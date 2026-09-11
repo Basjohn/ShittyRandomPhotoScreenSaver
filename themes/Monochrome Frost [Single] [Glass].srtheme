@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Monochrome Frost [Single] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       250,
       251,
       252,
+      255
+    ],
+    "about.art.liquid": [
+      225,
+      230,
+      233,
       255
     ],
     "popup.container.surface": [

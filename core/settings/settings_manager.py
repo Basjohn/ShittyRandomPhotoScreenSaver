@@ -19,7 +19,10 @@ from core.settings.json_store import (
     get_json_settings_store,
 )
 from core.settings.models import SpotifyVisualizerSettings
-from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
+from core.settings.structured_roots import (
+    STRUCTURED_SETTINGS_ROOTS,
+    merge_missing_structured_defaults,
+)
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
@@ -480,26 +483,13 @@ class SettingsManager(QObject):
     def _merge_missing_mapping_defaults(
         existing: Mapping[str, Any],
         defaults: Mapping[str, Any],
+        *,
+        path: tuple[str, ...] = (),
     ) -> tuple[Dict[str, Any], bool]:
-        """Deep-fill missing mapping leaves while preserving existing values."""
+        """Compatibility wrapper around the shared structured-default merge."""
 
-        merged: Dict[str, Any] = deepcopy(dict(existing))
-        changed = False
-        for key, default_value in defaults.items():
-            if key not in merged:
-                merged[key] = deepcopy(default_value)
-                changed = True
-                continue
-            existing_value = merged[key]
-            if isinstance(existing_value, Mapping) and isinstance(default_value, Mapping):
-                child, child_changed = SettingsManager._merge_missing_mapping_defaults(
-                    existing_value,
-                    default_value,
-                )
-                if child_changed:
-                    merged[key] = child
-                    changed = True
-        return merged, changed
+        return merge_missing_structured_defaults(existing, defaults, path=path)
+
 
     def _ensure_structured_root_defaults(
         self,
@@ -511,9 +501,18 @@ class SettingsManager(QObject):
         with self._lock:
             raw = self._settings.value(root, self._MISSING)
             if raw is self._MISSING or not isinstance(raw, Mapping):
-                self._settings.setValue(root, deepcopy(dict(defaults)))
+                seeded, _changed = self._merge_missing_mapping_defaults(
+                    {},
+                    defaults,
+                    path=(str(root),),
+                )
+                self._settings.setValue(root, seeded)
                 return
-            merged, changed = self._merge_missing_mapping_defaults(raw, defaults)
+            merged, changed = self._merge_missing_mapping_defaults(
+                raw,
+                defaults,
+                path=(str(root),),
+            )
             if changed:
                 self._settings.setValue(root, merged)
 

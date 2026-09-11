@@ -15,7 +15,7 @@ Cross-links:
 - Bubble temporal fidelity: `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - R-69 failed viewport-compression lesson: `Docs/Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md`
 - R-71 audio-allocation/GC history: `Docs/Historical_Bugs/R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md`
-- final installed/physical acceptance: `Docs/QtQuick_Migration/Remaining_J_Final_Installed_Acceptance_Decomposition.md`
+- final installed/physical acceptance: `Current_Plan.md` + `Docs/TestSuite.md`
 
 ## 1. Definition of good performance
 
@@ -231,6 +231,6 @@ Current target order:
 - Tool output cannot authorize any change forbidden by the reactivity/freshness/latency-tail checklist above.
 
 The operator-authorized 2026-09-05 Bubble equal-area response correction is documented in
-`Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` and `Docs/Visualizer_Reference.md`.
+`Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` and `Docs/Reference/Visualizer_Reference.md`.
 It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps,
 DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.

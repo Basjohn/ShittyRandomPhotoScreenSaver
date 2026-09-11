@@ -36,6 +36,7 @@ from ui.tabs.shared_styles import (
     add_aligned_row,
     create_inline_label,
     build_bucket_toggle,
+    finalize_bucket_body as _finalize_bucket_body,
 )
 from ui.widgets import StyledComboBox
 
@@ -281,12 +282,6 @@ def _begin_gmail_backend_bootstrap(tab: WidgetsTab) -> None:
     except Exception as exc:
         logger.warning("[GMAIL_TAB] Failed to submit backend bootstrap: %s", exc)
         _ready(False)
-
-
-def _finalize_bucket_body(toggle, body: QWidget) -> None:
-    expanded = bool(toggle.isChecked())
-    if body.isHidden() == expanded:
-        body.setVisible(expanded)
 
 
 def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
@@ -633,9 +628,9 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     GUARDRAIL: Only these controls may live outside a bucket:
       - Enable checkbox
     ALL other settings MUST be placed inside a collapsed-by-default bucket.
-    The Backend bucket is the only default-open bucket because connection
-    state is the first-run task for this widget.
-    When adding new interactable settings, create or extend a bucket.
+    Bucket persistence is sparse and one-open-per-page; no Gmail bucket is
+    privileged open on a fresh profile. When adding new interactable settings,
+    create or extend a bucket.
 
     Returns the Gmail container widget.
     """

@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Slate Lavender [Single] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       247,
       246,
       255,
+      255
+    ],
+    "about.art.liquid": [
+      192,
+      187,
+      238,
       255
     ],
     "popup.container.surface": [

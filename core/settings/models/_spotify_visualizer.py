@@ -576,6 +576,11 @@ _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sphere_finish': str,
     'sphere_fill_color': list,
     'sphere_edge_color': list,
+    'sphere_tracer_color': list,
+    'sphere_edge_weight': float,
+    'sphere_voxel_size_variation': float,
+    'sphere_depth_shading_enabled': bool,
+    'sphere_depth_shading_strength': float,
     'sphere_allow_overflow': bool,
     'sphere_cel_shading': bool,
     'sphere_light_tracer_enabled': bool,
@@ -584,6 +589,10 @@ _SPHERE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'sphere_incoming_transient_velocity_enabled': bool,
     'sphere_particle_outtake_enabled': bool,
     'sphere_shadow_enabled': bool,
+    'sphere_shadow_opacity': float,
+    'sphere_shadow_softness': float,
+    'sphere_shadow_distance': float,
+    'sphere_shadow_size': float,
     'sphere_fade_incoming_blocks': bool,
     'sphere_fragment_strength': float,
     'sphere_particle_distance': float,
@@ -1320,6 +1329,11 @@ class SpotifyVisualizerSettings:
     sphere_finish: str = field(default_factory=lambda: _visualizer_default('sphere_finish'))
     sphere_fill_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_fill_color')))
     sphere_edge_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_edge_color')))
+    sphere_tracer_color: list[int] = field(default_factory=lambda: deepcopy(_visualizer_default('sphere_tracer_color')))
+    sphere_edge_weight: float = field(default_factory=lambda: _visualizer_default('sphere_edge_weight'))
+    sphere_voxel_size_variation: float = field(default_factory=lambda: _visualizer_default('sphere_voxel_size_variation'))
+    sphere_depth_shading_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_depth_shading_enabled'))
+    sphere_depth_shading_strength: float = field(default_factory=lambda: _visualizer_default('sphere_depth_shading_strength'))
     sphere_allow_overflow: bool = field(default_factory=lambda: _visualizer_default('sphere_allow_overflow'))
     sphere_cel_shading: bool = field(default_factory=lambda: _visualizer_default('sphere_cel_shading'))
     sphere_light_tracer_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_light_tracer_enabled'))
@@ -1328,6 +1342,10 @@ class SpotifyVisualizerSettings:
     sphere_incoming_transient_velocity_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_incoming_transient_velocity_enabled'))
     sphere_particle_outtake_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_particle_outtake_enabled'))
     sphere_shadow_enabled: bool = field(default_factory=lambda: _visualizer_default('sphere_shadow_enabled'))
+    sphere_shadow_opacity: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_opacity'))
+    sphere_shadow_softness: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_softness'))
+    sphere_shadow_distance: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_distance'))
+    sphere_shadow_size: float = field(default_factory=lambda: _visualizer_default('sphere_shadow_size'))
     sphere_fade_incoming_blocks: bool = field(default_factory=lambda: _visualizer_default('sphere_fade_incoming_blocks'))
     sphere_fragment_strength: float = field(default_factory=lambda: _visualizer_default('sphere_fragment_strength'))
     sphere_particle_distance: float = field(default_factory=lambda: _visualizer_default('sphere_particle_distance'))
@@ -1424,12 +1442,13 @@ class SpotifyVisualizerSettings:
         self.sphere_incoming_transient_velocity_enabled = bool(self.sphere_incoming_transient_velocity_enabled)
         self.sphere_particle_outtake_enabled = bool(self.sphere_particle_outtake_enabled)
         self.sphere_shadow_enabled = bool(self.sphere_shadow_enabled)
+        self.sphere_depth_shading_enabled = bool(self.sphere_depth_shading_enabled)
         self.sphere_fade_incoming_blocks = bool(self.sphere_fade_incoming_blocks)
         self.sphere_taste_the_rainbow_enabled = bool(self.sphere_taste_the_rainbow_enabled)
         self.sphere_taste_the_rainbow_surfaces = bool(self.sphere_taste_the_rainbow_surfaces)
         self.sphere_taste_the_rainbow_edges = bool(self.sphere_taste_the_rainbow_edges)
         self.sphere_finish = normalize_sphere_finish(self.sphere_finish)
-        for attr in ("sphere_fill_color", "sphere_edge_color"):
+        for attr in ("sphere_fill_color", "sphere_edge_color", "sphere_tracer_color"):
             value = list(getattr(self, attr))
             fallback = list(_visualizer_default(attr))
             if len(value) < 3:
@@ -1444,7 +1463,7 @@ class SpotifyVisualizerSettings:
         self.sphere_light_direction = str(self.sphere_light_direction).strip().upper()
         if self.sphere_light_direction not in {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}:
             raise ValueError(f"invalid sphere light direction {self.sphere_light_direction!r}")
-        for attr, low, high in (("sphere_fragment_strength", 0.0, 9.0), ("sphere_particle_distance", 0.0, 4.5), ("sphere_particle_amount", 0.25, 1.75), ("sphere_perspective_strength", 0.0, 1.0), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_vocal_response", 0.0, 1.35), ("sphere_size_response", 0.0, 2.54)):
+        for attr, low, high in (("sphere_fragment_strength", 0.0, 9.0), ("sphere_particle_distance", 0.0, 4.5), ("sphere_particle_amount", 0.25, 1.75), ("sphere_perspective_strength", 0.0, 1.0), ("sphere_edge_weight", 0.25, 1.75), ("sphere_voxel_size_variation", 0.0, 1.0), ("sphere_depth_shading_strength", 0.0, 0.5), ("sphere_shadow_opacity", 0.0, 2.0), ("sphere_shadow_softness", 0.0, 0.45), ("sphere_shadow_distance", 0.0, 2.5), ("sphere_shadow_size", 0.6, 1.6), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_vocal_response", 0.0, 1.35), ("sphere_size_response", 0.0, 2.54)):
             _clamp_attr_range(self, attr, low, high)
 
     @classmethod

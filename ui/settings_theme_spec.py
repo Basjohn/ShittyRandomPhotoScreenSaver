@@ -28,7 +28,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 
-SETTINGS_THEME_SCHEMA_VERSION = 5
+SETTINGS_THEME_SCHEMA_VERSION = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -456,6 +456,8 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "about.more.hover_surface": Rgba(60, 60, 70, 220),
     "about.notice.surface": Rgba(16, 16, 16, 230),
     "about.notice.text": WHITE,
+    # About artwork liquid/background hue. Shipped themes seed this from their primary chrome accent.
+    "about.art.liquid": WHITE,
 
     # Shared styled-popup / colour-picker presentation.
     "popup.container.surface": Rgba(25, 25, 30, 235),

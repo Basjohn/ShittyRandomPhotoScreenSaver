@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Cucked Cobalt [Two-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       198,
       214,
       245,
+      255
+    ],
+    "about.art.liquid": [
+      64,
+      131,
+      203,
       255
     ],
     "popup.container.surface": [

@@ -17,7 +17,7 @@ echoed to the original stderr so script/debug console behaviour remains useful.
 
 This is *not* a process-level stderr redirect.  Native libraries or other code
 that writes directly to file descriptor 2 without using Qt remain outside this
-capture.  See ``Docs/Qt_QML_Observability.md`` before adding an OS-level stderr
+capture.  See ``Docs/Guides/Qt_QML_Observability.md`` before adding an OS-level stderr
 tee: fd-level redirection has materially different subprocess/crash semantics.
 """
 from __future__ import annotations

@@ -1,6 +1,6 @@
 # Future Cleanup — Active Deletion / Compatibility Ledger
 
-Last updated: 2026-09-05
+Last updated: 2026-09-11
 
 This file contains only **surviving cleanup/deletion debt**. Completed migration history belongs in
 `Docs/Fossils/`, historical bug records and source-control history (the Qt Quick migration is closed and its
@@ -37,26 +37,25 @@ stale tests that still import/assert against deleted presentation owners such as
 - [ ] Restore the broad whole-tree suite to useful signal without weakening the canonical `destination`
       profile or resurrecting museum architecture.
 
-## READY — caller-dead visualizer-renderer + image-processor islands
+## DONE — caller-dead visualizer-renderer + image-processor islands
 
-Both are proven to have **no production importer** (exact import search, 2026-09-08); they survive only in
-mixed test files that also cover live behaviour, so they could not be deleted cleanly in the slice that
-retired `transition_worker.py`. Deleting each requires splitting its test file first, then removing the
-fossil, then restoring the two `test_defaults_schema_authority.py` removal assertions that were relaxed to
-avoid a false RED.
+Exact production-import search was reconfirmed on 2026-09-11 and both caller-dead islands are retired. The
+pre-Quick `widgets/spotify_visualizer/renderers/` package and synchronous `rendering/image_processor.py` no
+longer exist. Live mixed coverage was rehomed to current owners before the old test modules were staged as
+debris: Quick Spectrum layout, presentation-neutral Sine reactivity, Quick DevCurve shader/uniform source,
+and QImage-first `AsyncImageProcessor`. `test_retired_runtime_islands_contract.py` now guards both removals
+without requiring museum owners to import. Never restore either island to satisfy historical tests.
 
-- [ ] Delete the `widgets/spotify_visualizer/renderers/` island (pre-Quick QWidget GL uniform/upload
-      helpers — `get_uniform_names`/`upload_uniforms`/`compute_bar_layout` etc.). The Quick path renders via
-      `rendering/quick/visualizer/implementations/*` + `widgets/spotify_visualizer/shaders/*` and does not
-      import it. First rehome any still-live coverage: e.g. `tests/test_spectrum_shaping.py` mixes live
-      `audio_worker._fft_to_bars` assertions with dead `compute_bar_layout` ones — split before deleting.
-- [ ] Delete `rendering/image_processor.py` (`ImageProcessor`); production uses
-      `rendering/image_processor_async.py` (`AsyncImageProcessor`). `tests/test_image_processor.py` mixes
-      live `AsyncImageProcessor` coverage with dead `ImageProcessor` coverage — split before deleting;
-      `tests/test_lanczos_scaling.py` also imports `ImageProcessor`.
-- [ ] After each island is gone, re-add its removal assertion to
-      `test_dead_transition_precompute_worker_is_removed` / `test_resolved_runtime_consumers_do_not_rebuild_product_defaults`.
-- Never restore the QWidget renderer/GL upload path or the sync image processor to satisfy an old test.
+
+## DONE — bucket reachability / stale bucket-test residue
+
+The 2026-09-11 single-open bucket change was followed by an explicit reachability/duplication audit. Outer Visualizer
+`Advanced`/`Technical` disclosures remain independent parents; Technical `AGC`/`Transient` are current leaf buckets.
+Seven duplicated Widget bucket-finalization helpers were collapsed into the shared owner. Three mixed tests retained
+current coverage but asserted retired bucket semantics, so their surviving coverage was rehomed to
+`test_widgets_tab_current.py`, `test_widgets_tab_general_current.py`, and
+`test_visualizer_settings_lazy_bodies_current.py`; the old modules are debris. Do not restore simultaneous sibling-open,
+fresh-profile default-open, or checkbox-style Technical visibility semantics to make old tests pass.
 
 ## READY — Future Work destination gate reconciliation
 
@@ -158,7 +157,7 @@ than preserved as phantom GUI authority. This is migration plumbing, not a suppo
 ### `themes/dark.qss` retirement
 
 `themes/dark.qss` remains legacy base-stylesheet geometry/debris, not Settings Theme palette authority.
-Execution authority is `Docs/Settings_Dark_QSS_Retirement.md`. Do not simply delete it, copy literals into
+Execution authority is `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`. Do not simply delete it, copy literals into
 Python, or disturb native AccentPolicy/frameless/forged-edge behaviour. Final retirement requires the
 physical Default Dark + Acrylic + Glass + dialogs/controls/tray matrix with the file genuinely absent, then
 production loaders and file removed in the same bounded slice.

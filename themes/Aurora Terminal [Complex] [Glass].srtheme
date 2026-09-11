@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Aurora Terminal [Complex] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       237,
       240,
       244,
+      255
+    ],
+    "about.art.liquid": [
+      107,
+      175,
+      167,
       255
     ],
     "popup.container.surface": [

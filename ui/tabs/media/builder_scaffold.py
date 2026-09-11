@@ -84,29 +84,32 @@ def add_builder_swatch_row(
     return row_widget, content, label
 
 
-def build_collapsible_bucket(
+def _build_collapsible_bucket_core(
     tab: "VisualizerSettingsContextMixin",
     target_layout: QVBoxLayout,
     *,
-    mode_key: str,
+    mode_provider: Callable[[], str],
+    host_mode_key: str,
     bucket_key: str,
     title: str,
     helper_text: str,
-) -> tuple[QWidget, QVBoxLayout]:
-    """Create a persisted collapsible bucket for a visualizer mode."""
+) -> tuple[QWidget, QVBoxLayout, QToolButton]:
+    """Create one Visualizer Custom bucket using the shared accordion contract."""
+
     host = QWidget()
-    host.setObjectName(f"{mode_key}_bucket_{bucket_key}")
+    host.setObjectName(f"{host_mode_key}_bucket_{bucket_key}")
     host.setProperty("bucketTitle", title)
 
     host_layout = QVBoxLayout(host)
     host_layout.setContentsMargins(0, 0, 0, 0)
     host_layout.setSpacing(8)
 
+    mode = str(mode_provider()).strip().lower()
+    expanded = bool(tab.get_visualizer_bucket_state(mode, bucket_key))
+
     toggle_row = QHBoxLayout()
     toggle_row.setContentsMargins(0, 0, 0, 0)
     toggle_row.setSpacing(8)
-
-    expanded = bool(tab.get_visualizer_bucket_state(mode_key, bucket_key))
 
     toggle = QToolButton()
     toggle.setText(title)
@@ -131,22 +134,77 @@ def build_collapsible_bucket(
     body_layout.setSpacing(12)
     host_layout.addWidget(body)
 
-    def _apply_state(checked: bool) -> None:
+    def _apply_visual_state(checked: bool) -> None:
         toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
         body.setVisible(checked)
         helper.setVisible(not checked)
+
+    shared_styles.bind_bucket_accordion(
+        toggle,
+        scope_owner=tab,
+        apply_visual_state=_apply_visual_state,
+        scope_key=lambda: ("visualizer", str(mode_provider()).strip().lower()),
+    )
+
+    def _apply_state(checked: bool) -> None:
+        if checked:
+            shared_styles.close_bucket_accordion_peers(toggle)
+        _apply_visual_state(checked)
         setter = getattr(tab, "set_visualizer_bucket_state", None)
         if callable(setter):
-            try:
-                setter(mode_key, bucket_key, checked)
-            except Exception:
-                pass
+            setter(str(mode_provider()).strip().lower(), bucket_key, checked)
 
     toggle.toggled.connect(_apply_state)
-    _apply_state(expanded)
+    _apply_visual_state(expanded)
 
     target_layout.addWidget(host)
+    return host, body_layout, toggle
+
+
+def build_collapsible_bucket(
+    tab: "VisualizerSettingsContextMixin",
+    target_layout: QVBoxLayout,
+    *,
+    mode_key: str,
+    bucket_key: str,
+    title: str,
+    helper_text: str,
+) -> tuple[QWidget, QVBoxLayout]:
+    """Create a persisted Visualizer Custom bucket for one canonical mode."""
+
+    host, body_layout, _toggle = _build_collapsible_bucket_core(
+        tab,
+        target_layout,
+        mode_provider=lambda _mode=mode_key: _mode,
+        host_mode_key=mode_key,
+        bucket_key=bucket_key,
+        title=title,
+        helper_text=helper_text,
+    )
     return host, body_layout
+
+
+def build_dynamic_collapsible_bucket(
+    tab: "VisualizerSettingsContextMixin",
+    target_layout: QVBoxLayout,
+    *,
+    mode_provider: Callable[[], str],
+    host_mode_key: str,
+    bucket_key: str,
+    title: str,
+    helper_text: str,
+) -> tuple[QWidget, QVBoxLayout, QToolButton]:
+    """Create a stable accessory bucket whose persistence follows active mode."""
+
+    return _build_collapsible_bucket_core(
+        tab,
+        target_layout,
+        mode_provider=mode_provider,
+        host_mode_key=host_mode_key,
+        bucket_key=bucket_key,
+        title=title,
+        helper_text=helper_text,
+    )
 
 
 def build_mode_scaffold(

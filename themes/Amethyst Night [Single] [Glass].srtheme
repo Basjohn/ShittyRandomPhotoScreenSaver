@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Amethyst Night [Single] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -873,6 +873,12 @@
     "about.notice.text": [
       250,
       245,
+      255,
+      255
+    ],
+    "about.art.liquid": [
+      210,
+      178,
       255,
       255
     ],

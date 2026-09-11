@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Arctic Ember [Three-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       243,
       245,
       249,
+      255
+    ],
+    "about.art.liquid": [
+      203,
+      110,
+      74,
       255
     ],
     "popup.container.surface": [

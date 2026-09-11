@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Wine Glacier [Three-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       241,
       239,
       243,
+      255
+    ],
+    "about.art.liquid": [
+      157,
+      204,
+      224,
       255
     ],
     "popup.container.surface": [

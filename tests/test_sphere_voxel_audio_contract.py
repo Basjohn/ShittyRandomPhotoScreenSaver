@@ -172,7 +172,10 @@ def test_voxel_required_uniform_contract_matches_shader_declarations() -> None:
 
     vertex_shader = source.split('_VERTEX_SOURCE = f"""', 1)[1].split('_FRAGMENT_SOURCE', 1)[0]
     fragment_shader = source.split('_FRAGMENT_SOURCE = """', 1)[1].split('_SHADOW_VERTEX_SOURCE', 1)[0]
-    shadow_vertex = source.split('_SHADOW_VERTEX_SOURCE = """', 1)[1].split('_SHADOW_FRAGMENT_SOURCE', 1)[0]
+    # Shadow deliberately compiles the exact hero vertex source so projected
+    # geometry cannot drift from rotation/deformation/particle transforms.
+    assert "_SHADOW_VERTEX_SOURCE = _VERTEX_SOURCE" in source
+    shadow_vertex = vertex_shader
     shadow_fragment = source.split('_SHADOW_FRAGMENT_SOURCE = """', 1)[1].split('class QuickSphereVoxelRenderer', 1)[0]
 
     uniform_pattern = r"^\s*uniform\s+\w+\s+(u\w+)(?:\s*\[[^\]]+\])?\s*;"
@@ -198,8 +201,28 @@ def test_audio_does_not_modulate_voxel_palette_during_reactivity_tuning() -> Non
     assert "vDrive" not in fragment
     assert "uSectionDrives" not in fragment
     assert "rainbowHue = fract(uRainbowPhase + 0.22 * vRainbowCoordinate)" in fragment
-    assert 'gl.glUniform1f(u["uBlockRelief"], 0.35)' in source
+    assert 'gl.glUniform1f(uniforms["uVoxelSizeVariation"], float(parameters["sphere_voxel_size_variation"]))' in source
+    assert "uBlockRelief" not in source
     assert "uMaterialFx" not in fragment
+
+
+def test_tracer_colour_default_preserves_pre_swatch_shader_floats_exactly() -> None:
+    source_path = ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    selected = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            names = {target.id for target in node.targets if isinstance(target, ast.Name)}
+            if names & {"_TRACER_BASE_RGBA_U8", "_TRACER_BASE_RGBA"}:
+                selected.append(node)
+        elif isinstance(node, ast.FunctionDef) and node.name == "sphere_tracer_color_rgba":
+            selected.append(node)
+    module = ast.Module(body=selected, type_ignores=[])
+    namespace: dict[str, object] = {}
+    exec(compile(module, str(source_path), "exec"), namespace)
+    resolve = namespace["sphere_tracer_color_rgba"]
+    assert resolve([255, 242, 194, 255]) == (1.0, 0.95, 0.76, 1.0)
+    assert resolve([0, 128, 255, 64]) == (0.0, 128 / 255.0, 1.0, 64 / 255.0)
 
 
 def test_sphere_capture_uses_raw_analysis_spectrum_and_live_pre_agc_energy() -> None:
@@ -767,6 +790,18 @@ def test_voxel_light_is_screen_anchored_and_cube_definition_is_independent() -> 
     assert "uRainbowSurfaces" in fragment and "uRainbowEdges" in fragment
     assert "uPerspectiveStrength" in source
     assert "turnedPosition.z * uPerspectiveStrength" in source
+    # Optional presentation-only additions preserve the accepted path at their
+    # baseline values and consume only existing transformed geometry.
+    assert "uVoxelSizeVariation" in source
+    assert "sphere_voxel_size_variation" in source
+    assert "uEdgeWeight" in fragment
+    assert "edgeStart = 0.72 + (1.0 - edgeWeight) * 0.30" in fragment
+    assert "edgeEnd = 0.90 + (1.0 - edgeWeight) * 0.14" in fragment
+    assert "vDepthCoordinate" in fragment
+    assert "uDepthShading" in fragment
+    assert "rearAmount = 1.0 - smoothstep(0.05, 0.95, vDepthCoordinate)" in fragment
+    assert "uTracerColor" in fragment
+    assert "color = mix(color, uTracerColor.rgb, tracerMix)" in fragment
     assert "sphere_taste_the_rainbow_enabled" in source
     assert "sphere_rainbow_enabled" not in source
 
@@ -790,6 +825,15 @@ def test_voxel_bloom_curated_preset_exists() -> None:
     assert '"sphere_particle_distance": 2.45' in text
     assert '"sphere_particle_amount": 1.0' in text
     assert '"sphere_perspective_strength": 1.0' in text
+    assert '"sphere_tracer_color"' in text
+    assert '"sphere_edge_weight": 1.0' in text
+    assert '"sphere_voxel_size_variation": 0.35' in text
+    assert '"sphere_depth_shading_enabled": false' in text
+    assert '"sphere_depth_shading_strength": 0.2' in text
+    assert '"sphere_shadow_opacity": 1.0' in text
+    assert '"sphere_shadow_softness": 0.18' in text
+    assert '"sphere_shadow_distance": 1.0' in text
+    assert '"sphere_shadow_size": 1.0' in text
     assert '"sphere_deformation"' not in text
     assert '"sphere_bump_reactivity"' not in text
 
@@ -808,6 +852,16 @@ def test_sphere_optional_presentation_features_are_mode_owned_and_default_off() 
     assert config["sphere_taste_the_rainbow_edges"] is True
     assert config["sphere_particle_amount"] == 1.0
     assert config["sphere_perspective_strength"] == 1.0
+    assert config["sphere_tracer_color"] == [255, 242, 194, 255]
+    assert config["sphere_edge_weight"] == 1.0
+    assert config["sphere_voxel_size_variation"] == 0.35
+    assert config["sphere_depth_shading_enabled"] is False
+    assert config["sphere_depth_shading_strength"] == 0.2
+    assert config["sphere_shadow_enabled"] is True
+    assert config["sphere_shadow_opacity"] == 1.0
+    assert config["sphere_shadow_softness"] == 0.18
+    assert config["sphere_shadow_distance"] == 1.0
+    assert config["sphere_shadow_size"] == 1.0
     assert config["sphere_incoming_density_response_enabled"] is False
     assert config["sphere_incoming_transient_velocity_enabled"] is False
     assert "sphere_rainbow_ghosting" not in config
@@ -881,14 +935,25 @@ def test_scene_shadow_cel_and_arrival_fade_are_sphere_renderer_only() -> None:
     assert "uCelShading" in source and "uFadeIncoming" in source
     assert "self._draw_scene_shadow(" in source
     shadow_method = source.split('    def _draw_scene_shadow(', 1)[1].split('    def _initialize', 1)[0]
-    assert 'frame.quad_vao' in shadow_method
-    assert 'gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)' in shadow_method
-    assert 'gl.glDrawArraysInstanced' not in shadow_method
+    assert 'frame.quad_vao' not in shadow_method
+    assert 'gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)' not in shadow_method
+    assert 'gl.glDrawArraysInstanced' in shadow_method
+    assert 'gl.glBindVertexArray(self._vao)' in shadow_method
     assert 'parameters["sphere_shadow_enabled"]' in shadow_method
-    assert 'radius * 1.26 * growth' in shadow_method
-    assert "-light_x * radius * (0.34 + float(state.size_pulse) * 0.55)" in source
-    assert "-light_y * radius * (0.34 + float(state.size_pulse) * 0.55)" in source
+    assert '_SHADOW_VERTEX_SOURCE = _VERTEX_SOURCE' in source
+    assert 'self._upload_voxel_transform_uniforms(' in shadow_method
+    assert 'projection_offset=shadow_offset' in shadow_method
+    assert 'projection_scale=shadow_size' in shadow_method
+    assert 'cohort.outtake for cohort in state.particle_cohorts' in shadow_method
+    assert 'parameters["sphere_shadow_opacity"]' in shadow_method
+    assert 'parameters["sphere_shadow_softness"]' in shadow_method
+    assert 'parameters["sphere_shadow_distance"]' in shadow_method
+    assert 'parameters["sphere_shadow_size"]' in shadow_method
+    assert "-light_x * radius * (0.34 + float(state.size_pulse) * 0.55) * distance" in source
+    assert "-light_y * radius * (0.34 + float(state.size_pulse) * 0.55) * distance" in source
+    assert "uLayerAlpha" in source
     assert "ground ellipse" not in source
+    assert "soft disc" not in source
 
 
 def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is_retired() -> None:
@@ -902,6 +967,16 @@ def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is
     assert "ColorSwatchButton" in builder
     assert "Finish Preset:" in builder and "Fill Color:" in builder and "Edge Color:" in builder
     assert "Drop Shadow:" in builder and "Toon Shading:" in builder
+    for key in (
+        "sphere_shadow_opacity",
+        "sphere_shadow_softness",
+        "sphere_shadow_distance",
+        "sphere_shadow_size",
+    ):
+        assert key in builder
+        assert key in binding
+        assert f'"{key}"' in config_applier
+    assert "apply_shadow_dependency" in builder
     assert "sphere_finish" in binding and "sphere_fill_color" in binding and "sphere_edge_color" in binding
     for rejected in (
         "Rainbow Ghosting:",
@@ -1108,66 +1183,93 @@ def test_playing_state_silence_cannot_author_new_incoming_voxels() -> None:
     assert frame.particle_cohorts == ()
 
 
-def test_incoming_density_response_scales_stable_four_corner_cohort_size() -> None:
+def test_incoming_density_response_uses_event_motion_not_passage_loudness() -> None:
+    _render_state, sphere_runtime = _load_plain_visualizer_modules()
+
+    # Population is a post-admission reward. Absolute passage loudness is not an
+    # argument at all: a strong event over a loud bed keeps its reaction, while a
+    # barely qualified event cannot inherit a full cohort merely from that bed.
+    weak = sphere_runtime._incoming_density_from_event(0.55, 0.22)
+    medium = sphere_runtime._incoming_density_from_event(0.78, 0.62)
+    strong = sphere_runtime._incoming_density_from_event(0.82, 1.0)
+    maximum = sphere_runtime._incoming_density_from_event(1.0, 1.0)
+
+    assert 0.28 <= weak < medium < strong < maximum
+    assert strong < 0.90
+    assert maximum == pytest.approx(1.0)
+
+
+def test_strong_typed_event_inside_loud_passage_still_authors_particles() -> None:
     render_state, sphere_runtime = _load_plain_visualizer_modules()
-    reactive = render_state.VisualizerEnergyState(bass=0.30, mid=0.46, high=0.24, overall=0.38)
-    params = _params(render_state, incoming_density_response=True)
-
-    quiet_runtime = sphere_runtime.SphereFrameRuntime()
-    quiet_presence = render_state.VisualizerEnergyState(bass=0.08, mid=0.09, high=0.06, overall=0.08)
-    _resolve(quiet_runtime, render_state, ts=51.0, reactive=reactive, presence=quiet_presence, params=params)
-    _resolve(
-        quiet_runtime,
+    runtime = sphere_runtime.SphereFrameRuntime()
+    reactive = render_state.VisualizerEnergyState(bass=0.72, mid=0.84, high=0.58, overall=0.75)
+    loud_presence = render_state.VisualizerEnergyState(bass=2.1, mid=2.4, high=1.7, overall=2.2)
+    params = _params(
         render_state,
-        ts=51.04,
-        reactive=reactive,
-        presence=quiet_presence,
-        scheduler=_Scheduler(vocal_swell=_Event(0.92)),
-        params=params,
+        incoming_density_response=True,
+        incoming_transient_velocity=True,
     )
-    quiet = _resolve(
-        quiet_runtime,
-        render_state,
-        ts=51.10,
-        reactive=reactive,
-        presence=quiet_presence,
-        params=params,
-    )
-    assert quiet is not None and quiet.incoming_drive > 0.0
 
-    loud_runtime = sphere_runtime.SphereFrameRuntime()
-    loud_presence = render_state.VisualizerEnergyState(bass=1.7, mid=2.0, high=1.3, overall=1.8)
-    _resolve(loud_runtime, render_state, ts=52.0, reactive=reactive, presence=loud_presence, params=params)
-    _resolve(
-        loud_runtime,
+    _resolve(runtime, render_state, ts=52.0, reactive=reactive, presence=loud_presence, params=params)
+    frame = _resolve(
+        runtime,
         render_state,
         ts=52.04,
         reactive=reactive,
         presence=loud_presence,
-        scheduler=_Scheduler(vocal_swell=_Event(0.92)),
+        scheduler=_Scheduler(vocal_swell=_Event(0.92), kick=_Event(0.94)),
         params=params,
     )
-    loud = _resolve(
-        loud_runtime,
+
+    assert frame is not None
+    assert frame.particle_cohorts
+    assert frame.incoming_density >= sphere_runtime._INCOMING_DENSITY_MIN_ACTIVE
+
+
+def test_recently_open_gate_cannot_author_new_cohort_in_near_silence() -> None:
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+    runtime = sphere_runtime.SphereFrameRuntime()
+    reactive = render_state.VisualizerEnergyState(bass=0.20, mid=0.20, high=0.10, overall=0.18)
+    loud_presence = render_state.VisualizerEnergyState(bass=0.35, mid=0.42, high=0.22, overall=0.35)
+    near_silent_presence = render_state.VisualizerEnergyState(bass=0.12, mid=0.0, high=0.0, overall=0.02)
+    params = _params(
         render_state,
-        ts=52.10,
+        incoming_density_response=True,
+        incoming_transient_velocity=True,
+    )
+
+    # Open the hysteretic gate with real material, then fall to the same class of
+    # residual bass-only level observed in hardware logs (intake ~= 0.066). A
+    # fresh latched typed event must not be allowed to spawn a new cohort there.
+    _resolve(runtime, render_state, ts=53.0, reactive=reactive, presence=loud_presence, params=params)
+    frame = _resolve(
+        runtime,
+        render_state,
+        ts=53.04,
         reactive=reactive,
-        presence=loud_presence,
+        presence=near_silent_presence,
+        scheduler=_Scheduler(kick=_Event(1.0)),
         params=params,
     )
-    assert loud is not None and loud.incoming_drive > 0.0
-    assert 0.28 <= quiet.incoming_density < loud.incoming_density <= 1.0
+
+    assert frame is not None
+    assert frame.particle_cohorts == ()
+    assert frame.incoming_drive == 0.0
 
 
 def test_incoming_intensity_calibration_requires_about_twenty_percent_more_evidence() -> None:
     _render_state, sphere_runtime = _load_plain_visualizer_modules()
 
-    # Preserve the accepted silence/density calibration from the previous pass.
+    # Preserve the existing open/close hysteresis while enforcing a current
+    # near-silence authoring floor. Density itself no longer uses absolute passage
+    # loudness, which was saturated throughout normal loud material.
     assert sphere_runtime._INCOMING_GATE_OPEN == pytest.approx(0.090)
     assert sphere_runtime._INCOMING_GATE_CLOSE == pytest.approx(0.042)
-    assert sphere_runtime._INCOMING_TYPED_FORCE_FLOOR == pytest.approx(0.030)
-    assert sphere_runtime._INCOMING_DENSITY_LOW == pytest.approx(0.096)
-    assert sphere_runtime._INCOMING_DENSITY_HIGH == pytest.approx(1.50)
+    assert sphere_runtime._INCOMING_TYPED_FORCE_FLOOR == pytest.approx(0.075)
+    assert sphere_runtime._INCOMING_AUTHOR_FLOOR == pytest.approx(0.075)
+    assert sphere_runtime._INCOMING_DENSITY_MIN_ACTIVE == pytest.approx(0.28)
+    assert sphere_runtime._INCOMING_DENSITY_EVENT_WEIGHT == pytest.approx(0.45)
+    assert sphere_runtime._INCOMING_DENSITY_CURVE == pytest.approx(1.80)
 
     # Event confidence is admission evidence, not travel power. Even a shared
     # event clamped to 1.0 must remain well below maximum motion if the local
@@ -1365,6 +1467,10 @@ def test_glass_current_preserves_operator_transparent_react_golden() -> None:
     assert config["sphere_edge_color"] == [233, 248, 255, 255]
     assert config["sphere_finish"] == "Custom"
     assert config["sphere_shadow_enabled"] is False
+    assert config["sphere_shadow_opacity"] == 1.0
+    assert config["sphere_shadow_softness"] == 0.18
+    assert config["sphere_shadow_distance"] == 1.0
+    assert config["sphere_shadow_size"] == 1.0
     assert config["sphere_light_tracer_enabled"] is True
     assert config["sphere_fragment_interpolation_enabled"] is True
     assert config["sphere_incoming_density_response_enabled"] is True
@@ -1386,7 +1492,16 @@ def test_sphere_owned_controls_do_not_enter_accepted_mode_implementations() -> N
     keys = (
         "sphere_fill_color",
         "sphere_edge_color",
+        "sphere_tracer_color",
+        "sphere_edge_weight",
+        "sphere_voxel_size_variation",
+        "sphere_depth_shading_enabled",
+        "sphere_depth_shading_strength",
         "sphere_shadow_enabled",
+        "sphere_shadow_opacity",
+        "sphere_shadow_softness",
+        "sphere_shadow_distance",
+        "sphere_shadow_size",
         "sphere_fragment_interpolation_enabled",
         "sphere_incoming_density_response_enabled",
         "sphere_incoming_transient_velocity_enabled",

@@ -1,6 +1,6 @@
 """Pure semantic model for SRPSS Theme Foundry.
 
-Theme Foundry edits the same immutable schema-v5 :class:`SettingsThemeSpec`
+Theme Foundry edits the same immutable schema-v6 :class:`SettingsThemeSpec`
 consumed by Settings and serializes only through ``ui.settings_theme_io``.
 There is no source/QSS scanner and no second theme schema hidden in the tool.
 """
@@ -376,6 +376,12 @@ def color_category(token: str) -> str:
 
 def semantic_description(kind: str, token: str) -> str:
     if kind == "color":
+        if token == "about.art.liquid":
+            return (
+                "Theme colour for only the explicitly masked liquid/background field in the "
+                "About logo and Shoogle artwork. Original shading/alpha and unmasked artwork "
+                "are preserved; shipped themes seed this role from their primary chrome accent."
+            )
         return (
             f"Semantic Settings colour role `{token}`. Runtime renderers consume "
             "this role directly; Theme Foundry does not rewrite Python/QSS source literals."

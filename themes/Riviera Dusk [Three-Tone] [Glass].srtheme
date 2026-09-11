@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Riviera Dusk [Three-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       237,
       240,
       245,
+      255
+    ],
+    "about.art.liquid": [
+      107,
+      182,
+      184,
       255
     ],
     "popup.container.surface": [

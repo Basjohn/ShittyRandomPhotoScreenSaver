@@ -7,7 +7,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "spectrum_growth": 5.0,
         "spectrum_render_mode": "bars",
         "spectrum_visual_smoothing_enabled": true,
         "spectrum_visual_smoothing": 0.5,
@@ -16,8 +15,8 @@
         "spectrum_rainbow_border": true,
         "spectrum_border_radius": 2.0,
         "spectrum_link_fill_border": false,
-        "spectrum_glow_enabled": true,
-        "spectrum_glow_intensity": 0.15,
+        "spectrum_glow_enabled": false,
+        "spectrum_glow_intensity": 0.08,
         "spectrum_glow_color": [
           255,
           255,
@@ -91,17 +90,17 @@
           ]
         ],
         "spectrum_lane_strengths_mirrored": {
-          "Mid": 0.344,
-          "Vocal": 0.4096,
+          "Bass": 0.1794871794871802,
           "Low-Mid": 0.2868,
-          "Bass": 0.1794871794871802
+          "Mid": 0.344,
+          "Vocal": 0.4096
         },
         "spectrum_lane_strengths_linear": {
           "Bass": 0.24,
-          "Low-Mid": 0.2868,
-          "Vocal": 0.4096,
           "Hi-Mid": 0.672,
-          "Treble": 1.0
+          "Low-Mid": 0.2868,
+          "Treble": 1.0,
+          "Vocal": 0.4096
         },
         "spectrum_wave_amplitude": 0.15,
         "spectrum_profile_floor": 0.2,

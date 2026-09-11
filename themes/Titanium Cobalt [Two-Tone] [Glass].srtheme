@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Titanium Cobalt [Two-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       236,
       240,
       243,
+      255
+    ],
+    "about.art.liquid": [
+      145,
+      158,
+      168,
       255
     ],
     "popup.container.surface": [

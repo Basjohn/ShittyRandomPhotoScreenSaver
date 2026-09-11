@@ -735,7 +735,7 @@ Important existing evidence:
 
 ### Phase 2 Visualizer Fidelity Lock
 
-`Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md`
+the retired Phase-2 Visualizer Fidelity Lock (source history)
 
 Use for:
 
@@ -779,7 +779,7 @@ Canonical, very wide and very tall CUSTOM shapes must preserve comparable author
 
 ### Bubble parity / reactivity evidence
 
-Current authority is the maintained Bubble reactivity/cadence/BTF/viewport test set plus temporal fixtures/goldens and live PERF evidence. The former `tools/bubble_parity_harness.py` was retired in I because it compared simulation revisions only and had **no viewport/domain/DPR/presentation-scaling oracle**; it could not catch R-69.
+Current authority is the maintained Bubble reactivity/cadence/BTF/viewport test set plus temporal fixtures/goldens and live PERF evidence. The former `tests/test_visualizer_replay.py` and `tests/test_bubble_reactivity.py` was retired in I because it compared simulation revisions only and had **no viewport/domain/DPR/presentation-scaling oracle**; it could not catch R-69.
 
 Synthetic logical evidence is useful only for the layer it actually observes and is never a substitute for live scheduler/delivery/presentation evidence.
 

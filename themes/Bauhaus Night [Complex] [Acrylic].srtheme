@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Bauhaus Night [Complex] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       238,
       240,
       244,
+      255
+    ],
+    "about.art.liquid": [
+      201,
+      136,
+      130,
       255
     ],
     "popup.container.surface": [

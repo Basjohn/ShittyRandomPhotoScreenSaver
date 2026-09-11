@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Indigo Brass [Two-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       243,
       245,
       249,
+      255
+    ],
+    "about.art.liquid": [
+      197,
+      153,
+      76,
       255
     ],
     "popup.container.surface": [

@@ -35,6 +35,10 @@ from ui.settings_theme_spec import (
 SETTINGS_THEME_FILE_FORMAT = "srpss.settings-theme"
 SETTINGS_THEME_FILE_EXTENSION = ".srtheme"
 
+_PREVIOUS_SETTINGS_THEME_SCHEMA_VERSION = 5
+_ABOUT_ART_LIQUID_TOKEN = "about.art.liquid"
+
+
 _TOP_LEVEL_KEYS = frozenset(
     {
         "format",
@@ -297,11 +301,14 @@ def settings_theme_from_payload(payload: Any) -> SettingsThemeSpec:
         )
 
     schema_version = _expect_int(obj["schema_version"], "theme.schema_version")
-    if schema_version != SETTINGS_THEME_SCHEMA_VERSION:
+    if schema_version not in {
+        _PREVIOUS_SETTINGS_THEME_SCHEMA_VERSION,
+        SETTINGS_THEME_SCHEMA_VERSION,
+    }:
         raise _error(
             "theme.schema_version",
-            f"unsupported version {schema_version}; "
-            f"expected {SETTINGS_THEME_SCHEMA_VERSION}",
+            f"unsupported version {schema_version}; expected "
+            f"{_PREVIOUS_SETTINGS_THEME_SCHEMA_VERSION} or {SETTINGS_THEME_SCHEMA_VERSION}",
         )
 
     name = obj["name"]
@@ -312,14 +319,31 @@ def settings_theme_from_payload(payload: Any) -> SettingsThemeSpec:
     raw_shadows = _expect_mapping(obj["shadows"], "shadows")
     raw_gradients = _expect_mapping(obj["gradients"], "gradients")
 
+    # Schema v6 adds one Settings-only About artwork semantic. Schema-v5 user
+    # themes remain valid and are upgraded deterministically instead of falling
+    # back to Default Dark merely because the new role did not exist yet.
+    if schema_version == _PREVIOUS_SETTINGS_THEME_SCHEMA_VERSION:
+        expected_v5 = {
+            token: value
+            for token, value in DEFAULT_DARK_SETTINGS_THEME.colors.items()
+            if token != _ABOUT_ART_LIQUID_TOKEN
+        }
+        _require_role_set(raw_colors, expected_v5, "colors")
+        migrated_colors = dict(raw_colors)
+        migrated_liquid = list(raw_colors["chrome.outer_border"])
+        migrated_liquid[3] = 255
+        migrated_colors[_ABOUT_ART_LIQUID_TOKEN] = migrated_liquid
+        raw_colors = migrated_colors
+    else:
+        _require_role_set(
+            raw_colors,
+            DEFAULT_DARK_SETTINGS_THEME.colors,
+            "colors",
+        )
+
     # A typo or omitted role is a whole-theme validation failure. Schema
-    # evolution is explicit through SETTINGS_THEME_SCHEMA_VERSION instead of
-    # silently blending arbitrary file fragments with the built-in fallback.
-    _require_role_set(
-        raw_colors,
-        DEFAULT_DARK_SETTINGS_THEME.colors,
-        "colors",
-    )
+    # evolution remains explicit; only the one defined v5 -> v6 migration above
+    # is admitted.
     _require_role_set(
         raw_shadows,
         DEFAULT_DARK_SETTINGS_THEME.shadows,
@@ -354,7 +378,7 @@ def settings_theme_from_payload(payload: Any) -> SettingsThemeSpec:
             colors=colors,
             shadows=shadows,
             gradients=gradients,
-            schema_version=schema_version,
+            schema_version=SETTINGS_THEME_SCHEMA_VERSION,
         )
     except (TypeError, ValueError) as exc:
         if isinstance(exc, SettingsThemeFileError):

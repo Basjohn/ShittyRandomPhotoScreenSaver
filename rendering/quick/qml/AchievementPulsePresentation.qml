@@ -429,6 +429,171 @@ OverlayWidget {
                 shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
             }
 
+            Item {
+                id: progressPulse
+                objectName: "achievementProgressPulse"
+                visible: achievementRoot.achievementModel.progressPulseEnabled
+                    && achievementRoot.achievementModel.totalFieldEnabled
+                    && achievementRoot.achievementModel.viewState === "content"
+                x: 51.0
+                y: authoredCanvas.height - height - 16.0
+                width: 108.0
+                height: 108.0
+                z: 2
+
+                property real pulseLevel: 0.0
+                readonly property real glowDistance: 19.0 + pulseLevel * 6.0
+                readonly property real glowScale: Math.max(0.5, glowDistance / 12.0)
+
+                function triggerPulse() {
+                    if (!visible)
+                        return
+                    pulseAnimation.stop()
+                    pulseAnimation.restart()
+                }
+
+                onVisibleChanged: {
+                    if (!visible) {
+                        pulseAnimation.stop()
+                        pulseLevel = 0.0
+                    }
+                }
+
+                Connections {
+                    target: achievementRoot.achievementModel
+                    function onProgressPulseRequested() {
+                        progressPulse.triggerPulse()
+                    }
+                }
+
+                SequentialAnimation {
+                    id: pulseAnimation
+                    onRunningChanged: {
+                        if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
+                            widgetFrameDemand.setAnimationActive(pulseAnimation, running)
+                    }
+                    NumberAnimation {
+                        target: progressPulse
+                        property: "pulseLevel"
+                        to: 1.0
+                        duration: 2000
+                        easing.type: Easing.InOutQuad
+                    }
+                    NumberAnimation {
+                        target: progressPulse
+                        property: "pulseLevel"
+                        to: 0.0
+                        duration: 3000
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                // Reuse the existing analytical widget-glow shader. This is a
+                // single retained circle and is completely dormant at level 0;
+                // no blur capture, timer, poller or extra runtime owner exists.
+                ShaderEffect {
+                    x: -progressPulse.glowDistance
+                    y: -progressPulse.glowDistance
+                    width: progressPulse.width + progressPulse.glowDistance * 2.0
+                    height: progressPulse.height + progressPulse.glowDistance * 2.0
+                    property vector2d effectSize: Qt.vector2d(
+                        width / progressPulse.glowScale,
+                        height / progressPulse.glowScale
+                    )
+                    property vector2d cardSize: Qt.vector2d(
+                        progressPulse.width / progressPulse.glowScale,
+                        progressPulse.height / progressPulse.glowScale
+                    )
+                    property real cornerRadius: progressPulse.width * 0.5 / progressPulse.glowScale
+                    property color glowColor: achievementRoot.achievementModel.capsuleBorderColor
+                    opacity: progressPulse.pulseLevel * 0.82
+                    visible: opacity > 0.001
+                    fragmentShader: "shaders/widget_glow.frag.qsb"
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width * 0.5
+                    color: Qt.rgba(
+                        achievementRoot.achievementModel.capsuleFillColor.r,
+                        achievementRoot.achievementModel.capsuleFillColor.g,
+                        achievementRoot.achievementModel.capsuleFillColor.b,
+                        achievementRoot.achievementModel.capsuleFillColor.a * 0.72
+                    )
+                    border.color: achievementRoot.achievementModel.capsuleBorderColor
+                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                        5.0, achievementRoot.contentScale
+                    )
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 7.0
+                    radius: width * 0.5
+                    color: "transparent"
+                    border.color: Qt.rgba(
+                        achievementRoot.achievementModel.capsuleBorderColor.r,
+                        achievementRoot.achievementModel.capsuleBorderColor.g,
+                        achievementRoot.achievementModel.capsuleBorderColor.b,
+                        achievementRoot.achievementModel.capsuleBorderColor.a * 0.38
+                    )
+                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                        1.0, achievementRoot.contentScale
+                    )
+                }
+
+                Text {
+                    anchors.fill: parent
+                    text: achievementRoot.achievementModel.progressText
+                    color: achievementRoot.achievementModel.capsuleBorderColor
+                    opacity: progressPulse.pulseLevel * 0.16
+                    scale: 1.11
+                    font.family: achievementRoot.achievementModel.fontFamily
+                    font.pointSize: achievementRoot.achievementModel.fontSize * 2.22
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPointSize: 9.0
+                    visible: opacity > 0.001
+                }
+
+                Text {
+                    anchors.fill: parent
+                    text: achievementRoot.achievementModel.progressText
+                    color: achievementRoot.achievementModel.capsuleBorderColor
+                    opacity: progressPulse.pulseLevel * 0.44
+                    scale: 1.045
+                    font.family: achievementRoot.achievementModel.fontFamily
+                    font.pointSize: achievementRoot.achievementModel.fontSize * 2.22
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPointSize: 9.0
+                    visible: opacity > 0.001
+                }
+
+                ShadowedText {
+                    anchors.fill: parent
+                    anchors.margins: 13.0
+                    text: achievementRoot.achievementModel.progressText
+                    color: achievementRoot.achievementModel.textColor
+                    font.family: achievementRoot.achievementModel.fontFamily
+                    font.pointSize: achievementRoot.achievementModel.fontSize * 2.22
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPointSize: 9.0
+                    elide: Text.ElideRight
+                    shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                    shadowColor: achievementRoot.achievementModel.textShadowColor
+                    shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
+                    shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
+                }
+            }
+
             Repeater {
                 id: fieldRepeater
                 model: achievementRoot.achievementModel.fieldModel
@@ -439,13 +604,16 @@ OverlayWidget {
                     required property string fieldValue
                     required property int index
                     objectName: "achievementField_" + fieldId
-                    readonly property int compactRow: Math.floor(index / 3)
-                    readonly property int column: index % 3
+                    readonly property int columnCount: progressPulse.visible ? 2 : 3
+                    readonly property int compactRow: Math.floor(index / columnCount)
+                    readonly property int column: index % columnCount
                     readonly property int railStride:
-                        achievementRoot.achievementModel.doubleCapsules ? 2 : 1
+                        achievementRoot.achievementModel.shelfStyle
+                        ? 1
+                        : (achievementRoot.achievementModel.doubleCapsules ? 2 : 1)
                     readonly property int railCount: Math.max(
                         1,
-                        Math.ceil(fieldRepeater.count / 3) * railStride
+                        Math.ceil(fieldRepeater.count / columnCount) * railStride
                     )
                     readonly property real railStep:
                         achievementRoot.achievementModel.capsuleHeight
@@ -454,13 +622,15 @@ OverlayWidget {
                         authoredCanvas.height - 16.0
                         - achievementRoot.achievementModel.capsuleHeight
                         - (railCount - 1) * railStep
-                    x: 18.0 + column * 191.0
+                    x: (progressPulse.visible ? 208.0 : 18.0) + column * 191.0
                     y: firstRailY + compactRow * railStride * railStep
                     width: 182.0
-                    height: achievementRoot.achievementModel.doubleCapsules
-                        ? achievementRoot.achievementModel.capsuleHeight * 2.0
-                            + achievementRoot.achievementModel.capsuleGap
-                        : achievementRoot.achievementModel.capsuleHeight
+                    height: achievementRoot.achievementModel.shelfStyle
+                        ? achievementRoot.achievementModel.capsuleHeight
+                        : (achievementRoot.achievementModel.doubleCapsules
+                            ? achievementRoot.achievementModel.capsuleHeight * 2.0
+                                + achievementRoot.achievementModel.capsuleGap
+                            : achievementRoot.achievementModel.capsuleHeight)
 
                     AchievementCapsule {
                         anchors.fill: parent
@@ -468,12 +638,15 @@ OverlayWidget {
                         fieldLabel: parent.fieldLabel
                         fieldValue: parent.fieldValue
                         doubled: achievementRoot.achievementModel.doubleCapsules
+                        shelfStyle: achievementRoot.achievementModel.shelfStyle
                         capsuleHeight: achievementRoot.achievementModel.capsuleHeight
                         capsuleGap: achievementRoot.achievementModel.capsuleGap
                         capsuleFontSize: achievementRoot.achievementModel.capsuleFontSize
                         fontFamily: achievementRoot.achievementModel.fontFamily
                         fillColor: achievementRoot.achievementModel.capsuleFillColor
                         borderColor: achievementRoot.achievementModel.capsuleBorderColor
+                        shelfSeparatorColor: achievementRoot.achievementModel.steamMetricSeparatorColor
+                        shelfAccentColor: achievementRoot.achievementModel.accentColor
                         textColor: achievementRoot.achievementModel.textColor
                         textShadowEnabled: achievementRoot.achievementModel.textShadowEnabled
                         textShadowColor: achievementRoot.achievementModel.textShadowColor

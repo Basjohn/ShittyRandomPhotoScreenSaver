@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Teal Coral [Two-Tone] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       237,
       242,
       245,
+      255
+    ],
+    "about.art.liquid": [
+      231,
+      159,
+      150,
       255
     ],
     "popup.container.surface": [

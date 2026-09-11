@@ -20,6 +20,12 @@ from PySide6.QtWidgets import QWidget
 from core.logging.logger import get_logger
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
+from core.settings.ui_bucket_state import (
+    normalize_single_open_bucket_states,
+    set_single_open_bucket_state,
+    sparse_open_bucket_states,
+    visualizer_bucket_scope,
+)
 from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
     get_preset_slider_attr,
@@ -85,6 +91,7 @@ class VisualizerSettingsContextMixin:
         self._visualizer_tech_state = self._load_tech_states()
         self._visualizer_tech_bucket_state = self._load_tech_bucket_states()
         self._visualizer_bucket_state = self._load_bucket_states()
+        self._normalize_visualizer_leaf_bucket_states()
 
     def _load_canonical_ui_state_mapping(
         self,
@@ -292,15 +299,81 @@ class VisualizerSettingsContextMixin:
         )
 
     def _load_tech_bucket_states(self) -> Dict[str, bool]:
-        """Load persisted Technical subsection states over canonical defaults."""
-        return self._load_canonical_ui_state_mapping(
-            self._TECH_BUCKET_STATE_KEY, "visualizer_tech_bucket_states"
+        """Load one remembered open Technical leaf bucket per Visualizer mode."""
+        canonical = self._visualizer_ui_defaults.get("visualizer_tech_bucket_states")
+        if not isinstance(canonical, Mapping):
+            raise KeyError("Canonical UI defaults are missing ui.visualizer_tech_bucket_states")
+        return normalize_single_open_bucket_states(
+            canonical.keys(),
+            self._settings.get(self._TECH_BUCKET_STATE_KEY),
+            scope_for_key=visualizer_bucket_scope,
         )
 
     def _load_bucket_states(self) -> Dict[str, bool]:
-        """Load persisted Visualizer bucket states over canonical defaults."""
-        return self._load_canonical_ui_state_mapping(
-            self._BUCKET_STATE_KEY, "visualizer_bucket_states"
+        """Load one remembered open Custom bucket per Visualizer mode page."""
+        canonical = self._visualizer_ui_defaults.get("visualizer_bucket_states")
+        if not isinstance(canonical, Mapping):
+            raise KeyError("Canonical UI defaults are missing ui.visualizer_bucket_states")
+        return normalize_single_open_bucket_states(
+            canonical.keys(),
+            self._settings.get(self._BUCKET_STATE_KEY),
+            scope_for_key=visualizer_bucket_scope,
+        )
+
+    def _normalize_visualizer_leaf_bucket_states(self) -> None:
+        """Keep Custom and Technical leaf buckets to one open winner per mode.
+
+        The two persisted maps are retained as schema families, but their leaf
+        controls share one physical per-mode accordion. Legacy profiles may have
+        one remembered open key in each map; normalize that combined state in
+        memory without writing during Settings startup. Technical keys follow
+        Custom keys in the deterministic migration order, so a legacy Technical
+        winner wins if both families were simultaneously open.
+        """
+        custom = getattr(self, "_visualizer_bucket_state", None)
+        technical = getattr(self, "_visualizer_tech_bucket_state", None)
+        if not isinstance(custom, dict) or not isinstance(technical, dict):
+            raise RuntimeError("Visualizer leaf bucket state was not initialized")
+        combined_keys = tuple(custom) + tuple(technical)
+        combined = dict(custom)
+        combined.update(technical)
+        normalized = normalize_single_open_bucket_states(
+            combined_keys,
+            combined,
+            scope_for_key=visualizer_bucket_scope,
+        )
+        for key in custom:
+            custom[key] = normalized[key]
+        for key in technical:
+            technical[key] = normalized[key]
+
+    def _set_visualizer_leaf_bucket_state(self, key: str, expanded: bool) -> None:
+        """Persist one open leaf bucket across Custom + Technical per mode."""
+        custom = getattr(self, "_visualizer_bucket_state", None)
+        technical = getattr(self, "_visualizer_tech_bucket_state", None)
+        if not isinstance(custom, dict) or not isinstance(technical, dict):
+            raise RuntimeError("Visualizer leaf bucket state was not initialized")
+
+        combined = dict(custom)
+        combined.update(technical)
+        set_single_open_bucket_state(
+            combined,
+            key,
+            bool(expanded),
+            scope_for_key=visualizer_bucket_scope,
+        )
+        for candidate in custom:
+            custom[candidate] = combined[candidate]
+        for candidate in technical:
+            technical[candidate] = combined[candidate]
+
+        # These are two canonical persisted subtrees but one logical leaf scope.
+        # Write both sparse projections on interaction so legacy dual-open state
+        # cannot reappear after reload. No startup migration write is performed.
+        self._settings.set(self._BUCKET_STATE_KEY, sparse_open_bucket_states(custom))
+        self._settings.set(
+            self._TECH_BUCKET_STATE_KEY,
+            sparse_open_bucket_states(technical),
         )
 
     def get_visualizer_adv_state(self, mode: str) -> bool:
@@ -316,11 +389,11 @@ class VisualizerSettingsContextMixin:
             pass
 
     def get_visualizer_tech_state(self, mode: str) -> bool:
-        """Return remembered Technical bucket state for a visualizer mode."""
+        """Return remembered outer Technical disclosure state for a visualizer mode."""
         return bool(self._visualizer_tech_state[mode])
 
     def set_visualizer_tech_state(self, mode: str, expanded: bool) -> None:
-        """Persist Technical bucket expanded/collapsed state for a visualizer mode."""
+        """Persist the outer Technical disclosure state for a visualizer mode."""
         self._visualizer_tech_state[mode] = bool(expanded)
         try:
             self._settings.set(self._TECH_STATE_KEY, dict(self._visualizer_tech_state))
@@ -328,37 +401,20 @@ class VisualizerSettingsContextMixin:
             pass
 
     def get_visualizer_tech_bucket_state(self, mode: str, bucket: str) -> bool:
-        """Return remembered visibility state for a canonical Technical subsection."""
-        states = self._visualizer_tech_bucket_state
-        return bool(states[f"{mode}:{bucket}"])
+        """Return whether this is the remembered open Technical leaf bucket."""
+        return bool(self._visualizer_tech_bucket_state[f"{mode}:{bucket}"])
 
-    def set_visualizer_tech_bucket_state(self, mode: str, bucket: str, visible: bool) -> None:
-        """Persist visibility state for a per-mode Technical subsection."""
-        states = getattr(self, "_visualizer_tech_bucket_state", None)
-        if not isinstance(states, dict):
-            states = {}
-            self._visualizer_tech_bucket_state = states
-        states[f"{mode}:{bucket}"] = bool(visible)
-        try:
-            self._settings.set(self._TECH_BUCKET_STATE_KEY, dict(states))
-        except Exception:
-            pass
+    def set_visualizer_tech_bucket_state(self, mode: str, bucket: str, expanded: bool) -> None:
+        """Persist this Technical leaf in the mode-wide leaf accordion."""
+        self._set_visualizer_leaf_bucket_state(f"{mode}:{bucket}", bool(expanded))
 
     def get_visualizer_bucket_state(self, mode: str, bucket: str) -> bool:
-        """Return remembered expanded state for a canonical visualizer bucket."""
+        """Return whether this is the remembered open bucket for its mode page."""
         return bool(self._visualizer_bucket_state[f"{mode}:{bucket}"])
 
     def set_visualizer_bucket_state(self, mode: str, bucket: str, expanded: bool) -> None:
-        """Persist expanded/collapsed state for a visualizer bucket."""
-        states = getattr(self, "_visualizer_bucket_state", None)
-        if not isinstance(states, dict):
-            states = {}
-            self._visualizer_bucket_state = states
-        states[f"{mode}:{bucket}"] = bool(expanded)
-        try:
-            self._settings.set(self._BUCKET_STATE_KEY, dict(states))
-        except Exception:
-            pass
+        """Persist this Custom leaf in the mode-wide leaf accordion."""
+        self._set_visualizer_leaf_bucket_state(f"{mode}:{bucket}", bool(expanded))
 
     def save_scroll_position(self, mode: str) -> None:
         """Save current scroll position for a visualizer mode."""

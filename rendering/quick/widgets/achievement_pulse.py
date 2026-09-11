@@ -116,6 +116,8 @@ class AchievementPulsePresentationConfig:
     artwork_shape: str
     square_artwork_size: int
     double_capsules: bool
+    progress_pulse: bool
+    shelf_style: bool
     capsule_font_size: int
     capsule_fill_color: tuple[int, int, int, int]
     capsule_border_color: tuple[int, int, int, int]
@@ -236,6 +238,14 @@ class AchievementPulsePresentationConfig:
                 merged_card.get("double_capsules"),
                 bool(default_card["double_capsules"]),
             ),
+            progress_pulse=_as_bool(
+                merged_card.get("progress_pulse"),
+                bool(default_card["progress_pulse"]),
+            ),
+            shelf_style=_as_bool(
+                merged_card.get("shelf_style"),
+                bool(default_card["shelf_style"]),
+            ),
             capsule_font_size=normalize_achievement_capsule_font_size(
                 merged_card.get(
                     "capsule_font_size",
@@ -352,10 +362,17 @@ class AchievementPulsePresentationConfig:
 
     @property
     def authored_size(self) -> tuple[float, float]:
+        total_enabled = any(
+            field_id == "total" and enabled
+            for field_id, enabled in self.field_visibility
+        )
+        progress_pulse_visible = self.progress_pulse and total_enabled
         field_count = sum(
             1
             for field_id, enabled in self.field_visibility
-            if enabled and field_id not in _NON_CAPSULE_FIELD_IDS
+            if enabled
+            and field_id not in _NON_CAPSULE_FIELD_IDS
+            and not (progress_pulse_visible and field_id == "total")
         )
         capsule_height, capsule_gap = achievement_capsule_geometry(
             font_family=self.font_family,
@@ -368,6 +385,8 @@ class AchievementPulsePresentationConfig:
             field_rail_count=achievement_field_rail_count(
                 field_count,
                 double_capsules=self.double_capsules,
+                columns=2 if progress_pulse_visible else 3,
+                shelf_style=self.shelf_style,
             ),
             capsule_height=capsule_height,
             capsule_gap=capsule_gap,
@@ -502,6 +521,7 @@ class AchievementPulsePresentationModel(QObject):
 
     stateChanged = Signal()
     fadeRequested = Signal()
+    progressPulseRequested = Signal()
 
     def __init__(
         self,
@@ -524,6 +544,7 @@ class AchievementPulsePresentationModel(QObject):
         self._runtime_attached = False
         self._active = False
         self._retired = False
+        self._last_progress_percent: int | None = None
 
     @property
     def config(self) -> AchievementPulsePresentationConfig:
@@ -589,6 +610,28 @@ class AchievementPulsePresentationModel(QObject):
             raise RuntimeError("Achievement Pulse runtime service failed to start")
         return True
 
+    @staticmethod
+    def _progress_value(card: SteamCardViewModel) -> tuple[str, int | None, bool]:
+        """Return the authored Total text, numeric percent and visibility.
+
+        Progress Pulse is a presentation of the existing ``total`` field, not a
+        second achievement-progress authority.  Parsing is deliberately narrow:
+        the canonical resolver emits ``NN%`` or ``Unknown``.
+        """
+
+        for field in card.fields:
+            if field.field_id != "total":
+                continue
+            text = str(field.value or "").strip()
+            numeric = None
+            if text.endswith("%"):
+                try:
+                    numeric = max(0, min(100, int(round(float(text[:-1])))))
+                except (TypeError, ValueError):
+                    numeric = None
+            return text, numeric, bool(field.enabled)
+        return "", None, False
+
     def on_achievement_presentation(
         self,
         presentation: AchievementPulsePreparedPresentation,
@@ -599,7 +642,24 @@ class AchievementPulsePresentationModel(QObject):
         if not self.is_active or presentation.model.card_id != "achievement_pulse":
             return
         card = presentation.model
-        rows_changed = self._field_model.replace_rows(card.fields)
+        progress_text, progress_percent, progress_visible = self._progress_value(card)
+        del progress_text
+        pulse_requested = bool(
+            self.config.progress_pulse
+            and progress_visible
+            and progress_percent is not None
+            and self._last_progress_percent is not None
+            and progress_percent != self._last_progress_percent
+        )
+        if progress_percent is not None:
+            self._last_progress_percent = progress_percent
+
+        rows = (
+            tuple(field for field in card.fields if field.field_id != "total")
+            if self.config.progress_pulse
+            else card.fields
+        )
+        rows_changed = self._field_model.replace_rows(rows)
         unlocks_changed = self._unlock_model.replace_rows(card.latest_unlocks)
         snapshot = replace(
             self._snapshot,
@@ -621,6 +681,8 @@ class AchievementPulsePresentationModel(QObject):
         self._snapshot = snapshot
         if rows_changed or unlocks_changed or state_changed:
             self.stateChanged.emit()
+        if pulse_requested:
+            self.progressPulseRequested.emit()
 
     def request_achievement_fade(self) -> None:
         if self.is_active:
@@ -770,6 +832,23 @@ class AchievementPulsePresentationModel(QObject):
     def doubleCapsules(self) -> bool:
         return self.config.double_capsules
 
+    @Property(bool, notify=stateChanged)
+    def progressPulseEnabled(self) -> bool:
+        return self.config.progress_pulse
+
+    @Property(bool, notify=stateChanged)
+    def shelfStyle(self) -> bool:
+        return self.config.shelf_style
+
+    @Property(bool, notify=stateChanged)
+    def totalFieldEnabled(self) -> bool:
+        return self._progress_value(self.card)[2]
+
+    @Property(str, notify=stateChanged)
+    def progressText(self) -> str:
+        text, _numeric, _visible = self._progress_value(self.card)
+        return text or "Unknown"
+
     @Property(float, notify=stateChanged)
     def capsuleFontSize(self) -> float:
         return float(self.config.capsule_font_size)
@@ -795,6 +874,10 @@ class AchievementPulsePresentationModel(QObject):
     @Property(QColor, notify=stateChanged)
     def capsuleBorderColor(self) -> QColor:
         return QColor(*self.config.capsule_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def steamMetricSeparatorColor(self) -> QColor:
+        return QColor(*self.config.semantic_palette.metric_separator)
 
     @Property(QColor, notify=stateChanged)
     def steamInfoSurfaceColor(self) -> QColor:

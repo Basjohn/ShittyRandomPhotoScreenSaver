@@ -18,7 +18,7 @@ Last updated: 2026-09-03
 | custom transition pixels | inline display `QSGRenderNode` |
 | custom visualizer pixels | inline visualizer `QSGRenderNode` |
 | Settings UI | existing QWidget/settings owners |
-| Settings theme semantics/backdrop contract | `Docs/Settings_Theme_Architecture.md`; `SettingsThemeSpec` + Settings renderers + `core/windows/dwm_blur.py` |
+| Settings theme semantics/backdrop contract | `Docs/Architecture/Settings_Theme_Architecture.md`; `SettingsThemeSpec` + Settings renderers + `core/windows/dwm_blur.py` |
 
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
 Migration scaffolding may still reference legacy `DisplayWidget` before the production cutover. That is never a
@@ -51,6 +51,23 @@ Widget Theme (.srwtheme schema v3)
 ```
 
 Runtime cards are ordinary RGBA Quick surfaces. There is no Widget Theme material recommendation, Surface Style override, card-material Loader/capture path, or Settings-HWND backdrop reuse in the screensaver scene. Settings Glass/Acrylic remains owned exclusively by the Settings theme/native-window stack above.
+
+### Settings collapsible-bucket contract
+
+Canonical defaults enumerate collapsible bucket identities, but persistence does **not** store one boolean per bucket.
+`ui.gmail_bucket_states`, `ui.widget_bucket_states`, `ui.visualizer_bucket_states` and
+`ui.visualizer_tech_bucket_states` are sparse mappings whose missing members mean closed. Opening a bucket synchronously closes checked peers in the same local accordion scope
+before revealing the new body; no timer, polling loop, animation owner or second persistence coordinator is permitted.
+
+Scope follows actual layout ownership: ordinary Widget pages coordinate their peer buckets; nested Steam card buckets
+coordinate with sibling Layout/Appearance/Content buckets without collapsing their parent card; Visualizer Custom
+buckets coordinate per mode even when lazy construction places some buckets in Normal and others in Advanced. Stable
+Visualizer Custom accessories use the same shared accordion contract. Technical's AGC/Transient leaf sections use the
+same per-mode accordion rule. The outer Visualizer `Advanced` and `Technical` disclosures are **parents**, not leaf
+buckets: they retain independent disclosure state so opening a child can never close the container required to reach it.
+Canonical defaults remain the identity/schema registry, so unknown bucket keys stay fail-loud even though persisted maps
+are sparse. Legacy full boolean maps normalize
+to one open winner per local scope and are rewritten sparsely on the next bucket interaction, not during Settings startup.
 
 **Widget Theme palette precedence:** Widget Theme colours are the ordinary shared baseline. Explicit surviving specialized `widgets.<family>.*` colour values remain higher-precedence only where a genuine family-level authoring contract still exists; they are not silently reclassified as theme state. Branded Header Fill/Text/Border are **not** such family contracts anymore: Media/Gmail/Reddit/Steam resolve them through shared `header.*` semantics, with Header Fill exposed once in `Widgets -> General -> Style Overrides`. The Context Menu has no family override layer and takes Widget Theme palette values directly. A surviving specialized family swatch edit therefore does not create Widget Theme `Custom`; editing a Widget-Theme-owned shared value does.
 
@@ -130,7 +147,7 @@ Production runtime emits evidence; operator tooling consumes that evidence out o
 
 Built-in PERF/usage/QML instrumentation is the primary destination performance evidence. Retain an external parser/harness only when it answers a bounded question that current instrumentation/tests cannot answer more directly. Resource counters never authorize weakening Visualizer cadence, newest-state freshness, R-69 authored response, Media event ownership or R-63 black-flash protection.
 
-Current tool disposition and deletion routing live in `Docs/Tooling_Audit_2026-09-01.md`; production/tool boundary history is R-72.
+Current tool disposition and deletion routing live in `Docs/Reference/Harness_Index.md`; production/tool boundary history is R-72.
 
 ## Capability / ordinary enabled
 

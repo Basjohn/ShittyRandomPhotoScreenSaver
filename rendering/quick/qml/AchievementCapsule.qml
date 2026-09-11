@@ -11,23 +11,29 @@ Item {
     required property string fieldLabel
     required property string fieldValue
     property bool doubled: true
+    property bool shelfStyle: false
     property real capsuleHeight: 26.0
     property real capsuleGap: 6.0
     property real capsuleFontSize: 12.0
     property string fontFamily: "Inter"
     property color fillColor: "#26c7d5e0"
     property color borderColor: "#91c7d5e0"
+    property color shelfSeparatorColor: "#6ec7d5e0"
+    property color shelfAccentColor: borderColor
     property color textColor: "#ffffffff"
     property bool textShadowEnabled: true
     property color textShadowColor: "#54000000"
     property real textShadowOffsetX: 1.0
     property real textShadowOffsetY: 1.0
 
-    height: doubled ? capsuleHeight * 2.0 + capsuleGap : capsuleHeight
+    height: shelfStyle
+        ? capsuleHeight
+        : (doubled ? capsuleHeight * 2.0 + capsuleGap : capsuleHeight)
 
     Item {
         id: primaryShell
         objectName: "achievementCapsulePrimary_" + capsule.fieldId
+        visible: !capsule.shelfStyle
         width: parent.width
         height: capsule.capsuleHeight
 
@@ -74,7 +80,7 @@ Item {
     Item {
         id: detailShell
         objectName: "achievementCapsuleDetail_" + capsule.fieldId
-        visible: capsule.doubled
+        visible: capsule.doubled && !capsule.shelfStyle
         y: capsule.capsuleHeight + capsule.capsuleGap
         width: parent.width
         height: capsule.capsuleHeight
@@ -115,4 +121,78 @@ Item {
             shadowOffsetY: capsule.textShadowOffsetY
         }
     }
+    Item {
+        id: shelfShell
+        objectName: "achievementShelf_" + capsule.fieldId
+        visible: capsule.shelfStyle
+        anchors.fill: parent
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1.0
+            color: capsule.shelfSeparatorColor
+        }
+
+        Rectangle {
+            x: 0.0
+            anchors.verticalCenter: parent.verticalCenter
+            width: 4.0
+            height: 4.0
+            radius: 2.0
+            color: Qt.rgba(
+                capsule.shelfAccentColor.r,
+                capsule.shelfAccentColor.g,
+                capsule.shelfAccentColor.b,
+                0.76
+            )
+        }
+
+        ShadowedText {
+            x: 9.0
+            width: (parent.width - 13.0) * 0.53
+            height: parent.height
+            text: capsule.fieldId === "previous"
+                ? "PREVIOUSLY" : capsule.fieldLabel.toUpperCase()
+            color: Qt.rgba(
+                capsule.textColor.r,
+                capsule.textColor.g,
+                capsule.textColor.b,
+                Math.max(0.47, capsule.textColor.a * 0.72)
+            )
+            font.family: capsule.fontFamily
+            font.pointSize: capsule.capsuleFontSize * 0.82
+            font.bold: true
+            verticalAlignment: Text.AlignVCenter
+            fontSizeMode: Text.HorizontalFit
+            minimumPointSize: 6.0
+            elide: Text.ElideRight
+            shadowEnabled: capsule.textShadowEnabled
+            shadowColor: capsule.textShadowColor
+            shadowOffsetX: capsule.textShadowOffsetX
+            shadowOffsetY: capsule.textShadowOffsetY
+        }
+
+        ShadowedText {
+            x: 9.0 + (parent.width - 13.0) * 0.55
+            width: (parent.width - 13.0) * 0.45
+            height: parent.height
+            text: capsule.fieldValue.toUpperCase()
+            color: capsule.textColor
+            font.family: capsule.fontFamily
+            font.pointSize: capsule.capsuleFontSize * 0.82
+            font.bold: true
+            horizontalAlignment: Text.AlignRight
+            verticalAlignment: Text.AlignVCenter
+            fontSizeMode: Text.HorizontalFit
+            minimumPointSize: 6.0
+            elide: Text.ElideRight
+            shadowEnabled: capsule.textShadowEnabled
+            shadowColor: capsule.textShadowColor
+            shadowOffsetX: capsule.textShadowOffsetX
+            shadowOffsetY: capsule.textShadowOffsetY
+        }
+    }
+
 }

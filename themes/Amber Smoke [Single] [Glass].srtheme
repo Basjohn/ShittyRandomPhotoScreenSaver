@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Amber Smoke [Single] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       255,
       248,
       237,
+      255
+    ],
+    "about.art.liquid": [
+      238,
+      199,
+      143,
       255
     ],
     "popup.container.surface": [

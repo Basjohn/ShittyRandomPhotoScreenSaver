@@ -134,6 +134,8 @@ def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
         "show_source",
         "show_selected",
         "double_capsules",
+        "progress_pulse",
+        "shelf_style",
     ):
         assert isinstance(achievement[bool_key], bool)
     for color_key in ("capsule_fill_color", "capsule_border_color"):
@@ -217,6 +219,8 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.achievement_pulse_artwork_shape.setCurrentIndex(1)
             tab.achievement_pulse_square_artwork_size.setValue(190)
             tab.achievement_pulse_double_capsules.setChecked(False)
+            tab.achievement_pulse_progress_pulse.setChecked(False)
+            tab.achievement_pulse_shelf_style.setChecked(True)
             tab.achievement_pulse_capsule_font_size.setValue(22)
             assert tab.achievement_pulse_square_artwork_size.isEnabled() is False
             tab.achievement_pulse_show_latest.setChecked(False)
@@ -273,6 +277,8 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert achievement_payload["artwork_shape"] == "square"
             assert achievement_payload["square_artwork_size"] == 190
             assert achievement_payload["double_capsules"] is False
+            assert achievement_payload["progress_pulse"] is False
+            assert achievement_payload["shelf_style"] is True
             assert achievement_payload["capsule_font_size"] == 22
             assert "double_capsule_long_data" not in achievement_payload
             assert achievement_payload["show_latest"] is False

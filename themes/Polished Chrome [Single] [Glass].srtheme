@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Polished Chrome [Single] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       30,
       35,
       39,
+      255
+    ],
+    "about.art.liquid": [
+      111,
+      124,
+      133,
       255
     ],
     "popup.container.surface": [

@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Desert Nebula [Complex] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       240,
       239,
       244,
+      255
+    ],
+    "about.art.liquid": [
+      201,
+      146,
+      127,
       255
     ],
     "popup.container.surface": [

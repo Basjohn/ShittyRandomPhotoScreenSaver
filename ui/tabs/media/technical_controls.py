@@ -248,12 +248,12 @@ def _input_gain_tooltip(mode_key: str) -> str:
 _BUCKET_DEFS: tuple[_BucketDef, ...] = (
     _BucketDef(
         key="agc",
-        label="Show AGC Controls",
+        label="AGC",
         helper_text="Visibility only. Hidden AGC controls still keep their saved values and remain active.",
     ),
     _BucketDef(
         key="transient",
-        label="Show Transient Controls",
+        label="Transient",
         helper_text="Visibility only. Hidden transient controls still keep their saved values and remain active.",
     ),
 )
@@ -515,36 +515,22 @@ def _build_visibility_toggle(
     bucket_key: str,
     label: str,
     helper_text: str,
-) -> tuple[QCheckBox, QWidget]:
-    toggle = QCheckBox(label)
-    toggle.setProperty("circleIndicator", True)
+) -> tuple[QToolButton, QWidget]:
+    """Build one real Technical leaf bucket using the shared accordion owner."""
+
+    expanded = bool(tab.get_visualizer_tech_bucket_state(mode_key, bucket_key))
+    toggle, section, _section_layout = shared_styles.build_bucket_toggle(
+        parent_layout,
+        label,
+        expanded=expanded,
+        on_toggle=lambda checked: tab.set_visualizer_tech_bucket_state(
+            mode_key, bucket_key, checked
+        ),
+        defer_initial_visibility=True,
+        accordion_owner=tab,
+        accordion_scope=("visualizer", str(mode_key).strip().lower()),
+    )
     toggle.setToolTip(helper_text)
-    visible = bool(tab.get_visualizer_tech_bucket_state(mode_key, bucket_key))
-    toggle.blockSignals(True)
-    toggle.setChecked(visible)
-    toggle.blockSignals(False)
-
-    toggle_row = _aligned_row(parent_layout, "")
-    toggle_row.addWidget(toggle)
-    toggle_row.addStretch()
-
-    section = QWidget()
-    section_layout = QVBoxLayout(section)
-    section_layout.setContentsMargins(0, 0, 0, 0)
-    section_layout.setSpacing(12)
-    parent_layout.addWidget(section)
-
-    def _apply_visibility(checked: bool) -> None:
-        section.setVisible(checked)
-        setter = getattr(tab, "set_visualizer_tech_bucket_state", None)
-        if callable(setter):
-            try:
-                setter(mode_key, bucket_key, checked)
-            except Exception:
-                pass
-
-    toggle.toggled.connect(_apply_visibility)
-    _apply_visibility(visible)
     return toggle, section
 
 
@@ -819,9 +805,9 @@ def _build_control(tab, parent_layout: QVBoxLayout, mode_key: str, defn: _Contro
     raise ValueError(f"Unsupported control kind: {defn.widget_kind}")
 
 
-def _build_bucket_sections(tab, layout: QVBoxLayout, mode_key: str) -> tuple[Dict[str, QWidget], Dict[str, QCheckBox]]:
+def _build_bucket_sections(tab, layout: QVBoxLayout, mode_key: str) -> tuple[Dict[str, QWidget], Dict[str, QToolButton]]:
     sections: Dict[str, QWidget] = {}
-    toggles: Dict[str, QCheckBox] = {}
+    toggles: Dict[str, QToolButton] = {}
     for bucket in _BUCKET_DEFS:
         toggle, section = _build_visibility_toggle(
             tab,
@@ -908,6 +894,9 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     defs = _control_defs_for_mode(mode_key)
     for defn in defs:
         controls.update(_build_control(tab, section_layouts[defn.section], mode_key, defn))
+
+    for bucket_key in ("agc", "transient"):
+        shared_styles.finalize_bucket_body(toggles[bucket_key], sections[bucket_key])
 
     def _update_sensitivity_visibility() -> None:
         adaptive_checkbox = controls.get("adaptive")

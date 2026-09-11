@@ -196,6 +196,8 @@ def test_config_projects_current_steam_runtime_and_visual_settings() -> None:
                 "show_latest_achievement_artwork": False,
                 "latest_unlock_count": 5,
                 "double_capsules": False,
+                "progress_pulse": False,
+                "shelf_style": True,
                 "capsule_font_size": 22,
                 "capsule_fill_color": [12, 34, 56, 78],
                 "capsule_border_color": [90, 87, 65, 43],
@@ -211,6 +213,8 @@ def test_config_projects_current_steam_runtime_and_visual_settings() -> None:
     assert config.artwork_shape == "square"
     assert config.square_artwork_size == 190
     assert config.double_capsules is False
+    assert config.progress_pulse is False
+    assert config.shelf_style is True
     assert config.capsule_font_size == 22
     assert config.capsule_fill_color == (12, 34, 56, 78)
     assert config.capsule_border_color == (90, 87, 65, 43)
@@ -328,7 +332,6 @@ def test_accepted_presentation_mutates_stable_models_and_image_sources(
     assert [row.field_id for row in field_model.rows] == [
         "rarity",
         "session",
-        "total",
         "source",
         "selected",
     ]
@@ -359,6 +362,74 @@ def test_accepted_presentation_mutates_stable_models_and_image_sources(
     assert unlock_model.rows[0].text == "Steel Heart"
     assert field_reset_spy.count() == 0
     assert unlock_reset_spy.count() == 0
+
+
+def test_progress_pulse_is_event_owned_and_only_fires_for_numeric_total_changes() -> None:
+    model = _model()
+    assert model.config.progress_pulse is True
+    assert model.activate() is True
+    pulse_spy = QSignalSpy(model.progressPulseRequested)
+
+    card = build_mock_steam_view_model("achievement_pulse")
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(model=card),
+        animate=False,
+    )
+    # First resolved value establishes the baseline; opening the widget is not a
+    # fake achievement-progress event.
+    assert pulse_spy.count() == 0
+    assert model.progressText == "67%"
+    assert "total" not in [row.field_id for row in model.field_model.rows]
+
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(model=card),
+        animate=True,
+    )
+    assert pulse_spy.count() == 0
+
+    changed_fields = tuple(
+        replace(field, value="68%") if field.field_id == "total" else field
+        for field in card.fields
+    )
+    changed = replace(card, fields=changed_fields)
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(model=changed),
+        animate=True,
+    )
+    assert pulse_spy.count() == 1
+    assert model.progressText == "68%"
+
+    # Unrelated refresh content is not a pulse trigger.
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=replace(changed, status="same progress, newer metadata")
+        ),
+        animate=True,
+    )
+    assert pulse_spy.count() == 1
+
+    zero_fields = tuple(
+        replace(field, value="0%") if field.field_id == "total" else field
+        for field in changed.fields
+    )
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(model=replace(changed, fields=zero_fields)),
+        animate=True,
+    )
+    assert pulse_spy.count() == 2
+    assert model.progressText == "0%"
+
+
+def test_progress_pulse_off_restores_total_to_the_supporting_field_model() -> None:
+    model = _model(config=_config(progress_pulse=False))
+    assert model.activate() is True
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=build_mock_steam_view_model("achievement_pulse")
+        ),
+        animate=False,
+    )
+    assert "total" in [row.field_id for row in model.field_model.rows]
 
 
 def test_runtime_activation_configures_existing_owner_and_routes_admitted_refresh() -> None:
@@ -440,6 +511,7 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         rarity_detail = _find_visual_item(
             item, "achievementCapsuleDetail_rarity"
         )
+        progress_pulse = _find_visual_item(item, "achievementProgressPulse")
         assert canvas is not None
         assert header is not None
         assert artwork is not None
@@ -453,6 +525,12 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         assert card is not None
         assert rarity is not None
         assert rarity_detail is not None
+        assert progress_pulse is not None
+        assert progress_pulse.isVisible() is True
+        assert (progress_pulse.x(), progress_pulse.width(), progress_pulse.height()) == (51.0, 108.0, 108.0)
+        assert str(model.progressText) == "67%"
+        assert _find_visual_item(item, "achievementField_total") is None
+        assert rarity.x() == pytest.approx(208.0)
         assert float(item.property("contentScale")) == pytest.approx(1.0)
         # The shared BrandedHeader owns content-driven dimensions; the named
         # frame fills that owner, which sits at the family-authored anchor.
@@ -535,6 +613,32 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         qt_app.processEvents()
 
 
+@pytest.mark.qt
+def test_qml_shelf_style_reuses_abandonment_ledger_treatment(qt_app) -> None:
+    model = _model(config=_config(shelf_style=True))
+    model.activate()
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=build_mock_steam_view_model("achievement_pulse")
+        ),
+        animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        shelf = _find_visual_item(item, "achievementShelf_rarity")
+        primary = _find_visual_item(item, "achievementCapsulePrimary_rarity")
+        assert shelf is not None and shelf.isVisible() is True
+        assert primary is not None and primary.isVisible() is False
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        qt_app.processEvents()
+
+
 def test_qml_is_presentation_only_and_keeps_family_authored_capsule_shadow() -> None:
     qml = (QML_ROOT / "AchievementPulsePresentation.qml").read_text(
         encoding="utf-8"
@@ -566,6 +670,14 @@ def test_qml_is_presentation_only_and_keeps_family_authored_capsule_shadow() -> 
     assert 'fontSizeMode: Text.HorizontalFit' in qml
     assert '+ ": " + achievementRoot.achievementModel.metricValue' in qml
     assert "latestArtworkBackground" not in qml
+    assert 'objectName: "achievementProgressPulse"' in qml
+    assert "onProgressPulseRequested" in qml
+    assert "duration: 2000" in qml
+    assert "duration: 3000" in qml
+    assert 'fragmentShader: "shaders/widget_glow.frag.qsb"' in qml
+    assert "widgetFrameDemand.setAnimationActive(pulseAnimation, running)" in qml
+    assert 'objectName: "achievementShelf_" + capsule.fieldId' in capsule_qml
+    assert "capsule.shelfSeparatorColor" in capsule_qml
     assert "RectangularShadow" in capsule_qml
     assert "offset: Qt.vector2d(1.5, 1.5)" in capsule_qml
     assert "cached: true" in capsule_qml
