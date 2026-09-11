@@ -436,7 +436,7 @@ OverlayWidget {
                     && achievementRoot.achievementModel.totalFieldEnabled
                     && achievementRoot.achievementModel.viewState === "content"
                 x: 51.0
-                y: authoredCanvas.height - height - 16.0
+                y: authoredCanvas.height - height - 20.0
                 width: 108.0
                 height: 108.0
                 z: 2
@@ -549,7 +549,7 @@ OverlayWidget {
                     opacity: progressPulse.pulseLevel * 0.16
                     scale: 1.11
                     font.family: achievementRoot.achievementModel.fontFamily
-                    font.pointSize: achievementRoot.achievementModel.fontSize * 2.22
+                    font.pointSize: achievementRoot.achievementModel.fontSize * 1.998
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -565,7 +565,7 @@ OverlayWidget {
                     opacity: progressPulse.pulseLevel * 0.44
                     scale: 1.045
                     font.family: achievementRoot.achievementModel.fontFamily
-                    font.pointSize: achievementRoot.achievementModel.fontSize * 2.22
+                    font.pointSize: achievementRoot.achievementModel.fontSize * 1.998
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -580,7 +580,7 @@ OverlayWidget {
                     text: achievementRoot.achievementModel.progressText
                     color: achievementRoot.achievementModel.textColor
                     font.family: achievementRoot.achievementModel.fontFamily
-                    font.pointSize: achievementRoot.achievementModel.fontSize * 2.22
+                    font.pointSize: achievementRoot.achievementModel.fontSize * 1.998
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter

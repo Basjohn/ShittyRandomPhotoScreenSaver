@@ -177,11 +177,12 @@ float getSwirlOrderKey(vec2 cellUV, float swirlTurns, float seed, int swirlOrder
         // appear before outer ones, with a mild angular twist for visual
         // interest and heavy spatial noise to obliterate the grid pattern.
         
-        float cwAngle = 1.0 - thetaNorm;  // Clockwise 0..1
-        
-        // Radius is the main ordering term (~80%), gentle spiral hint (~20%)
-        float spiralHint = cwAngle * 0.18;
-        float order = rNorm * 0.75 + spiralHint;
+        // Keep the angular hint periodic. Feeding normalized atan() directly
+        // into a linear order term creates a hard discontinuity at +/-PI,
+        // which paints the radial cut/seam visible in Center Outward builds.
+        float spiralPhase = theta + rNorm * swirlTurns * TWO_PI;
+        float spiralHint = sin(spiralPhase) * 0.045;
+        float order = rNorm * 0.82 + spiralHint;
         
         // Heavy multi-frequency spatial noise to break rectangular grid
         float n1 = hash1(cellUV * 7.3 + seed * 1.7);

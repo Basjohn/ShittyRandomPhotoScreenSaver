@@ -30,7 +30,7 @@
       "same_image_all_monitors": false,
       "sharpen_downscale": false,
       "show_on_monitors": [
-        1
+        2
       ],
       "use_lanczos": false
     },
@@ -70,11 +70,11 @@
       "activation": {
         "3D Block Spins": true,
         "Blinds": true,
-        "Block Puzzle Flip": true,
+        "Block Puzzle Flip": false,
         "Burn": true,
-        "Crossfade": true,
+        "Crossfade": false,
         "Crumble": true,
-        "Diffuse": true,
+        "Diffuse": false,
         "Particle": true,
         "Ripple": true,
         "Slide": true,
@@ -144,9 +144,9 @@
         "direction": "Random",
         "gloss_size": 72.0,
         "light_direction": 3,
-        "mode": "Converge",
+        "mode": "Random",
         "overlap": 4.0,
-        "particle_radius": 8.000000000000004,
+        "particle_radius": 7.0,
         "swirl_order": 2,
         "swirl_strength": 1.0,
         "swirl_turns": 3.5000000000000004,
@@ -408,7 +408,7 @@
           224,
           38
         ],
-        "capsule_font_size": 12,
+        "capsule_font_size": 15,
         "color": [
           255,
           255,
@@ -446,7 +446,7 @@
         "preferred_width": 600,
         "progress_pulse": true,
         "selection_mode": "most_recent",
-        "shelf_style": false,
+        "shelf_style": true,
         "show_artwork": true,
         "show_background": true,
         "show_latest": true,
@@ -729,7 +729,7 @@
         "margin": 30,
         "monitor": 2,
         "mute_button_enabled": false,
-        "playback_progress_enabled": false,
+        "playback_progress_enabled": true,
         "playback_progress_fill_color": [
           255,
           255,
@@ -742,7 +742,7 @@
           255,
           180
         ],
-        "playback_progress_glow_enabled": false,
+        "playback_progress_glow_enabled": true,
         "playback_progress_height": 6,
         "playback_progress_shadow_color": [
           0,
@@ -1174,7 +1174,8 @@
           "oscilloscope",
           "sine_wave",
           "bubble",
-          "devcurve"
+          "devcurve",
+          "sphere"
         ],
         "mode": "bubble",
         "monitor": "ALL",
@@ -1567,10 +1568,10 @@
         "spectrum_visual_smoothing": 0.5,
         "spectrum_visual_smoothing_enabled": true,
         "spectrum_wave_amplitude": 0.5,
-        "sphere_allow_overflow": false,
+        "sphere_allow_overflow": true,
         "sphere_base_rotation_speed": 0.026,
         "sphere_cel_shading": false,
-        "sphere_depth_shading_enabled": false,
+        "sphere_depth_shading_enabled": true,
         "sphere_depth_shading_strength": 0.2,
         "sphere_edge_color": [
           190,
@@ -1579,7 +1580,7 @@
           255
         ],
         "sphere_edge_weight": 1.0,
-        "sphere_fade_incoming_blocks": false,
+        "sphere_fade_incoming_blocks": true,
         "sphere_fill_color": [
           95,
           160,
@@ -1587,13 +1588,13 @@
           255
         ],
         "sphere_finish": "Neutral",
-        "sphere_fragment_interpolation_enabled": false,
+        "sphere_fragment_interpolation_enabled": true,
         "sphere_fragment_strength": 1.1475,
         "sphere_gloss": 0.2,
-        "sphere_incoming_density_response_enabled": false,
-        "sphere_incoming_transient_velocity_enabled": false,
+        "sphere_incoming_density_response_enabled": true,
+        "sphere_incoming_transient_velocity_enabled": true,
         "sphere_light_direction": "NW",
-        "sphere_light_tracer_enabled": false,
+        "sphere_light_tracer_enabled": true,
         "sphere_particle_amount": 1.0,
         "sphere_particle_distance": 1.35,
         "sphere_particle_outtake_enabled": false,

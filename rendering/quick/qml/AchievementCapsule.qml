@@ -26,6 +26,13 @@ Item {
     property real textShadowOffsetX: 1.0
     property real textShadowOffsetY: 1.0
 
+    function shelfValueText(value) {
+        const upper = String(value || "").trim().toUpperCase()
+        return (upper === "UNKNOWN" || upper === "UNAVAILABLE")
+            ? "UNAVAILABLE"
+            : upper
+    }
+
     height: shelfStyle
         ? capsuleHeight
         : (doubled ? capsuleHeight * 2.0 + capsuleGap : capsuleHeight)
@@ -178,7 +185,7 @@ Item {
             x: 9.0 + (parent.width - 13.0) * 0.55
             width: (parent.width - 13.0) * 0.45
             height: parent.height
-            text: capsule.fieldValue.toUpperCase()
+            text: capsule.shelfValueText(capsule.fieldValue)
             color: capsule.textColor
             font.family: capsule.fontFamily
             font.pointSize: capsule.capsuleFontSize * 0.82

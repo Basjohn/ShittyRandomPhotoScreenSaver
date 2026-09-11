@@ -9,7 +9,7 @@ from __future__ import annotations
 
 
 PROFILE_DEFAULT_OVERRIDES = {'Screensaver': {},
- 'Screensaver_MC': {'display': {'show_on_monitors': [1]},
+ 'Screensaver_MC': {'display': {'show_on_monitors': [2]},
                     'input': {'interaction_mode': True},
                     'mc': {'always_on_top': True},
                     'widgets': {'clock': {'monitor': 'ALL'},
