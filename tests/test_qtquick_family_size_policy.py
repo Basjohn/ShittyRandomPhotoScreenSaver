@@ -23,8 +23,11 @@ def _shadow_values():
         "color": [0, 0, 0, 255],
         "blur_radius": 18,
         "frame_opacity": 0.77,
+        "frame_extra_offset": 0,
         "text_enabled": True,
         "text_opacity": 0.33,
+        "text_extra_offset": 0,
+        "header_enabled": True,
         "direction": "SE",
     }
 
@@ -79,8 +82,8 @@ def test_clock_analogue_preserves_authored_natural_geometry(qt_app) -> None:
     host = _host(factory, owner)
     try:
         def analogue_size(font_size: int) -> tuple[float, float]:
-            config = ClockPresentationConfig(
-                widget_id="clock", font_size=font_size, display_mode="analog"
+            config = ClockPresentationConfig.from_mapping(
+                "clock", {"font_size": font_size, "display_mode": "analog"}
             )
             model = ClockPresentationModel(
                 config, ClockPresentationStyle.project(config, _shadow_values())
