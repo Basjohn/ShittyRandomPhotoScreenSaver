@@ -52,7 +52,7 @@ _BOOTSTRAP_REPO_ROOT = _early_repo_root()
 if str(_BOOTSTRAP_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_BOOTSTRAP_REPO_ROOT))
 
-from PySide6.QtCore import QRect, Qt, Signal  # noqa: E402
+from PySide6.QtCore import QRect, Qt, QTimer, Signal  # noqa: E402
 from PySide6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPen  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractItemView,
@@ -126,6 +126,15 @@ from tools.generate_widget_theme_mirrors import (  # noqa: E402
     BUILTIN_SETTINGS_THEME_ID,
     widget_counterpart_for_settings_theme,
 )
+from tools.foundry_chrome import (  # noqa: E402
+    FoundryAppearanceDialog,
+    FoundryTitleBar,
+    apply_native_backdrop,
+    configure_frameless_window,
+    resolve_tool_theme,
+    save_tool_theme_id,
+)
+from tools.godzip_foundry_theme import render_foundry_stylesheet, resolve_foundry_theme  # noqa: E402
 
 from ui.settings_theme_spec import (  # noqa: E402
     DEFAULT_DARK_SETTINGS_THEME,
@@ -372,6 +381,9 @@ class ThemeFoundryWindow(QMainWindow):
         self._prefs = prefs
 
         self.setWindowTitle(APP_TITLE)
+        configure_frameless_window(self)
+        self._ui_theme_resolution = resolve_tool_theme("theme")
+        self._appearance_dialog: FoundryAppearanceDialog | None = None
         self._collapsible_sections: list[CollapsibleSection] = []
         icon_path = self.repo_root / "images" / "foundries" / "SRPSSTheme.ico"
         if not icon_path.is_file():
@@ -387,6 +399,7 @@ class ThemeFoundryWindow(QMainWindow):
         self._build_ui()
         self._refresh_theme_file_list()
         self._apply_internal_style()
+        QTimer.singleShot(0, lambda: apply_native_backdrop(self, self._ui_theme_resolution))
         self._refresh_backdrop_ui()
         self._rebuild_tree()
         self._check_default_mirror()
@@ -435,13 +448,12 @@ class ThemeFoundryWindow(QMainWindow):
         outer.setContentsMargins(18, 14, 18, 14)
         outer.setSpacing(10)
 
-        title = QLabel("THEME FOUNDRY")
-        title.setObjectName("themeFoundryTitle")
-        font = QFont(title.font())
-        font.setPointSize(max(16, font.pointSize() + 6))
-        font.setBold(True)
-        title.setFont(font)
-        outer.addWidget(title)
+        self.title_bar = FoundryTitleBar(
+            "THEME FOUNDRY",
+            self,
+            settings_callback=self._open_appearance,
+        )
+        outer.addWidget(self.title_bar)
 
         subtitle = QLabel(
             f"Semantic SettingsThemeSpec editor · schema-v{SETTINGS_THEME_SCHEMA_VERSION} .srtheme files · "
@@ -1033,51 +1045,30 @@ class ThemeFoundryWindow(QMainWindow):
         return spin
 
     def _apply_internal_style(self) -> None:
-        self.setStyleSheet(
-            """
-            QMainWindow { background: #0d181e; color: #f4f0e6; }
-            QWidget { color: #f4f0e6; font-family: 'Jost', 'Segoe UI', sans-serif; }
-            QWidget#themeFoundryRoot { background: #111a1e; }
-            QWidget#themeFoundryPane, QWidget#themeFoundryEditor, QWidget#backdropBox {
-                background: rgba(10,15,17,220); border: 1px solid rgba(225,193,127,100); border-radius: 10px;
-            }
-            QWidget#backdropBox { padding: 7px; }
-            QToolButton#collapsibleHeader {
-                background: rgba(20,31,33,220); color: #f4c66d; border: 1px solid rgba(225,193,127,100);
-                border-radius: 7px; padding: 6px 9px; font-weight: 700; text-align: left;
-            }
-            QToolButton#collapsibleHeader:hover {
-                background: rgba(38,59,58,230); border-color: #f4c66d;
-            }
-            QLabel#themeFoundryTitle { color: #f4c66d; letter-spacing: 2px; }
-            QLabel#themeFoundrySubtitle { color: #c8d4d1; font-size: 12px; padding-bottom: 3px; }
-            QLabel#scopeBanner, QLabel#descriptionBox, QLabel#stateBanner {
-                background: rgba(16,25,27,210); border: 1px solid rgba(225,193,127,110);
-                border-radius: 8px; padding: 8px; color: #dce5df;
-            }
-            QLabel#stateBanner { color: #f4c66d; }
-            QLabel#muted { color: #9fb2ad; }
-            QLabel#previewLabel, QLabel#sectionHeading { color: #f4c66d; font-weight: 700; }
-            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-                background: #1f2626; color: #f4f0e6; border: 1px solid #8f7950; border-radius: 7px; padding: 5px;
-            }
-            QTreeWidget#themeFoundryTree, QTreeWidget#layersTree {
-                background-color: rgba(10,15,17,218); alternate-background-color: rgba(31,38,38,205);
-                border: 1px solid rgba(225,193,127,150); border-radius: 10px; color: #edf1ed; outline: none;
-            }
-            QTreeWidget::item { min-height: 28px; padding: 2px 5px; }
-            QTreeWidget::item:selected { background: rgba(60,108,103,210); }
-            QHeaderView::section { background: #1f2f30; color: #f4c66d; border: none; padding: 7px; font-weight: 700; }
-            QPushButton { background: #263b3a; color: #f4f0e6; border: 1px solid #8f7950;
-                border-radius: 7px; padding: 7px 12px; font-weight: 600; }
-            QPushButton:hover { background: #33504d; border-color: #f4c66d; }
-            QPushButton:disabled { color: #6f7e7b; border-color: #4f554e; background: #1b2424; }
-            QPushButton#themeFoundryPrimary { background: #d59b42; color: #101719; border-color: #f4c66d; }
-            QSlider::groove:horizontal { height: 5px; background: #11191b; border: 1px solid #8f7950; }
-            QSlider::handle:horizontal { width: 14px; margin: -5px 0; border-radius: 7px; background: #f4c66d; }
-            QStatusBar { background: #0a0f11; color: #c8d4d1; }
-            """
-        )
+        # Theme Foundry edits product themes, but its own chrome is a separate
+        # tool-local choice from the frozen Foundry catalogue.
+        self.setStyleSheet(render_foundry_stylesheet(self._ui_theme_resolution.theme))
+
+    def _set_tool_theme(self, theme_id: str) -> None:
+        self._ui_theme_resolution = resolve_foundry_theme(theme_id)
+        save_tool_theme_id("theme", self._ui_theme_resolution.theme_id)
+        self._apply_internal_style()
+        apply_native_backdrop(self, self._ui_theme_resolution)
+
+    def _open_appearance(self) -> None:
+        dialog = self._appearance_dialog
+        if dialog is None:
+            dialog = FoundryAppearanceDialog(
+                self,
+                title="Theme Foundry",
+                resolution=self._ui_theme_resolution,
+                apply_theme=self._set_tool_theme,
+            )
+            self._appearance_dialog = dialog
+            dialog.finished.connect(lambda _code: setattr(self, "_appearance_dialog", None))
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _entry_id(self, kind: str, token: str) -> str:
         return f"{kind}:{token}"

@@ -91,6 +91,97 @@ COLORS = {
 }
 
 
+
+FOUNDRY_THEME_DIRECTORY = Path(__file__).resolve().parent / "godzip_themes"
+FOUNDRY_DEFAULT_THEME_ID = "file:Default Dark [Single] [Glass].srtheme"
+
+
+def _theme_file_for_id(theme_id: str) -> Path | None:
+    raw = str(theme_id or "").strip()
+    if raw.startswith("file:"):
+        name = raw[5:]
+        candidate = FOUNDRY_THEME_DIRECTORY / name
+        if candidate.is_file() and candidate.suffix.lower() == ".srtheme":
+            return candidate
+    preferred = FOUNDRY_THEME_DIRECTORY / FOUNDRY_DEFAULT_THEME_ID[5:]
+    return preferred if preferred.is_file() else None
+
+
+def build_foundry_theme_choices() -> tuple[tuple[str, str], ...]:
+    choices: list[tuple[str, str]] = []
+    if not FOUNDRY_THEME_DIRECTORY.is_dir():
+        return ()
+    for path in sorted(FOUNDRY_THEME_DIRECTORY.glob("*.srtheme"), key=lambda p: p.name.casefold()):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict) or payload.get("format") != "srpss.settings-theme":
+            continue
+        name = str(payload.get("name") or path.stem)
+        choices.append((f"file:{path.name}", name))
+    return tuple(choices)
+
+
+def _load_build_foundry_theme(theme_id: str) -> tuple[str, dict] | None:
+    path = _theme_file_for_id(theme_id)
+    if path is None:
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("format") != "srpss.settings-theme":
+        return None
+    return f"file:{path.name}", payload
+
+
+def _rgba_to_hex(value: object, *, fallback: str, under: tuple[int, int, int] = (24, 24, 24)) -> str:
+    if not isinstance(value, list) or len(value) != 4:
+        return fallback
+    try:
+        r, g, b, a = (max(0, min(255, int(channel))) for channel in value)
+    except (TypeError, ValueError):
+        return fallback
+    alpha = a / 255.0
+    rr = int(round(r * alpha + under[0] * (1.0 - alpha)))
+    gg = int(round(g * alpha + under[1] * (1.0 - alpha)))
+    bb = int(round(b * alpha + under[2] * (1.0 - alpha)))
+    return f"#{rr:02x}{gg:02x}{bb:02x}"
+
+
+def _apply_build_foundry_theme(theme_id: str) -> tuple[str, str]:
+    """Project ThemeSpec colours into Tk's opaque bootstrap-safe palette."""
+
+    resolved = _load_build_foundry_theme(theme_id)
+    if resolved is None:
+        return FOUNDRY_DEFAULT_THEME_ID, "Built-in Build Foundry palette"
+    resolved_id, payload = resolved
+    colors = payload.get("colors") if isinstance(payload.get("colors"), dict) else {}
+    def token(name: str, fallback_key: str) -> str:
+        return _rgba_to_hex(colors.get(name), fallback=COLORS[fallback_key])
+
+    COLORS.update({
+        "root": token("window.dialog_glass", "root"),
+        "shell_border": token("panel.border", "shell_border"),
+        "titlebar": token("window.titlebar.surface", "titlebar"),
+        "panel": token("panel.group.surface", "panel"),
+        "panel_alt": token("control.input.surface", "panel_alt"),
+        "panel_hover": token("navigation.subtab.hover_surface", "panel_hover"),
+        "border": token("control.button.border", "border"),
+        "text": token("text.primary", "text"),
+        "muted": token("text.secondary", "muted"),
+        "faint": token("text.tertiary", "faint"),
+        "amber": token("window.titlebar.text", "amber"),
+        "amber_dark": token("control.setup_action.surface", "amber_dark"),
+        "amber_hover": token("control.setup_action.hover_surface", "amber_hover"),
+        "green": token("popup.icon.success", "green"),
+        "red": token("popup.icon.error", "red"),
+        "close_hover": token("window.titlebar.close.hover", "close_hover"),
+    })
+    return resolved_id, str(payload.get("name") or Path(resolved_id[5:]).stem)
+
+
 WINDOWS_APP_ID = "JaydeVerElst.SRPSS.BuildFoundry"
 TASKBAR_TITLE = "Build Foundry"
 BASE_WINDOW_SIZE = (820, 670)
@@ -198,6 +289,7 @@ class JobResult:
 class Preferences:
     auto_close: bool = True
     mode: ModeName = "venv"
+    theme_id: str = FOUNDRY_DEFAULT_THEME_ID
 
 
 def normalize_mode(value: str) -> ModeName:
@@ -414,6 +506,7 @@ def load_preferences(path: Path | None = None) -> Preferences:
         return Preferences(
             auto_close=bool(payload.get("auto_close", True)),
             mode=normalize_mode(str(payload.get("mode", "venv"))),
+            theme_id=str(payload.get("theme_id", FOUNDRY_DEFAULT_THEME_ID) or FOUNDRY_DEFAULT_THEME_ID),
         )
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         return Preferences()
@@ -423,9 +516,10 @@ def save_preferences(preferences: Preferences, path: Path | None = None) -> bool
     target = path or preferences_path()
     tmp_path = target.with_name(f".{target.name}.{os.getpid()}.tmp")
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "auto_close": bool(preferences.auto_close),
         "mode": preferences.mode,
+        "theme_id": preferences.theme_id,
     }
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -970,6 +1064,7 @@ class BuildRunnerApp:
         self._progress_total = 0
         self._progress_completed = 0
         self._preferences = load_preferences()
+        self._theme_id, self._theme_name = _apply_build_foundry_theme(self._preferences.theme_id)
         self._dpi_scale = self._initial_dpi_scale()
         self._shell: tk.Frame | None = None
         self._initial_show_complete = False
@@ -1402,6 +1497,21 @@ class BuildRunnerApp:
             cursor="hand2",
         )
         close.pack(side="right", fill="y")
+        appearance = tk.Button(
+            titlebar,
+            text="⚙",
+            command=self._open_appearance,
+            bg=COLORS["titlebar"],
+            fg=COLORS["text"],
+            activebackground=COLORS["panel_hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            bd=0,
+            width=4,
+            cursor="hand2",
+        )
+        appearance.pack(side="right", fill="y")
+
         minimize = tk.Button(
             titlebar,
             text="—",
@@ -1426,6 +1536,84 @@ class BuildRunnerApp:
             anchor="w",
         )
         title.pack(side="left", fill="both", expand=True)
+
+    def _open_appearance(self) -> None:
+        if self._running:
+            self._footer_status.configure(
+                text="Finish the active build before changing Build Foundry appearance.",
+                fg=COLORS["amber"],
+            )
+            return
+        dialog = tk.Toplevel(self._root)
+        dialog.title("Build Foundry Appearance")
+        dialog.configure(bg=COLORS["panel"])
+        dialog.resizable(False, False)
+        dialog.transient(self._root)
+        try:
+            dialog.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        frame = tk.Frame(dialog, bg=COLORS["panel"], padx=18, pady=16)
+        frame.pack(fill="both", expand=True)
+        tk.Label(
+            frame,
+            text="FOUNDRY APPEARANCE",
+            bg=COLORS["panel"],
+            fg=COLORS["text"],
+            font=("Jost", 13, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        tk.Label(
+            frame,
+            text="Uses the same frozen .srtheme catalogue as the Qt Foundries. Build Foundry stays stdlib/Tk bootstrap-safe.",
+            bg=COLORS["panel"],
+            fg=COLORS["muted"],
+            justify="left",
+            wraplength=self._dip(520),
+            anchor="w",
+        ).pack(fill="x", pady=(3, 12))
+        choices = build_foundry_theme_choices()
+        names = [name for _theme_id, name in choices]
+        id_by_name = {name: theme_id for theme_id, name in choices}
+        selected_name = next((name for theme_id, name in choices if theme_id == self._theme_id), self._theme_name)
+        theme_var = tk.StringVar(value=selected_name)
+        combo = ttk.Combobox(frame, textvariable=theme_var, values=names, state="readonly", width=54)
+        combo.pack(fill="x")
+        hint = tk.Label(
+            frame,
+            text="Build Foundry applies theme changes by restarting so the live build/job widget tree is never half-restyled.",
+            bg=COLORS["panel"],
+            fg=COLORS["faint"],
+            justify="left",
+            wraplength=self._dip(520),
+            anchor="w",
+        )
+        hint.pack(fill="x", pady=(8, 12))
+        buttons = tk.Frame(frame, bg=COLORS["panel"])
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="CANCEL", command=dialog.destroy, style="Foundry.TButton").pack(side="right")
+
+        def apply_and_restart() -> None:
+            selected = id_by_name.get(theme_var.get())
+            if not selected:
+                return
+            prefs = Preferences(
+                auto_close=bool(self._auto_close_var.get()),
+                mode=normalize_mode(self._mode_var.get()),
+                theme_id=selected,
+            )
+            if not save_preferences(prefs):
+                hint.configure(text="Could not persist the selected Build Foundry theme.", fg=COLORS["red"])
+                return
+            argv = [sys.executable, str(Path(__file__).resolve()), "--mode", prefs.mode]
+            try:
+                subprocess.Popen(argv, cwd=str(REPO_ROOT))
+            except OSError as exc:
+                hint.configure(text=f"Could not restart Build Foundry: {exc}", fg=COLORS["red"])
+                return
+            self._root.destroy()
+
+        ttk.Button(buttons, text="APPLY & RESTART", command=apply_and_restart, style="Primary.TButton").pack(side="right", padx=(0, 8))
 
     @staticmethod
     def _is_drag_surface(widget: tk.Misc) -> bool:
@@ -1582,7 +1770,9 @@ class BuildRunnerApp:
         preferences = Preferences(
             auto_close=bool(self._auto_close_var.get()),
             mode=normalize_mode(self._mode_var.get()),
+            theme_id=self._theme_id,
         )
+        self._preferences = preferences
         if not save_preferences(preferences):
             self._footer_status.configure(
                 text="Could not persist Build Foundry preferences.",
