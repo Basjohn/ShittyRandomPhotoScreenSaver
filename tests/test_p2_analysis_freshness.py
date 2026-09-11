@@ -127,6 +127,17 @@ def engine(qt_app, np_module):
     instance = _SpotifyBeatEngine(16)
     instance._is_spotify_playing = True
     instance._audio_worker._np = np_module
+    # Resolve the full technical authority the analysis pipeline now requires
+    # before it will compute a frame (production fails loud / returns no frame on
+    # unresolved config: sensitivity, floor, input gain, energy boost, AGC,
+    # transient lane and capture block size).
+    instance.set_sensitivity_config(True, 1.0)
+    instance.set_floor_config(False, 0.1)
+    instance.set_input_gain(1.0)
+    instance.set_energy_boost(0.85)
+    instance.set_agc_strength(0.5)
+    instance.set_transient_lane_config(1.0, 0.65, 1.0)
+    instance._audio_worker.set_audio_block_size(1024)
     yield instance
     instance.deleteLater()
 
