@@ -23,9 +23,7 @@ from rendering.quick.scene_controller import QuickSceneController, QuickSceneFac
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.quick.window import QuickDisplayWindow
-from widgets.spotify_visualizer.presentation_geometry import (
-    resolve_visualizer_presentation,
-)
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
 from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy

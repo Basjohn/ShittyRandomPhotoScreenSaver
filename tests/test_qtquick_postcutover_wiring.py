@@ -45,6 +45,20 @@ class _ProductUrlOpener:
         return True
 
 
+
+_NEUTRAL_SHADOW = {
+    "enabled": False,
+    "color": [0, 0, 0, 255],
+    "blur_radius": 0,
+    "frame_opacity": 0.0,
+    "frame_extra_offset": 0,
+    "text_enabled": False,
+    "text_opacity": 0.0,
+    "text_extra_offset": 0,
+    "header_enabled": False,
+    "direction": "SE",
+}
+
 def _host(factory: QuickSceneFactory, owner: QObject):
     context, root = factory.create_display_root(
         owner=owner,
@@ -97,7 +111,7 @@ def test_media_family_uses_the_qml_engines_registered_artwork_provider(qt_app) -
             geometry=OverlayWidgetGeometry(20.0, 20.0, 600.0, 310.0),
             display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1920.0, 1080.0),
             display_identity="audit-display",
-            shadow_values={},
+            shadow_values=dict(_NEUTRAL_SHADOW),
             runtime_manager=_NoServiceRuntimeManager(),
             runtime_generation=1701,
         )
@@ -146,7 +160,7 @@ def test_reddit_family_has_a_product_url_opener_and_routes_admitted_click(qt_app
             geometry=OverlayWidgetGeometry(20.0, 20.0, 640.0, 320.0),
             display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1920.0, 1080.0),
             display_identity="audit-display",
-            shadow_values={},
+            shadow_values=dict(_NEUTRAL_SHADOW),
             runtime_manager=_NoServiceRuntimeManager(),
             runtime_generation=1701,
         )
