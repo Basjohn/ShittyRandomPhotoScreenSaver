@@ -121,9 +121,7 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
     )
     from widgets.spotify_visualizer import tick_pipeline
     from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
-    from widgets.spotify_visualizer.presentation_geometry import (
-        resolve_visualizer_presentation,
-    )
+    from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
     from widgets.spotify_visualizer.logical_tick_state import (
         install_default_logical_tick_state,
     )
@@ -226,6 +224,11 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
     )
     widget = controller.logical_tick_state
     install_default_logical_tick_state(widget, bar_count=4)
+    from widgets.spotify_visualizer.presentation_state import (
+        install_default_presentation_state,
+    )
+
+    install_default_presentation_state(controller.presentation_state)
     controller.enabled = True
     controller.playing = True
     controller.engine = _Engine()
