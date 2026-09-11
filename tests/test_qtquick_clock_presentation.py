@@ -115,6 +115,7 @@ def _shadow_values(**overrides):
         "text_enabled": True,
         "text_opacity": 0.33,
         "text_extra_offset": 0,
+        "header_enabled": True,
         "direction": "SE",
     }
     values.update(overrides)
