@@ -175,7 +175,7 @@ if ($Console) { $consoleArg = "--windows-console-mode=force" }
 $argsList = @(
     "-m", "nuitka",
     "--mingw64",
-    "--jobs=2",
+    "--jobs=4",
     "--onefile",
     "--standalone",
     "--remove-output",

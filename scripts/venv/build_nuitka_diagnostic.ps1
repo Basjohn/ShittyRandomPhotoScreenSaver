@@ -1,4 +1,4 @@
-<#
+﻿<#
 Dedicated repo-venv build worker for the installable SRPSS diagnostic runtime.
 
 The ordinary standard and Media Center workers remain diagnostics-free.  This
@@ -30,6 +30,7 @@ if (-not (Test-Path -LiteralPath $Worker -PathType Leaf)) {
     -DistributionName 'diagnostic' `
     -LogStem 'build_nuitka_diagnostic' `
     -OnefileCacheName 'diagnostic-onefile' `
+    -Jobs 4 `
     -ProductNameOverride 'SRPSS Diagnostic' `
     -DescriptionOverride 'SRPSS Diagnostic Runtime'
 

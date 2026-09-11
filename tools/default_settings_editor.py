@@ -21,7 +21,7 @@ import sys
 import time
 from typing import Any, Callable, Iterable, Mapping
 
-from PySide6.QtCore import QAbstractItemModel, QEvent, QModelIndex, Qt, Signal
+from PySide6.QtCore import QAbstractItemModel, QEvent, QModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -66,8 +66,16 @@ from tools.defaults_foundry_core import (  # noqa: E402
     validate_no_absolute_machine_paths,
     validate_no_private_fields,
 )
-from ui.settings_theme import load_theme  # noqa: E402
 from ui.styled_popup import ColorSwatchButton  # noqa: E402
+from tools.foundry_chrome import (  # noqa: E402
+    FoundryAppearanceDialog,
+    FoundryTitleBar,
+    apply_native_backdrop,
+    configure_frameless_window,
+    resolve_tool_theme,
+    save_tool_theme_id,
+)
+from tools.godzip_foundry_theme import render_foundry_stylesheet  # noqa: E402
 
 DEFAULT_SETTINGS_PATH = REPO_ROOT / "core" / "settings" / "default_settings.py"
 PROFILE_OVERRIDES_PATH = REPO_ROOT / "core" / "settings" / "default_profile_overrides.py"
@@ -906,27 +914,34 @@ class DefaultSettingsEditor(QMainWindow):
         self._leaf_items: dict[tuple[str, ...], QTreeWidgetItem] = {}
 
         self.setWindowTitle("SRPSS Defaults Foundry")
+        configure_frameless_window(self)
+        self._theme_resolution = resolve_tool_theme("defaults")
+        self._appearance_dialog: FoundryAppearanceDialog | None = None
         icon_path = REPO_ROOT / "images" / "foundries" / "SRPSSDefaults.ico"
         if icon_path.is_file():
             self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1220, 790)
         self.setMinimumSize(940, 620)
         self._build_ui()
+        self._apply_tool_theme()
         self._reload_tree()
         self._update_undo_state()
+        QTimer.singleShot(0, lambda: apply_native_backdrop(self, self._theme_resolution))
 
     def _build_ui(self) -> None:
         root = QWidget()
         root.setObjectName("defaultsFoundryRoot")
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(14)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
 
-        title = QLabel("DEFAULTS FOUNDRY")
-        title.setObjectName("defaultsFoundryTitle")
-        title.setFont(QFont("Jost", 24, QFont.Weight.Black))
-        layout.addWidget(title)
+        self.title_bar = FoundryTitleBar(
+            "DEFAULTS FOUNDRY",
+            self,
+            settings_callback=self._open_appearance,
+        )
+        layout.addWidget(self.title_bar)
         subtitle = QLabel(
             "Edit every canonical fresh-install/reset value. Normal writes the authoritative base; MC stores only its differences. Current user profiles are not modified."
         )
@@ -1008,39 +1023,40 @@ class DefaultSettingsEditor(QMainWindow):
         actions.addWidget(self.save_button)
         layout.addLayout(actions)
 
-        load_theme(self)
-        self.setStyleSheet(
-            self.styleSheet()
-            + """
-            QWidget#defaultsFoundryRoot {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(13, 24, 30, 255), stop:0.55 rgba(24, 30, 31, 255), stop:1 rgba(41, 34, 24, 255));
-                color: #f4f0e6;
-                font-family: 'Jost', 'Segoe UI';
-            }
-            QLabel#defaultsFoundryTitle { color: #f4c66d; letter-spacing: 2px; }
-            QLabel#defaultsFoundrySubtitle { color: #c8d4d1; font-size: 12px; padding-bottom: 4px; }
-            QTreeWidget#defaultsFoundryTree {
-                background-color: rgba(10, 15, 17, 218);
-                alternate-background-color: rgba(31, 38, 38, 205);
-                border: 1px solid rgba(225, 193, 127, 150);
-                border-radius: 10px;
-                color: #edf1ed;
-                outline: none;
-            }
-            QTreeWidget#defaultsFoundryTree::item { min-height: 32px; padding: 2px 5px; }
-            QTreeWidget#defaultsFoundryTree::item:selected { background: rgba(60, 108, 103, 210); }
-            QHeaderView::section {
-                background: rgba(31, 47, 48, 245); color: #f4c66d; border: none;
-                border-right: 1px solid rgba(255, 255, 255, 35); padding: 8px; font-weight: 700;
-            }
-            QPushButton#defaultsFoundryPrimary {
-                background: #d59b42; color: #11191a; border-color: #ffd995; font-weight: 800;
-            }
-            QPushButton#defaultsFoundryPrimary:hover { background: #efb65a; }
-            QLabel#defaultsFoundryStatus { color: #9fc9bd; }
-            """
-        )
+        # Tool appearance is applied by _apply_tool_theme(); product Settings
+        # theme state is deliberately not read or mutated here.
+
+
+    def _apply_tool_theme(self) -> None:
+        self.setStyleSheet(render_foundry_stylesheet(self._theme_resolution.theme))
+
+    def _set_tool_theme(self, theme_id: str) -> None:
+        from tools.godzip_foundry_theme import resolve_foundry_theme
+
+        self._theme_resolution = resolve_foundry_theme(theme_id)
+        save_tool_theme_id("defaults", self._theme_resolution.theme_id)
+        self._apply_tool_theme()
+        apply_native_backdrop(self, self._theme_resolution)
+        self._reload_tree()
+
+    def _open_appearance(self) -> None:
+        dialog = self._appearance_dialog
+        if dialog is None:
+            dialog = FoundryAppearanceDialog(
+                self,
+                title="Defaults Foundry",
+                resolution=self._theme_resolution,
+                apply_theme=self._set_tool_theme,
+            )
+            self._appearance_dialog = dialog
+            dialog.finished.connect(lambda _code: setattr(self, "_appearance_dialog", None))
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _theme_qcolor(self, token: str) -> QColor:
+        value = self._theme_resolution.theme.color(token)
+        return QColor(value.r, value.g, value.b, value.a)
 
     def _on_profile_changed(self) -> None:
         self._profile = str(self.profile_combo.currentData() or NORMAL_PROFILE)
@@ -1077,7 +1093,7 @@ class DefaultSettingsEditor(QMainWindow):
             if isinstance(value, Mapping) and value:
                 item = QTreeWidgetItem(container, [_pretty_name(key), "", "section", ""])
                 item.setData(0, PATH_ROLE, None)
-                item.setForeground(0, QColor("#f4c66d"))
+                item.setForeground(0, self._theme_qcolor("window.titlebar.text"))
                 item.setFont(0, QFont("Jost", 10, QFont.Weight.Bold))
                 item.setToolTip(0, _SECTION_DESCRIPTIONS.get(path[0], f"{_pretty_name(key)} settings"))
                 for child_key, child_value in value.items():
@@ -1099,7 +1115,7 @@ class DefaultSettingsEditor(QMainWindow):
             for column in range(4):
                 item.setToolTip(column, tooltip)
             if value != get_path(self._initial_models[self._profile], path, _MISSING):
-                item.setForeground(1, QColor("#f4c66d"))
+                item.setForeground(1, self._theme_qcolor("popup.icon.warning"))
             self._leaf_items[path] = item
 
         for top_key, top_value in model.items():

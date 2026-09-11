@@ -37,6 +37,7 @@ DEBRIS_MANIFEST_NAMES = (
 HEAVY_DEFAULT_PREFIXES = (
     "images/",
     "themes/",
+    "tools/godzip_themes/",
     "golden/",
     "goldens/",
     "tests/golden/",
