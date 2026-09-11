@@ -52,3 +52,42 @@ def resolve_presentation(**kwargs: Any):
     merged = dict(NEUTRAL_CARD_SHADOW_KWARGS)
     merged.update(kwargs)
     return resolve_visualizer_presentation(**merged)
+
+
+def default_visualizer_model_and_cache():
+    """Build a canonical settings model + per-mode technical cache.
+
+    Mirrors what ``engine/display_manager.py`` assembles for a real owner
+    (``SpotifyVisualizerSettings.from_mapping`` + ``build_technical_cache``), so
+    owner-lifecycle tests can resolve technical config without a live widget.
+    """
+    from core.settings.default_contract import get_raw_default_settings
+    from core.settings.models import SpotifyVisualizerSettings
+    from widgets.spotify_visualizer.technical_config import build_technical_cache
+
+    config = dict(get_raw_default_settings()["widgets"]["spotify_visualizer"])
+    model = SpotifyVisualizerSettings.from_mapping(config)
+    return model, build_technical_cache(None, model)
+
+
+def make_visualizer_owner(*args: Any, **kwargs: Any):
+    """Construct a QuickDisplayVisualizerOwner the way the display owner does.
+
+    Injects the neutral card/shadow kwargs and a canonical settings model +
+    technical cache (both mandatory for configure/sync to resolve) unless the
+    caller already supplied them.
+    """
+    from widgets.spotify_visualizer.quick_display_visualizer_owner import (
+        QuickDisplayVisualizerOwner,
+    )
+
+    kwargs.setdefault("card_shadow_kwargs", neutral_card_shadow_kwargs())
+    owner = QuickDisplayVisualizerOwner(*args, **kwargs)
+    controller = owner.controller
+    if getattr(controller, "settings_model", None) is None or not controller.technical_config_cache:
+        model, cache = default_visualizer_model_and_cache()
+        if getattr(controller, "settings_model", None) is None:
+            controller.settings_model = model
+        if not controller.technical_config_cache:
+            controller.technical_config_cache = cache
+    return owner

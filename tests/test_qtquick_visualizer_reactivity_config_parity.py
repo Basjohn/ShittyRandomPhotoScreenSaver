@@ -16,6 +16,10 @@ from widgets.spotify_visualizer.beat_engine import (
 from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
+
+# Construct owners the way the display owner does (card kwargs + technical cache).
+from tests._visualizer_presentation import make_visualizer_owner as _make_owner
+
 from widgets.spotify_visualizer.logical_tick_state import (
     install_default_logical_tick_state,
 )
@@ -49,6 +53,31 @@ class _SpectrumConfigEngine:
 
     def set_drop_speed(self, value: float) -> None:
         self.drop_speed = float(value)
+
+    # Technical-config application authority (signature-agnostic no-ops); this
+    # test asserts spectrum-shape routing, not the resolved technical apply.
+    _audio_worker = SimpleNamespace(set_audio_block_size=lambda *a, **k: None)
+
+    def reconfigure_bar_count(self, *args, **kwargs):
+        pass
+
+    def set_floor_config(self, *args, **kwargs):
+        pass
+
+    def set_sensitivity_config(self, *args, **kwargs):
+        pass
+
+    def set_transient_lane_config(self, *args, **kwargs):
+        pass
+
+    def set_agc_strength(self, *args, **kwargs):
+        pass
+
+    def set_energy_boost(self, *args, **kwargs):
+        pass
+
+    def set_input_gain(self, *args, **kwargs):
+        pass
 
 
 _SPECTRUM_CANONICAL_CONFIG = {
@@ -88,7 +117,7 @@ _SPECTRUM_CANONICAL_CONFIG = {
 
 def _owner(engine: _SpectrumConfigEngine, *, mode: str = "spectrum"):
     runtime = SimpleNamespace(runtime_generation=17)
-    return QuickDisplayVisualizerOwner(
+    return _make_owner(
         runtime,
         bar_count=33,
         initial_mode=mode,
@@ -233,10 +262,14 @@ class _TechnicalWorker:
         self.block_size = int(value)
 
     def set_transient_lane_config(
-        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+        self,
+        kick_lane_gain: float,
+        spectrum_lane_transient_mix: float,
+        transient_clamp: float = 0.0,
     ) -> None:
         self._kick_lane_gain = float(kick_lane_gain)
         self._spectrum_lane_transient_mix = float(spectrum_lane_transient_mix)
+        self._transient_clamp = float(transient_clamp)
 
 
 class _TechnicalEngine:
@@ -268,16 +301,20 @@ class _TechnicalEngine:
         self.input_gain = float(value)
 
     def set_transient_lane_config(
-        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+        self,
+        kick_lane_gain: float,
+        spectrum_lane_transient_mix: float,
+        transient_clamp: float = 0.0,
     ) -> None:
         self._audio_worker.set_transient_lane_config(
-            kick_lane_gain, spectrum_lane_transient_mix
+            kick_lane_gain, spectrum_lane_transient_mix, transient_clamp
         )
 
 
 class _TechnicalController:
     def __init__(self) -> None:
         self.bar_count = 32
+        self.mode_id = "bubble"
         self.logical_tick_state = SimpleNamespace()
         self.engine = _TechnicalEngine()
 
@@ -310,6 +347,7 @@ def test_quick_technical_config_preserves_reactivity_critical_zero_and_false_val
             "kick_lane_gain": 1.0,
             "transient_pulse_gain": 0.05,
             "transient_clamp": 1.15,
+            "spectrum_lane_transient_mix": 0.65,
             "bubble_transient_mix_bass": 0.20,
             "bubble_transient_mix_vocal": 0.15,
         },

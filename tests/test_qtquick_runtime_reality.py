@@ -41,6 +41,10 @@ from widgets.spotify_visualizer.logical_tick_state import (
 from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
+
+# Construct owners the way the display owner does (card kwargs + technical cache).
+from tests._visualizer_presentation import make_visualizer_owner as _make_owner
+
 from widgets.spotify_visualizer.render_state import (
     ResolvedVisualizerPresentation,
     SpectrumFrame,
@@ -86,22 +90,18 @@ def _visualizer_presentation() -> ResolvedVisualizerPresentation:
     policy = get_visualizer_presentation_policy("spectrum")
     assert policy.shell_policy is VisualizerShellPolicy.CARD
     assert policy.clip_policy is VisualizerClipPolicy.CARD_INTERIOR
-    return ResolvedVisualizerPresentation(
-        shell_policy=policy.shell_policy,
-        clip_policy=policy.clip_policy,
-        viewport_resize_capable=policy.viewport_resize_capable,
-        outer_rect=(40.0, 60.0, 420.0, 280.0),
-        content_rect=(44.0, 64.0, 412.0, 272.0),
-        dpr=1.0,
-        baseline_viewport_size=(420.0, 280.0),
-        baseline_aspect_ratio=1.5,
-        uniform_visual_scale=1.0,
-        viewport_extent=(412.0, 272.0),
-        current_aspect_ratio=412.0 / 272.0,
-        scene_fade=1.0,
-        content_fade=1.0,
+    # Resolve through the production resolver so the shell_style carries the full
+    # card contract (background/border/shadow) that sync composition consumes.
+    # A 4 px border at 1.0 scale yields the same (40,60,420,280) outer /
+    # (44,64,412,272) content geometry this test previously hand-authored.
+    from tests._visualizer_presentation import resolve_presentation
+
+    return resolve_presentation(
+        policy=policy,
+        display_size=(1920.0, 1080.0),
+        outer_origin=(40.0, 60.0),
         border_width=4.0,
-        shell_style={},
+        corner_radius=8.0,
     )
 
 
@@ -125,7 +125,7 @@ def test_successive_visualizer_revisions_reach_retained_sync_item(
             blank_cursor=False,
         ),
     )
-    owner = QuickDisplayVisualizerOwner(
+    owner = _make_owner(
         runtime,
         bar_count=2,
         initial_mode="spectrum",

@@ -30,6 +30,10 @@ from widgets.spotify_visualizer.logical_tick_state import (
 from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
+
+# Construct owners the way the display owner does (card kwargs + technical cache).
+from tests._visualizer_presentation import make_visualizer_owner as _make_owner
+
 from widgets.spotify_visualizer.runtime_controller import (
     VisualizerRuntimeController,
 )
@@ -82,7 +86,7 @@ def test_visualizer_owner_join_timeout_is_not_reported_as_retired() -> None:
     """
 
     runtime = SimpleNamespace(runtime_generation=91)
-    owner = QuickDisplayVisualizerOwner(
+    owner = _make_owner(
         runtime,
         bar_count=32,
         initial_mode="spectrum",
@@ -115,7 +119,7 @@ def test_visualizer_owner_stop_exception_is_not_swallowed() -> None:
     """A stop/join exception is a teardown failure, not successful retirement."""
 
     runtime = SimpleNamespace(runtime_generation=92)
-    owner = QuickDisplayVisualizerOwner(
+    owner = _make_owner(
         runtime,
         bar_count=32,
         initial_mode="spectrum",
