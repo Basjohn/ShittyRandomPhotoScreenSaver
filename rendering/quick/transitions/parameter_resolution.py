@@ -297,9 +297,8 @@ def _resolve_particle(
     if overlap >= radius * 2.0:
         raise ValueError("resolved Particle overlap must be smaller than particle diameter")
 
-    # Preserve the old runtime's numerical index contract. Current Settings
-    # labels for light direction / swirl order do not match shader comments
-    # one-for-one; changing meanings belongs to the later settings epoch.
+    # Preserve the runtime's numerical index contract. Settings labels mirror
+    # the shader meanings exactly; the persisted values remain integer indices.
     default_light = int(defaults["light_direction"])
     light_direction = max(
         0,

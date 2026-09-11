@@ -72,14 +72,22 @@ Owned in detail by `Docs/TestSuite.md` and `Future_Cleanup.md`.
   Bar Appearance/Rainbow accessories are real buckets; canonical bucket defaults are
   all closed; persistence is sparse and remembers at most one open identity per local
   scope; shared synchronous peer closure introduces no timer/poller/animation owner.
-  Physical PySide/Qt interaction remains **NEEDS RUN VALIDATION**.
+  Functional work is closed; remaining coverage belongs to the broad test reconciliation below.
 - [x] Paranoid bucket reachability/duplication audit: no newly unreachable control path found; outer Visualizer
   Advanced/Technical remain independent parent disclosures; Technical AGC/Transient are now real one-open sparse
   child buckets; Widget deferred-body finalization has one shared owner; seven copied finalizers and stale Gmail/
   Spectrum-eager prose were removed. Setup pills, About and Accessibility remain explicitly outside the bucket
   contract. Three stale mixed test modules were rehomed to new current modules and staged as debris rather than
   teaching production code obsolete multi-open/default-open behavior. Final Qt-free contract is 13/13, unified defaults
-  artifact verification and whole-tree syntax compilation are green; physical Qt interaction remains **NEEDS RUN VALIDATION**.
+  artifact verification and whole-tree syntax compilation are green. Functional work is closed; only test reconciliation remains.
+- [x] Small 2026-09-11 presentation/edit polish: Achievement Pulse percentage text is exactly 10% smaller without changing
+  authored card/pulse geometry, the pulse rail is raised 4 px, Shelf Style canonicalizes missing Playtime/Previous values to the
+  same `UNAVAILABLE` presentation, CUSTOM move editing gains a narrow external 30 px peer-margin snag plus a small 3 px
+  semantic scoring bias so existing edge/centre/peer alignment is actually felt without overriding ordinary grid dragging,
+  and Particle Random's intermittent broken Swirl case is traced to Center Outward's linear atan
+  branch cut. Only that periodic ordering term is repaired; the other Particle modes remain untouched. Particle light/build-order
+  labels now match their existing persisted shader indices (NW/NE/Front/SW/SE; Typical/Center Outward/Edges Inward).
+- [x] First-run missing-source launch continuity: a normal RUN launch interrupted by the source onboarding Settings dialog now resumes the same RUN process after sources are configured instead of returning through CONFIG and exiting. CONFIG-only invocations (`/c`, `-c`, `-s`, `--s`) retain Settings-only lifetime. Startup-dependent settings are re-read after onboarding commits. Functional work is closed; only physical Windows/PySide launch validation remains.
 - [ ] Run the broad `pytest tests/` inventory and reconcile remaining stale
   widget-glow / two-phase-retirement / defaults casualties against current owners.
 - [ ] Reconcile nine Clock presentation tests whose shadow fixtures omit current

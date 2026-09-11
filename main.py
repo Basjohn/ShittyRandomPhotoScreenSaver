@@ -353,6 +353,52 @@ def _schedule_runtime_reddit_helper_session(engine) -> bool:
     return True
 
 
+def _run_missing_sources_onboarding(app: QApplication, settings: SettingsManager) -> bool:
+    """Run Settings as an interrupted RUN-session onboarding step.
+
+    This is intentionally separate from :func:`run_config`: CONFIG mode owns a
+    Settings-only process lifetime, while this helper temporarily enters a modal
+    Settings loop and then returns control to the original RUN launch.  The
+    caller decides whether runtime startup may continue after sources exist.
+    """
+    logger.info("Opening source onboarding Settings for interrupted RUN launch")
+
+    animations = AnimationManager(owner="settings:run_source_onboarding")
+    previous_quit_on_last_window = app.quitOnLastWindowClosed()
+    # Settings is the only top-level window during onboarding.  Do not let its
+    # close schedule QApplication termination before RUN can create runtime
+    # windows and enter the main event loop.
+    app.setQuitOnLastWindowClosed(False)
+
+    try:
+        dialog = SettingsDialog(settings, animations)
+        dialog.exec()
+    except Exception as exc:
+        logger.exception("Failed to open source onboarding Settings: %s", exc)
+        QMessageBox.critical(
+            None,
+            "Configuration Error",
+            f"Failed to open settings:\n{exc}",
+        )
+        return False
+    finally:
+        try:
+            animations.stop()
+        except Exception:
+            logger.debug("Failed to stop onboarding AnimationManager", exc_info=True)
+        app.setQuitOnLastWindowClosed(previous_quit_on_last_window)
+
+    folders = settings.get('sources.folders')
+    rss_feeds = settings.get('sources.rss_feeds')
+    configured = bool(folders) or bool(rss_feeds)
+    logger.info(
+        "Source onboarding finished configured=%s; %s RUN startup",
+        configured,
+        "resuming" if configured else "not resuming",
+    )
+    return configured
+
+
 def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
     """
     Run the screensaver.
@@ -369,15 +415,6 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
     # Create settings manager
     settings = SettingsManager()
 
-    # Determine whether Interaction Mode is enabled so we can optionally
-    # expose a small system tray for Settings/Exit while the saver runs.
-    interaction_mode_enabled = False
-    try:
-        interaction_mode_enabled = settings.get_bool('input.interaction_mode')
-    except Exception as e:
-        logger.debug("[MAIN] Exception suppressed: %s", e)
-        interaction_mode_enabled = False
-    
     # Check if sources are configured (using dot notation)
     folders = settings.get('sources.folders')
     rss_feeds = settings.get('sources.rss_feeds')
@@ -399,7 +436,22 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
         from PySide6.QtCore import QTimer
         QTimer.singleShot(10_000, msg.accept)
         msg.exec()
-        return run_config(app)
+        if not _run_missing_sources_onboarding(app, settings):
+            logger.info("RUN launch ended after source onboarding without configured sources")
+            return 0
+        # Sources were configured from the interrupted RUN launch.  Continue in
+        # this same process rather than returning through the CONFIG-only path.
+        logger.info("Sources configured during onboarding; continuing RUN startup")
+
+    # Resolve startup settings only after source onboarding has completed so a
+    # RUN launch resumed from Settings uses the values the user just committed.
+    interaction_mode_enabled = False
+    try:
+        interaction_mode_enabled = settings.get_bool('input.interaction_mode')
+    except Exception as e:
+        logger.debug("[MAIN] Exception suppressed: %s", e)
+        interaction_mode_enabled = False
+
     # Create and start screensaver engine
     try:
         engine = ScreensaverEngine()

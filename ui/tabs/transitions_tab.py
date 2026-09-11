@@ -945,11 +945,11 @@ class TransitionsTab(QWidget):
         particle_light_row = _aligned_row(particle_layout, "Light Direction:")
         self.particle_light_combo = StyledComboBox(size_variant="compact")
         self.particle_light_combo.addItems([
+            "NW",
+            "NE",
             "Front",
-            "Left",
-            "Right",
-            "Top",
-            "Bottom",
+            "SW",
+            "SE",
         ])
         self.particle_light_combo.currentIndexChanged.connect(self._save_settings)
         particle_light_row.addWidget(self.particle_light_combo)
@@ -968,9 +968,9 @@ class TransitionsTab(QWidget):
         particle_swirl_order_row = _aligned_row(particle_layout, "Swirl Build Order:")
         self.particle_swirl_order_combo = StyledComboBox(size_variant="compact")
         self.particle_swirl_order_combo.addItems([
-            "Inside-Out",
-            "Outside-In",
-            "Random",
+            "Typical",
+            "Center Outward",
+            "Edges Inward",
         ])
         self.particle_swirl_order_combo.currentIndexChanged.connect(self._save_settings)
         particle_swirl_order_row.addWidget(self.particle_swirl_order_combo)

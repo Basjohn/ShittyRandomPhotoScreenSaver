@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-09-07
+Last updated: 2026-09-11
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -36,6 +36,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
+- [R-78 — Particle Center-Outward Swirl Had A Radial Branch Cut](R-78_Particle_Center_Outward_Swirl_Branch_Cut.md)
 - [R-73 — Quick Card-Shadow Extra Offset Translation And Visualizer Omission](R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md)
 - [R-72 — Production Shutdown Imported A Dead Performance Parser](R-72_Production_Shutdown_Imported_Dead_Perf_Parser.md)
 - [R-71 — Visualizer Audio Per-Frame Task And DSP-State Allocation Drove GC Pressure](R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md)

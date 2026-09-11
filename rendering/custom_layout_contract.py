@@ -22,7 +22,9 @@ CUSTOM_LAYOUT_RESTORE_VERSION = 1
 CUSTOM_LAYOUT_RESTORE_SETTINGS_KEY = "custom_layout_restore"
 CUSTOM_LAYOUT_GRID_STEP_PX = 12
 CUSTOM_LAYOUT_SNAP_THRESHOLD_PX = 24
-CUSTOM_LAYOUT_SNAP_GUTTER_PX = 0
+CUSTOM_LAYOUT_ALIGNMENT_SNAG_BIAS_PX = 3
+CUSTOM_LAYOUT_SNAP_GUTTER_PX = 30
+CUSTOM_LAYOUT_GUTTER_SNAG_THRESHOLD_PX = 5
 CUSTOM_LAYOUT_TRANSFER_THRESHOLD_PX = 28
 CUSTOM_LAYOUT_MIN_WIDGET_SIZE = QSize(80, 48)
 
@@ -608,14 +610,6 @@ def _snap_axis_position(
     }:
         candidates.append((grid_candidate, 0, "grid", grid_candidate))
 
-    if gutter:
-        candidates.extend(
-            [
-                (min(gutter, max_position), 2, "gutter", min(gutter, max_position)),
-                (max(0, max_position - gutter), 2, "gutter", boundary_span - gutter),
-            ]
-        )
-
     for peer_start, peer_end in peer_spans:
         peer_start = int(peer_start)
         peer_end = int(peer_end)
@@ -630,29 +624,52 @@ def _snap_axis_position(
         peer_center = int(round((float(peer_start) + float(peer_end)) / 2.0))
         candidates.append((peer_center - int(round(float(span) / 2.0)), 1, "peer_center", peer_center))
         if gutter:
-            candidates.extend(
-                {
-                    (peer_start + gutter, 2, "peer_gutter", peer_start + gutter),
-                    (peer_end - span - gutter, 2, "peer_gutter", peer_end - gutter),
-                    (peer_end + gutter, 2, "peer_gutter", peer_end + gutter),
-                    (peer_start - span - gutter, 2, "peer_gutter", peer_start - gutter),
-                }
-            )
+            # A Custom-layout margin snag means *adjacent* spacing, never an
+            # inset/overlap candidate inside the peer's span. Keep the attraction
+            # band intentionally narrow so mouse control remains authoritative.
+            for gutter_candidate, guide_position in (
+                (peer_end + gutter, peer_end + gutter),
+                (peer_start - span - gutter, peer_start - gutter),
+            ):
+                if 0 <= gutter_candidate <= max_position:
+                    candidates.append(
+                        (gutter_candidate, 2, "peer_gutter", guide_position)
+                    )
 
     best = current
     best_priority = 99
     best_delta = threshold + 1
+    best_score_delta = threshold + 1
     best_kind = ""
     best_guide = current
+    alignment_kinds = {"edge", "display_center", "peer", "peer_center"}
     for candidate, priority, kind, guide_position in candidates:
         candidate = max(0, min(int(candidate), max_position))
         delta = abs(candidate - current)
-        if delta > threshold:
+        candidate_threshold = (
+            min(threshold, CUSTOM_LAYOUT_GUTTER_SNAG_THRESHOLD_PX)
+            if kind == "peer_gutter"
+            else threshold
+        )
+        if delta > candidate_threshold:
             continue
-        if delta < best_delta or (delta == best_delta and priority < best_priority):
+        # Grid remains the ordinary free-drag cadence, but semantic alignment
+        # lines get a tiny distance advantage so they can be felt instead of
+        # almost always losing to a grid point a pixel or two nearer. This is
+        # deliberately a bias, not a wider sticky threshold: an alignment line
+        # still wins only when it is within a few pixels of the nearest grid.
+        score_delta = (
+            max(0, delta - CUSTOM_LAYOUT_ALIGNMENT_SNAG_BIAS_PX)
+            if kind in alignment_kinds
+            else delta
+        )
+        if score_delta < best_score_delta or (
+            score_delta == best_score_delta and priority < best_priority
+        ):
             best = candidate
             best_priority = priority
             best_delta = delta
+            best_score_delta = score_delta
             best_kind = kind
             best_guide = guide_position
     guides: list[SnapGuide] = []
@@ -748,7 +765,7 @@ def resolve_snap_local_rect_for_edit(
     - the real display edges
     - the shared display-local grid
     - peer widget edges
-    - optional secondary gutter spacing helpers
+    - a light external peer-gap snag at the shared 30 px widget margin
     """
 
     clamped = clamp_local_rect_to_bounds(rect, display_size, min_size=min_size)

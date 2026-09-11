@@ -30,7 +30,7 @@ The new `Progress Pulse` and `Shelf Style` presentation options use the existing
 
 **Real defect found and corrected during this audit:** the two new Settings controls were initially missing from the Steam section descriptor's `signal_block_attrs`. Lazy Settings hydration could therefore programmatically alter them without the same signal-block protection as peer Steam controls. Both attributes are now part of the canonical hydration block list, and `test_defaults_schema_authority.py` plus `test_steam_phase3_settings_descriptors.py` guard that contract.
 
-That was a Settings-hydration normalization/lifecycle hole, not a runtime geometry-normalization rewrite. The Qt resize-normalization oracle still requires a Windows/PySide run before the new Achievement Pulse state can be called physically validated.
+That was a Settings-hydration normalization/lifecycle hole, not a runtime geometry-normalization rewrite. Functional work is closed; the Qt resize-normalization oracle remains part of the outstanding Windows/PySide test inventory rather than a separate visual-acceptance blocker.
 
 ### 0.2 Headless validation completed here
 
@@ -98,6 +98,32 @@ After this audit:
 ```
 
 The destination profile remains target-isolated: each profile target runs in its own fresh pytest process so queued QQuick/QObject teardown cannot contaminate unrelated files.
+
+---
+
+## 0.5 2026-09-11 small polish contracts
+
+Three new Qt-free/source-level tests cover the narrow Achievement/CUSTOM/Particle slice without editing pre-existing test modules:
+
+```text
+tests/test_achievement_pulse_polish_contract.py
+tests/test_custom_layout_peer_margin_snag_contract.py
+tests/test_particle_transition_swirl_seam_contract.py
+```
+
+Direct execution in the current Linux workspace: **6/6 assertions PASS**. The geometry test executes the actual `_snap_axis_position()` function body in an isolated Qt-free namespace and verifies both the narrow/external-only 30 px peer-gap attraction and the small semantic alignment preference over a nearby grid target; a farther screen-edge approach still resolves to the ordinary grid, guarding against sticky snapping. The Particle contract protects the periodic Center Outward angle term and exact UI-to-shader label ordering. Achievement Pulse coverage protects the 10% text reduction, unchanged 108x108 pulse geometry, 4 px rail raise, and Shelf-only `UNKNOWN`/`UNAVAILABLE` presentation parity.
+
+These focused gates do not replace the outstanding broad Windows/PySide/OpenGL test inventory.
+
+## 0.6 2026-09-11 first-run source-onboarding launch contract
+
+One new Qt-free/source-level test covers the launch-intent seam without editing a pre-existing test module:
+
+```text
+tests/test_startup_source_onboarding_resume.py
+```
+
+Direct execution in the current Linux workspace: **4/4 assertions PASS**. The contract protects normal RUN resumption after missing-source onboarding, preserves `/c`, `-c`, `-s` and `--s` as CONFIG-only invocations, verifies the same Settings manager is reused and `quitOnLastWindowClosed` is restored, and requires startup-dependent Interaction Mode resolution to occur after onboarding. Physical Windows/PySide validation remains **NEEDS RUN VALIDATION** for the real dialog/process lifetime.
 
 ---
 
