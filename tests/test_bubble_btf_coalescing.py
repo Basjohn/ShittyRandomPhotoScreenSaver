@@ -38,6 +38,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests._visualizer_presentation import neutral_bubble_settings, neutral_bubble_pulse
 from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
 from widgets.spotify_visualizer.render_state import (
@@ -90,8 +91,8 @@ def _advance(runtime, *, bass, authored_ts, edge_token):
     return runtime.advance(
         dt=0.011,
         energy={"bass": bass},
-        settings={"_event_scheduler": _scheduler()},
-        pulse={"bass": bass},
+        settings=neutral_bubble_settings(event_scheduler=_scheduler()),
+        pulse=neutral_bubble_pulse(bass=bass),
         source_timestamp=authored_ts - 0.01,
         authored_timestamp=authored_ts,
         runtime_generation=2,
@@ -137,9 +138,7 @@ def _presentation():
     from core.settings.visualizer_mode_registry import (
         get_visualizer_presentation_policy,
     )
-    from widgets.spotify_visualizer.presentation_geometry import (
-        resolve_visualizer_presentation,
-    )
+    from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 
     return resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy("bubble"),
@@ -254,8 +253,8 @@ def _advance_real(runtime, *, fire, authored_ts, edge_token):
     return runtime.advance(
         dt=0.011,
         energy={"bass": 0.05, "mid": 0.05, "high": 0.05},
-        settings={"_event_scheduler": _make_scheduler(fire)},
-        pulse={"bass": 0.05},
+        settings=neutral_bubble_settings(event_scheduler=_make_scheduler(fire)),
+        pulse=neutral_bubble_pulse(bass=0.05),
         source_timestamp=authored_ts - 0.01,
         authored_timestamp=authored_ts,
         runtime_generation=2,

@@ -14,10 +14,9 @@ from types import SimpleNamespace
 import pytest
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+from tests._visualizer_presentation import neutral_bubble_settings, neutral_bubble_pulse
 from widgets.spotify_visualizer.bubble_frame_runtime import BubbleFrameRuntime
-from widgets.spotify_visualizer.presentation_geometry import (
-    resolve_visualizer_presentation,
-)
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
@@ -53,8 +52,8 @@ def _advance(runtime, *, extent, authored_ts, edge_token):
     return runtime.advance(
         dt=0.011,
         energy={"bass": 0.2},
-        settings={"_event_scheduler": _scheduler()},
-        pulse={"bass": 0.2},
+        settings=neutral_bubble_settings(event_scheduler=_scheduler()),
+        pulse=neutral_bubble_pulse(bass=0.2),
         source_timestamp=authored_ts - 0.01,
         authored_timestamp=authored_ts,
         runtime_generation=2,

@@ -70,6 +70,41 @@ def default_visualizer_model_and_cache():
     return model, build_technical_cache(None, model)
 
 
+def neutral_bubble_settings(*, event_scheduler: Any = None,
+                            viewport_extent: Any = (420.0, 280.0), **overrides: Any) -> dict:
+    """Return a complete BubbleSimulation settings payload from canonical defaults.
+
+    The simulation reads the full ``bubble_*`` control set plus the runtime-only
+    ``_event_scheduler`` / ``_bubble_viewport_extent`` keys; supplying the
+    canonical bubble config keeps these tests aligned with the shipped contract
+    instead of a hand-maintained subset.
+    """
+    from core.settings.default_contract import get_raw_default_settings
+
+    cfg = get_raw_default_settings()["widgets"]["spotify_visualizer"]
+    settings = {key: value for key, value in cfg.items() if key.startswith("bubble_")}
+    settings["_event_scheduler"] = event_scheduler
+    settings["_bubble_viewport_extent"] = viewport_extent
+    settings.update(overrides)
+    return settings
+
+
+def neutral_bubble_pulse(**overrides: Any) -> dict:
+    """Return a complete Bubble snapshot pulse payload (big/small pulse terms)."""
+    pulse = {
+        "bass": 0.0,
+        "mid_high": 0.0,
+        "big_bass_pulse": 0.0,
+        "small_freq_pulse": 0.0,
+        "big_specular_max_size": 1.0,
+        "big_visual_smoothing": 0.0,
+        "big_contraction_bias": 0.0,
+        "big_size_clamp": 1.0,
+    }
+    pulse.update(overrides)
+    return pulse
+
+
 def make_visualizer_owner(*args: Any, **kwargs: Any):
     """Construct a QuickDisplayVisualizerOwner the way the display owner does.
 

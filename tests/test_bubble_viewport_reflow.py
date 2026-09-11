@@ -30,6 +30,7 @@ from widgets.spotify_visualizer.bubble_simulation import (
     BubbleSimulation,
     BubbleState,
 )
+from tests._visualizer_presentation import neutral_bubble_settings
 from widgets.spotify_visualizer.bubble_viewport_profile import (
     resolve_bubble_viewport_profile,
 )
@@ -39,12 +40,10 @@ _NO_KEY = object()
 
 
 def _settings(extent=_NO_KEY, **over):
-    settings = {
-        "bubble_big_count": 6,
-        "bubble_small_count": 20,
-        "bubble_stream_direction": "up",
-        "bubble_drift_direction": "random",
-    }
+    settings = neutral_bubble_settings(
+        bubble_big_count=6, bubble_small_count=20,
+        bubble_stream_direction="up", bubble_drift_direction="random",
+    )
     if extent is not _NO_KEY:
         settings["_bubble_viewport_extent"] = extent
     settings.update(over)
@@ -244,24 +243,24 @@ def _run_viewport_transient_motion_impl(
         )
     ]
     scheduler = _OneShotSnareScheduler()
-    settings = {
-        "_bubble_viewport_extent": extent,
-        "_event_scheduler": scheduler,
-        "bubble_big_count": 0,
-        "bubble_small_count": 0,
-        "bubble_stream_direction": stream_direction,
-        "bubble_stream_constant_speed": 0.12,
-        "bubble_stream_speed_cap": 1.8,
-        "bubble_stream_reactivity": 1.0,
-        "bubble_drift_direction": drift_direction,
-        "bubble_drift_amount": 0.65,
-        "bubble_drift_speed": 0.65,
-        "bubble_drift_frequency": 0.45,
-        "bubble_group_drift": group_drift,
-        "bubble_trail_strength": 1.0,
-        "bubble_bounce_big_pct": 0.0,
-        "bubble_bounce_small_pct": 0.0,
-    }
+    settings = neutral_bubble_settings(
+        viewport_extent=extent,
+        event_scheduler=scheduler,
+        bubble_big_count=0,
+        bubble_small_count=0,
+        bubble_stream_direction=stream_direction,
+        bubble_stream_constant_speed=0.12,
+        bubble_stream_speed_cap=1.8,
+        bubble_stream_reactivity=1.0,
+        bubble_drift_direction=drift_direction,
+        bubble_drift_amount=0.65,
+        bubble_drift_speed=0.65,
+        bubble_drift_frequency=0.45,
+        bubble_group_drift=group_drift,
+        bubble_trail_strength=1.0,
+        bubble_bounce_big_pct=0.0,
+        bubble_bounce_small_pct=0.0,
+    )
     body = {
         "bass": 0.26,
         "mid": 0.22,
@@ -468,16 +467,12 @@ def test_refill_cluster_spread_is_content_relative(expanded_extent) -> None:
         sim.tick(
             1.0 / 90.0,
             dict(_ZERO_ENERGY),
-            {
-                "_bubble_viewport_extent": extent,
-                "bubble_big_count": 0,
-                "bubble_small_count": 3,
-                "bubble_stream_direction": "none",
-                "bubble_drift_direction": "none",
-                "bubble_drift_amount": 0.0,
-                "bubble_bounce_big_pct": 0.0,
-                "bubble_bounce_small_pct": 0.0,
-            },
+            neutral_bubble_settings(
+                viewport_extent=extent, bubble_big_count=0, bubble_small_count=3,
+                bubble_stream_direction="none", bubble_drift_direction="none",
+                bubble_drift_amount=0.0, bubble_bounce_big_pct=0.0,
+                bubble_bounce_small_pct=0.0,
+            ),
         )
         return recorded
 
@@ -524,17 +519,12 @@ def test_surface_exit_margin_is_content_relative(
         sim.tick(
             1.0 / 90.0,
             dict(_ZERO_ENERGY),
-            {
-                "_bubble_viewport_extent": extent,
-                "bubble_big_count": 0,
-                "bubble_small_count": 0,
-                "bubble_stream_direction": "none",
-                "bubble_drift_direction": "none",
-                "bubble_drift_amount": 0.0,
-                "bubble_trail_strength": 1.0,
-                "bubble_bounce_big_pct": 0.0,
-                "bubble_bounce_small_pct": 0.0,
-            },
+            neutral_bubble_settings(
+                viewport_extent=extent, bubble_big_count=0, bubble_small_count=0,
+                bubble_stream_direction="none", bubble_drift_direction="none",
+                bubble_drift_amount=0.0, bubble_trail_strength=1.0,
+                bubble_bounce_big_pct=0.0, bubble_bounce_small_pct=0.0,
+            ),
         )
         return bubble.exiting
 
@@ -729,11 +719,9 @@ _ZERO_ENERGY = {"bass": 0.0, "mid": 0.0, "high": 0.0, "overall": 0.0}
 
 
 def _quiet_settings(extent):
-    return {
-        "_bubble_viewport_extent": extent,
-        "bubble_big_count": 0,
-        "bubble_small_count": 0,
-    }
+    return neutral_bubble_settings(
+        viewport_extent=extent, bubble_big_count=0, bubble_small_count=0,
+    )
 
 
 def test_specular_offsets_are_local_and_domain_independent() -> None:
