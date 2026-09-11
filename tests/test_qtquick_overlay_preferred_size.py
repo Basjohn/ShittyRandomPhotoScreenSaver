@@ -36,15 +36,18 @@ def _shadow_values():
         "color": [0, 0, 0, 255],
         "blur_radius": 18,
         "frame_opacity": 0.77,
+        "frame_extra_offset": 0,
         "text_enabled": True,
         "text_opacity": 0.33,
+        "text_extra_offset": 0,
+        "header_enabled": True,
         "direction": "SE",
     }
 
 
 def _clock_model(display_mode: str) -> ClockPresentationModel:
-    config = ClockPresentationConfig(
-        widget_id="clock", font_size=48, display_mode=display_mode
+    config = ClockPresentationConfig.from_mapping(
+        "clock", {"font_size": 48, "display_mode": display_mode}
     )
     style = ClockPresentationStyle.project(config, _shadow_values())
     return ClockPresentationModel(config, style)
