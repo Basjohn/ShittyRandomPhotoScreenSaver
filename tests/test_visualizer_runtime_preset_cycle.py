@@ -31,19 +31,23 @@ def _default_visualizer_config() -> dict:
 
 def test_flat_shipped_custom_cache_migrates_and_nested_snapshot_wins() -> None:
     cache = {
-        "bubble.bubble_growth": 4.25,
+        "bubble.bubble_bar_count": 20,
         "bubble.mode": "bubble",
-        "bubble": {"mode": "bubble", "bubble_growth": 7.5},
-        "devcurve.devcurve_growth": 2.0,
+        "bubble": {"mode": "bubble", "bubble_bar_count": 44},
+        "devcurve.devcurve_base_level": 0.7,
     }
 
     normalized = normalize_visualizer_custom_snapshot_cache(cache)
 
-    assert normalized == {
-        "bubble": {"mode": "bubble", "bubble_growth": 7.5},
-        "devcurve": {"devcurve_growth": 2.0},
-    }
-    assert cache["bubble.bubble_growth"] == 4.25
+    # A valid nested mode snapshot wins over flat material for the same mode; a
+    # mode present only as flat keys is migrated. Both are canonically
+    # materialized into a full mode-scoped config, so assert the decisive values
+    # rather than an exact sparse dict.
+    assert set(normalized) == {"bubble", "devcurve"}
+    assert normalized["bubble"]["mode"] == "bubble"
+    assert normalized["bubble"]["bubble_bar_count"] == 44
+    assert normalized["devcurve"]["devcurve_base_level"] == pytest.approx(0.7)
+    assert cache["bubble.bubble_bar_count"] == 20
 
 
 @pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
@@ -83,7 +87,7 @@ def test_shipped_custom_cache_route_leak_is_stripped_on_normalization() -> None:
         {
             "bubble": {
                 "mode": "bubble",
-                "bubble_growth": 7.5,
+                "bubble_bar_count": 44,
                 "monitor": "ALL",
                 "position": "Top Left",
                 "enabled": False,
@@ -91,9 +95,11 @@ def test_shipped_custom_cache_route_leak_is_stripped_on_normalization() -> None:
         }
     )
 
-    assert normalized == {
-        "bubble": {"mode": "bubble", "bubble_growth": 7.5}
-    }
+    # Widget route/geometry keys never belong in a mode snapshot; the authored
+    # mode value survives canonical materialization.
+    assert normalized["bubble"]["mode"] == "bubble"
+    assert normalized["bubble"]["bubble_bar_count"] == 44
+    assert not {"monitor", "position", "enabled"}.intersection(normalized["bubble"])
 
 
 @pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
@@ -125,8 +131,7 @@ def test_custom_roundtrip_is_lossless_and_curated_target_replaces_values() -> No
         {
             "mode": mode,
             get_preset_key(mode): custom_index,
-            "spectrum_growth": 9.75,
-            "spectrum_glow_intensity": 0.17,
+            "spectrum_glow_intensity": 0.5,
         }
     )
     original_custom = build_normalized_custom_snapshot(mode, config)
@@ -134,10 +139,10 @@ def test_custom_roundtrip_is_lossless_and_curated_target_replaces_values() -> No
 
     target = resolve_next_visualizer_runtime_preset(config, cache, mode=mode)
     curated = get_preset_settings(mode, 0)
-    assert target.visualizer_config["spectrum_growth"] == pytest.approx(
-        curated["spectrum_growth"]
+    assert target.visualizer_config["spectrum_glow_intensity"] == pytest.approx(
+        curated["spectrum_glow_intensity"]
     )
-    assert target.visualizer_config["spectrum_growth"] != pytest.approx(9.75)
+    assert target.visualizer_config["spectrum_glow_intensity"] != pytest.approx(0.5)
 
     for _ in range(get_preset_count(mode) - 1):
         target = resolve_next_visualizer_runtime_preset(
@@ -170,7 +175,7 @@ def test_custom_roundtrip_preserves_live_widget_admission_and_route() -> None:
     leaked_cache = {
         mode: {
             "mode": mode,
-            "bubble_growth": 8.25,
+            "bubble_bar_count": 20,
             "monitor": "ALL",
             "position": "Top Left",
             "enabled": False,
@@ -190,7 +195,7 @@ def test_custom_roundtrip_preserves_live_widget_admission_and_route() -> None:
         cache = resolved.custom_presets
 
     assert resolved.target_index == custom_index
-    assert target["bubble_growth"] == pytest.approx(8.25)
+    assert target["bubble_bar_count"] == 20
     assert target["position"] == "Custom"
     assert target["monitor"] == "2"
     assert target["enabled"] is True
