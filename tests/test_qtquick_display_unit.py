@@ -55,7 +55,18 @@ def test_unit_assembles_chain_and_binds_families(qt_app) -> None:
 
         built = unit.bind_families(
             widgets_config={"clock": {"enabled": True, "position": "Top Right"}},
-            shadow_values={"enabled": True, "direction": "SE"},
+            shadow_values={
+                "enabled": True,
+                "color": [0, 0, 0, 255],
+                "blur_radius": 18,
+                "frame_opacity": 0.77,
+                "frame_extra_offset": 0,
+                "text_enabled": True,
+                "text_opacity": 0.4,
+                "text_extra_offset": 0,
+                "header_enabled": True,
+                "direction": "SE",
+            },
         )
         assert built == ("clock",)
         assert host.live_count == 1

@@ -28,7 +28,20 @@ from widgets.spotify_visualizer.oscilloscope_frame_runtime import (
     OscilloscopeFrameRuntime,
 )
 from widgets.spotify_visualizer.logical_runtime import LatestStateMailbox
-from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
+from tests._visualizer_presentation import (
+    resolve_presentation as resolve_visualizer_presentation,
+    neutral_bubble_settings,
+    neutral_bubble_pulse,
+)
+from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+
+
+def _resolved_mode_config(mode_id: str) -> dict:
+    """Complete canonical resolved config for one mode (all authored params)."""
+    payload = resolve_visualizer_activation_payload(
+        {"mode": mode_id, f"preset_{mode_id}": 0}, mode=mode_id
+    )
+    return dict(payload.resolved_config)
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     DevCurveFrame,
@@ -175,8 +188,8 @@ def _drive_runtime(
         return runtime.advance(
             dt=0.016,
             energy={"bass": 0.5},
-            settings={},
-            pulse={"bass": 0.5},
+            settings=neutral_bubble_settings(),
+            pulse=neutral_bubble_pulse(bass=0.5),
             source_timestamp=now_ts - 0.01,
             authored_timestamp=now_ts,
             source_ready=fresh_source and playing,
@@ -189,15 +202,24 @@ def _drive_runtime(
             source_timestamp=now_ts - 0.01,
             energy=VisualizerEnergyState(bass=0.5, overall=0.5),
             transient=VisualizerTransientState(bass=0.4),
-            layer_shape_nodes={},
-            parameters={},
+            layer_shape_nodes={
+                name: [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
+                for name in ("bass", "vocals", "mids", "transients")
+            },
+            parameters=_resolved_mode_config("devcurve"),
             **identity,
         )
     if mode_id == "sphere":
         resolved = runtime.resolve(
             now_ts=now_ts,
             energy=VisualizerEnergyState(bass=0.5, mid=0.4, high=0.3, overall=0.4),
-            parameters=freeze_render_fields({"sphere_material": "Chrome"}),
+            reactive_energy=VisualizerEnergyState(bass=0.5, mid=0.4, high=0.3, overall=0.4),
+            presence_energy=VisualizerEnergyState(bass=0.5, mid=0.4, high=0.3, overall=0.4),
+            transient=VisualizerTransientState(bass=0.4),
+            analysis_spectrum=(),
+            source_active=bool(fresh_source and playing),
+            event_scheduler=None,
+            parameters=freeze_render_fields(_resolved_mode_config("sphere")),
             runtime_generation=identity["runtime_generation"],
             engine_generation=identity["engine_generation"],
             activation_id=identity["activation_id"],
