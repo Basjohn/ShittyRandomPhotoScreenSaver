@@ -89,6 +89,10 @@ def test_context_menu_shadow_projects_global_card_direction_without_translation(
             "blur_radius": 22,
             "direction": "NW",
             "frame_extra_offset": 17,
+            "text_enabled": True,
+            "text_opacity": 0.4,
+            "text_extra_offset": 0,
+            "header_enabled": True,
         }
     )
 
