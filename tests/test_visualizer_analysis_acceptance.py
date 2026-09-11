@@ -216,6 +216,9 @@ def test_acceptance_preserves_reset_and_gap_energy_behavior():
 
 def test_acceptance_commits_waveform_worker_energy_and_current_activation(monkeypatch):
     engine = _SpotifyBeatEngine(3)
+    # Resolve the sensitivity/floor authority the reactivity path now requires.
+    engine.set_sensitivity_config(True, 1.0)
+    engine.set_floor_config(False, 0.1)
     activation = engine.get_activation_id()
     worker_state = object()
     committed = []
