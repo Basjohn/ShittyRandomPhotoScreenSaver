@@ -299,10 +299,13 @@ class SwatchButton(QPushButton):
         c = self._value
         luminance = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
         fg = "#000000" if luminance > 150 and c.a > 90 else "#ffffff"
+        # The authored swatch colour is local; structural chrome stays with the
+        # Foundry ThemeSpec so borders/radii remain consistent with the rest of
+        # the editor.
         self.setStyleSheet(
             "QPushButton {"
             f"background-color: rgba({c.r},{c.g},{c.b},{c.a});"
-            f"color:{fg};border:1px solid #aaaaaa;border-radius:6px;padding:6px 12px;"
+            f"color:{fg};"
             "}"
         )
 
@@ -445,7 +448,7 @@ class ThemeFoundryWindow(QMainWindow):
         root.setObjectName("themeFoundryRoot")
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
-        outer.setContentsMargins(18, 14, 18, 14)
+        outer.setContentsMargins(12, 10, 12, 10)
         outer.setSpacing(10)
 
         self.title_bar = FoundryTitleBar(
@@ -463,7 +466,10 @@ class ThemeFoundryWindow(QMainWindow):
         outer.addWidget(subtitle)
 
         quick = QHBoxLayout()
-        quick.addWidget(QLabel("Theme"))
+        quick.setSpacing(8)
+        theme_label = QLabel("Theme")
+        theme_label.setFixedWidth(72)
+        quick.addWidget(theme_label)
         self.theme_combo = QComboBox()
         self.theme_combo.setMinimumWidth(360)
         quick.addWidget(self.theme_combo, 1)
@@ -478,12 +484,14 @@ class ThemeFoundryWindow(QMainWindow):
         outer.addLayout(quick)
 
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
         self.new_btn = QPushButton("New From Default")
         self.open_btn = QPushButton("Open Theme…")
         self.save_btn = QPushButton("Save")
         self.save_as_btn = QPushButton("Save As…")
         self.widget_export_btn = QPushButton("Save Widget Counterpart…")
         self.validate_btn = QPushButton("Validate Draft")
+        self.launch_widget_btn = QPushButton("LAUNCH WIDGET FOUNDRY")
         self.launch_btn = QPushButton("Launch Settings (--s)")
         self.save_as_btn.setObjectName("themeFoundryPrimary")
         for button in (
@@ -492,11 +500,15 @@ class ThemeFoundryWindow(QMainWindow):
         ):
             toolbar.addWidget(button)
         toolbar.addStretch(1)
+        toolbar.addWidget(self.launch_widget_btn)
         toolbar.addWidget(self.launch_btn)
         outer.addLayout(toolbar)
 
         file_row = QHBoxLayout()
-        file_row.addWidget(QLabel("Theme name"))
+        file_row.setSpacing(8)
+        name_label = QLabel("Theme name")
+        name_label.setFixedWidth(72)
+        file_row.addWidget(name_label)
         self.name_edit = QLineEdit(self.draft.name)
         self.name_edit.setMinimumWidth(260)
         file_row.addWidget(self.name_edit)
@@ -523,12 +535,14 @@ class ThemeFoundryWindow(QMainWindow):
         )
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setObjectName("themeFoundrySplitter")
         splitter.addWidget(self._build_tree_pane())
         splitter.addWidget(self._build_editor_pane())
         splitter.setSizes([820, 620])
         outer.addWidget(splitter, 1)
 
         status = QStatusBar(self)
+        status.setObjectName("themeFoundryStatusBar")
         self.setStatusBar(status)
         self.status_label = QLabel("")
         status.addWidget(self.status_label, 1)
@@ -539,6 +553,7 @@ class ThemeFoundryWindow(QMainWindow):
         self.save_as_btn.clicked.connect(self.save_theme_as)
         self.widget_export_btn.clicked.connect(self.save_widget_counterpart)
         self.validate_btn.clicked.connect(self.validate_draft)
+        self.launch_widget_btn.clicked.connect(self.launch_widget_foundry)
         self.launch_btn.clicked.connect(self.launch_settings)
         self.name_edit.textEdited.connect(self._theme_name_changed)
 
@@ -661,13 +676,15 @@ class ThemeFoundryWindow(QMainWindow):
 
     def _build_editor_pane(self) -> QScrollArea:
         scroll = QScrollArea()
+        scroll.setObjectName("themeFoundryEditorPane")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.viewport().setObjectName("themeFoundryEditorViewport")
         editor = QWidget()
-        editor.setObjectName("themeFoundryEditor")
+        editor.setObjectName("themeFoundryEditorContent")
         scroll.setWidget(editor)
         layout = QVBoxLayout(editor)
-        layout.setContentsMargins(14, 8, 10, 8)
+        layout.setContentsMargins(14, 12, 12, 12)
         layout.setSpacing(10)
 
         row = QHBoxLayout()
@@ -2200,6 +2217,54 @@ class ThemeFoundryWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         event.accept() if self._confirm_discard_if_dirty() else event.ignore()
+
+    def launch_widget_foundry(self) -> None:
+        widget_foundry = self.repo_root / "tools" / "widget_theme_foundry.py"
+        if not widget_foundry.is_file():
+            self._error(
+                "Cannot launch Widget Theme Foundry",
+                f"widget_theme_foundry.py not found under:\n{self.repo_root / 'tools'}",
+            )
+            return
+
+        command = [sys.executable, str(widget_foundry), "--repo", str(self.repo_root)]
+        counterpart: Path | None = None
+        if not self._is_dirty():
+            try:
+                spec = self.draft.to_spec()
+                themes_dir = (self.repo_root / "themes").resolve()
+                if self.theme_path is None and spec == self.default_spec:
+                    settings_theme_id = BUILTIN_SETTINGS_THEME_ID
+                elif self.theme_path is not None and self.theme_path.resolve().parent == themes_dir:
+                    settings_theme_id = (
+                        BUILTIN_SETTINGS_THEME_ID
+                        if self.theme_path.name.casefold() == CANONICAL_DEFAULT_FILENAME.casefold()
+                        else f"file:{self.theme_path.name}"
+                    )
+                else:
+                    settings_theme_id = ""
+                if settings_theme_id:
+                    projected = widget_counterpart_for_settings_theme(
+                        spec, settings_theme_id=settings_theme_id
+                    )
+                    candidate = themes_dir / "widgets" / f"{projected.name}{WIDGET_THEME_FILE_EXTENSION}"
+                    if candidate.is_file():
+                        counterpart = candidate
+                        command.append(str(candidate))
+            except Exception:
+                # Launching the editor itself must not depend on counterpart
+                # discovery; a missing/unusual link simply opens its default view.
+                counterpart = None
+
+        try:
+            subprocess.Popen(command, cwd=str(self.repo_root))
+        except Exception as exc:
+            self._error("Cannot launch Widget Theme Foundry", str(exc))
+            return
+        if counterpart is not None:
+            self._set_status(f"Launched Widget Theme Foundry with {counterpart.name!r}.")
+        else:
+            self._set_status("Launched Widget Theme Foundry.")
 
     def launch_settings(self) -> None:
         main_py = self.repo_root / "main.py"

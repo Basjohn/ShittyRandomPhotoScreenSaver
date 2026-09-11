@@ -439,9 +439,9 @@
       255
     ],
     "control.setup_action.border": [
-      170,
-      188,
-      219,
+      109,
+      137,
+      179,
       255
     ],
     "control.setup_action.hover_surface": [
@@ -523,9 +523,9 @@
       255
     ],
     "control.mode.border": [
-      170,
-      188,
-      219,
+      109,
+      137,
+      179,
       255
     ],
     "control.mode.hover_surface": [
@@ -535,15 +535,15 @@
       255
     ],
     "control.mode.checked_surface": [
-      63,
+      62,
       75,
       95,
       255
     ],
     "control.mode.checked_border": [
-      170,
-      188,
-      219,
+      109,
+      137,
+      179,
       255
     ],
     "control.mode.disabled_text": [
@@ -553,9 +553,9 @@
       255
     ],
     "control.mode.disabled_border": [
-      170,
-      188,
-      219,
+      109,
+      137,
+      179,
       255
     ],
     "control.checkbox.text": [
@@ -751,15 +751,15 @@
       255
     ],
     "slider.handle.hover_border": [
-      170,
-      188,
-      219,
+      109,
+      137,
+      179,
       255
     ],
     "slider.handle.pressed_border": [
-      170,
-      188,
-      219,
+      109,
+      137,
+      179,
       255
     ],
     "slider.handle.disabled_surface": [
@@ -769,9 +769,9 @@
       255
     ],
     "slider.handle.active_border": [
-      170,
-      188,
-      219,
+      109,
+      137,
+      179,
       255
     ],
     "slider.recommended_mark": [
@@ -817,9 +817,9 @@
       255
     ],
     "about.link.border": [
-      170,
-      188,
-      219,
+      109,
+      137,
+      179,
       255
     ],
     "about.link.hover_surface": [

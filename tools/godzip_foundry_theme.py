@@ -182,13 +182,13 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
 
     return base + f"""
         QMainWindow {{ background: transparent; }}
-        QWidget#root, QWidget#defaultsFoundryRoot, QWidget#themeFoundryRoot {{ background: {dialog}; color: {primary}; border: 1px solid {border}; border-radius: 10px; }}
+        QWidget#root, QWidget#defaultsFoundryRoot, QWidget#themeFoundryRoot, QWidget#widgetThemeFoundryRoot {{ background: {dialog}; color: {primary}; border: 1px solid {border}; border-radius: 10px; }}
         QWidget {{ color: {primary}; font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif'; font-size: 10pt; }}
 
         QFrame#shell {{ background: {subsection}; border: 1px solid {border}; border-radius: 10px; }}
         QFrame#foundryHeader {{ background: {titlebar}; border: none; border-bottom: 1px solid {border}; }}
         QLabel#appTitle, QLabel#defaultsFoundryTitle, QLabel#themeFoundryTitle {{ color: {title_text}; font-size: 19pt; font-weight: 800; letter-spacing: 1px; }}
-        QLabel#subtitle, QLabel#muted, QLabel#defaultsFoundrySubtitle, QLabel#themeFoundrySubtitle {{ color: {secondary}; }}
+        QLabel#subtitle, QLabel#muted, QLabel#defaultsFoundrySubtitle, QLabel#themeFoundrySubtitle, QLabel#widgetThemeFoundrySubtitle {{ color: {secondary}; }}
         QLabel#faint {{ color: {tertiary}; }}
         QLabel#repoPath {{ color: {tertiary}; padding: 1px 2px 5px 2px; }}
         QLabel#sectionTitle {{ color: {primary}; font-size: 12pt; font-weight: 750; }}
@@ -220,19 +220,22 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QPushButton#cmdTabButton:hover {{ background: {tab_hover}; color: {tab_text}; }}
         QPushButton#cmdTabButton:checked {{ background: {tab_selected}; color: {tab_text}; }}
 
-        QWidget#themeFoundryPane, QWidget#themeFoundryEditor, QWidget#backdropBox {{ background: {panel}; border: 1px solid {border}; border-radius: 9px; }}
+        QWidget#themeFoundryPane, QFrame#widgetThemeFoundryPane, QFrame#widgetThemeFoundryMetaBox, QWidget#backdropBox {{ background: {panel}; border: 1px solid {border}; border-radius: 9px; }}
+        QScrollArea#themeFoundryEditorPane, QScrollArea#widgetThemeFoundryEditorPane {{ background: {panel}; border: 1px solid {border}; border-radius: 9px; }}
+        QWidget#themeFoundryEditorViewport, QWidget#themeFoundryEditorContent, QWidget#widgetThemeFoundryEditorViewport, QWidget#widgetThemeFoundryEditorContent {{ background: transparent; border: none; }}
+        QLabel#scopePill {{ background: {tab_surface}; color: {popup_title}; border: 1px solid {border}; border-radius: 8px; padding: 5px 9px; font-weight: 700; }}
         QToolButton#collapsibleHeader {{ background: {tab_surface}; color: {primary}; border: 1px solid {border}; border-radius: 7px; padding: 6px 9px; font-weight: 700; text-align: left; }}
         QToolButton#collapsibleHeader:hover {{ background: {tab_hover}; }}
-        QLabel#scopeBanner, QLabel#descriptionBox, QLabel#stateBanner {{ background: {subsection}; border: 1px solid {border}; border-radius: 8px; padding: 8px; color: {primary}; }}
+        QLabel#scopeBanner, QLabel#descriptionBox, QLabel#stateBanner, QLabel#infoBox {{ background: {subsection}; border: 1px solid {border}; border-radius: 8px; padding: 8px; color: {primary}; }}
         QLabel#stateBanner, QLabel#previewLabel, QLabel#sectionHeading {{ color: {popup_title}; font-weight: 700; }}
         QLabel#defaultsFoundryStatus {{ color: {success}; }}
-        QPushButton#defaultsFoundryPrimary, QPushButton#themeFoundryPrimary {{ background: {action_surface}; color: {action_text}; border: 1.25px solid {action_border}; font-weight: 800; }}
-        QPushButton#defaultsFoundryPrimary:hover, QPushButton#themeFoundryPrimary:hover {{ background: {action_hover}; }}
+        QPushButton#defaultsFoundryPrimary, QPushButton#themeFoundryPrimary, QPushButton#widgetThemeFoundryPrimary {{ background: {action_surface}; color: {action_text}; border: 1.25px solid {action_border}; font-weight: 800; }}
+        QPushButton#defaultsFoundryPrimary:hover, QPushButton#themeFoundryPrimary:hover, QPushButton#widgetThemeFoundryPrimary:hover {{ background: {action_hover}; }}
         QSlider::groove:horizontal {{ height: 5px; background: {input_surface}; border: 1px solid {border}; border-radius: 2px; }}
         QSlider::handle:horizontal {{ width: 14px; margin: -5px 0; border-radius: 7px; background: {action_surface}; }}
-        QStatusBar {{ background: {titlebar}; color: {secondary}; }}
+        QStatusBar {{ background: {titlebar}; color: {secondary}; border-top: 1px solid {border}; }}
 
-        QPushButton {{ background: {button_surface}; color: {button_text}; border: 1px solid {button_border}; border-radius: 8px; padding: 7px 13px; font-weight: 600; }}
+        QPushButton {{ background: {button_surface}; color: {button_text}; border: 1px solid {button_border}; border-radius: 8px; padding: 7px 13px; min-height: 20px; font-weight: 600; }}
         QPushButton:hover {{ background: {button_hover}; }}
         QPushButton:pressed {{ background: {button_pressed}; }}
         QPushButton:disabled {{ color: {helper}; border-color: {helper}; background: {subsection}; }}
@@ -250,7 +253,7 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QCheckBox::indicator:checked {{ background: {checkbox_checked}; border: 1px solid {checkbox_checked_border}; }}
         QCheckBox::indicator:disabled {{ background: {subsection}; border-color: {helper}; }}
 
-        QLineEdit, QComboBox, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{ background: {input_surface}; color: {input_text}; border: 1px solid {input_border}; border-radius: 7px; padding: 7px 9px; selection-background-color: {list_selected}; selection-color: {list_text}; }}
+        QLineEdit, QComboBox, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{ background: {input_surface}; color: {input_text}; border: 1px solid {input_border}; border-radius: 7px; padding: 7px 9px; min-height: 20px; selection-background-color: {list_selected}; selection-color: {list_text}; }}
         QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ background: {input_focus}; border-color: {input_border}; }}
         QComboBox::drop-down {{ border: none; width: 24px; }}
         QComboBox QAbstractItemView {{ background: {list_surface}; color: {list_text}; border: 1px solid {list_border}; selection-background-color: {list_selected}; }}
@@ -259,7 +262,9 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QTreeWidget::item {{ padding: 4px 3px; }}
         QTreeWidget::item:selected {{ background: {list_selected}; color: {list_text}; }}
         QTreeWidget::item:hover {{ background: {list_hover}; }}
-        QHeaderView::section {{ background: {titlebar}; color: {title_text}; border: none; border-right: 1px solid {list_border}; border-bottom: 1px solid {border}; padding: 6px; font-weight: 700; }}
+        QHeaderView::section {{ background: {titlebar}; color: {title_text}; border: none; border-top: 1px solid {list_border}; border-right: 1px solid {list_border}; border-bottom: 1px solid {border}; padding: 6px; font-weight: 700; }}
+        QHeaderView::section:first {{ border-top-left-radius: 5px; }}
+        QHeaderView::section:last {{ border-top-right-radius: 5px; border-right: none; }}
 
         QToolTip {{ color: {tooltip_text}; background: {tooltip_surface}; border: 1px solid {tooltip_border}; padding: 5px; }}
         QScrollBar:vertical {{ background: {input_surface}; width: 11px; margin: 0; }}
@@ -271,8 +276,8 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
 
         QProgressBar {{ background: {input_surface}; border: 1px solid {border}; border-radius: 4px; text-align: center; }}
         QProgressBar::chunk {{ background: {action_surface}; }}
-        QSplitter#applySplitter::handle {{ background: {list_border}; width: 3px; margin: 2px 3px; }}
-        QSplitter#applySplitter::handle:hover {{ background: {border}; }}
+        QSplitter#applySplitter::handle, QSplitter#themeFoundrySplitter::handle, QSplitter#widgetThemeFoundrySplitter::handle {{ background: {list_border}; width: 3px; margin: 2px 3px; border-radius: 1px; }}
+        QSplitter#applySplitter::handle:hover, QSplitter#themeFoundrySplitter::handle:hover, QSplitter#widgetThemeFoundrySplitter::handle:hover {{ background: {border}; }}
 
         QLabel[relation="same"], QLabel[relation="compatible"] {{ color: {success}; background: {popup_surface}; border: 1px solid {success}; border-radius: 5px; padding: 6px; font-weight: 650; }}
         QLabel[relation="conflict"], QLabel[relation="diverged"] {{ color: {error}; background: {popup_surface}; border: 1px solid {error}; border-radius: 5px; padding: 6px; font-weight: 800; }}
