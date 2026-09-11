@@ -25,7 +25,11 @@ from widgets.spotify_visualizer.config_applier import (
     apply_logical_vis_mode_kwargs,
     apply_presentation_vis_mode_kwargs,
 )
-from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
+from tests._visualizer_presentation import (
+    resolve_presentation as resolve_visualizer_presentation,
+    neutral_bubble_settings,
+    neutral_bubble_pulse,
+)
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     VisualizerCommonState,
@@ -89,8 +93,15 @@ def _logical(
                     "bubble_tail_opacity": 0.5,
                     "bubble_ghosting_enabled": True,
                     "bubble_ghost_alpha": 0.4,
+                    "bubble_ghost_decay": 0.4,
                     "bubble_specular_direction": "top_left",
                     "bubble_gradient_direction": "top",
+                    "bubble_gradient_light": (210, 170, 120, 255),
+                    "bubble_gradient_dark": (30, 40, 60, 255),
+                    "bubble_outline_color": (255, 255, 255, 255),
+                    "bubble_specular_color": (255, 255, 255, 255),
+                    "bubble_pop_color": (255, 255, 255, 255),
+                    "rainbow_enabled": False,
                 }
             ),
         ),
@@ -111,6 +122,11 @@ def test_bubble_rainbow_uses_controller_owned_presentation_state() -> None:
         runtime_generation=2,
         initial_mode="bubble",
     )
+    from widgets.spotify_visualizer.presentation_state import (
+        install_default_presentation_state,
+    )
+
+    install_default_presentation_state(controller.presentation_state)
     apply_presentation_vis_mode_kwargs(
         controller.presentation_state,
         {"bubble_rainbow_enabled": True, "bubble_rainbow_speed": 0.35},
@@ -118,7 +134,19 @@ def test_bubble_rainbow_uses_controller_owned_presentation_state() -> None:
     extra: dict[str, object] = {}
     _populate_shared_visualizer_extras(
         extra,
-        SimpleNamespace(presentation_config_host=controller.presentation_state),
+        SimpleNamespace(
+            presentation_config_host=controller.presentation_state,
+            _spectrum_ghosting_enabled=False,
+            _spectrum_ghost_decay=0.4,
+            _osc_ghosting_enabled=False,
+            _osc_ghost_intensity=0.5,
+            _osc_ghost_decay=0.4,
+            _sine_ghosting_enabled=False,
+            _sine_ghost_alpha=0.5,
+            _sine_ghost_decay=0.4,
+            _sine_heartbeat=False,
+            _heartbeat_intensity=0.0,
+        ),
     )
 
     assert extra["rainbow_enabled"] is True
@@ -200,8 +228,8 @@ def test_bubble_frame_runtime_freezes_one_authored_step_and_visible_event() -> N
     resolved = runtime.advance(
         dt=0.01,
         energy={"bass": 0.8},
-        settings={"_event_scheduler": scheduler},
-        pulse={"bass": 0.8},
+        settings=neutral_bubble_settings(event_scheduler=scheduler),
+        pulse=neutral_bubble_pulse(bass=0.8),
         source_timestamp=4.98,
         authored_timestamp=5.0,
         runtime_generation=2,
@@ -283,12 +311,12 @@ def test_stale_playing_source_cannot_feed_energy_or_consume_event() -> None:
     resolved = runtime.advance(
         dt=0.01,
         energy={"bass": 0.9, "mid": 0.4},
-        settings={
-            "_event_scheduler": SimpleNamespace(
+        settings=neutral_bubble_settings(
+            event_scheduler=SimpleNamespace(
                 consume_next=lambda name, **_kwargs: scheduler_calls.append(name)
             )
-        },
-        pulse={"bass": 0.9},
+        ),
+        pulse=neutral_bubble_pulse(bass=0.9),
         source_timestamp=10.0,
         authored_timestamp=10.1,
         runtime_generation=2,
@@ -351,8 +379,8 @@ def test_bubble_retirement_waits_for_inflight_step_then_clears_state() -> None:
             runtime.advance(
                 dt=0.016,
                 energy={"bass": 0.5},
-                settings={},
-                pulse={"bass": 0.5},
+                settings=neutral_bubble_settings(),
+                pulse=neutral_bubble_pulse(bass=0.5),
                 source_timestamp=2.0,
                 authored_timestamp=2.01,
                 runtime_generation=4,
@@ -399,8 +427,8 @@ def test_bubble_retirement_waits_for_inflight_step_then_clears_state() -> None:
     assert runtime.advance(
         dt=0.016,
         energy={"bass": 1.0},
-        settings={},
-        pulse={"bass": 1.0},
+        settings=neutral_bubble_settings(),
+        pulse=neutral_bubble_pulse(bass=1.0),
         source_timestamp=3.0,
         authored_timestamp=3.01,
         runtime_generation=4,
