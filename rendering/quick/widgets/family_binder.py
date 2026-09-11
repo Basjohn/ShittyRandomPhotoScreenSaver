@@ -408,6 +408,13 @@ class ClockFamilyAdapter:
 class WeatherFamilyAdapter:
     """Adapter for the single-instance Weather family."""
 
+    def __init__(
+        self,
+        *,
+        on_settings_requested: Callable[[str], bool] | None = None,
+    ) -> None:
+        self._on_settings_requested = on_settings_requested
+
     @property
     def family_id(self) -> str:
         return "weather"
@@ -445,7 +452,10 @@ class WeatherFamilyAdapter:
         ):
             return None
         return RetainedWeatherPresentation(
-            host=host, model=model, geometry=geometry
+            host=host,
+            model=model,
+            geometry=geometry,
+            on_settings_requested=self._on_settings_requested,
         )
 
 
@@ -780,6 +790,7 @@ def default_ordinary_family_adapters(
         [str, str, str, OverlayWidgetGeometry, Mapping[str, object]], None
     ] | None = None,
     reddit_open_requested: Callable[[str, str], bool] | None = None,
+    settings_target_requested: Callable[[str], bool] | None = None,
 ) -> tuple[OrdinaryFamilyAdapter, ...]:
     """Return the explicit ordered ordinary-family adapters currently wired.
 
@@ -791,7 +802,7 @@ def default_ordinary_family_adapters(
 
     return (
         ClockFamilyAdapter(on_mode_toggle=clock_mode_toggle),
-        WeatherFamilyAdapter(),
+        WeatherFamilyAdapter(on_settings_requested=settings_target_requested),
         MediaFamilyAdapter(),
         RedditFamilyAdapter(on_open_requested=reddit_open_requested),
         GmailFamilyAdapter(),

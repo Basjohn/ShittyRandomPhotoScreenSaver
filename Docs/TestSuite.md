@@ -506,3 +506,27 @@ A test-affecting slice is complete only when:
 - defaults/generated artifacts are checked when settings changed;
 - maintained-profile membership is valid;
 - installed/Qt/GL evidence is requested where static/headless proof cannot close the claim.
+
+## 0.7 2026-09-11 Visualizer dormancy schema + Weather Settings target
+
+Two new Qt-free/current-owner contract modules cover this misc slice without editing a pre-existing test module:
+
+```text
+tests/test_visualizer_mode_activation_schema_current.py
+tests/test_weather_settings_target_contract.py
+```
+
+Direct execution in the Linux workspace: **8/8 assertions PASS**. Visualizer coverage requires the canonical per-mode dormancy authority to be the explicit `mode_activation` boolean map, protects registry ordering/the last-mode recovery invariant, verifies the typed model serializes no retired `enabled_modes` key, and proves the one temporary legacy reader converts/removes the old list while emitting warning feedback when relied upon. Weather coverage protects the semantic `weather_location` target, retained family callback injection, generation-checked DisplayManager/engine Settings lifecycle route, Widgets -> Weather lazy navigation and synchronous Location focus without a target-specific timer.
+
+Defaults regeneration and authority checking are required for this schema change. Physical Windows/PySide validation remains **NEEDS RUN VALIDATION** for real Visualizer enable/disable persistence and the retained Weather missing-location SETTINGS click -> modal Settings -> runtime restart path.
+
+## 0.8 2026-09-11 Achievement Pulse post-fit percentage scale
+
+One new Qt-free/source-level contract covers the installed visual follow-up without editing a pre-existing test module:
+
+```text
+tests/test_achievement_pulse_progress_text_visual_scale_contract.py
+```
+
+Direct execution in the Linux workspace: **2/2 assertions PASS**. The contract requires the 0.90 reduction to occur as a final presentation transform after `Text.HorizontalFit`, where it cannot be masked by the fitter's existing point-size choice. It separately protects the existing 108x108 pulse geometry and 4 px lift and verifies that the Total parsing/model and authored-size normalization remain in their existing Python owners. Physical installed confirmation of the visibly smaller percentage remains **NEEDS RUN VALIDATION**.
+

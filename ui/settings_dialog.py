@@ -49,6 +49,7 @@ from ui.settings_theme_runtime import (
     subscribe_settings_theme,
 )
 from ui.settings_theme_spec import SettingsThemeSpec
+from ui.settings_launch_targets import resolve_settings_launch_target
 
 logger = get_logger(__name__)
 
@@ -520,7 +521,8 @@ class SettingsDialog(QDialog):
                  parent: Optional[QWidget] = None,
                  *,
                  runtime_generation: object | None = None,
-                 themes_directory: str | os.PathLike[str] | None = None):
+                 themes_directory: str | os.PathLike[str] | None = None,
+                 initial_target: str | None = None):
         """
         Initialize settings dialog.
         
@@ -571,6 +573,12 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
 
         self._runtime_generation = runtime_generation
+        self._launch_target = resolve_settings_launch_target(initial_target)
+        if initial_target and self._launch_target is None:
+            logger.warning(
+                "Unknown Settings launch target %r; falling back to persisted navigation",
+                initial_target,
+            )
         self._settings = settings_manager
         self._animations = animation_manager
         self._is_maximized = False
@@ -635,6 +643,7 @@ class SettingsDialog(QDialog):
         self._connect_signals()
         self._restore_geometry()
         self._restore_last_tab_selection()
+        self._apply_initial_launch_target_focus()
 
         # Register only after the complete Settings hierarchy exists. Runtime
         # theme callbacks hold weak references and cannot extend dialog life.
@@ -661,7 +670,11 @@ class SettingsDialog(QDialog):
         return self._tab_keys.index(legacy_keys[legacy_index])
 
     def _determine_initial_tab(self) -> None:
-        index = self._read_persisted_tab_index()
+        target = self._launch_target
+        if target is not None and target.tab_key in self._tab_keys:
+            index = self._tab_keys.index(target.tab_key)
+        else:
+            index = self._read_persisted_tab_index()
         # Diagnostic toggle for U-04 isolation:
         # force a lightweight initial tab so we can compare startup behavior.
         if self._force_initial_sources_tab:
@@ -944,9 +957,7 @@ class SettingsDialog(QDialog):
                 self._settings,
                 parent=self.content_stack,
                 lazy_sections=True,
-                initial_view_state=dict(
-                    self._tab_state_cache.get("widgets", {}).get("view_state", {})
-                ) if isinstance(self._tab_state_cache.get("widgets", {}).get("view_state", {}), dict) else None,
+                initial_view_state=self._initial_view_state_for_tab("widgets"),
             ),
             "visualizers": lambda: VisualizersTab(
                 self._settings,
@@ -1324,6 +1335,8 @@ class SettingsDialog(QDialog):
         if widget is None or index < 0:
             return
         key = self._tab_key_for_index(index)
+        if self._launch_target is not None and self._launch_target.tab_key == key:
+            return
         entry = self._tab_state_cache.get(key, {})
         view_state = entry.get('view_state')
         if not view_state:
@@ -1400,8 +1413,51 @@ class SettingsDialog(QDialog):
         except Exception:
             logger.debug("Failed to persist last Settings tab", exc_info=True)
 
+    def _initial_view_state_for_tab(self, tab_key: str) -> Dict[str, Any] | None:
+        """Resolve one lazy tab's initial view without creating a second owner."""
+
+        target = self._launch_target
+        if target is not None and target.tab_key == str(tab_key):
+            return dict(target.view_state)
+        state = self._tab_state_cache.get(str(tab_key), {}).get("view_state", {})
+        return dict(state) if isinstance(state, dict) else None
+
+    def _apply_initial_launch_target_focus(self) -> None:
+        """Focus a semantic target only after its lazy page has been constructed."""
+
+        target = self._launch_target
+        if target is None or not target.focus_attr:
+            return
+        tab = self.__dict__.get(f"{target.tab_key}_tab")
+        if tab is None:
+            logger.warning(
+                "Settings launch target %s could not resolve built tab %s",
+                target.target_id,
+                target.tab_key,
+            )
+            return
+        control = getattr(tab, target.focus_attr, None)
+        if control is None:
+            logger.warning(
+                "Settings launch target %s could not resolve control %s",
+                target.target_id,
+                target.focus_attr,
+            )
+            return
+        try:
+            control.setFocus(Qt.FocusReason.OtherFocusReason)
+            select_all = getattr(control, "selectAll", None)
+            if callable(select_all):
+                select_all()
+        except Exception:
+            logger.debug(
+                "Failed to focus Settings launch target %s",
+                target.target_id,
+                exc_info=True,
+            )
+
     def _restore_last_tab_selection(self) -> None:
-        if self._force_initial_sources_tab:
+        if self._force_initial_sources_tab or self._launch_target is not None:
             return
         index = self._read_persisted_tab_index()
         if index < 0 or index >= len(self.tab_buttons):

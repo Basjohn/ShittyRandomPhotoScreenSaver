@@ -940,6 +940,7 @@ def _install_visualizer_body_host(tab, controls_layout, *, retire_body=None) -> 
     """
     from core.settings.visualizer_mode_body_host import VisualizerModeBodyHost
     from core.settings.visualizer_mode_registry import (
+        build_visualizer_mode_activation,
         load_mode_settings_builder,
         resolve_effective_enabled_modes,
     )
@@ -991,13 +992,16 @@ def _install_visualizer_body_host(tab, controls_layout, *, retire_body=None) -> 
 
     widgets_value = tab._settings.get("widgets") if hasattr(tab, "_settings") else {}
     section = widgets_value.get("spotify_visualizer", {}) if isinstance(widgets_value, dict) else {}
-    enabled = resolve_effective_enabled_modes(
-        section.get("enabled_modes") if isinstance(section, dict) else None
+    mode_activation = (
+        section.get("mode_activation") if isinstance(section, dict) else None
     )
+    # Validate/normalize at the canonical registry seam before the lazy host owns
+    # the derived enabled-id view.
+    resolve_effective_enabled_modes(mode_activation)
     tab._vis_body_host = VisualizerModeBodyHost(
         body_factory=_factory,
         retire_body=retire_body,
-        enabled_modes=enabled,
+        mode_activation=mode_activation,
     )
 
 
@@ -1472,7 +1476,10 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
 
     _host = getattr(tab, '_vis_body_host', None)
     if _host is not None:
-        spotify_vis_config['enabled_modes'] = list(_host.enabled_modes)
+        from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+        spotify_vis_config['mode_activation'] = build_visualizer_mode_activation(
+            _host.enabled_modes
+        )
 
     # Spectrum-owned ghost controls: only present when Spectrum's body is built
     # (V6a lazy). When Spectrum is unbuilt its persisted ghost state stays

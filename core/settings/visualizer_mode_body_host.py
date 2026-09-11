@@ -35,7 +35,7 @@ from core.settings.visualizer_mode_registry import (
 SETUP_PILL_ID = "SETUP"
 
 
-def visualizer_pill_model(enabled_modes: object) -> tuple[tuple[str, str], ...]:
+def visualizer_pill_model(mode_activation: object) -> tuple[tuple[str, str], ...]:
     """Return ordered ``(pill_id, label)`` pairs for the Visualizers tab.
 
     Always leads with the SETUP pill, then one pill per *effective enabled* mode
@@ -43,7 +43,7 @@ def visualizer_pill_model(enabled_modes: object) -> tuple[tuple[str, str], ...]:
     contributes no pill. Pure — no construction, no Qt.
     """
     pills: list[tuple[str, str]] = [(SETUP_PILL_ID, "Setup")]
-    for mode_id in resolve_effective_enabled_modes(enabled_modes):
+    for mode_id in resolve_effective_enabled_modes(mode_activation):
         pills.append((mode_id, get_visualizer_mode_descriptor(mode_id).display_name))
     return tuple(pills)
 
@@ -56,11 +56,11 @@ class VisualizerModeBodyHost:
         *,
         body_factory: Callable[[str], Any],
         retire_body: Optional[Callable[[str, Any], None]] = None,
-        enabled_modes: object = None,
+        mode_activation: object = None,
     ) -> None:
         self._factory = body_factory
         self._retire = retire_body
-        self._enabled: tuple[str, ...] = resolve_effective_enabled_modes(enabled_modes)
+        self._enabled: tuple[str, ...] = resolve_effective_enabled_modes(mode_activation)
         self._bodies: dict[str, Any] = {}
         self._selected: Optional[str] = None
 
@@ -114,15 +114,15 @@ class VisualizerModeBodyHost:
         self._selected = self._norm(mode_id)
         return body
 
-    def set_enabled_modes(self, enabled_modes: object) -> tuple[str, ...]:
-        """Apply a new enabled set, retiring bodies for now-disabled modes.
+    def set_mode_activation(self, mode_activation: object) -> tuple[str, ...]:
+        """Apply per-mode activation, retiring bodies for now-disabled modes.
 
         Returns the retired mode ids in canonical order. A retired body's
         persisted state is untouched — the host never owned it. If the selected
         mode was disabled, selection is cleared and the caller reselects an
         enabled mode through the effective-mode resolver.
         """
-        new_enabled = resolve_effective_enabled_modes(enabled_modes)
+        new_enabled = resolve_effective_enabled_modes(mode_activation)
         retired = tuple(
             mode_id for mode_id in self._enabled
             if mode_id in self._bodies and mode_id not in new_enabled

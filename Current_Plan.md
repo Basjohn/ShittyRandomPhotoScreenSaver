@@ -80,14 +80,21 @@ Owned in detail by `Docs/TestSuite.md` and `Future_Cleanup.md`.
   contract. Three stale mixed test modules were rehomed to new current modules and staged as debris rather than
   teaching production code obsolete multi-open/default-open behavior. Final Qt-free contract is 13/13, unified defaults
   artifact verification and whole-tree syntax compilation are green. Functional work is closed; only test reconciliation remains.
-- [x] Small 2026-09-11 presentation/edit polish: Achievement Pulse percentage text is exactly 10% smaller without changing
+- [x] Small 2026-09-11 presentation/edit polish: Achievement Pulse percentage text is reduced without changing
   authored card/pulse geometry, the pulse rail is raised 4 px, Shelf Style canonicalizes missing Playtime/Previous values to the
   same `UNAVAILABLE` presentation, CUSTOM move editing gains a narrow external 30 px peer-margin snag plus a small 3 px
   semantic scoring bias so existing edge/centre/peer alignment is actually felt without overriding ordinary grid dragging,
   and Particle Random's intermittent broken Swirl case is traced to Center Outward's linear atan
   branch cut. Only that periodic ordering term is repaired; the other Particle modes remain untouched. Particle light/build-order
   labels now match their existing persisted shader indices (NW/NE/Front/SW/SE; Typical/Center Outward/Edges Inward).
+- [x] Achievement Pulse percentage visual follow-up after installed screenshot: the earlier 10% `font.pointSize` ceiling change
+  could be masked by `Text.HorizontalFit`, so the three retained percentage glyph layers now receive one final 0.90 presentation
+  scale after fitting. The existing 4 px pulse lift, 108x108 pulse, authored card geometry, Total calculation and Python
+  normalization/layout owners are unchanged. Physical installed visual confirmation remains test evidence only, not open product work.
 - [x] First-run missing-source launch continuity: a normal RUN launch interrupted by the source onboarding Settings dialog now resumes the same RUN process after sources are configured instead of returning through CONFIG and exiting. CONFIG-only invocations (`/c`, `-c`, `-s`, `--s`) retain Settings-only lifetime. Startup-dependent settings are re-read after onboarding commits. Functional work is closed; only physical Windows/PySide launch validation remains.
+- [x] Normalize Visualizer per-mode dormancy to the same explicit boolean-map shape as Transition activation: `widgets.spotify_visualizer.mode_activation.<stable_mode_id>` is the sole current persisted authority; `enabled_modes` is derived in memory only. Existing profiles get one pre-default forward migration so their authored dormancy is not lost, and the retired key is removed immediately. Defaults/SST projections use only the new map. Functional work is closed; physical Settings toggle/persistence validation remains part of the test inventory.
+- [x] Repair the retained Weather missing-location **SETTINGS** shortcut: `weather_location` now flows through the ordinary family adapter into DisplayManager's generation-checked semantic Settings request and the existing engine teardown/destruction barrier, then opens Widgets -> Weather and focuses Location. No direct dialog owner, timer, poller or Weather-specific lifecycle path was added. Functional work is closed; physical retained-QML click/restart validation remains.
+- [ ] **Temporary migration debris — retire after safe profile-migration proof:** remove the `enabled_modes` compatibility signature (`migrate_legacy_enabled_modes_to_activation`, the pre-default SettingsManager migration hook, and its warning path) once migration tests plus intended Windows/profile validation demonstrate supported persisted profiles no longer rely on the retired list. Until then it is migration-only: current defaults/model/UI/runtime must never write or consume `enabled_modes` as product state.
 - [ ] Run the broad `pytest tests/` inventory and reconcile remaining stale
   widget-glow / two-phase-retirement / defaults casualties against current owners.
 - [ ] Reconcile nine Clock presentation tests whose shadow fixtures omit current

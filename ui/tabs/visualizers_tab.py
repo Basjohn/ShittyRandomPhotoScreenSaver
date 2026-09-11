@@ -35,6 +35,7 @@ from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.settings.visualizer_mode_registry import (
     apply_visualizer_mode_disable,
+    build_visualizer_mode_activation,
     can_disable_visualizer_mode,
     iter_visualizer_mode_descriptors,
     resolve_effective_enabled_modes,
@@ -561,7 +562,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         stored = widgets.get("spotify_visualizer", {})
         section = deepcopy(stored) if isinstance(stored, dict) else {}
         section["mode"] = mode_id
-        section["enabled_modes"] = list(self._vis_body_host.enabled_modes)
+        section["mode_activation"] = build_visualizer_mode_activation(
+            self._vis_body_host.enabled_modes
+        )
         preset_index = resolve_preset_index_from_mapping(mode_id, section)
         return apply_preset_to_config(mode_id, preset_index, section)
 
@@ -574,7 +577,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
 
         if checked:
             requested = tuple(current_enabled) + (target,)
-            new_enabled = resolve_effective_enabled_modes(requested)
+            new_enabled = resolve_effective_enabled_modes(
+                build_visualizer_mode_activation(requested)
+            )
         else:
             if not can_disable_visualizer_mode(current_enabled, target):
                 self._sync_mode_admission_controls()
@@ -582,10 +587,12 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             new_enabled = apply_visualizer_mode_disable(current_enabled, target)
 
         self._flush_pending_visualizer_save()
-        host.set_enabled_modes(new_enabled)
+        host.set_mode_activation(build_visualizer_mode_activation(new_enabled))
 
         active = self._get_active_visualizer_mode()
-        effective, substituted = resolve_effective_mode(active, host.enabled_modes)
+        effective, substituted = resolve_effective_mode(
+            active, build_visualizer_mode_activation(host.enabled_modes)
+        )
         if substituted:
             self._active_visualizer_mode_id = effective
             resolved = self._prepare_mode_hydration_config(effective)
@@ -739,10 +746,10 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             widgets["spotify_visualizer"] = spotify_vis
             self._settings.set_widgets_map(widgets)
             logger.debug(
-                "[VISUALIZERS_TAB] saved mode=%s preset=%d enabled_modes=%s",
+                "[VISUALIZERS_TAB] saved mode=%s preset=%d mode_activation=%s",
                 mode_id,
                 preset_index,
-                spotify_vis.get("enabled_modes"),
+                spotify_vis.get("mode_activation"),
             )
         finally:
             self._writing_settings = False
@@ -756,9 +763,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         if not isinstance(widgets, dict):
             widgets = {}
         section = widgets.get("spotify_visualizer", {})
-        requested_enabled = section.get("enabled_modes") if isinstance(section, dict) else None
+        requested_activation = section.get("mode_activation") if isinstance(section, dict) else None
         # Retire newly-disabled bodies before a full loader can rehydrate them.
-        self._vis_body_host.set_enabled_modes(requested_enabled)
+        self._vis_body_host.set_mode_activation(requested_activation)
         load_visualizer_settings(
             self,
             widgets,
@@ -767,7 +774,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         # Loader resolves effective mode; host owns the effective enabled set.
         effective, _substituted = resolve_effective_mode(
             self._get_active_visualizer_mode(),
-            self._vis_body_host.enabled_modes,
+            build_visualizer_mode_activation(self._vis_body_host.enabled_modes),
         )
         self._active_visualizer_mode_id = effective
         self._sync_mode_admission_controls()

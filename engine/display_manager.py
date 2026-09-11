@@ -99,6 +99,7 @@ class DisplayManager(QObject):
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
+    settings_target_requested = Signal(str)  # runtime widget -> semantic Settings target
     # The exact DisplayManager identity is a pointer-width Python integer.
     custom_layout_reload_requested = Signal(str, int, object)
     jedi_mode_requested = Signal(str, str)
@@ -709,7 +710,7 @@ class DisplayManager(QObject):
             # every mode enabled (today's default) this is the full canonical set.
             _vis_model = getattr(visualizer.controller, "settings_model", None)
             _enabled_ids = resolve_effective_enabled_modes(
-                getattr(_vis_model, "enabled_modes", None)
+                getattr(_vis_model, "mode_activation", None)
             )
             visualizer_modes = tuple(
                 (mode_id, get_visualizer_mode_descriptor(mode_id).display_name)
@@ -936,7 +937,7 @@ class DisplayManager(QObject):
         # persisted selection substitutes at the startup resolver with an explicit
         # log; this seam rejects instead. With every mode enabled (today's
         # default) this never rejects.
-        enabled_modes = resolve_effective_enabled_modes(section.get("enabled_modes"))
+        enabled_modes = resolve_effective_enabled_modes(section.get("mode_activation"))
         if target not in enabled_modes:
             logger.info(
                 "[VISUALIZER] Rejected runtime request for disabled mode=%s "
@@ -977,9 +978,9 @@ class DisplayManager(QObject):
         # Cycle only the effective enabled modes (V3): a disabled mode must never
         # be reachable by double-click/context-menu cycling.
         model = getattr(owner.controller, "settings_model", None)
-        enabled_modes = getattr(model, "enabled_modes", None)
+        mode_activation = getattr(model, "mode_activation", None)
         self._request_quick_visualizer_mode(
-            next_visualizer_mode_id(owner.controller.mode_id, enabled_modes)
+            next_visualizer_mode_id(owner.controller.mode_id, mode_activation)
         )
 
     def _request_quick_visualizer_preset_change(self) -> bool:
@@ -2722,9 +2723,26 @@ class DisplayManager(QObject):
                 return False
             return manager._open_quick_reddit_url(widget_id, url)
 
+        def _open_settings_target(target_id: str) -> bool:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or manager._runtime_generation != generation
+            ):
+                return False
+            target = str(target_id or "").strip()
+            if not target:
+                return False
+            if manager._quick_custom_layout_owner.is_active:
+                manager.cancel_custom_layout_session()
+            manager.settings_target_requested.emit(target)
+            return True
+
         return default_ordinary_family_adapters(
             clock_mode_toggle=_persist_clock_mode,
             reddit_open_requested=_open_reddit,
+            settings_target_requested=_open_settings_target,
         )
 
     def _persist_quick_clock_mode_override(

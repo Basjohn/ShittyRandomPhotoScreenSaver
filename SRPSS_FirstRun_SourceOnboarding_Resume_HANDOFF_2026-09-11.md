@@ -18,7 +18,7 @@ This slice continues from `GODZIP_DefaultsMerge_UserPreserved_2026-09-11.zip` an
 The operator's latest `core/settings/default_settings.py` is preserved exactly as supplied before derivative regeneration. Notable intentional changes relative to the preceding GODZIP include:
 
 - Transition activation defaults: Block Puzzle Flip OFF, Crossfade OFF, Diffuse OFF.
-- Visualizer `enabled_modes` includes Sphere.
+- Visualizer `mode_activation.sphere = true` (the later dormancy-schema migration preserves this intent while retiring persisted `enabled_modes`).
 - Sphere defaults enabled for overflow, depth shading, incoming fade, fragment interpolation, particle-density response, transient velocity, and light tracer.
 
 The MC profile override remains unchanged, including `display.show_on_monitors = [2]`.

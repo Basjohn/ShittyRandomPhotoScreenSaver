@@ -28,22 +28,22 @@ from core.settings.visualizer_mode_registry import (
 
 def next_visualizer_mode_id(
     current_mode_id: str,
-    enabled_modes: object = None,
+    mode_activation: object = None,
 ) -> str:
     """Return the next visualizer mode id, cycling only enabled modes.
 
     Mirrors the legacy ``mode_transition.cycle_mode`` order exactly: canonical
-    descriptor order, wrapping ``(idx + 1) % len``. When ``enabled_modes`` is
+    descriptor order, wrapping ``(idx + 1) % len``. When ``mode_activation`` is
     given, cycling is restricted to that effective enabled set (V3) so a disabled
     mode is never reachable by cycling; when it is ``None`` the full registered
     active set is used (legacy callers / no enable-state context). An unknown
     current id starts the cycle at the first mode.
     """
 
-    if enabled_modes is None:
+    if mode_activation is None:
         ids = tuple(desc.mode_id for desc in iter_visualizer_mode_descriptors())
     else:
-        ids = resolve_effective_enabled_modes(enabled_modes)
+        ids = resolve_effective_enabled_modes(mode_activation)
     if not ids:
         return coerce_visualizer_mode_id(current_mode_id)
     current = coerce_visualizer_mode_id(current_mode_id)

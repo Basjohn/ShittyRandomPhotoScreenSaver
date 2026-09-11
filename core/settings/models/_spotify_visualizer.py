@@ -16,6 +16,7 @@ from core.settings.visualizer_mode_registry import (
     coerce_visualizer_mode_id,
     get_preset_key,
     get_setting_prefixes,
+    normalize_visualizer_mode_activation,
     resolve_effective_enabled_modes,
     VISUALIZER_MODE_IDS,
 )
@@ -127,10 +128,10 @@ _CORE_SETTINGS_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "monitor": str,
     "position": str,
     "mode": str,
-    # Persisted per-mode enable set (V2). Always serialized in canonical order
-    # with at least one enabled mode; a disabled mode keeps all its own settings
-    # and presets — only its presence in this list changes.
-    "enabled_modes": lambda value: list(resolve_effective_enabled_modes(value)),
+    # Persisted per-mode capability activation. Every registered mode owns one
+    # explicit boolean, mirroring transition dormancy; the enabled-id tuple is
+    # derived only for runtime/UI consumers.
+    "mode_activation": normalize_visualizer_mode_activation,
     "rainbow_enabled": bool,
     "rainbow_speed": float,
     "sine_line_dim": bool,
@@ -1119,11 +1120,13 @@ class SpotifyVisualizerSettings:
     devcurve_sensitivity: float = field(default_factory=lambda: _visualizer_default('devcurve_sensitivity'))
     devcurve_bar_count: int = field(default_factory=lambda: _visualizer_default('devcurve_bar_count'))
     mode: str = field(default_factory=lambda: _visualizer_default('mode'))
-    # V2 persisted per-mode enable set. Default = every registered mode enabled,
-    # which preserves today's behavior and is the migration default for existing
-    # users (an absent key resolves to descriptor defaults). Disabling a mode never
-    # deletes its settings/presets; it only removes it from this list.
-    enabled_modes: list = field(default_factory=lambda: _visualizer_default('enabled_modes'))
+    # Explicit per-mode capability activation. A disabled mode keeps all authored
+    # settings/presets; this mapping owns admission only.
+    mode_activation: Dict[str, bool] = field(
+        default_factory=lambda: normalize_visualizer_mode_activation(
+            _visualizer_default('mode_activation')
+        )
+    )
     osc_glow_enabled: bool = field(default_factory=lambda: _visualizer_default('osc_glow_enabled'))
     osc_glow_intensity: float = field(default_factory=lambda: _visualizer_default('osc_glow_intensity'))
     osc_glow_reactivity: float = field(default_factory=lambda: _visualizer_default('osc_glow_reactivity'))
@@ -1466,6 +1469,12 @@ class SpotifyVisualizerSettings:
         for attr, low, high in (("sphere_fragment_strength", 0.0, 9.0), ("sphere_particle_distance", 0.0, 4.5), ("sphere_particle_amount", 0.25, 1.75), ("sphere_perspective_strength", 0.0, 1.0), ("sphere_edge_weight", 0.25, 1.75), ("sphere_voxel_size_variation", 0.0, 1.0), ("sphere_depth_shading_strength", 0.0, 0.5), ("sphere_shadow_opacity", 0.0, 2.0), ("sphere_shadow_softness", 0.0, 0.45), ("sphere_shadow_distance", 0.0, 2.5), ("sphere_shadow_size", 0.6, 1.6), ("sphere_base_rotation_speed", 0.0, 0.5), ("sphere_rotation_speed", 0.0, 2.0), ("sphere_gloss", 0.0, 1.0), ("sphere_specular", 0.0, 2.0), ("sphere_vocal_response", 0.0, 1.35), ("sphere_size_response", 0.0, 2.54)):
             _clamp_attr_range(self, attr, low, high)
 
+    @property
+    def enabled_modes(self) -> tuple[str, ...]:
+        """Derived canonical enabled-id view; never persisted as product state."""
+
+        return resolve_effective_enabled_modes(self.mode_activation)
+
     @classmethod
     def _build_constructor_kwargs_from_mode_state(
         cls,
@@ -1538,10 +1547,8 @@ class SpotifyVisualizerSettings:
             preset_kwargs=_preset_kwargs,
             bubble_gradient_semantics_version=bubble_gradient_semantics_version,
         )
-        kwargs["enabled_modes"] = list(
-            resolve_effective_enabled_modes(
-                get(f"{prefix}.enabled_modes", _visualizer_default("enabled_modes"))
-            )
+        kwargs["mode_activation"] = normalize_visualizer_mode_activation(
+            get(f"{prefix}.mode_activation", _visualizer_default("mode_activation"))
         )
         return cls(**kwargs)
 
@@ -1596,10 +1603,8 @@ class SpotifyVisualizerSettings:
             preset_kwargs=_preset_kwargs,
             bubble_gradient_semantics_version=bubble_gradient_semantics_version,
         )
-        kwargs["enabled_modes"] = list(
-            resolve_effective_enabled_modes(
-                _get("enabled_modes", _visualizer_default("enabled_modes"))
-            )
+        kwargs["mode_activation"] = normalize_visualizer_mode_activation(
+            _get("mode_activation", _visualizer_default("mode_activation"))
         )
         return cls(**kwargs)
 
