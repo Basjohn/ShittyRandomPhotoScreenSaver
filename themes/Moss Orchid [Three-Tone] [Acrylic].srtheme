@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Moss Orchid [Three-Tone] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       240,
       242,
       242,
+      255
+    ],
+    "about.art.liquid": [
+      171,
+      129,
+      167,
       255
     ],
     "popup.container.surface": [

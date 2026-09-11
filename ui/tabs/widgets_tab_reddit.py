@@ -31,6 +31,7 @@ from ui.tabs.shared_styles import (
     add_aligned_row,
     create_inline_label,
     build_bucket_toggle,
+    finalize_bucket_body as _finalize_bucket_body,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
@@ -38,12 +39,6 @@ if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
 
 logger = get_logger(__name__)
-
-
-def _finalize_bucket_body(toggle, body: QWidget) -> None:
-    expanded = bool(toggle.isChecked())
-    if body.isHidden() == expanded:
-        body.setVisible(expanded)
 
 
 def _update_reddit_enabled_visibility(tab: WidgetsTab) -> None:

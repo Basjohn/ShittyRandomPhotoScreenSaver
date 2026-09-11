@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-09-09
+Last updated: 2026-09-10
 
 Long-horizon feature / new-implementation backlog.
 
@@ -92,6 +92,15 @@ Mandatory contract:
   failure, not a valid experimental shortcut;
 - the shared Settings UI may generically host a descriptor-provided lazy body, but after generic descriptor dispatch it
   should not accumulate `if mode == <experiment>` branches or parallel save/hydration paths;
+- lazy Settings-body construction/hydration is **transactional** at the generic host boundary: success commits exactly one
+  complete body; failure removes any partially attached body and leaves the host retryable without duplicate controls or
+  leaked widget state;
+- persisted Settings scaffold identities are schema, not decoration. If an experiment adds/renames/removes a collapsible
+  bucket or other persisted UI-state key, update canonical UI-state defaults/migration in the same slice and keep a contract
+  test proving every builder-owned persisted identity has canonical ownership;
+- an experimental Visualizer mode that participates in presets inherits the existing user-owned catalogue contract from
+  `Spec.md`: authored preset counts/numbers may be arbitrary or sparse, runtime compacts them without renaming/deleting
+  files, and shipped manifests are never runtime authority over the user's preset catalogue;
 - shared lifecycle/render/runtime owners may expose generic extension seams, but experiment-specific exceptions to their
   contracts require explicit review and a focused regression test;
 - removal must be bounded and mechanical: delete the owned implementation + descriptor/registration, delete its owned
@@ -202,6 +211,11 @@ Prefer shared, dependency-light primitives for the parts the two consumers have 
 - small aspect-correct perspective / projection helpers where equations truly match;
 - GL-state restoration helpers that compose with the existing Quick render fence;
 - tiny presentation-neutral normal/lighting math only after identical semantics are demonstrated.
+
+**Instancing is a second-consumer extraction candidate, not current infrastructure work.** When the next real instanced
+consumer (for example Extruded Spectrum, Exploding Tiles or Reactive Particle Field) is implemented, compare its static
+mesh + instance-buffer layout/upload/lifetime machinery with Voxel Sphere. Extract only the smallest identical helper if
+the concrete implementations genuinely match; do not pre-build a generic instancing engine from Sphere alone.
 
 Keep the transition run, source/destination texture ownership, fracture/tile per-run state, Visualizer audio/logical state,
 Sphere deformation/materials and every feature's authored shader semantics local. Do **not** grow a generic camera tree,

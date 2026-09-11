@@ -59,6 +59,7 @@ from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
     add_aligned_row,
     build_bucket_toggle,
+    finalize_bucket_body as _finalize_bucket_body,
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
@@ -588,12 +589,6 @@ def _section_config(
     return candidate if isinstance(candidate, Mapping) else {}
 
 
-def _finalize_bucket_body(toggle, body: QWidget) -> None:
-    expanded = bool(toggle.isChecked())
-    if body.isHidden() == expanded:
-        body.setVisible(expanded)
-
-
 def _set_achievement_selection_mode(
     combo: StyledComboBox,
     mode: str,
@@ -890,6 +885,23 @@ def _update_achievement_latest_controls(tab: "WidgetsTab") -> None:
         artwork.setEnabled(visible.isChecked())
 
 
+def _update_achievement_capsule_style_controls(tab: "WidgetsTab") -> None:
+    """Keep capsule-only controls dormant while ledger Shelf Style is active."""
+
+    shelf = getattr(tab, "achievement_pulse_shelf_style", None)
+    pulse = getattr(tab, "achievement_pulse_progress_pulse", None)
+    shelf_enabled = bool(shelf is not None and shelf.isChecked())
+    pulse_enabled = bool(pulse is not None and pulse.isChecked())
+    fill = getattr(tab, "achievement_pulse_capsule_fill_color_btn", None)
+    doubled = getattr(tab, "achievement_pulse_double_capsules", None)
+    if fill is not None:
+        # Shelf rows do not consume capsule fill, but the Progress Pulse circle
+        # still does when both presentation options are enabled.
+        fill.setEnabled(not shelf_enabled or pulse_enabled)
+    if doubled is not None:
+        doubled.setEnabled(not shelf_enabled)
+
+
 def _update_steam_enabled_visibility(tab: "WidgetsTab") -> None:
     enabled = getattr(tab, "steam_enabled", None) and tab.steam_enabled.isChecked()
     container = getattr(tab, "_steam_controls_container", None)
@@ -1110,6 +1122,34 @@ def _build_card_group(
         artwork_size_row.addStretch()
         _update_achievement_artwork_controls(tab)
 
+        progress_pulse = QCheckBox("Progress Pulse")
+        progress_pulse.setProperty("circleIndicator", True)
+        progress_pulse.setToolTip(
+            "Replace the Total percentage capsule with a circular progress display. "
+            "When the numeric percentage changes on an existing refresh/update, the "
+            "circle and number gently pulse once; unchanged values stay completely idle."
+        )
+        progress_pulse.setChecked(tab._default_bool(key, "progress_pulse"))
+        progress_pulse.stateChanged.connect(tab._save_settings)
+        progress_pulse.stateChanged.connect(
+            lambda _state: _update_achievement_capsule_style_controls(tab)
+        )
+        tab.achievement_pulse_progress_pulse = progress_pulse
+        appearance_layout.addWidget(progress_pulse)
+
+        shelf_style = QCheckBox("Shelf Style")
+        shelf_style.setProperty("circleIndicator", True)
+        shelf_style.setToolTip(
+            "Render supporting Achievement Pulse fields using the compact Abandonment-style "
+            "ledger shelf instead of rounded capsules. Capsule-only choices are retained "
+            "and become active again when Shelf Style is disabled."
+        )
+        shelf_style.setChecked(tab._default_bool(key, "shelf_style"))
+        shelf_style.stateChanged.connect(tab._save_settings)
+        shelf_style.stateChanged.connect(lambda _state: _update_achievement_capsule_style_controls(tab))
+        tab.achievement_pulse_shelf_style = shelf_style
+        appearance_layout.addWidget(shelf_style)
+
         capsule_fill_row = _aligned_row(appearance_layout, "Capsule Fill:")
         tab._achievement_capsule_fill_color = _coerce_rgba_color(
             tab._widget_default(key, "capsule_fill_color"),
@@ -1171,6 +1211,7 @@ def _build_card_group(
         capsule_font_row.addWidget(capsule_font_size)
         capsule_font_row.addWidget(QLabel("px"))
         capsule_font_row.addStretch()
+        _update_achievement_capsule_style_controls(tab)
 
         latest_row = _aligned_row(content_layout, "Latest Unlocks:")
         show_latest = QCheckBox("Show Latest Unlocks")
@@ -1750,6 +1791,12 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                 ),
             )
             tab.achievement_pulse_double_capsules.setChecked(bool(double_capsules))
+            tab.achievement_pulse_progress_pulse.setChecked(
+                bool(config.get("progress_pulse", tab._default_bool(key, "progress_pulse")))
+            )
+            tab.achievement_pulse_shelf_style.setChecked(
+                bool(config.get("shelf_style", tab._default_bool(key, "shelf_style")))
+            )
             try:
                 tab.achievement_pulse_capsule_font_size.setValue(
                     int(
@@ -1795,6 +1842,7 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                 )
             _update_achievement_artwork_controls(tab)
             _update_achievement_latest_controls(tab)
+            _update_achievement_capsule_style_controls(tab)
         elif key == "abandonment_issues":
             _set_combo_data(
                 tab.abandonment_issues_selection_mode,
@@ -1936,6 +1984,8 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         payload["square_artwork_size"] = int(tab.achievement_pulse_square_artwork_size.value())
         payload.pop("double_capsule_long_data", None)
         payload["double_capsules"] = bool(tab.achievement_pulse_double_capsules.isChecked())
+        payload["progress_pulse"] = bool(tab.achievement_pulse_progress_pulse.isChecked())
+        payload["shelf_style"] = bool(tab.achievement_pulse_shelf_style.isChecked())
         payload["capsule_font_size"] = int(tab.achievement_pulse_capsule_font_size.value())
         payload["capsule_fill_color"] = _rgba_payload(tab._achievement_capsule_fill_color)
         payload["capsule_border_color"] = _rgba_payload(tab._achievement_capsule_border_color)

@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Circuit Rose [Three-Tone] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       238,
       240,
       247,
+      255
+    ],
+    "about.art.liquid": [
+      209,
+      138,
+      185,
       255
     ],
     "popup.container.surface": [

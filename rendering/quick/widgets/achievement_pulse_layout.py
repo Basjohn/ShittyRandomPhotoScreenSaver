@@ -97,11 +97,20 @@ def achievement_field_rail_count(
     field_count: int,
     *,
     double_capsules: bool,
+    columns: int = 3,
+    shelf_style: bool = False,
 ) -> int:
-    """Return whole-row rail occupancy for three supporting fields per row."""
+    """Return whole-row rail occupancy for supporting fields.
 
-    compact_rows = max(1, (max(0, int(field_count)) + 2) // 3)
-    return compact_rows * (2 if double_capsules else 1)
+    Progress Pulse reserves the left rail and therefore uses two supporting
+    columns.  Shelf Style renders label/value on one ledger row and does not
+    consume the second capsule rail.
+    """
+
+    resolved_columns = max(1, int(columns))
+    compact_rows = max(1, (max(0, int(field_count)) + resolved_columns - 1) // resolved_columns)
+    rail_stride = 1 if shelf_style else (2 if double_capsules else 1)
+    return compact_rows * rail_stride
 
 
 def achievement_pulse_authored_size(

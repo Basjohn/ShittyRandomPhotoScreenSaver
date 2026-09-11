@@ -40,6 +40,7 @@ from ui.tabs.shared_styles import (
     add_aligned_row,
     create_inline_label,
     build_bucket_toggle,
+    finalize_bucket_body as _finalize_bucket_body,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.tabs.media.technical_controls import (
@@ -97,12 +98,6 @@ def _run_visualizer_settings_step(label: str, func) -> None:
     finally:
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         logger.info("[PERF][SETTINGS][VisualizersTab] %s in %.1f ms", label, elapsed_ms)
-
-
-def _finalize_bucket_body(toggle, body: QWidget) -> None:
-    expanded = bool(toggle.isChecked())
-    if body.isHidden() == expanded:
-        body.setVisible(expanded)
 
 
 _OSC_MULTI_LINE_COLOR_BINDINGS = (
@@ -841,14 +836,13 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
 
 # ---------------------------------------------------------------------------
-# V5b lazy Settings-body construction (Option-1: Spectrum eager exception)
+# Lazy Visualizer Settings-body construction
 # ---------------------------------------------------------------------------
 #
-# Spectrum is built eagerly because it hosts the genuinely shared Bar Fill/Border
-# colour + Border Opacity controls physically nested in its Appearance bucket
-# (extracting them is a V6 pixel move). Oscilloscope / Sine / Bubble / DevCurve
-# are constructed lazily on first selection and hydrated ONCE at construction.
-_LAZY_VISUALIZER_MODES = ("oscilloscope", "sine_wave", "bubble", "devcurve")
+# Mode bodies are constructed on demand by VisualizerModeBodyHost. Shared stable
+# Custom accessories are owned by VisualizersTab and physically parked outside
+# retireable bodies between selections. No mode has an eager-construction
+# exception.
 
 _VIS_MODE_CONTAINER_ATTR = {
     "spectrum": "_spectrum_settings_container",
@@ -881,8 +875,8 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
     """Hydrate exactly one freshly-constructed mode body from the canonical config.
 
     Called ONCE at construction (never on reselection of a cached body), so
-    unsaved in-session edits are never overwritten. Uses the same loaders +
-    arguments the eager path used, so it is behaviour-neutral.
+    unsaved in-session edits are never overwritten. Uses the canonical per-mode
+    loaders and arguments, so construction remains behavior-neutral.
     """
     from core.settings.visualizer_mode_registry import get_preset_slider_attr
     from core.settings.visualizer_presets import resolve_preset_index_from_mapping

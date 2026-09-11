@@ -729,7 +729,7 @@ class SettingsDialog(QDialog):
         # slightly taller than the original 610px baseline so the About
         # card and hotkeys section have comfortable breathing room even
         # immediately after a Reset To Defaults.
-        self.setMinimumSize(1280, 700)
+        self.setMinimumSize(1280, 760)
         
         # Check if we have saved geometry first; if not, create the dialog at
         # the designed minimum size so layout matches the reference exactly.
@@ -2261,7 +2261,7 @@ class SettingsDialog(QDialog):
             x_saved = int(geometry.get('x', 100))
             y_saved = int(geometry.get('y', 100))
             w_saved = int(geometry.get('width', 1000))
-            h_saved = int(geometry.get('height', 700))
+            h_saved = int(geometry.get('height', 760))
 
             # Find which screen the saved position belongs to
             target_screen = QGuiApplication.screenAt(QPoint(x_saved, y_saved))

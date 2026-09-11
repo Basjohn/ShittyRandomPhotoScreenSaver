@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Boreal Bloom [Three-Tone] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       238,
       241,
       246,
+      255
+    ],
+    "about.art.liquid": [
+      154,
+      135,
+      188,
       255
     ],
     "popup.container.surface": [

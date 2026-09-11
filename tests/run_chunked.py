@@ -17,7 +17,7 @@ Examples::
 
     python tests/run_chunked.py --profile destination --chunks 4 --log
     python tests/run_chunked.py --chunks 4 --log
-    python tests/run_chunked.py --chunks 4 tests/test_widgets_tab.py
+    python tests/run_chunked.py --chunks 4 tests/test_widgets_tab_current.py
 """
 from __future__ import annotations
 
@@ -68,6 +68,18 @@ DESTINATION_PROFILE = (
     "test_qtquick_gmail_presentation.py",
     "test_qtquick_achievement_pulse_presentation.py",
     "test_qtquick_abandonment_issues_presentation.py",
+    # Post-cutover maintained contracts added/reconciled 2026-09-09..11.
+    # Keep source-only guards in the destination profile as cheap early failures;
+    # Qt-bearing files still execute in their own fresh subprocess on Windows.
+    "test_about_art_theme.py",
+    "test_theme_foundry_model.py",
+    "test_steam_phase3_settings_descriptors.py",
+    "test_defaults_schema_authority.py",
+    "test_sphere_voxel_audio_contract.py",
+    "test_sphere_voxel_geometry.py",
+    "test_visualizer_settings_body_transaction_contract.py",
+    "test_visualizer_user_authored_preset_catalog.py",
+    "test_visualizer_technical_profile_contract.py",
     "test_qtquick_visualizer_pre_cutover_audit.py",
     "test_qtquick_visualizer_reactivity_config_parity.py",
     "test_qtquick_visualizer_true_f_gate.py",
@@ -123,7 +135,7 @@ DESTINATION_PROFILE = (
     "test_visualizer_doc_references.py",
     "test_runtime_perf_policy_contracts.py",
     "test_tooling_ownership.py",
-    "test_widgets_tab.py::TestWidgetsTab::test_widgets_tab_disables_media_size_controls_when_custom_is_active",
+    "test_widgets_tab_current.py::TestWidgetsTab::test_widgets_tab_disables_media_size_controls_when_custom_is_active",
     "test_settings_eventfilter_teardown_guards.py",
     "test_terminal_runtime_destruction.py",
     "test_qtquick_retained_model_lifetime.py",
@@ -140,8 +152,8 @@ DESTINATION_PROFILE = (
     "test_qtquick_phase_c_registry_parity.py",
     "test_qtquick_transition_controller.py",
     "test_qtquick_transition_implementations.py",
+    "test_qtquick_crumble_transition.py",
     "test_qtquick_slide_motion.py",
-    "test_qtquick_sphere_rendering.py",
     "test_sphere_mode_integration.py",
     "test_qtquick_visualizer_mode_retirement.py",
     "test_qtquick_transition_parameter_defaults.py",

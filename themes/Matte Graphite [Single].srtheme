@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Matte Graphite [Single]",
   "backdrop": {
     "mode": "off",
@@ -874,6 +874,12 @@
       245,
       247,
       248,
+      255
+    ],
+    "about.art.liquid": [
+      172,
+      189,
+      200,
       255
     ],
     "popup.container.surface": [

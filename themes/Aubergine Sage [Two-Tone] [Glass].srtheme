@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Aubergine Sage [Two-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       243,
       245,
       248,
+      255
+    ],
+    "about.art.liquid": [
+      118,
+      143,
+      102,
       255
     ],
     "popup.container.surface": [

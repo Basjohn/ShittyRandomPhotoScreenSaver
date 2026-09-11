@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
 )
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QPixmap, QDesktopServices
+from PySide6.QtGui import QPixmap, QImage, QDesktopServices
 
 from core.logging.logger import get_logger
 from ui.settings_theme_runtime import (
@@ -21,6 +21,7 @@ from ui.settings_theme_runtime import (
     subscribe_settings_theme,
 )
 from ui.settings_theme_spec import SettingsThemeSpec
+from core.about_art_theme import themed_about_rgba
 from ui.settings_theme_qss import render_qss_color, render_qss_rgba255
 
 if TYPE_CHECKING:
@@ -108,6 +109,44 @@ def _about_notice_style() -> str:
     )
 
 
+def _theme_about_art_pixmap(source_path: Path, mask_path: Path) -> QPixmap:
+    """Build one themed About pixmap from explicit liquid-mask assets."""
+
+    target = _SETTINGS_THEME.color("about.art.liquid")
+    rgba = themed_about_rgba(
+        source_path,
+        mask_path,
+        (target.r, target.g, target.b),
+    )
+    height, width, _channels = rgba.shape
+    image = QImage(
+        rgba.data,
+        width,
+        height,
+        int(rgba.strides[0]),
+        QImage.Format.Format_RGBA8888,
+    ).copy()
+    return QPixmap.fromImage(image)
+
+
+def _refresh_about_art_sources(dialog: "SettingsDialog") -> None:
+    """Rebuild themed About artwork from original images + explicit masks."""
+
+    images_dir = getattr(dialog, "_about_images_dir", None)
+    if images_dir is None:
+        return
+    try:
+        logo_path = Path(images_dir) / "Logo.png"
+        logo_mask = Path(images_dir) / "Logo_LiquidMask.png"
+        shoogle_path = Path(images_dir) / "Shoogle300W.png"
+        shoogle_mask = Path(images_dir) / "Shoogle300W_LiquidMask.png"
+        dialog._about_logo_source = _theme_about_art_pixmap(logo_path, logo_mask)
+        dialog._about_shoogle_source = _theme_about_art_pixmap(shoogle_path, shoogle_mask)
+        dialog._about_last_card_width = 0
+    except Exception:
+        logger.debug("[ABOUT] Failed to theme About artwork", exc_info=True)
+
+
 def _apply_about_theme(dialog: "SettingsDialog") -> None:
     """Reapply semantic About styles to one already-built tab."""
 
@@ -185,6 +224,8 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
         logger.debug("[SETTINGS] Exception suppressed")
         images_dir = Path.cwd() / "images"
 
+    dialog._about_images_dir = images_dir
+
     logo_label = QLabel()
     logo_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
     dialog._about_logo_label = logo_label
@@ -210,6 +251,7 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     except Exception:
         logger.debug("[ABOUT] Failed to load Shoogle300W.png", exc_info=True)
     header_layout.addWidget(shoogle_label, 0, Qt.AlignmentFlag.AlignTop)
+    _refresh_about_art_sources(dialog)
     header_layout.addStretch()
     card_layout.addLayout(header_layout)
 
@@ -466,6 +508,8 @@ def _refresh_live_about_tabs(theme: SettingsThemeSpec) -> None:
     for dialog in tuple(_LIVE_ABOUT_DIALOGS):
         try:
             _apply_about_theme(dialog)
+            _refresh_about_art_sources(dialog)
+            update_about_header_images(dialog)
         except RuntimeError:
             continue
 

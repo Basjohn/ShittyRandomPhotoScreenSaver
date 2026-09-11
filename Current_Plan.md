@@ -1,6 +1,6 @@
 # Current Plan — Active Work
 
-Last updated: 2026-09-10
+Last updated: 2026-09-11
 
 Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
 
@@ -30,14 +30,18 @@ Sphere is now **accepted experimental and deliberately isolated**. Its current r
 - [x] Preserve user-authored visualizer preset ownership: sparse authored slot numbers are valid, runtime compacts them without renaming/deleting files, Edit Preset retains the real backing path, and Save-As appends after the highest authored number rather than assuming contiguous slots. Shipped manifests are never runtime authority over user presets.
 - [x] Make lazy visualizer Settings-body construction transactional: a failed builder/hydration attempt removes its partial body before rethrow, stale retry bodies are de-duplicated by a mode marker, and non-Custom presets never transiently expose Custom/Advanced controls.
 - [x] Close Sphere bucket-state schema drift: the new appearance/particle-flow/reactivity/rotation/effects bucket identities are registered in canonical `ui.visualizer_bucket_states`; JSON/SST defaults are regenerated; a Qt-free builder/schema contract now prevents future bucket renames from escaping canonical defaults.
-- [x] Focused validation after approved control/rainbow cleanup + sparse-preset + bucket-schema regressions: Sphere/geometry/technical-profile/user-preset/body-transaction/bucket-contract gate **82 passed**; full Python source compile clean; canonical JSON/SST defaults match. Settings persistence collection remains blocked in this Linux workspace only by missing `PySide6`.
-- [ ] Deferred presentation-only candidates (Edge Weight, Voxel Size Variation, Shadow controls, Tracer Colour, Depth Cue) remain unimplemented pending operator decision; do not maintain a separate proposal specification in docs.
+- [x] Log-audit the post-split physical run before further renderer work. Detached cohort velocity remains granular (239 distinct observed maxima); captured low/mid/high-impact motion remains strongly ordered (~0.25 / ~0.45 / ~0.93 mean motion respectively), with continuous body/section/rotation outputs rather than a 0/1 collapse. The control split therefore shows no evidence of reactivity/fidelity regression in this run.
+- [x] Add presentation-only Sphere controls without changing accepted defaults: **Edge Weight** (`1.0` = prior fixed thresholds), **Voxel Size Variation** (`0.35` = prior fixed shader constant), **Tracer Color** (`[255,242,194,255]` maps exactly to the former shader `(1.0, 0.95, 0.76)`), and optional **Depth Shading** (default off; suggested strength `0.20`). All remain in the existing Sphere draw and private `sphere_*` parameter bundle.
+- [x] Replace the obsolete circular Sphere shadow proxy with a **projected voxel silhouette** using the exact same Sphere vertex shader/instance transforms as the hero draw. Shadow Opacity/Softness/Distance/Size are Sphere-local optional controls; `1.0 / 0.18 / 1.0 / 1.0` are the starting values. Softness uses at most one cheap expanded instanced layer; no shadow map, FBO blur, mutual voxel lighting, per-voxel Python state, worker or cadence is introduced.
+- [x] Re-audit experimental isolation after the presentation additions: the mode descriptor, Sphere capture/runtime, BeatEngine/shared logical runtime, and every permanent-mode renderer/runtime remain byte-identical to the pre-visual-polish checkpoint. The only shared config-file edit is confined to the existing `_SPHERE_PARAMETER_KEYS`/Sphere apply block. The documented migration gate remains dormant and requires operator activation plus pre/post Sphere and permanent-mode replay/capture evidence.
+- [x] Correct detached-particle population granularity without weakening loud-passage transients: absolute passage loudness no longer owns cohort density. Qualified events keep the accepted 28% visible participation floor, then event confidence + Sphere-local granular motion evidence shape population through a convex curve; 100% density requires both authorities to max rather than merely occurring in loud material. Add a hard current near-silence authoring floor (`0.075`) beneath the existing `0.090/0.042` hysteretic gate so stale/latched typed evidence cannot author a new cohort from perceptually silent residual signal. Event admission thresholds, acoustic-motion authority, travel speed/amplitude, and loud-bed kick/vocal eligibility remain unchanged.
+- [x] Focused validation through particle granularity and projected-shadow work is **85/85** in the working tree. Canonical defaults authority is clean. Settings persistence collection remains blocked in this Linux workspace only by missing `PySide6`; rerun the same focused gate against the extracted GODZIP before delivery.
 
 Protected behaviour remains the 2026-09-10 accepted detached-cohort/onset/tracer/four-corner/vocal-recoil contract. Do not retune those mechanics during presentation polish.
 
 ## 2. `dark.qss` retirement → ThemeSpec sole authority
 
-Execution authority: `Docs/Settings_Dark_QSS_Retirement.md`.
+Execution authority: `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`.
 
 Migrate the Settings dialog's remaining colour **and** structure authority out of
 `themes/dark.qss` into `SettingsThemeSpec`, leaving ThemeSpec as the sole Settings GUI
@@ -60,10 +64,22 @@ competing stylesheet authority completely.
 
 Owned in detail by `Docs/TestSuite.md` and `Future_Cleanup.md`.
 
-- [ ] Delete the caller-dead `widgets/spotify_visualizer/renderers/` island and
-  `rendering/image_processor.py` after splitting any mixed tests that still rely on
-  them; then restore the two relaxed removal assertions in
-  `test_defaults_schema_authority.py`.
+- [x] Delete the caller-dead `widgets/spotify_visualizer/renderers/` island and
+  `rendering/image_processor.py`. Surviving Spectrum/Sine/DevCurve/image-processing
+  coverage is rehomed to new current-owner tests; a new removal gate replaces the
+  previously relaxed museum-owner assertions without editing an old test file.
+- [x] Normalize collapsible Settings bucket UX/persistence: Spectrum Custom's stable
+  Bar Appearance/Rainbow accessories are real buckets; canonical bucket defaults are
+  all closed; persistence is sparse and remembers at most one open identity per local
+  scope; shared synchronous peer closure introduces no timer/poller/animation owner.
+  Physical PySide/Qt interaction remains **NEEDS RUN VALIDATION**.
+- [x] Paranoid bucket reachability/duplication audit: no newly unreachable control path found; outer Visualizer
+  Advanced/Technical remain independent parent disclosures; Technical AGC/Transient are now real one-open sparse
+  child buckets; Widget deferred-body finalization has one shared owner; seven copied finalizers and stale Gmail/
+  Spectrum-eager prose were removed. Setup pills, About and Accessibility remain explicitly outside the bucket
+  contract. Three stale mixed test modules were rehomed to new current modules and staged as debris rather than
+  teaching production code obsolete multi-open/default-open behavior. Final Qt-free contract is 13/13, unified defaults
+  artifact verification and whole-tree syntax compilation are green; physical Qt interaction remains **NEEDS RUN VALIDATION**.
 - [ ] Run the broad `pytest tests/` inventory and reconcile remaining stale
   widget-glow / two-phase-retirement / defaults casualties against current owners.
 - [ ] Reconcile nine Clock presentation tests whose shadow fixtures omit current
@@ -109,13 +125,13 @@ exact current source + current reconciled test tree
 -> Spec.md
 -> FWPlan.md (future / non-blocking implementation)
 -> Future_Cleanup.md / Docs/TestSuite.md (cleanup + test truth)
--> Docs/Index.md + focused/decomposition docs
+-> Index.md + focused/decomposition docs
 ```
 
 ## Durable references
 
-- `Docs/Index.md` — routing map to current owners.
+- `Index.md` — routing map to current owners.
 - `Docs/TestSuite.md`
 - `Future_Cleanup.md`
 - `FWPlan.md`
-- `Docs/Settings_Dark_QSS_Retirement.md`
+- `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`

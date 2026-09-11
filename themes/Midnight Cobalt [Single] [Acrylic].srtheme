@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Midnight Cobalt [Single] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -873,6 +873,12 @@
     "about.notice.text": [
       243,
       246,
+      255,
+      255
+    ],
+    "about.art.liquid": [
+      141,
+      170,
       255,
       255
     ],

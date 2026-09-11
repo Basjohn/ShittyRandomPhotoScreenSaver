@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Burgundy Mint [Two-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       242,
       239,
       243,
+      255
+    ],
+    "about.art.liquid": [
+      158,
+      215,
+      197,
       255
     ],
     "popup.container.surface": [

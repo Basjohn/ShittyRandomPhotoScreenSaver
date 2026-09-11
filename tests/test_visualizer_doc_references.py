@@ -6,8 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_current_visualizer_reference_docs_exist():
     for relative in (
-        "Docs/Visualizer_Reference.md",
-        "Docs/Visualizer_Change_Checklist.md",
+        "Docs/Reference/Visualizer_Reference.md",
+        "Docs/Guides/Visualizer_Change_Checklist.md",
         "Docs/Guardrails/Visualizer_Presentation.md",
         "Docs/Contracts.md",
     ):
@@ -17,8 +17,8 @@ def test_current_visualizer_reference_docs_exist():
 
 def test_index_does_not_reference_missing_visualizer_docs():
     index_text = (ROOT / "Index.md").read_text(encoding="utf-8")
-    assert "Docs/Visualizer_Reference.md" in index_text
-    assert "Docs/Visualizer_Change_Checklist.md" in index_text
+    assert "Docs/Reference/Visualizer_Reference.md" in index_text
+    assert "Docs/Guides/Visualizer_Change_Checklist.md" in index_text
     assert "Docs/Visualizer_Reset_Matrix.md" not in index_text
     assert "Docs/Visualizer_Signal_Contract.md" not in index_text
     assert "Docs/Visualizer_Baseline_Tuning_Matrix.md" not in index_text
@@ -45,7 +45,7 @@ def test_spec_describes_the_current_visualizer_presentation_contract():
 
 
 def test_visualizer_reference_describes_the_current_quick_boundary():
-    reference_text = (ROOT / "Docs" / "Visualizer_Reference.md").read_text(encoding="utf-8")
+    reference_text = (ROOT / "Docs" / "Reference" / "Visualizer_Reference.md").read_text(encoding="utf-8")
     assert "display's sole `QQuickWindow`" in reference_text
     assert "one canonical baseline viewport aspect ratio" in reference_text
     assert "FRAMELESS + VIEWPORT_RECT" in reference_text
@@ -66,7 +66,7 @@ def test_contracts_route_visualizer_shell_clip_and_geometry_owners():
 
 
 def test_compositor_architecture_does_not_make_visualizer_card_universal():
-    architecture_text = (ROOT / "Docs" / "Compositor_Architecture.md").read_text(encoding="utf-8")
+    architecture_text = (ROOT / "Docs" / "Architecture" / "Compositor_Architecture.md").read_text(encoding="utf-8")
     assert "optional retained visualizer shell/chrome" in architecture_text
     assert "Card existence is a presentation policy" in architecture_text
     assert "shell_policy = FRAMELESS" in architecture_text
@@ -77,7 +77,7 @@ def test_compositor_architecture_does_not_make_visualizer_card_universal():
 def test_project_overview_keeps_visualizer_scope_current():
     overview_text = (ROOT / "Docs" / "00_PROJECT_OVERVIEW.md").read_text(encoding="utf-8")
     assert "high-fidelity multi-mode visualizer" in overview_text
-    assert "H is closed" in overview_text
+    assert "F/G/H and caller-proven Phase-I cleanup are closed" in overview_text
     assert "caller-proven Phase-I cleanup are closed" in overview_text
     assert "wheel/corners -> uniform scale" in overview_text
     assert "R-69 is golden" in overview_text
@@ -87,6 +87,6 @@ def test_project_overview_keeps_visualizer_scope_current():
 
 def test_deleted_qtimer_policy_is_not_referenced_by_active_docs():
     assert not (ROOT / "Docs" / "QTIMER_POLICY.md").exists()
-    for relative in ("Index.md", "Spec.md", "Docs/00_PROJECT_OVERVIEW.md", "Docs/10_WIDGET_GUIDELINES.md"):
+    for relative in ("Index.md", "Spec.md", "Docs/00_PROJECT_OVERVIEW.md", "Docs/Guides/10_WIDGET_GUIDELINES.md"):
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert "QTIMER_POLICY" not in text

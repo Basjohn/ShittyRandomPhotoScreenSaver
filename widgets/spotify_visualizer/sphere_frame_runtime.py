@@ -55,13 +55,21 @@ _SPHERE_INCOMING_MIN_INTERVAL_S = 0.26
 # event ownership or the four-corner participation floor.
 _INCOMING_GATE_OPEN = 0.090
 _INCOMING_GATE_CLOSE = 0.042
-_INCOMING_TYPED_FORCE_FLOOR = 0.030
-# Optional energy-scaled cohort density changes only how many members of each
-# stable four-corner population launch for a qualified event.  Its full-density
-# endpoint is deliberately ~20% higher than the initially accepted calibration.
+_INCOMING_TYPED_FORCE_FLOOR = 0.075
+# Even while the hysteretic gate is still open from recent real material, current
+# near-silence is never permission to author another detached cohort. Typed events
+# retain a narrow 0.075 -> 0.090 force window for isolated real attacks, but cannot
+# bypass this absolute Sphere-local presence floor.
+_INCOMING_AUTHOR_FLOOR = 0.075
+# Qualified-event population is intentionally *not* owned by absolute passage
+# loudness. Loud beds routinely saturate the live pre-AGC lane and previously made
+# every admitted cohort full-density. Keep the accepted visible four-corner floor,
+# then let event confidence + the already-granular Sphere-local motion evidence
+# decide how much of that stable population participates. The convex curve makes
+# 100% population genuinely exceptional rather than a normal loud-passage state.
 _INCOMING_DENSITY_MIN_ACTIVE = 0.28
-_INCOMING_DENSITY_LOW = 0.096
-_INCOMING_DENSITY_HIGH = 1.50
+_INCOMING_DENSITY_EVENT_WEIGHT = 0.45
+_INCOMING_DENSITY_CURVE = 1.80
 # Optional transient velocity is a cohort accent, not a continuously modulated
 # global particle speed.  Strong events return faster initially, then settle
 # toward the existing comfortable landing speed.
@@ -288,6 +296,28 @@ def _incoming_motion_intensity(event_strength: float, acoustic_impact: float) ->
     impact = _clamp01(acoustic_impact)
     confidence_floor = 0.07 + 0.19 * event
     return _clamp01(confidence_floor + (1.0 - confidence_floor) * pow(impact, 1.16))
+
+
+def _incoming_density_from_event(event_strength: float, motion_intensity: float) -> float:
+    """Return qualified-cohort population without using ambient passage loudness.
+
+    Admission remains owned by typed/onset evidence plus the Sphere-local silence
+    gate. Population is a separate reward: motion evidence supplies most of the
+    drive while event confidence provides a modest multiplier. A barely qualified
+    event therefore remains visible, a strong kick/vocal over a loud bed remains
+    strongly reactive, and 100% density requires both authorities to reach their
+    maximum rather than merely playing inside loud material.
+    """
+
+    event = _clamp01(event_strength)
+    motion = _clamp01(motion_intensity)
+    event_multiplier = (1.0 - _INCOMING_DENSITY_EVENT_WEIGHT) + _INCOMING_DENSITY_EVENT_WEIGHT * event
+    drive = _clamp01(motion * event_multiplier)
+    shaped = pow(drive, _INCOMING_DENSITY_CURVE)
+    return _clamp01(
+        _INCOMING_DENSITY_MIN_ACTIVE
+        + (1.0 - _INCOMING_DENSITY_MIN_ACTIVE) * shaped
+    )
 
 
 def _motion_activity(fast: float, slow: float, gain: float) -> float:
@@ -1160,20 +1190,16 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             typed_force_gate = bool(
                 incoming_candidates and intake_energy >= _INCOMING_TYPED_FORCE_FLOOR
             )
-            if incoming_candidates and (self._incoming_gate_open or typed_force_gate):
+            authoring_presence = intake_energy >= _INCOMING_AUTHOR_FLOOR
+            if incoming_candidates and authoring_presence and (self._incoming_gate_open or typed_force_gate):
                 _incoming_priority, incoming_source, incoming_section, incoming_strength, event_confidence = max(
                     incoming_candidates, key=lambda item: item[0]
                 )
                 motion_intensity = _incoming_motion_intensity(event_confidence, acoustic_impact)
                 self._last_intake_motion_intensity = motion_intensity
                 if density_enabled:
-                    density_activity = _smooth_gate(
-                        intake_energy, _INCOMING_DENSITY_LOW, _INCOMING_DENSITY_HIGH
-                    )
-                    incoming_density = (
-                        _INCOMING_DENSITY_MIN_ACTIVE
-                        + (1.0 - _INCOMING_DENSITY_MIN_ACTIVE)
-                        * math.sqrt(density_activity)
+                    incoming_density = _incoming_density_from_event(
+                        event_confidence, motion_intensity
                     )
                 else:
                     incoming_density = 1.0

@@ -14,7 +14,7 @@ try:
 except Exception:  # pragma: no cover - PySide test/import fallback
     Shiboken = None  # type: ignore[assignment]
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtGui import QFontDatabase, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -59,6 +59,7 @@ _LIVE_GROUP_BOXES: weakref.WeakSet = weakref.WeakSet()
 _LIVE_RECOMMENDED_SLIDERS: weakref.WeakSet = weakref.WeakSet()
 _LIVE_STYLED_LABELS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _LIVE_STYLE_BUNDLES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_LIVE_BUCKET_TOGGLES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 _SETTINGS_THEME = get_active_settings_theme()
@@ -1626,18 +1627,124 @@ QScrollArea { border: none; background: transparent; }
 QScrollArea > QWidget > QWidget { background: transparent; }
 """
 
+def bind_bucket_accordion(
+    toggle: QToolButton,
+    *,
+    scope_owner: QWidget,
+    apply_visual_state: Callable[[bool], None],
+    scope_key: object | Callable[[], object] | None = None,
+) -> None:
+    """Register one collapsible bucket in a synchronous local accordion scope.
+
+    The scope owner controls lifetime only; ``scope_key`` lets callers share one
+    logical scope across several nested layouts (Visualizer Custom uses this).
+    Ordinary Widget buckets omit it and naturally coordinate only with siblings
+    created under the same parent widget.  Peers are closed synchronously before
+    the newly opened body is shown, so no timer/animation/intermediate paint is
+    introduced.
+    """
+
+    if not _is_live_qobject(scope_owner):
+        return
+    registry = _LIVE_BUCKET_TOGGLES.get(scope_owner)
+    if registry is None:
+        registry = weakref.WeakSet()
+        _LIVE_BUCKET_TOGGLES[scope_owner] = registry
+    registry.add(toggle)
+
+    if callable(scope_key):
+        provider = scope_key
+    else:
+        provider = lambda _scope=scope_key: _scope
+
+    toggle._srpss_bucket_scope_owner = scope_owner  # type: ignore[attr-defined]
+    toggle._srpss_bucket_scope_provider = provider  # type: ignore[attr-defined]
+    toggle._srpss_bucket_apply_visual_state = apply_visual_state  # type: ignore[attr-defined]
+
+
+def close_bucket_accordion_peers(toggle: QToolButton) -> None:
+    """Close checked peers in ``toggle``'s current local accordion scope."""
+
+    owner = getattr(toggle, "_srpss_bucket_scope_owner", None)
+    provider = getattr(toggle, "_srpss_bucket_scope_provider", None)
+    if owner is None or not callable(provider) or not _is_live_qobject(owner):
+        return
+    registry = _LIVE_BUCKET_TOGGLES.get(owner)
+    if registry is None:
+        return
+    current_scope = provider()
+    for peer in tuple(registry):
+        if peer is toggle or not _is_live_qobject(peer):
+            continue
+        peer_provider = getattr(peer, "_srpss_bucket_scope_provider", None)
+        if not callable(peer_provider) or peer_provider() != current_scope:
+            continue
+        try:
+            if not peer.isChecked():
+                continue
+            blocker = QSignalBlocker(peer)
+            peer.setChecked(False)
+            apply_peer = getattr(peer, "_srpss_bucket_apply_visual_state", None)
+            if callable(apply_peer):
+                apply_peer(False)
+            del blocker
+        except RuntimeError:
+            continue
+
+
+def set_bucket_toggle_checked(
+    toggle: QToolButton,
+    checked: bool,
+    *,
+    coordinate: bool = True,
+) -> None:
+    """Apply a bucket's checked presentation without firing persistence callbacks."""
+
+    if not _is_live_qobject(toggle):
+        return
+    target = bool(checked)
+    if target and coordinate:
+        close_bucket_accordion_peers(toggle)
+    blocker = QSignalBlocker(toggle)
+    toggle.setChecked(target)
+    apply_state = getattr(toggle, "_srpss_bucket_apply_visual_state", None)
+    if callable(apply_state):
+        apply_state(target)
+    del blocker
+
+
+def finalize_bucket_body(toggle: QToolButton, body: QWidget) -> None:
+    """Reveal one deferred bucket body only after its controls are fully built.
+
+    Widget builders use deferred initial visibility so an initially closed body
+    cannot flash while child controls are being constructed.  Keep that final
+    reveal/hide step centralized with the shared bucket owner instead of copying
+    the same helper into every Widget page.
+    """
+
+    if not _is_live_qobject(toggle) or not _is_live_qobject(body):
+        return
+    expanded = bool(toggle.isChecked())
+    if body.isHidden() == expanded:
+        body.setVisible(expanded)
+
+
 def build_bucket_toggle(
     host_layout: QVBoxLayout,
     title: str,
     expanded: bool = False,
     on_toggle: Callable[[bool], None] | None = None,
     defer_initial_visibility: bool = False,
+    *,
+    accordion_owner: QWidget | None = None,
+    accordion_scope: object | Callable[[], object] | None = None,
 ) -> tuple[QToolButton, QWidget, QVBoxLayout]:
-    """Create a collapsible bucket toggle with arrow indicator.
+    """Create one shared collapsible Settings bucket.
 
-    Matches the established visualizer bucket design: a QToolButton with
-    a Down/Right arrow and text beside the icon.  Returns
-    ``(toggle_button, body_widget, body_layout)``.
+    Buckets under the same local scope form a synchronous accordion: opening one
+    closes its checked peers before revealing the new body.  Persistence remains
+    owned by the caller's ``on_toggle`` callback; programmatic peer closure does
+    not emit another persistence write.
     """
     toggle = QToolButton()
     toggle.setText(title)
@@ -1660,10 +1767,24 @@ def build_bucket_toggle(
         body.setVisible(expanded)
     host_layout.addWidget(body)
 
-    def _apply_state(checked: bool) -> None:
+    def _apply_visual_state(checked: bool) -> None:
         toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
         if body.isHidden() == bool(checked):
             body.setVisible(checked)
+
+    scope_owner = accordion_owner or host_layout.parentWidget()
+    if scope_owner is not None:
+        bind_bucket_accordion(
+            toggle,
+            scope_owner=scope_owner,
+            apply_visual_state=_apply_visual_state,
+            scope_key=accordion_scope,
+        )
+
+    def _apply_state(checked: bool) -> None:
+        if checked:
+            close_bucket_accordion_peers(toggle)
+        _apply_visual_state(checked)
         if on_toggle is not None:
             on_toggle(checked)
 

@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Forest Rose [Two-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       243,
       246,
       248,
+      255
+    ],
+    "about.art.liquid": [
+      193,
+      101,
+      127,
       255
     ],
     "popup.container.surface": [

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SRPSS Theme Foundry — schema-v5 semantic Settings theme editor.
+"""SRPSS Theme Foundry — schema-v6 semantic Settings theme editor.
 
 The Foundry edits the exact :class:`SettingsThemeSpec` consumed by Settings. It
 never scans Python/QSS literals, never rewrites runtime source files and never

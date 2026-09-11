@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Deep Ocean [Single] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       239,
       251,
       255,
+      255
+    ],
+    "about.art.liquid": [
+      119,
+      183,
+      225,
       255
     ],
     "popup.container.surface": [

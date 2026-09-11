@@ -73,6 +73,13 @@ from ui.tabs.shared_styles import (
     NoWheelSlider,  # noqa: F401 — re-exported
 )
 from ui.flow_layout import FlowContainer
+from core.settings.ui_bucket_state import (
+    flat_bucket_scope,
+    normalize_single_open_bucket_states,
+    set_single_open_bucket_state,
+    sparse_open_bucket_states,
+    widget_bucket_scope,
+)
 from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
 
 _WIDGET_MODULE_ROW_MIN_WIDTH = 220
@@ -305,16 +312,22 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
 
     def _load_gmail_bucket_states(self) -> Dict[str, bool]:
-        """Load persisted Gmail bucket states over the canonical UI baseline."""
-        return self._load_canonical_ui_state_mapping(
-            self._GMAIL_BUCKET_STATE_KEY, "gmail_bucket_states"
+        """Load Gmail's single remembered open bucket over an all-closed baseline."""
+        canonical = self._visualizer_ui_defaults.get("gmail_bucket_states")
+        if not isinstance(canonical, Mapping):
+            raise KeyError("Canonical UI defaults are missing ui.gmail_bucket_states")
+        return normalize_single_open_bucket_states(
+            canonical.keys(),
+            self._settings.get(self._GMAIL_BUCKET_STATE_KEY),
+            scope_for_key=flat_bucket_scope,
         )
 
     def _load_widget_bucket_states(self) -> Dict[str, bool]:
-        """Load Widget bucket states and forward-repair retired Reddit bucket names."""
-        states = self._load_canonical_ui_state_mapping(
-            self._WIDGET_BUCKET_STATE_KEY, "widget_bucket_states"
-        )
+        """Load one remembered open bucket per Widget page/local nested scope."""
+        canonical = self._visualizer_ui_defaults.get("widget_bucket_states")
+        if not isinstance(canonical, Mapping):
+            raise KeyError("Canonical UI defaults are missing ui.widget_bucket_states")
+        canonical_keys = tuple(str(key) for key in canonical)
         raw = self._settings.get(self._WIDGET_BUCKET_STATE_KEY)
         aliases = {
             "reddit:primary": "reddit:reddit1",
@@ -322,50 +335,66 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             "reddit:layout": "reddit:shared_layout",
             "reddit:appearance": "reddit:shared_appearance",
         }
+        repaired_raw: dict[str, bool] = {}
         if isinstance(raw, Mapping):
-            for retired, canonical in aliases.items():
-                if retired in raw and canonical not in raw:
-                    states[canonical] = bool(raw[retired])
-        for retired in aliases:
-            states.pop(retired, None)
-        return states
+            for raw_key, raw_value in raw.items():
+                key = str(raw_key)
+                canonical_key = aliases.get(key, key)
+                if canonical_key in repaired_raw and key in aliases:
+                    continue
+                repaired_raw[canonical_key] = bool(raw_value)
+        return normalize_single_open_bucket_states(
+            canonical_keys,
+            repaired_raw,
+            scope_for_key=lambda key: widget_bucket_scope(key, canonical_keys),
+        )
 
     def get_gmail_bucket_state(self, bucket: str) -> bool:
-        """Return remembered expanded state for a canonical Gmail bucket."""
+        """Return whether this is Gmail's remembered open bucket."""
         return bool(self._gmail_bucket_state[bucket])
 
     def set_gmail_bucket_state(self, bucket: str, expanded: bool) -> None:
-        """Persist expanded/collapsed state for a Gmail bucket."""
+        """Persist only Gmail's last open bucket; closed buckets are omitted."""
         states = getattr(self, "_gmail_bucket_state", None)
         if not isinstance(states, dict):
-            states = {}
-            self._gmail_bucket_state = states
-        if states.get(bucket) == bool(expanded):
-            return
-        states[bucket] = bool(expanded)
-        try:
-            self._settings.set(self._GMAIL_BUCKET_STATE_KEY, dict(states))
-        except Exception:
-            pass
+            raise RuntimeError("Gmail bucket state was not initialized")
+        set_single_open_bucket_state(
+            states,
+            bucket,
+            bool(expanded),
+            scope_for_key=flat_bucket_scope,
+        )
+        self._settings.set(
+            self._GMAIL_BUCKET_STATE_KEY,
+            sparse_open_bucket_states(states),
+        )
 
-    def get_widget_bucket_state(self, section: str, bucket: str) -> bool:
-        """Return remembered expanded state for a canonical Widget bucket."""
+    def get_widget_bucket_state(
+        self,
+        section: str,
+        bucket: str,
+        _legacy_default: bool | None = None,
+    ) -> bool:
+        """Return whether this is the remembered open bucket for its local scope."""
         return bool(self._widget_bucket_state[f"{section}:{bucket}"])
 
     def set_widget_bucket_state(self, section: str, bucket: str, expanded: bool) -> None:
-        """Persist expanded/collapsed state for a non-Gmail widget bucket."""
+        """Persist one open bucket per Widget page or nested card scope."""
         states = getattr(self, "_widget_bucket_state", None)
         if not isinstance(states, dict):
-            states = {}
-            self._widget_bucket_state = states
+            raise RuntimeError("Widget bucket state was not initialized")
+        canonical_keys = tuple(states)
         key = f"{section}:{bucket}"
-        if states.get(key) == bool(expanded):
-            return
-        states[key] = bool(expanded)
-        try:
-            self._settings.set(self._WIDGET_BUCKET_STATE_KEY, dict(states))
-        except Exception:
-            pass
+        set_single_open_bucket_state(
+            states,
+            key,
+            bool(expanded),
+            scope_for_key=lambda candidate: widget_bucket_scope(candidate, canonical_keys),
+        )
+        self._settings.set(
+            self._WIDGET_BUCKET_STATE_KEY,
+            sparse_open_bucket_states(states),
+        )
 
 
     

@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Default Dark [Single] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -871,6 +871,12 @@
       230
     ],
     "about.notice.text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "about.art.liquid": [
       255,
       255,
       255,

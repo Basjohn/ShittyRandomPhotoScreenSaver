@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Smoke Quartz [Single] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       224,
       214,
       208,
+      255
+    ],
+    "about.art.liquid": [
+      225,
+      201,
+      186,
       255
     ],
     "popup.container.surface": [

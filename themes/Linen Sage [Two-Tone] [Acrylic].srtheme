@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Linen Sage [Two-Tone] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       42,
       49,
       41,
+      255
+    ],
+    "about.art.liquid": [
+      105,
+      126,
+      97,
       255
     ],
     "popup.container.surface": [

@@ -26,6 +26,11 @@ logger = get_logger(__name__)
 _SPHERE_PARAMETER_KEYS = (
     "sphere_fill_color",
     "sphere_edge_color",
+    "sphere_tracer_color",
+    "sphere_edge_weight",
+    "sphere_voxel_size_variation",
+    "sphere_depth_shading_enabled",
+    "sphere_depth_shading_strength",
     "sphere_allow_overflow",
     "sphere_cel_shading",
     "sphere_light_tracer_enabled",
@@ -34,6 +39,10 @@ _SPHERE_PARAMETER_KEYS = (
     "sphere_incoming_transient_velocity_enabled",
     "sphere_particle_outtake_enabled",
     "sphere_shadow_enabled",
+    "sphere_shadow_opacity",
+    "sphere_shadow_softness",
+    "sphere_shadow_distance",
+    "sphere_shadow_size",
     "sphere_fade_incoming_blocks",
     "sphere_fragment_strength",
     "sphere_particle_distance",
@@ -108,12 +117,12 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     """
 
     # The experimental Sphere keeps one configure-owned immutable parameter
-    for key in ('sphere_allow_overflow', 'sphere_cel_shading', 'sphere_light_tracer_enabled', 'sphere_fragment_interpolation_enabled', 'sphere_incoming_density_response_enabled', 'sphere_incoming_transient_velocity_enabled', 'sphere_particle_outtake_enabled', 'sphere_shadow_enabled', 'sphere_fade_incoming_blocks', 'sphere_taste_the_rainbow_enabled', 'sphere_taste_the_rainbow_surfaces', 'sphere_taste_the_rainbow_edges'):
+    for key in ('sphere_allow_overflow', 'sphere_cel_shading', 'sphere_light_tracer_enabled', 'sphere_fragment_interpolation_enabled', 'sphere_incoming_density_response_enabled', 'sphere_incoming_transient_velocity_enabled', 'sphere_particle_outtake_enabled', 'sphere_shadow_enabled', 'sphere_depth_shading_enabled', 'sphere_fade_incoming_blocks', 'sphere_taste_the_rainbow_enabled', 'sphere_taste_the_rainbow_surfaces', 'sphere_taste_the_rainbow_edges'):
         if key in kwargs:
             setattr(host, f"_{key}", bool(kwargs[key]))
     # bundle. The voxel renderer consumes that snapshot without a second
     # settings/runtime authority or per-frame Python geometry rebuild.
-    for key in ('sphere_fill_color', 'sphere_edge_color'):
+    for key in ('sphere_fill_color', 'sphere_edge_color', 'sphere_tracer_color'):
         if key in kwargs:
             raw = kwargs[key]
             if not isinstance(raw, (list, tuple)) or len(raw) < 3:
@@ -134,6 +143,20 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._sphere_particle_amount = _sphere_bounded(kwargs['sphere_particle_amount'], 0.25, 1.75, 'sphere_particle_amount')
     if 'sphere_perspective_strength' in kwargs:
         host._sphere_perspective_strength = _sphere_bounded(kwargs['sphere_perspective_strength'], 0.0, 1.0, 'sphere_perspective_strength')
+    if 'sphere_edge_weight' in kwargs:
+        host._sphere_edge_weight = _sphere_bounded(kwargs['sphere_edge_weight'], 0.25, 1.75, 'sphere_edge_weight')
+    if 'sphere_voxel_size_variation' in kwargs:
+        host._sphere_voxel_size_variation = _sphere_bounded(kwargs['sphere_voxel_size_variation'], 0.0, 1.0, 'sphere_voxel_size_variation')
+    if 'sphere_depth_shading_strength' in kwargs:
+        host._sphere_depth_shading_strength = _sphere_bounded(kwargs['sphere_depth_shading_strength'], 0.0, 0.5, 'sphere_depth_shading_strength')
+    if 'sphere_shadow_opacity' in kwargs:
+        host._sphere_shadow_opacity = _sphere_bounded(kwargs['sphere_shadow_opacity'], 0.0, 2.0, 'sphere_shadow_opacity')
+    if 'sphere_shadow_softness' in kwargs:
+        host._sphere_shadow_softness = _sphere_bounded(kwargs['sphere_shadow_softness'], 0.0, 0.45, 'sphere_shadow_softness')
+    if 'sphere_shadow_distance' in kwargs:
+        host._sphere_shadow_distance = _sphere_bounded(kwargs['sphere_shadow_distance'], 0.0, 2.5, 'sphere_shadow_distance')
+    if 'sphere_shadow_size' in kwargs:
+        host._sphere_shadow_size = _sphere_bounded(kwargs['sphere_shadow_size'], 0.6, 1.6, 'sphere_shadow_size')
     if 'sphere_base_rotation_speed' in kwargs:
         host._sphere_base_rotation_speed = _sphere_bounded(kwargs['sphere_base_rotation_speed'], 0.0, 0.5, 'sphere_base_rotation_speed')
     if 'sphere_rotation_speed' in kwargs:

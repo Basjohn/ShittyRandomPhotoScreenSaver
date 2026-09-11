@@ -27,6 +27,7 @@ from ui.tabs.shared_styles import (
     add_aligned_row_widget,
     create_inline_label,
     build_bucket_toggle,
+    finalize_bucket_body as _finalize_bucket_body,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
@@ -63,12 +64,6 @@ def _combo_data_or_canonical(tab: WidgetsTab, combo, section: str, key: str):
     """Use combo data when selected; otherwise repair from canonical widget state."""
     value = combo.currentData()
     return value if value not in (None, "") else tab._widget_default(section, key)
-
-
-def _finalize_bucket_body(toggle, body: QWidget) -> None:
-    expanded = bool(toggle.isChecked())
-    if body.isHidden() == expanded:
-        body.setVisible(expanded)
 
 
 def _update_clock_enabled_visibility(tab: WidgetsTab) -> None:

@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Wine Ice [Two-Tone] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       244,
       245,
       248,
+      255
+    ],
+    "about.art.liquid": [
+      86,
+      174,
+      193,
       255
     ],
     "popup.container.surface": [

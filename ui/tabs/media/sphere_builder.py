@@ -33,6 +33,13 @@ _RECOMMENDED_SLIDER_VALUES: dict[str, float] = {
     "sphere_particle_distance": 2.25,
     "sphere_particle_amount": 1.00,
     "sphere_perspective_strength": 1.00,
+    "sphere_edge_weight": 1.00,
+    "sphere_voxel_size_variation": 0.35,
+    "sphere_depth_shading_strength": 0.20,
+    "sphere_shadow_opacity": 1.00,
+    "sphere_shadow_softness": 0.18,
+    "sphere_shadow_distance": 1.00,
+    "sphere_shadow_size": 1.00,
     "sphere_size_response": 2.25,
     "sphere_vocal_response": 1.35,
     "sphere_base_rotation_speed": 0.02,
@@ -202,6 +209,15 @@ def build_sphere_ui(tab, parent_layout) -> None:
     )
     content.addWidget(tab.sphere_edge_color_btn)
     content.addStretch()
+
+    slider(appearance, "sphere_edge_weight", "sphere_edge_weight", "Edge Weight:", 175, "x", 100.0, 25)
+    tab.sphere_edge_weight.setToolTip(
+        "Controls how much of each existing cube face is treated as the authored Edge Color. 1.0 is the accepted current edge width; lower values thin it and higher values thicken it without adding geometry or another draw."
+    )
+    slider(appearance, "sphere_voxel_size_variation", "sphere_voxel_size_variation", "Voxel Size Variation:", 100, "", 100.0, 0)
+    tab.sphere_voxel_size_variation.setToolTip(
+        "Exposes the existing deterministic per-voxel size variation. 0.35 is the accepted current appearance; zero makes every cube uniform and higher values increase the existing variation without changing voxel count or audio response."
+    )
 
     rainbow_master = toggle(
         appearance,
@@ -386,14 +402,78 @@ def build_sphere_ui(tab, parent_layout) -> None:
     # ------------------------------------------------------------------
     # Optional effects
     # ------------------------------------------------------------------
-    toggle(
+    shadow_master = toggle(
         effects,
         "sphere_shadow_enabled",
         "sphere_shadow_enabled",
         "Drop Shadow:",
-        "Enable flat Sphere drop shadow",
-        "Draws the Sphere-only flat 2D light-opposite shadow. It has no 3D voxel geometry, depth, or accepted-mode ownership.",
+        "Enable projected voxel drop shadow",
+        "Draws a Sphere-local flat-colour projection of the same rotating/deforming voxel instances. It follows detached particles without shadow maps, mutual lighting, an FBO blur, or another cadence.",
     )
+    shadow_opacity = slider(
+        effects, "sphere_shadow_opacity", "sphere_shadow_opacity",
+        "Shadow Opacity:", 200, "x", 100.0, 0,
+    )
+    shadow_opacity.setToolTip(
+        "Scales the inherited shadow-colour alpha. 1.00x preserves the previous Sphere shadow intensity curve; lower values soften it and values above 1.00x deliberately strengthen it."
+    )
+    shadow_softness = slider(
+        effects, "sphere_shadow_softness", "sphere_shadow_softness",
+        "Shadow Softness:", 45, "", 100.0, 0,
+    )
+    shadow_softness.setToolTip(
+        "Controls one cheap expanded feather layer around the projected voxel silhouette. 0 disables that extra layer; 0.18 is the suggested starting point without an offscreen blur pass."
+    )
+    shadow_distance = slider(
+        effects, "sphere_shadow_distance", "sphere_shadow_distance",
+        "Shadow Distance:", 250, "x", 100.0, 0,
+    )
+    shadow_distance.setToolTip(
+        "Scales the existing light-opposite Sphere shadow offset. 1.00x preserves the previous distance response, including its small whole-body pulse accent."
+    )
+    shadow_size = slider(
+        effects, "sphere_shadow_size", "sphere_shadow_size",
+        "Shadow Size:", 160, "x", 100.0, 60,
+    )
+    shadow_size.setToolTip(
+        "Scales the projected silhouette around the Sphere centre. 1.00x follows the actual voxel projection; detached particle positions remain represented rather than collapsing back to a circular proxy."
+    )
+
+    def apply_shadow_dependency(enabled: bool) -> None:
+        for control in (shadow_opacity, shadow_softness, shadow_distance, shadow_size):
+            control.setEnabled(bool(enabled))
+
+    shadow_master.toggled.connect(apply_shadow_dependency)
+    apply_shadow_dependency(shadow_master.isChecked())
+
+    depth_master = toggle(
+        effects,
+        "sphere_depth_shading_enabled",
+        "sphere_depth_shading_enabled",
+        "Depth Shading:",
+        "Darken rear voxels to reinforce sphere depth",
+        "Cheap Sphere-only luminance cue derived from the existing transformed voxel depth. It does not cast shadows, sample neighbouring voxels, desaturate colours, or add a render pass.",
+    )
+    depth_strength = slider(
+        effects,
+        "sphere_depth_shading_strength",
+        "sphere_depth_shading_strength",
+        "Depth Strength:",
+        50,
+        "",
+        100.0,
+        0,
+    )
+    depth_strength.setToolTip(
+        "Maximum rear-hemisphere darkening. 0.20 is the suggested restrained value; the front remains unchanged and authored/Rainbow colour hue and alpha are preserved."
+    )
+
+    def apply_depth_dependency(enabled: bool) -> None:
+        depth_strength.setEnabled(bool(enabled))
+
+    depth_master.toggled.connect(apply_depth_dependency)
+    apply_depth_dependency(depth_master.isChecked())
+
     toggle(
         effects,
         "sphere_cel_shading",
@@ -402,7 +482,7 @@ def build_sphere_ui(tab, parent_layout) -> None:
         "Enable hard toon bands + inked cube edges",
         "Uses deliberately hard light bands and strong edge ink. It changes presentation only, never voxel motion or audio reactivity.",
     )
-    toggle(
+    tracer_master = toggle(
         effects,
         "sphere_light_tracer_enabled",
         "sphere_light_tracer_enabled",
@@ -410,6 +490,29 @@ def build_sphere_ui(tab, parent_layout) -> None:
         "Enable music-driven light snake",
         "The sole moving bright-block effect. Each accepted audio onset queues one bounded step; travel is speed-capped and settles before fading. Gloss/Specular are per-face finish controls and cannot create a competing bright block.",
     )
+
+    _widget, content = row(effects, "Tracer Color:")
+    tab._sphere_tracer_color = tab._color_from_default("spotify_visualizer", "sphere_tracer_color")
+    tab.sphere_tracer_color_btn = ColorSwatchButton(title="Choose Sphere Tracer Color")
+    tab.sphere_tracer_color_btn.setToolTip(
+        "Styles the existing causal tracer only. The default warm cream exactly matches the accepted hard-coded tracer colour; alpha may soften its blend without changing tracer timing or admission."
+    )
+    bind_color_button(
+        tab,
+        tab.sphere_tracer_color_btn,
+        "_sphere_tracer_color",
+        auto_switch=True,
+        initial_color=tab._sphere_tracer_color,
+    )
+    content.addWidget(tab.sphere_tracer_color_btn)
+    content.addStretch()
+
+    def apply_tracer_dependency(enabled: bool) -> None:
+        tab.sphere_tracer_color_btn.setEnabled(bool(enabled))
+
+    tracer_master.toggled.connect(apply_tracer_dependency)
+    apply_tracer_dependency(tracer_master.isChecked())
+
     toggle(
         effects,
         "sphere_allow_overflow",

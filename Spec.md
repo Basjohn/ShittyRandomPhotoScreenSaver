@@ -52,9 +52,10 @@ caller-proven residue only; J is final visual/installed/physical acceptance and 
 
 ## Settings themes / native backdrop
 
-Settings remains a frameless translucent QWidget top-level. `SettingsThemeSpec` schema v5 is the semantic visual
+Settings remains a frameless translucent QWidget top-level. `SettingsThemeSpec` schema v6 is the semantic visual
 authority and compiled Default Dark is the unconditional no-file fallback. Complete `.srtheme` files may request
 `off`, `acrylic` or `glass` and must pass strict whole-theme validation.
+Schema v6 owns `about.art.liquid`, the explicit Settings-only colour used to recolour only the masked liquid/background field in the two About artworks while preserving source shading, alpha and all unmasked artwork. Every shipped theme seeds this role from its own primary accent (`chrome.outer_border` RGB at full alpha); Nocturne Split therefore uses its pink-red primary accent while other themes use their own primary colour. Schema-v5 user themes migrate the new role from that same existing primary accent rather than failing whole-theme load.
 
 The current Windows Settings top-level is a layered HWND. Both translucent product materials therefore stay on the
 physically proven `SetWindowCompositionAttribute` AccentPolicy family:
@@ -74,7 +75,7 @@ requires an intentional window/presentation architecture change and new physical
 activation is not repaired by timers, duplicate calls or QSS replay.
 
 `themes/dark.qss` is legacy stylesheet residue, not theme authority. Its guarded retirement is in `Future_Cleanup.md`.
-The complete permanent contract is `Docs/Settings_Theme_Architecture.md`.
+The complete permanent contract is `Docs/Architecture/Settings_Theme_Architecture.md`.
 
 ## Runtime Widget Themes / semantic visuals
 
@@ -84,7 +85,7 @@ Settings-theme <-> Widget-theme linking is one persisted **bidirectional** stabl
 
 Live Settings theme publication must distinguish Python wrapper lifetime from C++ QObject lifetime. Registries may use weak references for ownership, but before applying live QSS they must verify that the PySide wrapper still owns a valid C++ QObject and prune stale wrappers. A stale deleted wrapper is cleanup, not a renderer failure; an exception from a still-live renderer remains transaction-fatal and rolls the theme back.
 
-Runtime cards remain the ordinary retained Qt Quick RGBA surface/border/shadow path. The rejected runtime Glass/Acrylic card experiment has no schema field, Surface Style override, card material Loader, background capture/layer, mask tree or cadence callback. The wallpaper/transition render node is directly composited under the display scene using the healthy pre-material topology, selectively restored while preserving the later Bidirectional theme/lifetime/C++ fixes. Settings-window Glass/Acrylic remains a separate native QWidget/HWND theme concern. The failed runtime-card experiments are historical evidence only in `Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`.
+Runtime cards remain the ordinary retained Qt Quick RGBA surface/border/shadow path. The rejected runtime Glass/Acrylic card experiment has no schema field, Surface Style override, card material Loader, background capture/layer, mask tree or cadence callback. The wallpaper/transition render node is directly composited under the display scene using the healthy pre-material topology, selectively restored while preserving the later Bidirectional theme/lifetime/C++ fixes. Settings-window Glass/Acrylic remains a separate native QWidget/HWND theme concern. The failed runtime-card experiments are historical evidence only in `Docs/Fossils/Rejected_Card_Material_Experiments_2026-09-02.md`.
 
 The curated source pack currently contains 58 Settings themes and 58 deterministic colour-only Widget counterparts, including four deliberately light/white-adjacent themes and four silver/metal themes. Settings-theme filenames may legitimately retain `[Glass]`/`[Acrylic]` because those tags describe the Settings HWND. Widget counterpart display names and filenames omit those tags while preserving stable links back to the actual Settings-theme identity. Installed theme storage is the same machine-wide curated asset family as visualizer presets: source/dev reads `<repo-root>/themes`, while frozen/installed runtime reads `%ProgramData%\SRPSS\themes` and Widget Themes live under its `widgets/` child. Normal and Media Center installers seed/clean-replace that tree; Nuitka may bundle the source pack for build completeness, but frozen runtime does not merge the bundled extraction/app-local copy into the active catalogue.
 
@@ -167,7 +168,7 @@ Current proven patterns are deliberately heterogeneous:
   artwork provider;
 - Reddit/Reddit2: separate configured member runtime services/models using shared family policy;
 - Gmail: runtime-generation shared Gmail owner/backend with per-display lease;
-- Achievement Pulse: neutral Steam runtime/preparation/cache/selection ownership;
+- Achievement Pulse: neutral Steam runtime/preparation/cache/selection ownership. `Progress Pulse` is a presentation of the existing Total field: the first numeric value establishes baseline, later numeric changes emit one presentation edge, and the 2 s build / 3 s decay is QML animation frame demand only—no second refresh, polling, worker, thread or application timer. `Shelf Style` is a presentation-only alternate for the supporting fields and reuses existing Steam metric/accent/text semantics;
 - Abandonment Issues: neutral Steam runtime/data/cache/rotation ownership.
 
 Do not create services/managers merely for naming symmetry.
@@ -247,7 +248,7 @@ Canonical direction is NW/N/NE/W/E/SW/S/SE, default SE, resolved in Python. No T
 Clock analogue hard shadows are permanent family-authored exceptions under doc 11.
 
 Settings-window theme/shadow ownership is separate from runtime overlay-widget shadow authority; see
-`Docs/Settings_Theme_Architecture.md` and `ui/widgets/control_shadow.py`.
+`Docs/Architecture/Settings_Theme_Architecture.md` and `ui/widgets/control_shadow.py`.
 
 ## Geometry / CUSTOM
 
@@ -261,7 +262,7 @@ are excluded from shrink. No-fit remains an explicit overfull diagnostic. Global
 CUSTOM disables this derived planner; first Edit preserves the visible footprint.
 
 
-Ordinary card CUSTOM resize uses one retained whole-card transform, with Settings-authored baseline values unchanged. Clock retains variant-aware sizing; Visualizer retains separate viewport and visual-scale intents. New-widget implementation starts with the [authoring checklist](Docs/10_WIDGET_GUIDELINES.md#whole-card-custom-resize-default).
+Ordinary card CUSTOM resize uses one retained whole-card transform, with Settings-authored baseline values unchanged. Clock retains variant-aware sizing; Visualizer retains separate viewport and visual-scale intents. New-widget implementation starts with the [authoring checklist](Docs/Guides/10_WIDGET_GUIDELINES.md#whole-card-custom-resize-default).
 
 Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.
 Clock digital/analogue are the first required example.
@@ -373,7 +374,7 @@ Sphere remains architecturally isolated until the operator explicitly authorizes
 
 The reusable architectural asset is the **experimental host/isolation seam**—descriptor-driven lazy wiring, independent dormancy/retirement, private setting prefix and explicit shared-family opt-outs. It is suitable for future experimental modes. Sphere audio logic, voxel settings, shader semantics and mode-specific capability memberships are not a shared foundation and must not be generalized merely to make that seam look cleaner. All experimental modes use isolation by default until the operator explicitly authorizes migration.
 
-The only curated Sphere presets are **Glass Current** (Preset 1; accepted intake/transparent snapshot) and **Voxel Bloom** (Preset 2; accepted outtake/opaque-shadow snapshot). Dead experimental-era controls Block Relief, Bass Response, Mid Response, High Response, Energy Curve and Idle Drift are retired and stale state is forward-stripped; Base Rotation owns continuous idle rotation. The former Deformation × Block Reactivity coupling is migrated exactly to one Fragment Strength control plus independent Particle Distance, while Particle Amount changes only post-admission cohort population. Rainbow Ghosting is retired; Sphere-local Taste The Rainbow can independently colour Surfaces and Edges without shared-family ownership. Perspective Strength is Sphere-local and bounded `0..1`, where `1.0` is the accepted projection exactly and lower values only flatten toward orthographic. Recommended slider marks remain UI guidance matching Glass Current, not defaults. The dormant pre/post migration golden gate lives in `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+The only curated Sphere presets are **Glass Current** (Preset 1; accepted intake/transparent snapshot) and **Voxel Bloom** (Preset 2; accepted outtake/opaque presentation snapshot with shadow enabled). Dead experimental-era controls Block Relief, Bass Response, Mid Response, High Response, Energy Curve and Idle Drift are retired and stale state is forward-stripped; Base Rotation owns continuous idle rotation. The former Deformation × Block Reactivity coupling is migrated exactly to one Fragment Strength control plus independent Particle Distance, while Particle Amount changes only post-admission cohort population. Rainbow Ghosting is retired; Sphere-local Taste The Rainbow can independently colour Surfaces and Edges without shared-family ownership. Perspective Strength is Sphere-local and bounded `0..1`, where `1.0` is the accepted projection exactly and lower values only flatten toward orthographic. Edge Weight (`1.0`), Voxel Size Variation (`0.35`) and Tracer Color (`[255,242,194,255]`) expose the renderer's accepted pre-existing constants as Sphere-local presentation controls; those baseline values are visually equivalent to the previous hard-coded path. Optional Depth Shading defaults off and may only darken rear voxels from already-transformed depth in the existing draw; it adds no neighbouring-voxel sampling, extra pass or audio/geometry authority. Sphere Drop Shadow is now a flat-colour **projected voxel silhouette** that compiles the exact hero vertex shader, so rotation/deformation/tracer-local turns and detached intake/outtake positions cannot drift from the visible voxel geometry. Sphere-local Shadow Opacity (`1.0`), Softness (`0.18`), Distance (`1.0`) and Size (`1.0`) parameterize that pass; softness is one optional expanded instanced layer, not an FBO blur or shadow map. Recommended slider marks remain UI guidance matching Glass Current, not defaults. The dormant pre/post migration golden gate lives in `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
 
 ## Visualizer preset catalogue ownership
 
@@ -433,7 +434,7 @@ selected display
 
 Do not run old/new production runtime managers in parallel or restore the deleted physical presenter/backend. Preserve semantic cardinality. Ordinary committed Visualizer viewport extent remains authoritative outside CUSTOM and the temporary CUSTOM working override wins only while editing.
 
-The H closure record is `Docs/QtQuick_Migration/H_Phase_Closure_2026-09-01.md`. Current migration epochs are:
+The retired H closure record remains in source history; current migration epochs are:
 
 - G: closed retained CUSTOM/input/auxiliary foundation;
 - H: closed production Quick ownership + post-cutover physical/performance acceptance;

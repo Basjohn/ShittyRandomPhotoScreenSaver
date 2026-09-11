@@ -37,7 +37,24 @@ SPHERE_RADIUS_FRACTION = 0.215
 _SPHERE_SECTION_COUNT = 8
 _PARTICLE_COHORT_COUNT = 4
 
+# The accepted tracer predates a user-facing colour swatch and was authored as
+# literal shader floats.  Preserve that exact baseline for the canonical 8-bit
+# swatch instead of introducing a tiny 242/255, 194/255 round-trip shift.
+_TRACER_BASE_RGBA_U8 = (255, 242, 194, 255)
+_TRACER_BASE_RGBA = (1.0, 0.95, 0.76, 1.0)
+
 logger = get_logger(__name__)
+
+
+def sphere_tracer_color_rgba(value) -> tuple[float, float, float, float]:
+    """Resolve authored tracer RGBA while preserving the accepted baseline exactly."""
+
+    rgba = tuple(int(max(0, min(255, int(component)))) for component in value)
+    if len(rgba) != 4:
+        raise ValueError("Sphere tracer colour must contain exactly four RGBA channels")
+    if rgba == _TRACER_BASE_RGBA_U8:
+        return _TRACER_BASE_RGBA
+    return tuple(component / 255.0 for component in rgba)
 
 
 def sphere_pixel_geometry(presentation) -> tuple[float, float, float]:
@@ -94,6 +111,11 @@ def sphere_overflow_scissor(
     *,
     fragment_strength: float,
     particle_distance: float,
+    shadow_enabled: bool = False,
+    shadow_size: float = 1.0,
+    shadow_distance: float = 1.0,
+    shadow_softness: float = 0.0,
+    size_pulse: float = 0.0,
 ) -> tuple[int, int, int, int]:
     """Return the Sphere-only depth-clear footprint for unclipped overflow.
 
@@ -107,7 +129,21 @@ def sphere_overflow_scissor(
     fragment_radial = 0.68 * max(0.0, float(fragment_strength))
     particle_radial = 0.88 + 0.42 * max(0.0, float(particle_distance))
     max_radial = max(fragment_radial, particle_radial)
-    extent = radius * (1.22 + max_radial)
+    hero_extent = 1.22 + max_radial
+    max_extent = hero_extent
+    if shadow_enabled:
+        softness_norm = max(0.0, min(1.0, float(shadow_softness) / 0.45))
+        soft_scale = 1.0 + 0.12 * softness_norm
+        silhouette_extent = (
+            hero_extent
+            * max(0.6, min(1.6, float(shadow_size)))
+            * soft_scale
+        )
+        offset_extent = (
+            0.34 + max(0.0, float(size_pulse)) * 0.55
+        ) * max(0.0, min(2.5, float(shadow_distance)))
+        max_extent = max(max_extent, silhouette_extent + offset_extent)
+    extent = radius * max_extent
     return _project_local_rect(
         frame,
         (cx - extent, cy - extent, extent * 2.0, extent * 2.0),
@@ -130,7 +166,10 @@ uniform float uParticleAmount;
 uniform float uPerspectiveStrength;
 uniform float uRotationPhase;
 uniform float uSizePulse;
-uniform float uBlockRelief;
+uniform float uVoxelSizeVariation;
+uniform vec2 uProjectionOffset;
+uniform float uProjectionScale;
+uniform float uVoxelScale;
 uniform int uFadeIncoming;
 uniform float uIncomingDrive;
 uniform float uIncomingDensity;
@@ -158,6 +197,7 @@ flat out vec3 vWorldFaceNormal;
 out float vArrivalFade;
 out float vTracer;
 flat out float vRainbowCoordinate;
+flat out float vDepthCoordinate;
 
 mat3 rotation() {{
     vec3 angle = uRotationPhase * vec3(0.21, 0.57, 0.29);
@@ -406,7 +446,7 @@ void main() {{
     float bodyScale = 1.0 + uSizePulse;
     vec3 center = aInstanceCenter * bodyScale + direction * radial;
 
-    float seedVariation = (aInstanceSeed - 0.5) * 0.18 * uBlockRelief;
+    float seedVariation = (aInstanceSeed - 0.5) * 0.18 * uVoxelSizeVariation;
     float blockGrowth = 1.0 + 0.28 * uSizePulse;
     float halfExtent = {VOXEL_HALF_EXTENT:.9f}
                      * max(0.58, 1.0 + seedVariation)
@@ -427,7 +467,7 @@ void main() {{
 
     mat3 turn = rotation();
     vec3 turnedCenter = turn * center;
-    vec3 turnedPosition = turnedCenter + turn * (localTurn * (aPosition * halfExtent));
+    vec3 turnedPosition = turnedCenter + turn * (localTurn * (aPosition * halfExtent * uVoxelScale));
 
     vScreenCenter = turnedCenter;
     vLocalPosition = aPosition;
@@ -449,12 +489,18 @@ void main() {{
         0.0,
         1.0
     );
+    // Depth Shading reuses transformed shell depth only. Normalize away radial
+    // reaction/travel distance so the cue follows front/back orientation rather
+    // than becoming an accidental second reactivity multiplier.
+    float depthRadius = max(length(turnedCenter), 1.0e-5);
+    vDepthCoordinate = clamp(0.5 + 0.5 * turnedCenter.z / depthRadius, 0.0, 1.0);
     // 1.0 is the accepted projection exactly; lower values only flatten it
     // toward orthographic so this optional control can never exceed the golden
     // perspective/overflow envelope.
     float cameraW = (4.8 - turnedPosition.z * uPerspectiveStrength) / 4.8;
     vec2 local = uGeometry.xy * cameraW
-               + vec2(turnedPosition.x, -turnedPosition.y) * uGeometry.z;
+               + vec2(turnedPosition.x, -turnedPosition.y) * uGeometry.z * uProjectionScale
+               + uProjectionOffset * cameraW;
     gl_Position = uMatrix * vec4(local, 0.0, cameraW);
     gl_Position.z = (-turnedPosition.z / 3.2) * gl_Position.w;
 }}
@@ -469,6 +515,7 @@ flat in vec3 vWorldFaceNormal;
 in float vArrivalFade;
 in float vTracer;
 flat in float vRainbowCoordinate;
+flat in float vDepthCoordinate;
 out vec4 fragColor;
 
 uniform vec3 uLight;
@@ -476,6 +523,9 @@ uniform float uGloss;
 uniform float uSpecular;
 uniform vec4 uFillColor;
 uniform vec4 uEdgeColor;
+uniform vec4 uTracerColor;
+uniform float uEdgeWeight;
+uniform float uDepthShading;
 uniform float uFade;
 uniform int uCelShading;
 uniform int uRainbowSurfaces;
@@ -510,7 +560,13 @@ void main() {
                 : (absLocalFace.y > 0.5 ? vLocalPosition.xz : vLocalPosition.xy);
     float edgeCoordinate = max(abs(faceUV.x), abs(faceUV.y));
     float edgeAA = max(fwidth(edgeCoordinate), 0.006);
-    float edgeDefinition = smoothstep(0.72 - edgeAA, 0.90 + edgeAA, edgeCoordinate);
+    // 1.0 resolves exactly to the accepted 0.72 -> 0.90 edge thresholds.
+    // Lower values thin the authored edge; higher values thicken it without
+    // changing topology, instance count or adding a render pass.
+    float edgeWeight = clamp(uEdgeWeight, 0.25, 1.75);
+    float edgeStart = 0.72 + (1.0 - edgeWeight) * 0.30;
+    float edgeEnd = 0.90 + (1.0 - edgeWeight) * 0.14;
+    float edgeDefinition = smoothstep(edgeStart - edgeAA, edgeEnd + edgeAA, edgeCoordinate);
 
     float gloss = clamp(uGloss, 0.0, 1.0);
     float specularStrength = clamp(uSpecular, 0.0, 2.0);
@@ -573,9 +629,19 @@ void main() {
         color += mix(base, vec3(1.0), 0.48) * rim * (0.025 + 0.18 * gloss);
     }
 
+    // Optional front/back luminance cue. This is not AO or mutual shadowing:
+    // it samples no neighbours and adds no render pass. Front-facing voxels are
+    // unchanged; rear voxels receive at most the authored restrained darkening.
+    if (uDepthShading > 0.0001) {
+        float rearAmount = 1.0 - smoothstep(0.05, 0.95, vDepthCoordinate);
+        color *= 1.0 - clamp(uDepthShading, 0.0, 0.5) * rearAmount;
+    }
+
     // Intentional tracer: preserve the happy-accident bright block as a causal
-    // articulation cue.  Stronger drive creates a short snake in the vertex stage.
-    color = mix(color, vec3(1.0, 0.95, 0.76), clamp(vTracer * 0.72, 0.0, 0.76));
+    // articulation cue. Stronger drive creates a short snake in the vertex stage.
+    // The default RGBA resolves exactly to the former hard-coded warm cream.
+    float tracerMix = clamp(vTracer * 0.72 * uTracerColor.a, 0.0, 0.76);
+    color = mix(color, uTracerColor.rgb, tracerMix);
 
     // Much gentler mapping than the rejected finish path; it no longer compresses
     // matte and glossy results back toward the same output.
@@ -597,34 +663,21 @@ void main() {
 }
 """
 
-_SHADOW_VERTEX_SOURCE = """#version 410 core
-layout(location = 0) in vec2 aPosition;
-uniform mat4 uMatrix;
-uniform vec2 uCenter;
-uniform float uRadius;
-uniform vec2 uScreenOffset;
-out vec2 vShadowUV;
-void main() {
-    vShadowUV = aPosition * 2.0 - 1.0;
-    vec2 local = uCenter + uScreenOffset + vShadowUV * uRadius;
-    gl_Position = uMatrix * vec4(local, 0.0, 1.0);
-}
-"""
+_SHADOW_VERTEX_SOURCE = _VERTEX_SOURCE
 
 _SHADOW_FRAGMENT_SOURCE = """#version 410 core
-in vec2 vShadowUV;
+in float vArrivalFade;
 out vec4 fragColor;
 uniform vec4 uShadowColor;
 uniform float uFade;
-uniform float uFeather;
+uniform float uLayerAlpha;
 void main() {
-    // A literal flat 2D drop shadow: one soft disc, one alpha value. There is no
-    // cube geometry, Z, face overlap or lighting state in this pass.
-    float d = length(vShadowUV);
-    float feather = clamp(uFeather, 0.03, 0.45);
-    float alpha = 1.0 - smoothstep(1.0 - feather, 1.0, d);
+    // This is deliberately not a second lit voxel object. The shared Sphere
+    // vertex shader supplies the exact rotating/deforming/projected silhouette;
+    // this fragment path contributes one flat shadow colour only.
+    float alpha = uShadowColor.a * uFade * uLayerAlpha * clamp(vArrivalFade, 0.0, 1.0);
     if (alpha <= 0.001) discard;
-    fragColor = vec4(uShadowColor.rgb, uShadowColor.a * uFade * alpha);
+    fragColor = vec4(uShadowColor.rgb, alpha);
 }
 """
 
@@ -684,6 +737,52 @@ class QuickSphereVoxelRenderer:
         gl.glUniform1iv(uniforms["uCohortLane"], _PARTICLE_COHORT_COUNT, lane)
         gl.glUniform1iv(uniforms["uCohortOuttake"], _PARTICLE_COHORT_COUNT, outtake)
 
+    def _upload_voxel_transform_uniforms(
+        self,
+        uniforms: dict[str, int],
+        frame: QuickVisualizerRenderFrame,
+        *,
+        state: SphereFrame,
+        parameters,
+        section_drives: np.ndarray,
+        fade_incoming: bool,
+        projection_offset: tuple[float, float] = (0.0, 0.0),
+        projection_scale: float = 1.0,
+        voxel_scale: float = 1.0,
+        render_pass: int = 0,
+    ) -> None:
+        """Upload the one Sphere geometry transform contract to hero or shadow.
+
+        Both programs compile the same vertex source. Keeping every authored
+        rotation/deformation/cohort/projection input in this one uploader prevents
+        the projected shadow from becoming a second approximation of Sphere motion.
+        """
+
+        presentation = frame.snapshot.presentation
+        gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, False, frame.matrix_values)
+        gl.glUniform3f(uniforms["uGeometry"], *sphere_pixel_geometry(presentation))
+        gl.glUniform1fv(uniforms["uSectionDrives"], _SPHERE_SECTION_COUNT, section_drives)
+        gl.glUniform1f(uniforms["uFragmentStrength"], float(parameters["sphere_fragment_strength"]))
+        gl.glUniform1f(uniforms["uParticleDistance"], float(parameters["sphere_particle_distance"]))
+        gl.glUniform1f(uniforms["uParticleAmount"], float(parameters["sphere_particle_amount"]))
+        gl.glUniform1f(uniforms["uPerspectiveStrength"], float(parameters["sphere_perspective_strength"]))
+        gl.glUniform1f(uniforms["uRotationPhase"], state.rotation_phase)
+        gl.glUniform1f(uniforms["uSizePulse"], state.size_pulse)
+        gl.glUniform1f(uniforms["uTracerDrive"], state.tracer_drive)
+        gl.glUniform1f(uniforms["uTracerPhase"], state.tracer_phase)
+        gl.glUniform1f(uniforms["uVoxelSizeVariation"], float(parameters["sphere_voxel_size_variation"]))
+        gl.glUniform2f(uniforms["uProjectionOffset"], *projection_offset)
+        gl.glUniform1f(uniforms["uProjectionScale"], float(projection_scale))
+        gl.glUniform1f(uniforms["uVoxelScale"], float(voxel_scale))
+        gl.glUniform1i(uniforms["uFadeIncoming"], 1 if fade_incoming else 0)
+        gl.glUniform1f(uniforms["uIncomingDrive"], float(state.incoming_drive))
+        gl.glUniform1f(uniforms["uIncomingDensity"], float(state.incoming_density))
+        gl.glUniform1i(uniforms["uIncomingSection"], int(state.incoming_section))
+        gl.glUniform1i(uniforms["uIncomingPreviousSection"], int(state.incoming_previous_section))
+        gl.glUniform1f(uniforms["uIncomingBlend"], float(state.incoming_blend))
+        self._upload_particle_cohorts(uniforms, state.particle_cohorts)
+        gl.glUniform1i(uniforms["uRenderPass"], int(render_pass))
+
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         state = frame.snapshot.logical.mode_state
         if not isinstance(state, SphereFrame):
@@ -701,15 +800,27 @@ class QuickSphereVoxelRenderer:
             self._parameters = parameters
             if is_viz_diagnostics_enabled():
                 logger.debug(
-                    "[SPHERE_RENDER] fill_rgba=%s edge_rgba=%s "
-                    "toon=%s tracer=%s gloss=%.3f specular=%.3f shadow=%s rainbow=%s/%s/%s light=%s",
+                    "[SPHERE_RENDER] fill_rgba=%s edge_rgba=%s tracer_rgba=%s "
+                    "edge_weight=%.2f voxel_var=%.2f depth=%s/%.2f "
+                    "toon=%s tracer=%s gloss=%.3f specular=%.3f "
+                    "shadow=%s op=%.2f soft=%.2f dist=%.2f size=%.2f "
+                    "rainbow=%s/%s/%s light=%s",
                     parameters["sphere_fill_color"],
                     parameters["sphere_edge_color"],
+                    parameters["sphere_tracer_color"],
+                    float(parameters["sphere_edge_weight"]),
+                    float(parameters["sphere_voxel_size_variation"]),
+                    bool(parameters["sphere_depth_shading_enabled"]),
+                    float(parameters["sphere_depth_shading_strength"]),
                     bool(parameters["sphere_cel_shading"]),
                     bool(parameters["sphere_light_tracer_enabled"]),
                     float(parameters["sphere_gloss"]),
                     float(parameters["sphere_specular"]),
                     bool(parameters["sphere_shadow_enabled"]),
+                    float(parameters["sphere_shadow_opacity"]),
+                    float(parameters["sphere_shadow_softness"]),
+                    float(parameters["sphere_shadow_distance"]),
+                    float(parameters["sphere_shadow_size"]),
                     bool(parameters["sphere_taste_the_rainbow_enabled"]),
                     bool(parameters["sphere_taste_the_rainbow_surfaces"]),
                     bool(parameters["sphere_taste_the_rainbow_edges"]),
@@ -750,6 +861,11 @@ class QuickSphereVoxelRenderer:
                 frame,
                 fragment_strength=float(parameters["sphere_fragment_strength"]),
                 particle_distance=float(parameters["sphere_particle_distance"]),
+                shadow_enabled=bool(parameters["sphere_shadow_enabled"]),
+                shadow_size=float(parameters["sphere_shadow_size"]),
+                shadow_distance=float(parameters["sphere_shadow_distance"]),
+                shadow_softness=float(parameters["sphere_shadow_softness"]),
+                size_pulse=float(state.size_pulse),
             )
         else:
             left, bottom, width, height = sphere_depth_scissor(frame)
@@ -762,17 +878,10 @@ class QuickSphereVoxelRenderer:
             return
 
         try:
-            self._draw_scene_shadow(
-                frame,
-                state=state,
-                parameters=parameters,
-                section_drives=section_drives,
-                fade_incoming=fade_incoming,
-            )
-
-            # Depth is cleared only inside the Sphere-owned draw footprint. In
-            # overflow mode that footprint expands to the worst-case current
-            # detachment radius; accepted modes never touch this path.
+            # Shadow and hero both use depth only inside the Sphere-owned draw
+            # footprint. The first clear gives the projected voxel silhouette a
+            # clean nearest-surface mask; the second clear below prevents that
+            # shadow depth from participating in the hero draw.
             gl.glEnable(gl.GL_SCISSOR_TEST)
             gl.glScissor(left, bottom, width, height)
             gl.glEnable(gl.GL_DEPTH_TEST)
@@ -780,6 +889,16 @@ class QuickSphereVoxelRenderer:
             gl.glDepthFunc(gl.GL_LESS)
             gl.glClearDepth(1.0)
             gl.glClear(gl.GL_DEPTH_BUFFER_BIT)
+
+            shadow_drawn = self._draw_scene_shadow(
+                frame,
+                state=state,
+                parameters=parameters,
+                section_drives=section_drives,
+                fade_incoming=fade_incoming,
+            )
+            if shadow_drawn:
+                gl.glClear(gl.GL_DEPTH_BUFFER_BIT)
 
             # After the bounded depth clear, restore the inherited scissor for
             # overflow drawing. If Qt supplied no scissor, the Sphere may draw
@@ -793,33 +912,30 @@ class QuickSphereVoxelRenderer:
 
             gl.glUseProgram(self._program)
             u = self._uniforms
-            gl.glUniformMatrix4fv(u["uMatrix"], 1, False, frame.matrix_values)
-            gl.glUniform3f(u["uGeometry"], *sphere_pixel_geometry(presentation))
-            gl.glUniform1fv(u["uSectionDrives"], _SPHERE_SECTION_COUNT, section_drives)
-            gl.glUniform1f(u["uFragmentStrength"], float(parameters["sphere_fragment_strength"]))
-            gl.glUniform1f(u["uParticleDistance"], float(parameters["sphere_particle_distance"]))
-            gl.glUniform1f(u["uParticleAmount"], float(parameters["sphere_particle_amount"]))
-            gl.glUniform1f(u["uPerspectiveStrength"], float(parameters["sphere_perspective_strength"]))
-            gl.glUniform1f(u["uRotationPhase"], state.rotation_phase)
-            gl.glUniform1f(u["uSizePulse"], state.size_pulse)
-            gl.glUniform1f(u["uTracerDrive"], state.tracer_drive)
-            gl.glUniform1f(u["uTracerPhase"], state.tracer_phase)
-            gl.glUniform1f(u["uBlockRelief"], 0.35)
-            gl.glUniform1i(u["uFadeIncoming"], 1 if fade_incoming else 0)
-            gl.glUniform1f(u["uIncomingDrive"], float(state.incoming_drive))
-            gl.glUniform1f(u["uIncomingDensity"], float(state.incoming_density))
-            gl.glUniform1i(u["uIncomingSection"], int(state.incoming_section))
-            gl.glUniform1i(u["uIncomingPreviousSection"], int(state.incoming_previous_section))
-            gl.glUniform1f(u["uIncomingBlend"], float(state.incoming_blend))
-            self._upload_particle_cohorts(u, state.particle_cohorts)
-            gl.glUniform1i(u["uRenderPass"], 0)
+            self._upload_voxel_transform_uniforms(
+                u,
+                frame,
+                state=state,
+                parameters=parameters,
+                section_drives=section_drives,
+                fade_incoming=fade_incoming,
+            )
             gl.glUniform3f(u["uLight"], *self._light)
             gl.glUniform1f(u["uGloss"], float(parameters["sphere_gloss"]))
             gl.glUniform1f(u["uSpecular"], float(parameters["sphere_specular"]))
             fill_color = tuple(float(v) / 255.0 for v in parameters["sphere_fill_color"])
             edge_color = tuple(float(v) / 255.0 for v in parameters["sphere_edge_color"])
+            tracer_color = sphere_tracer_color_rgba(parameters["sphere_tracer_color"])
             gl.glUniform4f(u["uFillColor"], *fill_color)
             gl.glUniform4f(u["uEdgeColor"], *edge_color)
+            gl.glUniform4f(u["uTracerColor"], *tracer_color)
+            gl.glUniform1f(u["uEdgeWeight"], float(parameters["sphere_edge_weight"]))
+            depth_shading = (
+                float(parameters["sphere_depth_shading_strength"])
+                if bool(parameters["sphere_depth_shading_enabled"])
+                else 0.0
+            )
+            gl.glUniform1f(u["uDepthShading"], depth_shading)
             gl.glUniform1f(u["uFade"], presentation.scene_fade * presentation.content_fade)
             gl.glUniform1i(u["uCelShading"], 1 if cel_shading else 0)
             rainbow_enabled = bool(parameters["sphere_taste_the_rainbow_enabled"])
@@ -913,47 +1029,53 @@ class QuickSphereVoxelRenderer:
         parameters,
         section_drives: np.ndarray,
         fade_incoming: bool,
-    ) -> None:
-        """Draw one truly flat Sphere-only direct X/Y shadow.
+    ) -> bool:
+        """Draw a flat-colour projection of the actual Sphere voxel geometry.
 
-        The old pass re-rendered voxel geometry and therefore looked like a second
-        3D object. This pass is a single soft 2D disc on the shared quad; it has no
-        Z, cube faces, self-overlap, rotation or displacement state.
+        The shadow program compiles the exact hero vertex shader and therefore
+        follows rigid rotation, local tracer turns, fragmentation, size pulse and
+        detached intake/outtake cohorts. Its fragment shader owns no lighting or
+        edge/material semantics. Depth is used only as a temporary silhouette mask
+        so overlapping cube faces do not compound alpha into an opaque centre.
         """
-        _ = state, parameters, section_drives, fade_incoming
+
         presentation = frame.snapshot.presentation
         style = presentation.shell_style
         if not bool(parameters["sphere_shadow_enabled"]) or not self._shadow_program:
-            return
+            return False
 
-        cx, cy, radius = sphere_pixel_geometry(presentation)
+        _, _, radius = sphere_pixel_geometry(presentation)
         light_x, light_y = self._light_xy
-        growth = 1.0 + min(0.22, float(state.size_pulse) * 2.1)
+        distance = float(parameters["sphere_shadow_distance"])
         shadow_offset = (
-            -light_x * radius * (0.34 + float(state.size_pulse) * 0.55),
-            -light_y * radius * (0.34 + float(state.size_pulse) * 0.55),
+            -light_x * radius * (0.34 + float(state.size_pulse) * 0.55) * distance,
+            -light_y * radius * (0.34 + float(state.size_pulse) * 0.55) * distance,
         )
         raw = style["shadow_color"]
         rgba = tuple(max(0.0, min(1.0, float(channel) / 255.0)) for channel in raw)
         alpha = rgba[3] * (0.28 + min(0.16, float(state.size_pulse) * 1.6))
+        alpha *= float(parameters["sphere_shadow_opacity"])
+        alpha = max(0.0, min(1.0, alpha))
         if alpha <= 0.0:
-            return
+            return False
 
         gl.glUseProgram(self._shadow_program)
         su = self._shadow_uniforms
-        gl.glUniformMatrix4fv(su["uMatrix"], 1, False, frame.matrix_values)
-        gl.glUniform2f(su["uCenter"], cx, cy)
-        gl.glUniform1f(su["uRadius"], radius * 1.26 * growth)
-        gl.glUniform2f(su["uScreenOffset"], *shadow_offset)
         gl.glUniform4f(su["uShadowColor"], rgba[0], rgba[1], rgba[2], alpha)
         gl.glUniform1f(
             su["uFade"],
             float(presentation.scene_fade) * float(presentation.content_fade),
         )
-        gl.glUniform1f(su["uFeather"], 0.18)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-        gl.glDepthMask(gl.GL_FALSE)
-        gl.glDisable(gl.GL_CULL_FACE)
+        gl.glEnable(gl.GL_DEPTH_TEST)
+        gl.glDepthMask(gl.GL_TRUE)
+        gl.glDepthFunc(gl.GL_LESS)
+        gl.glEnable(gl.GL_CULL_FACE)
+        gl.glCullFace(gl.GL_BACK)
+        gl.glFrontFace(
+            gl.GL_CW
+            if frame.matrix_values[0] * frame.matrix_values[5] > 0
+            else gl.GL_CCW
+        )
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendFuncSeparate(
             gl.GL_SRC_ALPHA,
@@ -961,8 +1083,51 @@ class QuickSphereVoxelRenderer:
             gl.GL_ONE,
             gl.GL_ONE_MINUS_SRC_ALPHA,
         )
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        gl.glBindVertexArray(self._vao)
+
+        has_outtake = fade_incoming and any(
+            cohort.outtake for cohort in state.particle_cohorts
+        )
+        shadow_size = float(parameters["sphere_shadow_size"])
+        softness = float(parameters["sphere_shadow_softness"])
+        softness_norm = max(0.0, min(1.0, softness / 0.45))
+
+        def draw_layer(*, voxel_scale: float, layer_alpha: float) -> None:
+            self._upload_voxel_transform_uniforms(
+                su,
+                frame,
+                state=state,
+                parameters=parameters,
+                section_drives=section_drives,
+                fade_incoming=fade_incoming,
+                projection_offset=shadow_offset,
+                projection_scale=shadow_size,
+                voxel_scale=voxel_scale,
+                render_pass=0,
+            )
+            gl.glUniform1f(su["uLayerAlpha"], float(layer_alpha))
+            gl.glDrawArraysInstanced(
+                gl.GL_TRIANGLES, 0, self._vertex_count, self._instance_count
+            )
+            if has_outtake:
+                gl.glUniform1i(su["uRenderPass"], 1)
+                gl.glDrawArraysInstanced(
+                    gl.GL_TRIANGLES, 0, self._vertex_count, self._instance_count
+                )
+                gl.glUniform1i(su["uRenderPass"], 0)
+
+        if softness_norm > 0.001:
+            # One cheap expanded layer approximates softness without allocating an
+            # offscreen mask/blur texture. Clear depth before the core silhouette
+            # so the expanded geometry cannot occlude it.
+            draw_layer(
+                voxel_scale=1.0 + 0.12 * softness_norm,
+                layer_alpha=0.32 * softness_norm,
+            )
+            gl.glClear(gl.GL_DEPTH_BUFFER_BIT)
+
+        draw_layer(voxel_scale=1.0, layer_alpha=1.0)
+        return True
 
     def _initialize(self) -> None:
         if self.has_resources:
@@ -976,19 +1141,21 @@ class QuickSphereVoxelRenderer:
             self._shadow_program = compile_program(
                 _SHADOW_VERTEX_SOURCE,
                 _SHADOW_FRAGMENT_SOURCE,
-                label="Quick Sphere flat shadow",
+                label="Quick Sphere projected voxel shadow",
             )
             names = (
                 "uMatrix", "uGeometry", "uSectionDrives",
                 "uFragmentStrength", "uParticleDistance", "uParticleAmount", "uPerspectiveStrength",
-                "uRotationPhase", "uSizePulse", "uBlockRelief",
+                "uRotationPhase", "uSizePulse", "uVoxelSizeVariation",
+                "uProjectionOffset", "uProjectionScale", "uVoxelScale",
                 "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection",
                 "uIncomingPreviousSection", "uIncomingBlend", "uCohortCount", "uCohortProgress",
                 "uCohortStrength", "uCohortDensity", "uCohortVelocity", "uCohortBounce",
                 "uCohortSection", "uCohortLane", "uCohortOuttake", "uRenderPass",
                 "uTracerDrive", "uTracerPhase",
                 "uLight", "uGloss", "uSpecular",
-                "uFillColor", "uEdgeColor", "uFade", "uCelShading",
+                "uFillColor", "uEdgeColor", "uTracerColor", "uEdgeWeight",
+                "uDepthShading", "uFade", "uCelShading",
                 "uRainbowSurfaces", "uRainbowEdges", "uRainbowPhase",
             )
             self._uniforms = {
@@ -1014,8 +1181,16 @@ class QuickSphereVoxelRenderer:
                     "Quick Sphere voxel uniforms are incomplete: " + ", ".join(missing)
                 )
             shadow_names = (
-                "uMatrix", "uCenter", "uRadius", "uScreenOffset",
-                "uShadowColor", "uFade", "uFeather",
+                "uMatrix", "uGeometry", "uSectionDrives",
+                "uFragmentStrength", "uParticleDistance", "uParticleAmount", "uPerspectiveStrength",
+                "uRotationPhase", "uSizePulse", "uVoxelSizeVariation",
+                "uProjectionOffset", "uProjectionScale", "uVoxelScale",
+                "uFadeIncoming", "uIncomingDrive", "uIncomingDensity", "uIncomingSection",
+                "uIncomingPreviousSection", "uIncomingBlend", "uCohortCount", "uCohortProgress",
+                "uCohortStrength", "uCohortDensity", "uCohortVelocity", "uCohortBounce",
+                "uCohortSection", "uCohortLane", "uCohortOuttake", "uRenderPass",
+                "uTracerDrive", "uTracerPhase",
+                "uShadowColor", "uFade", "uLayerAlpha",
             )
             self._shadow_uniforms = {
                 name: int(gl.glGetUniformLocation(self._shadow_program, name))

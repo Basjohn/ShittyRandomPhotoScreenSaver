@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Pearl Blush [Three-Tone] [Glass]",
   "backdrop": {
     "mode": "glass",
@@ -874,6 +874,12 @@
       49,
       37,
       47,
+      255
+    ],
+    "about.art.liquid": [
+      153,
+      96,
+      126,
       255
     ],
     "popup.container.surface": [

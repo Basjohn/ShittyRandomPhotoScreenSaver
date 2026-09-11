@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Royal Orchard [Three-Tone] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       240,
       240,
       245,
+      255
+    ],
+    "about.art.liquid": [
+      163,
+      194,
+      154,
       255
     ],
     "popup.container.surface": [

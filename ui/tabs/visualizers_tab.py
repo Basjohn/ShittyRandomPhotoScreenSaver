@@ -39,6 +39,7 @@ from core.settings.visualizer_mode_registry import (
     iter_visualizer_mode_descriptors,
     resolve_effective_enabled_modes,
     resolve_effective_mode,
+    mode_has_rainbow_controls,
 )
 from core.settings.visualizer_presets import (
     apply_preset_to_config,
@@ -50,6 +51,7 @@ from rendering.widget_descriptors import (
 )
 from ui.flow_layout import FlowContainer
 from ui.tabs import shared_styles
+from ui.tabs.media.builder_scaffold import build_dynamic_collapsible_bucket
 from ui.tabs.media.shared_appearance_controls import (
     build_shared_visualizer_appearance_controls,
 )
@@ -304,14 +306,21 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         # once by the tab, then physically placed inside the selected mode's Custom
         # normal-layout. Before body retirement they are evacuated back to the
         # stable mode page so Qt destruction cannot take them with a retired body.
-        self._base_appearance_group = QGroupBox("Bar Appearance")
-        style_group_box(self._base_appearance_group)
-        base_appearance_layout = QVBoxLayout(self._base_appearance_group)
-        base_appearance_layout.setContentsMargins(18, 18, 18, 18)
-        base_appearance_layout.setSpacing(4)
+        (
+            self._base_appearance_group,
+            base_appearance_layout,
+            self._base_appearance_toggle,
+        ) = build_dynamic_collapsible_bucket(
+            self,
+            controls_layout,
+            mode_provider=lambda: "spectrum",
+            host_mode_key="spectrum_stable",
+            bucket_key="bar_appearance",
+            title="Bar Appearance",
+            helper_text="Spectrum fill, border colour, and border opacity still apply when hidden.",
+        )
         build_shared_visualizer_appearance_controls(self, base_appearance_layout)
         self._base_appearance_group.setVisible(False)
-        controls_layout.addWidget(self._base_appearance_group)
 
         # Rainbow is likewise a Custom tweakable, not a mode-global strip. It is
         # physically moved into the selected mode's Custom normal-layout and is
@@ -331,11 +340,19 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         return page
 
     def _build_rainbow_controls(self, parent_layout: QVBoxLayout) -> None:
-        self._rainbow_controls_container = QGroupBox("Rainbow")
-        style_group_box(self._rainbow_controls_container)
-        bucket_layout = QVBoxLayout(self._rainbow_controls_container)
-        bucket_layout.setContentsMargins(18, 18, 18, 18)
-        bucket_layout.setSpacing(4)
+        (
+            self._rainbow_controls_container,
+            bucket_layout,
+            self._rainbow_bucket_toggle,
+        ) = build_dynamic_collapsible_bucket(
+            self,
+            parent_layout,
+            mode_provider=self._get_active_visualizer_mode,
+            host_mode_key="shared_stable",
+            bucket_key="rainbow",
+            title="Rainbow",
+            helper_text="Per-mode rainbow enablement and speed still apply when hidden.",
+        )
         self._rainbow_per_mode: dict[str, tuple[bool, int]] = {}
 
         row = QHBoxLayout()
@@ -408,7 +425,6 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._rainbow_speed_container.setVisible(False)
 
         self._rainbow_controls_container.setVisible(False)
-        parent_layout.addWidget(self._rainbow_controls_container)
 
     def _update_rainbow_visibility(self) -> None:
         """Apply shared Rainbow visibility plus Spectrum's Custom accessory gate."""
@@ -451,7 +467,23 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
 
         if mode_id == "spectrum":
             normal_layout.addWidget(self._base_appearance_group)
+            shared_styles.set_bucket_toggle_checked(
+                self._base_appearance_toggle,
+                self.get_visualizer_bucket_state("spectrum", "bar_appearance"),
+            )
+
         normal_layout.addWidget(self._rainbow_controls_container)
+        if mode_has_rainbow_controls(mode_id):
+            shared_styles.set_bucket_toggle_checked(
+                self._rainbow_bucket_toggle,
+                self.get_visualizer_bucket_state(mode_id, "rainbow"),
+            )
+        else:
+            shared_styles.set_bucket_toggle_checked(
+                self._rainbow_bucket_toggle,
+                False,
+                coordinate=False,
+            )
         self._update_rainbow_visibility()
 
     def set_family_capability_available(self, available: bool) -> None:

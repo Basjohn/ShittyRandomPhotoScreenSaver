@@ -1,51 +1,65 @@
 {
-    "mode": "sphere",
-    "name": "Voxel Bloom",
-    "preset_index": 1,
-    "visualizer_preset_override": true,
-    "visualizer_preset_mode": "sphere",
-    "snapshot": {
-        "widgets": {
-            "spotify_visualizer": {
-                "sphere_edge_color": [
-                    205,
-                    232,
-                    242,
-                    255
-                ],
-                "sphere_base_rotation_speed": 0.018,
-                "sphere_rotation_speed": 0.24,
-                "sphere_gloss": 0.38,
-                "sphere_specular": 0.42,
-                "sphere_light_direction": "NW",
-                "sphere_vocal_response": 1.35,
-                "sphere_size_response": 2.25,
-                "mode": "sphere",
-                "sphere_allow_overflow": true,
-                "sphere_fade_incoming_blocks": true,
-                "sphere_cel_shading": false,
-                "sphere_shadow_enabled": true,
-                "sphere_light_tracer_enabled": true,
-                "sphere_finish": "Neutral",
-                "sphere_fill_color": [
-                    86,
-                    132,
-                    158,
-                    255
-                ],
-                "sphere_fragment_interpolation_enabled": true,
-                "sphere_incoming_density_response_enabled": true,
-                "sphere_incoming_transient_velocity_enabled": true,
-                "sphere_particle_outtake_enabled": true,
-                "sphere_fragment_strength": 3.92,
-                "sphere_particle_distance": 2.45,
-                "sphere_particle_amount": 1.0,
-                "sphere_perspective_strength": 1.0,
-                "sphere_taste_the_rainbow_enabled": false,
-                "sphere_taste_the_rainbow_surfaces": true,
-                "sphere_taste_the_rainbow_edges": true
-            }
-        }
-    },
-    "description": "Accepted experimental Sphere golden: neutral outward particle flow with current fragmentation, tracer, density, velocity, sustained growth and flat shadow behaviour."
+  "mode": "sphere",
+  "name": "Preset 2 (Voxel Bloom)",
+  "preset_index": 1,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "sphere",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "sphere_finish": "Glassy",
+        "sphere_fill_color": [
+          4,
+          7,
+          8,
+          200
+        ],
+        "sphere_edge_color": [
+          233,
+          248,
+          255,
+          255
+        ],
+        "sphere_tracer_color": [
+          255,
+          255,
+          255,
+          245
+        ],
+        "sphere_edge_weight": 0.9,
+        "sphere_voxel_size_variation": 0.35,
+        "sphere_depth_shading_enabled": true,
+        "sphere_depth_shading_strength": 0.2,
+        "sphere_allow_overflow": true,
+        "sphere_cel_shading": false,
+        "sphere_light_tracer_enabled": true,
+        "sphere_fragment_interpolation_enabled": true,
+        "sphere_incoming_density_response_enabled": true,
+        "sphere_incoming_transient_velocity_enabled": true,
+        "sphere_particle_outtake_enabled": true,
+        "sphere_shadow_enabled": true,
+        "sphere_shadow_opacity": 1.0,
+        "sphere_shadow_softness": 0.18,
+        "sphere_shadow_distance": 1.0,
+        "sphere_shadow_size": 1.0,
+        "sphere_fade_incoming_blocks": true,
+        "sphere_fragment_strength": 3.6,
+        "sphere_particle_distance": 2.25,
+        "sphere_particle_amount": 1.0,
+        "sphere_perspective_strength": 1.0,
+        "sphere_taste_the_rainbow_enabled": false,
+        "sphere_taste_the_rainbow_surfaces": true,
+        "sphere_taste_the_rainbow_edges": true,
+        "sphere_base_rotation_speed": 0.02,
+        "sphere_rotation_speed": 0.99,
+        "sphere_gloss": 0.95,
+        "sphere_specular": 0.75,
+        "sphere_light_direction": "NW",
+        "sphere_vocal_response": 1.35,
+        "sphere_size_response": 2.25,
+        "mode": "sphere"
+      }
+    }
+  },
+  "description": "Saved from current Settings state."
 }

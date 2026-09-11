@@ -9,7 +9,7 @@ shape (frozen dataclass, schema version, semantic role maps, compiled Default Da
 so the two theme systems share one mental model and one file root.
 
 Boundaries (durable design owners: `Docs/Contracts.md`,
-`Docs/Custom_Style_Implementation.md`, `Future_Work.md` §10):
+`Docs/Guides/Custom_Style_Implementation.md`, `Future_Work.md` §10):
 
 * Widget Theme owns runtime semantic colours only. It does **not** own widget
   activation, provider/account state, geometry, cadence, compositor state, native

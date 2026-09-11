@@ -7,6 +7,10 @@ from ui.color_utils import qcolor_to_list as _qcolor_to_list
 
 _SPHERE_SETTING_KEYS = (
     "sphere_finish",
+    "sphere_edge_weight",
+    "sphere_voxel_size_variation",
+    "sphere_depth_shading_enabled",
+    "sphere_depth_shading_strength",
     "sphere_allow_overflow",
     "sphere_cel_shading",
     "sphere_light_tracer_enabled",
@@ -15,6 +19,10 @@ _SPHERE_SETTING_KEYS = (
     "sphere_incoming_transient_velocity_enabled",
     "sphere_particle_outtake_enabled",
     "sphere_shadow_enabled",
+    "sphere_shadow_opacity",
+    "sphere_shadow_softness",
+    "sphere_shadow_distance",
+    "sphere_shadow_size",
     "sphere_fade_incoming_blocks",
     "sphere_fragment_strength",
     "sphere_particle_distance",
@@ -50,6 +58,7 @@ def load_sphere_mode_settings(tab, config) -> None:
     for key, attr, button_attr in (
         ("sphere_fill_color", "_sphere_fill_color", "sphere_fill_color_btn"),
         ("sphere_edge_color", "_sphere_edge_color", "sphere_edge_color_btn"),
+        ("sphere_tracer_color", "_sphere_tracer_color", "sphere_tracer_color_btn"),
     ):
         default = tab._widget_default("spotify_visualizer", key)
         raw = config.get(key, default)
@@ -74,8 +83,14 @@ def collect_sphere_mode_settings(tab) -> dict:
         "sphere_incoming_transient_velocity_enabled": tab.sphere_incoming_transient_velocity_enabled.isChecked(),
         "sphere_particle_outtake_enabled": tab.sphere_particle_outtake_enabled.isChecked(),
         "sphere_shadow_enabled": tab.sphere_shadow_enabled.isChecked(),
+        "sphere_shadow_opacity": tab.sphere_shadow_opacity.value() / 100.0,
+        "sphere_shadow_softness": tab.sphere_shadow_softness.value() / 100.0,
+        "sphere_shadow_distance": tab.sphere_shadow_distance.value() / 100.0,
+        "sphere_shadow_size": tab.sphere_shadow_size.value() / 100.0,
+        "sphere_depth_shading_enabled": tab.sphere_depth_shading_enabled.isChecked(),
         "sphere_fill_color": _qcolor_to_list(getattr(tab, "_sphere_fill_color", None), tab._widget_default("spotify_visualizer", "sphere_fill_color")),
         "sphere_edge_color": _qcolor_to_list(getattr(tab, "_sphere_edge_color", None), tab._widget_default("spotify_visualizer", "sphere_edge_color")),
+        "sphere_tracer_color": _qcolor_to_list(getattr(tab, "_sphere_tracer_color", None), tab._widget_default("spotify_visualizer", "sphere_tracer_color")),
         "sphere_fade_incoming_blocks": tab.sphere_fade_incoming_blocks.isChecked(),
         "sphere_taste_the_rainbow_enabled": tab.sphere_taste_the_rainbow_enabled.isChecked(),
         "sphere_taste_the_rainbow_surfaces": tab.sphere_taste_the_rainbow_surfaces.isChecked(),
@@ -85,6 +100,9 @@ def collect_sphere_mode_settings(tab) -> dict:
         "sphere_particle_distance": tab.sphere_particle_distance.value() / 100.0,
         "sphere_particle_amount": tab.sphere_particle_amount.value() / 100.0,
         "sphere_perspective_strength": tab.sphere_perspective_strength.value() / 100.0,
+        "sphere_edge_weight": tab.sphere_edge_weight.value() / 100.0,
+        "sphere_voxel_size_variation": tab.sphere_voxel_size_variation.value() / 100.0,
+        "sphere_depth_shading_strength": tab.sphere_depth_shading_strength.value() / 100.0,
         "sphere_base_rotation_speed": tab.sphere_base_rotation_speed.value() / 100.0,
         "sphere_rotation_speed": tab.sphere_rotation_speed.value() / 100.0,
         "sphere_gloss": tab.sphere_gloss.value() / 100.0,

@@ -1,6 +1,6 @@
 {
   "format": "srpss.settings-theme",
-  "schema_version": 5,
+  "schema_version": 6,
   "name": "Indigo Saffron [Two-Tone] [Acrylic]",
   "backdrop": {
     "mode": "acrylic",
@@ -874,6 +874,12 @@
       239,
       240,
       247,
+      255
+    ],
+    "about.art.liquid": [
+      226,
+      192,
+      108,
       255
     ],
     "popup.container.surface": [
