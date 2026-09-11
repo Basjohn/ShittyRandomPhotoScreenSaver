@@ -33,7 +33,7 @@ TOOLS_DIR = REPO_ROOT / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from PySide6.QtCore import QRect, Qt, Signal  # noqa: E402
+from PySide6.QtCore import QRect, Qt, QTimer, Signal  # noqa: E402
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
@@ -77,6 +77,15 @@ from ui.widget_theme_spec import (  # noqa: E402
     WidgetThemeSpec,
 )
 from ui.widget_visual_roles import WIDGET_VISUAL_ROLE_PARENTS  # noqa: E402
+from tools.foundry_chrome import (  # noqa: E402
+    FoundryAppearanceDialog,
+    FoundryTitleBar,
+    apply_native_backdrop,
+    configure_frameless_window,
+    resolve_tool_theme,
+    save_tool_theme_id,
+)
+from tools.godzip_foundry_theme import render_foundry_stylesheet, resolve_foundry_theme  # noqa: E402
 from widget_theme_foundry_model import (  # noqa: E402
     WidgetThemeDraft,
     all_widget_theme_roles,
@@ -145,11 +154,14 @@ class SwatchButton(QPushButton):
     def set_rgba(self, color: Rgba) -> None:
         self._rgba = color
         fg = "#101719" if (color.r * 299 + color.g * 587 + color.b * 114) / 1000 > 155 else "#f7f4ea"
+        # The swatch owns only the authored colour.  Border/radius/padding stay
+        # with the selected Foundry ThemeSpec so changing the tool skin cannot
+        # leave a hard-coded amber control behind.
         self.setStyleSheet(
             "QPushButton {"
             f"background-color: rgba({color.r},{color.g},{color.b},{color.a}); color:{fg};"
-            "border:1px solid rgba(244,198,109,180); border-radius:7px; padding:7px 10px; font-weight:700;"
-            "} QPushButton:hover { border-color:#fff0ba; }"
+            "font-weight:700;"
+            "}"
         )
 
 
@@ -172,13 +184,17 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self._most_used_entries: list[tuple[Rgba, tuple[str, ...]]] = []
 
         self.setWindowTitle(APP_TITLE)
+        configure_frameless_window(self)
+        self._ui_theme_resolution = resolve_tool_theme("widget_theme")
+        self._appearance_dialog: FoundryAppearanceDialog | None = None
         icon_path = self.repo_root / "images" / "foundries" / "SRPSSTheme.ico"
         if icon_path.is_file():
             self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1260, 810)
         self.setMinimumSize(980, 650)
-        self._apply_style()
         self._build_ui()
+        self._apply_style()
+        QTimer.singleShot(0, lambda: apply_native_backdrop(self, self._ui_theme_resolution))
         self._refresh_file_list()
         if initial_path is not None:
             self._open_theme_path(initial_path)
@@ -191,34 +207,36 @@ class WidgetThemeFoundryWindow(QMainWindow):
         root.setObjectName("widgetThemeFoundryRoot")
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
-        outer.setContentsMargins(14, 12, 14, 10)
+        outer.setContentsMargins(12, 10, 12, 10)
         outer.setSpacing(10)
 
-        title_row = QHBoxLayout()
-        title = QLabel("WIDGET THEME FOUNDRY")
-        title.setObjectName("foundryTitle")
-        font = QFont(title.font())
-        font.setPointSize(max(font.pointSize(), 17))
-        font.setBold(True)
-        title.setFont(font)
-        title_row.addWidget(title)
-        title_row.addStretch(1)
-        self.schema_label = QLabel("SCHEMA v3 · COLOUR ONLY")
-        self.schema_label.setObjectName("scopePill")
-        title_row.addWidget(self.schema_label)
-        outer.addLayout(title_row)
+        self.title_bar = FoundryTitleBar(
+            "WIDGET THEME FOUNDRY",
+            self,
+            settings_callback=self._open_appearance,
+        )
+        outer.addWidget(self.title_bar)
 
+        subtitle_row = QHBoxLayout()
         subtitle = QLabel(
             "Edit the exact retained Widget Theme palette. Shared semantics first; optional special roles stay sparse and inherited until you override them."
         )
-        subtitle.setObjectName("subtitle")
+        subtitle.setObjectName("widgetThemeFoundrySubtitle")
         subtitle.setWordWrap(True)
-        outer.addWidget(subtitle)
+        subtitle_row.addWidget(subtitle, 1)
+        self.schema_label = QLabel("SCHEMA v3 · COLOUR ONLY")
+        self.schema_label.setObjectName("scopePill")
+        self.schema_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle_row.addWidget(self.schema_label)
+        outer.addLayout(subtitle_row)
 
         quick = QHBoxLayout()
+        quick.setSpacing(8)
+        theme_label = QLabel("Theme")
+        theme_label.setFixedWidth(72)
+        quick.addWidget(theme_label)
         self.theme_combo = QComboBox()
         self.theme_combo.setMinimumWidth(330)
-        quick.addWidget(QLabel("Theme"))
         quick.addWidget(self.theme_combo, 1)
         self.open_selected_btn = QPushButton("OPEN SELECTED")
         self.open_selected_btn.clicked.connect(self._open_combo_theme)
@@ -228,25 +246,31 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self.refresh_files_btn.setToolTip("Refresh themes/widgets")
         self.refresh_files_btn.clicked.connect(self._refresh_file_list)
         quick.addWidget(self.refresh_files_btn)
-        self.new_btn = QPushButton("NEW")
-        self.new_btn.clicked.connect(self.new_from_default)
-        quick.addWidget(self.new_btn)
-        self.open_btn = QPushButton("OPEN…")
-        self.open_btn.clicked.connect(self.open_theme)
-        quick.addWidget(self.open_btn)
-        self.save_btn = QPushButton("SAVE")
-        self.save_btn.setObjectName("primary")
-        self.save_btn.clicked.connect(self.save_theme)
-        quick.addWidget(self.save_btn)
-        self.save_as_btn = QPushButton("SAVE AS…")
-        self.save_as_btn.clicked.connect(self.save_theme_as)
-        quick.addWidget(self.save_as_btn)
         outer.addLayout(quick)
 
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        actions.addSpacing(80)
+        self.new_btn = QPushButton("NEW FROM DEFAULT")
+        self.new_btn.clicked.connect(self.new_from_default)
+        actions.addWidget(self.new_btn)
+        self.open_btn = QPushButton("OPEN THEME…")
+        self.open_btn.clicked.connect(self.open_theme)
+        actions.addWidget(self.open_btn)
+        self.save_btn = QPushButton("SAVE")
+        self.save_btn.setObjectName("widgetThemeFoundryPrimary")
+        self.save_btn.clicked.connect(self.save_theme)
+        actions.addWidget(self.save_btn)
+        self.save_as_btn = QPushButton("SAVE AS…")
+        self.save_as_btn.clicked.connect(self.save_theme_as)
+        actions.addWidget(self.save_as_btn)
+        actions.addStretch(1)
+        outer.addLayout(actions)
+
         meta = QFrame()
-        meta.setObjectName("metaBox")
+        meta.setObjectName("widgetThemeFoundryMetaBox")
         meta_l = QGridLayout(meta)
-        meta_l.setContentsMargins(10, 8, 10, 8)
+        meta_l.setContentsMargins(12, 10, 12, 10)
         self.name_edit = QLineEdit()
         self.name_edit.textEdited.connect(self._name_changed)
         self.id_label = QLabel()
@@ -269,11 +293,12 @@ class WidgetThemeFoundryWindow(QMainWindow):
         outer.addWidget(meta)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setObjectName("widgetThemeFoundrySplitter")
         outer.addWidget(splitter, 1)
 
         # Left: role browser.
         left = QFrame()
-        left.setObjectName("pane")
+        left.setObjectName("widgetThemeFoundryPane")
         left_l = QVBoxLayout(left)
         left_l.setContentsMargins(10, 10, 10, 10)
         filter_row = QHBoxLayout()
@@ -310,9 +335,12 @@ class WidgetThemeFoundryWindow(QMainWindow):
 
         # Right: selected role + tools.
         right_scroll = QScrollArea()
+        right_scroll.setObjectName("widgetThemeFoundryEditorPane")
         right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        right_scroll.viewport().setObjectName("widgetThemeFoundryEditorViewport")
         right = QWidget()
-        right.setObjectName("editor")
+        right.setObjectName("widgetThemeFoundryEditorContent")
         right_scroll.setWidget(right)
         right_l = QVBoxLayout(right)
         right_l.setContentsMargins(12, 12, 12, 12)
@@ -421,6 +449,7 @@ class WidgetThemeFoundryWindow(QMainWindow):
         splitter.setStretchFactor(1, 2)
 
         status = QStatusBar()
+        status.setObjectName("widgetThemeFoundryStatusBar")
         self.setStatusBar(status)
         self.statusBar().showMessage("Ready")
         self._set_editor_enabled(False)
@@ -432,40 +461,30 @@ class WidgetThemeFoundryWindow(QMainWindow):
         return spin
 
     def _apply_style(self) -> None:
-        # Intentionally shares Theme Foundry's visual language and icon family.
-        self.setStyleSheet(
-            """
-            QMainWindow { background:#0d181e; color:#f4f0e6; }
-            QWidget { color:#f4f0e6; font-family:'Jost','Segoe UI',sans-serif; font-size:10pt; }
-            QWidget#widgetThemeFoundryRoot { background:#111a1e; }
-            QFrame#pane, QWidget#editor, QFrame#metaBox {
-                background:rgba(10,15,17,220); border:1px solid rgba(225,193,127,100); border-radius:10px;
-            }
-            QLabel#foundryTitle, QLabel#sectionTitle { color:#f4c66d; font-weight:700; letter-spacing:1px; }
-            QLabel#subtitle, QLabel#muted { color:#9fb2ad; }
-            QLabel#scopePill { background:#263b3a; color:#f4c66d; border:1px solid #8f7950; border-radius:8px; padding:5px 9px; font-weight:700; }
-            QLabel#stateBanner, QLabel#infoBox {
-                background:rgba(16,25,27,210); border:1px solid rgba(225,193,127,110); border-radius:8px; padding:8px; color:#dce5df;
-            }
-            QLabel#stateBanner { color:#f4c66d; }
-            QLineEdit, QComboBox, QSpinBox {
-                background:#1f2626; color:#f4f0e6; border:1px solid #8f7950; border-radius:7px; padding:5px;
-            }
-            QTreeWidget#roleTree {
-                background-color:rgba(10,15,17,218); alternate-background-color:rgba(31,38,38,205);
-                border:1px solid rgba(225,193,127,150); border-radius:10px; color:#edf1ed; outline:none;
-            }
-            QTreeWidget::item { min-height:27px; padding:2px 5px; }
-            QTreeWidget::item:selected { background:rgba(60,108,103,210); }
-            QHeaderView::section { background:#1f2f30; color:#f4c66d; border:none; padding:7px; font-weight:700; }
-            QPushButton { background:#263b3a; color:#f4f0e6; border:1px solid #8f7950; border-radius:7px; padding:7px 11px; font-weight:600; }
-            QPushButton:hover { background:#33504d; border-color:#f4c66d; }
-            QPushButton:disabled { color:#6f7e7b; border-color:#4f554e; background:#1b2424; }
-            QPushButton#primary { background:#d59b42; color:#101719; border-color:#f4c66d; }
-            QStatusBar { background:#0a0f11; color:#c8d4d1; }
-            QSplitter::handle { background:#273436; width:2px; }
-            """
-        )
+        # Widget Theme Foundry edits runtime WidgetThemeSpec colours, while its
+        # own chrome is a separate tool-local Settings ThemeSpec choice.
+        self.setStyleSheet(render_foundry_stylesheet(self._ui_theme_resolution.theme))
+
+    def _set_tool_theme(self, theme_id: str) -> None:
+        self._ui_theme_resolution = resolve_foundry_theme(theme_id)
+        save_tool_theme_id("widget_theme", self._ui_theme_resolution.theme_id)
+        self._apply_style()
+        apply_native_backdrop(self, self._ui_theme_resolution)
+
+    def _open_appearance(self) -> None:
+        dialog = self._appearance_dialog
+        if dialog is None:
+            dialog = FoundryAppearanceDialog(
+                self,
+                title="Widget Theme Foundry",
+                resolution=self._ui_theme_resolution,
+                apply_theme=self._set_tool_theme,
+            )
+            self._appearance_dialog = dialog
+            dialog.finished.connect(lambda _code: setattr(self, "_appearance_dialog", None))
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     # ---- loading / file lifecycle ---------------------------------
     def _refresh_file_list(self) -> None:

@@ -400,9 +400,10 @@ class Panel(QFrame):
 class FoundryHeaderFrame(QFrame):
     """Frameless-window drag surface for the Foundry header."""
 
-    def __init__(self, parent: QWidget) -> None:
+    def __init__(self, parent: QWidget, *, allow_maximize: bool = True) -> None:
         super().__init__(parent)
         self._drag_offset = QPoint()
+        self._allow_maximize = bool(allow_maximize)
         self.setObjectName("foundryHeader")
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
@@ -428,7 +429,7 @@ class FoundryHeaderFrame(QFrame):
         super().mouseMoveEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
-        if event.button() == Qt.MouseButton.LeftButton:
+        if self._allow_maximize and event.button() == Qt.MouseButton.LeftButton:
             owner = self.window()
             toggle = getattr(owner, "_toggle_maximized", None)
             if callable(toggle):
@@ -456,7 +457,58 @@ class _TaskBridge(QObject):
     failed = Signal(object)
 
 
-class FoundryNoticeDialog(QDialog):
+class FoundryPopupDialog(QDialog):
+    """Frameless, themed, non-modal Foundry popup shell."""
+
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setObjectName("foundryPopup")
+        self.setModal(False)
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        self.setWindowFlags(
+            Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        shell = QFrame(self)
+        shell.setObjectName("shell")
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(1, 1, 1, 1)
+        shell_layout.setSpacing(0)
+
+        header = FoundryHeaderFrame(self, allow_maximize=False)
+        header.setFixedHeight(42)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 0, 6, 0)
+        header_layout.setSpacing(6)
+        title_label = QLabel(title)
+        title_label.setObjectName("toolTitleLabel")
+        title_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        header_layout.addWidget(title_label, 1)
+        close_button = QPushButton("×")
+        close_button.setObjectName("toolTitleCloseButton")
+        close_button.setFixedSize(38, 30)
+        close_button.clicked.connect(self.reject)
+        header_layout.addWidget(close_button)
+        shell_layout.addWidget(header)
+
+        panel = QFrame(shell)
+        panel.setObjectName("foundryPopupPanel")
+        self.content_layout = QVBoxLayout(panel)
+        self.content_layout.setContentsMargins(16, 14, 16, 14)
+        self.content_layout.setSpacing(10)
+        shell_layout.addWidget(panel, 1)
+        outer.addWidget(shell)
+
+
+class FoundryNoticeDialog(FoundryPopupDialog):
     """Non-modal always-on-top Foundry notification."""
 
     def __init__(
@@ -467,29 +519,16 @@ class FoundryNoticeDialog(QDialog):
         *,
         danger: bool = False,
     ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setObjectName("foundryPopup")
-        self.setModal(False)
-        self.setWindowModality(Qt.WindowModality.NonModal)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowFlag(Qt.WindowType.Tool, True)
+        super().__init__(title, parent)
         self.setMinimumWidth(440)
         self.setMaximumWidth(760)
+        layout = self.content_layout
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        panel = QFrame()
-        panel.setObjectName("foundryPopupPanel")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(10)
-
-        heading = QLabel(title)
-        heading.setObjectName("popupTitle")
         if danger:
-            heading.setProperty("danger", True)
-        layout.addWidget(heading)
+            warning = QLabel("ATTENTION")
+            warning.setObjectName("popupTitle")
+            warning.setProperty("danger", True)
+            layout.addWidget(warning)
         body = QLabel(message)
         body.setObjectName("popupMessage")
         body.setWordWrap(True)
@@ -498,10 +537,9 @@ class FoundryNoticeDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
-        outer.addWidget(panel)
 
 
-class FoundryConfirmDialog(QDialog):
+class FoundryConfirmDialog(FoundryPopupDialog):
     """Non-modal always-on-top confirmation with callback-friendly signals."""
 
     def __init__(
@@ -513,29 +551,16 @@ class FoundryConfirmDialog(QDialog):
         confirm_text: str = "CONTINUE",
         danger: bool = False,
     ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setObjectName("foundryPopup")
-        self.setModal(False)
-        self.setWindowModality(Qt.WindowModality.NonModal)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowFlag(Qt.WindowType.Tool, True)
+        super().__init__(title, parent)
         self.setMinimumWidth(500)
         self.setMaximumWidth(780)
+        layout = self.content_layout
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        panel = QFrame()
-        panel.setObjectName("foundryPopupPanel")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(10)
-
-        heading = QLabel(title)
-        heading.setObjectName("popupTitle")
         if danger:
-            heading.setProperty("danger", True)
-        layout.addWidget(heading)
+            warning = QLabel("ATTENTION")
+            warning.setObjectName("popupTitle")
+            warning.setProperty("danger", True)
+            layout.addWidget(warning)
         body = QLabel(message)
         body.setObjectName("popupMessage")
         body.setWordWrap(True)
@@ -552,34 +577,18 @@ class FoundryConfirmDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        outer.addWidget(panel)
 
 
-class FoundrySettingsDialog(QDialog):
+class FoundrySettingsDialog(FoundryPopupDialog):
     """Tool-local Foundry settings. Product Settings are never mutated."""
 
     def __init__(self, window: "GodzipFoundryWindow") -> None:
-        super().__init__(window)
+        super().__init__("GODZIP FOUNDRY SETTINGS", window)
         self.window = window
-        self.setWindowTitle("GODZIP Foundry Settings")
-        self.setObjectName("foundryPopup")
-        self.setModal(False)
-        self.setWindowModality(Qt.WindowModality.NonModal)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowFlag(Qt.WindowType.Tool, True)
         self.resize(560, 210)
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        panel = QFrame()
-        panel.setObjectName("foundryPopupPanel")
-        layout = QVBoxLayout(panel)
+        layout = self.content_layout
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(12)
-
-        heading = QLabel("FOUNDRY SETTINGS")
-        heading.setObjectName("popupTitle")
-        layout.addWidget(heading)
         explainer = QLabel(
             "Foundry themes are a tool-local snapshot. Changing this does not alter SRPSS Settings."
         )
@@ -606,7 +615,6 @@ class FoundrySettingsDialog(QDialog):
         footer.addStretch(1)
         footer.addWidget(close_button)
         layout.addLayout(footer)
-        outer.addWidget(panel)
 
     def _theme_changed(self, index: int) -> None:
         theme_id = self.theme_combo.itemData(index)
@@ -967,9 +975,20 @@ class ApplyTab(QWidget):
             b.clicked.connect(handler)
             tools.addWidget(b)
         browser_l.addLayout(tools)
+        legend_row = QHBoxLayout()
         legend = QLabel("Orange = timestamp-old · Red = timestamp-old + Git-old · Violet = local dirty")
         legend.setObjectName("faint")
-        browser_l.addWidget(legend)
+        legend_row.addWidget(legend, 1)
+        self.compact_apply_button = QPushButton("APPLY")
+        self.compact_apply_button.setObjectName("primaryButton")
+        self.compact_apply_button.setFixedHeight(30)
+        self.compact_apply_button.setMinimumWidth(92)
+        self.compact_apply_button.setToolTip("Apply the currently checked GODZIP targets")
+        self.compact_apply_button.setEnabled(False)
+        self.compact_apply_button.hide()
+        self.compact_apply_button.clicked.connect(self.apply_selected)
+        legend_row.addWidget(self.compact_apply_button)
+        browser_l.addLayout(legend_row)
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("applySplitter")
@@ -1030,6 +1049,7 @@ class ApplyTab(QWidget):
         self._browser_expanded = not self._browser_expanded
         for widget in (self.context_panel, self.bottom_panel):
             widget.setVisible(not self._browser_expanded)
+        self.compact_apply_button.setVisible(self._browser_expanded)
         self.expand_button.setText("▼" if self._browser_expanded else "▲")
         self.expand_button.setToolTip(
             "Restore the normal Apply layout"
@@ -1275,6 +1295,7 @@ class ApplyTab(QWidget):
         inspection = self.inspection
         if inspection is None:
             self.apply_button.setEnabled(False)
+            self.compact_apply_button.setEnabled(False)
             return
         checked = set(self.tree.checked_paths())
         chosen = [entry for entry in inspection.files if entry.target_path in checked]
@@ -1318,7 +1339,14 @@ class ApplyTab(QWidget):
         finally:
             self.history_ack.blockSignals(False)
         history_ok = not history_ack_required or self.history_ack.isChecked()
-        self.apply_button.setEnabled(bool(chosen or debris) and history_ok)
+        can_apply = bool(chosen or debris) and history_ok
+        self.apply_button.setEnabled(can_apply)
+        self.compact_apply_button.setEnabled(can_apply)
+        self.compact_apply_button.setToolTip(
+            "Apply the currently checked GODZIP targets"
+            if history_ok
+            else "Restore the normal Apply view to review and acknowledge commit-history risk"
+        )
 
     def apply_selected(self) -> None:
         inspection = self.inspection
@@ -1690,19 +1718,13 @@ class DebrisTab(QWidget):
 
 
 
-class ConfirmFileListDialog(QDialog):
+class ConfirmFileListDialog(FoundryPopupDialog):
     """Prominent final confirmation that exposes every affected path."""
 
     def __init__(self, title: str, warning: str, lines: list[str], parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setObjectName("foundryPopup")
-        self.setModal(False)
-        self.setWindowModality(Qt.WindowModality.NonModal)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowFlag(Qt.WindowType.Tool, True)
+        super().__init__(title, parent)
         self.resize(760, 620)
-        layout = QVBoxLayout(self)
+        layout = self.content_layout
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         banner = QLabel(warning)
@@ -1758,11 +1780,19 @@ class LogzipTab(QWidget):
         controls = QHBoxLayout()
         refresh = QPushButton("Refresh")
         refresh.clicked.connect(self.refresh)
+        build_b = QPushButton("Build Logs")
+        build_b.setToolTip("Select Build Foundry build_runner_*.log files")
+        build_b.clicked.connect(lambda: self._set_profile("build"))
+        typical_b = QPushButton("Typical Logs")
+        typical_b.setToolTip("Select ordinary runtime/diagnostic logs and exclude Build Foundry logs")
+        typical_b.clicked.connect(lambda: self._set_profile("typical"))
         all_b = QPushButton("All")
         all_b.clicked.connect(lambda: self._set_all(True))
         none_b = QPushButton("None")
         none_b.clicked.connect(lambda: self._set_all(False))
         controls.addWidget(refresh)
+        controls.addWidget(build_b)
+        controls.addWidget(typical_b)
         controls.addWidget(all_b)
         controls.addWidget(none_b)
         controls.addStretch(1)
@@ -1830,6 +1860,22 @@ class LogzipTab(QWidget):
         self.tree.blockSignals(False)
         self._update()
 
+    def _set_profile(self, profile: str) -> None:
+        """Select the common LOGZIP workflow groups without changing source files."""
+
+        build = str(profile).strip().casefold() == "build"
+        self.tree.blockSignals(True)
+        try:
+            for i in range(self.tree.topLevelItemCount()):
+                item = self.tree.topLevelItem(i)
+                name = str(item.data(0, ROLE_PATH) or "")
+                is_build_log = name.casefold().startswith("build_runner_") and name.casefold().endswith(".log")
+                checked = is_build_log if build else not is_build_log
+                item.setCheckState(0, Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        finally:
+            self.tree.blockSignals(False)
+        self._update()
+
     def _selected(self) -> list[str]:
         return [
             str(self.tree.topLevelItem(i).data(0, ROLE_PATH))
@@ -1869,17 +1915,11 @@ class LogzipTab(QWidget):
         )
 
 
-class DiffResultDialog(QDialog):
+class DiffResultDialog(FoundryPopupDialog):
     def __init__(self, parent: QWidget, title: str, text: str, summary: str) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setObjectName("foundryPopup")
-        self.setModal(False)
-        self.setWindowModality(Qt.WindowModality.NonModal)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowFlag(Qt.WindowType.Tool, True)
+        super().__init__(title, parent)
         self.resize(1120, 820)
-        layout = QVBoxLayout(self)
+        layout = self.content_layout
         layout.setContentsMargins(14, 14, 14, 14)
         heading = QLabel(summary)
         heading.setObjectName("sectionTitle")
@@ -3117,18 +3157,31 @@ class GodzipFoundryWindow(QMainWindow):
         self.tabs.addTab(self.push_tab, "PUSH")
         self.tabs.addTab(self.pull_tab, "PULL")
         self.tabs.addTab(self.debris_tab, "DEBRIS")
-        self.tabs.addTab(self.run_tab, "RUN")
+        run_index = self.tabs.addTab(self.run_tab, "RUN")
         command_index = self.tabs.addTab(self.command_tab, "CMD")
-        try:
-            self.tabs.tabBar().setTabVisible(command_index, False)
-        except AttributeError:
-            self.tabs.tabBar().setTabEnabled(command_index, False)
+        for hidden_index in (run_index, command_index):
+            try:
+                self.tabs.tabBar().setTabVisible(hidden_index, False)
+            except AttributeError:
+                self.tabs.tabBar().setTabEnabled(hidden_index, False)
+
+        right_nav = QWidget(self.tabs)
+        right_nav_layout = QHBoxLayout(right_nav)
+        right_nav_layout.setContentsMargins(0, 0, 0, 0)
+        right_nav_layout.setSpacing(3)
+        self.run_tab_button = QPushButton("RUN")
+        self.run_tab_button.setObjectName("cmdTabButton")
+        self.run_tab_button.setCheckable(True)
+        self.run_tab_button.setFixedHeight(38)
+        self.run_tab_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.run_tab))
+        right_nav_layout.addWidget(self.run_tab_button)
         self.cmd_tab_button = QPushButton("CMD")
         self.cmd_tab_button.setObjectName("cmdTabButton")
         self.cmd_tab_button.setCheckable(True)
         self.cmd_tab_button.setFixedHeight(38)
         self.cmd_tab_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.command_tab))
-        self.tabs.setCornerWidget(self.cmd_tab_button, Qt.Corner.TopRightCorner)
+        right_nav_layout.addWidget(self.cmd_tab_button)
+        self.tabs.setCornerWidget(right_nav, Qt.Corner.TopRightCorner)
         self.tabs.currentChanged.connect(self._tab_changed)
         body_l.addWidget(self.tabs, 1)
         shell_l.addWidget(body, 1)
@@ -3150,6 +3203,8 @@ class GodzipFoundryWindow(QMainWindow):
 
     def _tab_changed(self, _index: int) -> None:
         current = self.tabs.currentWidget()
+        if hasattr(self, "run_tab_button"):
+            self.run_tab_button.setChecked(current is self.run_tab)
         if hasattr(self, "cmd_tab_button"):
             self.cmd_tab_button.setChecked(current is self.command_tab)
         if current is self.pull_tab:
