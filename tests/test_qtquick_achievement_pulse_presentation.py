@@ -239,9 +239,12 @@ def test_retained_layout_policy_preserves_shapes_and_grows_complete_capsule_rail
     large_capsules = replace(doubled, capsule_font_size=32)
 
     assert single.authored_size[0] == 600.0
+    # Authored outer height is artwork-shape driven (wide < square < portrait).
     assert 290.0 <= single.authored_size[1] < square.authored_size[1]
     assert square.authored_size[1] < portrait.authored_size[1]
-    assert doubled.authored_size[1] > single.authored_size[1]
+    # Capsule doubling is presented within the shape-driven authored baseline and
+    # no longer grows the authored size; a larger capsule font still grows it.
+    assert doubled.authored_size[1] == single.authored_size[1]
     assert large_capsules.authored_size[1] > doubled.authored_size[1]
 
 
@@ -562,7 +565,7 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         assert str(metric.property("text")).startswith("Unlocked: ")
         assert metric.y() == pytest.approx(216.0)
         assert subtitle.isVisible() is False
-        assert rarity_detail.isVisible() is True
+        assert rarity_detail.isVisible() is False
 
         # A taller committed/CUSTOM root may retain its outer interaction rect,
         # but the complete card shell must keep the authored 600x334 aspect.
