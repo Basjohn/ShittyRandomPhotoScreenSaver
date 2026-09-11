@@ -1,6 +1,55 @@
 # Test Suite Guide
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
+
+## 0.10 2026-09-12 Windows/PySide validation run — supersedes prior NEEDS RUN VALIDATION
+
+The maintained `destination` profile was executed on the intended **Windows +
+PySide6 6.9.1 + OpenGL** environment (unlike the earlier Linux audit that could
+not import PySide6). This is the actual run the prior "NEEDS RUN VALIDATION"
+labels were waiting for — treat those labels below as discharged for every
+target that now passes.
+
+- Broad collection: **4010 tests, 0 collection errors** — the earlier "206 files
+  errored" was 100% environmental (missing PySide/OpenGL/feedparser).
+- Destination profile before this migration pass: **77/130 pass, 53 fail**. The
+  53 were stale tests predating the Sep-2026 visualizer **card/border/shadow**
+  feature and the **Viz Schema Migration** (per-mode `*_growth` retired,
+  full-materialized custom-cache normalization), plus intentional default
+  changes — **not** architecture breakage. Production was internally coherent at
+  every boundary checked.
+- After this pass: **121/130 pass, 9 fail.** Reusable migration scaffolding lives
+  in `tests/_visualizer_presentation.py` (neutral card resolver wrapper,
+  `make_visualizer_owner`, canonical Bubble settings/pulse builders, model +
+  technical-cache factory).
+
+**One real production bug found and fixed** (not a stale test): Clock `12h`
+format was unreachable via `ClockPresentationConfig.from_mapping`
+(`rendering/quick/widgets/clock.py`) once the canonical default became `24h`;
+`12 Hour` is user-selectable, so this was a functionality defect. Fixed to honour
+either canonical token, falling back to the default only on invalid input.
+
+**s_hotkey native crash fixed**: a cross-test QQuickWindow teardown race (pending
+`deleteLater` destruction corrupting the next test's window teardown under
+pytest-qt's event pump). Fixed by draining `DeferredDelete` in the fixture; not a
+product defect (per-file subprocess isolation normally hides it).
+
+**9 remaining reds (deferred, deeper work):** `test_qtquick_h_cutover` (hangs
+creating real multi-display Quick windows — display-connectivity dependent, needs
+a real installed session); `test_sphere_voxel_audio_contract` +
+`test_sphere_mode_integration` (golden-value pins on operator-authored sphere
+presets that drifted through the voxel work / smooth-sphere fossil — need a
+deliberate golden refresh, not piecemeal guessing); `test_visualizer_glow_footprint`,
+`test_visualizer_line_coverage`, one `test_bubble_aspect_pixels` real-GL assertion
+(hand-built 27-param immutable frames drifted — need rehoming onto the production
+frame-capture path rather than hand-maintained param dicts);
+`test_qtquick_achievement_pulse_presentation` (Progress-Pulse/Shelf layout
+redesign — eyes-on acceptance per §8); one `test_qtquick_custom_layout_overlay`
+cross-display-transfer lifecycle assertion; `test_visualizer_viewport_scaling_contracts`
+(Qt-avoiding module loader + many inline Bubble dicts + stale `renderers/spectrum.py`
+path + DevCurve source scrapes).
+
+---
 
 ## Current authority
 
