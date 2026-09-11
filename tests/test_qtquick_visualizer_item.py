@@ -13,9 +13,7 @@ from rendering.quick.visualizer import (
     VisualizerRenderItem,
     VisualizerRenderNode,
 )
-from widgets.spotify_visualizer.presentation_geometry import (
-    resolve_visualizer_presentation,
-)
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
@@ -28,11 +26,15 @@ from widgets.spotify_visualizer.render_state import (
 
 
 def _presentation(*, scale: float = 1.0, origin=(120.0, 80.0)):
+    # A 4 px authored card border (8 px corner) so inner-chrome geometry tests
+    # exercise the real card inset; outer geometry is border-independent.
     return resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy("spectrum"),
         display_size=(1920.0, 1080.0),
         outer_origin=origin,
         uniform_visual_scale=scale,
+        border_width=4.0,
+        corner_radius=8.0,
     )
 
 

@@ -17,9 +17,7 @@ from rendering.quick.visualizer.implementations.oscilloscope import (
 from widgets.spotify_visualizer.oscilloscope_frame_runtime import (
     OscilloscopeFrameRuntime,
 )
-from widgets.spotify_visualizer.presentation_geometry import (
-    resolve_visualizer_presentation,
-)
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_state import (
     OscilloscopeFrame,
     VisualizerEnergyState,

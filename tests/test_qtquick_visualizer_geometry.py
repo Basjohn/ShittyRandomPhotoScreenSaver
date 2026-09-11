@@ -20,8 +20,12 @@ from widgets.spotify_visualizer.presentation_geometry import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
     resize_visualizer_presentation,
     resize_visualizer_presentation_uniformly,
-    resolve_visualizer_presentation,
 )
+
+# The resolver takes explicit card/border/shadow inputs (assembled from the
+# widget theme by the display owner in production). These geometry regressions
+# supply a neutral card and override only the chrome fields under test.
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 
 
 def test_canonical_baseline_is_the_healthy_committed_custom_size() -> None:
@@ -356,9 +360,9 @@ def test_visualizer_shadow_projection_is_owner_time_and_cached() -> None:
     qml = (root / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml").read_text(encoding="utf-8")
 
     assert "card_shadow_kwargs = {" in display_manager
-    assert "resolve_directional_extensions(direction, frame_extra)" in display_manager
+    assert "resolve_directional_extensions(" in display_manager
     assert "card_shadow_kwargs=card_shadow_kwargs" in display_manager
-    assert "self._card_shadow_kwargs = dict(card_shadow_kwargs or {})" in owner
+    assert "self._card_shadow_kwargs = dict(card_shadow_kwargs)" in owner
     assert "**self._card_shadow_kwargs" in owner
 
     # Global settings are projected when the display owner is built/rebuilt;
