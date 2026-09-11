@@ -22,9 +22,7 @@ from rendering.quick.visualizer.implementations.spectrum import (
     compute_quick_spectrum_layout,
 )
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-from widgets.spotify_visualizer.presentation_geometry import (
-    resolve_visualizer_presentation,
-)
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_bridge import VisualizerRenderIdentity
 from widgets.spotify_visualizer.render_state import (
     SpectrumFrame,
@@ -120,6 +118,13 @@ def test_spectrum_frame_capture_advances_rainbow_from_presentation_owner() -> No
         runtime_generation=2,
         initial_mode="spectrum",
     )
+    # Establish the complete canonical presentation contract first (as the
+    # production owner does), then override only the rainbow fields under test.
+    from widgets.spotify_visualizer.presentation_state import (
+        install_default_presentation_state,
+    )
+
+    install_default_presentation_state(controller.presentation_state)
     apply_presentation_vis_mode_kwargs(
         controller.presentation_state,
         {"spectrum_rainbow_enabled": True, "spectrum_rainbow_speed": 0.7},
@@ -141,6 +146,15 @@ def test_spectrum_frame_capture_advances_rainbow_from_presentation_owner() -> No
         _spectrum_single_piece=False,
         _spectrum_ghosting_enabled=False,
         _spectrum_ghost_decay=0.4,
+        # Shared cross-mode ghosting/heartbeat extras are copied for every mode.
+        _osc_ghosting_enabled=False,
+        _osc_ghost_intensity=0.5,
+        _osc_ghost_decay=0.4,
+        _sine_ghosting_enabled=False,
+        _sine_ghost_alpha=0.5,
+        _sine_ghost_decay=0.4,
+        _sine_heartbeat=False,
+        _heartbeat_intensity=0.0,
     )
 
     first = capture_visualizer_logical_frame(
