@@ -49,11 +49,24 @@ def engine_with_settings(qt_app, tmp_path):
     engine.settings_manager = settings
     
     yield engine, settings
-    
+
     # Cleanup
     if engine._running:
         engine.stop()
     engine.cleanup()
+
+    # These tests create and tear down real accelerated QQuickWindows. Their C++
+    # destruction is queued via deleteLater; if it is still pending when the next
+    # test in this process creates and destroys its own Quick windows, a stale
+    # cross-generation sceneGraphInvalidated callback can strike a half-destroyed
+    # render item and escalate to a native access violation under pytest-qt's
+    # event pump. Drain DeferredDelete here so window teardown fully completes
+    # within this test's scope (production drains via its live event loop).
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    for _ in range(8):
+        QCoreApplication.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 
@@ -244,7 +257,7 @@ def test_runtime_settings_request_is_deferred_and_coalesced(monkeypatch, qt_app)
     monkeypatch.setattr(
         engine_handlers,
         "on_settings_requested",
-        lambda admitted_engine: admitted.append(admitted_engine),
+        lambda admitted_engine, target=None: admitted.append(admitted_engine),
     )
 
     engine_handlers.request_settings_requested(engine)
@@ -282,7 +295,7 @@ def test_runtime_settings_request_is_admitted_on_a_real_later_qt_turn(
     monkeypatch.setattr(
         engine_handlers,
         "on_settings_requested",
-        lambda admitted_engine: admitted.append(admitted_engine),
+        lambda admitted_engine, target=None: admitted.append(admitted_engine),
     )
 
     engine_handlers.request_settings_requested(engine)
@@ -320,7 +333,7 @@ def test_runtime_settings_admission_rejects_replaced_display_owner(
     monkeypatch.setattr(
         engine_handlers,
         "on_settings_requested",
-        lambda admitted_engine: admitted.append(admitted_engine),
+        lambda admitted_engine, target=None: admitted.append(admitted_engine),
     )
 
     engine_handlers.request_settings_requested(engine)
