@@ -99,7 +99,10 @@ def test_visualizer_sync_runs_on_existing_presentation_opportunity_before_update
     pacer.set_visualizer_active(True)
 
     assert events == [("sync", 0)]
-    assert window.update_count == 1
+    # A successful visualizer sync already requested a scene present via the
+    # render item, so the pacer suppresses the redundant QQuickWindow.update()
+    # to avoid two swaps from one opportunity.
+    assert window.update_count == 0
 
 
 @pytest.mark.parametrize("rate", (0.0, -1.0, math.inf, -math.inf, math.nan))
@@ -178,7 +181,10 @@ def test_late_timer_callback_issues_one_fresh_update_and_counts_skips():
     clock.now_ns = 45_000_000
     timer.fire()
 
-    assert window.update_count == 2
+    # Both serviced opportunities requested a present through the visualizer
+    # item, so no separate window updates were issued (double-swap suppression);
+    # the pacer still counts them as issued present requests below.
+    assert window.update_count == 0
     assert timer.started_delays == [10, 5]
     described = pacer.describe()
     assert described["requested_opportunities"] == 5
@@ -195,7 +201,10 @@ def test_resume_after_idle_starts_now_without_replaying_idle_debt():
     clock.now_ns = 5_000_000_000
     pacer.set_visualizer_active(True)
 
-    assert window.update_count == 2
+    # Only the transition opportunity issued a window update; the resumed
+    # visualizer opportunity requested its present through the render item, so
+    # its redundant window update is suppressed.
+    assert window.update_count == 1
     assert pacer.describe()["skipped_deadlines"] == skipped_before
     assert timer.started_delays[-1] == 17
 
@@ -239,7 +248,9 @@ def test_visibility_pause_preserves_demands_and_resumes_without_hidden_debt():
     assert pacer.demands == (
         QuickFrameDemand.TRANSITION | QuickFrameDemand.VISUALIZER
     )
-    assert window.update_count == updates_before_resume + 1
+    # The resumed opportunity requested its present through the visualizer item,
+    # so no separate window update is issued (double-swap suppression).
+    assert window.update_count == updates_before_resume
     assert pacer.describe()["skipped_deadlines"] == skipped_before_resume
     assert timer.started_delays[-1] == 17
 
