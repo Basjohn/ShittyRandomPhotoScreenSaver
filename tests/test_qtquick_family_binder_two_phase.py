@@ -20,11 +20,28 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from rendering.quick.widgets.family_binder import OrdinaryFamilyPresentationBinder
 from rendering.quick.widgets.host import OverlayWidgetGeometry
 
 
 _BOUNDS = OverlayWidgetGeometry(0.0, 0.0, 1920.0, 1080.0)
+
+
+@pytest.fixture(autouse=True)
+def _synthetic_widget_routes(monkeypatch):
+    # These tests exercise the two-phase binder with synthetic family/widget ids
+    # ("a", "b", ...) that have no canonical monitor route. Admission here is
+    # exercised via family-effectiveness and geometry, not monitor route, so
+    # resolve every synthetic widget to ALL (admits every screen).
+    import rendering.widget_descriptors as _wd
+
+    monkeypatch.setattr(
+        _wd,
+        "get_effective_monitor_value_for_widget",
+        lambda widget_id, widgets_config: "ALL",
+    )
 
 
 class _RuntimeManager:
