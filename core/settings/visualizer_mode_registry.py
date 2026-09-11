@@ -8,6 +8,7 @@ around a giant generic schema.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
@@ -413,82 +414,174 @@ def coerce_visualizer_mode_id(mode_id: str | None) -> str:
     return get_default_visualizer_mode_id()
 
 
-def resolve_effective_enabled_modes(
-    requested: object,
-) -> tuple[str, ...]:
-    """Normalize a persisted enabled-mode selection into canonical order.
+def _coerce_activation_bool(value: object, default: bool) -> bool:
+    """Coerce one persisted activation leaf without inventing a second default."""
 
-    Keeps only canonical mode ids, de-duplicates, and preserves canonical
-    ``VISUALIZER_MODE_IDS`` order regardless of stored order. Enforces the V2
-    invariant that a live Visualizer family has at least one enabled mode: an
-    absent, empty, or fully-invalid selection resolves to the canonical
-    ``widgets.spotify_visualizer.enabled_modes`` product setting. Capability
-    descriptors deliberately do not own enable-state defaults.
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    if value is None:
+        return bool(default)
+    return bool(value)
 
-    This is intentionally about the *registered* canonical set, not dev gates:
-    enable-state is persisted product configuration, separate from ``is_mode_active``.
+
+def normalize_visualizer_mode_activation(requested: object) -> dict[str, bool]:
+    """Return the canonical per-mode activation mapping.
+
+    Persisted Visualizer dormancy now mirrors transition capability activation:
+    every registered stable mode id owns one boolean under
+    ``widgets.spotify_visualizer.mode_activation``. Missing persisted leaves
+    resolve through the canonical defaults map. Unknown persisted members are
+    discarded. A malformed/all-false mapping recovers to canonical defaults so
+    a live Visualizer family can never be left with zero admitted modes.
+
+    The retired ``enabled_modes`` list is intentionally *not* accepted here.
+    SettingsManager owns its temporary one-time migration boundary so runtime
+    and ordinary settings readers have exactly one current schema.
     """
 
     from core.settings.default_contract import require_canonical_default
 
     configured_defaults = require_canonical_default(
-        "widgets.spotify_visualizer.enabled_modes"
+        "widgets.spotify_visualizer.mode_activation"
     )
-    if not isinstance(configured_defaults, (list, tuple, set, frozenset)):
+    if not isinstance(configured_defaults, Mapping):
         raise TypeError(
-            "canonical visualizer enabled_modes must be a sequence of mode ids"
+            "canonical visualizer mode_activation must be a mapping of mode ids to booleans"
         )
-    configured_set = {
-        str(item or "").strip().lower() for item in configured_defaults
-    }
-    unknown_defaults = configured_set.difference(VISUALIZER_MODE_IDS)
-    if unknown_defaults:
+
+    default_keys = {str(key or "").strip().lower() for key in configured_defaults}
+    expected_keys = set(VISUALIZER_MODE_IDS)
+    missing_defaults = expected_keys.difference(default_keys)
+    unknown_defaults = default_keys.difference(expected_keys)
+    if missing_defaults or unknown_defaults:
+        problems: list[str] = []
+        if missing_defaults:
+            problems.append("missing=" + ",".join(sorted(missing_defaults)))
+        if unknown_defaults:
+            problems.append("unknown=" + ",".join(sorted(unknown_defaults)))
         raise ValueError(
-            "canonical visualizer enabled_modes contains unknown mode ids: "
-            + ", ".join(sorted(unknown_defaults))
+            "canonical visualizer mode_activation keys do not match registry: "
+            + " ".join(problems)
         )
-    default_modes = tuple(
-        mode_id for mode_id in VISUALIZER_MODE_IDS if mode_id in configured_set
-    )
-    if not default_modes:
-        raise ValueError("canonical visualizer enabled_modes must not be empty")
-    if requested is None:
-        return default_modes
+
+    defaults = {
+        mode_id: _coerce_activation_bool(configured_defaults.get(mode_id), False)
+        for mode_id in VISUALIZER_MODE_IDS
+    }
+    if not any(defaults.values()):
+        raise ValueError("canonical visualizer mode_activation must enable at least one mode")
+
+    if not isinstance(requested, Mapping):
+        return dict(defaults)
+
+    normalized = {
+        mode_id: _coerce_activation_bool(requested.get(mode_id), defaults[mode_id])
+        for mode_id in VISUALIZER_MODE_IDS
+    }
+    if not any(normalized.values()):
+        return dict(defaults)
+    return normalized
+
+
+def build_visualizer_mode_activation(enabled_modes: object) -> dict[str, bool]:
+    """Build the persisted activation mapping from a canonical enabled-id view.
+
+    This is a write-side bridge for Settings UI/body-host code. It accepts the
+    internal tuple/list/set view only; the persisted product schema remains the
+    explicit boolean mapping returned here.
+    """
+
+    if isinstance(enabled_modes, str):
+        selected = {enabled_modes.strip().lower()}
+    elif isinstance(enabled_modes, (list, tuple, set, frozenset)):
+        selected = {str(item or "").strip().lower() for item in enabled_modes}
+    else:
+        selected = set(resolve_effective_enabled_modes(None))
+    mapping = {mode_id: mode_id in selected for mode_id in VISUALIZER_MODE_IDS}
+    if not any(mapping.values()):
+        return normalize_visualizer_mode_activation(None)
+    return mapping
+
+
+def migrate_legacy_enabled_modes_to_activation(requested: object) -> dict[str, bool]:
+    """Translate the retired enabled-id list for one-time persisted migration.
+
+    This is deliberately migration-only. Runtime readers never accept the old
+    shape. Invalid/empty legacy values recover through canonical current
+    defaults rather than inventing another fallback.
+    """
 
     if isinstance(requested, str):
         raw_items: tuple[object, ...] = (requested,)
     elif isinstance(requested, (list, tuple, set, frozenset)):
         raw_items = tuple(requested)
     else:
-        return default_modes
+        return normalize_visualizer_mode_activation(None)
 
     selected = {
         str(item or "").strip().lower()
         for item in raw_items
+        if str(item or "").strip().lower() in VISUALIZER_MODE_IDS
     }
-    ordered = tuple(
-        mode_id for mode_id in VISUALIZER_MODE_IDS if mode_id in selected
+    if not selected:
+        return normalize_visualizer_mode_activation(None)
+    return {mode_id: mode_id in selected for mode_id in VISUALIZER_MODE_IDS}
+
+
+def resolve_effective_enabled_modes(
+    requested: object,
+) -> tuple[str, ...]:
+    """Return enabled mode ids from canonical ``mode_activation`` state.
+
+    The result preserves registry order and is a derived runtime/UI view only.
+    Persisted dormancy is the explicit per-mode boolean mapping, matching the
+    transition activation schema.
+    """
+
+    activation = normalize_visualizer_mode_activation(requested)
+    return tuple(
+        mode_id for mode_id in VISUALIZER_MODE_IDS if activation.get(mode_id, False)
     )
-    if not ordered:
-        # Never let a stale/garbage selection disable the whole family.
-        return default_modes
-    return ordered
 
 
-def resolve_admissible_enabled_modes(enabled_modes: object) -> tuple[str, ...]:
+def resolve_admissible_enabled_modes(mode_activation: object) -> tuple[str, ...]:
     """Return effective enabled modes intersected with dev-active descriptors.
 
     UI pill/body admission must never expose or construct a currently dev-gated
-    inactive mode, even if persisted ``enabled_modes`` still lists it. Persisted
-    canonical enable-state is preserved untouched — this is a read-only
+    inactive mode, even if persisted ``mode_activation`` enables it. Persisted
+    canonical activation state is preserved untouched — this is a read-only
     admission view, not a mutation. With all gates open (today) it equals
     :func:`resolve_effective_enabled_modes`.
     """
     return tuple(
         mode_id
-        for mode_id in resolve_effective_enabled_modes(enabled_modes)
+        for mode_id in resolve_effective_enabled_modes(mode_activation)
         if is_mode_active(mode_id)
     )
+
+
+def _canonicalize_internal_enabled_mode_ids(requested: object) -> tuple[str, ...]:
+    """Normalize the derived enabled-id view used inside Settings UI helpers.
+
+    This accepts an iterable of ids only as an in-memory convenience. Persisted
+    settings never flow through this seam; product state is ``mode_activation``.
+    """
+
+    if isinstance(requested, str):
+        raw_items: tuple[object, ...] = (requested,)
+    elif isinstance(requested, (list, tuple, set, frozenset)):
+        raw_items = tuple(requested)
+    else:
+        return resolve_effective_enabled_modes(None)
+    selected = {str(item or "").strip().lower() for item in raw_items}
+    ordered = tuple(mode_id for mode_id in VISUALIZER_MODE_IDS if mode_id in selected)
+    return ordered or resolve_effective_enabled_modes(None)
 
 
 def can_disable_visualizer_mode(enabled_modes: object, mode_id: str) -> bool:
@@ -500,7 +593,7 @@ def can_disable_visualizer_mode(enabled_modes: object, mode_id: str) -> bool:
     otherwise widen back to all modes. Turning the whole family OFF is a
     separate control, not this path.
     """
-    effective = resolve_effective_enabled_modes(enabled_modes)
+    effective = _canonicalize_internal_enabled_mode_ids(enabled_modes)
     target = str(mode_id or "").strip().lower()
     if target not in effective:
         return False
@@ -515,7 +608,7 @@ def apply_visualizer_mode_disable(enabled_modes: object, mode_id: str) -> tuple[
     should also disable the toggle via :func:`can_disable_visualizer_mode`). The
     result is always the canonical-ordered effective set, never widened to all.
     """
-    effective = resolve_effective_enabled_modes(enabled_modes)
+    effective = _canonicalize_internal_enabled_mode_ids(enabled_modes)
     if not can_disable_visualizer_mode(enabled_modes, mode_id):
         return effective
     target = str(mode_id or "").strip().lower()
@@ -524,7 +617,7 @@ def apply_visualizer_mode_disable(enabled_modes: object, mode_id: str) -> tuple[
 
 def resolve_effective_mode(
     requested_mode: object,
-    enabled_modes: object,
+    mode_activation: object,
 ) -> tuple[str, bool]:
     """Resolve a requested mode against the effective enabled-mode set.
 
@@ -537,11 +630,11 @@ def resolve_effective_mode(
       else the first enabled canonical mode, True
 
     A stale/disabled selection is never silently re-enabled: the substitute is
-    always drawn from ``enabled_modes``. Callers own persisting/logging the
+    always drawn from the derived enabled-mode view. Callers own persisting/logging the
     substitution; this function is pure.
     """
 
-    enabled = resolve_effective_enabled_modes(enabled_modes)
+    enabled = resolve_effective_enabled_modes(mode_activation)
     requested = str(requested_mode or "").strip().lower()
 
     if requested in enabled:
@@ -585,7 +678,7 @@ def resolve_effective_visualizer_section(
 
     requested_mode = str(section.get("mode") or "").strip().lower()
     effective_mode, substituted = resolve_effective_mode(
-        requested_mode, section.get("enabled_modes")
+        requested_mode, section.get("mode_activation")
     )
     if not substituted:
         return dict(section), False, requested_mode, effective_mode

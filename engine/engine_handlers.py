@@ -65,6 +65,7 @@ class SettingsRequestIntent:
 
     runtime_generation: int
     display_manager_identity: int
+    target: str = ""
 
 
 def _qobject_wrapper_is_valid(value: object) -> bool:
@@ -177,7 +178,11 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
 # Settings dialog (S key)
 # ------------------------------------------------------------------
 
-def request_settings_requested(engine: ScreensaverEngine) -> None:
+def request_settings_requested(
+    engine: ScreensaverEngine,
+    *,
+    target: str = "",
+) -> None:
     """Queue Settings admission after the emitting display input frame returns.
 
     Destroying the display graph synchronously inside a destination window's
@@ -211,6 +216,7 @@ def request_settings_requested(engine: ScreensaverEngine) -> None:
             )
         ),
         display_manager_identity=id(manager),
+        target=str(target or "").strip(),
     )
     pending = getattr(engine, "_pending_settings_request_intent", None)
     if pending is not None:
@@ -226,11 +232,13 @@ def request_settings_requested(engine: ScreensaverEngine) -> None:
         "settings_request_queued",
         generation=intent.runtime_generation,
         manager=intent.display_manager_identity,
+        target=intent.target,
     )
     logger.info(
-        "Settings request queued generation=%s manager=%s",
+        "Settings request queued generation=%s manager=%s target=%s",
         intent.runtime_generation,
         intent.display_manager_identity,
+        intent.target or "<generic>",
     )
     ThreadManager.single_shot(
         0,
@@ -268,19 +276,25 @@ def _admit_settings_requested(
         return
 
     logger.info(
-        "Settings request admitted generation=%s manager=%s",
+        "Settings request admitted generation=%s manager=%s target=%s",
         intent.runtime_generation,
         intent.display_manager_identity,
+        intent.target or "<generic>",
     )
     _record_diagnostic_stage(
         "settings_request_admitted",
         generation=intent.runtime_generation,
         manager=intent.display_manager_identity,
+        target=intent.target,
     )
-    on_settings_requested(engine)
+    on_settings_requested(engine, target=intent.target)
 
-def on_settings_requested(engine: ScreensaverEngine) -> None:
-    """Handle settings request (S key)."""
+def on_settings_requested(
+    engine: ScreensaverEngine,
+    *,
+    target: str = "",
+) -> None:
+    """Handle a generic or semantic-target Settings request."""
     if bool(getattr(engine, "_settings_dialog_active", False)) or getattr(
         engine, "_pending_runtime_destruction_barrier", None
     ) is not None:
@@ -360,13 +374,19 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
 
     continue_after_runtime_destruction(
         engine,
-        partial(_open_settings_after_runtime_destroyed, engine, request_start),
+        partial(
+            _open_settings_after_runtime_destroyed,
+            engine,
+            request_start,
+            str(target or "").strip(),
+        ),
     )
 
 
 def _open_settings_after_runtime_destroyed(
     engine: ScreensaverEngine,
     request_start: float,
+    target: str = "",
 ) -> None:
     """Open Settings only after every retired display root is destroyed."""
 
@@ -412,6 +432,7 @@ def _open_settings_after_runtime_destroyed(
             engine.settings_manager,
             animations,
             runtime_generation=dialog_generation,
+            initial_target=str(target or "").strip() or None,
         )
         engine._active_settings_dialog = dialog
         _record_diagnostic_stage(

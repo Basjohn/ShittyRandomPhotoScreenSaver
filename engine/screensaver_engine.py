@@ -821,6 +821,10 @@ class ScreensaverEngine(QObject):
             _connect_runtime_signal("cycle_transition_requested", self._on_cycle_transition)
             _connect_runtime_signal("settings_requested", self._on_settings_requested)
             _connect_runtime_signal(
+                "settings_target_requested",
+                self._on_settings_target_requested,
+            )
+            _connect_runtime_signal(
                 "custom_layout_reload_requested",
                 self._on_custom_layout_reload_requested,
             )
@@ -1738,6 +1742,12 @@ class ScreensaverEngine(QObject):
         """Delegates to engine.engine_handlers."""
         from engine.engine_handlers import request_settings_requested
         request_settings_requested(self)
+
+    def _on_settings_target_requested(self, target_id: str) -> None:
+        """Route one semantic runtime-widget Settings target through lifecycle admission."""
+        from engine.engine_handlers import request_settings_requested
+
+        request_settings_requested(self, target=str(target_id or ""))
 
     def _on_custom_layout_reload_requested(
         self,

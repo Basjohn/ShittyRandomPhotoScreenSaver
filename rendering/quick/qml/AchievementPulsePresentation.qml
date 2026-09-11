@@ -442,6 +442,11 @@ OverlayWidget {
                 z: 2
 
                 property real pulseLevel: 0.0
+                // Apply the requested percentage reduction after HorizontalFit.
+                // Changing only font.pointSize is not sufficient because fitted text
+                // may already be below that ceiling.  This is presentation-only:
+                // pulse/card geometry and the normalized Total value stay untouched.
+                readonly property real progressTextVisualScale: 0.90
                 readonly property real glowDistance: 19.0 + pulseLevel * 6.0
                 readonly property real glowScale: Math.max(0.5, glowDistance / 12.0)
 
@@ -547,7 +552,7 @@ OverlayWidget {
                     text: achievementRoot.achievementModel.progressText
                     color: achievementRoot.achievementModel.capsuleBorderColor
                     opacity: progressPulse.pulseLevel * 0.16
-                    scale: 1.11
+                    scale: progressPulse.progressTextVisualScale * 1.11
                     font.family: achievementRoot.achievementModel.fontFamily
                     font.pointSize: achievementRoot.achievementModel.fontSize * 1.998
                     font.bold: true
@@ -563,7 +568,7 @@ OverlayWidget {
                     text: achievementRoot.achievementModel.progressText
                     color: achievementRoot.achievementModel.capsuleBorderColor
                     opacity: progressPulse.pulseLevel * 0.44
-                    scale: 1.045
+                    scale: progressPulse.progressTextVisualScale * 1.045
                     font.family: achievementRoot.achievementModel.fontFamily
                     font.pointSize: achievementRoot.achievementModel.fontSize * 1.998
                     font.bold: true
@@ -579,6 +584,7 @@ OverlayWidget {
                     anchors.margins: 13.0
                     text: achievementRoot.achievementModel.progressText
                     color: achievementRoot.achievementModel.textColor
+                    scale: progressPulse.progressTextVisualScale
                     font.family: achievementRoot.achievementModel.fontFamily
                     font.pointSize: achievementRoot.achievementModel.fontSize * 1.998
                     font.bold: true

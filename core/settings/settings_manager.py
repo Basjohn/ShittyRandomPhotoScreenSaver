@@ -23,7 +23,10 @@ from core.settings.structured_roots import (
     STRUCTURED_SETTINGS_ROOTS,
     merge_missing_structured_defaults,
 )
-from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+from core.settings.visualizer_settings_snapshot import (
+    migrate_legacy_visualizer_mode_activation_schema,
+    normalize_visualizer_section_mapping,
+)
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
     strip_legacy_global_technical_keys,
@@ -54,7 +57,7 @@ class SettingsManager(QObject):
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = STRUCTURED_SETTINGS_ROOTS
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 8
+    _VISUALIZER_SCHEMA_VERSION = 9
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
     _RETIRED_WIDGET_SHADOW_KEYS = frozenset({
         "intense_shadow",
@@ -159,6 +162,17 @@ class SettingsManager(QObject):
             self._normalize_structured_root_storage()
         except Exception:
             logger.debug("Structured settings-root normalization failed", exc_info=True)
+
+        # Upgrade the retired Visualizer enabled-id list *before* current defaults
+        # are merged. Otherwise mode_activation defaults would mask the old user
+        # selection before the one compatibility seam can preserve it.
+        try:
+            self._migrate_legacy_visualizer_mode_activation_before_defaults()
+        except Exception:
+            logger.debug(
+                "Legacy visualizer mode-activation migration failed",
+                exc_info=True,
+            )
 
         # Initialize defaults
         self._set_defaults()
@@ -450,6 +464,32 @@ class SettingsManager(QObject):
                 repaired_roots,
             )
     
+    def _migrate_legacy_visualizer_mode_activation_before_defaults(self) -> None:
+        """Preserve old per-mode dormancy before current defaults can mask it.
+
+        The compatibility signature is temporary and intentionally centralized.
+        ``migrate_legacy_visualizer_mode_activation_schema`` logs a warning only
+        when the retired list is actually relied on, then removes it immediately.
+        """
+
+        with self._lock:
+            raw_widgets = self._settings.value("widgets", None)
+            if not isinstance(raw_widgets, Mapping):
+                return
+            widgets = dict(raw_widgets)
+            raw_vis = widgets.get("spotify_visualizer")
+            if not isinstance(raw_vis, Mapping):
+                return
+            migrated = migrate_legacy_visualizer_mode_activation_schema(raw_vis)
+            if dict(raw_vis) == migrated:
+                return
+            widgets["spotify_visualizer"] = migrated
+            # Deliberately store the narrow pre-default migration result directly.
+            # Full current-schema normalization runs later at its existing seam.
+            self._settings.setValue("widgets", widgets)
+            self._settings.sync()
+            self._clear_cache_locked()
+
     def _set_defaults(self) -> None:
         """Merge every canonical product default without overwriting user state.
 

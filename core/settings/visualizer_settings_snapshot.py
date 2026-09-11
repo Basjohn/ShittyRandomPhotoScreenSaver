@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Mapping
 
+from core.logging.logger import get_logger
 from core.settings.default_contract import require_canonical_default
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import (
@@ -12,6 +13,7 @@ from core.settings.visualizer_mode_registry import (
     get_setting_prefixes,
     get_owned_mode_setting_keys,
     mode_has_rainbow_controls,
+    migrate_legacy_enabled_modes_to_activation,
 )
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
@@ -22,6 +24,7 @@ from core.settings.visualizer_settings_contract import (
 )
 
 _PREFIX = "widgets.spotify_visualizer"
+logger = get_logger(__name__)
 _TECHNICAL_GLOBAL_KEYS = frozenset(
     {
         "adaptive_sensitivity",
@@ -63,6 +66,55 @@ _RETIRED_AUTHORED_GLOBAL_VISUAL_KEYS = frozenset(
         "ghost_decay",
     }
 )
+
+def migrate_legacy_visualizer_mode_activation_schema(
+    data: Mapping[str, Any],
+    *,
+    prefix: str = _PREFIX,
+) -> Dict[str, Any]:
+    """Forward-migrate retired ``enabled_modes`` into ``mode_activation``.
+
+    This is the *only* compatibility reader for the retired persisted list. It
+    removes the legacy key immediately. When old state is actually relied upon
+    to construct current activation, emit a warning so field/test feedback tells
+    us whether the temporary seam can be retired safely.
+    """
+
+    migrated = dict(data)
+    legacy_plain = "enabled_modes"
+    legacy_dotted = f"{prefix}.enabled_modes"
+    current_plain = "mode_activation"
+    current_dotted = f"{prefix}.mode_activation"
+    legacy_present = legacy_plain in migrated or legacy_dotted in migrated
+    if not legacy_present:
+        return migrated
+
+    current_present = current_plain in migrated or current_dotted in migrated
+    if not current_present:
+        legacy_value = (
+            migrated.get(legacy_plain)
+            if legacy_plain in migrated
+            else migrated.get(legacy_dotted)
+        )
+        activation = migrate_legacy_enabled_modes_to_activation(legacy_value)
+        if legacy_plain in migrated:
+            migrated[current_plain] = activation
+        else:
+            migrated[current_dotted] = activation
+        logger.warning(
+            "[VIS_MODE_ACTIVATION][LEGACY] Retired enabled_modes was relied on; "
+            "migrated immediately to mode_activation and removed old key"
+        )
+    else:
+        logger.info(
+            "[VIS_MODE_ACTIVATION][LEGACY] Dropping redundant enabled_modes because "
+            "current mode_activation is already present"
+        )
+
+    migrated.pop(legacy_plain, None)
+    migrated.pop(legacy_dotted, None)
+    return migrated
+
 def _forward_migrate_alias_keys(
     data: Mapping[str, Any],
     *,
@@ -182,7 +234,8 @@ def normalize_visualizer_section_mapping(
     if not isinstance(data, Mapping):
         return {}
 
-    migrated = migrate_legacy_sphere_finish_keys(data, prefix=prefix)
+    migrated = migrate_legacy_visualizer_mode_activation_schema(data, prefix=prefix)
+    migrated = migrate_legacy_sphere_finish_keys(migrated, prefix=prefix)
     migrated = migrate_legacy_sphere_control_keys(migrated, prefix=prefix)
     migrated = strip_retired_visualizer_settings(migrated, prefix=prefix)
     # Per-mode card-height growth was pre-Quick geometry state. The current
