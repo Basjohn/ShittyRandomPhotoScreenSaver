@@ -174,7 +174,9 @@ def test_passive_click_reaches_existing_action_and_holds_until_target_changes(
     glow = _glow(widget.item)
     assert action.property("actionCount") == 1
     assert widget.item.property("widgetGlowClicked") is True
-    assert glow.property("clickLevel") > 0.0
+    # clickLevel ramps toward the selected state via the glow's own animation;
+    # wait for it to engage rather than sampling the first frame at zero.
+    qtbot.waitUntil(lambda: glow.property("clickLevel") > 0.0, timeout=1200)
     qtbot.waitUntil(lambda: not glow.property("animating"), timeout=1200)
     # The glow settles at the selected state; release does not start a self-decay.
     assert glow.property("clickLevel") == pytest.approx(1.0)
