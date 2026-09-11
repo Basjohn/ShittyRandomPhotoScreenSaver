@@ -31,9 +31,9 @@ from rendering.widget_descriptors import get_widget_runtime_descriptor
 from rendering.quick.state import QuickSceneReadiness, QuickWindowPolicy
 from rendering.quick.window import QuickDisplayWindow
 from widgets.spotify_visualizer.presentation_geometry import (
-    resolve_visualizer_presentation,
     resize_visualizer_presentation,
 )
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,

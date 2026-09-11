@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests._visualizer_presentation import neutral_bubble_settings
+
 from widgets.spotify_visualizer.bubble_simulation import (
     BubbleSimulation,
     POP_FADE_S,
@@ -11,15 +13,12 @@ from widgets.spotify_visualizer.bubble_simulation import (
 
 
 def _settings() -> dict[str, object]:
-    return {
-        "bubble_big_count": 0,
-        "bubble_small_count": 0,
-        "bubble_stream_direction": "up",
-        "bubble_drift_direction": "none",
-        "bubble_surface_reach": 100.0,
-        "bubble_trail_strength": 0.0,
-        "bubble_ghosting_enabled": False,
-    }
+    return neutral_bubble_settings(
+        bubble_big_count=0, bubble_small_count=0,
+        bubble_stream_direction="up", bubble_drift_direction="none",
+        bubble_surface_reach=100.0, bubble_trail_strength=0.0,
+        bubble_ghosting_enabled=False,
+    )
 
 
 def test_runtime_birth_fade_changes_alpha_only_and_uses_sampled_active_duration() -> None:
