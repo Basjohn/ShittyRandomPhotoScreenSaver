@@ -117,9 +117,14 @@ def test_slide_resolution_freezes_the_single_style_choice(style):
 
 
 @pytest.mark.parametrize("invalid", ("Perspective", "elastic", "", 3, None, []))
-def test_slide_resolution_rejects_invalid_authored_motion_style(invalid):
-    with pytest.raises(ValueError, match="unknown Slide motion style"):
-        resolve_quick_transition_spec(_Settings(invalid))
+def test_slide_resolution_falls_back_to_canonical_motion_style(invalid):
+    # An invalid or corrupt authored motion style is not fatal: resolution falls
+    # back to the canonical Slide default rather than raising, so a bad stored
+    # value can never break the transition subsystem. Only a corrupt *canonical*
+    # default would raise.
+    spec = resolve_quick_transition_spec(_Settings(invalid))
+    assert spec is not None
+    assert dict(spec.parameters) == {"motion_style": "Linear"}
 
 
 @pytest.mark.qt

@@ -21,6 +21,10 @@ class _Settings:
             return self.hw_accel
         return default
 
+    def get_bool(self, key: str, default: bool = False) -> bool:
+        value = self.get(key, default)
+        return bool(value) if value is not None else bool(default)
+
 
 class _Rng:
     def __init__(self, choice_value: object) -> None:
@@ -118,6 +122,7 @@ def test_admitted_random_choice_and_block_flip_geometry_are_frozen() -> None:
                 "random_always": True,
                 "random_choice": "Block Puzzle Flip",
                 "pool": {"Block Puzzle Flip": True},
+                "activation": {"Block Puzzle Flip": True},
                 "durations": {"Block Puzzle Flip": 777},
                 "block_flip": {
                     "direction": "Diagonal TL-BR",

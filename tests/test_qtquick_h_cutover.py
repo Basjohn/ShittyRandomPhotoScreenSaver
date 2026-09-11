@@ -350,6 +350,9 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         def to_bool(value, default: bool = False) -> bool:
             return SettingsManager.to_bool(value, default)
 
+        def get_bool(self, key: str, default: bool = False) -> bool:
+            return self.to_bool(self.get(key, default), default)
+
         def set(self, key: str, value) -> None:
             if key == "visualizer_custom_presets":
                 self.custom_presets = deepcopy(value)
@@ -701,6 +704,9 @@ def test_display_manager_populates_and_routes_retained_context_menu(
         @staticmethod
         def to_bool(value, default: bool = False) -> bool:
             return SettingsManager.to_bool(value, default)
+
+        def get_bool(self, key: str, default: bool = False) -> bool:
+            return self.to_bool(self.get(key, default), default)
 
         def set(self, key: str, value) -> None:
             target = self.data
