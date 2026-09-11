@@ -11,6 +11,9 @@ from pathlib import Path
 import pytest
 
 from core.settings.settings_manager import SettingsManager
+from core.settings.visualizer_presets import (
+    normalize_visualizer_custom_snapshot_cache,
+)
 
 
 def _make_manager(tmp_path: Path, *, base_dir: Path | None = None) -> SettingsManager:
@@ -489,7 +492,7 @@ class TestSettingsManagerDefaults:
         manager.reset_to_defaults()
 
         assert manager.get("input.interaction_mode") is True
-        assert manager.get("display.show_on_monitors") == [1]
+        assert manager.get("display.show_on_monitors") == [2]
 
     def test_fresh_mc_profile_uses_same_resolved_defaults_as_reset(self, tmp_path: Path) -> None:
         manager = SettingsManager(
@@ -499,7 +502,7 @@ class TestSettingsManagerDefaults:
         )
 
         assert manager.get("input.interaction_mode") is True
-        assert manager.get("display.show_on_monitors") == [1]
+        assert manager.get("display.show_on_monitors") == [2]
         # MC profile ships numbered widgets on monitor 2 (int, matching canonical).
         assert manager.get("widgets.gmail.monitor") == 2
         assert manager.get("widgets.media.monitor") == 2
@@ -701,14 +704,12 @@ class TestSettingsManagerDefaults:
             application=app_name,
             storage_base_dir=storage_root,
         )
-        manager._settings.setValue(
-            "visualizer_custom_presets",
-            {
-                "bubble.mode": "bubble",
-                "bubble.bubble_growth": 4.75,
-                "bubble.bubble_manual_floor": 0.23,
-            },
-        )
+        flat_cache = {
+            "bubble.mode": "bubble",
+            "bubble.bubble_bar_count": 44,
+            "bubble.bubble_manual_floor": 0.23,
+        }
+        manager._settings.setValue("visualizer_custom_presets", flat_cache)
         manager._settings.update_metadata(visualizer_schema_version=3)
         manager._settings.sync()
         assert manager.flush(timeout=5.0) is True
@@ -720,13 +721,11 @@ class TestSettingsManagerDefaults:
             storage_base_dir=storage_root,
         )
 
-        assert reloaded.get("visualizer_custom_presets") == {
-            "bubble": {
-                "mode": "bubble",
-                "bubble_growth": 4.75,
-                "bubble_manual_floor": 0.23,
-            }
-        }
+        # Migration nests the flat cache and canonically materializes it (full
+        # mode-scoped config), matching the one cache-normalization authority.
+        assert reloaded.get("visualizer_custom_presets") == (
+            normalize_visualizer_custom_snapshot_cache(flat_cache)
+        )
         assert (
             reloaded._settings.metadata().get("visualizer_schema_version")
             == SettingsManager._VISUALIZER_SCHEMA_VERSION
@@ -740,18 +739,16 @@ class TestSettingsManagerDefaults:
             application=app_name,
             storage_base_dir=storage_root,
         )
-        manager._settings.setValue(
-            "visualizer_custom_presets",
-            {
-                "bubble": {
-                    "mode": "bubble",
-                    "bubble_growth": 5.25,
-                    "monitor": "ALL",
-                    "position": "Top Left",
-                    "enabled": False,
-                }
-            },
-        )
+        leaked_cache = {
+            "bubble": {
+                "mode": "bubble",
+                "bubble_bar_count": 44,
+                "monitor": "ALL",
+                "position": "Top Left",
+                "enabled": False,
+            }
+        }
+        manager._settings.setValue("visualizer_custom_presets", leaked_cache)
         manager._settings.update_metadata(visualizer_schema_version=4)
         manager._settings.sync()
         assert manager.flush(timeout=5.0) is True
@@ -763,12 +760,13 @@ class TestSettingsManagerDefaults:
             storage_base_dir=storage_root,
         )
 
-        assert reloaded.get("visualizer_custom_presets") == {
-            "bubble": {
-                "mode": "bubble",
-                "bubble_growth": 5.25,
-            }
-        }
+        # The route/geometry leak is stripped and the snapshot is canonically
+        # materialized on migration.
+        reloaded_cache = reloaded.get("visualizer_custom_presets")
+        assert reloaded_cache == normalize_visualizer_custom_snapshot_cache(leaked_cache)
+        assert not {"monitor", "position", "enabled"}.intersection(
+            reloaded_cache["bubble"]
+        )
         assert (
             reloaded._settings.metadata().get("visualizer_schema_version")
             == SettingsManager._VISUALIZER_SCHEMA_VERSION
@@ -787,10 +785,13 @@ class TestSettingsManagerDefaults:
         custom_cache = {
             "bubble": {
                 "mode": "bubble",
-                "bubble_growth": 6.25,
+                "bubble_bar_count": 44,
                 "bubble_manual_floor": 0.27,
             }
         }
+        # The runtime-preset write canonically materializes the custom cache
+        # through the one normalization authority before storing it.
+        expected_cache = normalize_visualizer_custom_snapshot_cache(custom_cache)
         changed: list[str] = []
         manager.settings_changed.connect(lambda key, _value: changed.append(key))
 
@@ -801,7 +802,7 @@ class TestSettingsManagerDefaults:
 
         assert manager.get("widgets", {})["media"] == media_before
         assert manager.get("widgets.spotify_visualizer.preset_bubble") == 1
-        assert manager.get("visualizer_custom_presets") == custom_cache
+        assert manager.get("visualizer_custom_presets") == expected_cache
         assert "widgets" not in changed
         assert changed == [
             "widgets.spotify_visualizer",
@@ -810,9 +811,9 @@ class TestSettingsManagerDefaults:
         assert manager.flush(timeout=5.0) is True
 
         payload = json.loads(Path(manager.get_storage_path()).read_text(encoding="utf-8"))
-        assert payload["snapshot"]["visualizer_custom_presets"] == custom_cache
+        assert payload["snapshot"]["visualizer_custom_presets"] == expected_cache
         manager._settings.load()
-        assert manager.get("visualizer_custom_presets") == custom_cache
+        assert manager.get("visualizer_custom_presets") == expected_cache
         assert manager.get("widgets", {})["media"] == media_before
 
     def test_visualizer_schema_migration_skips_when_metadata_current(self, tmp_path: Path, monkeypatch) -> None:

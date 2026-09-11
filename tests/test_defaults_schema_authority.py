@@ -669,9 +669,9 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
         normalize_visualizer_custom_snapshot_cache,
     )
 
-    existing_custom = {"bubble": {"bubble_growth": 7.5}}
+    existing_custom = {"bubble": {"bubble_bar_count": 40}}
     normalized_existing = normalize_visualizer_custom_snapshot_cache(existing_custom)
-    assert normalized_existing["bubble"]["bubble_growth"] == 7.5
+    assert normalized_existing["bubble"]["bubble_bar_count"] == 40
     mgr = _Manager({
         "timing.interval": 99,
         "visualizer_custom_presets": existing_custom,
@@ -692,9 +692,11 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
         normalize_visualizer_custom_snapshot_cache(incoming_custom)
     )
 
+    # A merge keeps the already-stored custom state as-is (the stored value is
+    # authoritative and is not re-projected), unlike a replace which normalizes.
     merged = _project_import_state(mgr, {}, merge=True)
     assert merged["timing.interval"] == 99
-    assert merged["visualizer_custom_presets"] == normalized_existing
+    assert merged["visualizer_custom_presets"] == existing_custom
 
     # Reset uses the identical canonical store projection and restores the
     # declared authored/user-specific state afterwards.
