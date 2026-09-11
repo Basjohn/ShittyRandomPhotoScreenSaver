@@ -6,9 +6,7 @@ import pytest
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-from widgets.spotify_visualizer.presentation_geometry import (
-    resolve_visualizer_presentation,
-)
+from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     VisualizerCommonState,
@@ -56,6 +54,7 @@ def _snapshot(
             "bubble_tail_opacity": 0.0,
             "bubble_ghosting_enabled": False,
             "bubble_ghost_alpha": 0.0,
+            "bubble_ghost_decay": 0.0,
             "bubble_gradient_direction": "top",
             "bubble_specular_direction": "top_left",
             "bubble_gradient_light": (0, 0, 0, 255),
