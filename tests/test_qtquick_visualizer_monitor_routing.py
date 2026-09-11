@@ -55,5 +55,7 @@ def test_all_visualizer_route_resolves_first_participant_in_custom():
 
 
 def test_missing_config_is_first_participant():
-    assert DisplayManager._resolve_visualizer_requested_screen_index({}) == -1
-    assert DisplayManager._resolve_visualizer_requested_screen_index(None) == -1
+    # Absent widget config resolves through the canonical spotify_visualizer
+    # monitor default (ALL) -> first participant (zero-based index 0).
+    assert DisplayManager._resolve_visualizer_requested_screen_index({}) == 0
+    assert DisplayManager._resolve_visualizer_requested_screen_index(None) == 0

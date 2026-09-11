@@ -177,7 +177,12 @@ class ClockPresentationConfig:
             raise KeyError(f"Canonical Clock defaults are missing {key!r}")
 
         default_format = str(canonical.get("format", base_canonical["format"]))
-        time_format = "24h" if str(resolved("format")).lower() == "24h" else default_format
+        # Honour either canonical format token explicitly; fall back to the
+        # canonical default only for genuinely invalid input. (Special-casing
+        # only "24h" made a "12h" selection unreachable whenever the canonical
+        # default was itself "24h".)
+        raw_format = str(resolved("format")).strip().lower()
+        time_format = raw_format if raw_format in {"12h", "24h"} else default_format
         default_calendar_layout = str(base_canonical["calendar_layout"])
         calendar_layout = (
             "two_lines"

@@ -31,18 +31,18 @@ def _settings(tmp_path, name: str):
 def test_widget_glow_defaults_inherit_theme_and_model_roundtrip(tmp_path):
     settings = _settings(tmp_path, "WidgetGlowDefaults")
 
-    assert settings.get("input.widget_glow_on_hover") is False
+    assert settings.get("input.widget_glow_on_hover") is True
     assert settings.get("input.widget_glow_on_click") is False
-    assert settings.get("input.widget_glow_intensity") == 100
-    assert settings.get("input.widget_glow_distance") == 14
+    assert settings.get("input.widget_glow_intensity") == 80
+    assert settings.get("input.widget_glow_distance") == 25
     assert settings.get("input.widget_glow_color") is None
 
     model = InputSettings.from_settings(settings)
-    assert model.widget_glow_intensity == 100
-    assert model.widget_glow_distance == 14
+    assert model.widget_glow_intensity == 80
+    assert model.widget_glow_distance == 25
     assert model.widget_glow_color is None
-    assert model.to_dict()["input.widget_glow_intensity"] == 100
-    assert model.to_dict()["input.widget_glow_distance"] == 14
+    assert model.to_dict()["input.widget_glow_intensity"] == 80
+    assert model.to_dict()["input.widget_glow_distance"] == 25
     assert model.to_dict()["input.widget_glow_color"] is None
 
     settings.set("input.widget_glow_on_hover", True)
@@ -64,6 +64,10 @@ def test_widget_glow_defaults_inherit_theme_and_model_roundtrip(tmp_path):
 
 def test_display_tab_glow_details_load_save_and_follow_trigger_visibility(qt_app, tmp_path):
     settings = _settings(tmp_path, "WidgetGlowDetails")
+    # Start from both triggers off so the detail rows begin hidden; hover now
+    # defaults on, so this test must set the trigger state it is exercising.
+    settings.set("input.widget_glow_on_hover", False)
+    settings.set("input.widget_glow_on_click", False)
     settings.set("input.widget_glow_intensity", 41)
     settings.set("input.widget_glow_distance", 27)
     tab = DisplayTab(settings)
