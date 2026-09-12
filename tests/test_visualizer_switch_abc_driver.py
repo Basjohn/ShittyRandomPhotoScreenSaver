@@ -4,15 +4,18 @@ Drives the driver through injected fake DM seams and a controllable scheduler, s
 the auto-drive logic is validated without a live GL surface. Proves the corrective
 contract:
 
-* every condition begins with a verified baseline recreation (A really is Bubble);
-* A holds without switching or further recreation;
+* the prepped slot-1 CUSTOM Bubble is the live baseline at launch, so every
+  condition WAITS for that baseline to settle (no baseline slot-load) then proceeds
+  (A really is Bubble);
+* A holds without switching or any recreation;
 * B/C perform the EXACT ``Sphere -> Spectrum -> Oscilloscope -> Sine -> Bubble``
   sequence for exactly 5 cycles (25 switches, no DevCurve), each advancing only on
   a genuine completion edge, then settle on Bubble;
-* C produces both a pre-recreation and a post-recreation scored window;
-* fail-closed: a rejected/incomplete/wrong-mode switch, a disabled required mode, a
-  failed/unverified recreation, or a watchdog expiry marks the run INVALID and
-  never continues.
+* only condition C loads the slot, once, as its recreation intervention, producing
+  both a pre-recreation and a post-recreation scored window;
+* fail-closed: a baseline that never settles, a rejected/incomplete/wrong-mode
+  switch, a disabled required mode, a failed/unverified C recreation, or a watchdog
+  expiry marks the run INVALID and never continues.
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ class _FakeWorld:
         self.requested: list[str] = []
         self.load_calls = 0
         self.pending_switch: tuple[str, object] | None = None
+        self.baseline_cb = None
         self.recreation_cb = None
         self.recreation_gen_before = None
         self.scheduled: list[tuple[int, str, object]] = []
@@ -74,6 +78,9 @@ class _FakeWorld:
     def owner_healthy(self) -> bool:
         return self.owner_ok
 
+    def await_baseline(self, on_ready) -> None:
+        self.baseline_cb = on_ready
+
     def watch_recreation(self, generation_before, on_ready) -> None:
         self.recreation_gen_before = generation_before
         self.recreation_cb = on_ready
@@ -92,6 +99,11 @@ class _FakeWorld:
                 callback()
                 return True
         return False
+
+    def ready_baseline(self) -> None:
+        callback, self.baseline_cb = self.baseline_cb, None
+        assert callback is not None, "no baseline wait registered"
+        callback()
 
     def complete_recreation(self, new_generation: int) -> None:
         self.generation = new_generation
@@ -129,6 +141,7 @@ def _driver(world: _FakeWorld, condition: str) -> VisualizerSwitchAbcDriver:
         mode_enabled=world.mode_enabled,
         custom_baseline_ok=world.custom_baseline_ok,
         owner_healthy=world.owner_healthy,
+        await_baseline=world.await_baseline,
         watch_recreation=world.watch_recreation,
         on_complete=world.on_complete,
         schedule=world.schedule,
@@ -142,11 +155,10 @@ def test_condition_a_verifies_baseline_then_holds_without_switching(qt_app):
     world = _FakeWorld()
     driver = _driver(world, "A")
     driver.start()
-    assert world.load_calls == 1  # baseline recreation only
-    world.complete_recreation(2)
+    world.ready_baseline()  # prepped baseline settles; no slot load
     world.advance_hold()  # steady_A
     assert world.requested == []  # no mode switches at all
-    assert world.load_calls == 1  # no further recreation
+    assert world.load_calls == 0  # A never loads/recreates
     assert world.completed == [{"condition": "A", "valid": True, "reason": None}]
 
 
@@ -154,7 +166,7 @@ def test_condition_b_drives_exact_five_cycles_then_settles_on_bubble(qt_app):
     world = _FakeWorld()
     driver = _driver(world, "B")
     driver.start()
-    world.complete_recreation(2)
+    world.ready_baseline()
     world.run_all_switches()
     world.advance_hold()  # steady_B
     # Exactly 25 switches, exact order, DevCurve never touched, settled on Bubble.
@@ -162,7 +174,7 @@ def test_condition_b_drives_exact_five_cycles_then_settles_on_bubble(qt_app):
     assert len(world.requested) == 25
     assert "devcurve" not in world.requested
     assert world.mode == "bubble"
-    assert world.load_calls == 1  # B never recreates the runtime
+    assert world.load_calls == 0  # B never recreates the runtime
     assert world.completed == [{"condition": "B", "valid": True, "reason": None}]
 
 
@@ -170,11 +182,11 @@ def test_condition_c_exposes_holds_recreates_then_holds_again(qt_app):
     world = _FakeWorld()
     driver = _driver(world, "C")
     driver.start()
-    world.complete_recreation(2)
+    world.ready_baseline()
     world.run_all_switches()
     world.advance_hold()  # steady_C_pre -> triggers the intervention recreation
-    assert world.load_calls == 2  # baseline + one C intervention
-    world.complete_recreation(3)  # runtime generation advances again
+    assert world.load_calls == 1  # exactly one C intervention load
+    world.complete_recreation(2)  # runtime generation advances 1 -> 2
     world.advance_hold()  # steady_C_post
     assert world.requested == list(EXPOSURE_SEQUENCE) * 5
     assert world.completed == [{"condition": "C", "valid": True, "reason": None}]
@@ -183,55 +195,38 @@ def test_condition_c_exposes_holds_recreates_then_holds_again(qt_app):
 # --- fail-closed paths ------------------------------------------------------
 
 
-def test_layout_slot_load_failure_is_invalid(qt_app):
-    world = _FakeWorld()
-    world.load_ok = False
-    _driver(world, "A").start()
-    assert world.completed[0]["valid"] is False
-    assert "layout slot load failed" in world.completed[0]["reason"]
-
-
-def test_recreation_watchdog_expiry_is_invalid(qt_app):
+def test_baseline_never_ready_is_invalid(qt_app):
     world = _FakeWorld()
     _driver(world, "A").start()
-    # Recreation never becomes ready; the bounded watchdog fires.
-    assert world.fire("recreate_watchdog")
+    # Baseline never settles; the bounded baseline watchdog fires.
+    assert world.fire("baseline_watchdog")
     assert world.completed[0]["valid"] is False
-    assert "watchdog" in world.completed[0]["reason"]
+    assert "baseline" in world.completed[0]["reason"]
 
 
-def test_unchanged_runtime_generation_after_recreation_is_invalid(qt_app):
+def test_baseline_not_bubble_is_invalid(qt_app):
     world = _FakeWorld()
+    world.mode = "spectrum"  # owner came up on the wrong mode
     _driver(world, "A").start()
-    world.complete_recreation(1)  # same as generation_before
+    world.ready_baseline()  # defensive re-check rejects a non-Bubble baseline
     assert world.completed[0]["valid"] is False
-    assert "generation did not change" in world.completed[0]["reason"]
+    assert "not Bubble" in world.completed[0]["reason"]
 
 
 def test_missing_custom_baseline_is_invalid(qt_app):
     world = _FakeWorld()
     world.custom_ok = False
     _driver(world, "A").start()
-    world.complete_recreation(2)
+    world.ready_baseline()
     assert world.completed[0]["valid"] is False
     assert "CUSTOM" in world.completed[0]["reason"]
-
-
-def test_bubble_not_restored_after_recreation_is_invalid(qt_app):
-    world = _FakeWorld()
-    _driver(world, "A").start()
-    world.generation = 2
-    world.mode = "spectrum"  # recreation did not restore Bubble
-    world.recreation_cb(2)
-    assert world.completed[0]["valid"] is False
-    assert "Bubble not restored" in world.completed[0]["reason"]
 
 
 def test_disabled_required_mode_is_invalid_without_enabling(qt_app):
     world = _FakeWorld()
     world.enabled = set(EXPOSURE_SEQUENCE) - {"oscilloscope"}
     _driver(world, "B").start()
-    world.complete_recreation(2)
+    world.ready_baseline()
     # Preflight rejects before any switch is requested; nothing was enabled.
     assert world.requested == []
     assert world.completed[0]["valid"] is False
@@ -243,7 +238,7 @@ def test_switch_request_rejection_is_invalid(qt_app):
     world = _FakeWorld()
     world.reject_request = True
     _driver(world, "B").start()
-    world.complete_recreation(2)
+    world.ready_baseline()
     assert world.completed[0]["valid"] is False
     assert "request rejected" in world.completed[0]["reason"]
 
@@ -251,7 +246,7 @@ def test_switch_request_rejection_is_invalid(qt_app):
 def test_switch_watchdog_expiry_is_invalid(qt_app):
     world = _FakeWorld()
     _driver(world, "B").start()
-    world.complete_recreation(2)
+    world.ready_baseline()
     assert world.pending_switch is not None  # first switch requested
     assert world.fire("switch_watchdog")  # never completes
     assert world.completed[0]["valid"] is False
@@ -261,10 +256,44 @@ def test_switch_watchdog_expiry_is_invalid(qt_app):
 def test_wrong_completed_mode_is_invalid(qt_app):
     world = _FakeWorld()
     _driver(world, "B").start()
-    world.complete_recreation(2)
+    world.ready_baseline()
     world.complete_switch(wrong=True)  # reports a different mode than requested
     assert world.completed[0]["valid"] is False
     assert "completed mode wrong" in world.completed[0]["reason"]
+
+
+def test_c_intervention_layout_load_failure_is_invalid(qt_app):
+    world = _FakeWorld()
+    world.load_ok = False
+    _driver(world, "C").start()
+    world.ready_baseline()
+    world.run_all_switches()
+    world.advance_hold()  # steady_C_pre -> C intervention load fails
+    assert world.load_calls == 1
+    assert world.completed[0]["valid"] is False
+    assert "layout slot load failed" in world.completed[0]["reason"]
+
+
+def test_c_recreation_watchdog_expiry_is_invalid(qt_app):
+    world = _FakeWorld()
+    _driver(world, "C").start()
+    world.ready_baseline()
+    world.run_all_switches()
+    world.advance_hold()  # steady_C_pre -> begins the intervention recreation
+    assert world.fire("recreate_watchdog")  # recreation never completes
+    assert world.completed[0]["valid"] is False
+    assert "recreation did not complete" in world.completed[0]["reason"]
+
+
+def test_c_unchanged_generation_after_recreation_is_invalid(qt_app):
+    world = _FakeWorld()
+    _driver(world, "C").start()
+    world.ready_baseline()
+    world.run_all_switches()
+    world.advance_hold()  # steady_C_pre -> intervention recreation
+    world.complete_recreation(1)  # generation did not advance past pre-load (1)
+    assert world.completed[0]["valid"] is False
+    assert "generation did not change" in world.completed[0]["reason"]
 
 
 def test_invalid_condition_is_rejected(qt_app):
