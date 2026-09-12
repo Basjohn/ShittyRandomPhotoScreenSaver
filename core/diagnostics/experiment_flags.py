@@ -1,20 +1,20 @@
 """Diagnostic experiment admission — parsed once at startup, activated deliberately.
 
-These flags admit *opt-in* investigation instrumentation for the Visualizer
-post-switch performance investigation (``Docs/Future_Work/
-Visualizer_Post_Switch_Performance.md``). They are **not** product feature gates:
+These flags admit *opt-in* Visualizer diagnostic tooling retained after the
+closed post-switch investigation (``Docs/Reference/
+Visualizer_Post_Switch_Performance_Investigation.md``). They are **not** product feature gates:
 ``core/dev_gates.py`` deliberately does not own them, because ``--abc-drive`` and
 ``--viz-switch-telemetry`` are experiment/debug admissions rather than shippable
 capabilities.
 
 Two admissions:
 
-* ``--viz-switch-telemetry`` — admit the boundary-only render-host switch/resource
-  ownership telemetry (P1). Without it, Standard/MC runtime allocates no lifecycle
+* ``--viz-switch-telemetry`` — admit boundary-only render-host switch/resource
+  ownership telemetry. Without it, Standard/MC runtime allocates no lifecycle
   telemetry object, takes no new lock, keeps no new bookkeeping, and adds no new
-  logging/timer/sampler/GL query for this investigation.
-* ``--abc-drive=A|B|C`` — admit the opt-in in-app A/B/C experiment driver (P4).
-  Because the driver scores exactly the boundary telemetry above, ``--abc-drive``
+  logging/timer/sampler/GL query.
+* ``--abc-drive=A|B|C`` — admit the opt-in in-app A/B/C stress/causal harness.
+  Because the harness may need the boundary ownership facts above, ``--abc-drive``
   **implicitly** enables the switch telemetry too.
 
 Contract:

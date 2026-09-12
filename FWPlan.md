@@ -8,7 +8,7 @@ intent. This file is only a compact handoff/router for dormant future implementa
 
 ## Active/promoted work is not owned here
 
-Anything promoted into active execution is intentionally omitted from this file. `Current_Plan.md` is the sole sequencing/status authority for active work; focused decompositions own implementation detail. Do not mirror active performance investigations, widget queues, run results or completion status here.
+Anything promoted into active execution is intentionally omitted from this file. `Current_Plan.md` is the sole sequencing/status authority for active work; focused decompositions own implementation detail. Do not mirror active investigations, widget queues, run results or completion status here.
 
 ## Dormant future ordering
 

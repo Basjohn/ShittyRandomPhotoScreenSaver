@@ -1,9 +1,9 @@
-"""Opt-in, deterministic in-app A/B/C driver for the post-switch tail experiment (P4).
+"""Opt-in deterministic in-app A/B/C driver retained for future causal checks.
 
-Authority: ``Docs/Future_Work/Visualizer_Post_Switch_Performance.md`` phase P4.
+Authority: ``Docs/Reference/Visualizer_Post_Switch_Performance_Investigation.md`` closed R-80 / ABC reference.
 Guardrail: ``Docs/Guardrails/Performance_Optimization_Contract.md``.
 
-This drives the phase-P4 A/B/C visualizer interactions through the app's **real**
+This drives the preserved A/B/C visualizer interactions through the app's **real**
 product paths — the same canonical direct visualizer mode-request used by the
 double/middle-click action and the same saved-layout load used for a runtime
 recreation — so the experiment measures real scheduler/QML/scene behaviour rather
@@ -33,7 +33,7 @@ Determinism and matched control (this is the corrective contract):
 Fail-closed: a rejected/incomplete/wrong-mode switch, a disabled required mode, a
 failed/unverified recreation, or any watchdog expiry marks the run **INVALID**
 (machine-readable reason) rather than continuing. An invalid run is never
-performance evidence. Recreation here is the P4 intervention, not a production
+performance evidence. Recreation here is the diagnostic intervention, not a production
 self-healing fallback.
 
 All DM interactions and timing are injected as callables so the state machine is
@@ -52,7 +52,7 @@ from PySide6.QtCore import QObject, QTimer
 
 logger = logging.getLogger(__name__)
 
-# The exact P4 exposure. DevCurve is intentionally excluded; the sequence ends on
+# The preserved historical stress exposure. DevCurve is intentionally excluded; the sequence ends on
 # the settle mode so five full cycles finish on a verified Bubble.
 EXPOSURE_SEQUENCE: tuple[str, ...] = (
     "sphere",
@@ -393,12 +393,11 @@ class VisualizerSwitchAbcDriver(QObject):
         next_action()
 
     def _log_attribution(self, window_name: str, state: str) -> None:
-        """Log the H1/H2 attribution snapshot at a scored-window boundary.
+        """Log opt-in boundary diagnostics for a scored window.
 
-        Read/log only — this is the boundary snapshot, never a per-frame or
-        cadence read. Deltas between the start and end of a window give per-window
-        presentation/update rates (H2); the start snapshot gives the settled
-        ownership state (H1). No-op when no attribution seam is injected.
+        Read/log only — this is a boundary snapshot, never a per-frame or cadence
+        probe. It preserves useful ownership/node/thread context for future
+        evidence without keeping P4 hot-path attribution hooks in production.
         """
         if self._attribution_snapshot is None:
             return
@@ -645,16 +644,11 @@ def install_abc_driver_if_enabled(
         timer.start()
 
     def _attribution_snapshot() -> dict | None:
-        # Assemble the boundary attribution snapshot: H1 ownership + identity from
-        # the display unit's existing resource_ownership_snapshot, the render-node
-        # sync/render/draw counts from the existing per-node telemetry, and the
-        # opt-in GUI presentation counters (H2). Read-only; called only at scored
-        # window start/end, never per frame.
+        # Assemble boundary-only ownership, existing node telemetry and a Python
+        # thread census. Read-only; called only at scored-window start/end.
         display_manager = _dm()
         if display_manager is None:
             return None
-        from core.diagnostics import visualizer_attribution
-
         ownership = None
         node = None
         try:
@@ -675,8 +669,6 @@ def install_abc_driver_if_enabled(
                     break
         except Exception:
             logger.exception("[ABC] attribution ownership/node walk failed")
-        fence = visualizer_attribution.fence_timing()
-        sync_present = visualizer_attribution.sync_present_timing()
         # Boundary-only thread census (opt-in, read once per scored-window edge, not
         # per frame): group live threads by a numeric-suffix-stripped name so an
         # A-vs-B diff names exactly which threads accumulate across switch exposure.
@@ -693,9 +685,6 @@ def install_abc_driver_if_enabled(
             "active_mode": _active_mode(),
             "ownership": ownership,
             "node_telemetry": node,
-            "presentation": visualizer_attribution.snapshot(),
-            "fence": None if fence is None else fence.snapshot(),
-            "sync_present": None if sync_present is None else sync_present.snapshot(),
             "thread_count": _threading.active_count(),
             "thread_names": dict(sorted(thread_names.items())),
         }

@@ -1,4 +1,4 @@
-"""Zero-burden admission coverage for the opt-in P1 switch/resource telemetry.
+"""Zero-burden admission coverage for the opt-in switch/resource lifecycle telemetry.
 
 The switch/resource render-host lifecycle telemetry is a diagnostic experiment,
 not runtime behaviour. These tests pin the hard requirement: an ordinary

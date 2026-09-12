@@ -167,7 +167,7 @@ than preserved as phantom GUI authority. This is migration plumbing, not a suppo
 ### `themes/dark.qss` retirement
 
 `themes/dark.qss` remains legacy base-stylesheet geometry/debris, not Settings Theme palette authority. This row is
-cleanup bookkeeping; active sequencing is `Current_Plan.md` section 4. Execution authority is
+cleanup bookkeeping; active sequencing is `Current_Plan.md` section 3. Execution authority is
 `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`. Do not simply delete it, copy literals into
 Python, or disturb native AccentPolicy/frameless/forged-edge behaviour. Final retirement requires the
 physical Default Dark + Acrylic + Glass + dialogs/controls/tray matrix with the file genuinely absent, then
@@ -187,8 +187,7 @@ protected by a final-acceptance horizon; they are ordinary caller-proven cleanup
 
 They are bounded architecture-selection evidence, not current product-performance authority. Do not expand them.
 Perform one final exact caller/import search, rehome any still-useful behavioural assertion to a current owner, then
-delete each tool with its spike-only tests. The current Visualizer performance investigation must use built-in
-PERF/usage/lifecycle evidence instead of keeping these migration spikes alive.
+delete each tool with its spike-only tests. If future performance work is reopened from a genuine traceable issue, use retained built-in/opt-in evidence instead of keeping these migration spikes alive.
 
 ## Permanent cleanup guardrails
 

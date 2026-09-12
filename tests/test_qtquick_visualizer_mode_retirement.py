@@ -19,9 +19,9 @@ from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
 
 
 def _instrumented_host() -> QuickVisualizerRenderHost:
-    """A host with lifecycle telemetry injected directly (opt-in seam for P2).
+    """A host with lifecycle telemetry injected directly for focused ownership tests.
 
-    P2 proves ownership boundedness by reading the boundary telemetry, so it
+    Repeated-switch tests prove ownership boundedness by reading boundary telemetry, so they
     injects the telemetry object rather than depending on the process argv
     admission (``--viz-switch-telemetry`` / ``--abc-drive``).
     """
@@ -137,7 +137,7 @@ def _render_mode(host, mode_id):
 
 
 def test_repeated_mode_switches_keep_one_active_renderer_and_bounded_quad(monkeypatch):
-    """P2: >=100 completed switches converge to the one-active-renderer invariant.
+    """>=100 completed switches converge to the one-active-renderer invariant.
 
     Proves lifecycle boundedness (not the physical perf bug): every switch retires
     the previous inactive renderer, resolved ownership stays == {active}, retired

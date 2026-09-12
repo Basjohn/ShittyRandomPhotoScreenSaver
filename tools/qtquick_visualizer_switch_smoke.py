@@ -1,6 +1,6 @@
-"""Real-GL repeated-mode-switch smoke for the inline Quick visualizer host (P3).
+"""Real-GL repeated-mode-switch lifecycle smoke for the inline Quick visualizer host.
 
-Authority: ``Docs/Future_Work/Visualizer_Post_Switch_Performance.md`` phase P3.
+Authority: ``Docs/Reference/Visualizer_Post_Switch_Performance_Investigation.md`` closed repeated-switch lifecycle reference.
 Guardrail: ``Docs/Guardrails/Performance_Optimization_Contract.md``.
 
 This reuses the proven real-``QQuickWindow`` / ``VisualizerRenderItem`` /
@@ -12,7 +12,7 @@ then holds Bubble, advancing only after each target mode has produced and drawn
 an accepted snapshot -- never on a blind wall-clock toggle.
 
 It reports one JSON object: requested/completed switch counts, the active mode
-after every completion, the boundary-only render-host lifecycle telemetry (P1)
+after every completion, the boundary-only render-host lifecycle telemetry
 after each switch, a separate ``settled_hold`` record for the final Bubble hold
 (kept out of the ``per_switch`` series so the switch record stays honest), node
 render/sync/draw/invalidation deltas, GL error status at the existing bounded

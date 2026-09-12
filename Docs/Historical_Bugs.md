@@ -19,7 +19,6 @@ not automatic current architecture instructions.
 
 ## Active / Pending Acceptance Records
 
-- [R-80 — ABC Event-Loop Rolling History Contaminated Named Steady Windows](Historical_Bugs/R-80_ABC_EventLoop_Rolling_Window_Contamination.md) — **ORACLE FIXED / PRODUCT ROOT CAUSE OPEN**.
 - [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](Historical_Bugs/R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md) — **IMPLEMENTED / AWAITING PHYSICAL VALIDATION**.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
 

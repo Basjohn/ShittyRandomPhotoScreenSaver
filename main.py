@@ -542,7 +542,7 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
 
                 _abc_slot = abc_layout_slot() or "1"
                 # Defer install briefly so RUN-mode display construction can start;
-                # the driver's baseline recreation waits for the readiness seam.
+                # the driver's baseline readiness check waits for the live owner seam.
                 QTimer.singleShot(
                     2000,
                     lambda: install_abc_driver_if_enabled(
@@ -763,9 +763,6 @@ def main(*, entrypoint: str = "main"):
             parse_experiment_flags(sys.argv)
         )
         if _experiment_flags.lifecycle_telemetry_admitted:
-            from core.diagnostics.visualizer_attribution import enable_if_admitted
-
-            enable_if_admitted()  # allocate opt-in presentation attribution counters
             logger.info(
                 "[DIAG] Visualizer switch telemetry admitted (abc_drive=%s, "
                 "viz_switch_telemetry=%s)",
