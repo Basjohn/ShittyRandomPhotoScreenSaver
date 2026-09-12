@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+from time import perf_counter_ns as _perf_counter_ns
 
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
+
+from core.diagnostics import visualizer_attribution as _viz_attr
 
 from .implementation_registry import resolve_quick_visualizer_renderer
 from .render_contract import QuickVisualizerRenderFrame, QuickVisualizerRenderer
@@ -231,7 +234,17 @@ class QuickVisualizerRenderHost:
             matrix_values=matrix_values,
             quad_vao=self._quad_vao,
         )
-        inherited = _InheritedGlState.capture()
+        # Opt-in P4 fence-cost measurement (render thread). When the experiment is
+        # not admitted this is None and no timing calls run; the GL work below is
+        # NEVER added to or removed from — only the existing capture()/restore() are
+        # wrapped with time.perf_counter_ns() to measure their duration distribution.
+        _fence = _viz_attr.fence_timing()
+        if _fence is None:
+            inherited = _InheritedGlState.capture()
+        else:
+            _c0 = _perf_counter_ns()
+            inherited = _InheritedGlState.capture()
+            _fence.note_capture(_perf_counter_ns() - _c0)
         try:
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendEquationSeparate(gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
@@ -247,7 +260,12 @@ class QuickVisualizerRenderHost:
             gl.glViewport(*viewport)
             implementation.render(frame)
         finally:
-            inherited.restore()
+            if _fence is None:
+                inherited.restore()
+            else:
+                _r0 = _perf_counter_ns()
+                inherited.restore()
+                _fence.note_restore(_perf_counter_ns() - _r0)
         self._last_render_mode_id = mode_id
         return mode_id
 
