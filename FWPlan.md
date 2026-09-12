@@ -1,42 +1,58 @@
 # Future Work implementation plan
 
-Last updated: 2026-09-09
+Last updated: 2026-09-12
 
-- [x] **DevCurve travel smoothing / line firmness:** fixed outside migration gating in the M2 build slice. Travel phase is integrated and rate-smoothed with only ±10% audio breathing; strong reaction remains in curve shape/material. Outline gets +1 px total baseline and eases to +3 px total at the largest viewport.
+The Qt Quick migration is closed and operator-accepted. This file no longer mirrors migration-close gates or keeps
+completed future slices as pseudo-work. `Current_Plan.md` owns active sequencing; `Future_Work.md` owns dormant feature
+intent. This file is only a handoff/router for explicitly activated future implementation.
 
-## Scope rule — READ THIS FIRST
+## Promoted into Current Plan
 
-`Current_Plan.md` M0-M3 is the **only migration-close authority**. This file must not silently add new migration blockers.
-Items here are future/post-migration work unless explicitly mirrored into an M0-M3 gate because they exposed a concrete current regression.
+The following are no longer dormant Future Work items and must not be separately sequenced here:
 
-Current starting comparison remains the supplied current GODZIP/source tree. Inspect exact source before each slice; preserve event-driven ownership, dormancy and no-fallback guardrails.
+1. **Steam Friend Pulse** — definite queued widget immediately below the current Visualizer performance investigation.
+   Execution/decomposition authority: `Docs/Future_Work/Steam_Friend_Pulse.md`.
+2. **System Stats** — conditional queued widget immediately after Friend Pulse. It proceeds only if the lightweight
+   sampler admission probe passes without material Visualizer latency/freshness cost. Start at a fixed 10 s cadence; 5 s is
+   the only faster candidate and requires evidence.
+   Execution/decomposition authority: `Docs/Future_Work/System_Stats_Widget.md`.
 
-## Migration-close mirror — do not create a second plan
+Both inherit application-level family activation, ordinary instance enablement, lazy Settings construction, retained
+Quick presentation, shared CUSTOM/stacking normalization and **real dormancy**: no provider/sampler cadence survives
+when the effective widget has no admitted consumer.
 
-- [x] **M0 mirror — Visualizer CUSTOM geometry/lifecycle:** finish target-environment validation of stable per-session pixels-per-world, side one-axis/corner two-axis viewport resize, wheel-only uniform scaling, manager-proven orphan target-admission cleanup, button/drag transfer, Cancel, and no-teardown Save. Latest stress regression also requires all-display atomic CUSTOM terminalization when a retained Qt root dies, corruption-only reconstruction after closure, and diagnostics that can never abort teardown. Numbered slot load remains the fenced rebuild boundary. Exact gates live in `Current_Plan.md`.
-- [x] **M1 mirror — Bubble reference mode:** cached profile is physically reported much more cohesive. Wide tail reaches +1 big only when authored big >0, +3 small and +20% baseline/cap; tall tail reaches -1 big/-1 small and **-30% cap** with baseline speed unchanged. Validate and then freeze absent new evidence.
-- [~] **M2 mirror — suite/build/install:** destination/broad classification -> build-tool/package dependency audit -> Diagnostic/standard/MC build + installer/profile asset-path acceptance. Diagnostic owns bundled themes/presets; standard/MC keep shared ProgramData authority.
-- [ ] **M3 mirror — frozen-product performance/soak:** clean 60/165 Hz performance comparison, then the overnight soak on the actual frozen Diagnostic/SCR product after M2 is green.
+## Dormant future ordering
 
-## Post-migration / non-blocking work
+1. **Directional Pixel Accretion** — isolated deterministic instanced transition experiment.
+2. **Glass Shatter** — isolated deterministic 3D shard experiment.
+3. **Exploding Tiles** — isolated instanced 3D tile experiment.
+4. **Slide Perspective Push** — remaining optional Slide modifier; Linear/Elastic/Wobble/Flex are already landed.
+5. **Deformable 3D Sphere / Blob Sphere** — separate future experiment; never mutate the accepted Voxel Sphere into it.
+6. **Organic Growth / Ink Bloom** — bounded shader experiment.
+7. **Other 3D Visualizer experiments** — each gets its own isolated mode boundary/decomposition.
+8. **Settings FlowContainer polish [low]** — only for a demonstrated layout improvement.
+9. **Two-texture artwork crossfade [low]** — only if current event-driven fade has a visible defect worth the extra
+   texture residency.
 
-- [x] **FW1 — Widget interaction glow:** Hover/Click controls, shared swatch, Glow Distance and finite event-driven feedback are landed; operator acceptance says Glow is closed. No Timer/poller/worker/frame loop/new cadence owner.
-- [x] **FW2 — Slide motion options and timing correction:** Elastic, Wobble and Flex remain in the sealed Slide owner with exact endpoints and current focused coverage. Perspective is a separately designed future feature, not a 2D counterfeit. Physical timing polish is non-blocking unless it reveals a product regression.
-- [ ] **FW3 — Voxel Sphere iterative acceptance — detached-cube sectional spectrum**
-  Smooth Sphere remains removed. The accepted visual floor is strong detached-cube displacement with immediate local attack and gentle fallout; future causality/presentation work must not shrink that reward back toward a solid shell. The current experiment uses the public support-aware Bubble energy + existing typed event seams, presence-gates continuous vocal contour, keeps ordinary bass minimal, and makes source loss/pause decay-only. Rotation now has two independent live controls: **Base Rotation** (`sphere_base_rotation_speed`) is continuous velocity, while the existing `sphere_rotation_speed` key is presented as **Velocity Reaction** and adds music-owned speed with fast attack / very gradual deceleration without changing direction or phase. Incoming blocks are optional and event-owned; generic crest activity cannot ambient-spawn them. They fade in while returning from outside and are distributed across changing broad regions instead of a permanent corner. Presentation work in the same isolated Sphere boundary now includes optional Toon shading, optional descriptor-gated scene overflow, literal Fill/Edge RGBA, explicit per-face Gloss/Specular, and a soft background/scene drop-shadow pass. The old Chrome/Obsidian/Magma/Silver/Water pseudo-material branches are retired; the Settings-only Finish preset merely authors the visible Gloss/Specular sliders and is not a renderer input. Block-to-block self-shadowing remains deferred. Legacy Bass/Mid/High/Energy-Curve/Idle-Drift plus Block-Relief controls are retired and forward-stripped because they had no live authority; Base Rotation is the sole continuous idle rotation control. The accepted Deformation × Block Reactivity product is now one **Fragment Strength** authority while **Particle Distance** separately owns detached travel distance; schema-v8 migration preserves old resolved values exactly. **Particle Amount** scales stable cohort population only after event admission. Sphere-local Taste The Rainbow may colour Surfaces and/or Edges inside the existing draw without joining the shared Rainbow family. Perspective Strength is isolated and bounded `0..1`; `1.0` is the accepted projection and lower values only flatten toward orthographic. Palette Effects/material pseudo-shading keys remain retired because they directly interfered with finish diagnosis; Base Rotation, Velocity Reaction, Fragment Strength, Particle Distance, Vocal Response and Size Response stay live. Evidence/constraints live in `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+## Golden / landed work is not backlog
 
-- [ ] **FW4 — Directional Pixel Accretion:** create a decomposition under the `Future_Work.md` experimental-isolation + Settings single-authority gate, then implement a deterministic instanced directional translation experiment with source underlay and exact endpoints.
-- [ ] **FW5 — Glass Shatter / Exploding Tiles:** separate decompositions under the `Future_Work.md` experimental-isolation + Settings single-authority gate and isolated lazy implementations after higher-priority closure work; prove depth, deterministic launch and resource retirement.
-- [ ] **FW6 — Ink Bloom:** bounded isolated shader experiment after higher-priority closure work.
-- [ ] **Later conditional:** other 3D modes require their own design/validation; FlowContainer changes require a concrete layout improvement; two-texture artwork crossfade requires evidence the existing fade is insufficient.
+- Current accepted Voxel Sphere reactivity/motion/presets are golden and remain isolated. No Sphere implementation work
+  is queued here; future retuning/migration requires an explicit operator request.
+- Widget interaction glow is landed and operator-accepted.
+- Slide Linear/Elastic/Wobble/Flex are landed current architecture. Do not recreate their old proposal sections.
+- Live Edit commit and ordinary resize/auto-fit normalization are landed/accepted; their old decomposition documents are
+  historical references only.
 
-## Non-blocking product/cleanup follow-ups
+## Cleanup interaction
 
-- [ ] Shared Widget colour-authority/style-override physical polish only if current profile exposes a visible regression.
-- [ ] Narrow Settings-theme lifetime/link/catalogue fragility audit if a current failure reproduces; do not restart broad semantic-literal archaeology.
-- [ ] Continue test/debris reconciliation in `Future_Cleanup.md` and `Docs/TestSuite.md`; do not resurrect retired QWidget/native-event/old-GL/polling owners for stale tests.
-- [ ] Retire migration-only benchmark/spike tooling after M3 confirms it has no remaining evidence job.
+Future implementation does not reopen cleanup/migration fossils. Before coding a selected item, inspect
+`Future_Cleanup.md` only for a genuine technical prerequisite. READY cleanup does not become feature scope merely
+because nearby code is touched. Never restore retired QWidget/native-event/compositor/polling owners to satisfy an old
+test.
 
 ## Checkpoint discipline
 
-For every future slice: inspect current owner first; compile changed Python; run focused falsifying tests; inspect diff; update the live authority that actually owns the work; then produce a narrow checkpoint. Keep user-environment physical/installed/visual acceptance explicit where automation cannot prove pixels or Qt lifetime.
+For every activated future slice: inspect current owners first; pin the pre-implementation GODZIP/HEAD; create a
+focused decomposition for sizeable/unique work; compile changed Python; run focused falsifying tests; inspect the
+diff; update the live authority that actually owns the work; then produce a narrow checkpoint. Keep user-environment
+physical/installed/visual acceptance explicit where automation cannot prove pixels or Qt lifetime.

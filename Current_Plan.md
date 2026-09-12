@@ -1,45 +1,122 @@
 # Current Plan — Active Work
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
 
-The Qt Quick migration is closed and operator-accepted. This file contains **active work only**; completed Gmail lifecycle, widget resize/Edit lifetime, non-CUSTOM auto-shrink, Weather binding-loop validation, Visualizer replay-floor work, and other accepted closeout items are intentionally absent.
+The Qt Quick migration is closed and operator-accepted. This file contains **active work only**; completed migration,
+Sphere polish, widget resize/Edit lifetime, bucket normalization and other accepted closeout items are intentionally absent.
 
 ---
 
-## 1. Voxel Sphere accepted-experimental polish
+## 1. Visualizer post-switch presentation-tail / anti-waste follow-up
 
-Execution authority: `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+Execution authority: `Docs/Guardrails/Performance_Optimization_Contract.md`.
 
-Sphere is now **accepted experimental and deliberately isolated**. Its current reactivity/motion is a golden preservation target; acceptance does not authorize migration into permanent/shared visualizer architecture. All experimental modes remain isolated until the operator explicitly activates migration.
+The 2026-09-12 diagnostic run included a heavy external CPU load and the sequence
+Sphere -> Spectrum -> Oscilloscope -> Sine -> Bubble. Bubble retained its intended
+~90 Hz logical evolution, 1.000 integration ratio and fresh audio-lane publication,
+while GUI/presentation late tails grew during the long Bubble residency. Loading a
+saved layout rebuilt the Quick display runtime and subjectively cleared the
+degradation without changing the active Bubble engine generation/activation. Treat
+this as a **presentation/lifetime attribution problem**, not permission to reduce
+Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evidence for future agents:
+`logs/evidence_chest/logsb11575b976.zip`.
 
-- [x] Consolidate the only useful Sphere presets: former 5 -> **Preset 1 / Glass Current**; former 6 -> **Preset 2 / Voxel Bloom**. Preserve their literal authored snapshots.
-- [x] Rebuild the Sphere Custom UI around shared themed circular checkboxes and real collapsible buckets while keeping every setting Sphere-owned.
-- [x] Trace and retire dead Sphere controls: Block Relief, Bass Response, Mid Response, High Response, Energy Curve and Idle Drift are removed from canonical UI/model/default/config state and forward-stripped. Base Rotation remains the sole idle rotation authority.
-- [x] Retire rejected **Rainbow Ghosting** completely: Settings/default/model/UI/binding/config/render-history path removed; stale imported state is forward-stripped. This does not wire Sphere into generic Taste The Rainbow.
-- [x] Record the reusable part of the experimental architecture: descriptor-driven lazy builder/runtime/renderer/capture resolution, independent dormancy/retirement, private settings prefix and explicit shared-family opt-outs. Preserve this host seam for future experiments; do not generalize Sphere internals.
-- [x] Record the permanent-migration gate as dormant future work. Both curated presets require pre/post deterministic replay/capture goldens, including the exact hidden technical-profile values that reproduce current behaviour. Any regression to permanent modes' reactivity, latency, fidelity, bleed/isolation, cadence, lifecycle or resource/dormancy behaviour rejects migration.
-- [x] Add themed recommended-position slider notches using the accepted Glass Current baseline as UI guidance only; no default/runtime authority.
-- [x] Split the overloaded Deformation × Block Reactivity contract without retuning: **Fragment Strength** owns the exact former product and **Particle Distance** owns the former Deformation travel-distance value. Visualizer schema v8 forward-migrates old Custom/persisted state before stripping the legacy keys.
-- [x] Add **Particle Amount** as a post-admission stable-population multiplier (`1.0` = accepted behaviour); rename the UI-only Intake Density label to **Particle Density Response**. No onset/admission/velocity threshold changes.
-- [x] Trim dead slider tails without changing resolved behaviour: Vocal Response max `1.35`; Size Response max `2.54` (existing growth saturation). Curated presets are rewritten to the equivalent resolved values.
-- [x] Add Sphere-local **Taste The Rainbow** with independent Surfaces/Edges sub-controls. It uses one moving partial-spectrum field in the existing voxel draw, preserves authored Fill/Edge alpha, and does not opt Sphere into the shared Rainbow family or add a timer/poller/worker/history pass.
-- [x] Add **Perspective Strength** as a Sphere-local presentation control constrained to `0..1`: `1.0` is the accepted projection exactly and lower values only flatten toward orthographic, so the control cannot exceed the current golden perspective/overflow envelope. Both curated presets remain `1.0`.
-- [x] Sweep active documentation for stale/duplicate Sphere-era authority; remove the two superseded Future Work documents while leaving Historical Bugs untouched.
-- [x] Preserve user-authored visualizer preset ownership: sparse authored slot numbers are valid, runtime compacts them without renaming/deleting files, Edit Preset retains the real backing path, and Save-As appends after the highest authored number rather than assuming contiguous slots. Shipped manifests are never runtime authority over user presets.
-- [x] Make lazy visualizer Settings-body construction transactional: a failed builder/hydration attempt removes its partial body before rethrow, stale retry bodies are de-duplicated by a mode marker, and non-Custom presets never transiently expose Custom/Advanced controls.
-- [x] Close Sphere bucket-state schema drift: the new appearance/particle-flow/reactivity/rotation/effects bucket identities are registered in canonical `ui.visualizer_bucket_states`; JSON/SST defaults are regenerated; a Qt-free builder/schema contract now prevents future bucket renames from escaping canonical defaults.
-- [x] Log-audit the post-split physical run before further renderer work. Detached cohort velocity remains granular (239 distinct observed maxima); captured low/mid/high-impact motion remains strongly ordered (~0.25 / ~0.45 / ~0.93 mean motion respectively), with continuous body/section/rotation outputs rather than a 0/1 collapse. The control split therefore shows no evidence of reactivity/fidelity regression in this run.
-- [x] Add presentation-only Sphere controls without changing accepted defaults: **Edge Weight** (`1.0` = prior fixed thresholds), **Voxel Size Variation** (`0.35` = prior fixed shader constant), **Tracer Color** (`[255,242,194,255]` maps exactly to the former shader `(1.0, 0.95, 0.76)`), and optional **Depth Shading** (default off; suggested strength `0.20`). All remain in the existing Sphere draw and private `sphere_*` parameter bundle.
-- [x] Replace the obsolete circular Sphere shadow proxy with a **projected voxel silhouette** using the exact same Sphere vertex shader/instance transforms as the hero draw. Shadow Opacity/Softness/Distance/Size are Sphere-local optional controls; `1.0 / 0.18 / 1.0 / 1.0` are the starting values. Softness uses at most one cheap expanded instanced layer; no shadow map, FBO blur, mutual voxel lighting, per-voxel Python state, worker or cadence is introduced.
-- [x] Re-audit experimental isolation after the presentation additions: the mode descriptor, Sphere capture/runtime, BeatEngine/shared logical runtime, and every permanent-mode renderer/runtime remain byte-identical to the pre-visual-polish checkpoint. The only shared config-file edit is confined to the existing `_SPHERE_PARAMETER_KEYS`/Sphere apply block. The documented migration gate remains dormant and requires operator activation plus pre/post Sphere and permanent-mode replay/capture evidence.
-- [x] Correct detached-particle population granularity without weakening loud-passage transients: absolute passage loudness no longer owns cohort density. Qualified events keep the accepted 28% visible participation floor, then event confidence + Sphere-local granular motion evidence shape population through a convex curve; 100% density requires both authorities to max rather than merely occurring in loud material. Add a hard current near-silence authoring floor (`0.075`) beneath the existing `0.090/0.042` hysteretic gate so stale/latched typed evidence cannot author a new cohort from perceptually silent residual signal. Event admission thresholds, acoustic-motion authority, travel speed/amplitude, and loud-bed kick/vocal eligibility remain unchanged.
-- [x] Focused validation through particle granularity and projected-shadow work is **85/85** in the working tree. Canonical defaults authority is clean. Settings persistence collection remains blocked in this Linux workspace only by missing `PySide6`; rerun the same focused gate against the extracted GODZIP before delivery.
+- [ ] Reproduce the exact multi-mode sequence into an extreme-vertical CUSTOM Bubble
+  under deliberate CPU contention, then compare the same activation before/after a
+  saved-layout runtime recreation. Capture event-loop p95/p99/max, pacer skips,
+  render/sync/draw counts, revision Hz, snapshot age and physical smoothness.
+- [ ] Add lifecycle-only render-host telemetry at mode boundaries/teardown: renderer
+  resolve count, inactive-release attempts/success/failure, active/resolved mode IDs,
+  per-implementation `has_resources`, and shared-quad ownership. Surface it in the
+  existing display/teardown snapshot. **No per-frame `glGet*` diagnostics.**
+- [ ] Use that evidence to prove or refute stale mode GL/scene resources across mode
+  switches. If stale ownership is demonstrated, repair the existing render-thread
+  retirement seam. Do **not** add automatic layout/runtime reinitialization as a
+  self-healing fallback.
+- [ ] If resource retirement is clean, attribute scene-update/invalidation origins
+  (frame pacer vs mode-switch retirement vs presentation/QML invalidation) and remove
+  only demonstrated duplicate/no-op requests. Do not lower the 60 Hz presentation
+  target or ~90 Hz authored/logical evolution to improve counters.
+- [ ] Remove known diagnostic/telemetry hot-path churn without changing diagnostic
+  meaning: compute bars/energy/waveform maxima only when a diagnostic record that
+  consumes them is actually due; rework `VisualizerRenderNodeTelemetry` so
+  `note_sync`/`note_render`/`note_draw` do not allocate a new frozen dataclass on
+  every hot-path call while `snapshot()` remains immutable and thread-safe.
+- [ ] Measure the per-frame `_InheritedGlState.capture()`/restore fence as a distinct
+  CPU/driver owner. It performs synchronous GL state queries around every Visualizer
+  draw; change it only if profiling proves material cost and state-isolation coverage
+  proves widgets/transitions/permanent Visualizer modes remain uncontaminated.
+- [ ] Close the item only after a representative mode-switch/recreation soak shows a
+  bounded resolved-renderer/resource plateau and stable event-loop/pacer tails with
+  no loss of Bubble temporal fidelity, source freshness, reaction amplitude or
+  CUSTOM scaling behaviour.
 
-Protected behaviour remains the 2026-09-10 accepted detached-cohort/onset/tracer/four-corner/vocal-recoil contract. Do not retune those mechanics during presentation polish.
+---
 
-## 2. `dark.qss` retirement → ThemeSpec sole authority
+## 2. Steam Friend Pulse — definite queued widget
+
+Execution authority: `Docs/Future_Work/Steam_Friend_Pulse.md`.
+
+Friend Pulse is queued immediately after the performance investigation. Do **not** port the old painter/mock card.
+Build the useful activity-first retained Quick card described by the decomposition: currently-playing friends plus a
+bounded useful subset/change emphasis, honest private/stale/unavailable states, and the existing Steam family Privacy
+Mode (`Strict` / `Balanced` / `Rich`) becoming real presentation policy.
+
+- [ ] Pin the pre-feature GODZIP/HEAD and current Steam request/cache/privacy fixtures before substantive code changes.
+- [ ] Reconfirm friend-list + player-summary fixture contracts, then define immutable accepted Friend Pulse state with
+  raw Steam IDs excluded from logs/presentation.
+- [ ] Implement cache-first bounded source preparation through the existing Steam locks/request/backoff policy; do not
+  create a parallel Steam provider or a card-local refresh interval.
+- [ ] Make dormancy explicit: Steam family activation + `widgets.steam.enabled` + `widgets.friend_pulse.enabled`
+  (plus the temporary dev/member gate) are all required before Friend Pulse may own source/runtime work. Disabled or
+  deactivated state performs no friend refresh, avatar work or latent worker cadence.
+- [ ] Reuse retained ordinary-card normalization: `ordinary_uniform`, shared global-CUSTOM/40% resize floor, shared
+  non-CUSTOM stacking/auto-fit, stable configured-capacity height, Widget Theme/Style Overrides, branded-header
+  vocabulary and finite presentation-only animation. No family-specific geometry or theme architecture.
+- [ ] Hydrate avatars only after visible-row ranking and only for Rich privacy mode; multiple displays must not multiply
+  Steam source refresh traffic.
+- [ ] Prove unchanged accepted snapshots do not rebuild rows/layout/assets; retirement fences stale completion and
+  releases Friend Pulse-owned runtime/assets without disturbing legitimate shared Steam consumers.
+- [ ] Ungate only after source/privacy/dormancy/normalization/performance and eyes-on readability gates are green.
+
+---
+
+## 3. System Stats — conditional queued widget
+
+Execution authority: `Docs/Future_Work/System_Stats_Widget.md`.
+
+The old blanket rejection is lifted, but this is **not** permission to make diagnostic `--usage` telemetry permanent.
+The preserved run proves the existing diagnostic sampler is too broad for a live card: light collections were ~24.5 ms
+median / ~33.9 ms p95 and heavy samples ~67 ms median / ~107 ms p95, with one contention outlier above one second.
+System Stats therefore gets a separate lightweight product sampler or remains shelved.
+
+- [ ] Begin with the decomposition's S0 probe only: whole-system CPU + RAM and a persistent adapter-aggregate GPU/VRAM
+  candidate. Measure p50/p95/max and GIL/Visualizer logical-tail impact under idle and deliberate CPU contention before UI.
+- [ ] If admitted, use exactly one process/runtime-generation shared sampler owner with narrow retained-card leases.
+  Multiple displays consume one accepted snapshot; the last lease stops cadence and closes GPU counter/query ownership.
+  Family deactivation or ordinary widget disable leaves **zero recurring sampler work**.
+- [ ] Use event-owned activation/retirement and one bounded low-priority shared sampler only while a real card lease exists.
+  Usage rates inherently require observations over time, so begin at a fixed **10 s** product cadence; consider **5 s** only
+  if eyes-on validation proves 10 s meaningfully too stale and A/B contention evidence remains clean. One sample may be in
+  flight; missed cadence edges skip instead of queue. No UI-thread system queries, QML/private polling timer, or sampler
+  surviving the last lease.
+- [ ] Keep first product scope intentionally small: CPU, RAM, and only reliable system-wide GPU/VRAM. No USS/private
+  memory, process-tree/thread/handle/IO diagnostics, temperatures, per-process tables, log parsing or Task-Manager clone.
+- [ ] Add canonical `system_stats` family/default/Settings ownership only after the sampling gate passes. Keep the new
+  family internally plugin-shaped and dev-gated/deactivated by default through acceptance; Settings stays lazy/
+  transactional with current closed + one-open bucket semantics, no shadow defaults or diagnostic knobs.
+- [ ] Reuse ordinary retained-card normalization/theme/glow/stacking/CUSTOM contracts. Configured metric capacity, not
+  momentary availability, owns preferred geometry so samples cannot churn layout. Reuse a canonical themed tools/settings
+  glyph if one genuinely fits; otherwise add a small original project-owned monochrome **gear + spanner** header asset through
+  the normal resource/build path rather than adding a web/icon-font dependency or a family-local icon loader.
+- [ ] Close only after off-vs-on contention comparison shows no meaningful loss of Visualizer freshness/reactivity or new
+  presentation-tail pathology, and activation/disable/recreation/multi-display soak proves bounded owner counts.
+
+---
+
+## 4. `dark.qss` retirement → ThemeSpec sole authority
 
 Execution authority: `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`.
 
@@ -60,53 +137,23 @@ competing stylesheet authority completely.
 
 ---
 
-## 3. Test / debris reconciliation
+## 5. Test / debris reconciliation
 
-Owned in detail by `Docs/TestSuite.md` and `Future_Cleanup.md`.
+Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this active plan carries sequencing only.
 
-- [x] Delete the caller-dead `widgets/spotify_visualizer/renderers/` island and
-  `rendering/image_processor.py`. Surviving Spectrum/Sine/DevCurve/image-processing
-  coverage is rehomed to new current-owner tests; a new removal gate replaces the
-  previously relaxed museum-owner assertions without editing an old test file.
-- [x] Normalize collapsible Settings bucket UX/persistence: Spectrum Custom's stable
-  Bar Appearance/Rainbow accessories are real buckets; canonical bucket defaults are
-  all closed; persistence is sparse and remembers at most one open identity per local
-  scope; shared synchronous peer closure introduces no timer/poller/animation owner.
-  Functional work is closed; remaining coverage belongs to the broad test reconciliation below.
-- [x] Paranoid bucket reachability/duplication audit: no newly unreachable control path found; outer Visualizer
-  Advanced/Technical remain independent parent disclosures; Technical AGC/Transient are now real one-open sparse
-  child buckets; Widget deferred-body finalization has one shared owner; seven copied finalizers and stale Gmail/
-  Spectrum-eager prose were removed. Setup pills, About and Accessibility remain explicitly outside the bucket
-  contract. Three stale mixed test modules were rehomed to new current modules and staged as debris rather than
-  teaching production code obsolete multi-open/default-open behavior. Final Qt-free contract is 13/13, unified defaults
-  artifact verification and whole-tree syntax compilation are green. Functional work is closed; only test reconciliation remains.
-- [x] Small 2026-09-11 presentation/edit polish: Achievement Pulse percentage text is reduced without changing
-  authored card/pulse geometry, the pulse rail is raised 4 px, Shelf Style canonicalizes missing Playtime/Previous values to the
-  same `UNAVAILABLE` presentation, CUSTOM move editing gains a narrow external 30 px peer-margin snag plus a small 3 px
-  semantic scoring bias so existing edge/centre/peer alignment is actually felt without overriding ordinary grid dragging,
-  and Particle Random's intermittent broken Swirl case is traced to Center Outward's linear atan
-  branch cut. Only that periodic ordering term is repaired; the other Particle modes remain untouched. Particle light/build-order
-  labels now match their existing persisted shader indices (NW/NE/Front/SW/SE; Typical/Center Outward/Edges Inward).
-- [x] Achievement Pulse percentage visual follow-up after installed screenshot: the earlier 10% `font.pointSize` ceiling change
-  could be masked by `Text.HorizontalFit`, so the three retained percentage glyph layers now receive one final 0.90 presentation
-  scale after fitting. The existing 4 px pulse lift, 108x108 pulse, authored card geometry, Total calculation and Python
-  normalization/layout owners are unchanged. Operator-installed validation is accepted; only automated test inventory remains relevant.
-- [x] First-run missing-source launch continuity: a normal RUN launch interrupted by the source onboarding Settings dialog now resumes the same RUN process after sources are configured instead of returning through CONFIG and exiting. CONFIG-only invocations (`/c`, `-c`, `-s`, `--s`) retain Settings-only lifetime. Startup-dependent settings are re-read after onboarding commits. Operator validation is accepted; only automated test inventory remains.
-- [x] Normalize Visualizer per-mode dormancy to the same explicit boolean-map shape as Transition activation: `widgets.spotify_visualizer.mode_activation.<stable_mode_id>` is the sole current persisted authority; `enabled_modes` is derived in memory only. Existing profiles get one pre-default forward migration so their authored dormancy is not lost, and the retired key is removed immediately. Defaults/SST projections use only the new map. Operator validation is accepted; only automated test inventory remains.
-- [x] Repair the retained Weather missing-location **SETTINGS** shortcut: `weather_location` now flows through the ordinary family adapter into DisplayManager's generation-checked semantic Settings request and the existing engine teardown/destruction barrier, then opens Widgets -> Weather and focuses Location. No direct dialog owner, timer, poller or Weather-specific lifecycle path was added. Operator validation is accepted; only automated test inventory remains.
-- [x] Modernize the standalone Foundry suite without coupling tool appearance to product Settings state: GODZIP, Defaults and Theme Foundries use the frozen `tools/godzip_themes/` ThemeSpec catalogue with Default Dark Glass, frameless custom chrome and tool-local appearance selection; Build Foundry consumes the same frozen catalogue through its stdlib/Tk bootstrap path and applies theme changes by clean restart. GODZIP's Apply dashboard stays compact, CMD is a dedicated right-aligned navigation action, and slow GODZIP operations use the serialized non-blocking task lane. `tools/godzip_themes/` remains **off by default** in CREATE GOD ZIP workflow selection so the static catalogue does not bloat routine archives. Tool UI validation is compile/static/manual rather than permanent product-test inventory.
-- [ ] **Temporary migration debris — retire after safe profile-migration proof:** remove the `enabled_modes` compatibility signature (`migrate_legacy_enabled_modes_to_activation`, the pre-default SettingsManager migration hook, and its warning path) once automated migration/profile tests demonstrate supported persisted profiles no longer rely on the retired list. Until then it is migration-only: current defaults/model/UI/runtime must never write or consume `enabled_modes` as product state.
-- [ ] Run the broad `pytest tests/` inventory and reconcile remaining stale
-  widget-glow / two-phase-retirement / defaults casualties against current owners.
-- [ ] Reconcile nine Clock presentation tests whose shadow fixtures omit current
-  required fields. Do **not** add production defaults merely to satisfy old fixtures.
-- [ ] Reconcile 21 scene-controller cases whose fixtures omit the 11 current required
-  style arguments.
+- [ ] Run/reconcile the broad `pytest tests/` inventory against current owners. Delete or rehome fossil assertions; do not
+  add production defaults/fallbacks or restore retired QWidget/compositor/polling architecture to satisfy them.
+- [ ] Retire the temporary Visualizer `enabled_modes` compatibility migration only after automated persisted-profile/import
+  coverage proves supported profiles no longer rely on it. Current runtime/default/UI state remains the canonical
+  `widgets.spotify_visualizer.mode_activation` boolean map.
+- [ ] Complete caller-proven READY deletion rows in `Future_Cleanup.md` only after their exact caller/test prerequisites are
+  satisfied; dormant compatibility-horizon rows remain dormant.
 
 ---
 
 ## Standing guardrails
 
+- **Voxel Sphere golden preservation:** current accepted Sphere reactivity/motion/preset behaviour is golden. Keep the mode architecturally isolated; do not retune or migrate it into permanent/shared Visualizer owners unless the operator explicitly requests that work.
 - **Visualizer fidelity / scaling (R-69, binding):** extreme CUSTOM geometry must
   never be solved by globally reducing head radius, authored reaction amplitude,
   motion, Ghost/history displacement, or by adding a second viewport/domain
@@ -150,4 +197,6 @@ exact current source + current reconciled test tree
 - `Docs/TestSuite.md`
 - `Future_Cleanup.md`
 - `FWPlan.md`
+- `Docs/Future_Work/Steam_Friend_Pulse.md`
+- `Docs/Future_Work/System_Stats_Widget.md`
 - `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`
