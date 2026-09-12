@@ -473,30 +473,46 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
         return controller is not None and getattr(controller, "mode_id", None) is not None
 
     def _watch_recreation(generation_before, on_ready: Callable[[int | None], None]) -> None:
+        # Observe the existing fenced-reload readiness seam. A saved-layout reload
+        # rebuilds the runtime and emits ``displays_ready`` ("ready for image
+        # replay") once the new generation's QML root is created and admission is
+        # open; ``authoritative_first_frames_ready`` only fires after a full image
+        # display cycle, which a reload does not always trigger, so it is a weaker
+        # secondary trigger. Either signal is only the trigger — the runtime
+        # generation is the truth: accept once it has actually advanced past the
+        # pre-load generation, which also ignores any pre-reload readiness emit.
         display_manager = _dm()
-        signal = getattr(display_manager, "authoritative_first_frames_ready", None)
-        if signal is None:
+        if display_manager is None:
+            return
+        signals = [
+            sig
+            for name in ("displays_ready", "authoritative_first_frames_ready")
+            for sig in (getattr(display_manager, name, None),)
+            if sig is not None
+        ]
+        if not signals:
             return
 
         state = {"fired": False}
 
-        def _slot(generation):
+        def _slot(_value=None):
             if state["fired"]:
                 return
-            try:
-                emitted = int(generation)
-            except (TypeError, ValueError):
+            current = _runtime_generation()
+            if current is None:
                 return
-            if generation_before is not None and emitted == int(generation_before):
-                return  # readiness for the pre-load generation; keep waiting
+            if generation_before is not None and current == int(generation_before):
+                return  # rebuild not committed yet / pre-reload readiness
             state["fired"] = True
-            try:
-                signal.disconnect(_slot)
-            except (RuntimeError, TypeError):
-                pass
-            on_ready(emitted)
+            for sig in signals:
+                try:
+                    sig.disconnect(_slot)
+                except (RuntimeError, TypeError):
+                    pass
+            on_ready(current)
 
-        signal.connect(_slot)
+        for sig in signals:
+            sig.connect(_slot)
 
     def _on_complete(result: dict) -> None:
         code = 0 if result.get("valid") else 3
@@ -507,6 +523,13 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
             result.get("reason"),
             code,
         )
+        # Clean teardown before exit: mirror the tray/normal exit path
+        # (engine.stop() then quit) so worker threads/runtime release and the
+        # process actually terminates instead of hanging after app.exec() returns.
+        try:
+            engine.stop()
+        except Exception:
+            logger.exception("[ABC] engine.stop() during experiment completion failed")
         app.exit(code)
 
     driver = VisualizerSwitchAbcDriver(
