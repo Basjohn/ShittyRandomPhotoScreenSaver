@@ -1,6 +1,6 @@
-"""A/B/C causal harness for the visualizer post-switch presentation tail (P4).
+"""Retained A/B/C diagnostic harness for Visualizer causal/performance checks.
 
-Authority: ``Docs/Future_Work/Visualizer_Post_Switch_Performance.md`` phase P4.
+Authority: ``Docs/Reference/Visualizer_Post_Switch_Performance_Investigation.md``.
 Guardrail: ``Docs/Guardrails/Performance_Optimization_Contract.md``.
 
 The physical slowdown must be measured in the real product path; synthetic GL
@@ -12,7 +12,7 @@ parts that can be automated and kept identical between runs:
   the driver's named steady windows (``steady_A`` / ``steady_B`` /
   ``steady_C_pre`` / ``steady_C_post``), validates freshness/reactivity, and
   fails a run closed when evidence is missing;
-* a **classifier** (``classify``) applying the phase-P4 regression threshold,
+* a **classifier** (``classify``) applying the preserved regression threshold,
   persistence requirement and metric-matched recovery rule to three matched
   A/B/C repetitions; and
 * an optional **auto** orchestrator (``auto``) that launches one condition
@@ -24,7 +24,9 @@ output is the evidence plane; this only scores and classifies it. Tool output ca
 never authorise a change forbidden by the reactivity/freshness/latency-tail
 checklist.
 
-Two ways to run each condition (three matched reps of each — A, B, C):
+The historical P4 classifier still supports matched A/B/C repetitions, but the
+current plan does not admit C unless a corrected window-local B actually regresses.
+Two ways to run an admitted condition:
 
 Automatic (opt-in in-app driver drives the exact interaction and quits the app)::
 
@@ -88,6 +90,34 @@ CONDITION_WINDOWS = {
     "B": ("steady_B",),
     "C": ("steady_C_pre", "steady_C_post"),
 }
+
+
+def _split_run_command(value: str | list[str], *, windows: bool | None = None) -> list[str]:
+    """Split ``--run-cmd`` without corrupting native Windows paths.
+
+    ``shlex.split()`` defaults to POSIX escaping.  On Windows that turns an
+    unquoted path such as ``C:\\Python311\\python.exe`` into a nonexistent
+    ``C:Python311python.exe``.  Use non-POSIX tokenization for Windows command
+    strings and strip only the matching outer quotes that non-POSIX shlex keeps.
+    Callers may still pass an already-tokenized list.
+    """
+    if isinstance(value, list):
+        return list(value)
+    if windows is None:
+        windows = sys.platform.startswith("win")
+    tokens = shlex.split(str(value), posix=not windows)
+    if not windows:
+        return tokens
+    cleaned: list[str] = []
+    for token in tokens:
+        if (
+            len(token) >= 2
+            and token[0] == token[-1]
+            and token[0] in {"'", '"'}
+        ):
+            token = token[1:-1]
+        cleaned.append(token)
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -549,7 +579,7 @@ def _classify_triple(a_run: dict, b_run: dict, c_run: dict) -> dict[str, object]
 
 
 def classify(a_reps: list[dict], b_reps: list[dict], c_reps: list[dict]) -> dict[str, object]:
-    """Apply the phase-P4 threshold, persistence and recovery rules to matched reps."""
+    """Apply the preserved threshold, persistence and recovery rules to matched reps."""
     valid_a = [r for r in a_reps if r.get("valid")]
     valid_b = [r for r in b_reps if r.get("valid")]
     valid_c = [r for r in c_reps if r.get("valid")]
@@ -644,7 +674,7 @@ def run_auto(args) -> int:
 
     condition = str(args.condition).strip().upper()
     repo_root = Path(__file__).resolve().parents[1]
-    base_cmd = args.run_cmd if isinstance(args.run_cmd, list) else shlex.split(args.run_cmd)
+    base_cmd = _split_run_command(args.run_cmd)
     run_cmd = list(base_cmd) + [
         f"--abc-drive={condition}",
         f"--abc-layout-slot={args.layout_slot}",
@@ -716,7 +746,7 @@ def run_auto(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="A/B/C harness for the visualizer post-switch tail investigation.",
+        description="Retained A/B/C harness for Visualizer causal diagnostics.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -751,11 +781,12 @@ def main(argv: list[str] | None = None) -> int:
         "--run-cmd",
         default="python main_mc.py --usage --viz --perf --life",
         help=(
-            "canonical RUN launch command as ONE quoted string (shlex-split); "
+            "canonical RUN launch command as ONE quoted string; parsing is "
+            "platform-aware so native Windows backslash paths remain intact. "
             "--abc-drive=<condition> and --abc-layout-slot=<slot> are appended. "
             "main_mc.py injects RUN mode when no explicit screensaver mode is "
             "supplied; frozen .scr builds still need their normal '/s'. Default "
-            "targets the MC build and includes lifecycle detail for attribution."
+            "targets the MC build and includes retained lifecycle detail."
         ),
     )
     p_auto.add_argument("--layout-slot", default="1", dest="layout_slot")

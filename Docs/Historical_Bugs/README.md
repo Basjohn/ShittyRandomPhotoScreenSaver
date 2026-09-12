@@ -26,7 +26,6 @@ Rehome surviving regression coverage before deleting an old owner.
 
 ## Active / Pending Acceptance
 
-- [R-80 — ABC Event-Loop Rolling History Contaminated Named Steady Windows](R-80_ABC_EventLoop_Rolling_Window_Contamination.md) — **ORACLE FIXED / PRODUCT ROOT CAUSE OPEN**.
 - [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md) — **IMPLEMENTED / AWAITING PHYSICAL VALIDATION**.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN at `5b3cbaef`; only physical dual-display acceptance remains.
 

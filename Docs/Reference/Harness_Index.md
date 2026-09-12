@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-09-01
+Last updated: 2026-09-12
 
 Compact routing for recurring investigation and migration sign-off commands.
 
@@ -88,6 +88,19 @@ python tools\image_worker_shm_lifecycle_harness.py --cycles 50 --width 3840 --he
 ```
 
 `tools/run_tests.py` is convenience only and delegates to `tests/run_chunked.py`.
+
+### Retained Visualizer causal/lifecycle diagnostics — no active investigation
+
+The post-switch performance investigation is closed, but two explicitly admitted diagnostics remain useful if future normal use/logs expose a persistent or traceable Visualizer issue:
+
+```powershell
+python tools\visualizer_switch_abc_harness.py auto --condition A --layout-slot 1 --workers 4 --log logs\screensaver_perf.log --out logs\abc_A.auto.json --rep-out logs\abc_A.json --run-cmd "python main_mc.py --usage --viz --perf --life"
+python tools\qtquick_visualizer_switch_smoke.py
+```
+
+`visualizer_switch_abc_harness.py` uses the R-80 window-local event-loop oracle and fails old rolling-only causal logs closed. `--abc-drive` and `--viz-switch-telemetry` are explicit diagnostic admissions; the retained render-host ownership telemetry is boundary-only and allocates only when admitted. The closed P4 per-frame/per-draw presentation/fence timing hooks were removed and must not be restored without a new reproduced defect and a concrete missing fact.
+
+These harnesses are **not scheduled work** and rapid-switch startup hitching alone is not a defect. Reopen only from future evidence that persists/grows after the triggering activity. See `Docs/Reference/Visualizer_Post_Switch_Performance_Investigation.md`.
 
 ## 2. Phase-C Quick transition regression harnesses
 
@@ -285,6 +298,29 @@ gate.
 Real two-display identity/topology, A -> B -> A physical ingress, mixed refresh/DPR, off/wake and final installed
 multi-display acceptance remain J evidence. Run those physical cells separately/isolated when the claim requires the operator's
 actual hardware.
+
+### 8.5 Friend Pulse / System Stats retained-card evidence
+
+Use the focused source/runtime/QML suites before the shared architecture gate. The smoke tool instantiates the production
+Quick host/components and writes standard, busy and shared-40%-floor captures for Friend Pulse Grid/Rows/Strict plus
+System Stats. It also captures the six-friend responsive three-column Grid. The harness uses inert fixture services and
+never contacts Steam or starts the product sampler.
+
+```powershell
+python -m pytest tests/test_steam_friend_pulse.py tests/test_friend_pulse_runtime.py tests/test_qtquick_friend_pulse_presentation.py tests/test_friend_pulse_stack_predictor.py tests/test_system_stats_source.py tests/test_system_stats_runtime.py tests/test_qtquick_system_stats_presentation.py tests/test_system_stats_settings.py -q
+python -m pytest tests/test_steam_links.py tests/test_secure_url_launcher.py tests/test_qtquick_family_product_actions.py -q
+python tools/qtquick_friend_system_stats_smoke.py --output-dir <capture-directory>
+python -m core.settings.defaults_snapshot_builder --check-all
+```
+
+The preserved bounded System Stats source admission harness remains:
+
+```powershell
+python tools/system_stats_s0_probe.py --condition cpu-ram --samples 3 --interval-seconds 10
+python tools/system_stats_s0_probe.py --condition cpu-ram --samples 3 --interval-seconds 10 --contention-workers 2
+```
+
+See `Docs/Reference/System_Stats_S0_Admission.md` for measured CPU/RAM admission and the rejected GPU/VRAM candidate.
 
 
 ## 9. Physical evidence

@@ -30,7 +30,6 @@ from __future__ import annotations
 import time
 from typing import Any, Callable, Optional
 
-from core.diagnostics import visualizer_attribution as _viz_attr
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from widgets.spotify_visualizer.reactivity_diagnostics import (
     maybe_log_snapshot_publication,
@@ -100,9 +99,6 @@ class QuickVisualizerPresentationSync:
         )
         if not published:
             return False
-        # Opt-in P4 attribution: one successful publication (a fresh snapshot
-        # reached the render bridge). No-op unless the experiment is admitted.
-        _viz_attr.note_publication()
         if is_viz_diagnostics_enabled():
             maybe_log_snapshot_publication(
                 self._controller,

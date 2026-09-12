@@ -8,7 +8,6 @@ import time
 from PySide6.QtCore import Slot, Qt
 from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGNode
 
-from core.diagnostics import visualizer_attribution as _viz_attr
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from widgets.spotify_visualizer.render_bridge import (
     VisualizerRenderIdentity,
@@ -94,7 +93,6 @@ class _RenderNodeRetirement:
                     self._telemetry.note_error(f"visualizer detached retirement failed: {exc}")
                     logger.exception("[QUICK] Detached visualizer retirement failed")
             _RetirementEvent(old_window, retire_detached)
-            _viz_attr.note_window_update_fallback()  # opt-in P4 attribution
             old_window.update()
 
     def set_node(self, node: VisualizerRenderNode, *, active_mode_id: str | None) -> None:
@@ -133,7 +131,6 @@ class _RenderNodeRetirement:
             if window is not self._window:
                 raise RuntimeError("visualizer retirement window does not own the node")
             self._pending_event = _RetirementEvent(window, self._release_inactive)
-        _viz_attr.note_window_update_fallback()  # opt-in P4 attribution
         window.update()
 
     def _release_inactive(self, event: _RetirementEvent) -> None:

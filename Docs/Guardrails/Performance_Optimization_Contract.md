@@ -183,6 +183,7 @@ Do not optimize a number until its semantics are understood.
 
 Before editing production code for performance:
 
+- [ ] **Reproduce before instrumenting:** if the target symptom is not currently reproduced by a trustworthy oracle or direct physical observation, do not add new counters/timers/samplers/profiler branches to chase it. First reproduce the actual symptom with the existing evidence plane. New instrumentation is admitted only after a failing condition exists and the missing fact is named.
 - [ ] Name the exact observed problem: stall tail, allocation source, CPU owner, GPU owner, leak/growth, task churn, provider duplication, etc.
 - [ ] Record the relevant load class: modest, representative heavy, transition-heavy, recreation-heavy, soak, installed/frozen, or another explicit cell.
 - [ ] Identify which existing metric proves the problem and which metrics protect freshness/reactivity.
@@ -208,23 +209,20 @@ After the change:
 - [ ] New instrumentation does not add meaningful hot-path work.
 - [ ] Any instructive failed optimization is recorded in Historical Bugs/guardrails when it could plausibly be repeated.
 
-## 8. Current late-J target
+## 8. Reopen gate — no active performance investigation
 
-Performance is no longer a Phase-H blocker. Late J may revisit it only after current I/J acceptance work admits it.
+There is currently **no active Visualizer performance target** from the closed post-switch investigation. Rapid mode-switch startup hitches are not backlog work by themselves when they stop with the triggering activity and leave steady-state ownership/resources/presentation healthy.
 
-Current target order:
+Reopen performance work only when normal use, a directly observed run, or logs expose a **persistent, growing or otherwise traceable defect**. Preserve that failing condition first. Do not schedule synthetic soak/probe campaigns merely to search for a problem. If a real defect is reproduced, use existing diagnostics before adding instrumentation, then add only the smallest missing measurement needed to localize the demonstrated failure.
 
-- [ ] fix recreation-boundary latency telemetry so tail evidence is trustworthy;
-- [ ] investigate only repeatable active >100 ms stalls or renewed deep-GC tails;
-- [ ] seek clear allocation/lifetime owners with reactivity-neutral fixes;
-- [ ] verify resource plateau through representative long soak/recreation;
-- [ ] preserve the modest-load quality envelope while validating representative heavy load;
-- [ ] leave stable CPU/GPU/cache/thread/handle numbers alone unless evidence shows avoidable work or growth.
+Stable CPU/GPU/cache/thread/handle numbers remain non-targets unless the failing evidence shows avoidable work or growth. Any reopened work still owes the full freshness/reactivity/latency-tail acceptance contract above.
 
 
 ## Instrumentation/tool ownership
 
-- Built-in PERF/usage/QML instrumentation is the primary runtime evidence plane.
+- Built-in PERF/usage/QML instrumentation is the primary runtime evidence plane when a real issue warrants diagnostics.
+- The corrected ABC harness/driver and `--viz-switch-telemetry` are retained as explicit opt-in tools; boundary lifecycle telemetry allocates only when admitted.
+- Closed-investigation P4 presentation/fence/sync timing hooks must not remain on ordinary render/presentation hot paths. They were removed after R-80 closure; do not restore them without a new reproduced defect and a concrete missing fact.
 - Generic offline archaeology parsers are not performance authority merely because they can summarize the same numbers.
 - Keep an external parser only for a narrow demonstrated cross-event question that the runtime does not already summarize; `image_change_perf_parser.py` is the current example.
 - `perf_measure.py` is retained because it observes the process tree independently/out of process; its CPU/RSS/thread/handle results remain context, never Visualizer freshness proof.

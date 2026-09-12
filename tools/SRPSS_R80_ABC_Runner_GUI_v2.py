@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import queue
+import shlex
 import shutil
 import subprocess
 import sys
@@ -261,11 +262,24 @@ class RunnerApp(tk.Tk):
             except FileNotFoundError:
                 pass
 
-        # Use the exact interpreter that launched this GUI for both harness and app.
-        # list2cmdline produces Windows-safe quoting if the interpreter path has spaces.
-        run_cmd = subprocess.list2cmdline(
+        # The harness parses --run-cmd with POSIX shlex even on Windows. A normal
+        # backslash path such as C:\\Python311\\pythonw.exe is therefore mangled.
+        # Pass a forward-slash path instead, which Windows accepts and shlex preserves.
+        #
+        # Prefer python.exe over pythonw.exe for the child app so diagnostic failures
+        # remain observable; keep the same interpreter installation/venv.
+        gui_python = Path(sys.executable).resolve()
+        if gui_python.name.lower() == "pythonw.exe":
+            console_python = gui_python.with_name("python.exe")
+            if not console_python.is_file():
+                console_python = gui_python
+        else:
+            console_python = gui_python
+
+        python_for_shlex = console_python.as_posix()
+        run_cmd = " ".join(
             [
-                sys.executable,
+                shlex.quote(python_for_shlex),
                 "main_mc.py",
                 "--usage",
                 "--viz",
@@ -273,6 +287,13 @@ class RunnerApp(tk.Tk):
                 "--life",
             ]
         )
+
+        # Fail before starting contention if the resolved child interpreter vanished.
+        if not console_python.is_file():
+            raise RuntimeError(
+                "Could not resolve the Python interpreter for the SRPSS child run: "
+                f"{console_python}"
+            )
 
         command = [
             sys.executable,

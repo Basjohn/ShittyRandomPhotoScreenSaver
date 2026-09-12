@@ -1,6 +1,6 @@
 """Focused coverage for the diagnostic experiment-flag resolver.
 
-These flags admit opt-in investigation instrumentation (visualizer switch/resource
+These flags admit retained opt-in diagnostics (visualizer switch/resource
 telemetry and the A/B/C driver). They are deliberately owned here rather than in
 ``core/dev_gates.py``; the tests pin the parsing contract, the implicit telemetry
 admission by ``--abc-drive``, argv-token stripping, and the once-at-startup

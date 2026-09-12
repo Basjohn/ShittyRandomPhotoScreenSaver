@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
 
 ## 0.10 2026-09-12 Windows/PySide validation run — supersedes prior NEEDS RUN VALIDATION
 
@@ -53,15 +53,46 @@ path + DevCurve source scrapes).
 
 ## 0.11 2026-09-12 Visualizer ABC event-loop oracle correction
 
-The original P4 `swap_sensitive` classifier result is **not trustworthy causal evidence** because the event-loop recorder's 2,048-sample rolling percentile retained about 102.4 seconds of pre-window history while the ABC driver excluded only 15 seconds before marking a "steady" window. R-80 records the failure.
+The original P4 `swap_sensitive` classifier result is **invalid causal evidence** because the event-loop recorder's 2,048-sample rolling percentile retained about 102.4 seconds of pre-window history while the ABC driver excluded only 15 seconds before marking a "steady" window. R-80 owns the failure/history.
 
 Current test/oracle contract:
 
 - `tests/test_event_loop_recorder.py` protects independent `period_*` report slices and scored-window history reset without restarting the timer/deadline chain;
 - `tests/test_visualizer_switch_abc_driver.py` protects one event-loop scoring reset at each named `steady_A`, `steady_B`, `steady_C_pre` and `steady_C_post` boundary;
-- `tests/test_visualizer_switch_abc_harness.py` proves causal scoring uses only matching window-local period summaries, rejects old rolling-only logs, preserves named C windows/freshness gates and applies persistence to represented non-overlapping periods.
+- `tests/test_visualizer_switch_abc_harness.py` proves causal scoring uses only matching window-local period summaries, rejects old rolling-only logs, preserves named C windows/freshness gates, applies persistence to represented non-overlapping periods, and preserves native Windows `--run-cmd` executable paths (including quoted paths with spaces).
 
-Validation in this Linux workspace: the 17 pure harness scorer/classifier tests were executed directly and all passed. The 14 injected driver state-machine cases also executed 14/14 under a minimal Qt stub, and a recorder logic smoke verified reset/period clearing plus summary emission; these do **not** replace real PySide execution. Normal pytest collection and the real Qt recorder/driver tests remain blocked here by missing PySide6; source compilation is green. The next Windows live A/B run is a product-oracle validation gate, not replaced by these tests.
+Validation:
+
+- corrected live A/B oracle on Windows: **VALID / persistent post-switch regression NOT REPRODUCED** (A p99 5.87 ms; B p99 6.80 ms; delta +0.93 ms/+15.8%; 3 >25 ms events each; ~89.9 Hz revision and 1.000 Bubble integration both);
+- pure harness scorer/classifier/path-parser + experiment-flag tests executed directly in this Linux workspace: **37/37 PASS**;
+- changed Python source compilation: **PASS**;
+- real PySide recorder/driver pytest collection remains **NOT RUN HERE** because this workspace lacks PySide6. Do not convert that environment limitation into PASS.
+- closed-investigation `core/diagnostics/visualizer_attribution.py` and its dedicated test were removed; retained coverage is the opt-in boundary lifecycle telemetry, repeated-switch retirement tests, corrected event-loop oracle, ABC driver/scorer and Windows command parsing.
+
+The performance investigation is closed: the corrected A/B result rejects the synthetic persistent 25-switch poison claim, and the original long-run observation is not currently reproduced/actionable. Reopen only from future persistent/traceable evidence; do not schedule another probe campaign from this record alone.
+
+---
+
+## 0.12 2026-09-13 Friend Pulse and System Stats implementation gate
+
+The F0-F6 Friend Pulse and S0-S6 CPU/RAM System Stats implementation gate is GREEN on Windows/PySide6:
+
+- **281/281 PASS** across Friend source/privacy/cache/request/avatar runtime, System Stats source/shared sampler, both
+  retained QML models/components, Steam/System Settings, binder/runtime-manager/family catalog, defaults authority,
+  one-open buckets, ordinary uniform resize, display stacking/prediction, build assets and focused semantic theme
+  inheritance. The expanded gate also covers private-cache ID confinement, identity-match validation, row-index-only
+  Friend actions, Steam/profile/Store target validation, interactive client fallback, normal secure-helper fail-closed
+  routing, exactly-once saver exit, and Achievement/Abandonment artwork actions;
+- **14/14 PASS** across widget import dormancy, capability-catalog neutrality and Widgets SETUP activation routing;
+- generated default snapshot plus both SST documents: **CURRENT** via `defaults_snapshot_builder --check-all`;
+- production-Quick visual smoke at DPR 1.5: canonical Grid, six-friend responsive three-column Grid, Activity Rows,
+  Strict, System Stats and both shared 40% floor captures rendered with **zero QML warnings**;
+- source asset contract: Friend/System QML and the original System Stats gear-and-spanner SVG are required build payloads.
+
+This is not the installed acceptance/ungate claim. Friend Pulse still needs connected-account privacy/readability,
+installed Steam/chat/profile/Store routing, and two-display retirement/cardinality validation. System Stats still needs
+the installed 10-second off-vs-on Visualizer contention/long-run and two-display resource/cardinality cells. Keep
+`--devsteam` / `--devstats` until those plan rows close.
 
 ---
 
@@ -596,4 +627,3 @@ tests/test_achievement_pulse_progress_text_visual_scale_contract.py
 ```
 
 Direct execution in the Linux workspace: **2/2 assertions PASS**. The contract requires the 0.90 reduction to occur as a final presentation transform after `Text.HorizontalFit`, where it cannot be masked by the fitter's existing point-size choice. It separately protects the existing 108x108 pulse geometry and 4 px lift and verifies that the Total parsing/model and authored-size normalization remain in their existing Python owners. Operator-installed visual confirmation is accepted as of 2026-09-11; only automated test execution debt remains.
-

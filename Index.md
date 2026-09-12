@@ -121,18 +121,18 @@ For a new mode or any meaningful reactivity change, read `Docs/Guides/Visualizer
 - `Docs/Reference/Harness_Index.md` — Harness Index
 - `Docs/Reference/Steam_Data_Feasibility.md` — Steam Data Feasibility
 - `Docs/Reference/Visualizer_Reference.md` — Visualizer Reference
+- `Docs/Reference/Visualizer_Post_Switch_Performance_Investigation.md` — closed Visualizer post-switch performance investigation; R-80 corrected the oracle and no persistent post-switch defect was reproduced.
 
 ### Future Work
 
-- `Docs/Future_Work/Visualizer_Post_Switch_Performance.md` — active Visualizer long-run presentation-tail investigation; window-local ABC oracle corrected after R-80 invalidated the original rolling-history verdict.
 
 - `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md` — Bubble aspect response and presentation cost
 - `Docs/Future_Work/Edit_Layout_Live_Commit.md` — Live Edit commit (retired / historical reference)
 - `Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md` — Ordinary Widget Resize Normalization (retired / historical reference)
 - `Docs/Future_Work/Settings_Dark_QSS_Retirement.md` — Settings `dark.qss` Retirement
 - `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` — Voxel Sphere — accepted experimental preservation and future migration gate
-- `Docs/Future_Work/Steam_Friend_Pulse.md` — Steam Friend Pulse — definite current-plan widget proposal/decomposition
-- `Docs/Future_Work/System_Stats_Widget.md` — System Stats — conditional current-plan widget proposal/decomposition
+- `Docs/Future_Work/Steam_Friend_Pulse.md` — implemented/dev-gated Friend Pulse architecture and live/installed acceptance authority
+- `Docs/Future_Work/System_Stats_Widget.md` — implemented/dev-gated CPU/RAM System Stats architecture, rejected GPU/VRAM evidence and S7 acceptance authority
 - `Docs/Future_Work/SST_9of10_Settings.md` — SST 9/10 Settings — closeout/reference checklist (Strategy B)
 - `Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md` — Visualizer replay reactivity floor (landed regression reference)
 - `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` — Visualizer visual regression recovery (historical evidence)
