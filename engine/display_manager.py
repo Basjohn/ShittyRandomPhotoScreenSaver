@@ -10,7 +10,7 @@ import weakref
 from copy import deepcopy
 from dataclasses import asdict
 from types import MappingProxyType, SimpleNamespace
-from typing import Any, List, Dict, Optional, Set, Mapping
+from typing import Any, Callable, List, Dict, Optional, Set, Mapping
 from PySide6.QtCore import QObject, Signal, QUrl
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
@@ -907,8 +907,20 @@ class DisplayManager(QObject):
 
         return False
 
-    def _request_quick_visualizer_mode(self, mode_id: str) -> bool:
-        """Resolve and request one canonical activation on the admitted owner."""
+    def _request_quick_visualizer_mode(
+        self,
+        mode_id: str,
+        *,
+        completion_observer: Callable[[str], None] | None = None,
+    ) -> bool:
+        """Resolve and request one canonical activation on the admitted owner.
+
+        ``completion_observer`` is an OPTIONAL experimental hook (opt-in A/B/C
+        driver) chained *after* the existing persistence completion. Ordinary
+        callers pass nothing and behaviour is unchanged; the observer, when
+        given, fires only on a genuine fully-presented target completion — never
+        on a rejected or timed-out request.
+        """
 
         owner = self._quick_visualizer_owner
         settings = self.settings_manager
@@ -955,6 +967,16 @@ class DisplayManager(QObject):
             resolve_preset_indices=False,
         )
         technical_cache = build_technical_cache(None, model)
+        on_complete: Callable[[str], None] = self._complete_quick_visualizer_mode_change
+        if completion_observer is not None:
+            persist_completion = on_complete
+
+            def on_complete(completed_mode_id: str) -> None:
+                # Persist first (existing behaviour), then notify the experiment
+                # observer on the same genuine completion edge.
+                persist_completion(completed_mode_id)
+                completion_observer(completed_mode_id)
+
         return bool(
             owner.request_mode_change(
                 target,
@@ -963,7 +985,7 @@ class DisplayManager(QObject):
                 technical_cache=technical_cache,
                 logical_kwargs=asdict(model),
                 presentation_kwargs=asdict(model),
-                on_complete=self._complete_quick_visualizer_mode_change,
+                on_complete=on_complete,
             )
         )
 

@@ -1,114 +1,162 @@
-"""Opt-in, dev-gated in-app A/B/C driver for the post-switch tail experiment (P4).
+"""Opt-in, deterministic in-app A/B/C driver for the post-switch tail experiment (P4).
 
 Authority: ``Docs/Future_Work/Visualizer_Post_Switch_Performance.md`` phase P4.
 Guardrail: ``Docs/Guardrails/Performance_Optimization_Contract.md``.
 
 This drives the phase-P4 A/B/C visualizer interactions through the app's **real**
-product paths — the same mode-cycle used by the double/middle-click action and
-the same saved-layout load used for a runtime recreation — so the experiment
-measures the real scheduler/QML/scene behaviour rather than a synthetic harness.
-It is installed only when ``--abc-drive=<A|B|C>`` is present (opt-in, dev-only,
-never active in production) and it emits distinct phase-window markers so an
-offline scorer can slice exactly the settled steady window.
+product paths — the same canonical direct visualizer mode-request used by the
+double/middle-click action and the same saved-layout load used for a runtime
+recreation — so the experiment measures real scheduler/QML/scene behaviour rather
+than a synthetic harness. It is installed only when ``--abc-drive=<A|B|C>`` was
+admitted by the diagnostics resolver (opt-in, dev-only, never active in
+production) and it emits distinct named phase-window markers so an offline scorer
+can slice exactly the settled steady window(s).
 
-It is a diagnostic experiment, not a product feature:
+Determinism and matched control (this is the corrective contract):
 
-* condition **A** holds settled Bubble (control) — no switching, no recreation;
-* condition **B** performs N full mode cycles through the real cycle action, then
-  holds Bubble — no recreation;
-* condition **C** performs the same B exposure, holds to establish the post-switch
-  tail, then loads the saved layout to force the existing Quick-runtime
-  recreation boundary, then holds Bubble again.
+* every condition begins from the **same saved layout slot**, recreated through
+  the real fenced reload, and the intended extreme-vertical CUSTOM Bubble baseline
+  is *verified* (runtime generation changed, Bubble active, CUSTOM layout mode
+  selected, owner/source healthy) before any measurement — so **A really is
+  Bubble**, not merely "some visualizer is active";
+* condition **A** holds the verified Bubble baseline (control) — no switching, no
+  further recreation;
+* conditions **B** and **C** perform the exact exposure ``Sphere -> Spectrum ->
+  Oscilloscope -> Sine -> Bubble`` repeated for exactly 5 full cycles (DevCurve is
+  deliberately excluded), each switch advancing only on a **genuine completion
+  edge** (fully-presented target), then settle on Bubble;
+* condition **C** additionally, after its post-switch hold, loads the *same* slot
+  again to force the existing Quick-runtime recreation boundary, verifies the
+  recreation, then holds Bubble again — producing both a pre-recreation and a
+  post-recreation scored window.
 
-The DM interactions are injected as callables so the state machine is unit
-testable without a live GL surface. Recreation here is the P4 intervention, not
-a production self-healing fallback.
+Fail-closed: a rejected/incomplete/wrong-mode switch, a disabled required mode, a
+failed/unverified recreation, or any watchdog expiry marks the run **INVALID**
+(machine-readable reason) rather than continuing. An invalid run is never
+performance evidence. Recreation here is the P4 intervention, not a production
+self-healing fallback.
+
+All DM interactions and timing are injected as callables so the state machine is
+unit-testable without a live GL surface. Progression uses completion edges, not a
+recurring poll; only bounded one-shot watchdogs/hold timers remain.
 """
 
 from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from enum import Enum, auto
 
 from PySide6.QtCore import QObject, QTimer
 
 logger = logging.getLogger(__name__)
 
+# The exact P4 exposure. DevCurve is intentionally excluded; the sequence ends on
+# the settle mode so five full cycles finish on a verified Bubble.
+EXPOSURE_SEQUENCE: tuple[str, ...] = (
+    "sphere",
+    "spectrum",
+    "oscilloscope",
+    "sine_wave",
+    "bubble",
+)
+SETTLE_MODE = "bubble"
+EXPOSURE_CYCLES = 5
+
 
 class _Phase(Enum):
-    WARMUP = auto()
-    SWITCHING = auto()
-    HOLD_POST_SWITCH = auto()
-    RECREATE = auto()
-    HOLD_POST_RECREATE = auto()
+    IDLE = auto()
+    RUNNING = auto()
     DONE = auto()
 
 
 class VisualizerSwitchAbcDriver(QObject):
-    """Drive one A/B/C condition through the real product mode-switch/recreate seams."""
+    """Drive one A/B/C condition deterministically through real product seams."""
 
     def __init__(
         self,
         *,
         condition: str,
-        cycle_mode: Callable[[], None],
-        active_mode: Callable[[], str | None],
         load_layout: Callable[[], bool],
+        active_mode: Callable[[], str | None],
         runtime_generation: Callable[[], int | None],
-        on_complete: Callable[[], None] | None = None,
-        settle_mode: str = "bubble",
-        cycles: int = 5,
+        request_mode: Callable[[str, Callable[[str], None]], bool],
+        mode_enabled: Callable[[str], bool],
+        custom_baseline_ok: Callable[[], bool],
+        owner_healthy: Callable[[], bool],
+        watch_recreation: Callable[[int | None, Callable[[int | None], None]], None],
+        on_complete: Callable[[dict], None] | None = None,
+        exposure_sequence: Sequence[str] = EXPOSURE_SEQUENCE,
+        cycles: int = EXPOSURE_CYCLES,
+        settle_mode: str = SETTLE_MODE,
         exclude_seconds: float = 15.0,
         hold_seconds: float = 120.0,
-        poll_ms: int = 250,
         switch_timeout_s: float = 8.0,
+        recreate_timeout_s: float = 30.0,
+        schedule: Callable[[int, str, Callable[[], None]], None] | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._condition = str(condition).strip().upper()
         if self._condition not in {"A", "B", "C"}:
             raise ValueError(f"unsupported A/B/C condition: {condition!r}")
-        self._cycle_mode = cycle_mode
-        self._active_mode = active_mode
         self._load_layout = load_layout
+        self._active_mode = active_mode
         self._runtime_generation = runtime_generation
+        self._request_mode = request_mode
+        self._mode_enabled = mode_enabled
+        self._custom_baseline_ok = custom_baseline_ok
+        self._owner_healthy = owner_healthy
+        self._watch_recreation = watch_recreation
         self._on_complete = on_complete
         self._settle_mode = str(settle_mode).strip().lower()
+        self._exposure = tuple(str(m).strip().lower() for m in exposure_sequence)
         self._cycles = max(1, int(cycles))
-        self._exclude_seconds = max(0.0, float(exclude_seconds))
-        self._hold_seconds = max(1.0, float(hold_seconds))
-        self._poll_ms = max(20, int(poll_ms))
-        self._switch_timeout_s = max(0.5, float(switch_timeout_s))
+        self._flat_sequence = self._exposure * self._cycles
+        self._required_modes = frozenset(self._exposure)
+        self._exclude_ms = max(0, int(float(exclude_seconds) * 1000))
+        self._hold_ms = max(1, int(float(hold_seconds) * 1000))
+        self._switch_timeout_ms = max(1, int(float(switch_timeout_s) * 1000))
+        self._recreate_timeout_ms = max(1, int(float(recreate_timeout_s) * 1000))
+        self._schedule_impl = schedule or self._default_schedule
 
-        self._phase = _Phase.WARMUP
-        self._switches_remaining = 0
-        self._num_modes_seen: set[str] = set()
-        self._pending_from_mode: str | None = None
-        self._pending_since = 0.0
-        self._window_deadline: float | None = None
-        self._recreate_generation_before: int | None = None
-        self._timer = QTimer(self)
-        self._timer.setInterval(self._poll_ms)
-        self._timer.timeout.connect(self._tick)
+        self._phase = _Phase.IDLE
+        self._done = False
+        self._generation_before: int | None = None
+        self._recreate_token = 0
+        self._recreate_next: Callable[[], None] | None = None
+        self._switch_token = 0
+        self._exposure_index = 0
+        self._pending_target: str | None = None
 
-    # ---- lifecycle -----------------------------------------------------------
+    # -- scheduling ------------------------------------------------------------
+
+    def _default_schedule(self, delay_ms: int, kind: str, callback: Callable[[], None]) -> None:
+        # Bounded one-shot only. No recurring cadence: switch/recreation progress
+        # arrives on completion edges, holds/watchdogs are single fires.
+        QTimer.singleShot(int(delay_ms), callback)
+
+    # -- lifecycle -------------------------------------------------------------
 
     def start(self) -> None:
+        if self._phase is not _Phase.IDLE:
+            return
+        self._phase = _Phase.RUNNING
         logger.info(
-            "[ABC] driver start condition=%s cycles=%d exclude_s=%.1f hold_s=%.1f",
+            "[ABC] driver start condition=%s cycles=%d exposure=%s exclude_s=%.1f "
+            "hold_s=%.1f",
             self._condition,
             self._cycles,
-            self._exclude_seconds,
-            self._hold_seconds,
+            "->".join(self._exposure),
+            self._exclude_ms / 1000.0,
+            self._hold_ms / 1000.0,
         )
-        self._timer.start()
+        self._mark("driver", "start")
+        # Every condition begins with a verified baseline recreation.
+        self._begin_recreation(self._after_baseline, purpose="baseline")
 
-    def stop(self) -> None:
-        self._timer.stop()
-
-    # ---- phase-window markers ------------------------------------------------
+    # -- markers ---------------------------------------------------------------
 
     def _mark(self, phase: str, state: str) -> None:
         logger.info(
@@ -120,141 +168,208 @@ class VisualizerSwitchAbcDriver(QObject):
             self._runtime_generation(),
         )
 
-    def _begin_window(self, phase_name: str) -> None:
-        # Exclude the first N seconds after activation/recreation, then score a
-        # settled window; the markers bracket exactly the scored interval.
-        self._pending_window_phase = phase_name
-        self._window_deadline = time.monotonic() + self._exclude_seconds
-        self._window_open = False
-
-    # ---- state machine -------------------------------------------------------
-
-    def _tick(self) -> None:
-        try:
-            handler = {
-                _Phase.WARMUP: self._tick_warmup,
-                _Phase.SWITCHING: self._tick_switching,
-                _Phase.HOLD_POST_SWITCH: self._tick_hold_post_switch,
-                _Phase.RECREATE: self._tick_recreate,
-                _Phase.HOLD_POST_RECREATE: self._tick_hold_post_recreate,
-                _Phase.DONE: self._tick_done,
-            }[self._phase]
-            handler()
-        except Exception:
-            logger.exception("[ABC] driver tick failed; stopping")
-            self._finish()
-
-    def _tick_warmup(self) -> None:
-        # Wait until the visualizer owner exists and reports an active mode.
-        if self._active_mode() is None:
-            return
-        if self._condition == "A":
-            self._enter_hold(_Phase.HOLD_POST_SWITCH, "steady_A")
-            return
-        # B/C: switch exposure = `cycles` full passes through the enabled modes.
-        # We complete a full pass each time we revisit the starting mode.
-        self._switches_remaining = self._cycles * self._estimate_mode_count()
-        self._num_modes_seen = set()
-        self._phase = _Phase.SWITCHING
-        self._request_switch()
-
-    def _estimate_mode_count(self) -> int:
-        # Conservative: the five permanent modes plus experimental Sphere when
-        # active. The exact count only bounds the switch total; landing on the
-        # settle mode below guarantees we finish on Bubble regardless.
-        return 6
-
-    def _request_switch(self) -> None:
-        self._pending_from_mode = self._active_mode()
-        self._pending_since = time.monotonic()
-        self._cycle_mode()
-
-    def _tick_switching(self) -> None:
-        current = self._active_mode()
-        if current is not None:
-            self._num_modes_seen.add(current)
-        advanced = current is not None and current != self._pending_from_mode
-        timed_out = (time.monotonic() - self._pending_since) > self._switch_timeout_s
-        if not (advanced or timed_out):
-            return
-        if self._switches_remaining > 0:
-            self._switches_remaining -= 1
-            self._request_switch()
-            return
-        # Exposure complete: cycle until we settle on the hold mode (Bubble).
-        if current != self._settle_mode:
-            self._request_switch()
-            return
-        self._enter_hold(_Phase.HOLD_POST_SWITCH, "steady_B" if self._condition == "B" else "steady_C_preswitch")
-
-    def _enter_hold(self, phase: _Phase, window_name: str) -> None:
-        self._phase = phase
-        self._begin_window(window_name)
-
-    def _advance_hold_window(self, next_action: Callable[[], None]) -> None:
-        now = time.monotonic()
-        if not getattr(self, "_window_open", False):
-            if now >= (self._window_deadline or 0.0):
-                self._window_open = True
-                self._window_deadline = now + self._hold_seconds
-                self._mark(self._pending_window_phase, "start")
-            return
-        if now >= (self._window_deadline or 0.0):
-            self._mark(self._pending_window_phase, "end")
-            next_action()
-
-    def _tick_hold_post_switch(self) -> None:
-        if self._condition == "C":
-            self._advance_hold_window(self._enter_recreate)
-        else:
-            self._advance_hold_window(self._finish)
-
-    def _enter_recreate(self) -> None:
-        self._phase = _Phase.RECREATE
-        self._recreate_generation_before = self._runtime_generation()
-        self._mark("recreate", "request")
-        ok = bool(self._load_layout())
-        logger.info("[ABC] recreate load_layout ok=%s", ok)
-        self._recreate_since = time.monotonic()
-
-    def _tick_recreate(self) -> None:
-        # Wait until the runtime generation actually changes (real recreation).
-        generation = self._runtime_generation()
-        changed = (
-            generation is not None
-            and self._recreate_generation_before is not None
-            and generation != self._recreate_generation_before
+    def _mark_invalid(self, reason: str) -> None:
+        logger.error(
+            "[ABC] condition=%s INVALID reason=%s epoch=%.3f runtime_generation=%s",
+            self._condition,
+            reason,
+            time.time(),
+            self._runtime_generation(),
         )
-        settled = self._active_mode() == self._settle_mode
-        timed_out = (time.monotonic() - self._recreate_since) > self._switch_timeout_s
-        if (changed and settled) or timed_out:
-            self._mark("recreate", "generation=%s" % generation)
-            self._enter_hold(_Phase.HOLD_POST_RECREATE, "steady_C_postrecreate")
 
-    def _tick_hold_post_recreate(self) -> None:
-        self._advance_hold_window(self._finish)
+    # -- recreation (baseline + condition-C intervention) ----------------------
 
-    def _tick_done(self) -> None:
-        self.stop()
+    def _begin_recreation(self, next_step: Callable[[], None], *, purpose: str) -> None:
+        self._generation_before = self._runtime_generation()
+        self._recreate_token += 1
+        token = self._recreate_token
+        self._recreate_next = next_step
+        self._mark("recreate", f"request purpose={purpose}")
+        # Observe the existing fenced reload/readiness seam rather than polling
+        # the runtime generation. The observer fires once, on the first ready
+        # generation that differs from the pre-load generation.
+        self._watch_recreation(
+            self._generation_before,
+            lambda generation: self._on_recreation_ready(generation, token),
+        )
+        if not bool(self._load_layout()):
+            self._invalidate("layout slot load failed")
+            return
+        self._schedule_impl(
+            self._recreate_timeout_ms,
+            "recreate_watchdog",
+            lambda: self._on_recreate_watchdog(token),
+        )
 
-    def _finish(self) -> None:
+    def _on_recreate_watchdog(self, token: int) -> None:
+        if token != self._recreate_token or self._done:
+            return  # recreation already completed; watchdog is stale
+        self._invalidate("runtime recreation did not complete (watchdog)")
+
+    def _on_recreation_ready(self, generation: int | None, token: int) -> None:
+        if token != self._recreate_token or self._done:
+            return  # stale/duplicate emit
+        self._recreate_token += 1  # invalidate the pending watchdog
+        current = self._runtime_generation()
+        if current is None or current == self._generation_before:
+            self._invalidate("runtime generation did not change on recreation")
+            return
+        active = (self._active_mode() or "").strip().lower()
+        if active != self._settle_mode:
+            self._invalidate(f"Bubble not restored after recreation (mode={active})")
+            return
+        if not bool(self._custom_baseline_ok()):
+            self._invalidate("required CUSTOM Bubble baseline unavailable")
+            return
+        if not bool(self._owner_healthy()):
+            self._invalidate("visualizer owner/source unhealthy after recreation")
+            return
+        self._mark("recreate", f"verified generation={current}")
+        next_step, self._recreate_next = self._recreate_next, None
+        if next_step is not None:
+            next_step()
+
+    # -- post-baseline branch --------------------------------------------------
+
+    def _after_baseline(self) -> None:
+        if self._condition == "A":
+            # Control: hold the verified Bubble baseline, no switching.
+            self._enter_hold("steady_A", self._finish_valid)
+            return
+        # B/C: preflight the exact required modes. Do not mutate/enable settings;
+        # an unavailable required mode invalidates the run.
+        missing = sorted(m for m in self._required_modes if not bool(self._mode_enabled(m)))
+        if missing:
+            self._invalidate(
+                "required exposure modes disabled/unavailable: " + ",".join(missing)
+            )
+            return
+        self._exposure_index = 0
+        self._begin_next_switch()
+
+    # -- switch exposure (B/C) -------------------------------------------------
+
+    def _begin_next_switch(self) -> None:
+        if self._exposure_index >= len(self._flat_sequence):
+            active = (self._active_mode() or "").strip().lower()
+            if active != self._settle_mode:
+                self._invalidate(f"exposure did not settle on Bubble (mode={active})")
+                return
+            if self._condition == "B":
+                self._enter_hold("steady_B", self._finish_valid)
+            else:
+                self._enter_hold("steady_C_pre", self._after_c_pre_hold)
+            return
+        target = self._flat_sequence[self._exposure_index]
+        self._pending_target = target
+        self._switch_token += 1
+        token = self._switch_token
+        if not bool(self._request_mode(target, self._on_switch_complete)):
+            self._invalidate(f"target mode request rejected: {target}")
+            return
+        self._schedule_impl(
+            self._switch_timeout_ms,
+            "switch_watchdog",
+            lambda: self._on_switch_watchdog(token),
+        )
+
+    def _on_switch_watchdog(self, token: int) -> None:
+        if token != self._switch_token or self._done:
+            return  # this switch already completed; watchdog is stale
+        # A timeout is a watchdog FAILURE, never an alternate success condition.
+        self._invalidate(f"mode transition did not complete: {self._pending_target}")
+
+    def _on_switch_complete(self, completed_mode_id: str) -> None:
+        if self._done:
+            return
+        completed = str(completed_mode_id or "").strip().lower()
+        if completed != self._pending_target:
+            self._invalidate(
+                f"completed mode wrong: expected {self._pending_target}, got {completed}"
+            )
+            return
+        self._switch_token += 1  # invalidate the pending watchdog
+        self._exposure_index += 1
+        self._begin_next_switch()
+
+    def _after_c_pre_hold(self) -> None:
+        # Condition-C intervention: recreate the same slot, verify, then hold again.
+        self._begin_recreation(
+            lambda: self._enter_hold("steady_C_post", self._finish_valid),
+            purpose="c_intervention",
+        )
+
+    # -- scored hold windows ---------------------------------------------------
+
+    def _enter_hold(self, window_name: str, next_action: Callable[[], None]) -> None:
+        # Exclude the first N seconds after activation/recreation, then bracket the
+        # scored window with start/end markers. Bounded one-shot timers only.
+        self._schedule_impl(
+            self._exclude_ms,
+            "exclusion",
+            lambda: self._begin_scored_window(window_name, next_action),
+        )
+
+    def _begin_scored_window(self, window_name: str, next_action: Callable[[], None]) -> None:
+        if self._done:
+            return
+        self._mark(window_name, "start")
+        self._schedule_impl(
+            self._hold_ms,
+            "hold",
+            lambda: self._end_scored_window(window_name, next_action),
+        )
+
+    def _end_scored_window(self, window_name: str, next_action: Callable[[], None]) -> None:
+        if self._done:
+            return
+        self._mark(window_name, "end")
+        next_action()
+
+    # -- completion ------------------------------------------------------------
+
+    def _finish_valid(self) -> None:
+        self._finish(valid=True, reason=None)
+
+    def _invalidate(self, reason: str) -> None:
+        self._finish(valid=False, reason=reason)
+
+    def _finish(self, *, valid: bool, reason: str | None) -> None:
+        if self._done:
+            return
+        self._done = True
         self._phase = _Phase.DONE
-        self.stop()
-        self._mark("driver", "complete")
-        logger.info("[ABC] driver complete condition=%s", self._condition)
+        if valid:
+            self._mark("driver", "complete valid=true")
+            logger.info("[ABC] driver complete condition=%s valid", self._condition)
+        else:
+            self._mark_invalid(reason or "unspecified")
+            logger.error(
+                "[ABC] driver INVALID condition=%s reason=%s", self._condition, reason
+            )
+        result = {
+            "condition": self._condition,
+            "valid": bool(valid),
+            "reason": reason,
+        }
         if self._on_complete is not None:
             try:
-                self._on_complete()
+                self._on_complete(result)
             except Exception:
                 logger.exception("[ABC] on_complete callback failed")
 
 
 def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
-    """Install the driver when ``--abc-drive`` is set; return it or None.
+    """Install the deterministic driver when ``--abc-drive`` is admitted; else None.
 
-    Uses the engine's real DisplayManager cycle-mode / load-layout seams. The
-    ``on_complete`` callback quits the app so a harness can treat process exit as
-    the run boundary. Kept defensive: any missing seam disables the driver.
+    Wires the driver to the engine's real DisplayManager seams: the canonical
+    direct visualizer mode-request (with the experimental completion observer), the
+    saved-layout slot load, the runtime generation, the effective-enabled-mode
+    admission, the global CUSTOM-layout baseline check and the authoritative
+    first-frame readiness signal used to observe a recreation. ``on_complete``
+    exits the app so a harness can treat process exit as the run boundary — exit
+    code 0 for a valid run, non-zero for INVALID. Kept defensive: any missing seam
+    disables the driver.
     """
     from core.diagnostics.experiment_flags import abc_drive_condition
 
@@ -262,31 +377,26 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
     if condition is None:
         return None
 
-    # Read the DisplayManager lazily each call: RUN mode creates/recreates it
-    # after this install, and condition C intentionally rebuilds it, so a stale
-    # captured reference would break mid-experiment.
+    slot = str(layout_slot)
+
+    # Read the DisplayManager lazily each call: RUN mode creates/recreates display
+    # units after this install, and condition C intentionally rebuilds them, so a
+    # stale captured reference would break mid-experiment. The DisplayManager
+    # object itself persists across those unit recreations.
     def _dm():
         return getattr(engine, "display_manager", None)
 
-    def _cycle_mode() -> None:
+    def _owner():
         display_manager = _dm()
-        if display_manager is not None:
-            display_manager._cycle_quick_visualizer_mode()
+        return None if display_manager is None else getattr(
+            display_manager, "_quick_visualizer_owner", None
+        )
 
     def _active_mode() -> str | None:
-        display_manager = _dm()
-        if display_manager is None:
-            return None
-        owner = getattr(display_manager, "_quick_visualizer_owner", None)
+        owner = _owner()
         controller = getattr(owner, "controller", None) if owner is not None else None
         mode = getattr(controller, "mode_id", None)
         return None if mode is None else str(mode).strip().lower()
-
-    def _load_layout() -> bool:
-        display_manager = _dm()
-        if display_manager is None:
-            return False
-        return bool(display_manager._load_layout_slot(str(layout_slot)))
 
     def _runtime_generation() -> int | None:
         display_manager = _dm()
@@ -296,15 +406,115 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
         except (TypeError, ValueError):
             return None
 
-    def _on_complete() -> None:
-        app.quit()
+    def _load_layout() -> bool:
+        display_manager = _dm()
+        if display_manager is None:
+            return False
+        return bool(display_manager._load_layout_slot(slot))
+
+    def _request_mode(target: str, on_complete: Callable[[str], None]) -> bool:
+        display_manager = _dm()
+        if display_manager is None:
+            return False
+        return bool(
+            display_manager._request_quick_visualizer_mode(
+                target, completion_observer=on_complete
+            )
+        )
+
+    def _mode_enabled(mode: str) -> bool:
+        display_manager = _dm()
+        settings = getattr(display_manager, "settings_manager", None) if display_manager else None
+        if settings is None:
+            return False
+        try:
+            from core.settings.visualizer_mode_registry import (
+                coerce_visualizer_mode_id,
+                is_mode_active,
+                resolve_effective_enabled_modes,
+            )
+
+            target = str(mode).strip().lower()
+            if coerce_visualizer_mode_id(target) != target or not is_mode_active(target):
+                return False
+            section = settings.get("widgets.spotify_visualizer")
+            if not isinstance(section, dict):
+                return False
+            enabled = resolve_effective_enabled_modes(section.get("mode_activation"))
+            return target in enabled
+        except Exception:
+            logger.exception("[ABC] mode_enabled preflight failed for %s", mode)
+            return False
+
+    def _custom_baseline_ok() -> bool:
+        display_manager = _dm()
+        settings = getattr(display_manager, "settings_manager", None) if display_manager else None
+        if settings is None:
+            return False
+        try:
+            from rendering.widget_descriptors import (
+                is_global_custom_layout_mode_selected,
+            )
+
+            return bool(is_global_custom_layout_mode_selected(settings.get_widgets_map()))
+        except Exception:
+            logger.exception("[ABC] CUSTOM baseline check failed")
+            return False
+
+    def _owner_healthy() -> bool:
+        owner = _owner()
+        if owner is None or getattr(owner, "is_retired", True):
+            return False
+        controller = getattr(owner, "controller", None)
+        return controller is not None and getattr(controller, "mode_id", None) is not None
+
+    def _watch_recreation(generation_before, on_ready: Callable[[int | None], None]) -> None:
+        display_manager = _dm()
+        signal = getattr(display_manager, "authoritative_first_frames_ready", None)
+        if signal is None:
+            return
+
+        state = {"fired": False}
+
+        def _slot(generation):
+            if state["fired"]:
+                return
+            try:
+                emitted = int(generation)
+            except (TypeError, ValueError):
+                return
+            if generation_before is not None and emitted == int(generation_before):
+                return  # readiness for the pre-load generation; keep waiting
+            state["fired"] = True
+            try:
+                signal.disconnect(_slot)
+            except (RuntimeError, TypeError):
+                pass
+            on_ready(emitted)
+
+        signal.connect(_slot)
+
+    def _on_complete(result: dict) -> None:
+        code = 0 if result.get("valid") else 3
+        logger.info(
+            "[ABC] experiment complete condition=%s valid=%s reason=%s exit=%d",
+            result.get("condition"),
+            result.get("valid"),
+            result.get("reason"),
+            code,
+        )
+        app.exit(code)
 
     driver = VisualizerSwitchAbcDriver(
         condition=condition,
-        cycle_mode=_cycle_mode,
-        active_mode=_active_mode,
         load_layout=_load_layout,
+        active_mode=_active_mode,
         runtime_generation=_runtime_generation,
+        request_mode=_request_mode,
+        mode_enabled=_mode_enabled,
+        custom_baseline_ok=_custom_baseline_ok,
+        owner_healthy=_owner_healthy,
+        watch_recreation=_watch_recreation,
         on_complete=_on_complete,
         parent=app,
     )
@@ -312,4 +522,10 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
     return driver
 
 
-__all__ = ["VisualizerSwitchAbcDriver", "install_abc_driver_if_enabled"]
+__all__ = [
+    "VisualizerSwitchAbcDriver",
+    "install_abc_driver_if_enabled",
+    "EXPOSURE_SEQUENCE",
+    "SETTLE_MODE",
+    "EXPOSURE_CYCLES",
+]
