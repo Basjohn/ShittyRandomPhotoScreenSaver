@@ -97,21 +97,35 @@ Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evide
   the tail is a **per-operation cost increase, not a count increase**, and the
   logical tick stays clean (no tick-breakdown spikes, ~90 Hz). C was NOT run — A/B
   leave no H1/H2 ambiguity to resolve. No repair made (neither hypothesis survived).
-- [ ] **ACTIVE NEXT (measurement, not repair):** since ownership AND presentation
-  cadence are equivalent but individual GUI-thread iterations got costlier in B,
-  measure the next suspects before changing anything: (a) the per-draw
-  `_InheritedGlState.capture()/restore()` fence (synchronous GL state queries around
-  every visualizer draw — same draw count in A/B, so per-draw cost must be timed to
-  test whether post-switch driver/GL state makes each capture slower); (b) GC /
-  Quick-generation-owned state accumulated across 25 activations (H4) as an alternate
-  GUI-thread stall source. Do not lower the 60 Hz presentation target or ~90 Hz
+- [x] **Fence measurement — DONE 2026-09-12, `_InheritedGlState` fence REJECTED.**
+  Added opt-in per-draw capture/restore timing (`visualizer_attribution._FenceTiming`,
+  `time.perf_counter_ns()` around the EXISTING fence, bucketed, boundary-emitted; no
+  GL added/removed; render-thread, no lock). Matched A + B (`logs/abc_evidence/
+  {A,B}_fence.perf.log`; B ran music-off only after fixing a real Spectrum bug found
+  in passing — its presentation-owned idle now reveals on cold activation instead of
+  only via a playing→stopped edge, commit "Spectrum reveals its paused idle").
+  B reproduced the event-loop degradation (window p99 21.66 ms
+  vs A 5.84 ms) yet its fence timing is equal-or-better than A: capture mean 162 vs
+  216 µs (p99 ≤500 µs vs ≤2 ms), restore mean 21 vs 50 µs (cum-max 3.4 ms vs A's
+  92.7 ms), combined mean 92 vs 133 µs. Thread ids confirm render-thread (non-GUI).
+  So the fence is a fixed ~130 µs/draw cost in BOTH, not the swap-sensitive tail —
+  fence hypothesis rejected. C not needed (no fence-cost difference to test for
+  recreation recovery). No repair made; the fence is unchanged.
+- [ ] **ACTIVE NEXT — H4 (generation/activation-owned state; measure, not repair):**
+  a concrete lead already exists in the same runs' `[PERF] [RESOURCE]` snapshots —
+  A's tracked set stays flat (14 resources, ~99.5 MB) while B grows (14→17 resources,
+  ~142→199 MB) across the 25 activations, with GL renderer resources 0 in both (H1
+  clean confirmed, so this is NON-GL generation/activation-owned state). Measure, at
+  the A/B scored-window boundaries and preferring existing resource/GC facts: (a) the
+  per-category resource_metrics breakdown (cpu_cache vs rm vs gl) to identify WHICH
+  retained state grows with switching and whether it is legitimate (image cache) or
+  accumulated activation debris; (b) GC behaviour — frozen-set size and any post-freeze
+  Gen2 scan/destruction cost — to test whether the accumulated state makes ordinary
+  GUI iterations moderately slower (the observed ~7× rise in 25–50 ms stalls) without
+  raising presentation count. Do not lower the 60 Hz presentation target or ~90 Hz
   authored/logical evolution, and never add automatic Quick-runtime/layout recreation
   as a self-heal (the recreation that clears the tail is the experiment's
   intervention, never a shipped mechanism).
-- [ ] Measure the per-frame `_InheritedGlState.capture()`/restore fence as a distinct
-  CPU/driver owner. It performs synchronous GL state queries around every Visualizer
-  draw; change it only if profiling proves material cost and state-isolation coverage
-  proves widgets/transitions/permanent Visualizer modes remain uncontaminated.
 - [ ] Close the item only after a representative mode-switch/recreation soak shows a
   bounded resolved-renderer/resource plateau and stable event-loop/pacer tails with
   no loss of Bubble temporal fidelity, source freshness, reaction amplitude or
