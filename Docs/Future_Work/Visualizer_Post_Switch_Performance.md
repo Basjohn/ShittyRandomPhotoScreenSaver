@@ -305,6 +305,23 @@ makes each capture costlier), with GC / Quick-generation-owned state accumulated
 across 25 activations (H4) as the alternate GUI-thread stall source. Measure before
 changing; no repair until a specific owner/path is identified.
 
+### Fence measured — 2026-09-12 (fence REJECTED, next path is H4)
+
+Timed the existing per-draw `_InheritedGlState.capture()/restore()` on the render
+thread (opt-in `visualizer_attribution._FenceTiming`, `perf_counter_ns()` around the
+existing calls, no GL added/removed). Matched A + B: B reproduced the event-loop
+degradation (window p99 21.66 ms vs A 5.84 ms) yet its fence timing was equal-or-
+better than A (capture mean 162 vs 216 µs; restore 21 vs 50 µs; combined 92 vs
+133 µs; A even held the single largest restore spike at 92.7 ms). The fence is a
+fixed ~130 µs/draw cost in both conditions, not the swap-sensitive owner. Fence
+hypothesis rejected; C unnecessary. The decision tree therefore moves to **H4**:
+the same runs' existing `[PERF] [RESOURCE]` snapshots show B's tracked set growing
+across the 25 activations (14→17 resources, ~99→199 MB) while A stays flat, with GL
+renderer resources 0 in both — i.e. non-GL generation/activation-owned state whose
+amount or collection cost may slow ordinary GUI iterations. Next: audit that
+per-category tracked-resource growth and GC/frozen-set behaviour at the A/B window
+boundaries before any change.
+
 ## Phase P5 — repairs only after attribution
 
 ### If H1
