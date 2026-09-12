@@ -772,6 +772,41 @@ def _spectrum_case_geometry(case: str) -> tuple[tuple[float, float], float]:
     return (420.0, 280.0), 1.0
 
 
+# Neutral card/shadow inputs for resolve_visualizer_presentation (migrated to
+# require them). These smokes measure clip/geometry/draw/retirement, not the card/
+# border/shadow presentation, so the card is transparent and no-shadow. border_width
+# and corner_radius are passed explicitly at each call site.
+_NEUTRAL_CARD_SHADOW = {
+    "content_inset": 0.0,
+    "background_color": (0, 0, 0, 0),
+    "border_color": (245, 250, 255, 255),
+    "shadow_color": (0, 0, 0, 0),
+    "shadow_blur": 0.0,
+    "shadow_offset": (0.0, 0.0),
+    "shadow_spread": 0.0,
+    "shadow_extensions": (0.0, 0.0, 0.0, 0.0),
+}
+
+
+def _with_line_index_params(params: dict, *, include_sine_shift: bool = False) -> dict:
+    """Fill the per-line (2..6) params the oscilloscope/sine renderers read.
+
+    ``line_count`` is 1 in these smoke frames, but both renderers unconditionally
+    read ``line{n}_color`` / ``line{n}_glow_color`` / ``ghost_line{n}_enabled`` for
+    n in 2..6 (and sine reads ``sine_line{n}_shift`` for n in 1..6). Provide
+    neutral, inactive values so the immutable frame satisfies the current
+    parameter contract regardless of the drawn line count.
+    """
+    for n in range(2, 7):
+        params.setdefault(f"line{n}_color", (245, 250, 255, 255))
+        params.setdefault(f"line{n}_glow_color", (80, 210, 255, 230))
+        params.setdefault(f"ghost_line{n}_enabled", False)
+    if include_sine_shift:
+        for n in range(1, 7):
+            params.setdefault(f"sine_line{n}_shift", 0.0)
+    return params
+
+
 def _spectrum_snapshot(case: str, presentation):
     runtime = SpectrumFrameRuntime()
     if case == "idle":
@@ -857,6 +892,9 @@ def _spectrum_snapshot(case: str, presentation):
                 {
                     "rainbow_enabled": False,
                     "rainbow_per_bar": False,
+                    "rainbow_speed": 0.5,
+                    "spectrum_rainbow_fill": False,
+                    "spectrum_rainbow_border": False,
                     "spectrum_ghosting_enabled": case == "ghost",
                     "spectrum_ghost_alpha": 0.85,
                     "spectrum_glow_enabled": True,
@@ -957,21 +995,27 @@ def _oscilloscope_snapshot(case: str, presentation):
             ),
             animation_time=0.25,
             parameters=freeze_render_fields(
-                {
-                    "glow_enabled": True,
-                    "glow_intensity": 0.55,
-                    "glow_size": 1.0,
-                    "glow_reactivity": 1.0,
-                    "glow_color": (80, 210, 255, 230),
-                    "reactive_glow": True,
-                    "resolved_sensitivity": sensitivity,
-                    "line_smoothing": 0.0,
-                    "line_color": (245, 250, 255, 255),
-                    "line_count": 1,
-                    "rainbow_enabled": False,
-                    "osc_ghosting_enabled": case == "ghost",
-                    "osc_ghost_intensity": 0.9,
-                }
+                _with_line_index_params(
+                    {
+                        "glow_enabled": True,
+                        "glow_intensity": 0.55,
+                        "glow_size": 1.0,
+                        "glow_reactivity": 1.0,
+                        "glow_color": (80, 210, 255, 230),
+                        "reactive_glow": True,
+                        "resolved_sensitivity": sensitivity,
+                        "line_smoothing": 0.0,
+                        "line_color": (245, 250, 255, 255),
+                        "line_count": 1,
+                        "line_dim": 0.0,
+                        "line_offset_bias": 0.0,
+                        "osc_vertical_shift": 0.0,
+                        "rainbow_enabled": False,
+                        "rainbow_speed": 0.5,
+                        "osc_ghosting_enabled": case == "ghost",
+                        "osc_ghost_intensity": 0.9,
+                    }
+                )
             ),
         ),
     )
@@ -1106,6 +1150,7 @@ def _sine_snapshot(case: str, presentation):
         "sine_ghosting_enabled": case == "ghost",
         "sine_ghost_alpha": 0.9,
         "rainbow_enabled": False,
+        "rainbow_speed": 0.5,
     }
     for name, value in zip(
         (
@@ -1121,6 +1166,10 @@ def _sine_snapshot(case: str, presentation):
         parameter_values[name] = value
     for index, value in enumerate(shifts, start=1):
         parameter_values[f"sine_line{index}_shift"] = value
+    # Fill any per-line params the current renderer reads but this frame does not
+    # set explicitly (e.g. ghost_line{n}_enabled for n in 2..6); setdefault keeps
+    # the explicit colours/shifts above untouched.
+    _with_line_index_params(parameter_values, include_sine_shift=True)
 
     logical = VisualizerLogicalFrame(
         runtime_generation=1,
@@ -1234,7 +1283,9 @@ def _bubble_snapshot(case: str, presentation):
                     "bubble_tail_opacity": tail_opacity,
                     "bubble_ghosting_enabled": case == "ghost",
                     "bubble_ghost_alpha": 1.0,
+                    "bubble_ghost_decay": 0.85,
                     "rainbow_enabled": False,
+                    "rainbow_speed": 0.5,
                 }
             ),
         ),
@@ -1535,6 +1586,7 @@ class _VisualizerModeRunner(QObject):
             border_width=4.0,
             corner_radius=12.0,
             shadow_enabled=False,
+            **_NEUTRAL_CARD_SHADOW,
         )
         outer_x, outer_y, outer_width, outer_height = (
             self._presentation.outer_rect
@@ -1700,6 +1752,7 @@ class _Runner(QObject):
             border_width=border_width,
             corner_radius=corner_radius,
             shadow_enabled=False,
+            **_NEUTRAL_CARD_SHADOW,
         )
         self._item.set_presentation(presentation)
         self._item.update()
