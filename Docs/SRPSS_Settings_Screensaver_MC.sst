@@ -292,6 +292,7 @@
         "steam:steam_progress": false,
         "steam:steam_progress_appearance": false,
         "steam:steam_progress_layout": false,
+        "system_stats:layout": false,
         "weather:appearance": false,
         "weather:content": false,
         "weather:source_layout": false
@@ -555,10 +556,17 @@
         "media": true,
         "reddit": true,
         "steam": true,
+        "system_stats": false,
         "visualizers": true,
         "weather": true
       },
       "friend_pulse": {
+        "accent_color": [
+          102,
+          192,
+          244,
+          255
+        ],
         "bg_color": [
           35,
           35,
@@ -581,13 +589,33 @@
         ],
         "enabled": false,
         "font_family": "Inter",
-        "font_size": 14,
+        "font_size": 15,
+        "header_border_color": [
+          196,
+          226,
+          242,
+          216
+        ],
+        "header_fill_color": [
+          11,
+          25,
+          34,
+          235
+        ],
+        "header_text_color": [
+          238,
+          249,
+          255,
+          240
+        ],
         "margin": 30,
         "monitor": "ALL",
         "position": "Top Left",
-        "preferred_height": 180,
-        "preferred_width": 420,
-        "show_background": true
+        "preferred_height": 334,
+        "preferred_width": 560,
+        "show_background": true,
+        "view_mode": "grid",
+        "visible_row_capacity": 4
       },
       "global": {
         "card_border_width_px": 4,
@@ -1655,6 +1683,68 @@
         "position": "Top Right",
         "preferred_height": 180,
         "preferred_width": 420,
+        "show_background": true
+      },
+      "system_stats": {
+        "bg_color": [
+          23,
+          28,
+          38,
+          255
+        ],
+        "bg_opacity": 0.78,
+        "border_color": [
+          174,
+          204,
+          226,
+          255
+        ],
+        "border_opacity": 0.9,
+        "color": [
+          242,
+          248,
+          252,
+          240
+        ],
+        "cpu_accent_color": [
+          87,
+          211,
+          255,
+          255
+        ],
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 15,
+        "header_border_color": [
+          174,
+          204,
+          226,
+          205
+        ],
+        "header_fill_color": [
+          22,
+          34,
+          48,
+          238
+        ],
+        "header_text_color": [
+          242,
+          248,
+          252,
+          245
+        ],
+        "margin": 30,
+        "metric_capacity": 2,
+        "monitor": "1",
+        "position": "Middle Left",
+        "preferred_height": 270,
+        "preferred_width": 520,
+        "ram_accent_color": [
+          183,
+          139,
+          255,
+          255
+        ],
         "show_background": true
       },
       "weather": {

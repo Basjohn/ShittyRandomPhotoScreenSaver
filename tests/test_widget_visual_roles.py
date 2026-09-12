@@ -214,3 +214,32 @@ def test_generic_widget_accent_theme_can_still_override_volume_fill() -> None:
     )
     assert resolved.color == themed_accent
     assert resolved.source_role == "widget.accent"
+
+
+def test_friend_pulse_and_system_stats_roles_inherit_shared_theme_semantics() -> None:
+    accent = Rgba(25, 125, 225, 180)
+    panel = Rgba(30, 40, 50, 190)
+    theme = _theme(
+        **{
+            "widget.accent": accent,
+            "widget.panel.alt": panel,
+        }
+    )
+
+    friend = resolve_widget_visual_color(
+        theme,
+        "steam.friend_pulse.accent",
+        local_roles={"local.accent": Rgba(1, 2, 3, 4)},
+        fallback=Rgba(5, 6, 7, 8),
+    )
+    stats = resolve_widget_visual_color(
+        theme,
+        "system_stats.metric.surface",
+        local_roles={"local.surface.alt": Rgba(1, 2, 3, 4)},
+        fallback=Rgba(5, 6, 7, 8),
+    )
+
+    assert friend.color == accent
+    assert friend.source_role == "widget.accent"
+    assert stats.color == panel
+    assert stats.source_role == "widget.panel.alt"

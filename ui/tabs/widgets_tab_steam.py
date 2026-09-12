@@ -3,7 +3,7 @@
 Building or loading this section must not decrypt credentials, scan cache
 directories, fetch assets, or submit provider work. It may read one bounded
 recent-games cache record on shared IO to label Achievement Pulse choices.
-Achievement Pulse is public while three unfinished cards stay dev-gated.
+Achievement Pulse and Abandonment Issues are public while two cards stay dev-gated.
 """
 from __future__ import annotations
 
@@ -116,6 +116,10 @@ _ABANDONMENT_SELECTION_OPTIONS: tuple[tuple[str, str], ...] = (
 _ABANDONMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
     ("Portrait", "portrait"),
     ("Wide", "wide"),
+)
+_FRIEND_PULSE_VIEW_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("Avatar Grid", "grid"),
+    ("Activity Rows", "rows"),
 )
 _ABANDONMENT_FIELD_OPTIONS: tuple[tuple[str, str, str], ...] = (
     ("playtime", "Show total playtime", "Total owned-library playtime for the selected game."),
@@ -991,6 +995,20 @@ def _build_card_group(
     display_row.addWidget(monitor)
     display_row.addStretch()
 
+    if key == "friend_pulse":
+        view_row = _aligned_row(layout, "View:")
+        view_mode = StyledComboBox()
+        for view_label, view_value in _FRIEND_PULSE_VIEW_OPTIONS:
+            view_mode.addItem(view_label, view_value)
+        _set_combo_data(view_mode, str(tab._widget_default(key, "view_mode")))
+        view_mode.setToolTip(
+            "Avatar Grid dynamically spaces the visible friends; Activity Rows uses a compact list. Privacy Mode still owns names and avatars."
+        )
+        view_mode.currentIndexChanged.connect(tab._save_settings)
+        tab.friend_pulse_view_mode = view_mode
+        view_row.addWidget(view_mode)
+        view_row.addStretch()
+
     _finalize_bucket_body(layout_toggle, layout_body)
     appearance_toggle, appearance_body, appearance_layout = _build_card_subbucket(
         tab,
@@ -1555,9 +1573,9 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     connection_layout.setSpacing(12)
 
     info = QLabel(
-        "Achievement Pulse and Abandonment Issues are available normally; unfinished Steam Journey and Friend Pulse "
-        "remain hidden unless --devsteam is used. Opening this section reads encrypted-storage availability and "
-        "bounded cached game records only; it never decrypts credentials or contacts Steam."
+        "Achievement Pulse and Abandonment Issues are available normally. Steam Journey remains a scaffold; the "
+        "experimental retained Friend Pulse card is visible only with --devsteam. Opening this section reads "
+        "encrypted-storage availability and bounded cached records only; it never decrypts credentials or contacts Steam."
     )
     info.setWordWrap(True)
     shared_styles.apply_shared_label_style(info, "INFO_LABEL_STYLE")
@@ -1700,6 +1718,12 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             )
         except Exception:
             getattr(tab, f"{key}_font_size").setValue(tab._default_int(key, "font_size"))
+        if key == "friend_pulse":
+            _set_combo_data(
+                tab.friend_pulse_view_mode,
+                str(config.get("view_mode", tab._default_str(key, "view_mode"))),
+                canonical_value=tab._default_str(key, "view_mode"),
+            )
         if key in {"achievement_pulse", "abandonment_issues"}:
             header_fill_fallback = (11, 16, 22, 230)
             header_text_fallback = (255, 255, 255, 230)
@@ -2051,6 +2075,14 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
             payload[f"show_{field_id}"] = bool(
                 getattr(tab, f"abandonment_issues_show_{field_id}").isChecked()
             )
+    elif key == "friend_pulse":
+        payload["view_mode"] = str(
+            tab._combo_data_or_widget_default(
+                "friend_pulse",
+                "view_mode",
+                tab.friend_pulse_view_mode,
+            )
+        )
     return payload
 
 

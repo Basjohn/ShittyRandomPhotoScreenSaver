@@ -5,12 +5,19 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from core.steam.credentials import SteamCredentialPayload, derive_profile_cache_key, safe_fingerprint
+from core.steam.credentials import (
+    SteamCredentialPayload,
+    derive_profile_cache_key,
+    safe_fingerprint,
+)
 from core.steam.friend_pulse import (
+    FriendPulseEntry,
+    FriendPulseSnapshot,
     build_friend_pulse_snapshot,
     project_friend_pulse,
     sanitize_friend_list_payload,
     sanitize_player_summaries_payload,
+    with_change_evidence,
 )
 from core.steam.friend_pulse_cache import (
     FRIEND_LIST_CACHE_KEY,
@@ -40,57 +47,206 @@ def _fixture(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
-def _result(source: SteamSourceId, payload: dict, *, cache: bool = False, at: float = 100.0) -> SteamResult:
-    return SteamResult(SteamResultStatus.SUCCESS, source, payload, from_cache=cache, fetched_at=at)
+def _result(
+    source: SteamSourceId, payload: dict, *, cache: bool = False, at: float = 100.0
+) -> SteamResult:
+    return SteamResult(
+        SteamResultStatus.SUCCESS, source, payload, from_cache=cache, fetched_at=at
+    )
 
 
-def test_sanitizers_remove_raw_ids_and_keep_only_safe_fingerprints() -> None:
+def test_normalizers_keep_ids_only_in_account_private_source_rows() -> None:
     friends = _fixture("friend_list.json")
     players = _fixture("player_summaries.json")
     safe_friends = sanitize_friend_list_payload(friends)
-    safe_players = sanitize_player_summaries_payload(players, friend_ids=(RAW_ID_A, RAW_ID_B))
+    safe_players = sanitize_player_summaries_payload(
+        players, friend_ids=(RAW_ID_A, RAW_ID_B)
+    )
 
     rendered = json.dumps({"friends": safe_friends, "players": safe_players})
-    assert RAW_ID_A not in rendered and RAW_ID_B not in rendered
-    assert safe_friends["friends"] == [{"identity_fingerprint": safe_fingerprint(RAW_ID_A)}, {"identity_fingerprint": safe_fingerprint(RAW_ID_B)}]
-    assert safe_players["players"][0]["identity_fingerprint"] == safe_fingerprint(RAW_ID_A)
+    assert RAW_ID_A in rendered and RAW_ID_B in rendered
+    assert safe_friends["friends"] == [
+        {
+            "identity_fingerprint": safe_fingerprint(RAW_ID_A),
+            "steam_id": RAW_ID_A,
+        },
+        {
+            "identity_fingerprint": safe_fingerprint(RAW_ID_B),
+            "steam_id": RAW_ID_B,
+        },
+    ]
+    assert safe_players["players"][0]["identity_fingerprint"] == safe_fingerprint(
+        RAW_ID_A
+    )
+    assert safe_players["players"][0]["steam_id"] == RAW_ID_A
 
 
 def test_snapshot_projects_private_empty_and_privacy_modes_honestly() -> None:
     private = build_friend_pulse_snapshot(
-        friend_result=SteamResult(SteamResultStatus.PRIVATE, SteamSourceId.FRIEND_LIST), summaries_result=None
+        friend_result=SteamResult(SteamResultStatus.PRIVATE, SteamSourceId.FRIEND_LIST),
+        summaries_result=None,
     )
-    assert project_friend_pulse(private, privacy_mode="Rich", capacity=3).state == "private"
+    assert (
+        project_friend_pulse(private, privacy_mode="Rich", capacity=3).state
+        == "private"
+    )
 
     empty = build_friend_pulse_snapshot(
         friend_result=_result(SteamSourceId.FRIEND_LIST, {"friends": []}),
         summaries_result=_result(SteamSourceId.PLAYER_SUMMARIES, {"players": []}),
     )
-    assert project_friend_pulse(empty, privacy_mode="Balanced", capacity=3).primary_metric == "No friends playing"
+    assert (
+        project_friend_pulse(empty, privacy_mode="Balanced", capacity=3).primary_metric
+        == "No friends playing"
+    )
+    stale_empty = FriendPulseSnapshot(
+        status=SteamResultStatus.SUCCESS,
+        from_cache=True,
+        stale=True,
+        playing_count=0,
+        online_count=0,
+    )
+    stale_projection = project_friend_pulse(
+        stale_empty,
+        privacy_mode="Balanced",
+        capacity=3,
+    )
+    assert stale_empty.usable is True
+    assert stale_projection.state == "stale"
+    assert stale_projection.primary_metric == "No friends playing (cached)"
 
     snapshot = build_friend_pulse_snapshot(
-        friend_result=_result(SteamSourceId.FRIEND_LIST, sanitize_friend_list_payload(_fixture("friend_list.json"))),
-        summaries_result=_result(SteamSourceId.PLAYER_SUMMARIES, sanitize_player_summaries_payload(_fixture("player_summaries.json"), friend_ids=(RAW_ID_A, RAW_ID_B))),
+        friend_result=_result(
+            SteamSourceId.FRIEND_LIST,
+            sanitize_friend_list_payload(_fixture("friend_list.json")),
+        ),
+        summaries_result=_result(
+            SteamSourceId.PLAYER_SUMMARIES,
+            sanitize_player_summaries_payload(
+                _fixture("player_summaries.json"), friend_ids=(RAW_ID_A, RAW_ID_B)
+            ),
+        ),
     )
     strict = project_friend_pulse(snapshot, privacy_mode="Strict", capacity=1)
     balanced = project_friend_pulse(snapshot, privacy_mode="Balanced", capacity=1)
-    rich = project_friend_pulse(snapshot, privacy_mode="Rich", capacity=1)
+    rich = project_friend_pulse(
+        snapshot,
+        privacy_mode="Rich",
+        capacity=1,
+        avatar_sources={safe_fingerprint(RAW_ID_A): "file:///safe/avatar.jpg"},
+    )
     assert strict.rows[0].primary == "Counter-Strike" and "Ada" not in str(strict)
+    assert strict.primary_metric == "1 friend playing"
+    assert strict.rows[0].secondary == "1 friend playing"
     assert balanced.rows[0].primary == "Ada" and balanced.rows[0].avatar_url is None
-    assert rich.rows[0].avatar_url == "https://avatars.example/ada.jpg"
+    assert balanced.rows[0].friend_action_available is True
+    assert rich.rows[0].avatar_url == "file:///safe/avatar.jpg"
+    assert rich.rows[0].identity_fingerprint == safe_fingerprint(RAW_ID_A)
+    assert rich.rows[0].friend_action_available is True
+    assert strict.rows[0].friend_action_available is False
+    assert RAW_ID_A not in str(rich.rows[0])
+
+
+def test_snapshot_rejects_cached_id_that_does_not_match_opaque_identity() -> None:
+    snapshot = build_friend_pulse_snapshot(
+        friend_result=_result(
+            SteamSourceId.FRIEND_LIST,
+            {
+                "friends": [
+                    {
+                        "identity_fingerprint": safe_fingerprint(RAW_ID_A),
+                        "steam_id": RAW_ID_A,
+                    }
+                ]
+            },
+        ),
+        summaries_result=_result(
+            SteamSourceId.PLAYER_SUMMARIES,
+            {
+                "players": [
+                    {
+                        "identity_fingerprint": safe_fingerprint(RAW_ID_A),
+                        "steam_id": RAW_ID_B,
+                        "display_name": "Ada",
+                        "game_appid": 70,
+                        "game_name": "Half-Life",
+                    }
+                ]
+            },
+        ),
+    )
+
+    assert snapshot.entries[0].steam_id is None
+    assert (
+        project_friend_pulse(snapshot, privacy_mode="Rich", capacity=1)
+        .rows[0]
+        .friend_action_available
+        is False
+    )
+
+
+def test_fresh_changed_rows_rank_ahead_of_stable_rows() -> None:
+    previous = FriendPulseSnapshot(
+        status=SteamResultStatus.SUCCESS,
+        authoritative=True,
+        entries=(
+            FriendPulseEntry("a", "Ada", 10, "A Game"),
+            FriendPulseEntry("z", "Zoë", 20, "Z Game"),
+        ),
+    )
+    current = FriendPulseSnapshot(
+        status=SteamResultStatus.SUCCESS,
+        authoritative=True,
+        entries=(
+            FriendPulseEntry("a", "Ada", 10, "A Game"),
+            FriendPulseEntry("z", "Zoë", 30, "New Game"),
+        ),
+    )
+
+    ranked = with_change_evidence(current, previous)
+
+    assert [entry.identity_fingerprint for entry in ranked.entries] == ["z", "a"]
+    assert [entry.changed for entry in ranked.entries] == [True, False]
 
 
 def test_change_evidence_requires_two_fresh_coherent_accepted_snapshots() -> None:
     friend = sanitize_friend_list_payload(_fixture("friend_list.json"))
-    first_players = sanitize_player_summaries_payload(_fixture("player_summaries.json"), friend_ids=(RAW_ID_A, RAW_ID_B))
-    first = build_friend_pulse_snapshot(friend_result=_result(SteamSourceId.FRIEND_LIST, friend), summaries_result=_result(SteamSourceId.PLAYER_SUMMARIES, first_players))
+    first_players = sanitize_player_summaries_payload(
+        _fixture("player_summaries.json"), friend_ids=(RAW_ID_A, RAW_ID_B)
+    )
+    first = build_friend_pulse_snapshot(
+        friend_result=_result(SteamSourceId.FRIEND_LIST, friend),
+        summaries_result=_result(SteamSourceId.PLAYER_SUMMARIES, first_players),
+    )
     assert not first.entries[0].changed
     changed_raw = _fixture("player_summaries.json")
     changed_raw["response"]["players"][0]["gameid"] = "20"
     changed_raw["response"]["players"][0]["gameextrainfo"] = "Team Fortress 2"
-    second = build_friend_pulse_snapshot(friend_result=_result(SteamSourceId.FRIEND_LIST, friend, at=200), summaries_result=_result(SteamSourceId.PLAYER_SUMMARIES, sanitize_player_summaries_payload(changed_raw, friend_ids=(RAW_ID_A, RAW_ID_B)), at=200), previous=first)
+    second = build_friend_pulse_snapshot(
+        friend_result=_result(SteamSourceId.FRIEND_LIST, friend, at=200),
+        summaries_result=_result(
+            SteamSourceId.PLAYER_SUMMARIES,
+            sanitize_player_summaries_payload(
+                changed_raw, friend_ids=(RAW_ID_A, RAW_ID_B)
+            ),
+            at=200,
+        ),
+        previous=first,
+    )
     assert second.entries[0].changed is True
-    stale = build_friend_pulse_snapshot(friend_result=_result(SteamSourceId.FRIEND_LIST, friend, cache=True, at=300), summaries_result=_result(SteamSourceId.PLAYER_SUMMARIES, sanitize_player_summaries_payload(changed_raw, friend_ids=(RAW_ID_A, RAW_ID_B)), cache=True, at=300), previous=first, stale=True)
+    stale = build_friend_pulse_snapshot(
+        friend_result=_result(SteamSourceId.FRIEND_LIST, friend, cache=True, at=300),
+        summaries_result=_result(
+            SteamSourceId.PLAYER_SUMMARIES,
+            sanitize_player_summaries_payload(
+                changed_raw, friend_ids=(RAW_ID_A, RAW_ID_B)
+            ),
+            cache=True,
+            at=300,
+        ),
+        previous=first,
+        stale=True,
+    )
     assert stale.entries[0].changed is False
 
 
@@ -98,48 +254,104 @@ def test_newly_playing_friend_is_changed_only_after_a_prior_fresh_snapshot() -> 
     friend = {"friends": [{"identity_fingerprint": safe_fingerprint(RAW_ID_A)}]}
     idle = build_friend_pulse_snapshot(
         friend_result=_result(SteamSourceId.FRIEND_LIST, friend),
-        summaries_result=_result(SteamSourceId.PLAYER_SUMMARIES, {"players": [{"identity_fingerprint": safe_fingerprint(RAW_ID_A), "persona_state": 1}]}),
+        summaries_result=_result(
+            SteamSourceId.PLAYER_SUMMARIES,
+            {
+                "players": [
+                    {
+                        "identity_fingerprint": safe_fingerprint(RAW_ID_A),
+                        "persona_state": 1,
+                    }
+                ]
+            },
+        ),
     )
     playing = build_friend_pulse_snapshot(
         friend_result=_result(SteamSourceId.FRIEND_LIST, friend, at=200),
-        summaries_result=_result(SteamSourceId.PLAYER_SUMMARIES, {"players": [{"identity_fingerprint": safe_fingerprint(RAW_ID_A), "game_appid": 10, "game_name": "Game"}]}, at=200),
+        summaries_result=_result(
+            SteamSourceId.PLAYER_SUMMARIES,
+            {
+                "players": [
+                    {
+                        "identity_fingerprint": safe_fingerprint(RAW_ID_A),
+                        "game_appid": 10,
+                        "game_name": "Game",
+                    }
+                ]
+            },
+            at=200,
+        ),
         previous=idle,
     )
     assert playing.entries[0].changed is True
 
 
-def test_refresh_batches_summaries_and_persists_no_raw_ids(tmp_path: Path) -> None:
-    ids = tuple(f"7656119800{index:07d}" for index in range(MAX_PLAYER_SUMMARIES_BATCH + 1))
+def test_refresh_batches_summaries_and_persists_private_action_ids(
+    tmp_path: Path,
+) -> None:
+    ids = tuple(
+        f"7656119800{index:07d}" for index in range(MAX_PLAYER_SUMMARIES_BATCH + 1)
+    )
     calls: list[str] = []
 
     def opener(request, timeout):
         calls.append(request.full_url)
         if "GetFriendList" in request.full_url:
-            return _Response({"friendslist": {"friends": [{"steamid": value} for value in ids]}})
+            return _Response(
+                {"friendslist": {"friends": [{"steamid": value} for value in ids]}}
+            )
         requested = parse_qs(urlparse(request.full_url).query)["steamids"][0].split(",")
         assert len(requested) <= MAX_PLAYER_SUMMARIES_BATCH
-        return _Response({"response": {"players": [{"steamid": value, "personaname": "Player", "personastate": 1, "gameid": 10, "gameextrainfo": "Game"} for value in requested]}})
+        return _Response(
+            {
+                "response": {
+                    "players": [
+                        {
+                            "steamid": value,
+                            "personaname": "Player",
+                            "personastate": 1,
+                            "gameid": 10,
+                            "gameextrainfo": "Game",
+                        }
+                        for value in requested
+                    ]
+                }
+            }
+        )
 
-    credential = SteamCredentialPayload(api_key="A" * 20, profile_identifier="profile-id")
-    snapshot = refresh_friend_pulse_cache(credential=credential, root=tmp_path, opener=opener, now=100.0)
+    credential = SteamCredentialPayload(
+        api_key="A" * 20, profile_identifier="profile-id"
+    )
+    snapshot = refresh_friend_pulse_cache(
+        credential=credential, root=tmp_path, opener=opener, now=100.0
+    )
     assert snapshot.playing_count == len(ids)
     assert len([url for url in calls if "GetPlayerSummaries" in url]) == 2
     profile_key = derive_profile_cache_key("profile-id")
-    raw_cache = "".join(path.read_text(encoding="utf-8") for path in tmp_path.glob("*.json"))
-    assert ids[0] not in raw_cache
+    raw_cache = "".join(
+        path.read_text(encoding="utf-8") for path in tmp_path.glob("*.json")
+    )
+    assert ids[0] in raw_cache
+    assert credential.api_key not in raw_cache
     assert (tmp_path / f"{FRIEND_LIST_CACHE_KEY}.json").exists()
     assert (tmp_path / f"{PLAYER_SUMMARIES_CACHE_KEY}.json").exists()
     assert profile_key.startswith("profile_")
 
 
-def test_cache_first_rate_limit_and_malformed_payload_are_honest(tmp_path: Path) -> None:
-    credential = SteamCredentialPayload(api_key="B" * 20, profile_identifier="cache-profile")
+def test_cache_first_rate_limit_and_malformed_payload_are_honest(
+    tmp_path: Path,
+) -> None:
+    credential = SteamCredentialPayload(
+        api_key="B" * 20, profile_identifier="cache-profile"
+    )
     payloads = [_fixture("friend_list.json"), _fixture("player_summaries.json")]
 
     def success(request, timeout):
         return _Response(payloads.pop(0))
 
-    first = refresh_friend_pulse_cache(credential=credential, root=tmp_path, opener=success, now=100.0)
+    first = refresh_friend_pulse_cache(
+        credential=credential, root=tmp_path, opener=success, now=100.0
+    )
     assert first.authoritative is True
     calls = 0
 
@@ -148,30 +360,48 @@ def test_cache_first_rate_limit_and_malformed_payload_are_honest(tmp_path: Path)
         calls += 1
         return _Response({}, status=429)
 
-    cached = refresh_friend_pulse_cache(credential=credential, root=tmp_path, opener=rate_limited, now=101.0)
+    cached = refresh_friend_pulse_cache(
+        credential=credential, root=tmp_path, opener=rate_limited, now=101.0
+    )
     assert calls == 0 and cached.from_cache is True
-    stale = load_friend_pulse_cache_snapshot(profile_key=derive_profile_cache_key("cache-profile"), root=tmp_path, now=1000.0)
+    stale = load_friend_pulse_cache_snapshot(
+        profile_key=derive_profile_cache_key("cache-profile"), root=tmp_path, now=1000.0
+    )
     assert stale.stale is True and stale.status == SteamResultStatus.SUCCESS
     malformed = build_friend_pulse_snapshot(
-        friend_result=_result(SteamSourceId.FRIEND_LIST, {"friends": [{"identity_fingerprint": "safe"}]}),
-        summaries_result=_result(SteamSourceId.PLAYER_SUMMARIES, {"players": [{"identity_fingerprint": "safe", "game_appid": "bad"}]}),
+        friend_result=_result(
+            SteamSourceId.FRIEND_LIST, {"friends": [{"identity_fingerprint": "safe"}]}
+        ),
+        summaries_result=_result(
+            SteamSourceId.PLAYER_SUMMARIES,
+            {"players": [{"identity_fingerprint": "safe", "game_appid": "bad"}]},
+        ),
     )
     assert malformed.playing_count == 0
 
 
 def test_rate_limited_without_cache_is_unavailable(tmp_path: Path) -> None:
-    credential = SteamCredentialPayload(api_key="C" * 20, profile_identifier="rate-profile")
+    credential = SteamCredentialPayload(
+        api_key="C" * 20, profile_identifier="rate-profile"
+    )
 
     def rate_limited(request, timeout):
         return _Response({}, status=429)
 
-    result = refresh_friend_pulse_cache(credential=credential, root=tmp_path, opener=rate_limited, now=100.0)
+    result = refresh_friend_pulse_cache(
+        credential=credential, root=tmp_path, opener=rate_limited, now=100.0
+    )
     assert result.status == SteamResultStatus.RATE_LIMITED
-    assert project_friend_pulse(result, privacy_mode="Strict", capacity=3).state == "unavailable"
+    assert (
+        project_friend_pulse(result, privacy_mode="Strict", capacity=3).state
+        == "unavailable"
+    )
 
 
 def test_fresh_empty_friend_list_clears_previous_summary_cache(tmp_path: Path) -> None:
-    credential = SteamCredentialPayload(api_key="D" * 20, profile_identifier="empty-profile")
+    credential = SteamCredentialPayload(
+        api_key="D" * 20, profile_identifier="empty-profile"
+    )
 
     def populated(request, timeout):
         if "GetFriendList" in request.full_url:
@@ -204,5 +434,4 @@ def test_fresh_empty_friend_list_clears_previous_summary_cache(tmp_path: Path) -
     summary_cache = (tmp_path / f"{PLAYER_SUMMARIES_CACHE_KEY}.json").read_text(
         encoding="utf-8"
     )
-    assert RAW_ID_A not in summary_cache
     assert '"players": []' in summary_cache

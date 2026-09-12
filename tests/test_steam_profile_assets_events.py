@@ -11,6 +11,7 @@ from core.steam.assets import (
     cache_asset_from_bytes,
     fetch_and_cache_asset,
     fetch_steam_achievement_icon,
+    fetch_steam_avatar,
     fetch_steam_app_artwork,
     fetch_steam_app_header,
     prune_asset_cache,
@@ -73,7 +74,9 @@ def test_asset_cache_rejects_bad_host_and_bad_image_signature(tmp_path: Path) ->
     assert bad_scheme.status == SteamResultStatus.ASSET_INVALID
 
 
-def test_asset_cache_writes_valid_image_with_injected_fetcher_and_prunes(tmp_path: Path) -> None:
+def test_asset_cache_writes_valid_image_with_injected_fetcher_and_prunes(
+    tmp_path: Path,
+) -> None:
     url = "https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg"
     asset = fetch_and_cache_asset(
         cache_dir=tmp_path,
@@ -126,7 +129,9 @@ def test_compact_steam_artwork_uses_the_portrait_library_capsule(
     )
 
     assert isinstance(asset, SteamAssetRecord)
-    assert calls == ["https://cdn.akamai.steamstatic.com/steam/apps/1086940/library_600x900.jpg"]
+    assert calls == [
+        "https://cdn.akamai.steamstatic.com/steam/apps/1086940/library_600x900.jpg"
+    ]
 
 
 def test_steam_app_artwork_variant_order_is_bounded_and_shape_aware() -> None:
@@ -174,6 +179,32 @@ def test_achievement_icon_accepts_schema_host_and_reuses_cache(tmp_path: Path) -
         fetcher=lambda requested: b"\xff\xd8\xffunsafe",
     )
 
+    assert isinstance(first, SteamAssetRecord)
+    assert isinstance(second, SteamAssetRecord)
+    assert first.path == second.path
+    assert calls == [url]
+    assert isinstance(rejected, SteamResult)
+    assert rejected.status == SteamResultStatus.ASSET_INVALID
+
+
+def test_avatar_helper_is_allowlisted_and_reuses_local_cache(tmp_path: Path) -> None:
+    url = "https://avatars.steamstatic.com/opaque-avatar.jpg"
+    calls: list[str] = []
+    first = fetch_steam_avatar(
+        cache_dir=tmp_path,
+        url=url,
+        fetcher=lambda requested: calls.append(requested) or b"\xff\xd8\xffavatar",
+    )
+    second = fetch_steam_avatar(
+        cache_dir=tmp_path,
+        url=url,
+        fetcher=lambda requested: calls.append(requested) or b"\xff\xd8\xffunused",
+    )
+    rejected = fetch_steam_avatar(
+        cache_dir=tmp_path,
+        url="https://example.com/avatar.jpg",
+        fetcher=lambda _requested: b"\xff\xd8\xffunsafe",
+    )
     assert isinstance(first, SteamAssetRecord)
     assert isinstance(second, SteamAssetRecord)
     assert first.path == second.path

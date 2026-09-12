@@ -13,11 +13,57 @@ from PySide6.QtGui import QDesktopServices
 
 from core.build_profile import is_diagnostic_build
 from core.logging.logger import get_logger
+from core.steam.links import SteamLinkTarget
 from core.windows import reddit_helper_bridge
 from core.windows import reddit_helper_runtime
 from core.mc import is_mc_build
 
 logger = get_logger(__name__)
+
+
+def open_steam_target(
+    target: SteamLinkTarget,
+    *,
+    source: str = "steam",
+) -> bool:
+    """Prefer a Steam-client deep link interactively, otherwise open HTTPS.
+
+    The normal screensaver cannot reliably launch into the interactive user's
+    Steam process, so it hands the validated HTTPS fallback to the existing
+    helper queue. MC/diagnostic runs try Steam first and fall back to the
+    browser when Qt rejects the protocol request.
+    """
+
+    if not isinstance(target, SteamLinkTarget):
+        return False
+    interactive = bool(is_mc_build() or is_diagnostic_build())
+    if interactive:
+        try:
+            if QDesktopServices.openUrl(QUrl(target.steam_url)):
+                logger.info(
+                    "[URL-LAUNCH] Opened Steam target directly source=%s kind=%s",
+                    source,
+                    target.kind,
+                )
+                return True
+            logger.warning(
+                "[URL-LAUNCH] Steam target was rejected; using browser source=%s kind=%s",
+                source,
+                target.kind,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[URL-LAUNCH] Steam target failed; using browser source=%s kind=%s error_type=%s",
+                source,
+                target.kind,
+                type(exc).__name__,
+            )
+    return open_url(
+        target.browser_url,
+        fallback=interactive,
+        prefer_direct=interactive,
+        source=source,
+    )
 
 
 def open_url(
@@ -50,7 +96,11 @@ def open_url(
                 return True
             logger.warning("[URL-LAUNCH] Native direct URL launch was rejected source=%s", source)
         except Exception as exc:
-            logger.warning("[URL-LAUNCH] Native direct URL launch failed source=%s error=%s", source, exc)
+            logger.warning(
+                "[URL-LAUNCH] Native direct URL launch failed source=%s error_type=%s",
+                source,
+                type(exc).__name__,
+            )
 
     # MC and the separate diagnostic product are always interactive: a failed
     # direct route must not enqueue work for the SCR helper, which neither
@@ -87,5 +137,8 @@ def open_url(
         logger.info("[URL-LAUNCH] Opened via webbrowser source=%s", source)
         return True
     except Exception as exc:
-        logger.error("[URL-LAUNCH] webbrowser.open failed: %s", exc)
+        logger.error(
+            "[URL-LAUNCH] webbrowser.open failed error_type=%s",
+            type(exc).__name__,
+        )
         return False

@@ -10,6 +10,7 @@ OverlayWidget {
     semanticDoubleClickEnabled: abandonmentModel.interactionEnabled
     signal refreshRequested()
     signal settingsRequested(string target)
+    signal storeRequested()
 
     readonly property real authoredWidth: abandonmentModel.authoredWidth
     readonly property real authoredHeight: abandonmentModel.authoredHeight
@@ -304,6 +305,7 @@ OverlayWidget {
                         clip: true
 
                         Rectangle {
+                            id: artworkBorder
                             anchors.fill: parent
                             radius: 8.0
                             color: abandonmentRoot.abandonmentModel.steamArtworkSurfaceColor
@@ -356,10 +358,27 @@ OverlayWidget {
                             anchors.fill: parent
                             radius: 8.0
                             color: "transparent"
-                            border.color: abandonmentRoot.abandonmentModel.steamArtworkBorderColor
+                            border.color: artworkHover.hovered
+                                ? abandonmentRoot.abandonmentModel.accentColor
+                                : abandonmentRoot.abandonmentModel.steamArtworkBorderColor
                             border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
                                 2.0, abandonmentRoot.presentationScale
                             )
+                        }
+
+                        HoverHandler {
+                            id: artworkHover
+                            enabled: abandonmentRoot.abandonmentModel.interactionEnabled
+                                && abandonmentRoot.abandonmentModel.appid > 0
+                                && abandonmentRoot.abandonmentModel.artworkSource.length > 0
+                        }
+
+                        TapHandler {
+                            enabled: abandonmentRoot.abandonmentModel.interactionEnabled
+                                && abandonmentRoot.abandonmentModel.appid > 0
+                                && abandonmentRoot.abandonmentModel.artworkSource.length > 0
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: abandonmentRoot.storeRequested()
                         }
                     }
                 }

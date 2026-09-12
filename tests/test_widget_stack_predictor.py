@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from core.settings.defaults import get_default_settings
+
+
+def _widget_defaults() -> dict:
+    return get_default_settings()["widgets"]
+
 
 def test_clock_stack_predictor_reserves_weekday_and_date_rows():
     from ui.widget_stack_predictor import estimate_clock_size
@@ -38,7 +44,8 @@ def test_widget_stack_predictor_includes_gmail_and_modern_reddit2_limit():
             "gmail": {"enabled": True, "position": "Middle Left", "font_size": 18, "limit": 25, "width": 600},
             "reddit2": {"enabled": True, "position": "Bottom Left", "limit": 4},
             "reddit": {"font_size": 18},
-        }
+        },
+        defaults=_widget_defaults(),
     )
 
     gmail = next(est for est in estimates if est.widget_type == WidgetType.GMAIL)
@@ -82,6 +89,7 @@ def test_widget_stack_predictor_flags_same_column_conflict_across_top_middle_bot
         WidgetType.GMAIL,
         "Middle Left",
         "ALL",
+        defaults=_widget_defaults(),
     )
 
     assert can_stack is False
@@ -114,6 +122,7 @@ def test_widget_stack_predictor_suppresses_status_when_stacking_disabled():
         WidgetType.GMAIL,
         "Middle Left",
         "ALL",
+        defaults=_widget_defaults(),
     )
 
     assert can_stack is True
@@ -138,7 +147,8 @@ def test_widget_stack_predictor_reserves_spotify_visualizer_footprint_with_media
                 "mode": "devcurve",
                 "base_height": 80,
             },
-        }
+        },
+        defaults=_widget_defaults(),
     )
 
     media = next(est for est in estimates if est.widget_type == WidgetType.MEDIA)
@@ -190,6 +200,7 @@ def test_widget_stack_predictor_treats_media_visualizer_as_fixed_block_for_right
         WidgetType.GMAIL,
         "Bottom Right",
         "ALL",
+        defaults=_widget_defaults(),
     )
 
     assert can_stack is False

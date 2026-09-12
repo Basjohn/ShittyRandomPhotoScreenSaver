@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from core.steam.links import SteamLinkTarget
+
 _CLOCK_WIDGET_IDS = frozenset({"clock", "clock2", "clock3"})
 _CLOCK_DISPLAY_MODES = frozenset({"analog", "digital"})
 
@@ -80,7 +82,26 @@ def dispatch_reddit_url_product_action(
     return True
 
 
+def dispatch_steam_link_product_action(
+    target: SteamLinkTarget,
+    *,
+    opener: Callable[[SteamLinkTarget], bool],
+    request_saver_exit: Callable[[], None],
+    interactive_build: bool,
+) -> bool:
+    """Open one validated Steam action and own ordinary-saver exit semantics."""
+
+    if not isinstance(target, SteamLinkTarget):
+        return False
+    if not bool(opener(target)):
+        return False
+    if not bool(interactive_build):
+        request_saver_exit()
+    return True
+
+
 __all__ = [
     "dispatch_reddit_url_product_action",
+    "dispatch_steam_link_product_action",
     "update_clock_display_mode_override",
 ]
