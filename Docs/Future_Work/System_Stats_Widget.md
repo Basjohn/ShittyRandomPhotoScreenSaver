@@ -1,9 +1,9 @@
 # System Stats Widget — Low-Burden Product Decomposition
 
-Status: **PROMOTED / CONDITIONAL CURRENT-PLAN FEATURE**  
-Last updated: 2026-09-12  
-Current sequencing authority: `Current_Plan.md`  
-Proposed stable widget/family id: `system_stats`
+Status: **CPU/RAM IMPLEMENTED / DEV-GATED / AWAITING S7 SOAK**
+Last updated: 2026-09-13
+Current sequencing authority: `Current_Plan.md`
+Stable widget/family id: `system_stats`
 
 ## 0. Decision
 
@@ -13,9 +13,26 @@ A small System Stats card is acceptable **only if its own measurement cost is be
 remains completely dormant without an admitted card consumer**. The existing `--usage` telemetry is useful evidence and
 must remain diagnostics-only; it is intentionally much broader than this product needs.
 
-This decomposition begins with a sampler admission experiment. If the cheap sampler cannot meet the cost/dormancy
-bar, the widget remains shelved rather than weakening Visualizer cadence/reactivity or disguising expensive collection
-behind a slower UI.
+This decomposition began with a sampler admission experiment. CPU/RAM cleared the source-cost gate; optional GPU/VRAM
+did not. Later metrics remain shelved rather than weakening Visualizer cadence/reactivity or disguising expensive
+collection behind a slower UI.
+
+### 0.1 Landed implementation state
+
+S0 admitted only whole-system CPU/RAM: direct source observations measured roughly 0.5–1.5 ms across idle and bounded
+CPU-contention runs. The persistent Windows GPU/VRAM candidate returned `query_error`, took about 363 ms on first setup,
+closed all query/counter state and is **not** in the product. No diagnostic or PID-scoped fallback was added.
+
+S1-S6 are implemented behind `--devstats` and the family remains deactivated/member-disabled by default. One
+runtime-generation owner submits a low-priority sample only while at least one real retained-card lease is active;
+additional displays share its immutable snapshot. The cadence is a fixed completion+10 seconds, one sample may be in
+flight, and final release fences completion and closes/clears source ownership. Settings construction stays source-inert.
+
+The retained card shows CPU load and RAM percentage plus used/total in two fixed panels. It uses semantic Widget Theme
+roles, ordinary stacking/global-CUSTOM/40% normalization, finite width easing and an original packaged monochrome gear
+and spanner header asset. Focused automated source/runtime/dormancy/multi-display/Settings/QML/binder/build checks and
+real Quick standard/busy/40%-floor captures are GREEN. S7 remains open for installed off-vs-on Visualizer contention,
+long-run, repeated retirement/recreation and two-display resource/cardinality validation; `--devstats` remains until then.
 
 ## 1. Product goal
 
@@ -79,7 +96,7 @@ Design target:
 
 ```text
 card admission / retirement events
-        -> acquire/release one process-shared sampler lease
+        -> acquire/release one runtime-generation-shared sampler lease
         -> while lease_count > 0, sample cheap OS-maintained counters every ~10 s
         -> immutable accepted snapshot
         -> all retained cards consume same snapshot
@@ -166,7 +183,7 @@ Do not create one sampler per display/card.
 
 - first admitted card lease starts/warms the sampler;
 - additional displays reuse the same accepted snapshot;
-- last lease release cancels future cadence and closes persistent GPU/PDH query handles;
+- last lease release cancels future cadence and closes/clears the admitted CPU/RAM source state;
 - in-flight completion carries generation and is discarded after last-release/recreation;
 - family deactivation forces lease release;
 - ordinary card disable forces that card’s lease release;
@@ -220,18 +237,15 @@ Do not add a second general scheduler framework for this card.
 
 ## 9. Accepted snapshot
 
-Keep the cross-thread payload tiny and immutable, conceptually:
+The landed cross-thread payload is tiny and immutable:
 
 ```text
-SystemStatsSnapshot
+SystemStatsRuntimeSnapshot
     revision
     accepted_monotonic
-    cpu_pct | None
-    ram_used_bytes / ram_total_bytes | None
-    gpu_identity/status
-    gpu_pct | None
-    vram_used_bytes / vram_total_bytes | None
-    source_status flags
+    CpuRamSample
+        cpu_status / cpu_pct | None
+        ram_status / ram_used_bytes / ram_total_bytes | None
 ```
 
 Formatting (GB strings, whole-number percentages, labels) belongs in neutral preparation/presentation, not the source
@@ -242,14 +256,14 @@ its tree just because another 10-second sample arrived.
 
 ## 10. Product UI
 
-Initial card should be deliberately boring and readable:
+The initial card is deliberately quiet and readable:
 
 ```text
-SYSTEM STATS
-CPU      63%   [bounded bar]
-RAM      71%   22.7 / 32.0 GB
-GPU      48%   [only if admitted]
-VRAM     62%   7.4 / 12.0 GB   [only if admitted]
+SYSTEM STATS                      WHOLE SYSTEM • 10 SEC
+CPU LOAD                         63%
+Across all logical processors    [bounded bar]
+MEMORY                           71%
+22.7 GB of 32.0 GB used          [bounded bar]
 ```
 
 Exact labels/layout are eyes-on work, but principles are binding:
@@ -259,7 +273,8 @@ Exact labels/layout are eyes-on work, but principles are binding:
 - small presentation easing between accepted samples is optional, finite and purely visual;
 - displayed value changes do not change preferred geometry;
 - configured metric capacity owns preferred height;
-- unsupported GPU/VRAM is omitted/marked unavailable without CPU/RAM collapsing into a different card architecture.
+- rejected GPU/VRAM is omitted; CPU/RAM does not collapse into a different card architecture when one value is warming
+  or unavailable.
 
 ## 11. Icon contract
 
@@ -297,13 +312,12 @@ sufficient.
 
 Only add canonical Settings/default state after sampler S0 admission passes.
 
-Minimum likely settings:
+Landed settings:
 
 - family activation entry;
 - Enabled;
 - Position / Monitor;
-- ordinary font/layout controls consistent with other families;
-- metric visibility toggles only for metrics actually admitted and only if the card remains coherent without them.
+- ordinary font family/size controls consistent with other families.
 
 Do not initially expose:
 
@@ -355,14 +369,14 @@ tens of milliseconds, investigate/reject it rather than normalizing that cost be
 
 ## 15. Implementation phases
 
-### S0 — sampler feasibility
+### S0 — sampler feasibility — CPU/RAM admitted, GPU/VRAM rejected
 
 - prove cheap whole-system CPU/RAM source;
 - probe honest GPU/VRAM candidate separately;
 - A/B at 10 s; optionally 5 s only after 10 s passes;
 - no product Settings/UI yet.
 
-### S1 — canonical owner + leases
+### S1 — canonical owner + leases — implemented
 
 - add the minimum sampler service;
 - generation fencing;
@@ -370,7 +384,7 @@ tens of milliseconds, investigate/reject it rather than normalizing that cost be
 - first/last lease start/stop;
 - explicit source handle close.
 
-### S2 — dormancy tests
+### S2 — dormancy tests — implemented
 
 - family activated but card disabled -> zero sampler work;
 - card enabled on one display -> one sampler;
@@ -379,7 +393,7 @@ tens of milliseconds, investigate/reject it rather than normalizing that cost be
 - runtime recreation -> old completion rejected, old handles closed;
 - Settings open/close -> zero runtime sampler side effects.
 
-### S3 — canonical Settings/default descriptor
+### S3 — canonical Settings/default descriptor — implemented
 
 Only after S0–S2 are green:
 
@@ -388,14 +402,14 @@ Only after S0–S2 are green:
 - add lazy Settings builder/body;
 - maintain activation vs ordinary enabled distinction.
 
-### S4 — retained card
+### S4 — retained card — implemented
 
 - CPU/RAM card first;
 - stable geometry/model identity;
 - unavailable/warming/error states;
 - no graphs.
 
-### S5 — optional GPU/VRAM
+### S5 — optional GPU/VRAM — probed and rejected
 
 Only metrics that passed S0:
 
@@ -404,14 +418,14 @@ Only metrics that passed S0:
 - no >100% aggregate nonsense;
 - graceful unsupported state.
 
-### S6 — icon / presentation polish
+### S6 — icon / presentation polish — implemented
 
 - reuse canonical glyph if viable;
 - otherwise add original gear+spanner resource;
 - Widget Theme/Style Overrides/glow/stacking/CUSTOM acceptance;
 - finite sample-to-sample visual easing only if it helps readability.
 
-### S7 — soak / ungate
+### S7 — soak / ungate — automated gate GREEN, installed/long-run cells pending
 
 - off-vs-on contention comparison;
 - 10-second long run;
