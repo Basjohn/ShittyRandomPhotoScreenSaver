@@ -1,7 +1,7 @@
 # Steam Friend Pulse — Current-Architecture Product Decomposition
 
-Status: **PROMOTED / DEFINITE CURRENT-PLAN FEATURE**  
-Last updated: 2026-09-12  
+Status: **IMPLEMENTED / DEV-GATED / AWAITING LIVE + INSTALLED ACCEPTANCE**
+Last updated: 2026-09-13
 Current sequencing authority: `Current_Plan.md`  
 Stable widget id: `friend_pulse`
 
@@ -18,6 +18,31 @@ policy and retained Quick widget architecture.
 This implementation must not become a Steam social client, chat client, activity-history database or a second Steam
 provider. It is a small, privacy-aware activity card fed by the same bounded Steam ownership used by the existing
 family.
+
+### 0.1 Landed implementation state
+
+F0-F6 are implemented. The retained card defaults to a dynamically centred two-column **Avatar Grid** at the canonical
+capacity of four, expands to three columns for capacities five/six at canonical width, and keeps two readable columns
+at narrow widths. A selectable compact **Activity Rows** view consumes the same stable row model and accepted snapshot.
+Tiles/rows show privacy-permitted identity, normalized persona presence and the current game; Strict mode groups by
+game and exposes neither names nor avatars.
+
+The source/cache/runtime path is cache-first, uses existing Steam locks/request coordination/backoff/redaction, and has
+one Friend Pulse owner per runtime generation shared by every display. Rich avatar hydration runs only for ranked
+visible rows and delivers local `file:` sources. Zero admitted consumers means no source refresh, avatar work or live
+cadence; retirement fences source and avatar completion and discards bounded comparison state.
+
+Validated Steam IDs are permitted in the user's account-private Friend Pulse cache and the shared runtime owner. The
+owner maps them to opaque fingerprints, strips them before delivering presentation snapshots, and QML emits only a row
+index. In interactive MC/diagnostic runs an admitted friend avatar or NEW-marker click attempts a directed Steam chat
+and falls back to the public profile when the protocol is rejected; normal screensaver runs use the HTTPS profile via
+the existing secure URL helper and then exit normally. Game actions use the same seam to open the Steam Store: game
+labels in Friend Pulse, plus existing Achievement Pulse and Abandonment Issues artwork, are actionable. No Steam
+message body or individual message notification is sourced or rendered.
+
+Focused automated source/runtime/privacy/cache/request/Settings/QML/binder/cardinality/normalization checks and real
+Quick standard/busy/40%-floor captures are GREEN. F7 remains open only for a real connected-account readability/privacy
+pass and installed two-display/DPI/theme/CUSTOM/retirement soak. The `--devsteam` gate remains until those cells close.
 
 ## 1. Current foundation to reuse
 
@@ -82,8 +107,8 @@ not displace currently-playing rows. Offline friend enumeration is not the point
 
 ### 3.3 Stable visible capacity
 
-Initial target: a small configured row capacity (for example 3) rather than a height that expands/contracts with every
-refresh. Exact capacity is chosen during eyes-on layout work.
+The initial product capacity is **four**. It is configuration-owned rather than a height that expands/contracts with
+every refresh.
 
 Configured capacity owns preferred geometry. Momentary source count never owns card height. Overflow is summarized
 rather than causing layout churn.
@@ -110,25 +135,41 @@ The existing Steam family `privacy_mode` is the only privacy-mode authority.
 
 - no friend persona names in the card;
 - no avatars;
-- no profile links/actions;
+- no individual friend profile/chat action; game-group rows may open their public Steam Store page;
 - aggregate by current game where useful, e.g. “2 friends playing <game>”;
-- raw Steam IDs never enter presentation or normal logs.
+- Steam IDs never enter presentation or normal logs.
 
 ### Balanced
 
 - friend display names may be shown;
 - no avatars;
 - game activity may be shown;
-- profile/deep-link actions stay omitted initially unless specifically justified during implementation.
+- the NEW marker may request the same admitted friend chat/profile action without exposing an identifier to QML;
+- the game label may request the public/app-client Store action.
 
 ### Rich
 
 - display names + current game;
 - avatars may be shown for visible ranked rows only;
-- any later profile action must use source-provided safe identity and the existing semantic action-routing seam.
+- a visible avatar or NEW marker may request the admitted friend chat/profile action;
+- all actions use source-provided validated identity and the existing semantic action-routing seam.
 
 Changing privacy mode must reproject already accepted neutral state where possible. It must not force an unnecessary
 network refresh merely to change pixels.
+
+### 4.1 Semantic action boundary
+
+- the account-private normalized cache may retain validated numeric Steam IDs; API keys remain credential-store only;
+- the shared runtime owner holds the current fingerprint-to-ID map and clears it on last lease/retirement/failure;
+- presentation snapshots and rows contain no Steam ID or URL, and QML emits only semantic signals plus a row index;
+- the Python model revalidates the current visible row and owner map before forwarding an action;
+- interactive MC/diagnostic runs try `steam://friends/message/<id>` or `steam://store/<appid>` and use the HTTPS
+  profile/Store route when Qt rejects the protocol;
+- normal screensaver runs send only the HTTPS profile/Store route through the existing secure helper and request the
+  ordinary saver exit exactly once after successful handoff; if the helper cannot accept it, the action fails closed
+  without a direct secure-desktop browser attempt or saver exit;
+- a NEW marker means a newly observed game transition, not a Steam message notification. The current allowed Steam
+  sources cannot deep-link to a particular chat message.
 
 ## 5. Source / request architecture
 
@@ -147,13 +188,14 @@ No additional source is added merely to decorate the card.
 
 ### 5.2 Shared refresh ownership
 
-Friend Pulse does **not** own an independent network cadence. It participates in the existing Steam family refresh /
-request-policy owner and canonical `steam.refresh_minutes` setting.
+Friend Pulse owns one generation-scoped semantic source cadence, not one cadence per card/display. Its interval comes
+only from canonical `steam.refresh_minutes`; there is no Friend Pulse-local interval or second provider. Endpoint work
+continues to use the existing Steam request coordinator/backoff and source locks shared with the family.
 
 Required behavior:
 
 - cache-first preparation;
-- one accepted family refresh generation can feed every Friend Pulse presentation consumer;
+- one accepted Friend Pulse refresh generation feeds every Friend Pulse presentation consumer;
 - multi-display instances never multiply the FriendList request or summary batches;
 - request batching/chunking follows the endpoint/provider’s bounded policy rather than one request per friend;
 - existing rate-limit/backoff/timeout/redaction contracts remain authoritative;
@@ -252,6 +294,9 @@ Steam source/request owner
 Presentation requirements:
 
 - stable root/list-model identity across ordinary snapshot updates;
+- selectable Avatar Grid and Activity Rows views over that same retained model;
+- deterministic bounded grid spacing and incomplete-row centering derived from configured capacity;
+- presentation-safe presence plus current-game details in both views;
 - unchanged accepted snapshot = no row tree rebuild / no avatar churn;
 - mutate existing model roles where possible;
 - no QWidget/QPainter fallback presenter;
@@ -280,12 +325,14 @@ preferred dimensions if the actual useful row design needs it. Normalization con
 
 Keep Settings small. Reuse the existing Steam family Connection / Privacy controls.
 
-Friend Pulse-owned controls should initially be limited to what changes durable product behavior, likely:
+Friend Pulse-owned controls are limited to durable product behavior:
 
 - Enabled;
 - ordinary Position / Monitor;
 - ordinary font/layout controls already expected by the family shell;
-- visible row capacity only if eyes-on use proves a fixed single capacity inadequate.
+- View: **Avatar Grid** / **Activity Rows**.
+
+Visible capacity is canonical at four and is not exposed as a user knob in v1.
 
 Do not add:
 
@@ -302,62 +349,64 @@ current closed-by-default / one-open-per-local-scope contract.
 ## 11. Logging / security
 
 - Steam API key never appears in logs/export/test fixtures/screenshots;
-- raw Steam IDs are redacted from ordinary logs;
+- validated Steam IDs may exist only in the account-private cache and owner-only runtime action map;
+- Steam IDs and full action URLs are absent from QML roles, presentation snapshots, ordinary logs and generated
+  Settings/default artifacts;
 - logging may report counts, source status, batch counts, cache age, revision and lifecycle generation;
 - no full friend payload dump in normal diagnostics;
 - failure logs distinguish private/rate-limited/network/invalid response where current Steam result types support it.
 
 ## 12. Implementation phases
 
-### F0 — evidence + rollback
+### F0 — evidence + rollback — implemented
 
 - pin GODZIP/HEAD;
 - audit current `friend_pulse` scaffold/default/descriptor hits;
 - record which scaffold fields are still valid generic settings and which are dead mock residue;
 - freeze current Steam sibling tests.
 
-### F1 — source fixture contract
+### F1 — source fixture contract — implemented
 
 - add fixture-only FriendList + PlayerSummaries coverage;
 - prove private/empty/rate-limited/malformed behavior;
-- prove raw IDs/secrets are redacted;
+- prove IDs remain inside the private cache/runtime boundary and secrets remain redacted;
 - define accepted neutral snapshot types.
 
-### F2 — bounded source preparation
+### F2 — bounded source preparation — implemented
 
 - implement cache-first friend/source preparation through existing request policy;
 - batch summaries without per-friend request fan-out;
 - build previous-accepted-snapshot change evidence;
 - no UI yet.
 
-### F3 — lease / dormancy owner
+### F3 — lease / dormancy owner — implemented
 
 - wire the standard Steam/runtime manager admission gates;
 - prove two displays share one source result;
 - prove zero Friend Pulse work with no effective consumer;
 - prove stale completion rejected after disable/recreation.
 
-### F4 — retained Quick card
+### F4 — retained Quick card — implemented
 
 - implement useful playing-first hierarchy;
 - stable rows / configured capacity;
 - private/empty/stale/error states;
 - no avatars yet.
 
-### F5 — privacy + Rich avatar enrichment
+### F5 — privacy + Rich avatar enrichment — implemented
 
 - Strict/Balanced/Rich projection;
 - visible-row-only avatar hydration;
 - cache/revision fences;
 - no presentation identity leak in Strict.
 
-### F6 — normalization / Settings / theming
+### F6 — normalization / Settings / theming — implemented
 
 - ordinary resize, stacking, global CUSTOM, glow, theme semantics;
 - bucket/default schema updates only where genuinely needed;
 - remove obsolete mock card presentation path if caller proof says it is dead.
 
-### F7 — acceptance / ungate
+### F7 — acceptance / ungate — automated gate GREEN, live/installed cells pending
 
 - deterministic fixtures;
 - request/backoff/cache tests;
@@ -407,5 +456,5 @@ Friend Pulse is GREEN only when:
 - multiple displays do not multiply source work;
 - no effective consumer means no Friend Pulse-owned work;
 - retained presentation obeys ordinary widget normalization/theme/CUSTOM rules;
-- no secrets/raw IDs leak;
+- no secrets or private-cache IDs escape their admitted boundary;
 - performance is effectively static between accepted Steam source updates.

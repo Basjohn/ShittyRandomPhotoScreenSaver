@@ -47,6 +47,12 @@ event-loop tail behavior before a card is enabled. GPU/VRAM remains omitted
 unless a later source probe succeeds with stable adapter identity, truthful
 counter semantics and comparable cost.
 
+Follow-through on 2026-09-12: the shared lease owner, dormancy/cardinality
+proof, dev-gated Settings and retained CPU/RAM card are now implemented. The
+remaining product-green boundary is the installed off-vs-on Visualizer tail,
+long-run and multi-display S7 soak recorded in `Current_Plan.md`; this S0 record
+continues to own the source-cost and GPU/VRAM rejection evidence only.
+
 ## Reproduction
 
 ```powershell
