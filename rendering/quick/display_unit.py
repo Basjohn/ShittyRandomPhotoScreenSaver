@@ -335,7 +335,32 @@ class QuickDisplayUnit:
             "visualizer_owners": int(visualizer_live),
             "first_frames_ready": int(bool(first_frame_ready)),
             "visualizer_identities": visualizer_identities,
+            "visualizer_render_host": self._visualizer_render_host_lifecycle(),
         }
+
+    def _visualizer_render_host_lifecycle(self) -> dict[str, object] | None:
+        """Boundary-only render-host lifecycle facts, or None when unreachable.
+
+        Walks the retained ``scene_controller.visualizer_item`` and returns its
+        thread-safe lifecycle snapshot as a plain dict. Any missing link (retired
+        runtime, no item, no node yet) yields ``None`` rather than raising; this
+        read never mutates/renders/releases and never issues GL queries.
+        """
+        from dataclasses import asdict
+
+        try:
+            item = self._runtime.scene_controller.visualizer_item
+        except Exception:
+            return None
+        if item is None:
+            return None
+        getter = getattr(item, "render_host_lifecycle_snapshot", None)
+        if not callable(getter):
+            return None
+        try:
+            return asdict(getter())
+        except Exception:
+            return None
 
     # -- visibility / lifecycle -------------------------------------------- #
     def show_on_screen(self) -> None:

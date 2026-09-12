@@ -68,6 +68,158 @@ def test_inactive_cleanup_requires_context_and_retries_failed_renderer(monkeypat
     assert active.release_count == 0
 
 
+def _install_host_render_stubs(monkeypatch, host, renderers):
+    """Make ``host.render()`` drivable without a real GL context.
+
+    ``renderers`` is a mode_id -> _FakeRenderer map; a mode is resolved once and
+    reused, matching production lazy resolution. The shared quad is pre-owned so
+    ``_ensure_quad`` short-circuits and we can prove it is never multiplied.
+    """
+    host._quad_vao = 7
+    host._quad_vbo = 7
+    monkeypatch.setattr(
+        render_host_module,
+        "QOpenGLContext",
+        SimpleNamespace(currentContext=staticmethod(object)),
+    )
+
+    def _resolve(mode_id):
+        renderer = renderers.get(mode_id)
+        if renderer is None or not renderer.has_resources:
+            renderer = _FakeRenderer()
+            renderers[mode_id] = renderer
+        return renderer
+
+    monkeypatch.setattr(
+        render_host_module, "resolve_quick_visualizer_renderer", _resolve
+    )
+    monkeypatch.setattr(
+        render_host_module._InheritedGlState,
+        "capture",
+        lambda: SimpleNamespace(restore=lambda: None),
+    )
+    for name in (
+        "glEnable",
+        "glBlendEquationSeparate",
+        "glBlendFuncSeparate",
+        "glDisable",
+        "glDepthMask",
+        "glViewport",
+        "glDeleteBuffers",
+        "glDeleteVertexArrays",
+    ):
+        monkeypatch.setattr(render_host_module.gl, name, lambda *_args: None)
+
+
+def _render_mode(host, mode_id):
+    snapshot = SimpleNamespace(logical=SimpleNamespace(mode_id=mode_id))
+    return host.render(
+        snapshot=snapshot,
+        viewport=(0, 0, 100, 100),
+        logical_size=(100.0, 100.0),
+        matrix_values=(1.0,) * 16,
+    )
+
+
+def test_repeated_mode_switches_keep_one_active_renderer_and_bounded_quad(monkeypatch):
+    """P2: >=100 completed switches converge to the one-active-renderer invariant.
+
+    Proves lifecycle boundedness (not the physical perf bug): every switch retires
+    the previous inactive renderer, resolved ownership stays == {active}, retired
+    renderers lose resources and drop from cache, release/resolve counts grow with
+    real boundaries (not rendered frames), and the shared quad is never multiplied.
+    """
+    host = QuickVisualizerRenderHost()
+    renderers: dict[str, _FakeRenderer] = {}
+    _install_host_render_stubs(monkeypatch, host, renderers)
+
+    modes = ("spectrum", "oscilloscope", "sine_wave", "bubble", "sphere")
+    quad_vao = host._quad_vao
+    completed = 0
+    previous_mode = None
+    previous_renderer = None
+    for cycle in range(22):  # 22 * 5 = 110 completed mode changes
+        for mode in modes:
+            assert _render_mode(host, mode) == mode
+            completed += 1
+
+            # 2: after every completed switch, exactly the active mode is resolved.
+            assert host.resolved_mode_ids == frozenset({mode})
+            # 1 + 3: the previous inactive renderer retired, lost resources, and
+            # is no longer cached.
+            if previous_mode is not None and previous_mode != mode:
+                assert previous_renderer.release_count == 1
+                assert previous_renderer.has_resources is False
+                assert previous_mode not in host.resolved_mode_ids
+            # 5: the shared host quad is not recreated/multiplied by a switch.
+            assert host._quad_vao == quad_vao
+            assert host._quad_vbo == quad_vao
+
+            previous_mode = mode
+            previous_renderer = renderers[mode]
+
+            # Extra same-mode frames must not resolve/release/advance boundaries.
+            snap = host.lifecycle_snapshot()
+            _render_mode(host, mode)
+            _render_mode(host, mode)
+            after = host.lifecycle_snapshot()
+            assert after.mode_boundary_seq == snap.mode_boundary_seq
+            assert after.renderer_resolve_count == snap.renderer_resolve_count
+
+    assert completed == 110
+    lifecycle = host.lifecycle_snapshot()
+    # 4: release/resolve counts track real boundaries, not rendered frames.
+    # 110 switches: first mode of the whole run has no predecessor to retire.
+    assert lifecycle.mode_boundary_seq == 110
+    assert lifecycle.renderer_resolve_count == 110
+    assert lifecycle.inactive_release_successes == 109
+    assert lifecycle.inactive_release_failures == 0
+    assert lifecycle.resolved_mode_ids == ("sphere",)
+    assert lifecycle.quad_vao_owned is True
+
+    # 8: full host release leaves no implementations and no host quad resources.
+    host.release_resources()
+    assert host.resolved_mode_ids == frozenset()
+    assert host._quad_vao == 0 and host._quad_vbo == 0
+    assert host.has_resources is False
+    final = host.lifecycle_snapshot()
+    assert final.full_release_count == 1
+    assert final.quad_vao_owned is False and final.quad_vbo_owned is False
+    assert final.resolved_mode_ids == ()
+
+
+def test_repeated_switch_injected_release_failure_is_accounted_then_retried(monkeypatch):
+    """P2 item 6: a failed inactive release stays accounted/cached, then a later
+    legal render retries it and restores the one-active-renderer invariant."""
+    host = QuickVisualizerRenderHost()
+    renderers: dict[str, _FakeRenderer] = {}
+    _install_host_render_stubs(monkeypatch, host, renderers)
+
+    assert _render_mode(host, "bubble") == "bubble"
+    bubble = renderers["bubble"]
+    bubble.fail_release = True
+
+    # Switching to spectrum tries to retire bubble; the failed release must raise,
+    # keep bubble cached/accounted, and register a lifecycle failure.
+    with pytest.raises(RuntimeError, match="inactive cleanup incomplete"):
+        _render_mode(host, "spectrum")
+    assert "bubble" in host.resolved_mode_ids
+    assert bubble.release_count == 1
+    failed_snapshot = host.lifecycle_snapshot()
+    assert failed_snapshot.inactive_release_failures == 1
+    assert failed_snapshot.last_release_error is not None
+    assert ("bubble", True) in failed_snapshot.resolved_has_resources
+
+    # A later legal render (failure cleared) retries and converges to one active.
+    bubble.fail_release = False
+    assert _render_mode(host, "spectrum") == "spectrum"
+    assert host.resolved_mode_ids == frozenset({"spectrum"})
+    assert bubble.release_count == 2
+    recovered = host.lifecycle_snapshot()
+    assert recovered.inactive_release_successes >= 1
+    assert recovered.resolved_mode_ids == ("spectrum",)
+
+
 def test_render_retires_inactive_mode_before_resolving_current_mode(monkeypatch) -> None:
     host = QuickVisualizerRenderHost()
     old = _FakeRenderer()

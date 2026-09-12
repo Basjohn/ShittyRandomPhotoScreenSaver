@@ -10,6 +10,10 @@ from PySide6.QtGui import QOpenGLContext
 
 from .implementation_registry import resolve_quick_visualizer_renderer
 from .render_contract import QuickVisualizerRenderFrame, QuickVisualizerRenderer
+from .telemetry import (
+    VisualizerRenderHostLifecycleSnapshot,
+    VisualizerRenderHostLifecycleTelemetry,
+)
 
 
 def _int_state(name: int) -> int:
@@ -103,6 +107,27 @@ class QuickVisualizerRenderHost:
         self._quad_vbo = 0
         self._implementations: dict[str, QuickVisualizerRenderer] = {}
         self._last_render_mode_id: str | None = None
+        self._lifecycle = VisualizerRenderHostLifecycleTelemetry()
+
+    def lifecycle_snapshot(self) -> VisualizerRenderHostLifecycleSnapshot:
+        """Boundary-only ownership facts; reading mutates/renders/releases nothing."""
+        return self._lifecycle.snapshot()
+
+    def _record_ownership(self) -> None:
+        """Capture already-owned ownership facts at an existing boundary.
+
+        No ``glGet*`` queries: the quad booleans and per-implementation
+        ``has_resources`` are host-side facts already tracked in Python.
+        """
+        self._lifecycle.note_ownership(
+            resolved_mode_ids=tuple(sorted(self._implementations)),
+            resolved_has_resources=tuple(
+                (mode_id, bool(implementation.has_resources))
+                for mode_id, implementation in sorted(self._implementations.items())
+            ),
+            quad_vao_owned=bool(self._quad_vao),
+            quad_vbo_owned=bool(self._quad_vbo),
+        )
 
     @property
     def has_resources(self) -> bool:
@@ -130,11 +155,12 @@ class QuickVisualizerRenderHost:
         mode_id = snapshot.logical.mode_id
         # A mode switch is observed on the render thread, where the GL context
         # is legal.  Retire every previously resolved inactive implementation
-        # before lazily resolving the new one.
-        if (
-            mode_id != self._last_render_mode_id
-            or len(self._implementations) > 1
-        ):
+        # before lazily resolving the new one.  Lifecycle telemetry advances only
+        # on this real boundary, never on ordinary same-mode frames.
+        mode_changed = mode_id != self._last_render_mode_id
+        if mode_changed:
+            self._lifecycle.note_mode_boundary(mode_id)
+        if mode_changed or len(self._implementations) > 1:
             self.release_inactive_implementations(mode_id)
         implementation = self._implementations.get(mode_id)
         if implementation is None:
@@ -144,7 +170,10 @@ class QuickVisualizerRenderHost:
                     f"Quick visualizer renderer is not registered: {mode_id}"
                 )
             self._implementations[mode_id] = implementation
+            self._lifecycle.note_resolve(mode_id)
         self._ensure_quad()
+        if mode_changed:
+            self._record_ownership()
         frame = QuickVisualizerRenderFrame(
             snapshot=snapshot,
             viewport=viewport,
@@ -199,6 +228,7 @@ class QuickVisualizerRenderHost:
                 "visualizer inactive render resources released without a current GL context"
             )
         errors: list[str] = []
+        successes = 0
         for mode_id, implementation in inactive:
             try:
                 implementation.release_resources()
@@ -207,6 +237,16 @@ class QuickVisualizerRenderHost:
                 continue
             if not implementation.has_resources:
                 self._implementations.pop(mode_id, None)
+                successes += 1
+        # A failed release stays accounted as a failure and a retained renderer;
+        # it is never silently dropped from the ownership snapshot.
+        self._lifecycle.note_inactive_release(
+            attempts=len(inactive),
+            successes=successes,
+            failures=len(errors),
+            error=(" | ".join(errors) if errors else None),
+        )
+        self._record_ownership()
         if errors:
             raise RuntimeError(
                 "Quick visualizer inactive cleanup incomplete: "
@@ -236,6 +276,10 @@ class QuickVisualizerRenderHost:
             gl.glDeleteVertexArrays(1, [self._quad_vao])
         self._quad_vao = 0
         self._last_render_mode_id = None
+        self._lifecycle.note_full_release(
+            error=(" | ".join(errors) if errors else None)
+        )
+        self._record_ownership()
         if errors:
             raise RuntimeError(
                 "Quick visualizer cleanup incomplete: " + " | ".join(errors)
