@@ -446,13 +446,17 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
     code 0 for a valid run, non-zero for INVALID. Kept defensive: any missing seam
     disables the driver.
     """
-    from core.diagnostics.experiment_flags import abc_drive_condition
+    from core.diagnostics.experiment_flags import (
+        abc_drive_condition,
+        abc_exclude_seconds,
+    )
 
     condition = abc_drive_condition()
     if condition is None:
         return None
 
     slot = str(layout_slot)
+    exclude_override = abc_exclude_seconds()
 
     # Read the DisplayManager lazily each call: RUN mode creates/recreates display
     # units after this install, and condition C intentionally rebuilds them, so a
@@ -703,6 +707,7 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
         on_complete=_on_complete,
         attribution_snapshot=_attribution_snapshot,
         parent=app,
+        **({} if exclude_override is None else {"exclude_seconds": exclude_override}),
     )
     driver.start()
     return driver
