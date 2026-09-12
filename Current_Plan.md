@@ -11,7 +11,9 @@ Sphere polish, widget resize/Edit lifetime, bucket normalization and other accep
 
 ## 1. Visualizer post-switch presentation-tail / anti-waste follow-up
 
-Execution authority: `Docs/Guardrails/Performance_Optimization_Contract.md`.
+Execution authority: `Docs/Future_Work/Visualizer_Post_Switch_Performance.md`.
+
+Binding guardrail: `Docs/Guardrails/Performance_Optimization_Contract.md`.
 
 The 2026-09-12 diagnostic run included a heavy external CPU load and the sequence
 Sphere -> Spectrum -> Oscilloscope -> Sine -> Bubble. Bubble retained its intended
@@ -23,10 +25,7 @@ this as a **presentation/lifetime attribution problem**, not permission to reduc
 Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evidence for future agents:
 `logs/evidence_chest/logsb11575b976.zip`.
 
-- [ ] Reproduce the exact multi-mode sequence into an extreme-vertical CUSTOM Bubble
-  under deliberate CPU contention, then compare the same activation before/after a
-  saved-layout runtime recreation. Capture event-loop p95/p99/max, pacer skips,
-  render/sync/draw counts, revision Hz, snapshot age and physical smoothness.
+- [ ] Execute the decomposition's falsifiable P0-P4 matrix rather than a one-off manual reproduction: repeated-switch lifecycle test, real-GL switch smoke, then three matched installed-runtime A/B/C repetitions (Bubble-only control vs five switch cycles vs the same exposure followed by saved-layout Quick-runtime recreation). Use its explicit thresholds/classification to prove or reject swap-sensitive residual degradation.
 - [ ] Add lifecycle-only render-host telemetry at mode boundaries/teardown: renderer
   resolve count, inactive-release attempts/success/failure, active/resolved mode IDs,
   per-implementation `has_resources`, and shared-quad ownership. Surface it in the
