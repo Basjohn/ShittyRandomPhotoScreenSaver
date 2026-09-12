@@ -78,19 +78,36 @@ Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evide
   gate. Reproduce with:
   `python tools/visualizer_switch_abc_harness.py auto --condition <A|B|C> --layout-slot 1 --workers 4 --log logs/screensaver_perf.log --rep-out <rep>.json --run-cmd "python main_mc.py /s --usage --viz --perf"`
   then `classify --a A1..A3 --b B1..B3 --c C1..C3`.
-- [ ] **ACTIVE NEXT (attribution, no repair yet):** with the swap-sensitive result
-  established, use the opt-in P1 render-host lifecycle telemetry
-  (`--viz-switch-telemetry` / `--abc-drive`, surfaced in the resource-ownership
-  snapshot) to prove or refute stale mode GL/scene resource ownership accumulating
-  across switches (H1) vs bounded ownership with rising invalidation/update rate
-  (H2). If stale ownership (H1) is demonstrated, repair the existing render-thread
-  retirement seam. Do **not** add automatic layout/runtime reinitialization as a
-  self-healing fallback (the recreation that clears the tail is the experiment's
+- [x] **Attribution H1 vs H2 — DONE 2026-09-12, both REJECTED.** Added opt-in
+  presentation-edge counters (`core/diagnostics/visualizer_attribution.py`) + a
+  boundary `[PERF] [ABC-ATTR]` snapshot logged by the driver at each scored window
+  start/end (H1 ownership+identity from the existing `resource_ownership_snapshot`,
+  render-node sync/render/draw, and the separate H2 presentation counts). Ran one
+  matched A + one matched B with `--life` (`logs/abc_evidence/{A,B}_attr.perf.log`).
+  **H1 rejected:** at the settled B window ownership is identical to the A control —
+  `resolved_mode_ids=={bubble}`, bubble `has_resources=False`, one shared quad,
+  release failures 0, `release_failure_unresolved=False`; resolve_count 26 with
+  releases 25/25/0 exactly track the 25 switches 1:1 with zero leak (Sphere WAS
+  exercised — resolve_by_mode sphere:5 — and retired cleanly, closing the P3 gap).
+  **H2 rejected:** over the 120 s window A vs B presentation cadence is equivalent
+  (pacer opportunities 7194/7193, publications 7189/7187, item present_requests
+  7189/7187, window-update fallbacks 0/0, frame swaps 7237/7325, renders 7237/7326,
+  draws 7237/7325 — B higher by ~1.2%, not amplified/duplicated). Yet B shows ~7×
+  more moderate (25–50 ms) GUI event-loop stalls at the SAME frame/present cadence:
+  the tail is a **per-operation cost increase, not a count increase**, and the
+  logical tick stays clean (no tick-breakdown spikes, ~90 Hz). C was NOT run — A/B
+  leave no H1/H2 ambiguity to resolve. No repair made (neither hypothesis survived).
+- [ ] **ACTIVE NEXT (measurement, not repair):** since ownership AND presentation
+  cadence are equivalent but individual GUI-thread iterations got costlier in B,
+  measure the next suspects before changing anything: (a) the per-draw
+  `_InheritedGlState.capture()/restore()` fence (synchronous GL state queries around
+  every visualizer draw — same draw count in A/B, so per-draw cost must be timed to
+  test whether post-switch driver/GL state makes each capture slower); (b) GC /
+  Quick-generation-owned state accumulated across 25 activations (H4) as an alternate
+  GUI-thread stall source. Do not lower the 60 Hz presentation target or ~90 Hz
+  authored/logical evolution, and never add automatic Quick-runtime/layout recreation
+  as a self-heal (the recreation that clears the tail is the experiment's
   intervention, never a shipped mechanism).
-- [ ] If resource retirement is clean, attribute scene-update/invalidation origins
-  (frame pacer vs mode-switch retirement vs presentation/QML invalidation) and remove
-  only demonstrated duplicate/no-op requests. Do not lower the 60 Hz presentation
-  target or ~90 Hz authored/logical evolution to improve counters.
 - [ ] Measure the per-frame `_InheritedGlState.capture()`/restore fence as a distinct
   CPU/driver owner. It performs synchronous GL state queries around every Visualizer
   draw; change it only if profiling proves material cost and state-isolation coverage
