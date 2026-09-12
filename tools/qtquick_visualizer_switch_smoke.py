@@ -13,13 +13,19 @@ an accepted snapshot -- never on a blind wall-clock toggle.
 
 It reports one JSON object: requested/completed switch counts, the active mode
 after every completion, the boundary-only render-host lifecycle telemetry (P1)
-after each switch and during the final Bubble hold, node render/sync/draw/
-invalidation deltas, GL error status at the existing bounded capture points, and
-the final teardown resource/thread state.
+after each switch, a separate ``settled_hold`` record for the final Bubble hold
+(kept out of the ``per_switch`` series so the switch record stays honest), node
+render/sync/draw/invalidation deltas, GL error status at the existing bounded
+capture points, and the final teardown resource/thread state. The tool admits the
+opt-in switch telemetry itself (tools enable it directly, not via app argv).
 
-It is a lifecycle/ownership probe. It cannot prove the physical performance bug;
-its acceptance is only that ownership stays bounded through the real-GL sequence
-and teardown is clean (any accumulation is a concrete H1 lead, not a fix mandate).
+This is the PERMANENT-mode real-GL retirement probe: it deliberately does NOT
+include the experimental Sphere architecture (that is exercised at the P2
+ownership seam and in the P4 real-product exposure). Passing here is not proof
+that the Sphere-starting P4 exposure is clean. It is a lifecycle/ownership probe;
+it cannot prove the physical performance bug. Its acceptance is only that
+ownership stays bounded through the real-GL sequence and teardown is clean (any
+accumulation is a concrete H1 lead, not a fix mandate).
 
 Run (only on a machine with a live display/GL surface)::
 
@@ -145,6 +151,7 @@ class _SwitchRunner(QObject):
         self._pending_draw_baseline = 0
         self._pending_swap_baseline = 0
         self._per_switch: list[dict[str, object]] = []
+        self._settled_hold: dict[str, object] | None = None
         self._last_telemetry = self._telemetry.snapshot()
         self._error: str | None = None
         self._closing = False
@@ -195,33 +202,41 @@ class _SwitchRunner(QObject):
         self._item.update()
         self._window.update()
 
-    def _record_completed_switch(self, mode_id: str) -> None:
+    def _ownership_record(self, mode_id: str) -> dict[str, object]:
+        """Build one boundary ownership record (lifecycle + node deltas/totals).
+
+        Pure: it reads telemetry but does not advance ``_last_telemetry`` or
+        ``_active_mode`` so it can serve both a completed switch and the separate
+        settled Bubble-hold record.
+        """
         telemetry = self._telemetry.snapshot()
         lifecycle = self._item.render_host_lifecycle_snapshot()
-        self._per_switch.append(
-            {
-                "completed_index": self._completed_switches,
-                "active_mode": mode_id,
-                "render_host": asdict(lifecycle),
-                "node_deltas": {
-                    "sync": telemetry.sync_count - self._last_telemetry.sync_count,
-                    "render": telemetry.render_count - self._last_telemetry.render_count,
-                    "draw": telemetry.draw_count - self._last_telemetry.draw_count,
-                    "invalidation": (
-                        telemetry.invalidation_count
-                        - self._last_telemetry.invalidation_count
-                    ),
-                },
-                "node_totals": {
-                    "sync": telemetry.sync_count,
-                    "render": telemetry.render_count,
-                    "draw": telemetry.draw_count,
-                    "release": telemetry.release_count,
-                    "invalidation": telemetry.invalidation_count,
-                },
-            }
-        )
-        self._last_telemetry = telemetry
+        return {
+            "active_mode": mode_id,
+            "render_host": asdict(lifecycle) if lifecycle is not None else None,
+            "node_deltas": {
+                "sync": telemetry.sync_count - self._last_telemetry.sync_count,
+                "render": telemetry.render_count - self._last_telemetry.render_count,
+                "draw": telemetry.draw_count - self._last_telemetry.draw_count,
+                "invalidation": (
+                    telemetry.invalidation_count
+                    - self._last_telemetry.invalidation_count
+                ),
+            },
+            "node_totals": {
+                "sync": telemetry.sync_count,
+                "render": telemetry.render_count,
+                "draw": telemetry.draw_count,
+                "release": telemetry.release_count,
+                "invalidation": telemetry.invalidation_count,
+            },
+        }
+
+    def _record_completed_switch(self, mode_id: str) -> None:
+        record = self._ownership_record(mode_id)
+        record = {"completed_index": self._completed_switches, **record}
+        self._per_switch.append(record)
+        self._last_telemetry = self._telemetry.snapshot()
         self._active_mode = mode_id
 
     # ---- poll loop -----------------------------------------------------------
@@ -263,8 +278,9 @@ class _SwitchRunner(QObject):
 
         if not self._closing:
             self._closing = True
-            # Record the settled Bubble-hold ownership snapshot before teardown.
-            self._record_completed_switch(self._active_mode or "bubble")
+            # The settled Bubble hold is its own result, NOT another switch record:
+            # keep it in a dedicated field so the switch series stays honest.
+            self._settled_hold = self._ownership_record(self._active_mode or "bubble")
             for method in ("hide", "releaseResources", "close"):
                 QMetaObject.invokeMethod(
                     self._window, method, Qt.ConnectionType.QueuedConnection
@@ -288,7 +304,10 @@ class _SwitchRunner(QObject):
             "completed_switches": self._completed_switches,
             "active_mode_final": self._active_mode,
             "per_switch": self._per_switch,
-            "final_render_host": asdict(final_lifecycle),
+            "settled_hold": self._settled_hold,
+            "final_render_host": (
+                asdict(final_lifecycle) if final_lifecycle is not None else None
+            ),
             "final_node_telemetry": {
                 "sync_count": telemetry.sync_count,
                 "render_count": telemetry.render_count,
@@ -329,6 +348,17 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         print(json.dumps({"valid": False, "error": f"unknown modes: {unknown}"}))
         return 2
+
+    # This tool IS the diagnostic: admit the opt-in boundary render-host telemetry
+    # directly (tools inject/enable it rather than depending on the app argv), so
+    # the render host allocates its lifecycle telemetry and the snapshots below are
+    # populated instead of None.
+    from core.diagnostics.experiment_flags import (
+        ExperimentFlags,
+        activate_experiment_flags,
+    )
+
+    activate_experiment_flags(ExperimentFlags(viz_switch_telemetry=True))
 
     configure_quick_graphics(reason="visualizer-switch-smoke")
     app = QGuiApplication(sys.argv[:1])

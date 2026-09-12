@@ -74,6 +74,35 @@ def test_experiment_tokens_equals_form_single_token():
     assert tokens == ("--abc-drive=A",)
 
 
+@pytest.mark.parametrize(
+    "argv,expected",
+    [
+        (["main.py", "--abc-layout-slot=3"], "3"),
+        (["main.py", "--abc-layout-slot", "5"], "5"),
+        (["main.py", "/s"], None),
+    ],
+)
+def test_abc_layout_slot_parsing(argv, expected):
+    flags = ef.parse_experiment_flags(argv)
+    assert flags.abc_layout_slot == expected
+
+
+def test_abc_layout_slot_tokens_stripped_with_value():
+    argv = ["main.py", "/s", "--abc-layout-slot", "2", "--abc-drive=C"]
+    tokens = ef.experiment_flag_tokens(argv)
+    assert "--abc-layout-slot" in tokens
+    assert "2" in tokens
+    assert "--abc-drive=C" in tokens
+    assert "/s" not in tokens
+
+
+def test_abc_layout_slot_activation_helper():
+    ef.activate_experiment_flags(
+        ef.parse_experiment_flags(["main.py", "--abc-drive=C", "--abc-layout-slot=4"])
+    )
+    assert ef.abc_layout_slot() == "4"
+
+
 def test_activation_is_deliberate_and_defaults_disabled():
     # Before activation, the process admission is a disabled default.
     assert ef.active_experiment_flags().lifecycle_telemetry_admitted is False
