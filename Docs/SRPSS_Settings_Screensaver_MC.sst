@@ -446,7 +446,7 @@
         "preferred_width": 600,
         "progress_pulse": true,
         "selection_mode": "most_recent",
-        "shelf_style": true,
+        "shelf_style": false,
         "show_artwork": true,
         "show_background": true,
         "show_latest": true,
@@ -456,7 +456,7 @@
         "show_selected": false,
         "show_source": false,
         "show_total": true,
-        "square_artwork_size": 140
+        "square_artwork_size": 160
       },
       "clock": {
         "analog_face_shadow": true,
@@ -836,7 +836,7 @@
         "show_background": true,
         "show_refresh_spiral": true,
         "show_separators": true,
-        "subreddit": "All"
+        "subreddit": "SubredditDrama"
       },
       "reddit2": {
         "bg_color": [
@@ -865,7 +865,7 @@
         "monitor": 2,
         "position": "Bottom Right",
         "show_background": true,
-        "subreddit": "Games"
+        "subreddit": "All"
       },
       "shadows": {
         "blur_radius": 18,

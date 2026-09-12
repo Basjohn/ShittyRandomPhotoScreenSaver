@@ -182,11 +182,11 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
 
     return base + f"""
         QMainWindow {{ background: transparent; }}
-        QWidget#root, QWidget#defaultsFoundryRoot, QWidget#themeFoundryRoot, QWidget#widgetThemeFoundryRoot {{ background: {dialog}; color: {primary}; border: 1px solid {border}; border-radius: 10px; }}
+        QWidget#root, QWidget#defaultsFoundryRoot, QWidget#themeFoundryRoot, QWidget#widgetThemeFoundryRoot {{ background: {dialog}; color: {primary}; border: 1.5px solid {border}; border-radius: 10px; }}
         QWidget {{ color: {primary}; font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif'; font-size: 10pt; }}
 
-        QFrame#shell {{ background: {subsection}; border: 1px solid {border}; border-radius: 10px; }}
-        QFrame#foundryHeader {{ background: {titlebar}; border: none; border-bottom: 1px solid {border}; }}
+        QFrame#shell {{ background: {subsection}; border: 1.5px solid {border}; border-radius: 10px; }}
+        QFrame#foundryHeader {{ background: {titlebar}; border: none; border-bottom: 1.5px solid {border}; border-top-left-radius: 8px; border-top-right-radius: 8px; }}
         QLabel#appTitle, QLabel#defaultsFoundryTitle, QLabel#themeFoundryTitle {{ color: {title_text}; font-size: 19pt; font-weight: 800; letter-spacing: 1px; }}
         QLabel#subtitle, QLabel#muted, QLabel#defaultsFoundrySubtitle, QLabel#themeFoundrySubtitle, QLabel#widgetThemeFoundrySubtitle {{ color: {secondary}; }}
         QLabel#faint {{ color: {tertiary}; }}
@@ -199,19 +199,19 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QLabel#chip[dirty="true"] {{ color: {warning}; border-color: {warning}; }}
         QLabel#chip[dirty="false"] {{ color: {success}; }}
 
-        QFrame#panel {{ background: {panel}; border: 1px solid {border}; border-radius: 8px; }}
+        QFrame#panel {{ background: {panel}; border: 1.25px solid {border}; border-radius: 8px; }}
         QFrame#dropPanel {{ background: {tab_surface}; border: 1px dashed {border}; border-radius: 8px; }}
         QFrame#dropPanel[dragActive="true"] {{ background: {tab_selected}; border-style: solid; }}
         QLabel#dropTitle {{ color: {title_text}; font-size: 16pt; font-weight: 850; letter-spacing: 1px; }}
         QLabel#dropHint {{ color: {secondary}; font-size: 9pt; }}
 
-        QTabWidget::pane {{ border: 1px solid {border}; background: transparent; top: -1px; border-radius: 8px; }}
+        QTabWidget::pane {{ border: 1.25px solid {border}; background: transparent; top: 0px; border-radius: 8px; }}
         QTabBar::tab {{ background: {tab_surface}; color: {secondary}; border: 1px solid {border}; padding: 9px 15px; margin-right: 3px; border-radius: 8px; font-weight: 650; }}
         QTabBar::tab:selected {{ background: {tab_selected}; color: {tab_text}; }}
         QTabBar::tab:hover {{ background: {tab_hover}; color: {tab_text}; }}
 
 
-        QFrame#toolTitleBar {{ background: {titlebar}; border: none; border-bottom: 1px solid {border}; }}
+        QFrame#toolTitleBar {{ background: {titlebar}; border: 1.5px solid {border}; border-radius: 9px; }}
         QLabel#toolTitleLabel {{ color: {title_text}; font-size: 15pt; font-weight: 800; letter-spacing: 1px; padding-left: 2px; }}
         QPushButton#toolTitleButton, QPushButton#toolTitleSettingsButton, QPushButton#toolTitleCloseButton {{ background: transparent; color: {title_text}; border: none; border-radius: 5px; padding: 0px; font-size: 15px; font-weight: 700; }}
         QPushButton#toolTitleButton:hover, QPushButton#toolTitleSettingsButton:hover {{ background: {tab_hover}; }}
@@ -219,9 +219,12 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QPushButton#cmdTabButton {{ background: {tab_surface}; color: {secondary}; border: 1px solid {border}; border-radius: 8px; padding: 9px 15px; font-weight: 700; }}
         QPushButton#cmdTabButton:hover {{ background: {tab_hover}; color: {tab_text}; }}
         QPushButton#cmdTabButton:checked {{ background: {tab_selected}; color: {tab_text}; }}
+        QPushButton#foundryLaunchButton {{ background: {button_surface}; color: {button_text}; border: 1.25px solid {button_border}; border-radius: 9px; padding: 11px 15px; min-height: 42px; font-size: 11pt; font-weight: 750; text-align: left; }}
+        QPushButton#foundryLaunchButton:hover {{ background: {button_hover}; border-color: {action_border}; }}
+        QPushButton#foundryLaunchButton:disabled {{ background: {tab_selected}; color: {secondary}; border-color: {border}; }}
 
-        QWidget#themeFoundryPane, QFrame#widgetThemeFoundryPane, QFrame#widgetThemeFoundryMetaBox, QWidget#backdropBox {{ background: {panel}; border: 1px solid {border}; border-radius: 9px; }}
-        QScrollArea#themeFoundryEditorPane, QScrollArea#widgetThemeFoundryEditorPane {{ background: {panel}; border: 1px solid {border}; border-radius: 9px; }}
+        QWidget#themeFoundryPane, QFrame#widgetThemeFoundryPane, QFrame#widgetThemeFoundryMetaBox, QWidget#backdropBox {{ background: {panel}; border: 1.25px solid {border}; border-radius: 9px; }}
+        QScrollArea#themeFoundryEditorPane, QScrollArea#widgetThemeFoundryEditorPane {{ background: {panel}; border: 1.25px solid {border}; border-radius: 9px; padding: 1px; }}
         QWidget#themeFoundryEditorViewport, QWidget#themeFoundryEditorContent, QWidget#widgetThemeFoundryEditorViewport, QWidget#widgetThemeFoundryEditorContent {{ background: transparent; border: none; }}
         QLabel#scopePill {{ background: {tab_surface}; color: {popup_title}; border: 1px solid {border}; border-radius: 8px; padding: 5px 9px; font-weight: 700; }}
         QToolButton#collapsibleHeader {{ background: {tab_surface}; color: {primary}; border: 1px solid {border}; border-radius: 7px; padding: 6px 9px; font-weight: 700; text-align: left; }}
@@ -253,12 +256,21 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QCheckBox::indicator:checked {{ background: {checkbox_checked}; border: 1px solid {checkbox_checked_border}; }}
         QCheckBox::indicator:disabled {{ background: {subsection}; border-color: {helper}; }}
 
-        QLineEdit, QComboBox, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{ background: {input_surface}; color: {input_text}; border: 1px solid {input_border}; border-radius: 7px; padding: 7px 9px; min-height: 20px; selection-background-color: {list_selected}; selection-color: {list_text}; }}
+        QLineEdit, QComboBox, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{ background: {input_surface}; color: {input_text}; border: 1.25px solid {input_border}; border-radius: 7px; padding: 7px 9px; min-height: 20px; selection-background-color: {list_selected}; selection-color: {list_text}; }}
         QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ background: {input_focus}; border-color: {input_border}; }}
-        QComboBox::drop-down {{ border: none; width: 24px; }}
-        QComboBox QAbstractItemView {{ background: {list_surface}; color: {list_text}; border: 1px solid {list_border}; selection-background-color: {list_selected}; }}
+        QComboBox {{ padding-right: 30px; }}
+        QComboBox::drop-down {{ subcontrol-origin: border; subcontrol-position: top right; width: 26px; background: {tab_surface}; border: none; border-left: 1px solid {input_border}; border-top-right-radius: 6px; border-bottom-right-radius: 6px; }}
+        QComboBox QAbstractItemView {{ background: {list_surface}; color: {list_text}; border: 1.25px solid {list_border}; border-radius: 6px; padding: 3px; selection-background-color: {list_selected}; outline: none; }}
+        QSpinBox, QDoubleSpinBox {{ padding-right: 28px; }}
+        QSpinBox::up-button, QDoubleSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 23px; background: {tab_surface}; border: none; border-left: 1px solid {input_border}; border-bottom: 1px solid {input_border}; border-top-right-radius: 6px; }}
+        QSpinBox::down-button, QDoubleSpinBox::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 23px; background: {tab_surface}; border: none; border-left: 1px solid {input_border}; border-bottom-right-radius: 6px; }}
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover, QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{ background: {tab_hover}; }}
+        QMenu {{ background: {list_surface}; color: {list_text}; border: 1.25px solid {popup_border}; border-radius: 7px; padding: 4px; }}
+        QMenu::item {{ padding: 6px 18px 6px 10px; border-radius: 4px; }}
+        QMenu::item:selected {{ background: {list_selected}; }}
+        QMenu::separator {{ height: 1px; background: {border}; margin: 4px 6px; }}
 
-        QTreeWidget {{ background: {list_surface}; alternate-background-color: {subsection}; color: {list_text}; border: 1px solid {list_border}; outline: none; border-radius: 6px; }}
+        QTreeWidget {{ background: {list_surface}; alternate-background-color: {subsection}; color: {list_text}; border: 1.25px solid {list_border}; outline: none; border-radius: 6px; padding: 1px; }}
         QTreeWidget::item {{ padding: 4px 3px; }}
         QTreeWidget::item:selected {{ background: {list_selected}; color: {list_text}; }}
         QTreeWidget::item:hover {{ background: {list_hover}; }}
@@ -273,6 +285,7 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QScrollBar:horizontal {{ background: {input_surface}; height: 11px; margin: 0; }}
         QScrollBar::handle:horizontal {{ background: {list_border}; min-width: 28px; border-radius: 5px; }}
         QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+        QAbstractScrollArea::corner {{ background: {input_surface}; border: none; border-bottom-right-radius: 5px; }}
 
         QProgressBar {{ background: {input_surface}; border: 1px solid {border}; border-radius: 4px; text-align: center; }}
         QProgressBar::chunk {{ background: {action_surface}; }}
@@ -284,8 +297,10 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QLabel[relation="future"], QLabel[relation="unknown"], QLabel[relation="stale"] {{ color: {warning}; background: {popup_surface}; border: 1px solid {warning}; border-radius: 5px; padding: 6px; font-weight: 750; }}
         QLabel[relation="dirty"] {{ color: {warning}; background: {popup_surface}; border: 1px solid {warning}; border-radius: 5px; padding: 6px; font-weight: 700; }}
 
-        QDialog#foundryPopup {{ background: {popup_surface}; color: {primary}; border: 1px solid {popup_border}; }}
-        QFrame#foundryPopupPanel {{ background: {popup_surface}; border: 1px solid {popup_border}; border-radius: 10px; }}
+        QDialog#foundryPopup {{ background: transparent; color: {primary}; border: none; }}
+        QFrame#foundryPopupShell {{ background: {popup_surface}; border: 1.5px solid {popup_border}; border-radius: 11px; }}
+        QFrame#foundryPopupPanel {{ background: {popup_surface}; border: 1.25px solid {popup_border}; border-radius: 9px; }}
+        QColorDialog#foundryColorPicker {{ background: {popup_surface}; color: {primary}; border: none; }}
         QLabel#popupTitle {{ color: {popup_title}; font-size: 12pt; font-weight: 750; }}
         QLabel#popupTitle[danger="true"] {{ color: {error}; }}
         QLabel#popupMessage {{ color: {popup_message}; }}

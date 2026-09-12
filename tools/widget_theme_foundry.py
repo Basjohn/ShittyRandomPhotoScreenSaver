@@ -38,7 +38,6 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QCheckBox,
-    QColorDialog,
     QComboBox,
     QFileDialog,
     QFrame,
@@ -81,6 +80,7 @@ from tools.foundry_chrome import (  # noqa: E402
     FoundryAppearanceDialog,
     FoundryTitleBar,
     apply_native_backdrop,
+    choose_foundry_qcolor,
     configure_frameless_window,
     resolve_tool_theme,
     save_tool_theme_id,
@@ -774,14 +774,13 @@ class WidgetThemeFoundryWindow(QMainWindow):
 
     # ---- edits ------------------------------------------------------
     def _choose_qcolor(self, current: Rgba, title: str) -> Rgba | None:
-        initial = QColor(*current.as_tuple())
-        chosen = QColorDialog.getColor(
-            initial,
+        chosen = choose_foundry_qcolor(
             self,
+            QColor(*current.as_tuple()),
             title,
-            QColorDialog.ColorDialogOption.ShowAlphaChannel,
+            show_alpha=True,
         )
-        if not chosen.isValid():
+        if chosen is None:
             return None
         return Rgba(chosen.red(), chosen.green(), chosen.blue(), chosen.alpha())
 

@@ -474,13 +474,15 @@ class FoundryPopupDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(2, 2, 2, 2)
         outer.setSpacing(0)
 
         shell = QFrame(self)
-        shell.setObjectName("shell")
+        shell.setObjectName("foundryPopupShell")
         shell_layout = QVBoxLayout(shell)
-        shell_layout.setContentsMargins(1, 1, 1, 1)
+        # Keep child paints inside the rounded shell; QSS border-radius does not
+        # clip descendants on translucent frameless windows.
+        shell_layout.setContentsMargins(2, 2, 2, 2)
         shell_layout.setSpacing(0)
 
         header = FoundryHeaderFrame(self, allow_maximize=False)
@@ -847,11 +849,11 @@ class ApplyTab(QWidget):
         context.setContentsMargins(12, 10, 12, 10)
         context.setSpacing(12)
 
-        # Compact drag target: the whole window still accepts ZIP drops; this is
-        # only the visual affordance and deliberately does not waste vertical space.
+        # The whole window accepts drops.  Keep the visual target compact so the
+        # archive controls, not empty chrome, own the horizontal space.
         self.drop_panel = QFrame()
         self.drop_panel.setObjectName("dropPanel")
-        self.drop_panel.setFixedWidth(124)
+        self.drop_panel.setFixedSize(118, 102)
         drop_l = QVBoxLayout(self.drop_panel)
         drop_l.setContentsMargins(8, 8, 8, 8)
         drop_l.addStretch(1)
@@ -860,17 +862,19 @@ class ApplyTab(QWidget):
         drop_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         drop_l.addWidget(drop_title)
         drop_l.addStretch(1)
-        context.addWidget(self.drop_panel)
+        context.addWidget(self.drop_panel, 0, Qt.AlignmentFlag.AlignTop)
 
         archive_box = QVBoxLayout()
-        archive_box.setSpacing(6)
+        archive_box.setSpacing(7)
+
+        archive_header = QHBoxLayout()
+        archive_header.setSpacing(6)
         self.archive_label = QLabel("No GODZIP loaded")
         self.archive_label.setObjectName("archiveName")
-        self.archive_label.setWordWrap(True)
-        archive_box.addWidget(self.archive_label)
+        self.archive_label.setWordWrap(False)
+        self.archive_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        archive_header.addWidget(self.archive_label, 1)
 
-        chips = QHBoxLayout()
-        chips.setSpacing(5)
         self.kind_chip = QLabel("—")
         self.kind_chip.setObjectName("chip")
         self.head_chip = QLabel("source HEAD —")
@@ -880,9 +884,41 @@ class ApplyTab(QWidget):
         self.dirty_chip = QLabel("worktree —")
         self.dirty_chip.setObjectName("chip")
         for chip in (self.kind_chip, self.head_chip, self.branch_chip, self.dirty_chip):
-            chips.addWidget(chip)
-        chips.addStretch(1)
-        archive_box.addLayout(chips)
+            archive_header.addWidget(chip)
+        archive_box.addLayout(archive_header)
+
+        # One selector row: combo + filter + refresh + browse.  These controls
+        # used to consume three rows, including a full-width Browse button.
+        chooser_row = QHBoxLayout()
+        chooser_row.setSpacing(8)
+        chooser_label = QLabel("GODZIP")
+        chooser_label.setObjectName("faint")
+        chooser_label.setMinimumWidth(54)
+        chooser_row.addWidget(chooser_label)
+        self.found_combo = QComboBox()
+        self.found_combo.setMinimumWidth(240)
+        self.found_combo.setToolTip(
+            "Newest direct ZIPs from repo-adjacent/output locations and the optional personal drop folder."
+        )
+        self.found_combo.activated.connect(self._load_discovered_index)
+        chooser_row.addWidget(self.found_combo, 1)
+        self.show_all_zips = QCheckBox("All ZIPs")
+        self.show_all_zips.setToolTip(
+            "Off: recognized SRPSS/GODZIP archives only. On: every direct ZIP in quick locations."
+        )
+        self.show_all_zips.toggled.connect(lambda *_: self.refresh_discovered_zips(force=True))
+        chooser_row.addWidget(self.show_all_zips)
+        refresh_found = QPushButton("↻")
+        refresh_found.setObjectName("iconButton")
+        refresh_found.setFixedSize(34, 32)
+        refresh_found.setToolTip("Refresh discovered ZIPs")
+        refresh_found.clicked.connect(lambda: self.refresh_discovered_zips(force=True))
+        chooser_row.addWidget(refresh_found)
+        browse = QPushButton("BROWSE GOD ZIP…")
+        browse.setToolTip("Choose a GODZIP from another folder")
+        browse.clicked.connect(self.browse)
+        chooser_row.addWidget(browse)
+        archive_box.addLayout(chooser_row)
 
         state_row = QHBoxLayout()
         state_row.setSpacing(8)
@@ -907,59 +943,14 @@ class ApplyTab(QWidget):
         archive_box.addWidget(self.strip_wrapper)
         context.addLayout(archive_box, 1)
 
-        chooser_box = QVBoxLayout()
-        chooser_box.setSpacing(6)
-        chooser_label = QLabel("GODZIP")
-        chooser_label.setObjectName("faint")
-        chooser_box.addWidget(chooser_label)
-        self.found_combo = QComboBox()
-        self.found_combo.setMinimumWidth(280)
-        self.found_combo.setToolTip(
-            "Newest direct ZIPs from repo-adjacent/output locations and the optional personal drop folder."
-        )
-        self.found_combo.activated.connect(self._load_discovered_index)
-        chooser_box.addWidget(self.found_combo)
-        quick_row = QHBoxLayout()
-        self.show_all_zips = QCheckBox("All ZIPs")
-        self.show_all_zips.setToolTip(
-            "Off: recognized SRPSS/GODZIP archives only. On: every direct ZIP in quick locations."
-        )
-        self.show_all_zips.toggled.connect(lambda *_: self.refresh_discovered_zips(force=True))
-        quick_row.addWidget(self.show_all_zips)
-        quick_row.addStretch(1)
-        refresh_found = QPushButton("↻")
-        refresh_found.setObjectName("iconButton")
-        refresh_found.setFixedSize(34, 32)
-        refresh_found.setToolTip("Refresh discovered ZIPs")
-        refresh_found.clicked.connect(lambda: self.refresh_discovered_zips(force=True))
-        quick_row.addWidget(refresh_found)
-        chooser_box.addLayout(quick_row)
-        browse = QPushButton("BROWSE GOD ZIP…")
-        browse.setObjectName("primaryButton")
-        browse.clicked.connect(self.browse)
-        chooser_box.addWidget(browse)
-        context.addLayout(chooser_box)
-
-        # Historical name retained only as an internal visibility alias; there is
-        # now one compact context dashboard rather than two stacked panels.
+        # Historical name retained only as an internal visibility alias.
         self.info_panel = self.context_panel
         layout.addWidget(self.context_panel)
 
         self.browser_panel = Panel()
         browser_l = QVBoxLayout(self.browser_panel)
-        browser_l.setContentsMargins(10, 0, 10, 10)
+        browser_l.setContentsMargins(10, 10, 10, 10)
         browser_l.setSpacing(8)
-
-        notch = QHBoxLayout()
-        notch.addStretch(1)
-        self.expand_button = QPushButton("▲")
-        self.expand_button.setObjectName("expandButton")
-        self.expand_button.setFixedWidth(46)
-        self.expand_button.setToolTip("Expand the Apply file browser to use the full tab height")
-        self.expand_button.clicked.connect(self.toggle_browser_expanded)
-        notch.addWidget(self.expand_button)
-        notch.addStretch(1)
-        browser_l.addLayout(notch)
 
         tools = QHBoxLayout()
         self.filter_edit = QLineEdit()
@@ -974,7 +965,14 @@ class ApplyTab(QWidget):
             b = QPushButton(label)
             b.clicked.connect(handler)
             tools.addWidget(b)
+        self.expand_button = QPushButton("▲")
+        self.expand_button.setObjectName("expandButton")
+        self.expand_button.setFixedWidth(46)
+        self.expand_button.setToolTip("Expand the Apply file browser to use the full tab height")
+        self.expand_button.clicked.connect(self.toggle_browser_expanded)
+        tools.addWidget(self.expand_button)
         browser_l.addLayout(tools)
+
         legend_row = QHBoxLayout()
         legend = QLabel("Orange = timestamp-old · Red = timestamp-old + Git-old · Violet = local dirty")
         legend.setObjectName("faint")
@@ -1017,32 +1015,32 @@ class ApplyTab(QWidget):
 
         self.bottom_panel = Panel()
         btm = QVBoxLayout(self.bottom_panel)
-        btm.setContentsMargins(14, 12, 14, 12)
-        opts = QHBoxLayout()
-        self.rollback = QCheckBox("Create rollback snapshot of overwritten files in /deleteme")
+        btm.setContentsMargins(12, 9, 12, 9)
+        btm.setSpacing(7)
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        self.rollback = QCheckBox("Rollback overwritten files to /deleteme")
         self.rollback.setChecked(True)
-        self.include_debris = QCheckBox("Apply checked archive debris moves")
+        self.include_debris = QCheckBox("Apply checked debris moves")
         self.include_debris.setChecked(True)
+        self.include_debris.hide()
         self.include_debris.toggled.connect(self._update_apply_summary)
-        opts.addWidget(self.rollback)
-        opts.addWidget(self.include_debris)
-        opts.addStretch(1)
-        btm.addLayout(opts)
+        row.addWidget(self.rollback)
+        row.addWidget(self.include_debris)
+        self.summary = QLabel("")
+        self.summary.setObjectName("muted")
+        row.addWidget(self.summary, 1)
+        self.apply_button = QPushButton("APPLY SELECTED")
+        self.apply_button.setObjectName("primaryButton")
+        self.apply_button.setEnabled(False)
+        self.apply_button.clicked.connect(self.apply_selected)
+        row.addWidget(self.apply_button)
+        btm.addLayout(row)
         self.history_ack = QCheckBox("I reviewed the selected timestamp + commit-history risk")
         self.history_ack.setObjectName("dangerCheck")
         self.history_ack.hide()
         self.history_ack.toggled.connect(self._update_apply_summary)
         btm.addWidget(self.history_ack)
-        row = QHBoxLayout()
-        self.summary = QLabel("Load a GODZIP to inspect it.")
-        self.summary.setObjectName("muted")
-        self.apply_button = QPushButton("APPLY SELECTED")
-        self.apply_button.setObjectName("primaryButton")
-        self.apply_button.setEnabled(False)
-        self.apply_button.clicked.connect(self.apply_selected)
-        row.addWidget(self.summary, 1)
-        row.addWidget(self.apply_button)
-        btm.addLayout(row)
         layout.addWidget(self.bottom_panel)
 
     def toggle_browser_expanded(self) -> None:
@@ -1169,7 +1167,8 @@ class ApplyTab(QWidget):
     def _render_inspection(self) -> None:
         inspection = self.inspection
         assert inspection is not None
-        self.archive_label.setText(str(inspection.zip_path))
+        self.archive_label.setText(inspection.zip_path.name)
+        self.archive_label.setToolTip(str(inspection.zip_path))
         manifest_version = inspection.manifest.get("version") if inspection.manifest else None
         self.kind_chip.setText("LEGACY / UNMANIFESTED" if inspection.legacy else f"MANIFEST v{manifest_version}")
         self.head_chip.setText(f"baseline {inspection.source_head[:10] if inspection.source_head else 'unknown'}")
@@ -2481,9 +2480,13 @@ class RunTab(QWidget):
         self._building = False
         self._auto_logzip_process: subprocess.Popen | None = None
         self._auto_logzip_wait_thread: threading.Thread | None = None
+        self._loaded_once = False
         self.runWaitFinished.connect(self._run_wait_finished)
         self._build_ui()
-        self.refresh_flags()
+        # CLI discovery imports/parses the repo entrypoint and is pointless until
+        # RUN is actually opened.  Keep startup on the cheap UI-only path.
+        self.launch_button.setEnabled(False)
+        self.run_status.setText("Open RUN to discover the repo CLI flags.")
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -2584,6 +2587,10 @@ class RunTab(QWidget):
         layout.addWidget(command_panel)
         layout.addStretch(1)
 
+    def ensure_loaded(self) -> None:
+        if not self._loaded_once:
+            self.refresh_flags()
+
     def _clear_flag_widgets(self) -> None:
         while self.flags_grid.count():
             item = self.flags_grid.takeAt(0)
@@ -2632,6 +2639,7 @@ class RunTab(QWidget):
             self.run_status.setText(str(exc))
         finally:
             self._building = False
+            self._loaded_once = True
         self._update_preview()
 
     def selected_flags(self) -> list[str]:
@@ -2941,6 +2949,84 @@ class CommandTab(QWidget):
             self.window.show_error(f"Open {shell.upper()} failed", exc)
 
 
+class FoundriesTab(QWidget):
+    """One compact launcher for every SRPSS Foundry.
+
+    Build Foundry is intentionally only launched here; its legacy Tkinter UI is
+    not pulled into the shared Qt theming/chrome architecture.
+    """
+
+    def __init__(self, window: "GodzipFoundryWindow") -> None:
+        super().__init__(window)
+        self.window = window
+        self.repo_root = window.repo_root
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(10)
+
+        intro = Panel()
+        il = QVBoxLayout(intro)
+        il.setContentsMargins(14, 12, 14, 12)
+        title = QLabel("SRPSS FOUNDRIES")
+        title.setObjectName("sectionTitle")
+        il.addWidget(title)
+        desc = QLabel(
+            "Open the repo's maintenance and authoring Foundries from one place. "
+            "Each launches as its own process so a broken tool cannot take GODZIP down with it."
+        )
+        desc.setObjectName("muted")
+        desc.setWordWrap(True)
+        il.addWidget(desc)
+        layout.addWidget(intro)
+
+        panel = Panel()
+        grid = QGridLayout(panel)
+        grid.setContentsMargins(14, 14, 14, 14)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+
+        entries = (
+            ("BUILD FOUNDRY\nBuild / package SRPSS · legacy Tkinter", "build_runner.py", False),
+            ("DEFAULTS FOUNDRY\nCanonical defaults + generated artifacts", "default_settings_editor.py", False),
+            ("THEME FOUNDRY\nSettings ThemeSpec authoring", "theme_foundry.py", True),
+            ("WIDGET THEME FOUNDRY\nRuntime Widget Theme palette authoring", "widget_theme_foundry.py", True),
+        )
+        for index, (label, script_name, needs_repo) in enumerate(entries):
+            button = QPushButton(label)
+            button.setObjectName("foundryLaunchButton")
+            button.setMinimumHeight(66)
+            button.clicked.connect(
+                lambda _checked=False, name=script_name, repo=needs_repo: self._launch(name, repo)
+            )
+            row, column = divmod(index, 2)
+            grid.addWidget(button, row, column)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        layout.addWidget(panel)
+        layout.addStretch(1)
+
+    def _launch(self, script_name: str, needs_repo: bool) -> None:
+        script = self.repo_root / "tools" / script_name
+        if not script.is_file():
+            self.window.show_error(
+                "Cannot launch Foundry",
+                GodzipError(f"Tool is missing: {script}"),
+            )
+            return
+        command = [sys.executable, str(script)]
+        if needs_repo:
+            command.extend(["--repo", str(self.repo_root)])
+        try:
+            process = subprocess.Popen(command, cwd=str(self.repo_root))
+        except Exception as exc:
+            self.window.show_error(f"Launch {script.stem} failed", exc)
+            return
+        self.window.set_status(f"Launched {script.stem} as PID {process.pid}")
+
+
 class GodzipFoundryWindow(QMainWindow):
     def __init__(self, repo_root: Path, initial_zip: Path | None = None) -> None:
         super().__init__()
@@ -2964,6 +3050,7 @@ class GodzipFoundryWindow(QMainWindow):
             | Qt.WindowType.WindowMinMaxButtonsHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setContentsMargins(2, 2, 2, 2)
         self.setAcceptDrops(True)
         self.setMinimumSize(900, 680)
         self._fit_to_screen()
@@ -3079,7 +3166,9 @@ class GodzipFoundryWindow(QMainWindow):
         shell = QFrame()
         shell.setObjectName("shell")
         shell_l = QVBoxLayout(shell)
-        shell_l.setContentsMargins(1, 1, 1, 1)
+        # Two-pixel inset prevents the title surface/body from painting across
+        # the shell's rounded border at fractional DPI scales.
+        shell_l.setContentsMargins(2, 2, 2, 2)
         shell_l.setSpacing(0)
 
         header = FoundryHeaderFrame(self)
@@ -3150,6 +3239,7 @@ class GodzipFoundryWindow(QMainWindow):
         self.pull_tab = PullTab(self)
         self.run_tab = RunTab(self)
         self.command_tab = CommandTab(self)
+        self.foundries_tab = FoundriesTab(self)
         self.tabs.addTab(self.create_tab, "CREATE GOD ZIP")
         self.tabs.addTab(self.apply_tab, "APPLY GOD ZIP")
         self.tabs.addTab(self.diff_tab, "DIFF")
@@ -3159,7 +3249,8 @@ class GodzipFoundryWindow(QMainWindow):
         self.tabs.addTab(self.debris_tab, "DEBRIS")
         run_index = self.tabs.addTab(self.run_tab, "RUN")
         command_index = self.tabs.addTab(self.command_tab, "CMD")
-        for hidden_index in (run_index, command_index):
+        foundries_index = self.tabs.addTab(self.foundries_tab, "FOUNDRIES")
+        for hidden_index in (run_index, command_index, foundries_index):
             try:
                 self.tabs.tabBar().setTabVisible(hidden_index, False)
             except AttributeError:
@@ -3181,6 +3272,14 @@ class GodzipFoundryWindow(QMainWindow):
         self.cmd_tab_button.setFixedHeight(38)
         self.cmd_tab_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.command_tab))
         right_nav_layout.addWidget(self.cmd_tab_button)
+        self.foundries_tab_button = QPushButton("FOUNDRIES")
+        self.foundries_tab_button.setObjectName("cmdTabButton")
+        self.foundries_tab_button.setCheckable(True)
+        self.foundries_tab_button.setFixedHeight(38)
+        self.foundries_tab_button.clicked.connect(
+            lambda: self.tabs.setCurrentWidget(self.foundries_tab)
+        )
+        right_nav_layout.addWidget(self.foundries_tab_button)
         self.tabs.setCornerWidget(right_nav, Qt.Corner.TopRightCorner)
         self.tabs.currentChanged.connect(self._tab_changed)
         body_l.addWidget(self.tabs, 1)
@@ -3207,7 +3306,11 @@ class GodzipFoundryWindow(QMainWindow):
             self.run_tab_button.setChecked(current is self.run_tab)
         if hasattr(self, "cmd_tab_button"):
             self.cmd_tab_button.setChecked(current is self.command_tab)
-        if current is self.pull_tab:
+        if hasattr(self, "foundries_tab_button"):
+            self.foundries_tab_button.setChecked(current is self.foundries_tab)
+        if current is self.run_tab:
+            self.run_tab.ensure_loaded()
+        elif current is self.pull_tab:
             self.pull_tab.ensure_loaded()
         elif current is self.apply_tab:
             self.apply_tab.ensure_discovery_loaded()
