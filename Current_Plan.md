@@ -9,6 +9,18 @@ Sphere polish, widget resize/Edit lifetime, bucket normalization and other accep
 
 ---
 
+## 0. Quick display sleep/wake topology reconciliation — implemented, pending physical closure
+
+Evidence: overnight diagnostic run `2026-09-12 05:43:59` started while Qt exposed one screen and remained healthy through the last logged activity at `09:16:28`; the operator force-closed the still-running process only at `13:47` after waking to a Quick window visually stranded across two displays. Both displays had remained powered off during the unattended period, so the logs do **not** prove that a second display returned earlier. The log stop may represent system suspension or another unlogged interval; do not invent a 09:16 shutdown.
+
+- [x] Remove the topology-authority split where `QuickDisplayWindow` reacted to live `QScreen` geometry/DPI changes locally while `DisplayManager` only reconciled whole topology on `screenAdded`/`screenRemoved`. `DisplayManager` now observes current Qt screen metric edges, primary-screen changes and application-state edges, all coalesced through the existing 250 ms one-shot reconcile. No polling/native Windows message path is added.
+- [x] When a resume/application-state edge ends with the exact same screen signature, reapply each live Quick window's already-authoritative bound-screen geometry once and re-anchor retained content instead of forcing a generation rebuild. A real signature change still takes the existing full teardown/rebuild path.
+- [x] Disconnect every new Qt topology edge at manager retirement and fence already-queued reconcile callbacks after disconnect.
+- [x] Add `tests/test_qtquick_monitor_wake_reconcile.py` plus the `QuickDisplayWindow` contract assertion. The local Linux workspace cannot execute PySide6 tests; syntax/AST validation is green.
+- [ ] **Closure gate:** on Windows/PySide, run the focused topology/window/lifecycle suites, then one installed dual-display sleep/off -> wake acceptance. Close R-79 only if the saver returns with one correct full-screen Quick window per admitted display, no straddled/stale window, and logs show either a topology reconcile/rebuild or the bounded same-signature resume geometry revalidation.
+
+---
+
 ## 1. Visualizer post-switch presentation-tail / anti-waste follow-up
 
 Execution authority: `Docs/Future_Work/Visualizer_Post_Switch_Performance.md`.
@@ -35,7 +47,12 @@ Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evide
   tests (`tests/test_qtquick_visualizer_mode_retirement.py`, ≥100 switches, inject the
   telemetry directly). P3 permanent-mode real-GL smoke
   (`tools/qtquick_visualizer_switch_smoke.py`, Sphere excluded, `settled_hold`
-  separated; not yet run). P4 deterministic in-app driver
+  separated) **run GREEN on real GL 2026-09-12: 26 completed switches over 5
+  cycles, one-active-renderer invariant held every switch, zero release failures,
+  shared quad never multiplied, clean same-thread teardown** (also fixed both
+  smoke tools' staleness vs the card/shadow + rainbow param migrations; clip-smoke
+  suite 44/46, 2 remaining are genuine bubble/oscilloscope pixel-contract asserts).
+  P4 deterministic in-app driver
   (`core/performance/visualizer_switch_abc_driver.py`): every condition verifies the
   same saved-layout Bubble/CUSTOM baseline, B/C drive the exact
   Sphere→Spectrum→Oscilloscope→Sine→Bubble ×5 exposure on genuine completion edges,
