@@ -13,10 +13,10 @@ Sphere polish, widget resize/Edit lifetime, bucket normalization and other accep
 
 Evidence: overnight diagnostic run `2026-09-12 05:43:59` started while Qt exposed one screen and remained healthy through the last logged activity at `09:16:28`; the operator force-closed the still-running process only at `13:47` after waking to a Quick window visually stranded across two displays. Both displays had remained powered off during the unattended period, so the logs do **not** prove that a second display returned earlier. The log stop may represent system suspension or another unlogged interval; do not invent a 09:16 shutdown.
 
-- [x] Remove the topology-authority split where `QuickDisplayWindow` reacted to live `QScreen` geometry/DPI changes locally while `DisplayManager` only reconciled whole topology on `screenAdded`/`screenRemoved`. `DisplayManager` now observes current Qt screen metric edges, primary-screen changes and application-state edges, all coalesced through the existing 250 ms one-shot reconcile. No polling/native Windows message path is added.
+- [x] Remove the topology-authority split where `QuickDisplayWindow` reacted to live `QScreen` geometry/DPI changes locally while `DisplayManager` only reconciled whole topology on `screenAdded`/`screenRemoved`. `DisplayManager` now observes current Qt screen metric edges, primary-screen changes and only the `ApplicationActive` resume edge, all coalesced through the existing 250 ms one-shot reconcile. Resume-revalidation intent is preserved even when a metric/topology edge scheduled that one-shot first. No polling/native Windows message path is added.
 - [x] When a resume/application-state edge ends with the exact same screen signature, reapply each live Quick window's already-authoritative bound-screen geometry once and re-anchor retained content instead of forcing a generation rebuild. A real signature change still takes the existing full teardown/rebuild path.
 - [x] Disconnect every new Qt topology edge at manager retirement and fence already-queued reconcile callbacks after disconnect.
-- [x] Add `tests/test_qtquick_monitor_wake_reconcile.py` plus the `QuickDisplayWindow` contract assertion. The local Linux workspace cannot execute PySide6 tests; syntax/AST validation is green.
+- [x] Add `tests/test_qtquick_monitor_wake_reconcile.py` plus the `QuickDisplayWindow` contract assertion. Coverage includes metric-first/resume-second coalescing, inactive-state no-op, same-signature geometry repair, primary-screen signature visibility and retirement fencing. The local Linux workspace cannot execute PySide6 tests; syntax/AST validation is green.
 - [ ] **Closure gate:** on Windows/PySide, run the focused topology/window/lifecycle suites, then one installed dual-display sleep/off -> wake acceptance. Close R-79 only if the saver returns with one correct full-screen Quick window per admitted display, no straddled/stale window, and logs show either a topology reconcile/rebuild or the bounded same-signature resume geometry revalidation.
 
 ---
@@ -37,10 +37,25 @@ this as a **presentation/lifetime attribution problem**, not permission to reduc
 Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evidence for future agents:
 `logs/evidence_chest/logsb11575b976.zip`.
 
-- [ ] Execute the decomposition's falsifiable P0-P4 matrix on a live display and use its
-  explicit thresholds/classification to prove or reject swap-sensitive residual
-  degradation. **Instrumentation is built, hardened and unit-validated (compile/help/
-  tests); only the live run + attribution remains.** Opt-in only: the P1 boundary
+- [x] Execute the decomposition's falsifiable P0-P4 matrix on a live display. **DONE
+  2026-09-12 — verdict `swap_sensitive` (3/3 matched valid reps), on MC build
+  (`main_mc.py /s`), prepped extreme-vertical CUSTOM Bubble slot 1, 4 contention
+  workers.** Nine valid reps (raw JSON + per-rep perf logs in `logs/abc_evidence/`,
+  `verdict.json`). Settled-window event-loop p99 (ms), 15 s excluded + 120 s scored:
+  A `5.49 / 4.63 / 11.25`; B `64.72 / 32.67 / 27.02`; C_pre `26.34 / 23.20 / 24.95`;
+  C_post `4.44 / 5.13 / 4.71`. All three B reps regress vs their paired A on p99
+  (≥2 ms & ≥35%, persistent ≥60 s), C_pre reproduces it, and the saved-layout
+  recreation clears ≥97% of the introduced tail (C_post at/below the A control).
+  Frame-pacer skip did NOT regress (all <1%); freshness/reactivity stayed healthy
+  throughout (viz_revision_hz ~90 Hz, viz_age_ms ~20–28 ms, integration ratio
+  1.000), so the tail is **not** logical/source starvation. Conclusion: a real,
+  reproducible, swap-sensitive **presentation event-loop tail** that a Quick-runtime
+  recreation resets — H0 (pure contention) rejected for this build/load. Caveat: the
+  event-loop summary cadence is ~15 s (≈8–9 samples/window), so persistence is
+  coarse though consistent; the dense freshness plane is unaffected. NEXT: attribute
+  H1 (stale render-host ownership) vs H2 (invalidation amplification) via the P1
+  telemetry before any perf-code change; do NOT add runtime/layout self-heal. The
+  supporting instrumentation, all opt-in (zero Standard/MC overhead): P1 boundary
   render-host telemetry allocates nothing in Standard/MC runtime and is admitted by
   `--viz-switch-telemetry` or `--abc-drive` through the diagnostics resolver
   (`core/diagnostics/experiment_flags.py`, NOT dev_gates). P2 repeated-switch lifecycle
@@ -60,12 +75,18 @@ Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evide
   non-zero exit). P4 harness (`tools/visualizer_switch_abc_harness.py`:
   `contention`/`score`/`classify`/`auto`) scores named windows with ≥60 s persistence,
   metric-matched C recovery, freshness/reactivity validity, and a 3-matched-valid-rep
-  gate. Run three matched reps per condition once displays are available (`auto`
-  drives it, or the manual protocol).
-- [ ] Use that evidence to prove or refute stale mode GL/scene resources across mode
-  switches. If stale ownership is demonstrated, repair the existing render-thread
+  gate. Reproduce with:
+  `python tools/visualizer_switch_abc_harness.py auto --condition <A|B|C> --layout-slot 1 --workers 4 --log logs/screensaver_perf.log --rep-out <rep>.json --run-cmd "python main_mc.py /s --usage --viz --perf"`
+  then `classify --a A1..A3 --b B1..B3 --c C1..C3`.
+- [ ] **ACTIVE NEXT (attribution, no repair yet):** with the swap-sensitive result
+  established, use the opt-in P1 render-host lifecycle telemetry
+  (`--viz-switch-telemetry` / `--abc-drive`, surfaced in the resource-ownership
+  snapshot) to prove or refute stale mode GL/scene resource ownership accumulating
+  across switches (H1) vs bounded ownership with rising invalidation/update rate
+  (H2). If stale ownership (H1) is demonstrated, repair the existing render-thread
   retirement seam. Do **not** add automatic layout/runtime reinitialization as a
-  self-healing fallback.
+  self-healing fallback (the recreation that clears the tail is the experiment's
+  intervention, never a shipped mechanism).
 - [ ] If resource retirement is clean, attribute scene-update/invalidation origins
   (frame pacer vs mode-switch retirement vs presentation/QML invalidation) and remove
   only demonstrated duplicate/no-op requests. Do not lower the 60 Hz presentation
