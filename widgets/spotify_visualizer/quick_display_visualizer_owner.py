@@ -716,7 +716,18 @@ class QuickDisplayVisualizerOwner:
             # The old source is already hidden and retired. Keep the target
             # hidden until its canonical engine activation has produced a fresh
             # logical frame; then start the authored 250 ms reveal.
-            if self._controller.logical_tick_state._waiting_for_fresh_engine_frame:
+            #
+            # Exception: a presentation-owned-idle mode (Spectrum) whose playback
+            # is idle produces its resting scene from presentation, not from engine
+            # ticks. The tick side already publishes that idle while deliberately
+            # keeping the fresh-source fence armed for later reactive authority
+            # (tick_pipeline). Honor the same capability here so the paused idle
+            # reveal is not stranded waiting for an engine frame that only arrives
+            # on playback. The fence stays armed; only the reveal proceeds.
+            if (
+                self._controller.logical_tick_state._waiting_for_fresh_engine_frame
+                and not self._target_reveals_paused_idle_without_engine_frame()
+            ):
                 return self._sync.sync_latest()
             published = self._sync.sync_latest()
             if published:
@@ -742,6 +753,23 @@ class QuickDisplayVisualizerOwner:
             return published
 
         raise RuntimeError(f"unknown visualizer mode transition phase: {phase}")
+
+    def _target_reveals_paused_idle_without_engine_frame(self) -> bool:
+        """True when the active target may reveal its paused idle with no engine frame.
+
+        A presentation-owned-idle mode (Spectrum) builds its resting scene from
+        presentation rather than engine ticks, so while playback is idle its reveal
+        must not wait for a fresh engine frame (which only arrives on playback).
+        Playing targets, and modes whose idle is engine-driven, are unaffected.
+        """
+        controller = self._controller
+        if bool(getattr(controller, "playing", False)):
+            return False
+        from widgets.spotify_visualizer import mode_capabilities
+
+        return mode_capabilities.has_presentation_owned_idle_scene(
+            getattr(controller, "mode_id", None)
+        )
 
     def request_mode_change(
         self,
