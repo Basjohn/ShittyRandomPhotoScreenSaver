@@ -216,6 +216,48 @@ A degrades similarly to B
     -> external contention/fixed per-frame cost is primary; mode swapping is not demonstrated causal
 ```
 
+## P4 result — 2026-09-12 (verdict: swap_sensitive)
+
+Executed the full automated A/B/C matrix on the MC build (`main_mc.py /s --usage
+--viz --perf`, opt-in `--abc-drive` driver), prepped extreme-vertical CUSTOM Bubble
+on saved-layout slot 1, 4 CPU contention workers, three matched valid reps per
+condition. Raw evidence preserved under `logs/abc_evidence/` (per-rep scored JSON,
+per-rep `screensaver_perf.log`, `verdict.json`). Each condition ran a fresh app
+process on a truncated perf log, so no rep contaminates another's markers.
+
+Settled-window event-loop late p99 (ms), 15 s excluded then 120 s scored:
+
+```text
+             rep1     rep2     rep3
+A  control   5.49     4.63    11.25
+B  exposure 64.72    32.67    27.02   (5 x Sphere->Spectrum->Oscilloscope->Sine->Bubble)
+C_pre       26.34    23.20    24.95   (same exposure, pre-recreation)
+C_post       4.44     5.13     4.71   (after saved-layout recreation)
+```
+
+Classifier (`classify`): **swap_sensitive**, 3/3. Every B regressed vs its paired A
+on event-loop p99 (>=2 ms and >=35%, persistent >=60 s); every C_pre reproduced the
+regression; every C_post cleared >=97% of the introduced tail (at/below the A
+control). Frame-pacer skip did **not** regress (all <1%). Freshness/reactivity
+stayed healthy in every scored window (viz_revision_hz ~90 Hz, viz_age_ms ~20-28 ms,
+Bubble integration ratio 1.000), so the tail is not logical/audio/source starvation
+(the scorer fails a run closed if it were). H0 (pure external contention) is
+rejected for this build/load: the degradation is a real, reproducible, swap-sensitive
+**presentation event-loop tail** that a Quick-runtime recreation resets.
+
+Caveats / remaining uncertainty:
+
+- the event-loop summary cadence is ~15 s, so each window carries ~8-9 p99 samples
+  and the >=60 s persistence is coarse (though consistent across reps); the dense
+  PERF_HUD freshness plane (~118/window) is unaffected;
+- this is one build, one machine, one load profile — the verdict is scoped to it;
+- the result does **not** yet distinguish H1 (stale render-host resource ownership)
+  from H2 (invalidation/update-rate amplification). That attribution, via the P1
+  boundary telemetry, is the required next step before any perf-code change.
+
+The recreation that clears the tail is the experiment's intervention only; it must
+never become a shipped runtime/layout self-heal.
+
 ## Phase P5 — repairs only after attribution
 
 ### If H1
