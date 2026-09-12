@@ -142,19 +142,19 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
         "--viz-diagnostics", "--viz-diag",
         "--fresh", "--devcurve", "--devsteam",
     }
+    # Diagnostic experiment admissions (--abc-drive[=|space]<A|B|C>,
+    # --viz-switch-telemetry) are owned by the diagnostics resolver, not by mode
+    # detection. Strip their tokens (including the value consumed by the
+    # space-separated --abc-drive form) so they never leak into RUN/CONFIG parsing.
+    from core.diagnostics.experiment_flags import experiment_flag_tokens
+
+    _experiment_tokens = set(experiment_flag_tokens(sys.argv))
     args = [
         arg
         for arg in sys.argv
-        if arg not in _filtered and not arg.startswith("--abc-drive")
+        if arg not in _filtered and arg not in _experiment_tokens
     ]
-    # The opt-in visualizer-switch A/B/C experiment condition is dev-only and
-    # consumes the argument after "--abc-drive" (e.g. "--abc-drive B").
-    for _index, _arg in enumerate(list(sys.argv)):
-        if _arg == "--abc-drive" and _index + 1 < len(sys.argv):
-            _consumed = sys.argv[_index + 1]
-            args = [arg for arg in args if arg != _consumed]
-            break
-    
+
     logger.debug(f"Command-line arguments: {sys.argv}")
     logger.debug(f"Filtered arguments: {args}")
 
@@ -521,13 +521,14 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
                 event_loop_recorder = None
                 logger.exception("[PERF] Failed to start event-loop lateness recorder")
 
-        # Opt-in, dev-gated visualizer-switch A/B/C experiment driver. Installed
-        # only with --abc-drive=<A|B|C>; never active in production. It drives the
-        # experiment through the real product mode-cycle/recreation seams and
-        # emits phase-window markers for offline scoring.
+        # Opt-in visualizer-switch A/B/C experiment driver. Installed only when
+        # --abc-drive=<A|B|C> was admitted by the diagnostics resolver (activated
+        # once at startup); never active in production. It drives the experiment
+        # through the real product direct-mode-request/recreation seams and emits
+        # named phase-window markers for offline scoring.
         _abc_driver = None
         try:
-            from core.dev_gates import abc_drive_condition
+            from core.diagnostics.experiment_flags import abc_drive_condition
 
             if abc_drive_condition() is not None:
                 from core.performance.visualizer_switch_abc_driver import (
@@ -734,6 +735,28 @@ def main(*, entrypoint: str = "main"):
         )
     except Exception:
         logger.debug("[QT_CAPTURE] Failed to install QML/Qt message capture", exc_info=True)
+    # Parse the opt-in diagnostic experiment admissions once, here, and activate
+    # them deliberately before any engine/visualizer construction so the P1
+    # boundary telemetry is admitted (or, in ordinary launches, provably absent).
+    # This is a diagnostics resolver, not a product feature gate (dev_gates).
+    try:
+        from core.diagnostics.experiment_flags import (
+            activate_experiment_flags,
+            parse_experiment_flags,
+        )
+
+        _experiment_flags = activate_experiment_flags(
+            parse_experiment_flags(sys.argv)
+        )
+        if _experiment_flags.lifecycle_telemetry_admitted:
+            logger.info(
+                "[DIAG] Visualizer switch telemetry admitted (abc_drive=%s, "
+                "viz_switch_telemetry=%s)",
+                _experiment_flags.abc_drive,
+                _experiment_flags.viz_switch_telemetry,
+            )
+    except Exception:
+        logger.exception("[DIAG] Failed to activate diagnostic experiment flags")
     diagnostic_record = None
     diagnostic_close = None
     native_fault_capture_requested = bool(

@@ -256,7 +256,7 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
     ``on_complete`` callback quits the app so a harness can treat process exit as
     the run boundary. Kept defensive: any missing seam disables the driver.
     """
-    from core.dev_gates import abc_drive_condition
+    from core.diagnostics.experiment_flags import abc_drive_condition
 
     condition = abc_drive_condition()
     if condition is None:
