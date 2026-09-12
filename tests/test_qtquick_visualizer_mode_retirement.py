@@ -11,8 +11,23 @@ from rendering.quick.visualizer import item as item_module
 from rendering.quick.visualizer import render_host as render_host_module
 from rendering.quick.visualizer import VisualizerRenderItem
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-from rendering.quick.visualizer.telemetry import VisualizerRenderNodeTelemetry
+from rendering.quick.visualizer.telemetry import (
+    VisualizerRenderHostLifecycleTelemetry,
+    VisualizerRenderNodeTelemetry,
+)
 from widgets.spotify_visualizer.render_bridge import VisualizerSnapshotBridge
+
+
+def _instrumented_host() -> QuickVisualizerRenderHost:
+    """A host with lifecycle telemetry injected directly (opt-in seam for P2).
+
+    P2 proves ownership boundedness by reading the boundary telemetry, so it
+    injects the telemetry object rather than depending on the process argv
+    admission (``--viz-switch-telemetry`` / ``--abc-drive``).
+    """
+    return QuickVisualizerRenderHost(
+        lifecycle_telemetry=VisualizerRenderHostLifecycleTelemetry()
+    )
 
 
 class _FakeRenderer:
@@ -129,7 +144,7 @@ def test_repeated_mode_switches_keep_one_active_renderer_and_bounded_quad(monkey
     renderers lose resources and drop from cache, release/resolve counts grow with
     real boundaries (not rendered frames), and the shared quad is never multiplied.
     """
-    host = QuickVisualizerRenderHost()
+    host = _instrumented_host()
     renderers: dict[str, _FakeRenderer] = {}
     _install_host_render_stubs(monkeypatch, host, renderers)
 
@@ -191,7 +206,7 @@ def test_repeated_mode_switches_keep_one_active_renderer_and_bounded_quad(monkey
 def test_repeated_switch_injected_release_failure_is_accounted_then_retried(monkeypatch):
     """P2 item 6: a failed inactive release stays accounted/cached, then a later
     legal render retries it and restores the one-active-renderer invariant."""
-    host = QuickVisualizerRenderHost()
+    host = _instrumented_host()
     renderers: dict[str, _FakeRenderer] = {}
     _install_host_render_stubs(monkeypatch, host, renderers)
 
@@ -208,6 +223,9 @@ def test_repeated_switch_injected_release_failure_is_accounted_then_retried(monk
     failed_snapshot = host.lifecycle_snapshot()
     assert failed_snapshot.inactive_release_failures == 1
     assert failed_snapshot.last_release_error is not None
+    # Current ownership is broken while the failed renderer is still retained.
+    assert failed_snapshot.last_release_failure is not None
+    assert failed_snapshot.release_failure_unresolved is True
     assert ("bubble", True) in failed_snapshot.resolved_has_resources
 
     # A later legal render (failure cleared) retries and converges to one active.
@@ -218,6 +236,11 @@ def test_repeated_switch_injected_release_failure_is_accounted_then_retried(monk
     recovered = host.lifecycle_snapshot()
     assert recovered.inactive_release_successes >= 1
     assert recovered.resolved_mode_ids == ("spectrum",)
+    # History is preserved (cumulative failure count + last failure text) but the
+    # ownership is no longer currently unresolved after the successful retry.
+    assert recovered.inactive_release_failures == 1
+    assert recovered.last_release_failure is not None
+    assert recovered.release_failure_unresolved is False
 
 
 def test_render_retires_inactive_mode_before_resolving_current_mode(monkeypatch) -> None:

@@ -342,9 +342,11 @@ class QuickDisplayUnit:
         """Boundary-only render-host lifecycle facts, or None when unreachable.
 
         Walks the retained ``scene_controller.visualizer_item`` and returns its
-        thread-safe lifecycle snapshot as a plain dict. Any missing link (retired
-        runtime, no item, no node yet) yields ``None`` rather than raising; this
-        read never mutates/renders/releases and never issues GL queries.
+        thread-safe lifecycle snapshot as a plain dict. Returns ``None`` for any
+        missing link (retired runtime, no item, no node yet) and also when the
+        opt-in switch/resource telemetry was never admitted (the host holds no
+        snapshot) — so ordinary runtime surfaces nothing new. This read never
+        mutates/renders/releases and never issues GL queries.
         """
         from dataclasses import asdict
 
@@ -358,7 +360,10 @@ class QuickDisplayUnit:
         if not callable(getter):
             return None
         try:
-            return asdict(getter())
+            snapshot = getter()
+            if snapshot is None:
+                return None
+            return asdict(snapshot)
         except Exception:
             return None
 

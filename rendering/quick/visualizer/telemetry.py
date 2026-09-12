@@ -159,6 +159,12 @@ class VisualizerRenderHostLifecycleSnapshot:
     quad_vbo_owned: bool = False
     full_release_count: int = 0
     last_release_error: str | None = None
+    # Distinguish cumulative history from current broken ownership: a release that
+    # failed once and later retried successfully stays counted in
+    # ``inactive_release_failures`` and remembered in ``last_release_failure`` but
+    # must not read as currently unresolved.
+    last_release_failure: str | None = None
+    release_failure_unresolved: bool = False
 
 
 class VisualizerRenderHostLifecycleTelemetry:
@@ -185,6 +191,8 @@ class VisualizerRenderHostLifecycleTelemetry:
         self._quad_vbo_owned = False
         self._full_release_count = 0
         self._last_release_error: str | None = None
+        self._last_release_failure: str | None = None
+        self._release_failure_unresolved = False
 
     def snapshot(self) -> VisualizerRenderHostLifecycleSnapshot:
         with self._lock:
@@ -204,6 +212,8 @@ class VisualizerRenderHostLifecycleTelemetry:
                 quad_vbo_owned=self._quad_vbo_owned,
                 full_release_count=self._full_release_count,
                 last_release_error=self._last_release_error,
+                last_release_failure=self._last_release_failure,
+                release_failure_unresolved=self._release_failure_unresolved,
             )
 
     def note_mode_boundary(self, active_mode_id: str | None) -> None:
@@ -228,12 +238,25 @@ class VisualizerRenderHostLifecycleTelemetry:
             self._inactive_release_failures += int(failures)
             if error is not None:
                 self._last_release_error = str(error)
+                self._last_release_failure = str(error)
+            # An attempt with failures leaves ownership currently unresolved; a
+            # later attempt that touched renderers and had no failures cleared the
+            # previously retained ones, so ownership is resolved again. Boundaries
+            # with nothing to release (attempts == 0) leave the state unchanged.
+            if int(attempts) > 0:
+                self._release_failure_unresolved = int(failures) > 0
 
     def note_full_release(self, *, error: str | None) -> None:
         with self._lock:
             self._full_release_count += 1
             if error is not None:
                 self._last_release_error = str(error)
+                self._last_release_failure = str(error)
+                self._release_failure_unresolved = True
+            else:
+                # A clean full teardown releases every retained renderer, so no
+                # broken ownership can remain outstanding.
+                self._release_failure_unresolved = False
 
     def note_ownership(
         self,

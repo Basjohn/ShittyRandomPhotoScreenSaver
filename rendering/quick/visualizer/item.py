@@ -102,17 +102,20 @@ class _RenderNodeRetirement:
         # Sync never schedules work. A newly constructed node has no inactive
         # resources; subsequent admission changes request their own event.
 
-    def render_host_lifecycle_snapshot(self) -> VisualizerRenderHostLifecycleSnapshot:
-        """Boundary-only render-host ownership facts, or an empty snapshot.
+    def render_host_lifecycle_snapshot(
+        self,
+    ) -> VisualizerRenderHostLifecycleSnapshot | None:
+        """Boundary-only render-host ownership facts, or ``None``.
 
         Reading is non-mutating: it takes the node reference under the retirement
-        lock, then returns the host's thread-safe lifecycle snapshot. No node
-        (pre-first-render) yields the default empty snapshot.
+        lock, then returns the host's thread-safe lifecycle snapshot. Returns
+        ``None`` when there is no node yet (pre-first-render) or when the opt-in
+        switch/resource telemetry was never admitted (the host holds none).
         """
         with self._lock:
             node = self._node
         if node is None:
-            return VisualizerRenderHostLifecycleSnapshot()
+            return None
         return node.render_host.lifecycle_snapshot()
 
     def update_latest_mode(self, mode_id: str | None) -> None:
@@ -189,8 +192,10 @@ class VisualizerRenderItem(QQuickItem):
     def telemetry(self) -> VisualizerRenderNodeTelemetry:
         return self._telemetry
 
-    def render_host_lifecycle_snapshot(self) -> VisualizerRenderHostLifecycleSnapshot:
-        """Boundary-only render-host lifecycle facts for lifecycle diagnostics."""
+    def render_host_lifecycle_snapshot(
+        self,
+    ) -> VisualizerRenderHostLifecycleSnapshot | None:
+        """Boundary-only render-host lifecycle facts, or ``None`` when disabled."""
         return self._retirement.render_host_lifecycle_snapshot()
 
     @property
