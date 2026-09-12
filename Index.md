@@ -124,6 +124,8 @@ For a new mode or any meaningful reactivity change, read `Docs/Guides/Visualizer
 
 ### Future Work
 
+- `Docs/Future_Work/Visualizer_Post_Switch_Performance.md` — active falsifiable A/B/C investigation for post-switch Visualizer presentation tails and render ownership.
+
 - `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md` — Bubble aspect response and presentation cost
 - `Docs/Future_Work/Edit_Layout_Live_Commit.md` — Live Edit commit (retired / historical reference)
 - `Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md` — Ordinary Widget Resize Normalization (retired / historical reference)

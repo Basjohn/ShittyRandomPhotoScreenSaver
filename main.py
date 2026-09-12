@@ -142,7 +142,18 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
         "--viz-diagnostics", "--viz-diag",
         "--fresh", "--devcurve", "--devsteam",
     }
-    args = [arg for arg in sys.argv if arg not in _filtered]
+    args = [
+        arg
+        for arg in sys.argv
+        if arg not in _filtered and not arg.startswith("--abc-drive")
+    ]
+    # The opt-in visualizer-switch A/B/C experiment condition is dev-only and
+    # consumes the argument after "--abc-drive" (e.g. "--abc-drive B").
+    for _index, _arg in enumerate(list(sys.argv)):
+        if _arg == "--abc-drive" and _index + 1 < len(sys.argv):
+            _consumed = sys.argv[_index + 1]
+            args = [arg for arg in args if arg != _consumed]
+            break
     
     logger.debug(f"Command-line arguments: {sys.argv}")
     logger.debug(f"Filtered arguments: {args}")
@@ -509,6 +520,29 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
             except Exception:
                 event_loop_recorder = None
                 logger.exception("[PERF] Failed to start event-loop lateness recorder")
+
+        # Opt-in, dev-gated visualizer-switch A/B/C experiment driver. Installed
+        # only with --abc-drive=<A|B|C>; never active in production. It drives the
+        # experiment through the real product mode-cycle/recreation seams and
+        # emits phase-window markers for offline scoring.
+        _abc_driver = None
+        try:
+            from core.dev_gates import abc_drive_condition
+
+            if abc_drive_condition() is not None:
+                from core.performance.visualizer_switch_abc_driver import (
+                    install_abc_driver_if_enabled,
+                )
+                from PySide6.QtCore import QTimer
+
+                # Defer install briefly so RUN-mode display construction can start;
+                # the driver still waits for the visualizer owner internally.
+                QTimer.singleShot(
+                    2000,
+                    lambda: install_abc_driver_if_enabled(engine, app),
+                )
+        except Exception:
+            logger.exception("[ABC] Failed to schedule A/B/C experiment driver")
 
         if usage_enabled:
             try:
