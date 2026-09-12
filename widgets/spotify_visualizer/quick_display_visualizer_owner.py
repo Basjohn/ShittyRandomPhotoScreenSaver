@@ -685,6 +685,25 @@ class QuickDisplayVisualizerOwner:
         # edits / transfers continue to follow the controller normally.
         self._committed_layout_extent = None
 
+    def _timed_sync_present(self) -> bool:
+        """Opt-in wrapper: time the GUI-thread sync_present duration for P4.
+
+        Only wired into the pacer when the experiment admission is active; ordinary
+        runtime calls ``sync_present`` directly. Times the whole pump call, so a
+        rise in its duration distribution across switch exposure localises the
+        per-operation GUI-side cost.
+        """
+        from time import perf_counter_ns
+
+        timing = _viz_attr.sync_present_timing()
+        if timing is None:
+            return self.sync_present()
+        start = perf_counter_ns()
+        try:
+            return self.sync_present()
+        finally:
+            timing.note(perf_counter_ns() - start)
+
     def sync_present(self) -> bool:
         # Opt-in P4 attribution: one presentation-pump opportunity. No-op unless the
         # experiment admission allocated the counters (ordinary runtime pays a
@@ -1010,7 +1029,14 @@ class QuickDisplayVisualizerOwner:
             # Arm the authored scene fade before the pacer can publish the first
             # frame so the visualizer eases up from zero instead of snapping in.
             self._activation_fade_started_at = float(self._transition_clock())
-            pacer.set_visualizer_sync(self.sync_present)
+            # Ordinary runtime wires the pump directly (zero overhead). Only under
+            # the opt-in experiment admission does the pacer call the timed wrapper,
+            # which measures GUI-thread sync_present duration for P4 attribution.
+            pacer.set_visualizer_sync(
+                self._timed_sync_present
+                if _viz_attr.is_enabled()
+                else self.sync_present
+            )
             pacer.set_visualizer_active(True)
             self._started = True
         except Exception:

@@ -117,6 +117,7 @@ class _PresentationCounters:
 # Process-level, allocated only when admitted. None => disabled => zero cost.
 _ATTR: _PresentationCounters | None = None
 _FENCE: _FenceTiming | None = None
+_SYNC_PRESENT: _EdgeTiming | None = None
 
 
 def enable_if_admitted() -> bool:
@@ -125,7 +126,7 @@ def enable_if_admitted() -> bool:
     Called deliberately at startup after the diagnostics resolver activates. Safe
     to call more than once. Returns whether attribution is now enabled.
     """
-    global _ATTR, _FENCE
+    global _ATTR, _FENCE, _SYNC_PRESENT
     if _ATTR is None:
         from core.diagnostics.experiment_flags import (
             visualizer_switch_telemetry_admitted,
@@ -134,7 +135,19 @@ def enable_if_admitted() -> bool:
         if visualizer_switch_telemetry_admitted():
             _ATTR = _PresentationCounters()
             _FENCE = _FenceTiming()
+            _SYNC_PRESENT = _EdgeTiming()
     return _ATTR is not None
+
+
+def sync_present_timing() -> _EdgeTiming | None:
+    """Return the GUI-thread ``sync_present()`` duration accumulator, or None.
+
+    The presentation pump wraps its own ``sync_present`` with
+    ``time.perf_counter_ns()`` only when this is non-None (opt-in). The pump is the
+    main GUI-thread per-frame visualizer operation, so a rise in its duration
+    distribution across switch exposure localises a per-operation GUI-side cost.
+    """
+    return _SYNC_PRESENT
 
 
 def is_enabled() -> bool:
@@ -205,15 +218,17 @@ def snapshot() -> dict[str, int] | None:
 
 def reset_for_testing() -> None:
     """Clear the process-level counter blocks (tests only)."""
-    global _ATTR, _FENCE
+    global _ATTR, _FENCE, _SYNC_PRESENT
     _ATTR = None
     _FENCE = None
+    _SYNC_PRESENT = None
 
 
 __all__ = [
     "enable_if_admitted",
     "is_enabled",
     "fence_timing",
+    "sync_present_timing",
     "note_pacer_opportunity",
     "note_publication",
     "note_present_request",
