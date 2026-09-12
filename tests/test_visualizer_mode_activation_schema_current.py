@@ -27,7 +27,11 @@ def test_canonical_visualizer_dormancy_is_explicit_boolean_map() -> None:
     activation = section["mode_activation"]
 
     assert "enabled_modes" not in section
-    assert tuple(activation) == VISUALIZER_MODE_IDS
+    # Mapping insertion order is serialization detail, not mode-order authority.
+    # The registry owns canonical UI/runtime order; persisted activation owns one
+    # boolean leaf per registered id.
+    assert set(activation) == set(VISUALIZER_MODE_IDS)
+    assert len(activation) == len(VISUALIZER_MODE_IDS)
     assert all(type(value) is bool for value in activation.values())
     assert resolve_effective_enabled_modes(activation) == VISUALIZER_MODE_IDS
 

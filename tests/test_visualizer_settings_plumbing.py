@@ -185,16 +185,16 @@ class TestSettingsModelPlumbing:
 
         assert model.visualizers_enabled is False
 
-    def test_enabled_modes_and_disabled_mode_state_survive_round_trip(self):
-        """Pre-V5/V6 durable no-settings-lost gate.
+    def test_mode_activation_and_disabled_mode_state_survive_round_trip(self):
+        """Current dormancy map and disabled-mode authored state survive round trip.
 
-        A partial ``enabled_modes`` selection and a *disabled* mode's own local
-        state both survive ``from_mapping -> to_dict -> from_settings``:
-        ``enabled_modes`` is preserved (additive, canonically ordered) and never
-        reset to all, and a disabled mode's authored colours/floors are not
-        dropped merely because it is not the active/enabled mode.
+        A partial ``mode_activation`` map and a *disabled* mode's own local state
+        both survive ``from_mapping -> to_dict -> from_settings``. The persisted
+        boolean map remains the sole product schema while ``model.enabled_modes``
+        is only its canonical ordered derived view.
         """
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
 
         class _DummySettings:
             def __init__(self, data):
@@ -208,7 +208,7 @@ class TestSettingsModelPlumbing:
         # state that must not be lost merely because it is disabled.
         payload = {
             "mode": "bubble",
-            "enabled_modes": ["bubble", "spectrum"],
+            "mode_activation": build_visualizer_mode_activation(("bubble", "spectrum")),
             "bubble_manual_floor": 0.27,
             "devcurve_bar_fill_color": [21, 22, 23, 24],
             "devcurve_manual_floor": 0.19,
@@ -224,8 +224,9 @@ class TestSettingsModelPlumbing:
         )
 
         for model in (from_mapping, from_settings):
-            # enabled_modes preserved as the stored subset, canonically ordered
-            # (never silently widened back to all modes).
+            assert model.mode_activation == build_visualizer_mode_activation(
+                ("spectrum", "bubble")
+            )
             assert list(model.enabled_modes) == ["spectrum", "bubble"]
             assert model.mode == "bubble"
             # Disabled mode (devcurve) local state survives the round trip.

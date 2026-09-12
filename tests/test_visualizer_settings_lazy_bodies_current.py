@@ -6,7 +6,9 @@ import ui.tabs.media.oscilloscope_builder as oscilloscope_builder
 import ui.tabs.media.sine_wave_builder as sine_wave_builder
 import ui.tabs.media.bubble_builder as bubble_builder
 import ui.tabs.media.devcurve_builder as devcurve_builder
+import ui.tabs.media.sphere_builder as sphere_builder
 
+from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
 from rendering.widget_descriptors import get_widgets_tab_settings_section_descriptors
 from ui.tabs.visualizers_tab import VisualizersTab
 
@@ -17,6 +19,7 @@ _BUILDERS = {
     "sine_wave": (sine_wave_builder, "build_sine_wave_ui"),
     "bubble": (bubble_builder, "build_bubble_ui"),
     "devcurve": (devcurve_builder, "build_devcurve_ui"),
+    "sphere": (sphere_builder, "build_sphere_ui"),
 }
 
 _CONTAINER_ATTR = {
@@ -25,6 +28,7 @@ _CONTAINER_ATTR = {
     "sine_wave": "_sine_wave_settings_container",
     "bubble": "_bubble_settings_container",
     "devcurve": "_devcurve_settings_container",
+    "sphere": "_sphere_settings_container",
 }
 
 
@@ -55,7 +59,7 @@ def _vis_settings(mode: str = "bubble", *, enabled_modes=None) -> dict:
         "preset_devcurve": 3,
     }
     if enabled_modes is not None:
-        section["enabled_modes"] = list(enabled_modes)
+        section["mode_activation"] = build_visualizer_mode_activation(enabled_modes)
     return {"spotify_visualizer": section}
 
 
@@ -280,7 +284,8 @@ def test_disabling_active_mode_substitutes_without_constructing_replacement(
 
         persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
         assert persisted["mode"] == "bubble"
-        assert persisted["enabled_modes"] == ["bubble"]
+        assert persisted["mode_activation"] == build_visualizer_mode_activation(("bubble",))
+        assert "enabled_modes" not in persisted
     finally:
         tab.deleteLater()
 

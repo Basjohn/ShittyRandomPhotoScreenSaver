@@ -5,6 +5,7 @@ import ast
 from copy import deepcopy
 from pathlib import Path
 
+from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
 from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
 
 
@@ -74,7 +75,7 @@ def test_unhydrated_visualizer_merge_preserves_stored_mapping_exactly():
             "mode": "spectrum",
             "preset_spectrum": 0,
             "spectrum_drop_speed": 1.85,
-            "enabled_modes": ["spectrum", "bubble"],
+            "mode_activation": build_visualizer_mode_activation(("spectrum", "bubble")),
         },
     }
     before = deepcopy(existing)
@@ -100,7 +101,7 @@ def test_hydrated_visualizer_merge_keeps_inactive_mode_state():
             "preset_spectrum": 0,
             "preset_bubble": 0,
             "spectrum_drop_speed": 1.85,
-            "enabled_modes": ["spectrum", "bubble"],
+            "mode_activation": build_visualizer_mode_activation(("spectrum", "bubble")),
         },
     }
 
@@ -113,6 +114,6 @@ def test_hydrated_visualizer_merge_keeps_inactive_mode_state():
     assert existing["spotify_visualizer"] is saved
     assert saved["spectrum_drop_speed"] == 1.85
     assert saved["mode"] == "bubble"
-    assert set(saved["enabled_modes"]) == {"spectrum", "bubble"}
+    assert saved["mode_activation"] == build_visualizer_mode_activation(("spectrum", "bubble"))
     assert mode == "bubble"
     assert preset == 0
