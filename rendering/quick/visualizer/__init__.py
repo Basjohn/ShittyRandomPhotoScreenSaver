@@ -16,6 +16,8 @@ from .render_contract import (
 )
 from .render_host import QuickVisualizerRenderHost
 from .telemetry import (
+    VisualizerRenderHostLifecycleSnapshot,
+    VisualizerRenderHostLifecycleTelemetry,
     VisualizerRenderNodeSnapshot,
     VisualizerRenderNodeTelemetry,
 )
@@ -30,6 +32,8 @@ __all__ = [
     "QuickVisualizerRenderHost",
     "VisualizerRenderItem",
     "VisualizerRenderNode",
+    "VisualizerRenderHostLifecycleSnapshot",
+    "VisualizerRenderHostLifecycleTelemetry",
     "VisualizerRenderNodeSnapshot",
     "VisualizerRenderNodeTelemetry",
     "iter_quick_visualizer_implementations",

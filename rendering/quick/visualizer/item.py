@@ -19,7 +19,10 @@ from widgets.spotify_visualizer.render_state import (
 )
 
 from .node import VisualizerRenderNode
-from .telemetry import VisualizerRenderNodeTelemetry
+from .telemetry import (
+    VisualizerRenderHostLifecycleSnapshot,
+    VisualizerRenderNodeTelemetry,
+)
 
 logger = get_logger(__name__)
 
@@ -99,6 +102,19 @@ class _RenderNodeRetirement:
         # Sync never schedules work. A newly constructed node has no inactive
         # resources; subsequent admission changes request their own event.
 
+    def render_host_lifecycle_snapshot(self) -> VisualizerRenderHostLifecycleSnapshot:
+        """Boundary-only render-host ownership facts, or an empty snapshot.
+
+        Reading is non-mutating: it takes the node reference under the retirement
+        lock, then returns the host's thread-safe lifecycle snapshot. No node
+        (pre-first-render) yields the default empty snapshot.
+        """
+        with self._lock:
+            node = self._node
+        if node is None:
+            return VisualizerRenderHostLifecycleSnapshot()
+        return node.render_host.lifecycle_snapshot()
+
     def update_latest_mode(self, mode_id: str | None) -> None:
         with self._lock:
             self._latest_mode_id = mode_id
@@ -172,6 +188,10 @@ class VisualizerRenderItem(QQuickItem):
     @property
     def telemetry(self) -> VisualizerRenderNodeTelemetry:
         return self._telemetry
+
+    def render_host_lifecycle_snapshot(self) -> VisualizerRenderHostLifecycleSnapshot:
+        """Boundary-only render-host lifecycle facts for lifecycle diagnostics."""
+        return self._retirement.render_host_lifecycle_snapshot()
 
     @property
     def render_identity(self) -> VisualizerRenderIdentity | None:

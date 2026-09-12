@@ -101,6 +101,7 @@ def test_unit_assembles_chain_and_binds_families(qt_app) -> None:
             "visualizer_owners": 0,
             "first_frames_ready": 1,
             "visualizer_identities": [],
+            "visualizer_render_host": None,
         }
         qobjects, python_owners = unit.runtime_retirement_roots()
         assert qobjects == (unit.runtime, unit.runtime.window)
