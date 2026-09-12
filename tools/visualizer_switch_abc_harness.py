@@ -423,6 +423,43 @@ def main(argv: list[str] | None = None) -> int:
     p_class.add_argument("--c", nargs="+", required=True)
     p_class.add_argument("--out", default=None)
 
+    p_auto = sub.add_parser(
+        "auto",
+        help="opt-in: launch the app under --abc-drive + contention, then score",
+        description=(
+            "Launch one condition's run through the real app with the opt-in "
+            "in-app driver (--abc-drive=<A|B|C>) plus matched contention, wait for "
+            "the driver to quit the app, then score the settled window from the "
+            "driver's phase markers. Requires a live display/GL surface."
+        ),
+    )
+    p_auto.add_argument("--condition", required=True, choices=["A", "B", "C"])
+    p_auto.add_argument(
+        "--run-cmd",
+        nargs="+",
+        default=["python", "main.py", "--run", "--usage", "--viz", "--perf"],
+        help="app launch argv; --abc-drive=<condition> is appended automatically",
+    )
+    p_auto.add_argument(
+        "--log",
+        required=True,
+        help="app diagnostic log to score after exit (driver markers slice it)",
+    )
+    p_auto.add_argument("--workers", type=int, default=4)
+    p_auto.add_argument(
+        "--contention-seconds",
+        type=float,
+        default=400.0,
+        help="upper bound for the contention workers (torn down at app exit)",
+    )
+    p_auto.add_argument(
+        "--deadline-seconds",
+        type=float,
+        default=900.0,
+        help="hard timeout for the app subprocess before it is terminated",
+    )
+    p_auto.add_argument("--out", default=None)
+
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     if args.command == "contention":
