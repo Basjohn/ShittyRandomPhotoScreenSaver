@@ -67,6 +67,35 @@ def test_enabled_when_admitted_counts_each_edge_separately(argv):
     }
 
 
+def test_fence_timing_disabled_by_default():
+    ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", "/s"]))
+    va.enable_if_admitted()
+    assert va.fence_timing() is None  # no fence accumulator without admission
+
+
+def test_fence_timing_buckets_and_stats_when_admitted():
+    ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", "--abc-drive=B"]))
+    va.enable_if_admitted()
+    fence = va.fence_timing()
+    assert fence is not None
+    # capture: a fast one and a very slow one (>100 ms) land in different buckets.
+    fence.note_capture(800)          # 0.5-1 us bucket
+    fence.note_capture(800)
+    fence.note_capture(120_000_000)  # >100 ms overflow bucket
+    fence.note_restore(3_000)        # 2-5 us bucket
+    snap = fence.snapshot()
+    cap = snap["capture"]
+    assert cap["count"] == 3
+    assert cap["total_ns"] == 800 + 800 + 120_000_000
+    assert cap["max_ns"] == 120_000_000
+    assert cap["thread_id"] is not None
+    # two in an early bucket, one in the final (overflow) bucket
+    assert cap["buckets"][-1] == 1
+    assert sum(cap["buckets"]) == 3
+    assert snap["restore"]["count"] == 1
+    assert len(snap["bucket_upper_ns"]) == len(cap["buckets"]) - 1
+
+
 def test_enable_is_idempotent():
     ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", "--abc-drive=A"]))
     assert va.enable_if_admitted() is True

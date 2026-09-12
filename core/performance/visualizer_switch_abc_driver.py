@@ -646,12 +646,14 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
                     break
         except Exception:
             logger.exception("[ABC] attribution ownership/node walk failed")
+        fence = visualizer_attribution.fence_timing()
         return {
             "runtime_generation": _runtime_generation(),
             "active_mode": _active_mode(),
             "ownership": ownership,
             "node_telemetry": node,
             "presentation": visualizer_attribution.snapshot(),
+            "fence": None if fence is None else fence.snapshot(),
         }
 
     def _on_complete(result: dict) -> None:
