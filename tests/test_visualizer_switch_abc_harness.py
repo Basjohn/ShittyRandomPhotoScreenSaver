@@ -21,6 +21,17 @@ import visualizer_switch_abc_harness as h  # noqa: E402
 _BASE = 1_700_000_000  # fixed epoch base for deterministic timestamps
 
 
+def test_line_epoch_parses_seconds_and_millis_formats():
+    # The app's file handlers emit seconds precision; the harness must parse both
+    # that and the comma-millis form. A None here would zero every window's samples.
+    secs = "2026-09-12 15:04:41 - core.performance.event_loop_recorder - INFO - x"
+    millis = "2026-09-12 15:04:41,123 - core.performance - INFO - x"
+    e_secs = h._line_epoch(secs)
+    e_millis = h._line_epoch(millis)
+    assert e_secs is not None and e_millis is not None
+    assert abs((e_millis - e_secs) - 0.123) < 1e-6
+
+
 def _ts(epoch: float) -> str:
     secs = int(epoch)
     ms = int(round((epoch - secs) * 1000))
