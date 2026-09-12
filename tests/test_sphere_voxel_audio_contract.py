@@ -810,8 +810,8 @@ def test_voxel_bloom_curated_preset_exists() -> None:
     preset = ROOT / "presets/visualizer_modes/sphere/preset_2_voxel_bloom.json"
     assert preset.exists()
     text = preset.read_text(encoding="utf-8")
-    assert '"name": "Voxel Bloom"' in text
-    assert '"sphere_finish": "Neutral"' in text
+    assert '"name": "Preset 2 (Voxel Bloom)"' in text
+    assert '"sphere_finish": "Glassy"' in text
     assert '"sphere_fill_color"' in text
     assert '"sphere_material"' not in text
     assert '"preset_index": 1' in text
@@ -821,14 +821,14 @@ def test_voxel_bloom_curated_preset_exists() -> None:
     assert '"sphere_incoming_transient_velocity_enabled": true' in text
     assert '"sphere_rainbow_ghosting"' not in text
     assert '"sphere_size_response": 2.25' in text
-    assert '"sphere_fragment_strength": 3.92' in text
-    assert '"sphere_particle_distance": 2.45' in text
+    assert '"sphere_fragment_strength": 3.6' in text
+    assert '"sphere_particle_distance": 2.25' in text
     assert '"sphere_particle_amount": 1.0' in text
     assert '"sphere_perspective_strength": 1.0' in text
     assert '"sphere_tracer_color"' in text
-    assert '"sphere_edge_weight": 1.0' in text
+    assert '"sphere_edge_weight": 0.9' in text
     assert '"sphere_voxel_size_variation": 0.35' in text
-    assert '"sphere_depth_shading_enabled": false' in text
+    assert '"sphere_depth_shading_enabled": true' in text
     assert '"sphere_depth_shading_strength": 0.2' in text
     assert '"sphere_shadow_opacity": 1.0' in text
     assert '"sphere_shadow_softness": 0.18' in text
@@ -843,10 +843,10 @@ def test_sphere_optional_presentation_features_are_mode_owned_and_default_off() 
     from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
 
     config = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
-    assert config["sphere_allow_overflow"] is False
+    assert config["sphere_allow_overflow"] is True
     assert config["sphere_cel_shading"] is False
-    assert config["sphere_light_tracer_enabled"] is False
-    assert config["sphere_fragment_interpolation_enabled"] is False
+    assert config["sphere_light_tracer_enabled"] is True
+    assert config["sphere_fragment_interpolation_enabled"] is True
     assert config["sphere_taste_the_rainbow_enabled"] is False
     assert config["sphere_taste_the_rainbow_surfaces"] is True
     assert config["sphere_taste_the_rainbow_edges"] is True
@@ -855,17 +855,17 @@ def test_sphere_optional_presentation_features_are_mode_owned_and_default_off() 
     assert config["sphere_tracer_color"] == [255, 242, 194, 255]
     assert config["sphere_edge_weight"] == 1.0
     assert config["sphere_voxel_size_variation"] == 0.35
-    assert config["sphere_depth_shading_enabled"] is False
+    assert config["sphere_depth_shading_enabled"] is True
     assert config["sphere_depth_shading_strength"] == 0.2
     assert config["sphere_shadow_enabled"] is True
     assert config["sphere_shadow_opacity"] == 1.0
     assert config["sphere_shadow_softness"] == 0.18
     assert config["sphere_shadow_distance"] == 1.0
     assert config["sphere_shadow_size"] == 1.0
-    assert config["sphere_incoming_density_response_enabled"] is False
-    assert config["sphere_incoming_transient_velocity_enabled"] is False
+    assert config["sphere_incoming_density_response_enabled"] is True
+    assert config["sphere_incoming_transient_velocity_enabled"] is True
     assert "sphere_rainbow_ghosting" not in config
-    assert config["sphere_fade_incoming_blocks"] is False
+    assert config["sphere_fade_incoming_blocks"] is True
     assert config["sphere_finish"] == "Neutral"
     assert config["sphere_fill_color"] == [95, 160, 190, 255]
     assert config["sphere_edge_color"] == [190, 224, 234, 255]
@@ -1432,6 +1432,8 @@ def test_particle_outtake_is_optional_and_only_voxel_bloom_enables_it() -> None:
     presets = (
         ("preset_1_glass_current.json", False),
         ("preset_2_voxel_bloom.json", True),
+        ("preset_3_rainbow_intake.json", True),
+        ("preset_4_rainbow_exhaust.json", False),
     )
     assert sorted(path.name for path in preset_dir.glob("preset_*.json")) == [name for name, _ in presets]
     for filename, expected_outtake in presets:
@@ -1462,11 +1464,11 @@ def test_glass_current_preserves_operator_transparent_react_golden() -> None:
 
     data = json.loads((ROOT / "presets/visualizer_modes/sphere/preset_1_glass_current.json").read_text(encoding="utf-8"))
     config = data["snapshot"]["widgets"]["spotify_visualizer"]
-    assert data["name"] == "Glass Current"
+    assert data["name"] == "Preset 1 (Glass Current)"
     assert config["sphere_fill_color"] == [4, 7, 8, 100]
-    assert config["sphere_edge_color"] == [233, 248, 255, 255]
-    assert config["sphere_finish"] == "Custom"
-    assert config["sphere_shadow_enabled"] is False
+    assert config["sphere_edge_color"] == [240, 248, 255, 255]
+    assert config["sphere_finish"] == "Glassy"
+    assert config["sphere_shadow_enabled"] is True
     assert config["sphere_shadow_opacity"] == 1.0
     assert config["sphere_shadow_softness"] == 0.18
     assert config["sphere_shadow_distance"] == 1.0
