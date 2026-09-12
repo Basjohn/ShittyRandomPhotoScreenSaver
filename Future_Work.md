@@ -1,11 +1,12 @@
 # Future Work
 
-Last updated: 2026-09-10
+Last updated: 2026-09-12
 
 Long-horizon feature / new-implementation backlog.
 
-The operator has activated backlog implementation (2026-09-05). `FWPlan.md` owns that selected work's live
-checklists and links to detailed decompositions; this document retains feature intent and relative priority.
+The operator may promote selected backlog work into `Current_Plan.md`. `FWPlan.md` is now a compact routing/handoff
+index for activated versus dormant future work; detailed execution lives in `Current_Plan.md` or a focused decomposition.
+This document retains dormant feature intent, architecture rules and relative priority.
 
 ## Authority / activation rule
 
@@ -16,7 +17,7 @@ An agent may implement work from this file only when **either**:
 
 1. the operator explicitly asks for a named `Future_Work.md` item; **or**
 2. `Current_Plan.md` contains no remaining important active work and no **READY** cleanup row in
-   `Future_Cleanup.md` is scheduled ahead of the feature. `DELETE AFTER HORIZON` / `J EXIT` rows are dormant
+   `Future_Cleanup.md` is scheduled ahead of the feature. `DELETE AFTER HORIZON` rows are dormant
    gates and do not block unrelated future work merely by existing.
 
 **Operator override:** an explicit request for a named `Future_Work.md` item overrides the normal sequencing above.
@@ -57,7 +58,7 @@ At minimum it must:
    until another concrete consumer proves the abstraction;
 5. decompose the work into resumable checkpoints that leave the repository coherent whenever practical;
 6. define deterministic/source-level, lifecycle/resource, performance and eyes-on visual acceptance bars separately;
-8. keep an explicit landed/remaining status so partial completion is not mistaken for finished architecture.
+7. keep an explicit landed/remaining status so partial completion is not mistaken for finished architecture.
 
 Do not spend a first implementation pass building speculative infrastructure merely because later features might need it.
 Build the requested vertical feature, extract only reuse justified by the real implementation, and record attractive but
@@ -113,9 +114,9 @@ Mandatory contract:
   experiment-owned runtime/GPU resources without another cadence.
 
 **Accepted-owner modifier exception:** an option that literally bolts onto an already accepted owner and has no independent
-identity/lifecycle is not forced through experimental isolation. Slide Elastic/Wobble/Flex/Perspective are the canonical
-example: they stay options of the one Slide descriptor/implementation and use the canonical `transitions.slide` Settings
-owner. Do not manufacture a fake plugin/mode merely for removability. If an alleged modifier grows an independent cadence,
+identity/lifecycle is not forced through experimental isolation. The landed Slide Elastic/Wobble/Flex options are canonical
+examples: they stay options of the one Slide descriptor/implementation and use the canonical `transitions.slide` Settings
+owner. The same ownership rule would apply to future Perspective Push only if it remains a modifier without independent cadence/resources. Do not manufacture a fake plugin/mode merely for removability. If an alleged modifier grows an independent cadence,
 resource lifetime, source owner, catalog identity, or substantial feature-specific shared branches, stop and reassess whether
 it has become a real standalone implementation boundary.
 
@@ -252,70 +253,18 @@ Performance rules:
 
 ---
 
-# 2. Slide — optional effects inside the one canonical Slide transition
+# 2. Slide — remaining Perspective Push option
 
-**Elastic, Wobble, Flex and Perspective are options inside Slide, not separate transitions.**
+Linear / Elastic / Wobble / Flex are landed current architecture and are intentionally absent from future work.
+The only surviving Slide idea here is **Perspective Push**: a restrained true-3D presentation option inside the one
+canonical Slide transition, not a separate transition identity.
 
-Do not create separate transition IDs or separate Random/Cycle entries. `Slide` remains one canonical
-transition identity.
+Source may tilt slightly away and/or destination may push into plane while moving. Use shallow card geometry, modest
+perspective, restrained yaw/pitch/Z and a sealed-coverage strategy. It shares Slide's one canonical progress/coverage
+owner and must collapse exactly to the destination at completion.
 
-Base Slide remains cardinal-only, uses one canonical progress sample, has mathematically sealed
-source/destination coverage, and exposes no black/unowned microgap.
-
-## 2.1 Elastic option
-
-Subtle arrival overshoot/rebound/settle evaluated analytically from normalized canonical time.
-
-Candidate shape:
-
-```text
-canonical progress
-    -> sealed Slide coverage
-    -> analytic damped spring modifier
-    -> modifier exactly zero at completion
-```
-
-Do not integrate spring state from frame delta and do not create physical source/destination separation
-that exposes background.
-
-## 2.2 Soft Wobble option
-
-Gentle perpendicular organic flex during travel that decays completely at settlement.
-
-Candidate:
-
-```text
-warp = perpendicular_direction
-       * amplitude(t)
-       * sin(spatial_frequency * position + phase(t))
-```
-
-A second low-frequency harmonic can reduce synthetic appearance. Use a bounded UV warp or a modest
-tessellated mesh. Coverage must remain sealed.
-
-## 2.3 Rubber-Sheet / Flex option
-
-Leading edge moves first while the rest stretches/catches up.
-
-Candidate:
-
-```text
-local_t = clamp(global_t + flex_amount * shape(position_along_axis), 0, 1)
-```
-
-A modest tessellated mesh is likely appropriate. Final frame collapses exactly to destination.
-
-## 2.4 Perspective Push option
-
-Mild true-3D Slide presentation: source tilts slightly away and/or destination pushes into plane while
-moving.
-
-Use shallow card geometry, modest perspective, restrained yaw/pitch/Z and a sealed-coverage strategy.
-
-## 2.5 Combination policy
-
-Some modifiers may compose, e.g. small Wobble during travel plus Elastic settlement. Do not expose
-every possible cross-product automatically. All modifiers share the one Slide run/coverage owner.
+Do not add a second clock, transition ID, Random/Cycle entry or independent lifecycle. If implemented, first inspect the
+current landed Slide implementation and the proven Quick 3D resource/depth seams rather than reviving the old proposal.
 
 ---
 
@@ -479,42 +428,33 @@ logical steps or turn render refresh into simulation cadence.
 
 **Unique Mode means a real mode boundary.** Each experiment labelled `Unique Mode` gets one canonical descriptor plus its own lazy mode-local logical/runtime/renderer/Settings implementation. It may reuse shared analysis bands, direction vocabulary, shader utilities and proven math, but it must not parasitically run another mode's active runtime, install a second visualizer clock, or create an ad-hoc six-way switch outside the descriptor seam. A Bubble-derived or Spectrum-derived experiment may borrow contracts/equations while remaining independently dormant when disabled.
 
-## 7.1 Voxel Sphere — accepted experimental, isolated
+**Voxel Sphere golden preservation:** the accepted Voxel Sphere is not future work. Its current
+reactivity/motion/presets are golden and its architecture remains isolated; do not retune or promote it unless the
+operator explicitly requests that work. Detailed preservation/migration evidence remains in
+`Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
 
-Sphere has passed the visual/product experimentation bar but remains **experimental architecture**. It is deliberately isolated and may not be promoted into shared/permanent visualizer owners until the operator explicitly activates migration. The focused authority is `Docs/Future_Work/Sphere_Visualizer_Decomposition.md`; do not duplicate its control matrix, preset goldens or reaction formulas here.
-
-Future value retained here is narrow:
-
-- reuse the descriptor-driven experimental host boundary for future experimental modes: lazy Settings/runtime/renderer/capture resolution, private persisted prefix, explicit shared-family opt-outs, dormancy and normal retirement;
-- keep Sphere audio, voxel parameters, shader semantics and hard-coded capability memberships private; reusable isolation is **not** permission to make Sphere a base class;
-- before any permanent migration, capture deterministic pre/post goldens for both curated Sphere presets and the five accepted permanent modes, including the exact resolved hidden technical settings that reproduce current behaviour;
-- reject migration on any unapproved Sphere fidelity change or any permanent-mode reactivity, latency, fidelity, bleed/isolation, cadence, lifecycle, CPU/GPU or dormancy regression;
-- optional new presentation/control work requires explicit operator approval and remains Sphere-local while experimental. Sphere-local Taste The Rainbow exists independently; the generic/shared Rainbow family still does not own Sphere.
-
-Rainbow Ghosting is retired and forward-stripped. The rejected smooth icosphere and pseudo-material systems remain retired; historical evidence belongs in Historical Bugs/git history rather than this active future-work file.
-
-## 7.2 Extruded Spectrum - Unique Mode
+## 7.1 Extruded Spectrum - Unique Mode
 
 Instanced shallow 3D columns: one cuboid mesh, 32–128 instances, per-instance height/color/energy,
 restrained lighting/specular and mild perspective/orthographic depth.
 
-## 7.3 Waveform Ribbon - Unique Mode
+## 7.2 Waveform Ribbon - Unique Mode
 
 Oscilloscope/Sine-like state as a 3D ribbon with a few hundred vertices, amplitude on Y,
 authored phase/history through X/Z twist, neighboring-sample normals and bounded ghost ribbons.
 
-## 7.4 Bubble Depth Field - Unique Mode
+## 7.3 Bubble Depth Field - Unique Mode
 
 Shallow Z/depth presentation option without changing Bubble logical motion **or R-69 response amplitude**. Depth/parallax must not become a viewport-dependent damping term. Prefer instanced billboard
 sphere impostors with analytic normals/specular, per-bubble Z from authored state, depth ordering and
 subtle parallax.
 
-## 7.5 Reactive Particle Field - Unique Mode
+## 7.4 Reactive Particle Field - Unique Mode
 
 Bounded 3D instanced point/quad field driven by existing analysis. Prefer hundreds/low-thousands in
 one/few draws. Persistent state, if truly required, belongs to proper logical/runtime ownership.
 
-## 7.6 Spectrum Terrain - Unique Mode
+## 7.5 Spectrum Terrain - Unique Mode
 
 Spectrum/history mapped onto a modest grid mesh: current spectrum across one axis, short retained
 history into depth, a few thousand vertices, displacement from compact data/texture, normals/lighting.
@@ -538,29 +478,40 @@ For a genuinely new transition/visualizer implementation:
 11. after it is worth keeping, polish its isolated Settings/defaults/docs; **keep isolation** unless the operator separately and explicitly requests promotion/migration;
 12. commit + push bounded work.
 
-For an option inside an existing transition such as Slide Elastic/Wobble/Flex/Perspective, extend the
-single existing implementation/descriptor rather than manufacturing a new transition identity.
+For a future option inside an existing transition such as Slide Perspective Push, extend the single existing
+implementation/descriptor rather than manufacturing a new transition identity.
 
 ---
 
-# 9. Current idea priority — not active sequencing
+# 9. Future widgets promoted to Current Plan
 
-This is priority **inside Future Work only**. Unless the operator explicitly selects a named item under the
-**Operator override** above, `Current_Plan.md` and any scheduled **READY** cleanup still outrank it; dormant
-compatibility-horizon/J-exit rows do not.
+- **Steam Friend Pulse** — definite queued widget; execution/decomposition authority is
+  `Docs/Future_Work/Steam_Friend_Pulse.md`. Do not revive the pre-Quick mock/scaffold.
+- **System Stats** — conditional queued widget; execution/admission authority is
+  `Docs/Future_Work/System_Stats_Widget.md`. It requires a measured lightweight, demand-driven sampler with complete
+  dormancy; begin at a fixed 10 s cadence (5 s only if evidence justifies it), and keep diagnostic `--usage` diagnostics-only.
 
-1. **Widget hover/click glow** — operator-requested bounded interaction polish; shared swatch, event-driven
-   hover/click pulse, no polling/timers/thread owner;
-2. **Slide optional motion styles** — Elastic first, then Wobble/Flex/Perspective inside Slide;
-3. **Deformable 3D Sphere / Blob Sphere experiment**;
-4. **Directional Pixel Accretion**;
-5. **Glass Shatter**;
-6. **Exploding Tiles**;
-7. **Organic Growth / Ink Bloom** prototype;
-8. other 3D visualizer experiments after final J validation;
-9. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use;
-10. **Optional true two-texture artwork crossfade [LOW]** only if the current event-driven fade still has a
-    demonstrated visual discontinuity worth the extra texture residency.
+Both are sequenced directly below the current performance investigation in `Current_Plan.md`, so they are not repeated
+in the dormant priority list below.
+
+---
+
+# 10. Current idea priority — not active sequencing
+
+Steam Friend Pulse and System Stats are intentionally **absent** from this dormant ranking because the operator has
+promoted both into `Current_Plan.md` immediately below the performance investigation. This list now contains only
+remaining dormant ideas.
+
+1. **Directional Pixel Accretion**;
+2. **Glass Shatter**;
+3. **Exploding Tiles**;
+4. **Slide Perspective Push** — remaining optional Slide modifier;
+5. **Deformable 3D Sphere / Blob Sphere experiment**;
+6. **Organic Growth / Ink Bloom** prototype;
+7. other 3D visualizer experiments after current active work;
+8. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use;
+9. **Optional true two-texture artwork crossfade [LOW]** only if the current event-driven fade still has a
+   demonstrated visual discontinuity worth the extra texture residency.
 
 Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if their
 first prototypes are abandoned. Their intended identities should not collapse into generic `shatter`,
@@ -572,25 +523,15 @@ experiment record rather than reviving 2026-09-02 debris.
 
 ---
 
-# 10. Operator-requested UI polish contracts
+# 11. Operator-requested UI polish contracts
 
-## 10.1 Widget glow on hover / click — landed, physical tuning open
-
-Display -> Interaction now owns **Widget Glow on Hover**, **Widget Glow on Click**, the shared theme-inheriting
-colour swatch, and a 0-100% **Glow Intensity** slider. The retained primitive is state-edge driven rather than a
-self-decaying pulse: hover fades in and stays settled until the existing hover edge ends; click selects the last
-clicked ordinary card and stays settled until a later admitted press selects another card or empty space. State
-changes alone trigger finite fade-in/fade-out animations. No recurring timer, poller, worker, independent frame
-loop or per-widget controller exists. Future work here is eyes-on timing/subtlety only unless a concrete defect is
-found; do not reopen ownership or invent sustained animation cadence.
-
-## 10.2 Settings FlowContainer polish [LOW]
+## 11.1 Settings FlowContainer polish [LOW]
 
 Use FlowContainers in additional Settings sections only where they materially improve alignment and space
 usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct
 otherwise lazy bodies.
 
-## 10.3 Optional artwork crossfade [LOW]
+## 11.2 Optional artwork crossfade [LOW]
 
 The current shared artwork/metadata fades are landed and belong to current physical validation, not future
 architecture work. A true outgoing+incoming two-texture artwork crossfade is a separate optional experiment

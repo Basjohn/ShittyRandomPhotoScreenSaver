@@ -1,6 +1,6 @@
 # Future Cleanup — Active Deletion / Compatibility Ledger
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 This file contains only **surviving cleanup/deletion debt**. Completed migration history belongs in
 `Docs/Fossils/`, historical bug records and source-control history (the Qt Quick migration is closed and its
@@ -12,7 +12,6 @@ later agent can accidentally reopen. `Current_Plan.md` always outranks this file
 ```text
 READY / caller-proven residue     -> remove in one bounded cleanup slice
 DELETE AFTER HORIZON              -> temporary compatibility read/migration bridge only
-J EXIT                            -> retain until final compiled/installed/physical evidence exists
 ```
 
 - Never restore deleted QWidget/GL/overlay/polling/fallback owners to satisfy an old test/tool.
@@ -22,7 +21,7 @@ J EXIT                            -> retain until final compiled/installed/physi
 - Cleanup is not performance tuning. Do not alter Visualizer cadence/freshness/reactivity or GC policy
   merely because a compatibility symbol is being removed.
 
-## READY — stale destination tests and dead-owner expectations
+## READY — broad-suite stale-owner reconciliation
 
 The old manual-delete tool/test set from the 2026-09-01 tooling audit is already absent from the current
 tree; do **not** keep re-listing or recreating it. The remaining broad-suite debt is now the larger set of
@@ -57,7 +56,7 @@ current coverage but asserted retired bucket semantics, so their surviving cover
 `test_visualizer_settings_lazy_bodies_current.py`; the old modules are debris. Do not restore simultaneous sibling-open,
 fresh-profile default-open, or checkbox-style Technical visibility semantics to make old tests pass.
 
-## READY — Future Work destination gate reconciliation
+## READY — retained broad-suite evidence reconciliation
 
 The later Sphere/geometry destination run completed all 117 targets (105 passed, 12 failed). The same nine
 unrelated targets below remain red. Its additional CUSTOM-owner failure occurred while that implementation was
@@ -86,6 +85,17 @@ by `a3e4ec17`; its stale profile entry was removed rather than restoring retired
   missing theme assets solely to bless a count.
 - [ ] Update obsolete phase prose assertions in `test_visualizer_doc_references.py` against the current destination.
 - [ ] Resolve caller-proven quarantine/debris listed by `test_tooling_ownership.py` without restoring removed tools.
+
+
+## READY AFTER PROFILE PROOF — Visualizer `enabled_modes` migration bridge
+
+`widgets.spotify_visualizer.mode_activation.<stable_mode_id>` is the sole current persisted/runtime authority. The old
+`enabled_modes` list survives only as a pre-default forward-migration signature for supported older profiles.
+
+- [ ] Remove `migrate_legacy_enabled_modes_to_activation`, its SettingsManager pre-default hook and warning path only
+      after automated persisted-profile/import fixtures prove supported profiles no longer require the bridge.
+- [ ] Current defaults/model/UI/runtime must never write or consume `enabled_modes` as product state while the bridge
+      exists. Do not retain it as a second dormancy representation.
 
 ## AUDIT — GPU timing CLI versus Quick ownership
 
@@ -156,8 +166,9 @@ than preserved as phantom GUI authority. This is migration plumbing, not a suppo
 
 ### `themes/dark.qss` retirement
 
-`themes/dark.qss` remains legacy base-stylesheet geometry/debris, not Settings Theme palette authority.
-Execution authority is `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`. Do not simply delete it, copy literals into
+`themes/dark.qss` remains legacy base-stylesheet geometry/debris, not Settings Theme palette authority. This row is
+cleanup bookkeeping; active sequencing is `Current_Plan.md` section 4. Execution authority is
+`Docs/Future_Work/Settings_Dark_QSS_Retirement.md`. Do not simply delete it, copy literals into
 Python, or disturb native AccentPolicy/frameless/forged-edge behaviour. Final retirement requires the
 physical Default Dark + Acrylic + Glass + dialogs/controls/tray matrix with the file genuinely absent, then
 production loaders and file removed in the same bounded slice.
@@ -166,15 +177,18 @@ The old `ui/settings_theme_paths.py` "temporary packaging/dev fallback" task is 
 already resolves explicit injection -> ProgramData for frozen/installed -> repo source for dev, without
 silently merging another root. Do not reopen it unless a new packaging defect is observed.
 
-## J EXIT — temporary architecture-selection evidence
+## READY — retire migration-era architecture-selection evidence
 
-Keep only until final compiled/installed/physical acceptance no longer needs them:
+The Qt Quick migration is closed and operator-accepted. These bounded architecture-selection artifacts are no longer
+protected by a final-acceptance horizon; they are ordinary caller-proven cleanup candidates:
 
 - `tools/presentation_benchmark_core.py` + `tests/test_presentation_benchmark_core.py`;
 - `tools/qtquick_presentation_spike.py` + `tests/test_qtquick_presentation_spike.py`.
 
-They are bounded architecture-selection evidence, not current product-performance authority. Do not expand
-them. Delete them together with their spike-only tests at J exit.
+They are bounded architecture-selection evidence, not current product-performance authority. Do not expand them.
+Perform one final exact caller/import search, rehome any still-useful behavioural assertion to a current owner, then
+delete each tool with its spike-only tests. The current Visualizer performance investigation must use built-in
+PERF/usage/lifecycle evidence instead of keeping these migration spikes alive.
 
 ## Permanent cleanup guardrails
 
