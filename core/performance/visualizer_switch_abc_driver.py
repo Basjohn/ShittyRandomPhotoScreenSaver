@@ -88,6 +88,7 @@ class VisualizerSwitchAbcDriver(QObject):
         await_baseline: Callable[[Callable[[], None]], None],
         watch_recreation: Callable[[int | None, Callable[[int | None], None]], None],
         on_complete: Callable[[dict], None] | None = None,
+        attribution_snapshot: Callable[[], dict | None] | None = None,
         exposure_sequence: Sequence[str] = EXPOSURE_SEQUENCE,
         cycles: int = EXPOSURE_CYCLES,
         settle_mode: str = SETTLE_MODE,
@@ -112,6 +113,7 @@ class VisualizerSwitchAbcDriver(QObject):
         self._await_baseline = await_baseline
         self._watch_recreation = watch_recreation
         self._on_complete = on_complete
+        self._attribution_snapshot = attribution_snapshot
         self._settle_mode = str(settle_mode).strip().lower()
         self._exposure = tuple(str(m).strip().lower() for m in exposure_sequence)
         self._cycles = max(1, int(cycles))
@@ -357,6 +359,7 @@ class VisualizerSwitchAbcDriver(QObject):
         if self._done:
             return
         self._mark(window_name, "start")
+        self._log_attribution(window_name, "start")
         self._schedule_impl(
             self._hold_ms,
             "hold",
@@ -366,8 +369,37 @@ class VisualizerSwitchAbcDriver(QObject):
     def _end_scored_window(self, window_name: str, next_action: Callable[[], None]) -> None:
         if self._done:
             return
+        self._log_attribution(window_name, "end")
         self._mark(window_name, "end")
         next_action()
+
+    def _log_attribution(self, window_name: str, state: str) -> None:
+        """Log the H1/H2 attribution snapshot at a scored-window boundary.
+
+        Read/log only — this is the boundary snapshot, never a per-frame or
+        cadence read. Deltas between the start and end of a window give per-window
+        presentation/update rates (H2); the start snapshot gives the settled
+        ownership state (H1). No-op when no attribution seam is injected.
+        """
+        if self._attribution_snapshot is None:
+            return
+        try:
+            payload = self._attribution_snapshot()
+        except Exception:
+            logger.exception("[ABC] attribution snapshot failed")
+            return
+        if payload is None:
+            return
+        import json
+
+        logger.info(
+            "[PERF] [ABC-ATTR] condition=%s window=%s state=%s epoch=%.3f data=%s",
+            self._condition,
+            window_name,
+            state,
+            time.time(),
+            json.dumps(payload, sort_keys=True, default=str),
+        )
 
     # -- completion ------------------------------------------------------------
 
@@ -583,6 +615,45 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
         timer.timeout.connect(_check)
         timer.start()
 
+    def _attribution_snapshot() -> dict | None:
+        # Assemble the boundary attribution snapshot: H1 ownership + identity from
+        # the display unit's existing resource_ownership_snapshot, the render-node
+        # sync/render/draw counts from the existing per-node telemetry, and the
+        # opt-in GUI presentation counters (H2). Read-only; called only at scored
+        # window start/end, never per frame.
+        display_manager = _dm()
+        if display_manager is None:
+            return None
+        from core.diagnostics import visualizer_attribution
+
+        ownership = None
+        node = None
+        try:
+            for unit in list(getattr(display_manager, "displays", []) or []):
+                getter = getattr(unit, "resource_ownership_snapshot", None)
+                if callable(getter) and ownership is None:
+                    ownership = getter(first_frame_ready=True)
+                try:
+                    item = unit._runtime.scene_controller.visualizer_item
+                except Exception:
+                    item = None
+                telemetry = getattr(item, "telemetry", None)
+                if telemetry is not None and node is None:
+                    from dataclasses import asdict
+
+                    node = asdict(telemetry.snapshot())
+                if ownership is not None and node is not None:
+                    break
+        except Exception:
+            logger.exception("[ABC] attribution ownership/node walk failed")
+        return {
+            "runtime_generation": _runtime_generation(),
+            "active_mode": _active_mode(),
+            "ownership": ownership,
+            "node_telemetry": node,
+            "presentation": visualizer_attribution.snapshot(),
+        }
+
     def _on_complete(result: dict) -> None:
         code = 0 if result.get("valid") else 3
         logger.info(
@@ -613,6 +684,7 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
         await_baseline=_await_baseline,
         watch_recreation=_watch_recreation,
         on_complete=_on_complete,
+        attribution_snapshot=_attribution_snapshot,
         parent=app,
     )
     driver.start()

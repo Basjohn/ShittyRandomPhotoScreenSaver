@@ -15,6 +15,7 @@ import time
 from dataclasses import replace
 from typing import Any, Callable, Mapping
 
+from core.diagnostics import visualizer_attribution as _viz_attr
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 
 logger = get_logger(__name__)
@@ -685,6 +686,10 @@ class QuickDisplayVisualizerOwner:
         self._committed_layout_extent = None
 
     def sync_present(self) -> bool:
+        # Opt-in P4 attribution: one presentation-pump opportunity. No-op unless the
+        # experiment admission allocated the counters (ordinary runtime pays a
+        # single is-None check).
+        _viz_attr.note_pacer_opportunity()
         if self._retired or self._sync is None:
             return False
         phase = self._mode_transition_phase
