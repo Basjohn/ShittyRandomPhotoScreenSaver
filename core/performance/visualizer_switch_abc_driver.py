@@ -648,6 +648,17 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
             logger.exception("[ABC] attribution ownership/node walk failed")
         fence = visualizer_attribution.fence_timing()
         sync_present = visualizer_attribution.sync_present_timing()
+        # Boundary-only thread census (opt-in, read once per scored-window edge, not
+        # per frame): group live threads by a numeric-suffix-stripped name so an
+        # A-vs-B diff names exactly which threads accumulate across switch exposure.
+        import re as _re
+        import threading as _threading
+        from collections import Counter as _Counter
+
+        thread_names = _Counter(
+            _re.sub(r"[-_ ]?\d+$", "", str(t.name or "unnamed")).strip() or "unnamed"
+            for t in _threading.enumerate()
+        )
         return {
             "runtime_generation": _runtime_generation(),
             "active_mode": _active_mode(),
@@ -656,6 +667,8 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
             "presentation": visualizer_attribution.snapshot(),
             "fence": None if fence is None else fence.snapshot(),
             "sync_present": None if sync_present is None else sync_present.snapshot(),
+            "thread_count": _threading.active_count(),
+            "thread_names": dict(sorted(thread_names.items())),
         }
 
     def _on_complete(result: dict) -> None:
