@@ -154,7 +154,6 @@ DESTINATION_PROFILE = (
     "test_qtquick_transition_implementations.py",
     "test_qtquick_crumble_transition.py",
     "test_qtquick_slide_motion.py",
-    "test_sphere_mode_integration.py",
     "test_qtquick_visualizer_mode_retirement.py",
     "test_qtquick_transition_parameter_defaults.py",
     "test_qtquick_transition_parameter_resolution.py",
