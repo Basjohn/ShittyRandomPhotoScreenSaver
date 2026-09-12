@@ -1,6 +1,6 @@
 # Performance Optimization Contract
 
-Last updated: 2026-09-01
+Last updated: 2026-09-12
 
 This document is the canonical admission/acceptance contract for SRPSS performance work after Phase H.
 
@@ -177,6 +177,7 @@ Do not optimize a number until its semantics are understood.
 - [ ] **Process CPU:** Windows process CPU may exceed 100% because 100% is approximately one logical processor, not the entire machine.
 - [ ] **Private commit vs RSS/USS:** committed virtual/private address space is not equivalent to physical resident RAM.
 - [ ] **Cache memory:** bounded decoded/scaled image caches intentionally exchange RAM for lower latency. Optimize leak/growth or bad eviction, not the existence of a useful bounded cache.
+- [ ] **Named-window metric history:** a causal/steady window may not score a rolling metric whose retained samples cross the window boundary unless that history is explicitly sliced/reset. A post-boundary delay is not a substitute when the metric's retention horizon is longer than the delay. Keep ordinary rolling diagnostics if useful, but causal harnesses must consume window-local evidence and fail stale/unsliceable logs closed (R-80).
 
 ## 6. Performance-change admission checklist
 

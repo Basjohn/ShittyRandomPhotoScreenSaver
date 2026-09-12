@@ -48,6 +48,7 @@ class _FakeWorld:
         self.recreation_gen_before = None
         self.scheduled: list[tuple[int, str, object]] = []
         self.completed: list[dict] = []
+        self.event_loop_resets: list[str] = []
 
     # -- injected seams --------------------------------------------------------
     def load_layout(self) -> bool:
@@ -90,6 +91,9 @@ class _FakeWorld:
 
     def on_complete(self, result) -> None:
         self.completed.append(result)
+
+    def reset_event_loop_window(self, label: str) -> None:
+        self.event_loop_resets.append(str(label))
 
     # -- test drivers ----------------------------------------------------------
     def fire(self, kind: str) -> bool:
@@ -144,6 +148,7 @@ def _driver(world: _FakeWorld, condition: str) -> VisualizerSwitchAbcDriver:
         await_baseline=world.await_baseline,
         watch_recreation=world.watch_recreation,
         on_complete=world.on_complete,
+        reset_event_loop_window=world.reset_event_loop_window,
         schedule=world.schedule,
     )
 
@@ -159,6 +164,7 @@ def test_condition_a_verifies_baseline_then_holds_without_switching(qt_app):
     world.advance_hold()  # steady_A
     assert world.requested == []  # no mode switches at all
     assert world.load_calls == 0  # A never loads/recreates
+    assert world.event_loop_resets == ["steady_A"]
     assert world.completed == [{"condition": "A", "valid": True, "reason": None}]
 
 
@@ -175,6 +181,7 @@ def test_condition_b_drives_exact_five_cycles_then_settles_on_bubble(qt_app):
     assert "devcurve" not in world.requested
     assert world.mode == "bubble"
     assert world.load_calls == 0  # B never recreates the runtime
+    assert world.event_loop_resets == ["steady_B"]
     assert world.completed == [{"condition": "B", "valid": True, "reason": None}]
 
 
@@ -189,6 +196,7 @@ def test_condition_c_exposes_holds_recreates_then_holds_again(qt_app):
     world.complete_recreation(2)  # runtime generation advances 1 -> 2
     world.advance_hold()  # steady_C_post
     assert world.requested == list(EXPOSURE_SEQUENCE) * 5
+    assert world.event_loop_resets == ["steady_C_pre", "steady_C_post"]
     assert world.completed == [{"condition": "C", "valid": True, "reason": None}]
 
 

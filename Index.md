@@ -58,7 +58,7 @@ Keep the small routing authorities at `Docs/` root: project overview, owner map,
 | historical bug routing | `Docs/Historical_Bugs.md` then `Docs/Historical_Bugs/README.md` |
 | deferred cleanup | `Future_Cleanup.md` |
 | broad deferred features | `Future_Work.md` |
-| operator-activated future checklists | `FWPlan.md` |
+| dormant future ordering / handoff router | `FWPlan.md` |
 
 ## Visualizer read order
 
@@ -124,7 +124,7 @@ For a new mode or any meaningful reactivity change, read `Docs/Guides/Visualizer
 
 ### Future Work
 
-- `Docs/Future_Work/Visualizer_Post_Switch_Performance.md` — active falsifiable A/B/C investigation for post-switch Visualizer presentation tails and render ownership.
+- `Docs/Future_Work/Visualizer_Post_Switch_Performance.md` — active Visualizer long-run presentation-tail investigation; window-local ABC oracle corrected after R-80 invalidated the original rolling-history verdict.
 
 - `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md` — Bubble aspect response and presentation cost
 - `Docs/Future_Work/Edit_Layout_Live_Commit.md` — Live Edit commit (retired / historical reference)
@@ -253,6 +253,9 @@ For a new mode or any meaningful reactivity change, read `Docs/Guides/Visualizer
 - `Docs/Historical_Bugs/R-75_Superseded_Compute_Callback_Released_Held_Serial_Lane_Slot.md` — R-75 — A superseded audio-analysis callback could release a serial-lane slot a newer owner held
 - `Docs/Historical_Bugs/R-76_Spectrum_Viewport_Temporal_Scaling_Axis_And_Solid_Domain.md` — R-76 — Spectrum viewport temporal scaling used the wrong axis and the wrong owner
 - `Docs/Historical_Bugs/R-77_Post_Phase_I_QWidget_Runtime_Residue_Required_Coordinated_Retirement.md` — R-77 — Post-Phase-I QWidget/runtime residue required coordinated retirement
+- `Docs/Historical_Bugs/R-78_Particle_Center_Outward_Swirl_Branch_Cut.md` — R-78 — Particle Center-Outward Swirl Had A Radial Branch Cut
+- `Docs/Historical_Bugs/R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md` — R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays
+- `Docs/Historical_Bugs/R-80_ABC_EventLoop_Rolling_Window_Contamination.md` — R-80 — ABC event-loop rolling history contaminated named steady windows
 - `Docs/Historical_Bugs/README.md` — Historical Bug Records
 - `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` — Runtime Card Backdrop Materials Rejected — 2026-09-02
 - `Docs/Historical_Bugs/Theme_Defaults_Split_Authority_2026-09-06.md` — Historical Bug — Theme defaults split authority

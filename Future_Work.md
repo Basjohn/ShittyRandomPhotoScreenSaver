@@ -4,9 +4,8 @@ Last updated: 2026-09-12
 
 Long-horizon feature / new-implementation backlog.
 
-The operator may promote selected backlog work into `Current_Plan.md`. `FWPlan.md` is now a compact routing/handoff
-index for activated versus dormant future work; detailed execution lives in `Current_Plan.md` or a focused decomposition.
-This document retains dormant feature intent, architecture rules and relative priority.
+The operator may promote selected backlog work into `Current_Plan.md`. `FWPlan.md` is the compact router/order for dormant implementation only; detailed active execution lives in `Current_Plan.md` or a focused decomposition.
+This document retains dormant feature intent, durable architecture rules and relative priority. It must not become an active experiment/status diary.
 
 ## Authority / activation rule
 
@@ -483,24 +482,9 @@ implementation/descriptor rather than manufacturing a new transition identity.
 
 ---
 
-# 9. Future widgets promoted to Current Plan
+# 9. Dormant idea priority — not active sequencing
 
-- **Steam Friend Pulse** — definite queued widget; execution/decomposition authority is
-  `Docs/Future_Work/Steam_Friend_Pulse.md`. Do not revive the pre-Quick mock/scaffold.
-- **System Stats** — conditional queued widget; execution/admission authority is
-  `Docs/Future_Work/System_Stats_Widget.md`. It requires a measured lightweight, demand-driven sampler with complete
-  dormancy; begin at a fixed 10 s cadence (5 s only if evidence justifies it), and keep diagnostic `--usage` diagnostics-only.
-
-Both are sequenced directly below the current performance investigation in `Current_Plan.md`, so they are not repeated
-in the dormant priority list below.
-
----
-
-# 10. Current idea priority — not active sequencing
-
-Steam Friend Pulse and System Stats are intentionally **absent** from this dormant ranking because the operator has
-promoted both into `Current_Plan.md` immediately below the performance investigation. This list now contains only
-remaining dormant ideas.
+This ranking contains dormant ideas only. Active/promoted work is deliberately absent; `Current_Plan.md` is the sole active sequencing authority.
 
 1. **Directional Pixel Accretion**;
 2. **Glass Shatter**;
@@ -508,32 +492,22 @@ remaining dormant ideas.
 4. **Slide Perspective Push** — remaining optional Slide modifier;
 5. **Deformable 3D Sphere / Blob Sphere experiment**;
 6. **Organic Growth / Ink Bloom** prototype;
-7. other 3D visualizer experiments after current active work;
+7. other 3D visualizer experiments;
 8. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use;
-9. **Optional true two-texture artwork crossfade [LOW]** only if the current event-driven fade still has a
-   demonstrated visual discontinuity worth the extra texture residency.
+9. **Optional true two-texture artwork crossfade [LOW]** only if the current event-driven fade still has a demonstrated visual discontinuity worth the extra texture residency.
 
-Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if their
-first prototypes are abandoned. Their intended identities should not collapse into generic `shatter`,
-`pixel dissolve`, or `audio sphere` effects.
+Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if their first prototypes are abandoned. Their intended identities should not collapse into generic `shatter`, `pixel dissolve`, or `audio sphere` effects.
 
-Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a queued feature. Reconsider
-only if a future renderer architecture independently justifies the capability; begin from the rejected-
-experiment record rather than reviving 2026-09-02 debris.
+Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a queued feature. Reconsider only if a future renderer architecture independently justifies the capability; begin from the rejected-experiment record rather than reviving 2026-09-02 debris.
 
 ---
 
-# 11. Operator-requested UI polish contracts
+# 10. Operator-requested UI polish contracts
 
-## 11.1 Settings FlowContainer polish [LOW]
+## 10.1 Settings FlowContainer polish [LOW]
 
-Use FlowContainers in additional Settings sections only where they materially improve alignment and space
-usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct
-otherwise lazy bodies.
+Use FlowContainers in additional Settings sections only where they materially improve alignment and space usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct otherwise lazy bodies.
 
-## 11.2 Optional artwork crossfade [LOW]
+## 10.2 Optional artwork crossfade [LOW]
 
-The current shared artwork/metadata fades are landed and belong to current physical validation, not future
-architecture work. A true outgoing+incoming two-texture artwork crossfade is a separate optional experiment
-only if eyes-on validation proves the current fade insufficient. Measure texture residency and transition
-cost before keeping it.
+The shared artwork/metadata fades are landed current architecture and are not future work. A true outgoing+incoming two-texture artwork crossfade is a separate optional experiment only if eyes-on validation proves the current fade insufficient. Measure texture residency and transition cost before keeping it.

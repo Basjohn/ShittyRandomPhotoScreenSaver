@@ -9,127 +9,32 @@ Sphere polish, widget resize/Edit lifetime, bucket normalization and other accep
 
 ---
 
-## 0. Quick display sleep/wake topology reconciliation — implemented, pending physical closure
+## 0. Quick display sleep/wake topology reconciliation — implemented, automated gate GREEN, pending physical closure
 
-Evidence: overnight diagnostic run `2026-09-12 05:43:59` started while Qt exposed one screen and remained healthy through the last logged activity at `09:16:28`; the operator force-closed the still-running process only at `13:47` after waking to a Quick window visually stranded across two displays. Both displays had remained powered off during the unattended period, so the logs do **not** prove that a second display returned earlier. The log stop may represent system suspension or another unlogged interval; do not invent a 09:16 shutdown.
+R-79 fixed the Qt topology-authority split exposed by the 2026-09-12 overnight run: screen metric/primary/resume edges now coalesce through the existing bounded reconcile, same-signature resume reapplies authoritative live Quick geometry once, real topology changes keep the existing teardown/rebuild path, and retirement fences/disconnects queued callbacks. No polling or native Windows message path was added.
 
-- [x] Remove the topology-authority split where `QuickDisplayWindow` reacted to live `QScreen` geometry/DPI changes locally while `DisplayManager` only reconciled whole topology on `screenAdded`/`screenRemoved`. `DisplayManager` now observes current Qt screen metric edges, primary-screen changes and only the `ApplicationActive` resume edge, all coalesced through the existing 250 ms one-shot reconcile. Resume-revalidation intent is preserved even when a metric/topology edge scheduled that one-shot first. No polling/native Windows message path is added.
-- [x] When a resume/application-state edge ends with the exact same screen signature, reapply each live Quick window's already-authoritative bound-screen geometry once and re-anchor retained content instead of forcing a generation rebuild. A real signature change still takes the existing full teardown/rebuild path.
-- [x] Disconnect every new Qt topology edge at manager retirement and fence already-queued reconcile callbacks after disconnect.
-- [x] Add `tests/test_qtquick_monitor_wake_reconcile.py` plus the `QuickDisplayWindow` contract assertion. Coverage includes metric-first/resume-second coalescing, inactive-state no-op, same-signature geometry repair, primary-screen signature visibility and retirement fencing. The local Linux workspace cannot execute PySide6 tests; syntax/AST validation is green.
-- [ ] **Closure gate:** on Windows/PySide, run the focused topology/window/lifecycle suites, then one installed dual-display sleep/off -> wake acceptance. Close R-79 only if the saver returns with one correct full-screen Quick window per admitted display, no straddled/stale window, and logs show either a topology reconcile/rebuild or the bounded same-signature resume geometry revalidation.
+- [x] Focused Windows/PySide automated gate is GREEN for the R-79-owned topology/window/lifecycle path, including the metric-first -> `ApplicationActive`-second coalescing race, inactive-state no-op, same-signature repair, topology change and retirement fencing. The four observed `test_qtquick_h_cutover.py` / `test_multidisplay_sync.py` failures reproduce without R-79 and remain separate stale-test debt.
+- [ ] **Physical closure only, much later:** one installed dual-display off/sleep -> wake acceptance. Close R-79 only when the saver returns with one correct full-screen Quick window per admitted display and no straddled/stale window.
 
 ---
 
-## 1. Visualizer post-switch presentation-tail / anti-waste follow-up
+## 1. Visualizer long-run presentation-tail investigation — oracle corrected
 
 Execution authority: `Docs/Future_Work/Visualizer_Post_Switch_Performance.md`.
 
 Binding guardrail: `Docs/Guardrails/Performance_Optimization_Contract.md`.
 
-The 2026-09-12 diagnostic run included a heavy external CPU load and the sequence
-Sphere -> Spectrum -> Oscilloscope -> Sine -> Bubble. Bubble retained its intended
-~90 Hz logical evolution, 1.000 integration ratio and fresh audio-lane publication,
-while GUI/presentation late tails grew during the long Bubble residency. Loading a
-saved layout rebuilt the Quick display runtime and subjectively cleared the
-degradation without changing the active Bubble engine generation/activation. Treat
-this as a **presentation/lifetime attribution problem**, not permission to reduce
-Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evidence for future agents:
-`logs/evidence_chest/logsb11575b976.zip`.
+The original hostile-load observation remains real and unresolved: after a long multi-mode run ending in Bubble, logical/source freshness stayed healthy while presentation appeared to degrade, and a saved-layout recreation subjectively appeared to clear it. The automated P4 experiment was built to reproduce that observation, but its first causal verdict is now **invalidated by an oracle bug** rather than accepted as product truth.
 
-- [x] Execute the decomposition's falsifiable P0-P4 matrix on a live display. **DONE
-  2026-09-12 — verdict `swap_sensitive` (3/3 matched valid reps), on MC build
-  (`main_mc.py /s`), prepped extreme-vertical CUSTOM Bubble slot 1, 4 contention
-  workers.** Nine valid reps (raw JSON + per-rep perf logs in `logs/abc_evidence/`,
-  `verdict.json`). Settled-window event-loop p99 (ms), 15 s excluded + 120 s scored:
-  A `5.49 / 4.63 / 11.25`; B `64.72 / 32.67 / 27.02`; C_pre `26.34 / 23.20 / 24.95`;
-  C_post `4.44 / 5.13 / 4.71`. All three B reps regress vs their paired A on p99
-  (≥2 ms & ≥35%, persistent ≥60 s), C_pre reproduces it, and the saved-layout
-  recreation clears ≥97% of the introduced tail (C_post at/below the A control).
-  Frame-pacer skip did NOT regress (all <1%); freshness/reactivity stayed healthy
-  throughout (viz_revision_hz ~90 Hz, viz_age_ms ~20–28 ms, integration ratio
-  1.000), so the tail is **not** logical/source starvation. Conclusion: a real,
-  reproducible, swap-sensitive **presentation event-loop tail** that a Quick-runtime
-  recreation resets — H0 (pure contention) rejected for this build/load. Caveat: the
-  event-loop summary cadence is ~15 s (≈8–9 samples/window), so persistence is
-  coarse though consistent; the dense freshness plane is unaffected. NEXT: attribute
-  H1 (stale render-host ownership) vs H2 (invalidation amplification) via the P1
-  telemetry before any perf-code change; do NOT add runtime/layout self-heal. The
-  supporting instrumentation, all opt-in (zero Standard/MC overhead): P1 boundary
-  render-host telemetry allocates nothing in Standard/MC runtime and is admitted by
-  `--viz-switch-telemetry` or `--abc-drive` through the diagnostics resolver
-  (`core/diagnostics/experiment_flags.py`, NOT dev_gates). P2 repeated-switch lifecycle
-  tests (`tests/test_qtquick_visualizer_mode_retirement.py`, ≥100 switches, inject the
-  telemetry directly). P3 permanent-mode real-GL smoke
-  (`tools/qtquick_visualizer_switch_smoke.py`, Sphere excluded, `settled_hold`
-  separated) **run GREEN on real GL 2026-09-12: 26 completed switches over 5
-  cycles, one-active-renderer invariant held every switch, zero release failures,
-  shared quad never multiplied, clean same-thread teardown** (also fixed both
-  smoke tools' staleness vs the card/shadow + rainbow param migrations; clip-smoke
-  suite 44/46, 2 remaining are genuine bubble/oscilloscope pixel-contract asserts).
-  P4 deterministic in-app driver
-  (`core/performance/visualizer_switch_abc_driver.py`): every condition verifies the
-  same saved-layout Bubble/CUSTOM baseline, B/C drive the exact
-  Sphere→Spectrum→Oscilloscope→Sine→Bubble ×5 exposure on genuine completion edges,
-  C keeps both pre/post recreation windows, and every failure is fail-closed (INVALID +
-  non-zero exit). P4 harness (`tools/visualizer_switch_abc_harness.py`:
-  `contention`/`score`/`classify`/`auto`) scores named windows with ≥60 s persistence,
-  metric-matched C recovery, freshness/reactivity validity, and a 3-matched-valid-rep
-  gate. Reproduce with:
-  `python tools/visualizer_switch_abc_harness.py auto --condition <A|B|C> --layout-slot 1 --workers 4 --log logs/screensaver_perf.log --rep-out <rep>.json --run-cmd "python main_mc.py /s --usage --viz --perf"`
-  then `classify --a A1..A3 --b B1..B3 --c C1..C3`.
-- [x] **Attribution H1 vs H2 — DONE 2026-09-12, both REJECTED.** Added opt-in
-  presentation-edge counters (`core/diagnostics/visualizer_attribution.py`) + a
-  boundary `[PERF] [ABC-ATTR]` snapshot logged by the driver at each scored window
-  start/end (H1 ownership+identity from the existing `resource_ownership_snapshot`,
-  render-node sync/render/draw, and the separate H2 presentation counts). Ran one
-  matched A + one matched B with `--life` (`logs/abc_evidence/{A,B}_attr.perf.log`).
-  **H1 rejected:** at the settled B window ownership is identical to the A control —
-  `resolved_mode_ids=={bubble}`, bubble `has_resources=False`, one shared quad,
-  release failures 0, `release_failure_unresolved=False`; resolve_count 26 with
-  releases 25/25/0 exactly track the 25 switches 1:1 with zero leak (Sphere WAS
-  exercised — resolve_by_mode sphere:5 — and retired cleanly, closing the P3 gap).
-  **H2 rejected:** over the 120 s window A vs B presentation cadence is equivalent
-  (pacer opportunities 7194/7193, publications 7189/7187, item present_requests
-  7189/7187, window-update fallbacks 0/0, frame swaps 7237/7325, renders 7237/7326,
-  draws 7237/7325 — B higher by ~1.2%, not amplified/duplicated). Yet B shows ~7×
-  more moderate (25–50 ms) GUI event-loop stalls at the SAME frame/present cadence:
-  the tail is a **per-operation cost increase, not a count increase**, and the
-  logical tick stays clean (no tick-breakdown spikes, ~90 Hz). C was NOT run — A/B
-  leave no H1/H2 ambiguity to resolve. No repair made (neither hypothesis survived).
-- [x] **Fence measurement — DONE 2026-09-12, `_InheritedGlState` fence REJECTED.**
-  Added opt-in per-draw capture/restore timing (`visualizer_attribution._FenceTiming`,
-  `time.perf_counter_ns()` around the EXISTING fence, bucketed, boundary-emitted; no
-  GL added/removed; render-thread, no lock). Matched A + B (`logs/abc_evidence/
-  {A,B}_fence.perf.log`; B ran music-off only after fixing a real Spectrum bug found
-  in passing — its presentation-owned idle now reveals on cold activation instead of
-  only via a playing→stopped edge, commit "Spectrum reveals its paused idle").
-  B reproduced the event-loop degradation (window p99 21.66 ms
-  vs A 5.84 ms) yet its fence timing is equal-or-better than A: capture mean 162 vs
-  216 µs (p99 ≤500 µs vs ≤2 ms), restore mean 21 vs 50 µs (cum-max 3.4 ms vs A's
-  92.7 ms), combined mean 92 vs 133 µs. Thread ids confirm render-thread (non-GUI).
-  So the fence is a fixed ~130 µs/draw cost in BOTH, not the swap-sensitive tail —
-  fence hypothesis rejected. C not needed (no fence-cost difference to test for
-  recreation recovery). No repair made; the fence is unchanged.
-- [ ] **ACTIVE NEXT — H4 (generation/activation-owned state; measure, not repair):**
-  a concrete lead already exists in the same runs' `[PERF] [RESOURCE]` snapshots —
-  A's tracked set stays flat (14 resources, ~99.5 MB) while B grows (14→17 resources,
-  ~142→199 MB) across the 25 activations, with GL renderer resources 0 in both (H1
-  clean confirmed, so this is NON-GL generation/activation-owned state). Measure, at
-  the A/B scored-window boundaries and preferring existing resource/GC facts: (a) the
-  per-category resource_metrics breakdown (cpu_cache vs rm vs gl) to identify WHICH
-  retained state grows with switching and whether it is legitimate (image cache) or
-  accumulated activation debris; (b) GC behaviour — frozen-set size and any post-freeze
-  Gen2 scan/destruction cost — to test whether the accumulated state makes ordinary
-  GUI iterations moderately slower (the observed ~7× rise in 25–50 ms stalls) without
-  raising presentation count. Do not lower the 60 Hz presentation target or ~90 Hz
-  authored/logical evolution, and never add automatic Quick-runtime/layout recreation
-  as a self-heal (the recreation that clears the tail is the experiment's
-  intervention, never a shipped mechanism).
-- [ ] Close the item only after a representative mode-switch/recreation soak shows a
-  bounded resolved-renderer/resource plateau and stable event-loop/pacer tails with
-  no loss of Bubble temporal fidelity, source freshness, reaction amplitude or
-  CUSTOM scaling behaviour.
+- [x] **Invalidate the old `swap_sensitive` / recreation-clears-tail verdict.** `EventLoopStallRecorder` retained 2,048 samples at 50 ms (~102.4 s), while P4 began its "settled" score only 15 s after switching. Each logged p99 therefore still contained switch-period stalls for most of the scored window. In all three C runs, `steady_C_pre` returned to ~4–5 ms p99 before the recreation occurred, so C never proved that recreation caused recovery. Do not use the old A/B/C JSON or rolling p99 classifier output as causal evidence.
+- [x] **Repair the oracle, not the product.** Named ABC scored windows now reset the recorder history immediately before their start marker. The recorder keeps its ordinary rolling diagnostic view but also emits independent, non-overlapping `period_*` summaries tagged with the scored-window label. The harness scores only those window-local periods, rejects old rolling-only logs, and measures p99 persistence from consecutive represented report durations instead of repeatedly scoring the same rolling history.
+- [x] Preserve the useful stress-sequence facts without overclaiming causality: 25 mode switches (Sphere included) retired render-host implementations cleanly with bounded ownership; presentation/request counts stayed ~1:1; `_InheritedGlState.capture()/restore()` did not become more expensive; `sync_present()` did not produce the 20–50 ms settled stalls; Python thread census did not grow; the aged Bubble-only A-long control stayed clean; aggregate image-cache/native-thread counts do not track the apparent degradation. These results are anti-leak/anti-amplification evidence, not proof that the original long-run problem is solved.
+- [x] Keep the Spectrum cold-paused activation fix found during music-off testing: presentation-owned Spectrum idle may reveal while the fresh-source fence remains armed for later reactive authority.
+- [ ] **ACTIVE NEXT — one corrected A/B oracle pair.** Use `main_mc.py`, saved layout slot 1, 4 contention workers, `--usage --viz --perf --life`, the same 15 s exclusion and 120 s scored hold; music may remain off. A holds Bubble. B performs `Sphere -> Spectrum -> Oscilloscope -> Sine -> Bubble` x5, then holds Bubble. Do not run C or another 3x matrix unless the corrected window-local B actually shows a persistent post-switch regression.
+- [ ] If corrected B is clean, mark the automated 25-switch poison hypothesis **not reproduced for this build/load** and return to reproducing the original long-residency observation with the corrected metric plane. If corrected B still regresses on window-local periods, continue attribution from that trustworthy state and use C only when a concrete suspect/recovery claim requires it.
+- [ ] Close this item only when the original user-visible long-run hitch is either reproduced and repaired or honestly rejected for a representative hostile soak. No fix may lower ~90 Hz authored/logical evolution, the 60 Hz presentation target, source freshness, Bubble reaction amplitude/motion/geometry/CUSTOM scaling, or substitute automatic runtime/layout recreation for a real repair.
+
+**Correctness fences are non-negotiable:** GL-state isolation, fresh-source/admission fencing, stale-generation rejection and stale-frame/bleed prevention must remain functionally intact. They may only be altered with equivalent correctness proof; they are never removable performance knobs.
 
 ---
 

@@ -138,6 +138,15 @@ Use the same build, settings/presets, audio/source, extreme-vertical CUSTOM Bubb
 
 Run **three matched repetitions** of each condition. Exclude the first 15 seconds after the final activation/recreation from steady-state scoring.
 
+**Corrected event-loop oracle (R-80):** the recorder's ordinary rolling percentile
+is not a valid named-window metric because it retains 2,048 x 50 ms ~= 102.4 s of
+history. At each scored-window start the opt-in driver must reset the recorder's
+scoring history immediately before the marker. The recorder emits independent,
+non-overlapping `period_*` summaries tagged with that window label; the harness
+scores only those local periods and fails old rolling-only logs closed. The 15 s
+exclusion remains an authored transition-settle interval, not a substitute for
+flushing the old rolling deque.
+
 ### A — control, no switch exposure
 
 - start/recreate into Bubble;
@@ -174,7 +183,7 @@ Repeat A and B without deliberate external CPU contention. If B only diverges un
 
 For every scored steady-state window collect the same existing metrics:
 
-- event-loop p95 / p99 / max;
+- window-local event-loop period p95 / p99 / max (never the pre-window rolling view);
 - frame-pacer late/skip counts and ratio;
 - render/sync/draw/invalidation rates;
 - Visualizer logical revision Hz;
@@ -216,111 +225,39 @@ A degrades similarly to B
     -> external contention/fixed per-frame cost is primary; mode swapping is not demonstrated causal
 ```
 
-## P4 result — 2026-09-12 (verdict: swap_sensitive)
+## Evidence status — 2026-09-12 oracle correction
 
-Executed the full automated A/B/C matrix on the MC build (`main_mc.py /s --usage
---viz --perf`, opt-in `--abc-drive` driver), prepped extreme-vertical CUSTOM Bubble
-on saved-layout slot 1, 4 CPU contention workers, three matched valid reps per
-condition. Raw evidence preserved under `logs/abc_evidence/` (per-rep scored JSON,
-per-rep `screensaver_perf.log`, `verdict.json`). Each condition ran a fresh app
-process on a truncated perf log, so no rep contaminates another's markers.
+The first full P4 matrix produced a `swap_sensitive` classification, but that
+classification is **invalid causal evidence**. The event-loop summaries being
+scored were the recorder's 2,048-sample rolling view (~102.4 s at 50 ms/sample), so
+the 15 s post-switch exclusion did not isolate the named steady windows. The same
+switch-period stalls were repeatedly re-observed until they aged out of the deque.
 
-Settled-window event-loop late p99 (ms), 15 s excluded then 120 s scored:
+Condition C proves the mistake directly: in every preserved C run the
+`steady_C_pre` rolling p99 returned to roughly 4–5 ms before the saved-layout
+recreation happened. Therefore the old claim that recreation removed >=97% of a
+persistent tail is withdrawn; the pre-recreation state had already recovered.
 
-```text
-             rep1     rep2     rep3
-A  control   5.49     4.63    11.25
-B  exposure 64.72    32.67    27.02   (5 x Sphere->Spectrum->Oscilloscope->Sine->Bubble)
-C_pre       26.34    23.20    24.95   (same exposure, pre-recreation)
-C_post       4.44     5.13     4.71   (after saved-layout recreation)
-```
+Useful non-causal stress facts remain valid and should not be discarded:
 
-Classifier (`classify`): **swap_sensitive**, 3/3. Every B regressed vs its paired A
-on event-loop p99 (>=2 ms and >=35%, persistent >=60 s); every C_pre reproduced the
-regression; every C_post cleared >=97% of the introduced tail (at/below the A
-control). Frame-pacer skip did **not** regress (all <1%). Freshness/reactivity
-stayed healthy in every scored window (viz_revision_hz ~90 Hz, viz_age_ms ~20-28 ms,
-Bubble integration ratio 1.000), so the tail is not logical/audio/source starvation
-(the scorer fails a run closed if it were). H0 (pure external contention) is
-rejected for this build/load: the degradation is a real, reproducible, swap-sensitive
-**presentation event-loop tail** that a Quick-runtime recreation resets.
+- the exact 25-switch path, including Sphere, converged to one active Bubble render
+  implementation with 25/25 successful inactive releases and no renderer/quad
+  accumulation;
+- publication/request/render/swap counts stayed bounded and approximately 1:1;
+- the mandatory `_InheritedGlState.capture()/restore()` isolation fence did not
+  become more expensive across the stress path and remains unchanged;
+- `sync_present()` timing, Python-thread census, process age (A-long), aggregate
+  image-cache size and observed native-thread count do not explain the apparent
+  rolling-tail result.
 
-Caveats / remaining uncertainty:
+These facts reject several simple leak/amplification stories for the stress path;
+they do **not** prove the original long-residency user-visible hitch is solved.
 
-- the event-loop summary cadence is ~15 s, so each window carries ~8-9 p99 samples
-  and the >=60 s persistence is coarse (though consistent across reps); the dense
-  PERF_HUD freshness plane (~118/window) is unaffected;
-- this is one build, one machine, one load profile — the verdict is scoped to it;
-- the result does **not** yet distinguish H1 (stale render-host resource ownership)
-  from H2 (invalidation/update-rate amplification). That attribution, via the P1
-  boundary telemetry, is the required next step before any perf-code change.
-
-The recreation that clears the tail is the experiment's intervention only; it must
-never become a shipped runtime/layout self-heal.
-
-## Attribution result — 2026-09-12 (H1 rejected, H2 rejected)
-
-Added opt-in presentation-edge counters (`core/diagnostics/visualizer_attribution.py`,
-GUI-thread, allocated only under the experiment admission) and a boundary
-`[PERF] [ABC-ATTR]` snapshot logged by the driver at each scored window start/end.
-It assembles H1 ownership + generation/activation identity (from the existing
-`resource_ownership_snapshot`), the render-node sync/render/draw counts, and the H2
-presentation counts kept strictly separate (pacer opportunities, publications, item
-present requests, fallback window updates, frame swaps). One matched A and one
-matched B run (`main_mc.py /s --usage --viz --perf --life`, slot 1, 4 workers);
-evidence in `logs/abc_evidence/{A,B}_attr.perf.log`.
-
-H1 (stale ownership) — REJECTED. At the settled B window the render-host ownership
-is identical to the A control: `resolved_mode_ids == {bubble}`, bubble
-`has_resources == False`, one shared quad (VAO+VBO), zero release failures,
-`release_failure_unresolved == False`. B's `renderer_resolve_count == 26` with
-inactive releases `25/25/0` exactly track the 25 completed switches 1:1 with no
-leak; `resolve_counts_by_mode` shows every mode including `sphere: 5`, so the exact
-loaded P4 path (Sphere included) retires cleanly — closing the gap P3 left by
-excluding Sphere. No stale/inactive renderer, no multiplied resource, no
-stale-generation ownership.
-
-H2 (presentation/update amplification) — REJECTED. Over the 120 s window the A-vs-B
-presentation cadence is equivalent (deltas): pacer opportunities 7194 / 7193,
-publications 7189 / 7187, item present_requests 7189 / 7187, fallback window updates
-0 / 0, frame swaps 7237 / 7325, render 7237 / 7326, draw 7237 / 7325. B is ~1.2%
-higher, not amplified or duplicated, and the publication->request->render->swap
-relationship stays ~1:1 in both.
-
-Yet B's event-loop late tail is 5-10x A's. Cross-checking `over_*_ms` counts in the
-same windows: B has ~7x more moderate 25-50 ms GUI event-loop stalls than A (over_25
-164 vs 23, over_50 51 vs 15) while extreme spikes are not higher (over_100 12 vs 15),
-and there are no logical tick-breakdown spikes (>50 ms) in either — the logical
-thread stays ~90 Hz. So the degradation is a **per-operation GUI-thread cost
-increase, not a count increase**: the same number of frames/presentations, but
-individual iterations more often stall moderately after the switch exposure.
-
-Conclusion: neither H1 nor H2 survives; per the interpretation table's "ownership
-AND presentation/update cadence equivalent" branch, do not force an H1/H2 verdict.
-C was not run — A/B leave no H1/H2 ambiguity to resolve. Next MEASUREMENT (not a
-repair): time the per-draw `_InheritedGlState.capture()/restore()` fence (its
-synchronous GL state queries run once per draw; draw counts are equal in A/B, so
-only a per-draw duration measurement can test whether post-switch driver/GL state
-makes each capture costlier), with GC / Quick-generation-owned state accumulated
-across 25 activations (H4) as the alternate GUI-thread stall source. Measure before
-changing; no repair until a specific owner/path is identified.
-
-### Fence measured — 2026-09-12 (fence REJECTED, next path is H4)
-
-Timed the existing per-draw `_InheritedGlState.capture()/restore()` on the render
-thread (opt-in `visualizer_attribution._FenceTiming`, `perf_counter_ns()` around the
-existing calls, no GL added/removed). Matched A + B: B reproduced the event-loop
-degradation (window p99 21.66 ms vs A 5.84 ms) yet its fence timing was equal-or-
-better than A (capture mean 162 vs 216 µs; restore 21 vs 50 µs; combined 92 vs
-133 µs; A even held the single largest restore spike at 92.7 ms). The fence is a
-fixed ~130 µs/draw cost in both conditions, not the swap-sensitive owner. Fence
-hypothesis rejected; C unnecessary. The decision tree therefore moves to **H4**:
-the same runs' existing `[PERF] [RESOURCE]` snapshots show B's tracked set growing
-across the 25 activations (14→17 resources, ~99→199 MB) while A stays flat, with GL
-renderer resources 0 in both — i.e. non-GL generation/activation-owned state whose
-amount or collection cost may slow ordinary GUI iterations. Next: audit that
-per-category tracked-resource growth and GC/frozen-set behaviour at the A/B window
-boundaries before any change.
+The next executable gate is deliberately small: one corrected A and one corrected
+B using window-local `period_*` event-loop evidence. Only if B still shows a real
+post-boundary persistent regression should C or deeper attribution resume. If B is
+clean, close the automated 25-switch poison hypothesis for this build/load and
+return to the original long-residency reproduction with the corrected oracle.
 
 ## Phase P5 — repairs only after attribution
 
@@ -351,9 +288,9 @@ This item closes only when:
 
 1. P2 deterministic repeated-switch lifecycle tests are green;
 2. P3 real-GL repeated-switch smoke is green and resources plateau;
-3. P4 has three matched A/B/C repetitions sufficient to support or reject a swap-sensitive regression;
-4. any demonstrated H1/H2/H3/H4 owner has been repaired and the same experiment rerun;
+3. the corrected window-local P4 oracle has first established whether a post-switch regression exists at all; expand to matched A/B/C repetitions only when a causal recovery claim actually needs them;
+4. any owner demonstrated by the corrected oracle has been repaired and the same trustworthy experiment rerun;
 5. no fix lowers Bubble/permanent-mode temporal fidelity, audio/source freshness, reaction amplitude, motion/tails/radius, CUSTOM scaling or presentation target;
 6. no automatic runtime/layout recreation has been introduced as a self-healing mechanism.
 
-A clean result is valuable: if A/B/C reject the swap hypothesis, mark it rejected for the tested build/load and stop carrying an unproven leak theory forward.
+A clean result is valuable: if corrected A/B reject the swap hypothesis, mark it rejected for the tested build/load and stop carrying an unproven leak theory forward.

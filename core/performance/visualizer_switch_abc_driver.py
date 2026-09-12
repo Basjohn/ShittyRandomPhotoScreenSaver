@@ -89,6 +89,7 @@ class VisualizerSwitchAbcDriver(QObject):
         watch_recreation: Callable[[int | None, Callable[[int | None], None]], None],
         on_complete: Callable[[dict], None] | None = None,
         attribution_snapshot: Callable[[], dict | None] | None = None,
+        reset_event_loop_window: Callable[[str], object] | None = None,
         exposure_sequence: Sequence[str] = EXPOSURE_SEQUENCE,
         cycles: int = EXPOSURE_CYCLES,
         settle_mode: str = SETTLE_MODE,
@@ -114,6 +115,7 @@ class VisualizerSwitchAbcDriver(QObject):
         self._watch_recreation = watch_recreation
         self._on_complete = on_complete
         self._attribution_snapshot = attribution_snapshot
+        self._reset_event_loop_window = reset_event_loop_window
         self._settle_mode = str(settle_mode).strip().lower()
         self._exposure = tuple(str(m).strip().lower() for m in exposure_sequence)
         self._cycles = max(1, int(cycles))
@@ -358,6 +360,23 @@ class VisualizerSwitchAbcDriver(QObject):
     def _begin_scored_window(self, window_name: str, next_action: Callable[[], None]) -> None:
         if self._done:
             return
+        # The app event-loop recorder keeps a long rolling diagnostic history.
+        # A named causal window must begin from a fresh history or switch/recreate
+        # transients remain visible for ~window_size*interval after the boundary
+        # and masquerade as a persistent settled regression.  Reset exactly here,
+        # after the exclusion and immediately before the authoritative marker.
+        if self._reset_event_loop_window is not None:
+            try:
+                self._reset_event_loop_window(window_name)
+            except Exception:
+                logger.exception(
+                    "[ABC] event-loop scoring-window reset failed window=%s",
+                    window_name,
+                )
+                self._invalidate(
+                    f"event-loop scoring-window reset failed: {window_name}"
+                )
+                return
         self._mark(window_name, "start")
         self._log_attribution(window_name, "start")
         self._schedule_impl(
@@ -434,7 +453,13 @@ class VisualizerSwitchAbcDriver(QObject):
                 logger.exception("[ABC] on_complete callback failed")
 
 
-def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
+def install_abc_driver_if_enabled(
+    engine,
+    app,
+    *,
+    layout_slot: str = "1",
+    reset_event_loop_window: Callable[[str], object] | None = None,
+):
     """Install the deterministic driver when ``--abc-drive`` is admitted; else None.
 
     Wires the driver to the engine's real DisplayManager seams: the canonical
@@ -706,6 +731,7 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
         watch_recreation=_watch_recreation,
         on_complete=_on_complete,
         attribution_snapshot=_attribution_snapshot,
+        reset_event_loop_window=reset_event_loop_window,
         parent=app,
         **({} if exclude_override is None else {"exclude_seconds": exclude_override}),
     )

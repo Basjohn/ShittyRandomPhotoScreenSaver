@@ -51,6 +51,20 @@ path + DevCurve source scrapes).
 
 ---
 
+## 0.11 2026-09-12 Visualizer ABC event-loop oracle correction
+
+The original P4 `swap_sensitive` classifier result is **not trustworthy causal evidence** because the event-loop recorder's 2,048-sample rolling percentile retained about 102.4 seconds of pre-window history while the ABC driver excluded only 15 seconds before marking a "steady" window. R-80 records the failure.
+
+Current test/oracle contract:
+
+- `tests/test_event_loop_recorder.py` protects independent `period_*` report slices and scored-window history reset without restarting the timer/deadline chain;
+- `tests/test_visualizer_switch_abc_driver.py` protects one event-loop scoring reset at each named `steady_A`, `steady_B`, `steady_C_pre` and `steady_C_post` boundary;
+- `tests/test_visualizer_switch_abc_harness.py` proves causal scoring uses only matching window-local period summaries, rejects old rolling-only logs, preserves named C windows/freshness gates and applies persistence to represented non-overlapping periods.
+
+Validation in this Linux workspace: the 17 pure harness scorer/classifier tests were executed directly and all passed. The 14 injected driver state-machine cases also executed 14/14 under a minimal Qt stub, and a recorder logic smoke verified reset/period clearing plus summary emission; these do **not** replace real PySide execution. Normal pytest collection and the real Qt recorder/driver tests remain blocked here by missing PySide6; source compilation is green. The next Windows live A/B run is a product-oracle validation gate, not replaced by these tests.
+
+---
+
 ## Current authority
 
 The exact current source tree and the maintained `destination` profile in `tests/run_chunked.py` own executable test truth. `Current_Plan.md` owns execution order. Historical bug records and old migration reports are evidence, not permission to keep tests for retired owners alive indefinitely.
