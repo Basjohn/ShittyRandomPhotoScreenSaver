@@ -25,11 +25,18 @@ this as a **presentation/lifetime attribution problem**, not permission to reduc
 Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evidence for future agents:
 `logs/evidence_chest/logsb11575b976.zip`.
 
-- [ ] Execute the decomposition's falsifiable P0-P4 matrix rather than a one-off manual reproduction: repeated-switch lifecycle test, real-GL switch smoke, then three matched installed-runtime A/B/C repetitions (Bubble-only control vs five switch cycles vs the same exposure followed by saved-layout Quick-runtime recreation). Use its explicit thresholds/classification to prove or reject swap-sensitive residual degradation.
-- [ ] Add lifecycle-only render-host telemetry at mode boundaries/teardown: renderer
-  resolve count, inactive-release attempts/success/failure, active/resolved mode IDs,
-  per-implementation `has_resources`, and shared-quad ownership. Surface it in the
-  existing display/teardown snapshot. **No per-frame `glGet*` diagnostics.**
+- [ ] Execute the decomposition's falsifiable P0-P4 matrix on a live display and use its
+  explicit thresholds/classification to prove or reject swap-sensitive residual
+  degradation. **Instrumentation is built and validated (unit/compile/help), only the
+  live run + attribution remains:** P2 repeated-switch lifecycle tests
+  (`tests/test_qtquick_visualizer_mode_retirement.py`, ≥100 switches, green); P3 real-GL
+  switch smoke (`tools/qtquick_visualizer_switch_smoke.py`, prepared, not yet run); P4
+  installed-runtime A/B/C harness (`tools/visualizer_switch_abc_harness.py`:
+  `contention`/`score`/`classify`/`auto`) driven either by operator protocol or the
+  opt-in in-app driver (`--abc-drive=<A|B|C>`,
+  `core/performance/visualizer_switch_abc_driver.py`, state-machine tests green). Run
+  three matched reps (Bubble-only control vs five switch cycles vs the same exposure
+  followed by saved-layout Quick-runtime recreation) once displays are available.
 - [ ] Use that evidence to prove or refute stale mode GL/scene resources across mode
   switches. If stale ownership is demonstrated, repair the existing render-thread
   retirement seam. Do **not** add automatic layout/runtime reinitialization as a
@@ -38,11 +45,6 @@ Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evide
   (frame pacer vs mode-switch retirement vs presentation/QML invalidation) and remove
   only demonstrated duplicate/no-op requests. Do not lower the 60 Hz presentation
   target or ~90 Hz authored/logical evolution to improve counters.
-- [ ] Remove known diagnostic/telemetry hot-path churn without changing diagnostic
-  meaning: compute bars/energy/waveform maxima only when a diagnostic record that
-  consumes them is actually due; rework `VisualizerRenderNodeTelemetry` so
-  `note_sync`/`note_render`/`note_draw` do not allocate a new frozen dataclass on
-  every hot-path call while `snapshot()` remains immutable and thread-safe.
 - [ ] Measure the per-frame `_InheritedGlState.capture()`/restore fence as a distinct
   CPU/driver owner. It performs synchronous GL state queries around every Visualizer
   draw; change it only if profiling proves material cost and state-isolation coverage
