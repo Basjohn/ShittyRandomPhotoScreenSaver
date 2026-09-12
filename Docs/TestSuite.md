@@ -402,7 +402,7 @@ Protect:
 - QML emits semantic actions rather than owning provider/business side effects;
 - ordinary family presentation remains normalized from authored size + one resolved runtime geometry authority.
 
-High-value suites include `test_qtquick_runtime.py`, `test_qtquick_window.py`, `test_qtquick_scene_controller.py`, `test_qtquick_family_binder*.py`, `test_qtquick_ordinary_widget_host.py`, lifecycle/terminal-destruction suites and family-specific Quick presentation tests.
+High-value suites include `test_qtquick_runtime.py`, `test_qtquick_window.py`, `test_qtquick_monitor_wake_reconcile.py`, `test_qtquick_scene_controller.py`, `test_qtquick_family_binder*.py`, `test_qtquick_ordinary_widget_host.py`, lifecycle/terminal-destruction suites and family-specific Quick presentation tests. `test_qtquick_monitor_wake_reconcile.py` permanently pins the event-driven sleep/wake contract: same-count QScreen metric changes reach DisplayManager topology authority, only `ApplicationActive` admits resume repair, metric-first/resume-second bursts preserve that repair intent, unchanged final signatures reapply bound Quick geometry once, primary-screen changes are signature-visible, and retirement disconnects every topology edge.
 
 ### 6.2 Widget normalization / CUSTOM
 
@@ -569,7 +569,7 @@ tests/test_visualizer_mode_activation_schema_current.py
 tests/test_weather_settings_target_contract.py
 ```
 
-Direct execution in the Linux workspace: **8/8 assertions PASS**. Visualizer coverage requires the canonical per-mode dormancy authority to be the explicit `mode_activation` boolean map, protects registry ordering/the last-mode recovery invariant, verifies the typed model serializes no retired `enabled_modes` key, and proves the one temporary legacy reader converts/removes the old list while emitting warning feedback when relied upon. Weather coverage protects the semantic `weather_location` target, retained family callback injection, generation-checked DisplayManager/engine Settings lifecycle route, Widgets -> Weather lazy navigation and synchronous Location focus without a target-specific timer.
+Direct execution in the Linux workspace: **8/8 assertions PASS**. Visualizer coverage requires the canonical per-mode dormancy authority to be the explicit `mode_activation` boolean map, treats mapping insertion order as irrelevant while protecting registry-order resolution/the last-mode recovery invariant, verifies the typed model serializes no retired `enabled_modes` key, and proves the one temporary legacy reader converts/removes the old list while emitting warning feedback when relied upon. Weather coverage protects the semantic `weather_location` target, retained family callback injection, generation-checked DisplayManager/engine Settings lifecycle route, Widgets -> Weather lazy navigation and synchronous Location focus without a target-specific timer.
 
 Defaults regeneration and authority checking are required for this schema change. Operator-installed validation is accepted as of 2026-09-11 for real Visualizer enable/disable persistence and the retained Weather missing-location SETTINGS click -> modal Settings -> runtime restart path; only automated test execution debt remains.
 

@@ -7,7 +7,7 @@ constructed. These tests pin that:
 
 - resolving one mode's renderer imports only that renderer (fresh interpreter);
 - the frame-runtime factory imports only the requested mode's runtime;
-- each of the five modes can be the sole enabled mode (cycling/selection stay
+- each registered mode can be the sole enabled mode (cycling/selection stay
   on it, substitution never leaves it);
 - enable-state resolution introduces no timer/thread/poller.
 """
@@ -23,6 +23,7 @@ import pytest
 
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
+    build_visualizer_mode_activation,
     resolve_effective_enabled_modes,
     resolve_effective_mode,
 )
@@ -108,12 +109,12 @@ def test_each_mode_can_be_the_sole_enabled_mode():
     )
 
     for mode_id in VISUALIZER_MODE_IDS:
-        enabled = [mode_id]
-        assert resolve_effective_enabled_modes(enabled) == (mode_id,)
+        activation = build_visualizer_mode_activation((mode_id,))
+        assert resolve_effective_enabled_modes(activation) == (mode_id,)
         # Cycling stays on the sole enabled mode from any current id.
         for current in VISUALIZER_MODE_IDS + ("garbage",):
-            assert next_visualizer_mode_id(current, enabled) == mode_id
-            resolved, _ = resolve_effective_mode(current, enabled)
+            assert next_visualizer_mode_id(current, activation) == mode_id
+            resolved, _ = resolve_effective_mode(current, activation)
             assert resolved == mode_id
 
 

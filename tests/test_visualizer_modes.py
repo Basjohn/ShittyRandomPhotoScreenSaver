@@ -1,7 +1,7 @@
 """
 Tests for Spotify Visualizer visualization modes.
 
-These tests verify the VisualizerMode enum and the five active registry modes.
+These tests verify the permanent audio-worker enum without collapsing isolated Sphere into it.
 """
 # ruff: noqa: E402
 from __future__ import annotations
@@ -37,7 +37,10 @@ class TestVisualizerModeEnum:
         modes = list(VisualizerMode)
         assert len(modes) == 5
         assert modes[0] == VisualizerMode.SPECTRUM
-        assert {m.name.lower() for m in modes} == set(VISUALIZER_MODE_IDS)
+        permanent_worker_ids = set(VISUALIZER_MODE_IDS) - {"sphere"}
+        assert {m.name.lower() for m in modes} == permanent_worker_ids
+        assert "sphere" in VISUALIZER_MODE_IDS
+        assert all(m.name.lower() != "sphere" for m in modes)
 
     def test_registry_default_mode_id_matches_canonical_default(self):
         """Verify the shared default-mode helper stays aligned with product defaults."""

@@ -205,6 +205,27 @@ class QuickDisplayWindow(QQuickWindow):
             self.display_identity_changed.emit(identity)
         return identity
 
+    def revalidate_bound_screen_geometry(self) -> QuickDisplayIdentity:
+        """Reapply authoritative screen geometry after a suspend/resume edge.
+
+        This is intentionally not a topology-rebinding API.  If Qt has rebound
+        the native window to another ``QScreen``, the existing ``screenChanged``
+        path owns binding loss and generation replacement.  When the same screen
+        remains authoritative, reapplying its geometry repairs a native window
+        that Windows displaced while the displays/system were asleep.
+        """
+
+        if self._binding_loss is not None or self._close_queued:
+            return self.display_identity
+        screen = self._bound_screen
+        if screen is None:
+            raise RuntimeError("Quick display window has no bound screen")
+        if self.screen() is not screen:
+            self._on_window_screen_changed(self.screen())
+            return self.display_identity
+        self._apply_screen_geometry(screen)
+        return self.refresh_display_identity()
+
     def describe_window_state(self) -> dict[str, Any]:
         rect = self.geometry()
         return {

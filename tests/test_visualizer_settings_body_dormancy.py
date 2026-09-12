@@ -1,4 +1,4 @@
-"""V5 Settings-body dormancy contract (pre-V5/V6 gate item 4).
+"""Current Settings-body dormancy contract.
 
 Proves the canonical lazy Settings-body ownership mechanism: opening Settings
 constructs no disabled/unselected mode bodies; selecting an enabled mode builds
@@ -15,13 +15,14 @@ from pathlib import Path
 
 import pytest
 
+from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
 from core.settings.visualizer_mode_body_host import (
     SETUP_PILL_ID,
     VisualizerModeBodyHost,
     visualizer_pill_model,
 )
 
-_DISABLED = ("oscilloscope", "sine_wave", "devcurve")
+_DISABLED = ("oscilloscope", "sine_wave", "devcurve", "sphere")
 
 
 class _Authority:
@@ -53,7 +54,9 @@ def _make_host(authority: _Authority, enabled, *, constructions, retirements):
         retirements.append(mode_id)
 
     return VisualizerModeBodyHost(
-        body_factory=factory, retire_body=retire, enabled_modes=enabled
+        body_factory=factory,
+        retire_body=retire,
+        mode_activation=build_visualizer_mode_activation(enabled),
     )
 
 
@@ -128,7 +131,7 @@ def test_disabling_mode_retires_body_without_losing_state():
     host.select("spectrum")
     original_state = dict(authority.state["spectrum"])
 
-    retired = host.set_enabled_modes(["bubble"])
+    retired = host.set_mode_activation(build_visualizer_mode_activation(("bubble",)))
 
     assert retired == ("spectrum",)
     assert retirements == ["spectrum"]
@@ -146,8 +149,8 @@ def test_reenable_reselect_reconstructs_from_preserved_state():
         constructions=constructions, retirements=[],
     )
     first_body = host.select("spectrum")
-    host.set_enabled_modes(["bubble"])            # spectrum disabled + retired
-    host.set_enabled_modes(["spectrum", "bubble"])  # spectrum re-enabled
+    host.set_mode_activation(build_visualizer_mode_activation(("bubble",)))            # spectrum disabled + retired
+    host.set_mode_activation(build_visualizer_mode_activation(("spectrum", "bubble")))  # spectrum re-enabled
 
     second_body = host.select("spectrum")
 
@@ -181,7 +184,10 @@ def test_save_load_serialization_constructs_no_body():
     _make_host(_authority(), ["spectrum", "bubble"], constructions=constructions, retirements=[])
 
     # A full settings round trip must not touch the body host at all.
-    payload = {"mode": "bubble", "enabled_modes": ["spectrum", "bubble"]}
+    payload = {
+        "mode": "bubble",
+        "mode_activation": build_visualizer_mode_activation(("spectrum", "bubble")),
+    }
     model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
     persisted = model.to_dict()
 
@@ -194,15 +200,17 @@ def test_save_load_serialization_constructs_no_body():
 
 
 def test_pill_model_is_setup_plus_enabled_in_canonical_order():
-    pills = visualizer_pill_model(["bubble", "spectrum"])
+    pills = visualizer_pill_model(
+        build_visualizer_mode_activation(("bubble", "spectrum"))
+    )
     assert pills[0] == (SETUP_PILL_ID, "Setup")
     # Canonical order (spectrum before bubble), disabled modes absent.
     assert [pid for pid, _label in pills[1:]] == ["spectrum", "bubble"]
     assert dict(pills)["spectrum"] == "Spectrum"
     assert dict(pills)["bubble"] == "Bubble"
-    # Absent selection -> every mode enabled (migration default).
+    # Absent persisted map resolves through canonical current defaults.
     assert [pid for pid, _ in visualizer_pill_model(None)[1:]] == [
-        "spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve",
+        "spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve", "sphere",
     ]
 
 

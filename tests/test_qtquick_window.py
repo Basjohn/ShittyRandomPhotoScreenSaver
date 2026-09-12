@@ -132,6 +132,7 @@ def test_quick_display_window_is_a_narrow_standalone_qwindow_owner():
         "queue_hide",
         "queue_close",
         "refresh_display_identity",
+        "revalidate_bound_screen_geometry",
         "describe_window_state",
     } <= methods
     assert "setPersistentGraphics(False)" in source

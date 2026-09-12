@@ -11,7 +11,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, Callable, List, Dict, Optional, Set, Mapping
-from PySide6.QtCore import QObject, Signal, QUrl
+from PySide6.QtCore import QObject, Signal, QUrl, Qt
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
 from core.logging.logger import (
@@ -66,6 +66,13 @@ from utils.lockfree.spsc_queue import SPSCQueue
 logger = get_logger(__name__)
 REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
 MONITOR_RECONCILE_DELAY_MS = 250
+MONITOR_TOPOLOGY_SCREEN_SIGNAL_NAMES = (
+    "geometryChanged",
+    "availableGeometryChanged",
+    "virtualGeometryChanged",
+    "logicalDotsPerInchChanged",
+    "physicalDotsPerInchChanged",
+)
 
 try:  # Windows-only bridge for ProgramData queue
     from core.windows import reddit_helper_bridge
@@ -224,6 +231,12 @@ class DisplayManager(QObject):
         self._monitor_detection_app = None
         self._monitor_detection_connected = False
         self._monitor_reconcile_pending = False
+        # A resume edge may arrive while another topology edge already owns the
+        # coalesced one-shot. Preserve that semantic intent independently of the
+        # first scheduling reason so same-signature native-window revalidation
+        # cannot be lost to event ordering.
+        self._monitor_resume_revalidation_pending = False
+        self._monitor_detection_screens: list[QScreen] = []
         self._screen_signature: tuple[tuple[object, ...], ...] = ()
         
         # Monitor hotplug detection
@@ -292,24 +305,97 @@ class DisplayManager(QObject):
                 )
     
     def _setup_monitor_detection(self) -> None:
-        """Setup monitor hotplug detection."""
+        """Setup event-driven monitor/topology detection.
+
+        ``screenAdded``/``screenRemoved`` are not sufficient on Windows sleep/wake:
+        Qt can keep the same ``QScreen`` wrapper while its geometry/DPI/virtual
+        desktop facts change, or resume with the same final signature after the
+        native fullscreen window was displaced.  Subscribe to Qt's existing
+        topology/metric/application-state edges and coalesce all of them through
+        the single monitor reconcile owner below.  There is no polling cadence.
+        """
+
         app = QGuiApplication.instance()
         if app:
-            # Connect to screen change signals
             app.screenAdded.connect(self._on_screen_added)
             app.screenRemoved.connect(self._on_screen_removed)
+            primary_changed = getattr(app, "primaryScreenChanged", None)
+            if primary_changed is not None:
+                primary_changed.connect(self._on_primary_screen_changed)
+            application_state_changed = getattr(app, "applicationStateChanged", None)
+            if application_state_changed is not None:
+                application_state_changed.connect(self._on_application_state_changed)
             self._monitor_detection_app = app
             self._monitor_detection_connected = True
-            
-            # Store initial screen count
+            self._sync_monitor_screen_connections()
+
+            # Store initial screen count/signature only after every live screen is
+            # subscribed, so a wake edge cannot land in a construction gap.
             self._screen_signature = self._current_screen_signature()
             self.screen_count = len(self._screen_signature)
             logger.info("Monitor detection enabled (%d screens)" % self.screen_count)
 
+    def _connect_monitor_screen(self, screen: QScreen) -> None:
+        if any(bound is screen for bound in self._monitor_detection_screens):
+            return
+        for name in MONITOR_TOPOLOGY_SCREEN_SIGNAL_NAMES:
+            try:
+                signal = getattr(screen, name, None)
+            except (RuntimeError, AttributeError):
+                signal = None
+            if signal is None:
+                continue
+            try:
+                signal.connect(self._on_screen_metrics_changed)
+            except (RuntimeError, TypeError, AttributeError):
+                logger.debug(
+                    "[DISPLAY_MANAGER] QScreen metric signal connect skipped signal=%s",
+                    name,
+                    exc_info=True,
+                )
+        self._monitor_detection_screens.append(screen)
+
+    def _disconnect_monitor_screen(self, screen: QScreen) -> None:
+        for name in MONITOR_TOPOLOGY_SCREEN_SIGNAL_NAMES:
+            try:
+                signal = getattr(screen, name, None)
+            except (RuntimeError, AttributeError):
+                signal = None
+            if signal is None:
+                continue
+            try:
+                signal.disconnect(self._on_screen_metrics_changed)
+            except (RuntimeError, TypeError, AttributeError):
+                pass
+        self._monitor_detection_screens = [
+            bound for bound in self._monitor_detection_screens if bound is not screen
+        ]
+
+    def _sync_monitor_screen_connections(self) -> None:
+        if not self._monitor_detection_connected:
+            return
+        try:
+            current = list(QGuiApplication.screens())
+        except Exception:
+            logger.debug(
+                "[DISPLAY_MANAGER] Failed to synchronize QScreen metric signals",
+                exc_info=True,
+            )
+            return
+        current_ids = {id(screen) for screen in current}
+        for screen in tuple(self._monitor_detection_screens):
+            if id(screen) not in current_ids:
+                self._disconnect_monitor_screen(screen)
+        for screen in current:
+            self._connect_monitor_screen(screen)
+
     def disconnect_monitor_detection(self) -> None:
-        """Detach this manager from application monitor signals before replacement."""
+        """Detach every manager-owned Qt topology edge before replacement."""
+
         app = self._monitor_detection_app
         if app is None or not self._monitor_detection_connected:
+            self._monitor_reconcile_pending = False
+            self._monitor_resume_revalidation_pending = False
             return
         try:
             app.screenAdded.disconnect(self._on_screen_added)
@@ -319,6 +405,25 @@ class DisplayManager(QObject):
             app.screenRemoved.disconnect(self._on_screen_removed)
         except Exception:
             logger.debug("[DISPLAY_MANAGER] screenRemoved disconnect skipped", exc_info=True)
+        for signal_name, callback in (
+            ("primaryScreenChanged", self._on_primary_screen_changed),
+            ("applicationStateChanged", self._on_application_state_changed),
+        ):
+            signal = getattr(app, signal_name, None)
+            if signal is None:
+                continue
+            try:
+                signal.disconnect(callback)
+            except Exception:
+                logger.debug(
+                    "[DISPLAY_MANAGER] %s disconnect skipped",
+                    signal_name,
+                    exc_info=True,
+                )
+        for screen in tuple(self._monitor_detection_screens):
+            self._disconnect_monitor_screen(screen)
+        self._monitor_reconcile_pending = False
+        self._monitor_resume_revalidation_pending = False
         self._monitor_detection_connected = False
         self._monitor_detection_app = None
 
@@ -352,12 +457,17 @@ class DisplayManager(QObject):
             dpr = round(float(dpr), 3)
         except Exception:
             dpr = 1.0
+        try:
+            primary = QGuiApplication.primaryScreen()
+        except Exception:
+            primary = None
         return (
             index,
             str(self._call_screen_attr(screen, "name", "")),
             str(self._call_screen_attr(screen, "manufacturer", "")),
             str(self._call_screen_attr(screen, "model", "")),
             str(self._call_screen_attr(screen, "serialNumber", "")),
+            bool(screen is primary),
             _geom_part(geometry),
             _geom_part(available),
             dpr,
@@ -382,6 +492,10 @@ class DisplayManager(QObject):
 
         if not self._monitor_detection_connected:
             return
+        if reason == "applicationStateChanged":
+            # Preserve resume semantics even when another edge (for example a
+            # QScreen metric change) scheduled the coalesced pass first.
+            self._monitor_resume_revalidation_pending = True
         if self._monitor_reconcile_pending:
             logger.debug("[DISPLAY_MANAGER] Monitor reconcile already pending reason=%s", reason)
             return
@@ -391,15 +505,25 @@ class DisplayManager(QObject):
 
         def _run() -> None:
             manager = manager_ref()
-            if manager is None or manager._retired:
+            if (
+                manager is None
+                or manager._retired
+                or not manager._monitor_detection_connected
+            ):
                 return
             manager._monitor_reconcile_pending = False
-            manager._reconcile_monitor_topology(reason)
+            resume_revalidation = manager._monitor_resume_revalidation_pending
+            manager._monitor_resume_revalidation_pending = False
+            manager._reconcile_monitor_topology(
+                reason,
+                resume_revalidation=resume_revalidation,
+            )
 
         _run._srpss_runtime_generation = self._runtime_generation
 
         if self._thread_manager is None or not hasattr(self._thread_manager, "single_shot"):
             self._monitor_reconcile_pending = False
+            self._monitor_resume_revalidation_pending = False
             logger.warning(
                 "[DISPLAY_MANAGER][FALLBACK] Monitor topology reconcile skipped: "
                 "ThreadManager single_shot unavailable"
@@ -410,22 +534,31 @@ class DisplayManager(QObject):
             self._thread_manager.single_shot(MONITOR_RECONCILE_DELAY_MS, _run)
         except Exception:
             self._monitor_reconcile_pending = False
+            self._monitor_resume_revalidation_pending = False
             logger.warning(
                 "[DISPLAY_MANAGER][FALLBACK] Monitor topology reconcile scheduling failed; "
                 "ThreadManager single_shot rejected the request",
                 exc_info=True,
             )
 
-    def _reconcile_monitor_topology(self, reason: str) -> None:
+    def _reconcile_monitor_topology(
+        self,
+        reason: str,
+        *,
+        resume_revalidation: bool = False,
+    ) -> None:
         if not self._monitor_detection_connected:
             logger.debug("[DISPLAY_MANAGER] Ignoring monitor reconcile after manager disconnect reason=%s", reason)
             return
 
+        self._sync_monitor_screen_connections()
         old_count = self.screen_count
         old_signature = self._screen_signature
         new_signature = self._current_screen_signature()
         new_count = len(new_signature)
         if new_count == old_count and new_signature == old_signature:
+            if resume_revalidation:
+                self._revalidate_quick_display_geometry_after_resume()
             logger.debug("[DISPLAY_MANAGER] Monitor reconcile no-op reason=%s count=%d", reason, new_count)
             return
 
@@ -440,6 +573,57 @@ class DisplayManager(QObject):
             new_signature,
         )
         self.monitors_changed.emit(new_count)
+
+    def _revalidate_quick_display_geometry_after_resume(self) -> None:
+        """Repair native Quick placement when resume keeps the same topology.
+
+        A suspend/resume can restore the same final ``QScreen`` signature while
+        leaving an existing borderless native window displaced across the virtual
+        desktop.  Reapply each runtime's already-authoritative bound ``QScreen``
+        geometry and then re-anchor retained content.  This is an event-edge
+        repair only; it does not create a timer or a second topology authority.
+        """
+
+        for unit in tuple(self.displays):
+            if not isinstance(unit, QuickDisplayUnit) or unit.is_retired:
+                continue
+            runtime = unit.runtime
+            if getattr(runtime, "binding_loss", None) is not None:
+                continue
+            window = runtime.window
+            revalidate = getattr(window, "revalidate_bound_screen_geometry", None)
+            if not callable(revalidate):
+                continue
+            try:
+                revalidate()
+                if getattr(runtime, "binding_loss", None) is not None:
+                    continue
+                unit.reanchor_for_current_bounds()
+            except Exception:
+                logger.warning(
+                    "[DISPLAY_MANAGER] Resume display revalidation failed screen=%s",
+                    unit.screen_index,
+                    exc_info=True,
+                )
+
+    def _on_screen_metrics_changed(self, *_args: object) -> None:
+        """Treat live QScreen metric changes as topology evidence, not local-only geometry."""
+
+        self._schedule_monitor_reconcile("screenMetricsChanged")
+
+    def _on_primary_screen_changed(self, _screen: QScreen | None) -> None:
+        self._sync_monitor_screen_connections()
+        self._schedule_monitor_reconcile("primaryScreenChanged")
+
+    def _on_application_state_changed(self, state: object) -> None:
+        # Only the transition back to an active application is a resume/recovery
+        # edge. Inactive/suspended transitions must not schedule redundant work.
+        if state != Qt.ApplicationState.ApplicationActive:
+            return
+        # Resume/activation is an event edge, not a cadence. If the signature
+        # changed the normal rebuild path runs; if it did not, the settled pass
+        # reapplies the authoritative bound-screen geometry once.
+        self._schedule_monitor_reconcile("applicationStateChanged")
 
     def _get_allowed_screen_indices(self, screen_count: int) -> set[int]:
         """Resolve which screen indices should create Quick display units.
@@ -505,11 +689,13 @@ class DisplayManager(QObject):
     def _on_screen_added(self, screen: QScreen) -> None:
         """Handle screen added event."""
         logger.info("Screen added: %s (%dx%d)" % (screen.name(), screen.geometry().width(), screen.geometry().height()))
+        self._connect_monitor_screen(screen)
         self._schedule_monitor_reconcile("screenAdded")
     
     def _on_screen_removed(self, screen: QScreen) -> None:
         """Handle screen removed event."""
         logger.info("Screen removed: %s" % screen.name())
+        self._disconnect_monitor_screen(screen)
         self._schedule_monitor_reconcile("screenRemoved")
 
     def _quick_window_policy(self) -> QuickWindowPolicy:
@@ -4246,6 +4432,7 @@ class DisplayManager(QObject):
         self._display_startup_ready_seen.clear()
         self._startup_desktop_seed_screens.clear()
         self._monitor_reconcile_pending = False
+        self._monitor_resume_revalidation_pending = False
         self._transition_work_pending = False
         self._reset_quick_transition_batch()
         self._transition_ready_queue = None

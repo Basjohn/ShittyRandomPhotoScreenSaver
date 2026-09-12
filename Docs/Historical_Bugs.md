@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -19,6 +19,7 @@ not automatic current architecture instructions.
 
 ## Active / Pending Acceptance Records
 
+- [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](Historical_Bugs/R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md) — **IMPLEMENTED / AWAITING PHYSICAL VALIDATION**.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
 
 No other R-series record is current implementation sequencing. Current migration work is owned by
@@ -30,6 +31,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](Historical_Bugs/R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md)
 - [R-78 — Particle Center-Outward Swirl Had A Radial Branch Cut](Historical_Bugs/R-78_Particle_Center_Outward_Swirl_Branch_Cut.md)
 - [R-77 — Post-Phase-I QWidget/runtime residue required coordinated retirement](Historical_Bugs/R-77_Post_Phase_I_QWidget_Runtime_Residue_Required_Coordinated_Retirement.md)
 - [R-74 — Quick Card Shadows Could Overpaint Sibling Widget Content](Historical_Bugs/R-74_Quick_Card_Shadow_Sibling_Subtree_Overpaint.md) — **IMPLEMENTED / AWAITING VALIDATION**. Production ordinary shadows now live in one display underlay below all ordinary cards.

@@ -1,7 +1,7 @@
-"""Pre-V5/V6 deepest request-admission gate at the DisplayManager seam.
+"""Deepest current request-admission gate at the DisplayManager seam.
 
 ``_request_quick_visualizer_mode`` must itself refuse a canonical, dev-active but
-*disabled* (not in ``enabled_modes``) mode for a normal runtime/UI request,
+*disabled* (false in ``mode_activation``) mode for a normal runtime/UI request,
 without routing to it or re-enabling it. An enabled mode must pass the guard into
 activation. Startup/stale-persisted substitution is handled separately by the
 startup resolver, not here.
@@ -13,6 +13,10 @@ from types import SimpleNamespace
 import pytest
 
 import core.settings.visualizer_presets as visualizer_presets
+from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
+    build_visualizer_mode_activation,
+)
 from engine.display_manager import DisplayManager
 
 
@@ -39,7 +43,7 @@ def _make_manager(section: dict, owner: _Owner) -> DisplayManager:
 
 def test_request_rejects_disabled_mode_without_activation():
     owner = _Owner()
-    section = {"mode": "spectrum", "enabled_modes": ["spectrum", "bubble"]}
+    section = {"mode": "spectrum", "mode_activation": build_visualizer_mode_activation(("spectrum", "bubble"))}
     mgr = _make_manager(section, owner)
 
     # oscilloscope is dev-active and canonical but NOT enabled -> rejected before
@@ -50,7 +54,7 @@ def test_request_rejects_disabled_mode_without_activation():
 
 def test_request_admits_enabled_mode_into_activation(monkeypatch):
     owner = _Owner()
-    section = {"mode": "spectrum", "enabled_modes": ["spectrum", "bubble"]}
+    section = {"mode": "spectrum", "mode_activation": build_visualizer_mode_activation(("spectrum", "bubble"))}
     mgr = _make_manager(section, owner)
 
     class _ReachedActivation(RuntimeError):
@@ -70,7 +74,7 @@ def test_request_admits_enabled_mode_into_activation(monkeypatch):
 
 
 def test_request_all_modes_enabled_default_admits_any_active_mode(monkeypatch):
-    # Absent enabled_modes -> every mode enabled (today's default): no gate
+    # Absent mode_activation -> canonical defaults (all enabled today): no gate
     # rejection for any dev-active mode.
     owner = _Owner()
     section = {"mode": "spectrum"}
@@ -85,6 +89,6 @@ def test_request_all_modes_enabled_default_admits_any_active_mode(monkeypatch):
         lambda _section: (_ for _ in ()).throw(_ReachedActivation()),
     )
 
-    for mode in ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"):
+    for mode in VISUALIZER_MODE_IDS:
         with pytest.raises(_ReachedActivation):
             mgr._request_quick_visualizer_mode(mode)
