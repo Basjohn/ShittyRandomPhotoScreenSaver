@@ -58,7 +58,6 @@ from PySide6.QtWidgets import (  # noqa: E402
     QAbstractItemView,
     QApplication,
     QCheckBox,
-    QColorDialog,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -130,6 +129,7 @@ from tools.foundry_chrome import (  # noqa: E402
     FoundryAppearanceDialog,
     FoundryTitleBar,
     apply_native_backdrop,
+    choose_foundry_qcolor,
     configure_frameless_window,
     resolve_tool_theme,
     save_tool_theme_id,
@@ -485,6 +485,9 @@ class ThemeFoundryWindow(QMainWindow):
 
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
+        # Match the labelled Theme/Name rows below instead of starting at the
+        # window edge.  The Widget Theme Foundry already uses this gutter.
+        toolbar.addSpacing(80)
         self.new_btn = QPushButton("New From Default")
         self.open_btn = QPushButton("Open Theme…")
         self.save_btn = QPushButton("Save")
@@ -1494,11 +1497,13 @@ class ThemeFoundryWindow(QMainWindow):
             self.tree.scrollToItem(target)
 
     def _choose_qcolor(self, initial: Rgba, title: str, *, alpha: bool = True) -> Rgba | None:
-        options = QColorDialog.ColorDialogOption.DontUseNativeDialog
-        if alpha:
-            options |= QColorDialog.ColorDialogOption.ShowAlphaChannel
-        chosen = QColorDialog.getColor(QColor(*initial.as_tuple()), self, title, options)
-        if not chosen.isValid():
+        chosen = choose_foundry_qcolor(
+            self,
+            QColor(*initial.as_tuple()),
+            title,
+            show_alpha=alpha,
+        )
+        if chosen is None:
             return None
         return Rgba(chosen.red(), chosen.green(), chosen.blue(), chosen.alpha())
 

@@ -12,9 +12,12 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QColorDialog,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -76,6 +79,10 @@ def configure_frameless_window(window: QWidget) -> None:
         | Qt.WindowType.WindowMinMaxButtonsHint
     )
     window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    # Keep the rounded central-widget border off the native window edge.  On
+    # fractional DPI a border painted flush to a translucent HWND is clipped at
+    # the corner arc before Qt can antialias it.
+    window.setContentsMargins(2, 2, 2, 2)
 
 
 class FoundryTitleBar(QFrame):
@@ -87,11 +94,14 @@ class FoundryTitleBar(QFrame):
         parent: QWidget,
         *,
         settings_callback: Callable[[], None] | None = None,
+        compact: bool = False,
+        allow_maximize: bool = True,
     ) -> None:
         super().__init__(parent)
         self._drag_offset = QPoint()
+        self._allow_maximize = bool(allow_maximize and not compact)
         self.setObjectName("toolTitleBar")
-        self.setFixedHeight(48)
+        self.setFixedHeight(48 if not compact else 44)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 0, 8, 0)
@@ -103,7 +113,7 @@ class FoundryTitleBar(QFrame):
         layout.addWidget(self.title_label)
         layout.addStretch(1)
 
-        if settings_callback is not None:
+        if not compact and settings_callback is not None:
             settings = QPushButton("⚙")
             settings.setObjectName("toolTitleSettingsButton")
             settings.setFixedSize(38, 30)
@@ -111,17 +121,20 @@ class FoundryTitleBar(QFrame):
             settings.clicked.connect(settings_callback)
             layout.addWidget(settings)
 
-        self.minimize_button = QPushButton("−")
-        self.minimize_button.setObjectName("toolTitleButton")
-        self.minimize_button.setFixedSize(40, 30)
-        self.minimize_button.clicked.connect(parent.showMinimized)
-        layout.addWidget(self.minimize_button)
+        self.minimize_button: QPushButton | None = None
+        self.maximize_button: QPushButton | None = None
+        if not compact:
+            self.minimize_button = QPushButton("−")
+            self.minimize_button.setObjectName("toolTitleButton")
+            self.minimize_button.setFixedSize(40, 30)
+            self.minimize_button.clicked.connect(parent.showMinimized)
+            layout.addWidget(self.minimize_button)
 
-        self.maximize_button = QPushButton("□")
-        self.maximize_button.setObjectName("toolTitleButton")
-        self.maximize_button.setFixedSize(40, 30)
-        self.maximize_button.clicked.connect(self.toggle_maximized)
-        layout.addWidget(self.maximize_button)
+            self.maximize_button = QPushButton("□")
+            self.maximize_button.setObjectName("toolTitleButton")
+            self.maximize_button.setFixedSize(40, 30)
+            self.maximize_button.clicked.connect(self.toggle_maximized)
+            layout.addWidget(self.maximize_button)
 
         self.close_button = QPushButton("×")
         self.close_button.setObjectName("toolTitleCloseButton")
@@ -130,13 +143,17 @@ class FoundryTitleBar(QFrame):
         layout.addWidget(self.close_button)
 
     def toggle_maximized(self) -> None:
+        if not self._allow_maximize:
+            return
         window = self.window()
         if window.isMaximized():
             window.showNormal()
-            self.maximize_button.setText("□")
+            if self.maximize_button is not None:
+                self.maximize_button.setText("□")
         else:
             window.showMaximized()
-            self.maximize_button.setText("❐")
+            if self.maximize_button is not None:
+                self.maximize_button.setText("❐")
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
@@ -161,7 +178,7 @@ class FoundryTitleBar(QFrame):
         super().mouseMoveEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
-        if event.button() == Qt.MouseButton.LeftButton:
+        if self._allow_maximize and event.button() == Qt.MouseButton.LeftButton:
             self.toggle_maximized()
             event.accept()
             return
@@ -185,21 +202,41 @@ class FoundryAppearanceDialog(QDialog):
         self.setObjectName("foundryPopup")
         self.setWindowModality(Qt.WindowModality.NonModal)
         self.setModal(False)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowFlag(Qt.WindowType.Tool, True)
-        self.resize(520, 170)
+        self.setWindowFlags(
+            Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.resize(560, 210)
+        self.setStyleSheet(owner.styleSheet())
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        panel = QFrame()
+        # Leave two physical pixels around the rounded shell.  Qt stylesheets do
+        # not clip child painting to a parent's border-radius, so flush children
+        # are the source of the chopped-corner artefacts the Foundries used to show.
+        outer.setContentsMargins(2, 2, 2, 2)
+        outer.setSpacing(0)
+        shell = QFrame(self)
+        shell.setObjectName("foundryPopupShell")
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(2, 2, 2, 2)
+        shell_layout.setSpacing(8)
+
+        title_bar = FoundryTitleBar(
+            "FOUNDRY APPEARANCE",
+            self,
+            compact=True,
+            allow_maximize=False,
+        )
+        shell_layout.addWidget(title_bar)
+
+        panel = QFrame(shell)
         panel.setObjectName("foundryPopupPanel")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setContentsMargins(18, 14, 18, 16)
         layout.setSpacing(10)
 
-        heading = QLabel("FOUNDRY APPEARANCE")
-        heading.setObjectName("popupTitle")
-        layout.addWidget(heading)
         note = QLabel(
             "Tool-local theme only. It uses the frozen Foundry theme catalogue and never changes SRPSS Settings."
         )
@@ -226,7 +263,8 @@ class FoundryAppearanceDialog(QDialog):
         close.clicked.connect(self.close)
         buttons.addWidget(close)
         layout.addLayout(buttons)
-        outer.addWidget(panel)
+        shell_layout.addWidget(panel)
+        outer.addWidget(shell)
 
         self.combo.currentIndexChanged.connect(self._selection_changed)
 
@@ -234,6 +272,78 @@ class FoundryAppearanceDialog(QDialog):
         theme_id = self.combo.currentData()
         if isinstance(theme_id, str) and theme_id:
             self._apply_theme(theme_id)
+
+
+def choose_foundry_qcolor(
+    owner: QWidget,
+    initial: QColor,
+    title: str,
+    *,
+    show_alpha: bool = True,
+) -> QColor | None:
+    """Show QColorDialog inside Foundry chrome instead of an unthemed native popup.
+
+    The picker is embedded as a widget in our own rounded shell.  Besides keeping
+    Widget/Theme Foundry popups on-theme, this avoids native child windows painting
+    across translucent rounded corners.
+    """
+
+    dialog = QDialog(owner)
+    dialog.setWindowTitle(title)
+    dialog.setObjectName("foundryPopup")
+    dialog.setWindowFlags(
+        Qt.WindowType.Tool
+        | Qt.WindowType.FramelessWindowHint
+        | Qt.WindowType.WindowStaysOnTopHint
+    )
+    dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    dialog.resize(720, 560)
+    dialog.setStyleSheet(owner.styleSheet())
+
+    outer = QVBoxLayout(dialog)
+    outer.setContentsMargins(2, 2, 2, 2)
+    outer.setSpacing(0)
+    shell = QFrame(dialog)
+    shell.setObjectName("foundryPopupShell")
+    shell_layout = QVBoxLayout(shell)
+    shell_layout.setContentsMargins(2, 2, 2, 2)
+    shell_layout.setSpacing(8)
+
+    title_bar = FoundryTitleBar(
+        title.upper(),
+        dialog,
+        compact=True,
+        allow_maximize=False,
+    )
+    shell_layout.addWidget(title_bar)
+
+    panel = QFrame(shell)
+    panel.setObjectName("foundryPopupPanel")
+    panel_layout = QVBoxLayout(panel)
+    panel_layout.setContentsMargins(12, 10, 12, 12)
+    panel_layout.setSpacing(10)
+
+    picker = QColorDialog(initial, dialog)
+    picker.setObjectName("foundryColorPicker")
+    picker.setWindowFlags(Qt.WindowType.Widget)
+    picker.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
+    picker.setOption(QColorDialog.ColorDialogOption.NoButtons, True)
+    picker.setOption(QColorDialog.ColorDialogOption.ShowAlphaChannel, bool(show_alpha))
+    panel_layout.addWidget(picker, 1)
+
+    buttons = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+    )
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    panel_layout.addWidget(buttons)
+    shell_layout.addWidget(panel, 1)
+    outer.addWidget(shell, 1)
+
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    chosen = picker.currentColor()
+    return chosen if chosen.isValid() else None
 
 
 def apply_native_backdrop(window: QWidget, resolution: FoundryThemeResolution) -> bool:
@@ -276,6 +386,7 @@ __all__ = [
     "FoundryAppearanceDialog",
     "FoundryTitleBar",
     "apply_native_backdrop",
+    "choose_foundry_qcolor",
     "configure_frameless_window",
     "load_tool_theme_id",
     "resolve_tool_theme",

@@ -933,8 +933,8 @@ class DefaultSettingsEditor(QMainWindow):
         root.setObjectName("defaultsFoundryRoot")
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(10)
 
         self.title_bar = FoundryTitleBar(
             "DEFAULTS FOUNDRY",
@@ -1147,7 +1147,12 @@ class DefaultSettingsEditor(QMainWindow):
             item.setText(3, self._origin_for(path))
             item.setIcon(1, _color_icon(value) if _is_color_setting(path, value) else QIcon())
             initial = get_path(self._initial_models[self._profile], path, _MISSING)
-            item.setForeground(1, QColor("#f4c66d") if value != initial else QColor("#edf1ed"))
+            item.setForeground(
+                1,
+                self._theme_qcolor("popup.icon.warning")
+                if value != initial
+                else self._theme_qcolor("control.list.text"),
+            )
         finally:
             self._building_tree = False
         self._set_status(f"Unsaved change: {'.'.join(path)}")
