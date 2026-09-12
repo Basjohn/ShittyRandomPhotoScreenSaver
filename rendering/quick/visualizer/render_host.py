@@ -16,6 +16,27 @@ from .telemetry import (
 )
 
 
+def create_lifecycle_telemetry_if_admitted() -> (
+    VisualizerRenderHostLifecycleTelemetry | None
+):
+    """Allocate render-host lifecycle telemetry only when opt-in admitted.
+
+    The switch/resource ownership telemetry (P1) is a diagnostic experiment, not
+    a runtime feature: without ``--viz-switch-telemetry`` or ``--abc-drive`` the
+    process admission is disabled and this returns ``None``, so Standard/MC
+    runtime allocates no telemetry object, takes no new lock, and keeps no new
+    bookkeeping. Tests/tools inject a telemetry object directly instead of
+    depending on process argv.
+    """
+    from core.diagnostics.experiment_flags import (
+        visualizer_switch_telemetry_admitted,
+    )
+
+    if visualizer_switch_telemetry_admitted():
+        return VisualizerRenderHostLifecycleTelemetry()
+    return None
+
+
 def _int_state(name: int) -> int:
     value = gl.glGetIntegerv(name)
     try:
@@ -102,23 +123,48 @@ class _InheritedGlState:
 class QuickVisualizerRenderHost:
     """Own one shared quad and resolve only the current mode implementation."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        lifecycle_telemetry: VisualizerRenderHostLifecycleTelemetry | None = None,
+    ) -> None:
         self._quad_vao = 0
         self._quad_vbo = 0
         self._implementations: dict[str, QuickVisualizerRenderer] = {}
         self._last_render_mode_id: str | None = None
-        self._lifecycle = VisualizerRenderHostLifecycleTelemetry()
+        # Opt-in only: injected telemetry (tests/tools) wins; otherwise consult
+        # the process experiment admission. ``None`` == disabled == no new
+        # allocation/lock/bookkeeping for ordinary Standard/MC runtime.
+        self._lifecycle: VisualizerRenderHostLifecycleTelemetry | None = (
+            lifecycle_telemetry
+            if lifecycle_telemetry is not None
+            else create_lifecycle_telemetry_if_admitted()
+        )
 
-    def lifecycle_snapshot(self) -> VisualizerRenderHostLifecycleSnapshot:
-        """Boundary-only ownership facts; reading mutates/renders/releases nothing."""
+    @property
+    def lifecycle_telemetry_enabled(self) -> bool:
+        """True only when opt-in switch/resource telemetry is admitted."""
+        return self._lifecycle is not None
+
+    def lifecycle_snapshot(self) -> VisualizerRenderHostLifecycleSnapshot | None:
+        """Boundary-only ownership facts, or ``None`` when telemetry is disabled.
+
+        Reading mutates/renders/releases nothing. ``None`` means the opt-in
+        telemetry was never admitted, so no snapshot exists to surface.
+        """
+        if self._lifecycle is None:
+            return None
         return self._lifecycle.snapshot()
 
     def _record_ownership(self) -> None:
         """Capture already-owned ownership facts at an existing boundary.
 
         No ``glGet*`` queries: the quad booleans and per-implementation
-        ``has_resources`` are host-side facts already tracked in Python.
+        ``has_resources`` are host-side facts already tracked in Python. A no-op
+        when telemetry is disabled.
         """
+        if self._lifecycle is None:
+            return
         self._lifecycle.note_ownership(
             resolved_mode_ids=tuple(sorted(self._implementations)),
             resolved_has_resources=tuple(
@@ -157,8 +203,11 @@ class QuickVisualizerRenderHost:
         # is legal.  Retire every previously resolved inactive implementation
         # before lazily resolving the new one.  Lifecycle telemetry advances only
         # on this real boundary, never on ordinary same-mode frames.
+        # ``mode_changed`` already gates the existing retirement path; guarding
+        # the telemetry note behind it (short-circuit) adds no per-frame branch,
+        # only a boundary-time None check when a switch actually happens.
         mode_changed = mode_id != self._last_render_mode_id
-        if mode_changed:
+        if mode_changed and self._lifecycle is not None:
             self._lifecycle.note_mode_boundary(mode_id)
         if mode_changed or len(self._implementations) > 1:
             self.release_inactive_implementations(mode_id)
@@ -170,7 +219,8 @@ class QuickVisualizerRenderHost:
                     f"Quick visualizer renderer is not registered: {mode_id}"
                 )
             self._implementations[mode_id] = implementation
-            self._lifecycle.note_resolve(mode_id)
+            if self._lifecycle is not None:
+                self._lifecycle.note_resolve(mode_id)
         self._ensure_quad()
         if mode_changed:
             self._record_ownership()
@@ -240,12 +290,13 @@ class QuickVisualizerRenderHost:
                 successes += 1
         # A failed release stays accounted as a failure and a retained renderer;
         # it is never silently dropped from the ownership snapshot.
-        self._lifecycle.note_inactive_release(
-            attempts=len(inactive),
-            successes=successes,
-            failures=len(errors),
-            error=(" | ".join(errors) if errors else None),
-        )
+        if self._lifecycle is not None:
+            self._lifecycle.note_inactive_release(
+                attempts=len(inactive),
+                successes=successes,
+                failures=len(errors),
+                error=(" | ".join(errors) if errors else None),
+            )
         self._record_ownership()
         if errors:
             raise RuntimeError(
@@ -276,9 +327,10 @@ class QuickVisualizerRenderHost:
             gl.glDeleteVertexArrays(1, [self._quad_vao])
         self._quad_vao = 0
         self._last_render_mode_id = None
-        self._lifecycle.note_full_release(
-            error=(" | ".join(errors) if errors else None)
-        )
+        if self._lifecycle is not None:
+            self._lifecycle.note_full_release(
+                error=(" | ".join(errors) if errors else None)
+            )
         self._record_ownership()
         if errors:
             raise RuntimeError(
