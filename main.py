@@ -755,6 +755,9 @@ def main(*, entrypoint: str = "main"):
             parse_experiment_flags(sys.argv)
         )
         if _experiment_flags.lifecycle_telemetry_admitted:
+            from core.diagnostics.visualizer_attribution import enable_if_admitted
+
+            enable_if_admitted()  # allocate opt-in presentation attribution counters
             logger.info(
                 "[DIAG] Visualizer switch telemetry admitted (abc_drive=%s, "
                 "viz_switch_telemetry=%s)",

@@ -15,6 +15,7 @@ from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 from shiboken6 import isValid as _is_valid_qobject
 
+from core.diagnostics import visualizer_attribution as _viz_attr
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.visualizer_mode_registry import VisualizerShellPolicy
 from rendering.custom_layout_session import (
@@ -1563,6 +1564,10 @@ class QuickSceneController(QObject):
         item = self._visualizer_item
         if item is None:
             return False
+        # Opt-in P4 attribution: one retained item present request from a fresh
+        # publication (this is the item.update() caused by a publication, counted
+        # separately from fallback window.update()s and scene-graph invalidation).
+        _viz_attr.note_present_request()
         item.update()
         return True
 
@@ -1929,6 +1934,7 @@ class QuickSceneController(QObject):
         self._perf_window_dt_max_ms = 0.0
 
     def _on_frame_swapped(self) -> None:
+        _viz_attr.note_frame_swap()  # opt-in P4 attribution: one presented frame
         self._update_perf_hud_on_swap()
         snapshot = self._telemetry.snapshot()
         # A rendered migration proof/empty clear is not an intentional product
