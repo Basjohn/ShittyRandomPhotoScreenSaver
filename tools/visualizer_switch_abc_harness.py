@@ -69,7 +69,10 @@ from pathlib import Path
 
 # --- investigation thresholds (challengeable; not product SLAs) -------------
 MIN_SCORED_SECONDS = 60.0        # a scored window must cover at least this long
-MIN_EVENTLOOP_SAMPLES = 10       # and carry at least this many event-loop summaries
+# The event-loop recorder emits one summary every ~15 s, so a settled 120 s window
+# carries ~8. Require 5 (margin below 8) so a genuinely stalled recorder still
+# fails closed, without rejecting a healthy window for the normal cadence.
+MIN_EVENTLOOP_SAMPLES = 5
 BUCKET_SECONDS = 20.0            # persistence bucket granularity
 PERSIST_SECONDS = 60.0           # a regression must persist at least this long
 P99_ABS_MS = 2.0                 # event-loop p99 absolute worsening floor
@@ -126,8 +129,10 @@ def run_contention(workers: int, seconds: float) -> int:
 # Log-line grammar (matches the app's real diagnostic output).
 # ---------------------------------------------------------------------------
 
-# Standard logging timestamp prefix, e.g. "2026-09-12 00:19:03,123".
-_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})[,.](\d{3})")
+# Logging timestamp prefix. The app's file handlers format seconds-precision
+# ("2026-09-12 15:04:41 - logger - INFO - ..."); the millisecond fraction is
+# optional so both that and "…03,123" forms parse.
+_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:[,.](\d{3}))?")
 # core/performance/event_loop_recorder.py summary line.
 _EVENTLOOP_RE = re.compile(
     r"late_p50_ms=(?P<p50>[-\d.]+) late_p90_ms=(?P<p90>[-\d.]+) "
@@ -163,7 +168,8 @@ def _line_epoch(line: str) -> float | None:
         return None
     try:
         base = time.mktime(time.strptime(match.group(1), "%Y-%m-%d %H:%M:%S"))
-        return base + int(match.group(2)) / 1000.0
+        millis = match.group(2)
+        return base + (int(millis) / 1000.0 if millis else 0.0)
     except (ValueError, OverflowError):
         return None
 

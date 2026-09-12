@@ -159,8 +159,12 @@ class VisualizerSwitchAbcDriver(QObject):
     # -- markers ---------------------------------------------------------------
 
     def _mark(self, phase: str, state: str) -> None:
+        # The [PERF] tag co-locates these scored markers with the event-loop /
+        # PERF_HUD / integration metric plane in screensaver_perf.log, so the
+        # offline scorer reads markers and metrics from one file. The harness
+        # matches [ABC] via search(), so the prefix is transparent to it.
         logger.info(
-            "[ABC] condition=%s phase=%s state=%s epoch=%.3f runtime_generation=%s",
+            "[PERF] [ABC] condition=%s phase=%s state=%s epoch=%.3f runtime_generation=%s",
             self._condition,
             phase,
             state,
@@ -170,7 +174,7 @@ class VisualizerSwitchAbcDriver(QObject):
 
     def _mark_invalid(self, reason: str) -> None:
         logger.error(
-            "[ABC] condition=%s INVALID reason=%s epoch=%.3f runtime_generation=%s",
+            "[PERF] [ABC] condition=%s INVALID reason=%s epoch=%.3f runtime_generation=%s",
             self._condition,
             reason,
             time.time(),
