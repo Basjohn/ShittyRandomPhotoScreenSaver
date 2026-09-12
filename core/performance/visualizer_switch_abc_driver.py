@@ -85,6 +85,7 @@ class VisualizerSwitchAbcDriver(QObject):
         mode_enabled: Callable[[str], bool],
         custom_baseline_ok: Callable[[], bool],
         owner_healthy: Callable[[], bool],
+        await_baseline: Callable[[Callable[[], None]], None],
         watch_recreation: Callable[[int | None, Callable[[int | None], None]], None],
         on_complete: Callable[[dict], None] | None = None,
         exposure_sequence: Sequence[str] = EXPOSURE_SEQUENCE,
@@ -108,6 +109,7 @@ class VisualizerSwitchAbcDriver(QObject):
         self._mode_enabled = mode_enabled
         self._custom_baseline_ok = custom_baseline_ok
         self._owner_healthy = owner_healthy
+        self._await_baseline = await_baseline
         self._watch_recreation = watch_recreation
         self._on_complete = on_complete
         self._settle_mode = str(settle_mode).strip().lower()
@@ -124,6 +126,7 @@ class VisualizerSwitchAbcDriver(QObject):
         self._phase = _Phase.IDLE
         self._done = False
         self._generation_before: int | None = None
+        self._baseline_token = 0
         self._recreate_token = 0
         self._recreate_next: Callable[[], None] | None = None
         self._switch_token = 0
@@ -153,8 +156,44 @@ class VisualizerSwitchAbcDriver(QObject):
             self._hold_ms / 1000.0,
         )
         self._mark("driver", "start")
-        # Every condition begins with a verified baseline recreation.
-        self._begin_recreation(self._after_baseline, purpose="baseline")
+        # The saved layout (slot 1) is already the prepped, live baseline at launch,
+        # so no baseline slot-load/recreation is needed or wanted: just wait for the
+        # rebuilt owner to settle on the intended CUSTOM Bubble, then proceed. Only
+        # condition C loads the slot later, as its recreation intervention.
+        self._begin_baseline_wait()
+
+    def _begin_baseline_wait(self) -> None:
+        self._baseline_token += 1
+        token = self._baseline_token
+        self._mark("baseline", "wait")
+        self._await_baseline(lambda: self._on_baseline_ready(token))
+        self._schedule_impl(
+            self._recreate_timeout_ms,
+            "baseline_watchdog",
+            lambda: self._on_baseline_watchdog(token),
+        )
+
+    def _on_baseline_watchdog(self, token: int) -> None:
+        if token != self._baseline_token or self._done:
+            return
+        self._invalidate("CUSTOM Bubble baseline did not become ready (watchdog)")
+
+    def _on_baseline_ready(self, token: int) -> None:
+        if token != self._baseline_token or self._done:
+            return
+        self._baseline_token += 1  # invalidate the pending watchdog
+        # Defensive re-verification of the settled baseline the wait reported.
+        if (self._active_mode() or "").strip().lower() != self._settle_mode:
+            self._invalidate(f"baseline is not Bubble (mode={self._active_mode()})")
+            return
+        if not bool(self._custom_baseline_ok()):
+            self._invalidate("required CUSTOM Bubble baseline unavailable")
+            return
+        if not bool(self._owner_healthy()):
+            self._invalidate("visualizer owner/source unhealthy at baseline")
+            return
+        self._mark("baseline", "verified")
+        self._after_baseline()
 
     # -- markers ---------------------------------------------------------------
 
@@ -472,47 +511,77 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
         controller = getattr(owner, "controller", None)
         return controller is not None and getattr(controller, "mode_id", None) is not None
 
-    def _watch_recreation(generation_before, on_ready: Callable[[int | None], None]) -> None:
-        # Observe the existing fenced-reload readiness seam. A saved-layout reload
-        # rebuilds the runtime and emits ``displays_ready`` ("ready for image
-        # replay") once the new generation's QML root is created and admission is
-        # open; ``authoritative_first_frames_ready`` only fires after a full image
-        # display cycle, which a reload does not always trigger, so it is a weaker
-        # secondary trigger. Either signal is only the trigger — the runtime
-        # generation is the truth: accept once it has actually advanced past the
-        # pre-load generation, which also ignores any pre-reload readiness emit.
-        display_manager = _dm()
-        if display_manager is None:
-            return
-        signals = [
-            sig
-            for name in ("displays_ready", "authoritative_first_frames_ready")
-            for sig in (getattr(display_manager, name, None),)
-            if sig is not None
-        ]
-        if not signals:
-            return
+    def _await_baseline(on_ready: Callable[[], None]) -> None:
+        # The prepped slot-1 CUSTOM Bubble is the live baseline at launch; no load
+        # is performed. Wait (bounded one-shot) for the freshly built owner to
+        # settle on Bubble with CUSTOM active, then fire once. Stops on success;
+        # on timeout the driver's baseline watchdog fails the run closed.
+        from PySide6.QtCore import QTimer
 
-        state = {"fired": False}
+        poll_ms = 250
+        max_ms = 28_000
+        state = {"fired": False, "elapsed_ms": 0}
+        timer = QTimer(app)
+        timer.setInterval(poll_ms)
 
-        def _slot(_value=None):
+        def _check() -> None:
             if state["fired"]:
+                timer.stop()
                 return
-            current = _runtime_generation()
-            if current is None:
-                return
-            if generation_before is not None and current == int(generation_before):
-                return  # rebuild not committed yet / pre-reload readiness
-            state["fired"] = True
-            for sig in signals:
-                try:
-                    sig.disconnect(_slot)
-                except (RuntimeError, TypeError):
-                    pass
-            on_ready(current)
+            state["elapsed_ms"] += poll_ms
+            if _owner_healthy() and _active_mode() == "bubble" and _custom_baseline_ok():
+                state["fired"] = True
+                timer.stop()
+                on_ready()
+            elif state["elapsed_ms"] >= max_ms:
+                timer.stop()
 
-        for sig in signals:
-            sig.connect(_slot)
+        timer.timeout.connect(_check)
+        timer.start()
+
+    def _watch_recreation(generation_before, on_ready: Callable[[int | None], None]) -> None:
+        # The fenced saved-layout reload DESTROYS and recreates the whole
+        # DisplayManager (engine.display_manager = None -> new DisplayManager(...)),
+        # and the engine exposes no generation-ready signal. A signal connected to
+        # the pre-reload manager therefore cannot survive to report the rebuild.
+        # Observe readiness on the freshly-installed manager instead, via a bounded
+        # one-shot poll of the EXISTING runtime-generation counter (read lazily so
+        # it resolves to the new manager): fire once the generation has advanced
+        # past the pre-load value AND the rebuilt owner is the settled CUSTOM
+        # Bubble baseline. This is not a steady-state cadence and not a second
+        # lifecycle authority — it is a bounded post-reload settle check that stops
+        # on success, leaving the driver's own recreate watchdog to fail closed.
+        from PySide6.QtCore import QTimer
+
+        poll_ms = 250
+        max_ms = 28_000  # just under the driver's recreate watchdog
+        state = {"fired": False, "elapsed_ms": 0}
+        timer = QTimer(app)
+        timer.setInterval(poll_ms)
+
+        def _check() -> None:
+            if state["fired"]:
+                timer.stop()
+                return
+            state["elapsed_ms"] += poll_ms
+            current = _runtime_generation()
+            advanced = current is not None and (
+                generation_before is None or current != int(generation_before)
+            )
+            if (
+                advanced
+                and _owner_healthy()
+                and _active_mode() == "bubble"
+                and _custom_baseline_ok()
+            ):
+                state["fired"] = True
+                timer.stop()
+                on_ready(current)
+            elif state["elapsed_ms"] >= max_ms:
+                timer.stop()  # let the driver's recreate watchdog fail the run closed
+
+        timer.timeout.connect(_check)
+        timer.start()
 
     def _on_complete(result: dict) -> None:
         code = 0 if result.get("valid") else 3
@@ -541,6 +610,7 @@ def install_abc_driver_if_enabled(engine, app, *, layout_slot: str = "1"):
         mode_enabled=_mode_enabled,
         custom_baseline_ok=_custom_baseline_ok,
         owner_healthy=_owner_healthy,
+        await_baseline=_await_baseline,
         watch_recreation=_watch_recreation,
         on_complete=_on_complete,
         parent=app,
