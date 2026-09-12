@@ -20,10 +20,12 @@ from rendering.quick.widgets.family_binder import (
     AbandonmentIssuesFamilyAdapter,
     AchievementPulseFamilyAdapter,
     ClockFamilyAdapter,
+    FriendPulseFamilyAdapter,
     GmailFamilyAdapter,
     MediaFamilyAdapter,
     OrdinaryFamilyPresentationBinder,
     RedditFamilyAdapter,
+    SystemStatsFamilyAdapter,
     WeatherFamilyAdapter,
     default_ordinary_family_adapters,
 )
@@ -195,7 +197,8 @@ def test_clock_adapter_enumerates_enabled_instances_without_qt() -> None:
 
 def test_default_adapter_set_covers_every_wired_family_without_qt() -> None:
     families = [adapter.family_id for adapter in default_ordinary_family_adapters()]
-    # Two Steam-family instances share the one capability family id.
+    # Three Steam-card adapters share the capability id; System Stats is a
+    # distinct dev-gated family.
     assert families == [
         "clocks",
         "weather",
@@ -204,7 +207,64 @@ def test_default_adapter_set_covers_every_wired_family_without_qt() -> None:
         "gmail",
         "steam",
         "steam",
+        "steam",
+        "system_stats",
     ]
+
+
+@pytest.mark.parametrize(
+    ("adapter", "widget_id"),
+    (
+        (FriendPulseFamilyAdapter(), "friend_pulse"),
+        (SystemStatsFamilyAdapter(), "system_stats"),
+    ),
+)
+def test_new_service_backed_adapters_retire_owner_if_qml_construction_fails(
+    adapter,
+    widget_id,
+) -> None:
+    class _RuntimeManager:
+        def __init__(self) -> None:
+            self.owned = False
+            self.retired: list[str] = []
+
+        def has_runtime_service(self, candidate: str) -> bool:
+            return candidate == widget_id
+
+        def ensure_widget_service(self, candidate, model, config):
+            del config
+            assert candidate == widget_id
+            service = object()
+            model.set_runtime_service(service)
+            self.owned = True
+            return service
+
+        def retire_widget_service(self, candidate: str) -> bool:
+            assert candidate == widget_id
+            self.owned = False
+            self.retired.append(candidate)
+            return True
+
+    class _FailingHost:
+        def create_family_widget(self, *_args, **_kwargs):
+            raise RuntimeError("fixture QML construction failure")
+
+    manager = _RuntimeManager()
+    with pytest.raises(RuntimeError, match="fixture QML construction failure"):
+        adapter.build(
+            widget_id=widget_id,
+            widgets_config={},
+            host=_FailingHost(),
+            geometry=_geometry_resolver(widget_id),
+            display_bounds=_DISPLAY_BOUNDS,
+            display_identity="screen:a",
+            shadow_values=require_canonical_default("widgets.shadows"),
+            runtime_manager=manager,
+            runtime_generation=501,
+        )
+
+    assert manager.owned is False
+    assert manager.retired == [widget_id]
 
 
 def test_reddit_adapter_enumerates_both_members_without_qt() -> None:

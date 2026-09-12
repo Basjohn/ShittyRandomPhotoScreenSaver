@@ -1,7 +1,8 @@
 """Cache-first, bounded Friend Pulse source preparation.
 
-No Qt/runtime/timer ownership lives here.  All writes are sanitized before they
-reach the generic account-private cache envelope.
+No Qt/runtime/timer ownership lives here. All writes are normalized before they
+reach the account-private cache envelope; validated Steam IDs remain private
+cache/runtime data and are stripped before presentation projection.
 """
 from __future__ import annotations
 
@@ -39,7 +40,7 @@ def load_friend_pulse_cache_snapshot(
     now: float | None = None,
     previous: FriendPulseSnapshot | None = None,
 ) -> FriendPulseSnapshot:
-    """Load only already-sanitized cache records; no credential/network work."""
+    """Load only already-normalized private cache records; no network work."""
 
     friend = read_cache_record(cache_path_for_profile_key(profile_key, FRIEND_LIST_CACHE_KEY, profile=profile, root=root))
     summaries = read_cache_record(cache_path_for_profile_key(profile_key, PLAYER_SUMMARIES_CACHE_KEY, profile=profile, root=root))
@@ -57,7 +58,7 @@ def refresh_friend_pulse_cache(
     force: bool = False,
     previous: FriendPulseSnapshot | None = None,
 ) -> FriendPulseSnapshot:
-    """Fetch FriendList then bounded PlayerSummaries batches, cache sanitized data."""
+    """Fetch FriendList then bounded PlayerSummaries batches and cache normalized data."""
 
     reference_now = time.time() if now is None else float(now)
     profile_key = derive_profile_cache_key(credential.profile_identifier)
@@ -68,9 +69,9 @@ def refresh_friend_pulse_cache(
     if not friend.ok:
         cached = load_friend_pulse_cache_snapshot(profile_key=profile_key, profile=profile, root=root, now=reference_now, previous=previous)
         return cached if cached.usable else build_friend_pulse_snapshot(friend_result=friend, summaries_result=None, now=reference_now, previous=previous)
-    # A fresh FriendList response is raw only in this stack frame.  A cache hit
-    # is already sanitized and therefore cannot (and must not) be turned back
-    # into request identifiers; use its existing sanitized summaries instead.
+    # A fresh FriendList response drives a matching summaries refresh. A cache
+    # hit is already a coherent normalized pair, so reuse its cached summaries
+    # rather than manufacturing extra network work from the cached identifiers.
     live_ids = friend_ids_from_payload(friend.payload or {})
     if not live_ids and friend.from_cache:
         summaries = read_cache_record(cache_path_for_profile_key(profile_key, PLAYER_SUMMARIES_CACHE_KEY, profile=profile, root=root))

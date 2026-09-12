@@ -16,6 +16,8 @@ Item {
     property string label: ""
     property url logoSource: ""
     property bool logoDesaturated: false
+    property bool logoTintEnabled: false
+    property color logoTintColor: "white"
     property bool interactionEnabled: false
 
     property color fillColor: "transparent"
@@ -114,9 +116,12 @@ Item {
                 fillMode: Image.PreserveAspectFit
                 asynchronous: false
                 cache: true
-                layer.enabled: header.logoDesaturated || header.textShadowEnabled
+                layer.enabled: header.logoDesaturated || header.logoTintEnabled
+                    || header.textShadowEnabled
                 layer.effect: MultiEffect {
                     saturation: header.logoDesaturated ? -1.0 : 0.0
+                    colorization: header.logoTintEnabled ? 1.0 : 0.0
+                    colorizationColor: header.logoTintColor
                     shadowEnabled: header.textShadowEnabled
                     shadowColor: header.textShadowColor
                     shadowOpacity: 1.0

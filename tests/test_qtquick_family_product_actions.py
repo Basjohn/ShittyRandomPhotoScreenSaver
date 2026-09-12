@@ -4,8 +4,10 @@ import pytest
 
 from core.widget_product_actions import (
     dispatch_reddit_url_product_action,
+    dispatch_steam_link_product_action,
     update_clock_display_mode_override,
 )
+from core.steam.links import store_target
 
 
 def test_clock_override_updates_only_target_display_and_preserves_shared_baseline():
@@ -107,6 +109,45 @@ def test_reddit_failed_open_does_not_exit_and_empty_url_is_rejected():
         interactive_build=False,
     )
     assert len(attempts) == 1
+    assert exits == []
+
+
+@pytest.mark.parametrize("interactive", [False, True])
+def test_steam_action_opens_once_and_only_exits_ordinary_saver(interactive):
+    target = store_target(620)
+    opened = []
+    exits = []
+    assert target is not None
+
+    assert dispatch_steam_link_product_action(
+        target,
+        opener=lambda value: opened.append(value) or True,
+        request_saver_exit=lambda: exits.append("exit"),
+        interactive_build=interactive,
+    )
+    assert opened == [target]
+    assert exits == ([] if interactive else ["exit"])
+
+
+def test_failed_or_invalid_steam_action_never_exits():
+    target = store_target(620)
+    attempts = []
+    exits = []
+    assert target is not None
+
+    assert not dispatch_steam_link_product_action(
+        target,
+        opener=lambda value: attempts.append(value) or False,
+        request_saver_exit=lambda: exits.append("exit"),
+        interactive_build=False,
+    )
+    assert not dispatch_steam_link_product_action(
+        None,
+        opener=lambda value: attempts.append(value) or True,
+        request_saver_exit=lambda: exits.append("exit"),
+        interactive_build=False,
+    )
+    assert attempts == [target]
     assert exits == []
 
     assert not dispatch_reddit_url_product_action(

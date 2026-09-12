@@ -1,4 +1,5 @@
-"""Safe Steam asset cache helpers for future card artwork/avatar use."""
+"""Safe Steam asset cache helpers for retained card artwork and avatars."""
+
 from __future__ import annotations
 
 import hashlib
@@ -176,7 +177,9 @@ def prepare_desaturated_steam_artwork(
     tmp_path = output_path.with_name(f"{output_path.name}.tmp")
     try:
         with Image.open(source_path) as image:
-            prepared = ImageEnhance.Color(image.convert("RGBA")).enhance(1.0 - strength / 100.0)
+            prepared = ImageEnhance.Color(image.convert("RGBA")).enhance(
+                1.0 - strength / 100.0
+            )
             prepared.save(tmp_path, format="PNG", optimize=True)
         tmp_path.replace(output_path)
         return output_path
@@ -227,6 +230,44 @@ def fetch_steam_achievement_icon(
     )
 
 
+def fetch_steam_avatar(
+    *,
+    cache_dir: Path,
+    url: str,
+    fetcher: Callable[[str], bytes] | None = None,
+) -> SteamAssetRecord | SteamResult:
+    """Load one allowlisted Steam avatar into the account-private asset cache.
+
+    The caller owns the opaque friend identity and must never use it in the
+    cache name.  This helper fingerprints the source URL just like existing
+    Steam artwork helpers and returns a local path only.
+    """
+
+    safe_url = str(url or "").strip()
+    parsed = urlparse(safe_url)
+    if (
+        parsed.scheme.lower() != "https"
+        or (parsed.hostname or "").lower() not in STEAM_ASSET_ALLOWED_HOSTS
+    ):
+        return SteamResult(
+            status=SteamResultStatus.ASSET_INVALID,
+            message="Steam avatar URL is not allowed.",
+        )
+    cached = find_cached_asset(cache_dir, safe_url)
+    if cached is not None:
+        return SteamAssetRecord(
+            url_fingerprint=hashlib.sha256(safe_url.encode("utf-8")).hexdigest()[:24],
+            path=cached,
+            bytes_written=cached.stat().st_size,
+            image_kind=cached.suffix.lstrip("."),
+        )
+    return fetch_and_cache_asset(
+        cache_dir=cache_dir,
+        url=safe_url,
+        fetcher=fetcher or _default_fetch_asset,
+    )
+
+
 def cache_asset_from_bytes(
     *,
     cache_dir: Path,
@@ -243,10 +284,16 @@ def cache_asset_from_bytes(
             message="Steam asset URL is not allowed.",
         )
     if not data or len(data) > MAX_STEAM_ASSET_BYTES:
-        return SteamResult(status=SteamResultStatus.ASSET_INVALID, message="Steam asset size is invalid.")
+        return SteamResult(
+            status=SteamResultStatus.ASSET_INVALID,
+            message="Steam asset size is invalid.",
+        )
     kind = _detect_image_kind(data)
     if kind is None:
-        return SteamResult(status=SteamResultStatus.ASSET_INVALID, message="Steam asset did not look like a supported image.")
+        return SteamResult(
+            status=SteamResultStatus.ASSET_INVALID,
+            message="Steam asset did not look like a supported image.",
+        )
     fingerprint = hashlib.sha256(url.encode("utf-8")).hexdigest()[:24]
     cache_dir.mkdir(parents=True, exist_ok=True)
     path = cache_dir / f"{fingerprint}.{kind}"
@@ -309,7 +356,9 @@ def fetch_and_cache_asset(
             status=SteamResultStatus.NETWORK_ERROR,
             message="Steam asset fetch failed.",
         )
-    return cache_asset_from_bytes(cache_dir=cache_dir, url=url, data=data, allowed_hosts=allowed_hosts)
+    return cache_asset_from_bytes(
+        cache_dir=cache_dir, url=url, data=data, allowed_hosts=allowed_hosts
+    )
 
 
 def _default_fetch_asset(url: str) -> bytes:
@@ -322,11 +371,17 @@ def prune_asset_cache(cache_dir: Path, *, max_files: int = 256) -> int:
     """Prune oldest cached Steam asset files beyond max_files."""
     if not cache_dir.exists():
         return 0
-    files = [path for path in cache_dir.iterdir() if path.is_file() and not path.name.endswith(".tmp")]
+    files = [
+        path
+        for path in cache_dir.iterdir()
+        if path.is_file() and not path.name.endswith(".tmp")
+    ]
     if len(files) <= max_files:
         return 0
     removed = 0
-    for path in sorted(files, key=lambda item: item.stat().st_mtime)[: max(0, len(files) - max_files)]:
+    for path in sorted(files, key=lambda item: item.stat().st_mtime)[
+        : max(0, len(files) - max_files)
+    ]:
         try:
             path.unlink()
             removed += 1

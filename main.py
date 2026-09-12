@@ -130,7 +130,8 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
     - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
     - --devcurve - Legacy no-op flag kept for compatibility
-    - --devsteam - Show unfinished Steam Journey, Abandonment Issues, and Friend Pulse cards
+    - --devsteam - Show Steam Journey and the experimental Friend Pulse card
+    - --devstats - Show the experimental System Stats card
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
@@ -140,7 +141,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
         "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing", "--diag-pair-warm-finish", "--diag-p4-stages", "--diag-p4-no-perf-hud", "--usage", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
         "--noupdates",
         "--viz-diagnostics", "--viz-diag",
-        "--fresh", "--devcurve", "--devsteam",
+        "--fresh", "--devcurve", "--devsteam", "--devstats",
     }
     # Diagnostic experiment admissions (--abc-drive[=|space]<A|B|C>,
     # --viz-switch-telemetry) are owned by the diagnostics resolver, not by mode

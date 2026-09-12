@@ -55,6 +55,16 @@ ORDINARY_WIDGET_FAMILY_COMPONENTS: tuple[OrdinaryWidgetFamilyComponent, ...] = (
         qml_filename="AbandonmentIssuesPresentation.qml",
         presentation_model_kind="AbandonmentIssuesPresentationModel",
     ),
+    OrdinaryWidgetFamilyComponent(
+        family_id="friend_pulse",
+        qml_filename="FriendPulsePresentation.qml",
+        presentation_model_kind="FriendPulsePresentationModel",
+    ),
+    OrdinaryWidgetFamilyComponent(
+        family_id="system_stats",
+        qml_filename="SystemStatsPresentation.qml",
+        presentation_model_kind="SystemStatsPresentationModel",
+    ),
 )
 
 

@@ -2931,6 +2931,20 @@ class DisplayManager(QObject):
                 return False
             return manager._open_quick_reddit_url(widget_id, url)
 
+        def _open_steam(widget_id: str, action_kind: str, target: str) -> bool:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or manager._runtime_generation != generation
+            ):
+                return False
+            return manager._open_quick_steam_target(
+                widget_id,
+                action_kind,
+                target,
+            )
+
         def _open_settings_target(target_id: str) -> bool:
             manager = manager_ref()
             if (
@@ -2950,6 +2964,7 @@ class DisplayManager(QObject):
         return default_ordinary_family_adapters(
             clock_mode_toggle=_persist_clock_mode,
             reddit_open_requested=_open_reddit,
+            steam_open_requested=_open_steam,
             settings_target_requested=_open_settings_target,
         )
 
@@ -3170,6 +3185,72 @@ class DisplayManager(QObject):
             logger.info(
                 "[REDDIT] Quick URL action admitted widget=%s route=%s",
                 str(widget_id or "reddit"),
+                "interactive" if interactive else "screensaver-handoff",
+            )
+        return bool(opened)
+
+    def _open_quick_steam_target(
+        self,
+        widget_id: str,
+        action_kind: str,
+        target_value: str,
+    ) -> bool:
+        """Route a validated Steam semantic action outside retained QML."""
+
+        if self._retired:
+            return False
+        from rendering.runtime_input import runtime_pointer_input_is_suppressed
+
+        if runtime_pointer_input_is_suppressed(
+            "steamOpenRequested",
+            screen_index="?",
+        ):
+            logger.info(
+                "[STEAM] Quick external action suppressed across runtime/edit "
+                "boundary widget=%s kind=%s",
+                str(widget_id or "steam"),
+                str(action_kind or "unknown"),
+            )
+            return False
+
+        from core.build_profile import is_diagnostic_build
+        from core.mc import is_mc_build
+        from core.steam.links import friend_message_target, store_target
+        from core.widget_product_actions import dispatch_steam_link_product_action
+        from core.windows.secure_url_launcher import open_steam_target
+
+        kind = str(action_kind or "").strip().lower()
+        if kind == "friend_message":
+            target = friend_message_target(target_value)
+        elif kind == "store":
+            target = store_target(target_value)
+        else:
+            target = None
+        if target is None:
+            logger.warning(
+                "[STEAM] Rejected invalid external action widget=%s kind=%s",
+                str(widget_id or "steam"),
+                kind or "unknown",
+            )
+            return False
+
+        interactive = bool(is_mc_build() or is_diagnostic_build())
+        opened = dispatch_steam_link_product_action(
+            target,
+            opener=lambda resolved: bool(
+                open_steam_target(
+                    resolved,
+                    source=f"steam:{str(widget_id or 'steam')}:{kind}",
+                )
+            ),
+            request_saver_exit=self._on_exit_requested,
+            interactive_build=interactive,
+        )
+        if opened:
+            logger.info(
+                "[STEAM] Quick external action admitted widget=%s kind=%s route=%s",
+                str(widget_id or "steam"),
+                kind,
                 "interactive" if interactive else "screensaver-handoff",
             )
         return bool(opened)

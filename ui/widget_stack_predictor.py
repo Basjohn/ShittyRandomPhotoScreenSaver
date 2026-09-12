@@ -111,6 +111,7 @@ class WidgetType(Enum):
     ACHIEVEMENT_PULSE = "achievement_pulse"
     ABANDONMENT_ISSUES = "abandonment_issues"
     FRIEND_PULSE = "friend_pulse"
+    SYSTEM_STATS = "system_stats"
 
 
 @dataclass
@@ -365,6 +366,36 @@ def estimate_steam_card_size(font_size: int, width: int = 420, height: int = 180
     return (max(260, int(width)), max(120, scaled_height))
 
 
+def estimate_friend_pulse_size(
+    *,
+    width: int = 560,
+    view_mode: str = "grid",
+    capacity: int = 4,
+) -> Tuple[int, int]:
+    """Estimate Friend Pulse geometry from its retained presentation contract.
+
+    Friend Pulse reserves geometry from configured capacity, not source row
+    count. Keep this calculation presentation-neutral so the settings stack
+    predictor follows the same rows/grid contract without importing Qt Quick.
+    """
+    normalized_width = max(420, min(900, int(width)))
+    normalized_capacity = max(1, min(6, int(capacity)))
+    normalized_mode = str(view_mode or "grid").strip().lower()
+    if normalized_mode not in {"rows", "grid"}:
+        normalized_mode = "grid"
+    if normalized_mode == "grid":
+        columns = (
+            2
+            if normalized_capacity <= 4 or normalized_width < 540
+            else 3
+        )
+        rows = (normalized_capacity + columns - 1) // columns
+        height = 120 + rows * 102 + max(0, rows - 1) * 10
+    else:
+        height = 102 + normalized_capacity * 58
+    return normalized_width, height
+
+
 def estimate_spotify_vis_size(
     vis_settings: Mapping[str, Any],
     *,
@@ -547,11 +578,18 @@ def build_widget_estimates(
             continue
         if str(steam_card["position"]).strip().lower() == "custom":
             continue
-        w, h = estimate_steam_card_size(
-            int(steam_card["font_size"]),
-            int(steam_card["preferred_width"]),
-            int(steam_card["preferred_height"]),
-        )
+        if section == "friend_pulse":
+            w, h = estimate_friend_pulse_size(
+                width=int(steam_card["preferred_width"]),
+                view_mode=str(steam_card.get("view_mode", "grid")),
+                capacity=int(steam_card.get("visible_row_capacity", 4)),
+            )
+        else:
+            w, h = estimate_steam_card_size(
+                int(steam_card["font_size"]),
+                int(steam_card["preferred_width"]),
+                int(steam_card["preferred_height"]),
+            )
         estimates.append(WidgetEstimate(
             widget_type=widget_type,
             position=str(steam_card["position"]),
@@ -560,6 +598,27 @@ def build_widget_estimates(
             estimated_width=w,
             estimated_height=h,
         ))
+
+    system_stats = _resolved_widget_section(settings, defaults, "system_stats")
+    if (
+        bool(system_stats["enabled"])
+        and str(system_stats["position"]).strip().lower() != "custom"
+    ):
+        w, h = estimate_steam_card_size(
+            int(system_stats["font_size"]),
+            int(system_stats["preferred_width"]),
+            int(system_stats["preferred_height"]),
+        )
+        estimates.append(
+            WidgetEstimate(
+                widget_type=WidgetType.SYSTEM_STATS,
+                position=str(system_stats["position"]),
+                monitor=str(system_stats["monitor"]),
+                enabled=True,
+                estimated_width=w,
+                estimated_height=h,
+            )
+        )
 
     spotify_vis = _resolved_widget_section(settings, defaults, "spotify_visualizer")
     if (
@@ -603,6 +662,7 @@ def _get_widget_display_name(widget_type: WidgetType) -> str:
         WidgetType.ACHIEVEMENT_PULSE: "Achievement Pulse",
         WidgetType.ABANDONMENT_ISSUES: "Abandonment Issues",
         WidgetType.FRIEND_PULSE: "Friend Pulse",
+        WidgetType.SYSTEM_STATS: "System Stats",
     }
     return names.get(widget_type, widget_type.value)
 

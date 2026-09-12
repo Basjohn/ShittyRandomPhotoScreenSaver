@@ -739,6 +739,7 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
     assert service.is_running() is False
 
     settings_requests = []
+    steam_actions = []
     presentation = None
     try:
         presentation = RetainedAchievementPulsePresentation(
@@ -746,6 +747,10 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
             model=model,
             geometry=OverlayWidgetGeometry(25.0, 30.0, 600.0, 334.0),
             on_settings_requested=lambda target: settings_requests.append(target)
+            or True,
+            on_steam_action_requested=lambda kind, target: steam_actions.append(
+                (kind, target)
+            )
             or True,
         )
         item = presentation.item
@@ -763,7 +768,7 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
         ]
 
         service._accept_model(
-            build_mock_steam_view_model("achievement_pulse"),
+            replace(build_mock_steam_view_model("achievement_pulse"), appid=620),
             profile_key="",
             animate=False,
         )
@@ -781,7 +786,9 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
         )
         item.settingsRequested.emit("steam_connection")
         item.refreshRequested.emit()
+        item.storeRequested.emit()
         assert settings_requests == ["steam_connection"]
+        assert steam_actions == [("store", str(model.appid))]
         assert [task["category"] for task in manager.tasks] == [
             "steam_achievement_cache_load",
             "steam_achievement_refresh",

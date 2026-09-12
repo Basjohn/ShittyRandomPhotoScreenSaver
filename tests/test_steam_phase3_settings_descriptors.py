@@ -82,17 +82,24 @@ def test_steam_phase3_descriptors_are_complete_behind_dev_gate() -> None:
             if descriptor.section_id == "steam"
         )
 
-        substantive = {"achievement_pulse", "abandonment_issues"}
-        unfinished = set(STEAM_WIDGET_IDS) - substantive
+        scaffolds = {"steam_progress"}
         assert not set(STEAM_WIDGET_IDS).intersection(factory_keys)
-        for widget_id in substantive:
+        for widget_id in {"achievement_pulse", "abandonment_issues"}:
             assert widget_id in runtime_ids
             assert widget_id in custom_ids
             assert widget_id in preview_ids
             assert get_service_runtime_contracts(widget_id) == STEAM_SERVICE_RUNTIME_CONTRACTS
-        assert not unfinished.intersection(runtime_ids)
-        assert not unfinished.intersection(custom_ids)
-        assert unfinished.issubset(preview_ids)
+        assert "friend_pulse" in runtime_ids
+        assert "friend_pulse" in custom_ids
+        assert "friend_pulse" in preview_ids
+        assert {
+            "shared_generation_owner",
+            "privacy_reprojection",
+            "visible_row_avatar_hydration",
+        }.issubset(get_service_runtime_contracts("friend_pulse"))
+        assert not scaffolds.intersection(runtime_ids)
+        assert not scaffolds.intersection(custom_ids)
+        assert scaffolds.issubset(preview_ids)
 
         assert section.persisted_widget_keys == ("steam",) + STEAM_WIDGET_IDS
         assert section.builder_module == "ui.tabs.widgets_tab_steam"
@@ -101,6 +108,7 @@ def test_steam_phase3_descriptors_are_complete_behind_dev_gate() -> None:
         assert resize_sections["steam"].widget_ids == (
             "achievement_pulse",
             "abandonment_issues",
+            "friend_pulse",
         )
     finally:
         _restore_steam_gate(prior)
@@ -168,6 +176,10 @@ def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
     ):
         assert isinstance(abandonment[bool_key], bool)
     assert len(abandonment["accent_color"]) == 4
+    friend_pulse = widgets["friend_pulse"]
+    assert friend_pulse["view_mode"] in {"grid", "rows"}
+    assert 1 <= int(friend_pulse["visible_row_capacity"]) <= 6
+    assert len(friend_pulse["accent_color"]) == 4
 
 
 def test_lazy_widgets_tab_does_not_import_steam_settings_section_on_general_open(
@@ -252,6 +264,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.abandonment_issues_accent_color_btn.color_changed.emit(
                 QColor(180, 110, 55, 170)
             )
+            tab.friend_pulse_view_mode.setCurrentIndex(1)
 
             preview = build_widget_stack_preview_config(tab)
             assert preview["steam_progress"]["enabled"] is False
@@ -308,6 +321,9 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert abandonment_payload["show_last_played"] is False
             assert abandonment_payload["show_queue"] is True
             assert abandonment_payload["accent_color"] == [180, 110, 55, 170]
+            friend_payload = collect_widget_section_save_result(tab, "steam")[4]
+            assert friend_payload["view_mode"] == "rows"
+            assert friend_payload["visible_row_capacity"] == 4
         finally:
             tab.deleteLater()
     finally:

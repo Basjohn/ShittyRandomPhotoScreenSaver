@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Optional, Protocol, runtime_checkable
 
+from core.dev_gates import is_named_gate_enabled
 from core.logging.logger import get_logger
 from core.settings.default_contract import require_canonical_default
 from rendering.widget_descriptors import widget_route_admits_screen
@@ -571,6 +572,13 @@ class GmailFamilyAdapter:
 class AchievementPulseFamilyAdapter:
     """Adapter for the Achievement Pulse card (Steam capability family)."""
 
+    def __init__(
+        self,
+        *,
+        on_steam_action_requested: Callable[[str, str, str], bool] | None = None,
+    ) -> None:
+        self._on_steam_action_requested = on_steam_action_requested
+
     @property
     def family_id(self) -> str:
         return "steam"
@@ -609,13 +617,28 @@ class AchievementPulseFamilyAdapter:
             runtime_manager, widget_id, model, widgets_config
         ):
             return None
+        action_callback = None
+        if self._on_steam_action_requested is not None:
+            action_callback = lambda kind, target, wid=widget_id: bool(
+                self._on_steam_action_requested(wid, str(kind), str(target))
+            )
         return RetainedAchievementPulsePresentation(
-            host=host, model=model, geometry=geometry
+            host=host,
+            model=model,
+            geometry=geometry,
+            on_steam_action_requested=action_callback,
         )
 
 
 class AbandonmentIssuesFamilyAdapter:
     """Adapter for the Abandonment Issues card (Steam capability family)."""
+
+    def __init__(
+        self,
+        *,
+        on_steam_action_requested: Callable[[str, str, str], bool] | None = None,
+    ) -> None:
+        self._on_steam_action_requested = on_steam_action_requested
 
     @property
     def family_id(self) -> str:
@@ -655,9 +678,148 @@ class AbandonmentIssuesFamilyAdapter:
             runtime_manager, widget_id, model, widgets_config
         ):
             return None
+        action_callback = None
+        if self._on_steam_action_requested is not None:
+            action_callback = lambda kind, target, wid=widget_id: bool(
+                self._on_steam_action_requested(wid, str(kind), str(target))
+            )
         return RetainedAbandonmentIssuesPresentation(
-            host=host, model=model, geometry=geometry
+            host=host,
+            model=model,
+            geometry=geometry,
+            on_steam_action_requested=action_callback,
         )
+
+
+class FriendPulseFamilyAdapter:
+    """Adapter for the dev-gated, shared-source Steam Friend Pulse card."""
+
+    def __init__(
+        self,
+        *,
+        on_steam_action_requested: Callable[[str, str, str], bool] | None = None,
+    ) -> None:
+        self._on_steam_action_requested = on_steam_action_requested
+
+    @property
+    def family_id(self) -> str:
+        return "steam"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        if not is_named_gate_enabled("steam"):
+            return ()
+        shared = widgets_config.get("steam", {})
+        if not isinstance(shared, Mapping):
+            shared = {}
+        default_enabled = bool(require_canonical_default("widgets.steam.enabled"))
+        if not _enabled_flag(shared.get("enabled", default_enabled), default_enabled):
+            return ()
+        return _enabled_from_candidates(widgets_config, ("friend_pulse",))
+
+    def build(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost,
+        geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry,
+        display_identity: str,
+        shadow_values: Mapping[str, object],
+        runtime_manager: Any,
+        runtime_generation: int | None = None,
+    ) -> BoundFamilyPresentation | None:
+        from .friend_pulse import (
+            FriendPulsePresentationConfig,
+            FriendPulsePresentationModel,
+            FriendPulsePresentationStyle,
+            RetainedFriendPulsePresentation,
+        )
+
+        config = FriendPulsePresentationConfig.from_widgets_mapping(widgets_config)
+        style = FriendPulsePresentationStyle.project(config, shadow_values)
+        model = FriendPulsePresentationModel(
+            config,
+            style,
+            runtime_generation=runtime_generation,
+        )
+        if not _attach_runtime_service(
+            runtime_manager, widget_id, model, widgets_config
+        ):
+            return None
+        action_callback = None
+        if self._on_steam_action_requested is not None:
+            action_callback = lambda kind, target, wid=widget_id: bool(
+                self._on_steam_action_requested(wid, str(kind), str(target))
+            )
+        try:
+            return RetainedFriendPulsePresentation(
+                host=host,
+                model=model,
+                geometry=geometry,
+                on_steam_action_requested=action_callback,
+            )
+        except Exception:
+            runtime_manager.retire_widget_service(widget_id)
+            raise
+
+
+class SystemStatsFamilyAdapter:
+    """Adapter for the dev-gated whole-system CPU/RAM card."""
+
+    @property
+    def family_id(self) -> str:
+        return "system_stats"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        if not is_named_gate_enabled("system_stats"):
+            return ()
+        return _enabled_from_candidates(widgets_config, ("system_stats",))
+
+    def build(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost,
+        geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry,
+        display_identity: str,
+        shadow_values: Mapping[str, object],
+        runtime_manager: Any,
+        runtime_generation: int | None = None,
+    ) -> BoundFamilyPresentation | None:
+        from .system_stats import (
+            RetainedSystemStatsPresentation,
+            SystemStatsPresentationConfig,
+            SystemStatsPresentationModel,
+            SystemStatsPresentationStyle,
+        )
+
+        config = SystemStatsPresentationConfig.from_widgets_mapping(widgets_config)
+        style = SystemStatsPresentationStyle.project(config, shadow_values)
+        model = SystemStatsPresentationModel(
+            config,
+            style,
+            runtime_generation=runtime_generation,
+        )
+        if not _attach_runtime_service(
+            runtime_manager, widget_id, model, widgets_config
+        ):
+            return None
+        try:
+            return RetainedSystemStatsPresentation(
+                host=host,
+                model=model,
+                geometry=geometry,
+            )
+        except Exception:
+            runtime_manager.retire_widget_service(widget_id)
+            raise
 
 
 class MediaFamilyAdapter:
@@ -790,6 +952,7 @@ def default_ordinary_family_adapters(
         [str, str, str, OverlayWidgetGeometry, Mapping[str, object]], None
     ] | None = None,
     reddit_open_requested: Callable[[str, str], bool] | None = None,
+    steam_open_requested: Callable[[str, str, str], bool] | None = None,
     settings_target_requested: Callable[[str], bool] | None = None,
 ) -> tuple[OrdinaryFamilyAdapter, ...]:
     """Return the explicit ordered ordinary-family adapters currently wired.
@@ -806,8 +969,14 @@ def default_ordinary_family_adapters(
         MediaFamilyAdapter(),
         RedditFamilyAdapter(on_open_requested=reddit_open_requested),
         GmailFamilyAdapter(),
-        AchievementPulseFamilyAdapter(),
-        AbandonmentIssuesFamilyAdapter(),
+        AchievementPulseFamilyAdapter(
+            on_steam_action_requested=steam_open_requested
+        ),
+        AbandonmentIssuesFamilyAdapter(
+            on_steam_action_requested=steam_open_requested
+        ),
+        FriendPulseFamilyAdapter(on_steam_action_requested=steam_open_requested),
+        SystemStatsFamilyAdapter(),
     )
 
 
@@ -816,11 +985,13 @@ __all__ = [
     "AchievementPulseFamilyAdapter",
     "BoundFamilyPresentation",
     "ClockFamilyAdapter",
+    "FriendPulseFamilyAdapter",
     "GmailFamilyAdapter",
     "MediaFamilyAdapter",
     "OrdinaryFamilyAdapter",
     "OrdinaryFamilyPresentationBinder",
     "RedditFamilyAdapter",
+    "SystemStatsFamilyAdapter",
     "WeatherFamilyAdapter",
     "default_ordinary_family_adapters",
 ]

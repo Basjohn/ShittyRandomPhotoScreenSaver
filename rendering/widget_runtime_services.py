@@ -22,7 +22,7 @@ preserving the existing neutral ``core.steam`` cache/backend authorities. Other
 Steam cards remain separate; no generic/shared Steam service is implied.
 
 E1 slice 5 adds the distinct per-card/display Achievement Pulse runtime/model/
-artwork service. Progress and Friend Pulse remain unregistered and source-inert.
+artwork service. Progress remains unregistered and source-inert.
 
 E1 slice 6 adds one Media lease per display. Leases in the same runtime
 generation join one family-shared owner for controller/provider, polling,
@@ -39,6 +39,11 @@ E1 slice 8 adds a separate Media app-volume lease per participating display.
 Those leases share one controller/target/read-write/debounce owner per runtime
 generation. A second, distinct system-mute lease shares one UI-thread endpoint
 state/poll/action owner. The primary Media owner remains intentionally separate.
+
+Friend Pulse now joins one Steam-specific source/avatar owner per runtime
+generation while retaining per-display privacy projections. System Stats uses
+the same lease shape for one low-cost CPU/RAM sampler per runtime generation;
+neither owner exists until its family and member are admitted.
 
 Heavy provider implementation is imported lazily inside the build callable so a
 process that never activates/creates the family does not resolve it merely
@@ -321,6 +326,109 @@ _ACHIEVEMENT_SERVICE_SPEC = RuntimeServiceSpec(
 )
 
 
+def _build_friend_pulse_service(
+    widget_id: str, widgets_config: Mapping[str, Any]
+) -> Any:
+    from widgets.friend_pulse_runtime import (
+        FriendPulseRuntimeConfig,
+        FriendPulseRuntimeService,
+    )
+
+    shared = widgets_config.get("steam", {}) if isinstance(widgets_config, Mapping) else {}
+    card = (
+        widgets_config.get(widget_id, {})
+        if isinstance(widgets_config, Mapping)
+        else {}
+    )
+    shared = shared if isinstance(shared, Mapping) else {}
+    card = card if isinstance(card, Mapping) else {}
+    return FriendPulseRuntimeService(
+        config=FriendPulseRuntimeConfig(
+            refresh_minutes=shared.get("refresh_minutes", 6),
+            privacy_mode=shared.get("privacy_mode", "Rich"),
+            capacity=card.get("visible_row_capacity", 4),
+        )
+    )
+
+
+def _inject_friend_pulse_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "runtime widget cannot accept Friend Pulse service "
+            "(missing set_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_friend_pulse_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("Friend Pulse runtime service has no retire method")
+    retire()
+
+
+def _friend_pulse_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    if _widget_is_active(widget) and getattr(service, "shared_owner", None) is None:
+        return False
+    return not _widget_is_active(widget) or _service_is_running(service)
+
+
+_FRIEND_PULSE_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_friend_pulse_service,
+    inject=_inject_friend_pulse_service,
+    retire=_retire_friend_pulse_service,
+    reuse_is_valid=_friend_pulse_service_reuse_is_valid,
+)
+
+
+def _build_system_stats_service(
+    widget_id: str, widgets_config: Mapping[str, Any]
+) -> Any:
+    from widgets.system_stats_runtime import SystemStatsRuntimeService
+
+    return SystemStatsRuntimeService(shared=True)
+
+
+def _inject_system_stats_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "runtime widget cannot accept System Stats service "
+            "(missing set_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_system_stats_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("System Stats runtime service has no retire method")
+    retire()
+
+
+def _system_stats_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if _service_is_retired(service):
+        return False
+    if _widget_is_active(widget) and getattr(service, "shared_owner", None) is None:
+        return False
+    return not _widget_is_active(widget) or _service_is_running(service)
+
+
+_SYSTEM_STATS_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_system_stats_service,
+    inject=_inject_system_stats_service,
+    retire=_retire_system_stats_service,
+    reuse_is_valid=_system_stats_service_reuse_is_valid,
+)
+
+
 def _build_media_service(widget_id: str, widgets_config: Mapping[str, Any]) -> Any:
     from core.settings.models import MediaWidgetSettings
     from widgets.media_runtime import MediaRuntimeService
@@ -543,6 +651,8 @@ _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "gmail": _GMAIL_SERVICE_SPEC,
     "abandonment_issues": _ABANDONMENT_SERVICE_SPEC,
     "achievement_pulse": _ACHIEVEMENT_SERVICE_SPEC,
+    "friend_pulse": _FRIEND_PULSE_SERVICE_SPEC,
+    "system_stats": _SYSTEM_STATS_SERVICE_SPEC,
 }
 
 

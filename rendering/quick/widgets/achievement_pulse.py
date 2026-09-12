@@ -696,6 +696,12 @@ class AchievementPulsePresentationModel(QObject):
             and self._achievement_runtime_service.request_manual_refresh()
         )
 
+    def store_action_target(self) -> str | None:
+        appid = self.card.appid
+        if not self.is_active or not self._snapshot.interaction_enabled:
+            return None
+        return str(appid) if appid is not None and int(appid) > 0 else None
+
     def notify_fade_complete(self) -> None:
         if self.is_active and self._achievement_runtime_service is not None:
             self._achievement_runtime_service.on_presentation_fade_complete()
@@ -766,6 +772,10 @@ class AchievementPulsePresentationModel(QObject):
     @Property(str, notify=stateChanged)
     def viewState(self) -> str:
         return self.card.state
+
+    @Property(int, notify=stateChanged)
+    def appid(self) -> int:
+        return int(self.card.appid or 0)
 
     @Property(bool, notify=stateChanged)
     def interactionEnabled(self) -> bool:
@@ -983,9 +993,11 @@ class RetainedAchievementPulsePresentation:
         geometry: OverlayWidgetGeometry,
         fade_opacity: float = 0.0,
         on_settings_requested: Callable[[str], Any] | None = None,
+        on_steam_action_requested: Callable[[str, str], bool] | None = None,
     ) -> None:
         self._model = model
         self._on_settings_requested = on_settings_requested
+        self._on_steam_action_requested = on_steam_action_requested
         self._retained: RetainedOverlayWidget = host.create_family_widget(
             "achievement_pulse",
             initial_properties={"achievementModel": model},
@@ -1002,6 +1014,7 @@ class RetainedAchievementPulsePresentation:
         host.set_widget_input_state_handler(self._retained, self.apply_input_state)
         self._connect("refreshRequested", model.request_manual_refresh)
         self._connect("settingsRequested", self._handle_settings_requested)
+        self._connect("storeRequested", self._handle_store_requested)
         model.fadeRequested.connect(self._handle_fade_requested)
 
     def _connect(self, signal_name: str, callback: Callable[..., Any]) -> None:
@@ -1077,6 +1090,12 @@ class RetainedAchievementPulsePresentation:
         ):
             return False
         return bool(self._on_settings_requested(normalized))
+
+    def _handle_store_requested(self) -> bool:
+        target = self._model.store_action_target()
+        if target is None or self._on_steam_action_requested is None:
+            return False
+        return bool(self._on_steam_action_requested("store", target))
 
     def _handle_fade_requested(self) -> None:
         if not self._model.is_active:

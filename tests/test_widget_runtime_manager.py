@@ -316,9 +316,48 @@ def test_ensure_widget_service_builds_abandonment_without_generic_steam_owner():
     assert owner.get_widget_service("abandonment_issues") is service
     assert owner.has_runtime_service("achievement_pulse") is True
     assert owner.has_runtime_service("steam_progress") is False
-    assert owner.has_runtime_service("friend_pulse") is False
+    assert owner.has_runtime_service("friend_pulse") is True
+    assert owner.has_runtime_service("system_stats") is True
     assert owner.retire_widget_service("abandonment_issues") is True
     assert service.is_retired() is True
+
+
+def test_friend_pulse_and_system_stats_services_are_inert_until_presenter_activation():
+    from widgets.friend_pulse_runtime import shared_friend_pulse_owner_count
+    from widgets.system_stats_runtime import shared_system_stats_owner_count
+
+    owner = WidgetRuntimeManager(_Host())
+    friend_consumer = _WeatherConsumer()
+    stats_consumer = _WeatherConsumer()
+
+    friend_service = owner.ensure_widget_service(
+        "friend_pulse",
+        friend_consumer,
+        {
+            "steam": {"refresh_minutes": 17, "privacy_mode": "Balanced"},
+            "friend_pulse": {"visible_row_capacity": 4},
+        },
+    )
+    stats_service = owner.ensure_widget_service(
+        "system_stats",
+        stats_consumer,
+        {"system_stats": {"enabled": True}},
+    )
+
+    assert friend_service is friend_consumer.injected
+    assert stats_service is stats_consumer.injected
+    assert friend_service.is_running() is False
+    assert stats_service.is_running() is False
+    assert friend_service.shared_owner is None
+    assert stats_service.shared_owner is None
+    assert shared_friend_pulse_owner_count() == 0
+    assert shared_system_stats_owner_count() == 0
+
+    owner.cleanup()
+    assert friend_service.is_retired() is True
+    assert stats_service.is_retired() is True
+    assert shared_friend_pulse_owner_count() == 0
+    assert shared_system_stats_owner_count() == 0
 
 
 def test_ensure_widget_service_builds_inert_shared_media_lease() -> None:

@@ -549,7 +549,31 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "friend_pulse_monitor_combo",
             "friend_pulse_font_family",
             "friend_pulse_font_size",
+            "friend_pulse_view_mode",
         ),
+    ),
+    WidgetSettingsSectionDescriptor(
+        section_id="system_stats",
+        button_label="System Stats",
+        button_attr_name="_btn_system_stats",
+        container_attr_name="_system_stats_container",
+        builder_module="ui.tabs.widgets_tab_system_stats",
+        builder_name="build_system_stats_ui",
+        loader_module="ui.tabs.widgets_tab_system_stats",
+        loader_name="load_system_stats_settings",
+        loader_guard_attrs=("system_stats_enabled",),
+        saver_module="ui.tabs.widgets_tab_system_stats",
+        saver_name="save_system_stats_settings",
+        saver_guard_attrs=("system_stats_enabled",),
+        persisted_widget_keys=("system_stats",),
+        signal_block_attrs=(
+            "system_stats_enabled",
+            "system_stats_position",
+            "system_stats_monitor_combo",
+            "system_stats_font_family",
+            "system_stats_font_size",
+        ),
+        dev_feature_gate="system_stats",
     ),
     WidgetSettingsSectionDescriptor(
         section_id="defaults",
@@ -661,16 +685,25 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="steam",
-        widget_ids=("achievement_pulse", "abandonment_issues"),
+        widget_ids=("achievement_pulse", "abandonment_issues", "friend_pulse"),
         position_combo_attrs=(
             "achievement_pulse_position",
             "abandonment_issues_position",
+            "friend_pulse_position",
         ),
         control_attrs=(
             "achievement_pulse_font_size",
             "abandonment_issues_font_size",
+            "friend_pulse_font_size",
         ),
         anchor_attr="achievement_pulse_font_size",
+    ),
+    WidgetCustomResizeLockDescriptor(
+        section_id="system_stats",
+        widget_ids=("system_stats",),
+        position_combo_attrs=("system_stats_position",),
+        control_attrs=("system_stats_font_size",),
+        anchor_attr="system_stats_font_size",
     ),
 )
 
@@ -684,6 +717,8 @@ WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS: tuple[WidgetCustomPositionOptionDescr
     WidgetCustomPositionOptionDescriptor("gmail", "gmail_position"),
     WidgetCustomPositionOptionDescriptor("achievement_pulse", "achievement_pulse_position"),
     WidgetCustomPositionOptionDescriptor("abandonment_issues", "abandonment_issues_position"),
+    WidgetCustomPositionOptionDescriptor("friend_pulse", "friend_pulse_position"),
+    WidgetCustomPositionOptionDescriptor("system_stats", "system_stats_position"),
 )
 
 
@@ -1547,6 +1582,54 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         custom_layout_resize_mode="steam_card_scale",
     ),
     WidgetRuntimeDescriptor(
+        widget_id="friend_pulse",
+        attr_name="friend_pulse_presentation",
+        settings_section_id="steam",
+        settings_prefixes=("widgets.friend_pulse", "widgets.steam"),
+        startup_stage="primary",
+        service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS
+        + (CUSTOM_POSITION_OPTION_LABEL,),
+        service_runtime_contracts=(
+            "cache_first",
+            "shared_generation_owner",
+            "periodic_refresh",
+            "request_generation_fencing",
+            "privacy_reprojection",
+            "visible_row_avatar_hydration",
+            "timer_stop_cleanup",
+        ),
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="ordinary_uniform",
+        dev_feature_gate="steam",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="system_stats",
+        attr_name="system_stats_presentation",
+        settings_section_id="system_stats",
+        settings_prefixes=("widgets.system_stats",),
+        startup_stage="primary",
+        service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS
+        + (CUSTOM_POSITION_OPTION_LABEL,),
+        service_runtime_contracts=(
+            "shared_generation_owner",
+            "fixed_delay_sampling",
+            "request_generation_fencing",
+            "one_in_flight",
+            "timer_stop_cleanup",
+        ),
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="ordinary_uniform",
+        dev_feature_gate="system_stats",
+    ),
+    WidgetRuntimeDescriptor(
         widget_id="spotify_visualizer",
         attr_name="spotify_visualizer_widget",
         settings_section_id="visualizers",
@@ -2379,6 +2462,28 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
         ),
         family_enabled_attr_name="steam_enabled",
         dev_feature_gate="steam",
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="system_stats",
+        widget_type_key="system_stats",
+        status_attr_name="system_stats_stack_status",
+        position_attr_name="system_stats_position",
+        monitor_attr_name="system_stats_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor(
+                "enabled", "system_stats_enabled", "checked"
+            ),
+            WidgetPreviewFieldDescriptor(
+                "position", "system_stats_position", "current_text"
+            ),
+            WidgetPreviewFieldDescriptor(
+                "monitor", "system_stats_monitor_combo", "current_text"
+            ),
+            WidgetPreviewFieldDescriptor(
+                "font_size", "system_stats_font_size", "value"
+            ),
+        ),
+        dev_feature_gate="system_stats",
     ),
 )
 

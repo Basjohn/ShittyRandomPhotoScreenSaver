@@ -90,6 +90,18 @@ WIDGET_VISUAL_ROLE_PARENTS: Mapping[str, str] = {
     "abandonment_issues.header.border": "header.border",
     "abandonment_issues.header.text": "header.text",
     "abandonment_issues.accent": "widget.accent",
+    "friend_pulse.header.fill": "header.fill",
+    "friend_pulse.header.border": "header.border",
+    "friend_pulse.header.text": "header.text",
+    "steam.friend_pulse.accent": "widget.accent",
+    "system_stats.header.fill": "header.fill",
+    "system_stats.header.border": "header.border",
+    "system_stats.header.text": "header.text",
+    "system_stats.cpu.accent": "widget.accent",
+    "system_stats.ram.accent": "widget.accent",
+    "system_stats.metric.surface": "widget.panel.alt",
+    "system_stats.metric.border": "widget.outline",
+    "system_stats.metric.track": "widget.panel",
 
     # Media internal surfaces.  These are intentionally semantic, not GUI controls.
     "media.transport.surface": "widget.panel",

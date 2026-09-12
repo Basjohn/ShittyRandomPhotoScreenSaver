@@ -372,12 +372,14 @@ def test_animated_acceptance_defers_state_and_semantic_actions_until_commit(
 def test_actions_are_capability_gated_and_fade_completion_stays_runtime_owned() -> None:
     service = _RuntimeService()
     model = _model(runtime_service=service)
+    state_spy = QSignalSpy(model.stateChanged)
 
     assert model.request_manual_refresh() is False
     assert model.on_abandonment_rotation_due() is False
     model.activate(object())
     assert model.request_manual_refresh() is False
-    model.set_interaction_enabled(True)
+    assert model.set_interaction_enabled(True) is True
+    assert state_spy.count() == 1
     assert model.request_manual_refresh() is True
     assert model.on_abandonment_rotation_due() is True
     model.notify_fade_complete()
@@ -602,6 +604,7 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
     )
 
     settings_requests = []
+    steam_actions = []
     retained = None
     try:
         retained = RetainedAbandonmentIssuesPresentation(
@@ -609,6 +612,10 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
             model=model,
             geometry=OverlayWidgetGeometry(25.0, 30.0, 600.0, 331.0),
             on_settings_requested=lambda target: settings_requests.append(target)
+            or True,
+            on_steam_action_requested=lambda kind, target: steam_actions.append(
+                (kind, target)
+            )
             or True,
         )
         item = retained.item
@@ -645,7 +652,9 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
         )
         item.settingsRequested.emit("steam_connection")
         item.refreshRequested.emit()
+        item.storeRequested.emit()
         assert settings_requests == ["steam_connection"]
+        assert steam_actions == [("store", str(model.appid))]
         assert [task["category"] for task in manager.tasks] == [
             "steam_abandonment_cache_load",
             "steam_abandonment_refresh",

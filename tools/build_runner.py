@@ -415,9 +415,12 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
         repo_root / "resources" / "tutuogg.ogg",
         repo_root / "resources" / "jedimodeyall.mp3",
         repo_root / "rendering" / "quick" / "qml" / "DisplayScene.qml",
+        repo_root / "rendering" / "quick" / "qml" / "FriendPulsePresentation.qml",
+        repo_root / "rendering" / "quick" / "qml" / "SystemStatsPresentation.qml",
         repo_root / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml",
         repo_root / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
         repo_root / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
+        repo_root / "images" / "system_stats_tools.svg",
         # PyInstaller toolchain pins for the (default-selected) Reddit Helper job.
         repo_root / "build_deps" / "requirements_helper.txt",
     )

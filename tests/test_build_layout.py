@@ -30,6 +30,23 @@ def _run_layout_command(command: str, **paths: Path) -> subprocess.CompletedProc
     )
 
 
+def test_friend_pulse_and_system_stats_assets_are_in_the_product_contract() -> None:
+    contract = LAYOUT_SCRIPT.read_text(encoding="utf-8")
+
+    assert "rendering\\quick\\qml\\FriendPulsePresentation.qml" in contract
+    assert "rendering\\quick\\qml\\SystemStatsPresentation.qml" in contract
+    assert "images\\system_stats_tools.svg" in contract
+    assert "--include-data-dir=images=images" in contract
+
+
+def test_build_runner_preflight_checks_friend_pulse_and_system_stats_assets() -> None:
+    contract = (REPO_ROOT / "tools" / "build_runner.py").read_text(encoding="utf-8")
+
+    assert '"rendering" / "quick" / "qml" / "FriendPulsePresentation.qml"' in contract
+    assert '"rendering" / "quick" / "qml" / "SystemStatsPresentation.qml"' in contract
+    assert '"images" / "system_stats_tools.svg"' in contract
+
+
 def test_publish_replaces_only_the_canonical_product_directory(tmp_path):
     source = tmp_path / "source"
     source.mkdir()

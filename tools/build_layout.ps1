@@ -290,9 +290,12 @@ function Assert-SRPSSSourceProductAssets {
         'resources\tutuogg.ogg',
         'resources\jedimodeyall.mp3',
         'rendering\quick\qml\DisplayScene.qml',
+        'rendering\quick\qml\FriendPulsePresentation.qml',
+        'rendering\quick\qml\SystemStatsPresentation.qml',
         'rendering\quick\qml\VisualizerPresentation.qml',
         'rendering\quick\qml\WidgetInteractionGlow.qml',
-        'rendering\quick\qml\shaders\widget_glow.frag.qsb'
+        'rendering\quick\qml\shaders\widget_glow.frag.qsb',
+        'images\system_stats_tools.svg'
     )
     foreach ($relativePath in $requiredFiles) {
         $candidate = Join-Path $RepoRoot $relativePath
@@ -350,6 +353,7 @@ function Assert-SRPSSOnefileQuickPayloadContract {
 
     $requiredArguments = @(
         '--include-data-dir=rendering/quick/qml=rendering/quick/qml',
+        '--include-data-dir=images=images',
         '--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg',
         '--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3',
         '--include-package=rendering.quick',

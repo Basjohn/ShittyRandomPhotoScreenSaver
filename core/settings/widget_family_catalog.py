@@ -133,6 +133,14 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
         settings_section_id="steam",
         description="Steam progress, achievement pulse, abandonment and friend cards.",
     ),
+    WidgetFamilyDescriptor(
+        family_id="system_stats",
+        label="System Stats",
+        member_widget_ids=("system_stats",),
+        settings_section_id="system_stats",
+        description="Sparse whole-system CPU and memory usage card.",
+        dev_feature_gate="system_stats",
+    ),
 )
 
 

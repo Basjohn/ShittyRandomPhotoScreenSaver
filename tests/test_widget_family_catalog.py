@@ -92,7 +92,7 @@ def test_clocks_family_owns_all_three_clocks():
     assert family.member_widget_ids == ("clock", "clock2", "clock3")
 
 
-def test_steam_family_gating_matches_active_members():
+def test_steam_family_gating_adds_retained_friend_pulse_but_not_scaffold():
     # Steam owns ungated members (achievement_pulse, abandonment_issues) so the
     # family is always available; --devsteam only adds the gated members. The
     # neutral catalog and runtime-descriptor caches are env-signature keyed, so
@@ -112,7 +112,9 @@ def test_steam_family_gating_matches_active_members():
 
         dev_gates.force_gate(steam=True)
         active_dev = set(wd.get_active_member_widget_ids("steam"))
-        assert "steam_progress" in active_dev
+        # Steam Journey remains a Settings-only scaffold; a dev gate must not
+        # turn it into a runtime widget without a retained implementation.
+        assert "steam_progress" not in active_dev
         assert "friend_pulse" in active_dev
     finally:
         dev_gates.force_gate(steam=False)

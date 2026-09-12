@@ -13,4 +13,6 @@ GmailPresentation 1.0 GmailPresentation.qml
 AchievementPulsePresentation 1.0 AchievementPulsePresentation.qml
 AchievementCapsule 1.0 AchievementCapsule.qml
 AbandonmentIssuesPresentation 1.0 AbandonmentIssuesPresentation.qml
+FriendPulsePresentation 1.0 FriendPulsePresentation.qml
+SystemStatsPresentation 1.0 SystemStatsPresentation.qml
 MediaMetadataColumn 1.0 MediaMetadataColumn.qml

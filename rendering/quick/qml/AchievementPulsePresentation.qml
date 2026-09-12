@@ -9,6 +9,7 @@ OverlayWidget {
     semanticDoubleClickEnabled: achievementModel.interactionEnabled
     signal refreshRequested()
     signal settingsRequested(string target)
+    signal storeRequested()
 
     readonly property real authoredWidth: achievementModel.authoredWidth
     readonly property real authoredHeight: achievementModel.authoredHeight
@@ -234,14 +235,32 @@ OverlayWidget {
                 // the border under an inset image made Pulse's edge look washed
                 // and inconsistently transparent.
                 Rectangle {
+                    id: artworkBorder
                     objectName: "achievementArtworkBorder"
                     anchors.fill: parent
                     radius: 7.0
                     color: "transparent"
-                    border.color: achievementRoot.achievementModel.steamArtworkBorderColor
+                    border.color: artworkHover.hovered
+                        ? achievementRoot.achievementModel.accentColor
+                        : achievementRoot.achievementModel.steamArtworkBorderColor
                     border.width: achievementRoot.scaleAwareStrokeWidthForScale(
                         2.0, achievementRoot.contentScale
                     )
+                }
+
+                HoverHandler {
+                    id: artworkHover
+                    enabled: achievementRoot.achievementModel.interactionEnabled
+                        && achievementRoot.achievementModel.appid > 0
+                        && achievementRoot.achievementModel.artworkSource.length > 0
+                }
+
+                TapHandler {
+                    enabled: achievementRoot.achievementModel.interactionEnabled
+                        && achievementRoot.achievementModel.appid > 0
+                        && achievementRoot.achievementModel.artworkSource.length > 0
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: achievementRoot.storeRequested()
                 }
             }
 

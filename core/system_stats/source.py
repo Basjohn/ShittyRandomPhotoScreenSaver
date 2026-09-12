@@ -6,6 +6,7 @@ whole-system card.  These sources make one whole-system CPU/RAM observation
 and, when Windows exposes suitable PDH counters, retain one adapter-scoped
 query rather than rediscovering PID/process counters on every sample.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -103,7 +104,9 @@ class PdhAdapter(Protocol):
     def open_query(self) -> Any: ...
     def close_query(self, query: Any) -> None: ...
     def enumerate_instances(self, object_name: str) -> tuple[str, ...]: ...
-    def add_counter(self, query: Any, object_name: str, instance: str, counter_name: str) -> Any: ...
+    def add_counter(
+        self, query: Any, object_name: str, instance: str, counter_name: str
+    ) -> Any: ...
     def collect(self, query: Any) -> None: ...
     def read_double(self, counter: Any) -> float: ...
     def read_large(self, counter: Any) -> int: ...
@@ -147,11 +150,15 @@ class Win32PdhAdapter:
         self._pdh.CollectQueryData(query)
 
     def read_double(self, counter: Any) -> float:
-        _kind, value = self._pdh.GetFormattedCounterValue(counter, self._pdh.PDH_FMT_DOUBLE)
+        _kind, value = self._pdh.GetFormattedCounterValue(
+            counter, self._pdh.PDH_FMT_DOUBLE
+        )
         return float(value)
 
     def read_large(self, counter: Any) -> int:
-        _kind, value = self._pdh.GetFormattedCounterValue(counter, self._pdh.PDH_FMT_LARGE)
+        _kind, value = self._pdh.GetFormattedCounterValue(
+            counter, self._pdh.PDH_FMT_LARGE
+        )
         return int(value)
 
 
@@ -197,7 +204,9 @@ class PersistentWindowsGpuAdapterSource:
         self,
         adapter: PdhAdapter | None = None,
         *,
-        identity_from_instance: Callable[[str], str | None] = adapter_identity_from_instance,
+        identity_from_instance: Callable[
+            [str], str | None
+        ] = adapter_identity_from_instance,
     ) -> None:
         self._adapter: PdhAdapter = adapter or Win32PdhAdapter()
         self._identity_from_instance = identity_from_instance
@@ -214,14 +223,20 @@ class PersistentWindowsGpuAdapterSource:
     def cardinality(self) -> dict[str, int | bool]:
         return {
             "query_open": self._query is not None,
-            "engine_counters": sum(len(values) for values in self._engine_counters.values()),
+            "engine_counters": sum(
+                len(values) for values in self._engine_counters.values()
+            ),
             "memory_counters": len(self._usage_counters) + len(self._limit_counters),
             "adapter_identities": len(
-                set(self._engine_counters).union(self._usage_counters, self._limit_counters)
+                set(self._engine_counters).union(
+                    self._usage_counters, self._limit_counters
+                )
             ),
         }
 
-    def _snapshot(self, status: str, adapters: tuple[AdapterGpuSample, ...] = ()) -> GpuVramSample:
+    def _snapshot(
+        self, status: str, adapters: tuple[AdapterGpuSample, ...] = ()
+    ) -> GpuVramSample:
         counts = self.cardinality()
         return GpuVramSample(
             status=status,
@@ -244,7 +259,9 @@ class PersistentWindowsGpuAdapterSource:
                 identity = self._identity_from_instance(instance)
                 if identity is not None:
                     self._engine_counters.setdefault(identity, []).append(
-                        self._adapter.add_counter(query, self._ENGINE_OBJECT, instance, self._ENGINE_COUNTER)
+                        self._adapter.add_counter(
+                            query, self._ENGINE_OBJECT, instance, self._ENGINE_COUNTER
+                        )
                     )
             for instance in memory_instances:
                 identity = self._identity_from_instance(instance)
@@ -283,21 +300,42 @@ class PersistentWindowsGpuAdapterSource:
             return self._snapshot(self._open())
         try:
             self._adapter.collect(self._query)
-            identities = sorted(set(self._engine_counters).union(self._usage_counters, self._limit_counters))
+            identities = sorted(
+                set(self._engine_counters).union(
+                    self._usage_counters, self._limit_counters
+                )
+            )
             adapters: list[AdapterGpuSample] = []
             for identity in identities:
-                engine_values = [self._adapter.read_double(counter) for counter in self._engine_counters.get(identity, ())]
-                valid_engines = [value for value in engine_values if 0.0 <= value <= 100.0]
-                used = self._adapter.read_large(self._usage_counters[identity]) if identity in self._usage_counters else None
-                total = self._adapter.read_large(self._limit_counters[identity]) if identity in self._limit_counters else None
-                if used is not None and (used < 0 or total is None or total <= 0 or used > total):
+                engine_values = [
+                    self._adapter.read_double(counter)
+                    for counter in self._engine_counters.get(identity, ())
+                ]
+                valid_engines = [
+                    value for value in engine_values if 0.0 <= value <= 100.0
+                ]
+                used = (
+                    self._adapter.read_large(self._usage_counters[identity])
+                    if identity in self._usage_counters
+                    else None
+                )
+                total = (
+                    self._adapter.read_large(self._limit_counters[identity])
+                    if identity in self._limit_counters
+                    else None
+                )
+                if used is not None and (
+                    used < 0 or total is None or total <= 0 or used > total
+                ):
                     used, total = None, None
-                adapters.append(AdapterGpuSample(
-                    adapter_identity=identity,
-                    gpu_pct=max(valid_engines) if valid_engines else None,
-                    vram_used_bytes=used,
-                    vram_total_bytes=total,
-                ))
+                adapters.append(
+                    AdapterGpuSample(
+                        adapter_identity=identity,
+                        gpu_pct=max(valid_engines) if valid_engines else None,
+                        vram_used_bytes=used,
+                        vram_total_bytes=total,
+                    )
+                )
             return self._snapshot("ok", tuple(adapters))
         except Exception:
             self.close()
