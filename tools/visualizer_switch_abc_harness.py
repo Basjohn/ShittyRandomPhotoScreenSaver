@@ -62,6 +62,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import statistics
 import sys
 import time
@@ -569,7 +570,8 @@ def run_auto(args) -> int:
 
     condition = str(args.condition).strip().upper()
     repo_root = Path(__file__).resolve().parents[1]
-    run_cmd = list(args.run_cmd) + [
+    base_cmd = args.run_cmd if isinstance(args.run_cmd, list) else shlex.split(args.run_cmd)
+    run_cmd = list(base_cmd) + [
         f"--abc-drive={condition}",
         f"--abc-layout-slot={args.layout_slot}",
     ]
@@ -673,12 +675,13 @@ def main(argv: list[str] | None = None) -> int:
     p_auto.add_argument("--condition", required=True, choices=["A", "B", "C"])
     p_auto.add_argument(
         "--run-cmd",
-        nargs="+",
-        default=["python", "main.py", "/s", "--usage", "--viz", "--perf"],
+        default="python main_mc.py /s --usage --viz --perf",
         help=(
-            "canonical RUN launch argv; --abc-drive=<condition> and "
-            "--abc-layout-slot=<slot> are appended. Use the real RUN argument "
-            "(script: '/s'; frozen build: the .scr with '/s'), not a fallthrough."
+            "canonical RUN launch command as ONE quoted string (shlex-split); "
+            "--abc-drive=<condition> and --abc-layout-slot=<slot> are appended. "
+            "Use the real RUN argument (script: main_mc.py '/s'; frozen build: the "
+            ".scr with '/s'), not a fallthrough. Default targets the MC build so "
+            "the saver does not quit on operator input mid-run."
         ),
     )
     p_auto.add_argument("--layout-slot", default="1", dest="layout_slot")
