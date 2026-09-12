@@ -528,7 +528,10 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
         # named phase-window markers for offline scoring.
         _abc_driver = None
         try:
-            from core.diagnostics.experiment_flags import abc_drive_condition
+            from core.diagnostics.experiment_flags import (
+                abc_drive_condition,
+                abc_layout_slot,
+            )
 
             if abc_drive_condition() is not None:
                 from core.performance.visualizer_switch_abc_driver import (
@@ -536,11 +539,14 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
                 )
                 from PySide6.QtCore import QTimer
 
+                _abc_slot = abc_layout_slot() or "1"
                 # Defer install briefly so RUN-mode display construction can start;
-                # the driver still waits for the visualizer owner internally.
+                # the driver's baseline recreation waits for the readiness seam.
                 QTimer.singleShot(
                     2000,
-                    lambda: install_abc_driver_if_enabled(engine, app),
+                    lambda: install_abc_driver_if_enabled(
+                        engine, app, layout_slot=_abc_slot
+                    ),
                 )
         except Exception:
             logger.exception("[ABC] Failed to schedule A/B/C experiment driver")

@@ -43,6 +43,7 @@ class ExperimentFlags:
 
     abc_drive: str | None = None
     viz_switch_telemetry: bool = False
+    abc_layout_slot: str | None = None
 
     @property
     def lifecycle_telemetry_admitted(self) -> bool:
@@ -65,6 +66,7 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
     args = [str(arg) for arg in argv]
     abc_drive: str | None = None
     viz_switch_telemetry = False
+    abc_layout_slot: str | None = None
     for index, arg in enumerate(args):
         if arg == "--viz-switch-telemetry":
             viz_switch_telemetry = True
@@ -78,8 +80,20 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
             condition = value.strip().upper()
             if condition in _VALID_CONDITIONS:
                 abc_drive = condition
+            continue
+        slot: str | None = None
+        if arg.startswith("--abc-layout-slot="):
+            slot = arg.split("=", 1)[1]
+        elif arg == "--abc-layout-slot" and index + 1 < len(args):
+            slot = args[index + 1]
+        if slot is not None:
+            slot = slot.strip()
+            if slot:
+                abc_layout_slot = slot
     return ExperimentFlags(
-        abc_drive=abc_drive, viz_switch_telemetry=viz_switch_telemetry
+        abc_drive=abc_drive,
+        viz_switch_telemetry=viz_switch_telemetry,
+        abc_layout_slot=abc_layout_slot,
     )
 
 
@@ -94,9 +108,13 @@ def experiment_flag_tokens(argv: Sequence[str]) -> tuple[str, ...]:
     args = [str(arg) for arg in argv]
     tokens: list[str] = []
     for index, arg in enumerate(args):
-        if arg == "--viz-switch-telemetry" or arg.startswith("--abc-drive="):
+        if (
+            arg == "--viz-switch-telemetry"
+            or arg.startswith("--abc-drive=")
+            or arg.startswith("--abc-layout-slot=")
+        ):
             tokens.append(arg)
-        elif arg == "--abc-drive":
+        elif arg in ("--abc-drive", "--abc-layout-slot"):
             tokens.append(arg)
             if index + 1 < len(args):
                 tokens.append(args[index + 1])
@@ -126,6 +144,11 @@ def abc_drive_condition() -> str | None:
     return active_experiment_flags().abc_drive
 
 
+def abc_layout_slot() -> str | None:
+    """Return the saved-layout slot the A/B/C baseline recreation should load."""
+    return active_experiment_flags().abc_layout_slot
+
+
 def visualizer_switch_telemetry_admitted() -> bool:
     """True when opt-in render-host switch/resource telemetry must be allocated."""
     return active_experiment_flags().lifecycle_telemetry_admitted
@@ -144,6 +167,7 @@ __all__ = [
     "activate_experiment_flags",
     "active_experiment_flags",
     "abc_drive_condition",
+    "abc_layout_slot",
     "visualizer_switch_telemetry_admitted",
     "override_active_flags_for_testing",
 ]
