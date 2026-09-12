@@ -1,0 +1,8 @@
+{
+  "response": {
+    "players": [
+      {"steamid": "76561198000000001", "personaname": "Ada", "personastate": 1, "gameid": "10", "gameextrainfo": "Counter-Strike", "avatarfull": "https://avatars.example/ada.jpg"},
+      {"steamid": "76561198000000002", "personaname": "Bea", "personastate": 0}
+    ]
+  }
+}

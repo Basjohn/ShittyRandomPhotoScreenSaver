@@ -1,0 +1,8 @@
+{
+  "friendslist": {
+    "friends": [
+      {"steamid": "76561198000000001", "relationship": "friend", "friend_since": 1},
+      {"steamid": "76561198000000002", "relationship": "friend", "friend_since": 2}
+    ]
+  }
+}
