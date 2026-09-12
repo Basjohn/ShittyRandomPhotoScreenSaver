@@ -86,8 +86,31 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
                 "glow_reactivity": preset["sine_glow_reactivity"],
                 "glow_color": QColor(*preset["sine_glow_color"]),
                 "resolved_sensitivity": preset["sine_sensitivity"],
+                "glow_size": 1.0,
+                "reactive_glow": preset["sine_reactive_glow"],
+                "resolved_width_reaction": preset["sine_width_reaction"],
+                "line_dim": preset["sine_line_dim"],
+                "line_offset_bias": preset["sine_line_offset_bias"],
+                "sine_crawl_amount": preset["sine_crawl_amount"],
+                "sine_displacement": preset["sine_displacement"],
+                "sine_ghost_alpha": preset["sine_ghost_alpha"],
+                "sine_ghosting_enabled": preset["sine_ghosting_enabled"],
+                "sine_heartbeat": preset["sine_heartbeat"],
+                "sine_vertical_shift": preset["sine_vertical_shift"],
+                "rainbow_enabled": preset["sine_wave_rainbow_enabled"],
+                "rainbow_speed": preset["sine_wave_rainbow_speed"],
+                "wave_effect_gate": 0.0,
+                "u_rainbow_hue_offset": 0.0,
                 **{
                     f"line{index}_color": QColor(*preset[f"sine_line{index}_color"])
+                    for index in range(2, 7)
+                },
+                **{
+                    f"line{index}_glow_color": QColor(*preset[f"sine_line{index}_glow_color"])
+                    for index in range(2, 7)
+                },
+                **{
+                    f"ghost_line{index}_enabled": preset[f"sine_ghost_line{index}_enabled"]
                     for index in range(2, 7)
                 },
                 **{
@@ -118,14 +141,24 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
                 "glow_reactivity": preset["osc_glow_reactivity"],
                 "glow_color": QColor(*preset["osc_glow_color"]),
                 "reactive_glow": preset["osc_reactive_glow"],
-                "osc_line_offset_bias": preset["osc_line_offset_bias"],
+                "glow_size": 1.0,
+                "line_dim": preset["osc_line_dim"],
+                "line_offset_bias": preset["osc_line_offset_bias"],
                 "osc_vertical_shift": preset["osc_vertical_shift"],
+                "osc_ghost_intensity": preset["osc_ghost_intensity"],
+                "osc_ghosting_enabled": preset["osc_ghosting_enabled"],
+                "rainbow_enabled": preset["oscilloscope_rainbow_enabled"],
+                "rainbow_speed": preset["oscilloscope_rainbow_speed"],
                 **{
                     f"line{index}_color": QColor(*preset[f"osc_line{index}_color"])
                     for index in range(2, 7)
                 },
                 **{
                     f"line{index}_glow_color": QColor(*preset[f"osc_line{index}_glow_color"])
+                    for index in range(2, 7)
+                },
+                **{
+                    f"ghost_line{index}_enabled": preset[f"osc_ghost_line{index}_enabled"]
                     for index in range(2, 7)
                 },
             }),
@@ -137,6 +170,18 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
             draw_order=("bass", "vocals", "mids", "transients"),
             parameters=freeze_render_fields({
                 "devcurve_sample_count": 96,
+                "rainbow_enabled": False,
+                "rainbow_speed": 0.5,
+                "devcurve_foreground_shadow_enabled": False,
+                "devcurve_foreground_shadow_alpha": 0.36,
+                "devcurve_foreground_shadow_darken": 0.42,
+                "devcurve_foreground_shadow_offset": 0.10,
+                "devcurve_foreground_specular_enabled": False,
+                "devcurve_foreground_specular_alpha": 0.78,
+                "devcurve_foreground_specular_width": 0.022,
+                "devcurve_foreground_specular_offset": 0.028,
+                "devcurve_foreground_specular_crest_bias": 1.05,
+                "devcurve_specular_activity_alpha": 0.0,
                 **{
                     f"devcurve_layer_{name}_{field}": value
                     for name in ("bass", "vocals", "mids", "transients")
