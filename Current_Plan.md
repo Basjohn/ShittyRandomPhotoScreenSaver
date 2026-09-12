@@ -27,16 +27,24 @@ Visualizer cadence, reactivity, authored geometry or motion. Preserved raw evide
 
 - [ ] Execute the decomposition's falsifiable P0-P4 matrix on a live display and use its
   explicit thresholds/classification to prove or reject swap-sensitive residual
-  degradation. **Instrumentation is built and validated (unit/compile/help), only the
-  live run + attribution remains:** P2 repeated-switch lifecycle tests
-  (`tests/test_qtquick_visualizer_mode_retirement.py`, ≥100 switches, green); P3 real-GL
-  switch smoke (`tools/qtquick_visualizer_switch_smoke.py`, prepared, not yet run); P4
-  installed-runtime A/B/C harness (`tools/visualizer_switch_abc_harness.py`:
-  `contention`/`score`/`classify`/`auto`) driven either by operator protocol or the
-  opt-in in-app driver (`--abc-drive=<A|B|C>`,
-  `core/performance/visualizer_switch_abc_driver.py`, state-machine tests green). Run
-  three matched reps (Bubble-only control vs five switch cycles vs the same exposure
-  followed by saved-layout Quick-runtime recreation) once displays are available.
+  degradation. **Instrumentation is built, hardened and unit-validated (compile/help/
+  tests); only the live run + attribution remains.** Opt-in only: the P1 boundary
+  render-host telemetry allocates nothing in Standard/MC runtime and is admitted by
+  `--viz-switch-telemetry` or `--abc-drive` through the diagnostics resolver
+  (`core/diagnostics/experiment_flags.py`, NOT dev_gates). P2 repeated-switch lifecycle
+  tests (`tests/test_qtquick_visualizer_mode_retirement.py`, ≥100 switches, inject the
+  telemetry directly). P3 permanent-mode real-GL smoke
+  (`tools/qtquick_visualizer_switch_smoke.py`, Sphere excluded, `settled_hold`
+  separated; not yet run). P4 deterministic in-app driver
+  (`core/performance/visualizer_switch_abc_driver.py`): every condition verifies the
+  same saved-layout Bubble/CUSTOM baseline, B/C drive the exact
+  Sphere→Spectrum→Oscilloscope→Sine→Bubble ×5 exposure on genuine completion edges,
+  C keeps both pre/post recreation windows, and every failure is fail-closed (INVALID +
+  non-zero exit). P4 harness (`tools/visualizer_switch_abc_harness.py`:
+  `contention`/`score`/`classify`/`auto`) scores named windows with ≥60 s persistence,
+  metric-matched C recovery, freshness/reactivity validity, and a 3-matched-valid-rep
+  gate. Run three matched reps per condition once displays are available (`auto`
+  drives it, or the manual protocol).
 - [ ] Use that evidence to prove or refute stale mode GL/scene resources across mode
   switches. If stale ownership is demonstrated, repair the existing render-thread
   retirement seam. Do **not** add automatic layout/runtime reinitialization as a
