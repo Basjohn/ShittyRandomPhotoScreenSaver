@@ -44,6 +44,7 @@ class ExperimentFlags:
     abc_drive: str | None = None
     viz_switch_telemetry: bool = False
     abc_layout_slot: str | None = None
+    abc_exclude_seconds: float | None = None
 
     @property
     def lifecycle_telemetry_admitted(self) -> bool:
@@ -67,6 +68,7 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
     abc_drive: str | None = None
     viz_switch_telemetry = False
     abc_layout_slot: str | None = None
+    abc_exclude_seconds: float | None = None
     for index, arg in enumerate(args):
         if arg == "--viz-switch-telemetry":
             viz_switch_telemetry = True
@@ -90,10 +92,22 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
             slot = slot.strip()
             if slot:
                 abc_layout_slot = slot
+            continue
+        exclude: str | None = None
+        if arg.startswith("--abc-exclude-seconds="):
+            exclude = arg.split("=", 1)[1]
+        elif arg == "--abc-exclude-seconds" and index + 1 < len(args):
+            exclude = args[index + 1]
+        if exclude is not None:
+            try:
+                abc_exclude_seconds = max(0.0, float(exclude.strip()))
+            except ValueError:
+                pass
     return ExperimentFlags(
         abc_drive=abc_drive,
         viz_switch_telemetry=viz_switch_telemetry,
         abc_layout_slot=abc_layout_slot,
+        abc_exclude_seconds=abc_exclude_seconds,
     )
 
 
@@ -112,9 +126,10 @@ def experiment_flag_tokens(argv: Sequence[str]) -> tuple[str, ...]:
             arg == "--viz-switch-telemetry"
             or arg.startswith("--abc-drive=")
             or arg.startswith("--abc-layout-slot=")
+            or arg.startswith("--abc-exclude-seconds=")
         ):
             tokens.append(arg)
-        elif arg in ("--abc-drive", "--abc-layout-slot"):
+        elif arg in ("--abc-drive", "--abc-layout-slot", "--abc-exclude-seconds"):
             tokens.append(arg)
             if index + 1 < len(args):
                 tokens.append(args[index + 1])
@@ -149,6 +164,15 @@ def abc_layout_slot() -> str | None:
     return active_experiment_flags().abc_layout_slot
 
 
+def abc_exclude_seconds() -> float | None:
+    """Return an override for the pre-score exclusion window, if set.
+
+    Diagnostic-only: used to age an A control (long Bubble hold before scoring) so
+    the process-age/cache confound can be ruled out without switching modes.
+    """
+    return active_experiment_flags().abc_exclude_seconds
+
+
 def visualizer_switch_telemetry_admitted() -> bool:
     """True when opt-in render-host switch/resource telemetry must be allocated."""
     return active_experiment_flags().lifecycle_telemetry_admitted
@@ -168,6 +192,7 @@ __all__ = [
     "active_experiment_flags",
     "abc_drive_condition",
     "abc_layout_slot",
+    "abc_exclude_seconds",
     "visualizer_switch_telemetry_admitted",
     "override_active_flags_for_testing",
 ]
