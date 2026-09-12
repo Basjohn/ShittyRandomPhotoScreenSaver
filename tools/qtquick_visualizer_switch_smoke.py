@@ -95,6 +95,21 @@ _SNAPSHOT_FACTORIES = {
 _DEFAULT_SEQUENCE = ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve")
 
 
+# Neutral card/shadow inputs: this ownership probe measures switch/retirement, not
+# the card/border/shadow presentation, so the migrated card kwargs are supplied as
+# a transparent, no-shadow neutral (mirrors tests/_visualizer_presentation.py).
+_NEUTRAL_CARD_SHADOW = {
+    "content_inset": 0.0,
+    "background_color": (0, 0, 0, 0),
+    "border_color": (255, 255, 255, 255),
+    "shadow_color": (0, 0, 0, 0),
+    "shadow_blur": 0.0,
+    "shadow_offset": (0.0, 0.0),
+    "shadow_spread": 0.0,
+    "shadow_extensions": (0.0, 0.0, 0.0, 0.0),
+}
+
+
 def _presentation_for(mode_id: str):
     return resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy(mode_id),
@@ -105,6 +120,7 @@ def _presentation_for(mode_id: str):
         border_width=4.0,
         corner_radius=12.0,
         shadow_enabled=False,
+        **_NEUTRAL_CARD_SHADOW,
     )
 
 
