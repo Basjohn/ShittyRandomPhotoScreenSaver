@@ -134,11 +134,18 @@ def run_contention(workers: int, seconds: float) -> int:
 # ("2026-09-12 15:04:41 - logger - INFO - ..."); the millisecond fraction is
 # optional so both that and "…03,123" forms parse.
 _TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:[,.](\d{3}))?")
-# core/performance/event_loop_recorder.py summary line.
-_EVENTLOOP_RE = re.compile(
-    r"late_p50_ms=(?P<p50>[-\d.]+) late_p90_ms=(?P<p90>[-\d.]+) "
-    r"late_p95_ms=(?P<p95>[-\d.]+) late_p99_ms=(?P<p99>[-\d.]+) "
-    r"late_max_ms=(?P<max>[-\d.]+) over_25_ms=(?P<over25>\d+)"
+# Window-local, non-overlapping report period emitted by EventLoopStallRecorder.
+# ABC scoring MUST use this rather than the recorder's long rolling percentile;
+# otherwise pre-window switch/recreation stalls remain in the retained deque for
+# ~102 s and masquerade as persistent post-switch degradation.
+_EVENTLOOP_PERIOD_RE = re.compile(
+    r"period_samples=(?P<samples>\d+) period_elapsed_s=(?P<elapsed>[-\d.]+) "
+    r"period_epoch=(?P<epoch>[\d.]+) "
+    r"period_p50_ms=(?P<p50>[-\d.]+) period_p90_ms=(?P<p90>[-\d.]+) "
+    r"period_p95_ms=(?P<p95>[-\d.]+) period_p99_ms=(?P<p99>[-\d.]+) "
+    r"period_max_ms=(?P<max>[-\d.]+) period_over_25_ms=(?P<over25>\d+) "
+    r"period_over_50_ms=(?P<over50>\d+) period_over_100_ms=(?P<over100>\d+) "
+    r"score_reset_seq=(?P<reset_seq>\d+) score_label=(?P<label>\S+)"
 )
 # rendering/quick/scene_controller.py structured PERF_HUD line: skip ratio plus the
 # reactivity/freshness plane (revision Hz, source age) in one record.
@@ -231,7 +238,13 @@ def _agg(values: list[float]) -> dict[str, float] | None:
             "min": min(values), "samples": len(values)}
 
 
-def score_window(path: Path, start: float, end: float) -> dict[str, object]:
+def score_window(
+    path: Path,
+    start: float,
+    end: float,
+    *,
+    window_name: str | None = None,
+) -> dict[str, object]:
     """Aggregate the diagnostic metric plane within one steady window.
 
     Retains temporal series for event-loop p99 and frame-pacer skip so the
@@ -239,7 +252,7 @@ def score_window(path: Path, start: float, end: float) -> dict[str, object]:
     a transition spike make a whole window count.
     """
     p95s: list[float] = []
-    p99_series: list[tuple[float, float]] = []
+    p99_series: list[tuple[float, float, float]] = []
     maxes: list[float] = []
     over25: list[int] = []
     skip_series: list[tuple[float, float]] = []
@@ -253,17 +266,40 @@ def score_window(path: Path, start: float, end: float) -> dict[str, object]:
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for line in handle:
             epoch = _line_epoch(line)
+            # Causal ABC scoring consumes the independent report-period fields
+            # directly.  Do not make validity depend on the legacy rolling-view
+            # grammar: that view is ordinary diagnostics only and may evolve
+            # independently of the causal oracle.  Old logs with no period fields
+            # simply contribute zero event-loop samples and fail closed below.
+            period = _EVENTLOOP_PERIOD_RE.search(line)
+            if period is not None:
+                # Event-loop summaries carry their own millisecond wall epoch so
+                # exact named-window boundaries are not blurred by the file
+                # handler's seconds-only timestamp prefix.
+                epoch = float(period.group("epoch"))
+                if epoch < start or epoch > end:
+                    continue
+                if window_name is not None and period.group("label") != window_name:
+                    continue
+                period_samples = int(period.group("samples"))
+                if period_samples <= 0:
+                    continue
+                offset = epoch - start
+                p95s.append(float(period.group("p95")))
+                p99_series.append(
+                    (
+                        offset,
+                        float(period.group("p99")),
+                        max(0.0, float(period.group("elapsed"))),
+                    )
+                )
+                maxes.append(float(period.group("max")))
+                over25.append(int(period.group("over25")))
+                eventloop_samples += 1
+                continue
             if epoch is None or epoch < start or epoch > end:
                 continue
             offset = epoch - start
-            m = _EVENTLOOP_RE.search(line)
-            if m is not None:
-                p95s.append(float(m.group("p95")))
-                p99_series.append((offset, float(m.group("p99"))))
-                maxes.append(float(m.group("max")))
-                over25.append(int(m.group("over25")))
-                eventloop_samples += 1
-                continue
             m = _PERF_HUD_RE.search(line)
             if m is not None:
                 skip_series.append((offset, float(m.group("skip"))))
@@ -280,7 +316,7 @@ def score_window(path: Path, start: float, end: float) -> dict[str, object]:
         "window_seconds": round(end - start, 2),
         "eventloop_samples": eventloop_samples,
         "eventloop_p95_ms": _agg(p95s),
-        "eventloop_p99_ms": _agg([v for _o, v in p99_series]),
+        "eventloop_p99_ms": _agg([v for _o, v, _d in p99_series]),
         "eventloop_max_ms": _agg(maxes),
         "eventloop_over_25_ms_total": sum(over25),
         "pacer_skip_pct": _agg([v for _o, v in skip_series]),
@@ -290,7 +326,9 @@ def score_window(path: Path, start: float, end: float) -> dict[str, object]:
         "bubble_integration_ratio": _agg(ratios),
         "bubble_integration_failures_total": failures,
         # Temporal series retained for persistence analysis.
-        "p99_series": [[round(o, 2), v] for o, v in p99_series],
+        # Each entry is one non-overlapping recorder report period:
+        # [offset_s, period_p99_ms, represented_period_s].
+        "p99_series": [[round(o, 2), v, round(d, 3)] for o, v, d in p99_series],
         "skip_series": [[round(o, 2), v] for o, v in skip_series],
     }
 
@@ -346,7 +384,7 @@ def score_run(path: Path) -> dict[str, object]:
             result["windows"] = scored
             return result
         start, end = windows[name]
-        window = score_window(path, start, end)
+        window = score_window(path, start, end, window_name=name)
         scored[name] = window
         if float(window["window_seconds"]) < MIN_SCORED_SECONDS:
             result["reason"] = (
@@ -393,6 +431,40 @@ def _persistent_seconds_above(series: list, threshold: float) -> float:
     return seconds
 
 
+def _persistent_period_seconds_above(series: list, threshold: float) -> float:
+    """Longest consecutive local-report duration whose p99 exceeds threshold.
+
+    Event-loop p99 points are independent report periods, not rolling snapshots.
+    Sum the represented period durations only while consecutive reports stay above
+    the threshold.  This makes the >=60 s persistence requirement mean >=60 s of
+    actual post-boundary data rather than four observations of the same retained
+    102-second history.
+    """
+
+    longest = 0.0
+    current = 0.0
+    previous_offset: float | None = None
+    for entry in series:
+        if len(entry) >= 3:
+            offset, value, duration = float(entry[0]), float(entry[1]), float(entry[2])
+        else:
+            # Backward-compatible shape for focused unit tests/helpers; production
+            # ABC logs now always carry the explicit represented period duration.
+            offset, value = float(entry[0]), float(entry[1])
+            duration = 15.0
+        # A large missing-report gap breaks persistence even if the next period is
+        # also above threshold.  Two nominal report periods is a conservative gap.
+        if previous_offset is not None and offset - previous_offset > 30.0:
+            current = 0.0
+        if value >= threshold:
+            current += max(0.0, duration)
+            longest = max(longest, current)
+        else:
+            current = 0.0
+        previous_offset = offset
+    return longest
+
+
 def _regression(window: dict, baseline: dict) -> dict[str, object]:
     """Metric-matched, persistence-checked regression of a window vs its baseline A."""
     a_p99, w_p99 = _mean(baseline, "eventloop_p99_ms"), _mean(window, "eventloop_p99_ms")
@@ -402,7 +474,9 @@ def _regression(window: dict, baseline: dict) -> dict[str, object]:
     p99_persist_s = 0.0
     if a_p99 is not None and w_p99 is not None and a_p99 > 0:
         threshold = a_p99 + max(P99_ABS_MS, P99_REL * a_p99)
-        p99_persist_s = _persistent_seconds_above(window.get("p99_series", []), threshold)
+        p99_persist_s = _persistent_period_seconds_above(
+            window.get("p99_series", []), threshold
+        )
         p99_worse = (
             (w_p99 - a_p99) >= P99_ABS_MS
             and (w_p99 - a_p99) / a_p99 >= P99_REL
@@ -675,13 +749,13 @@ def main(argv: list[str] | None = None) -> int:
     p_auto.add_argument("--condition", required=True, choices=["A", "B", "C"])
     p_auto.add_argument(
         "--run-cmd",
-        default="python main_mc.py /s --usage --viz --perf",
+        default="python main_mc.py --usage --viz --perf --life",
         help=(
             "canonical RUN launch command as ONE quoted string (shlex-split); "
             "--abc-drive=<condition> and --abc-layout-slot=<slot> are appended. "
-            "Use the real RUN argument (script: main_mc.py '/s'; frozen build: the "
-            ".scr with '/s'), not a fallthrough. Default targets the MC build so "
-            "the saver does not quit on operator input mid-run."
+            "main_mc.py injects RUN mode when no explicit screensaver mode is "
+            "supplied; frozen .scr builds still need their normal '/s'. Default "
+            "targets the MC build and includes lifecycle detail for attribution."
         ),
     )
     p_auto.add_argument("--layout-slot", default="1", dest="layout_slot")

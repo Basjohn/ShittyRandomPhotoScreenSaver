@@ -42,19 +42,38 @@ def _value(spec, offset: float) -> float:
     return float(spec(offset)) if callable(spec) else float(spec)
 
 
-def _window_lines(start: float, *, duration: float, p99, skip, rev_hz=90.0, age=8.0):
+def _window_lines(
+    start: float,
+    *,
+    duration: float,
+    p99,
+    skip,
+    label: str,
+    rolling_p99=None,
+    rev_hz=90.0,
+    age=8.0,
+):
     lines: list[str] = []
-    step = 1.0
+    # Match the real recorder report cadence so persistence represents actual
+    # non-overlapping report periods rather than synthetic one-second duplicates.
+    step = 15.0
     offset = 0.0
     while offset < duration:
         epoch = start + offset
         prefix = f"{_ts(epoch)} INFO "
+        period_p99 = _value(p99, offset)
+        rolling = period_p99 if rolling_p99 is None else _value(rolling_p99, offset)
         lines.append(
             prefix
             + "[PERF] [EVENT LOOP] summary samples=100 retained=100 interval_ms=16 "
-            + f"late_p50_ms=0.50 late_p90_ms=1.00 late_p95_ms={_value(p99, offset) * 0.8:.2f} "
-            + f"late_p99_ms={_value(p99, offset):.2f} late_max_ms={_value(p99, offset) * 1.5:.2f} "
-            + "over_25_ms=0 over_50_ms=0 over_100_ms=0 outcome=sampled"
+            + f"late_p50_ms=0.50 late_p90_ms=1.00 late_p95_ms={rolling * 0.8:.2f} "
+            + f"late_p99_ms={rolling:.2f} late_max_ms={rolling * 1.5:.2f} "
+            + "over_25_ms=0 over_50_ms=0 over_100_ms=0 "
+            + f"period_samples=300 period_elapsed_s=15.000 period_epoch={epoch:.3f} period_p50_ms=0.50 "
+            + f"period_p90_ms=1.00 period_p95_ms={period_p99 * 0.8:.2f} "
+            + f"period_p99_ms={period_p99:.2f} period_max_ms={period_p99 * 1.5:.2f} "
+            + "period_over_25_ms=0 period_over_50_ms=0 period_over_100_ms=0 "
+            + f"score_reset_seq=1 score_label={label} outcome=sampled"
         )
         lines.append(
             prefix
@@ -101,6 +120,8 @@ def _write_run(
                 duration=duration,
                 p99=spec["p99"],
                 skip=spec["skip"],
+                label=phase,
+                rolling_p99=spec.get("rolling_p99"),
                 rev_hz=spec.get("rev_hz", 90.0),
                 age=spec.get("age", 8.0),
             )
@@ -150,6 +171,52 @@ def test_named_windows_keeps_both_c_windows(tmp_path):
     assert run["windows"]["steady_C_pre"]["eventloop_p99_ms"]["mean"] == pytest.approx(5.0, abs=0.01)
     assert run["windows"]["steady_C_post"]["eventloop_p99_ms"]["mean"] == pytest.approx(1.2, abs=0.01)
 
+
+def test_scoring_uses_window_local_period_not_contaminated_rolling_p99(tmp_path):
+    path = _write_run(
+        tmp_path,
+        "contaminated.log",
+        "B",
+        {
+            "steady_B": {
+                "start_offset": 100,
+                "duration": 120,
+                "p99": 3.0,
+                "rolling_p99": 60.0,
+                "skip": 0.5,
+            }
+        },
+    )
+    run = h.score_run(path)
+    assert run["valid"] is True
+    assert run["windows"]["steady_B"]["eventloop_p99_ms"]["mean"] == pytest.approx(3.0)
+
+
+def test_old_rolling_only_event_loop_log_fails_closed(tmp_path):
+    path = _b_run(tmp_path, "old.log")
+    text = path.read_text(encoding="utf-8")
+    text = "\n".join(
+        line.split(" period_samples=", 1)[0] + " outcome=sampled"
+        if "[EVENT LOOP] summary" in line
+        else line
+        for line in text.splitlines()
+    ) + "\n"
+    path.write_text(text, encoding="utf-8")
+    run = h.score_run(path)
+    assert run["valid"] is False
+    assert "event-loop samples" in run["reason"]
+
+
+
+def test_wrong_scoring_window_label_is_rejected(tmp_path):
+    path = _b_run(tmp_path, "wrong-label.log")
+    text = path.read_text(encoding="utf-8").replace(
+        "score_label=steady_B", "score_label=steady_A"
+    )
+    path.write_text(text, encoding="utf-8")
+    run = h.score_run(path)
+    assert run["valid"] is False
+    assert "event-loop samples" in run["reason"]
 
 def test_invalid_marker_makes_run_invalid(tmp_path):
     path = _write_run(

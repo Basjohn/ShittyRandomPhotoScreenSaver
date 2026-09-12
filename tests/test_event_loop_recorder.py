@@ -52,7 +52,29 @@ def test_event_loop_summary_is_periodic_not_per_tick(qt_app, caplog):
     summaries = [record.message for record in caplog.records if "[EVENT LOOP] summary" in record.message]
     assert len(summaries) == 1
     assert "late_p99_ms=200.00" in summaries[0]
+    assert "period_p99_ms=200.00" in summaries[0]
     assert "over_100_ms=1" in summaries[0]
+    assert recorder.period_snapshot().retained_samples == 0
+
+
+def test_scoring_window_reset_clears_pre_window_history_without_restarting_deadline(qt_app):
+    recorder = EventLoopStallRecorder(parent=qt_app, interval_ms=50)
+    _prime(recorder, expected_at=10.05)
+    recorder._last_report_at = 9.0
+    recorder.record_tick(10.200)  # 150 ms pre-window stall
+    expected_at = recorder._expected_at
+
+    seq = recorder.reset_scoring_window("steady_B")
+
+    assert seq == 1
+    assert recorder.snapshot().retained_samples == 0
+    assert recorder.period_snapshot().retained_samples == 0
+    assert recorder._expected_at == expected_at
+    assert recorder._scoring_label == "steady_B"
+
+    recorder.record_tick(expected_at + 0.003)
+    assert recorder.snapshot().p99_ms == pytest.approx(3.0)
+    assert recorder.period_snapshot().p99_ms == pytest.approx(3.0)
 
 
 def test_stopped_recorder_is_inert(qt_app):

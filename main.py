@@ -545,7 +545,14 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
                 QTimer.singleShot(
                     2000,
                     lambda: install_abc_driver_if_enabled(
-                        engine, app, layout_slot=_abc_slot
+                        engine,
+                        app,
+                        layout_slot=_abc_slot,
+                        reset_event_loop_window=(
+                            None
+                            if event_loop_recorder is None
+                            else event_loop_recorder.reset_scoring_window
+                        ),
                     ),
                 )
         except Exception:

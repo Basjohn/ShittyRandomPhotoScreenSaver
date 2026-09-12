@@ -4,22 +4,11 @@ Last updated: 2026-09-12
 
 The Qt Quick migration is closed and operator-accepted. This file no longer mirrors migration-close gates or keeps
 completed future slices as pseudo-work. `Current_Plan.md` owns active sequencing; `Future_Work.md` owns dormant feature
-intent. This file is only a handoff/router for explicitly activated future implementation.
+intent. This file is only a compact handoff/router for dormant future implementation.
 
-## Promoted into Current Plan
+## Active/promoted work is not owned here
 
-The following are no longer dormant Future Work items and must not be separately sequenced here:
-
-1. **Steam Friend Pulse** — definite queued widget immediately below the current Visualizer performance investigation.
-   Execution/decomposition authority: `Docs/Future_Work/Steam_Friend_Pulse.md`.
-2. **System Stats** — conditional queued widget immediately after Friend Pulse. It proceeds only if the lightweight
-   sampler admission probe passes without material Visualizer latency/freshness cost. Start at a fixed 10 s cadence; 5 s is
-   the only faster candidate and requires evidence.
-   Execution/decomposition authority: `Docs/Future_Work/System_Stats_Widget.md`.
-
-Both inherit application-level family activation, ordinary instance enablement, lazy Settings construction, retained
-Quick presentation, shared CUSTOM/stacking normalization and **real dormancy**: no provider/sampler cadence survives
-when the effective widget has no admitted consumer.
+Anything promoted into active execution is intentionally omitted from this file. `Current_Plan.md` is the sole sequencing/status authority for active work; focused decompositions own implementation detail. Do not mirror active performance investigations, widget queues, run results or completion status here.
 
 ## Dormant future ordering
 
