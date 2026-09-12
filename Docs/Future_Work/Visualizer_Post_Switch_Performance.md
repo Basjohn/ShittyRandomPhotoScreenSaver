@@ -258,6 +258,53 @@ Caveats / remaining uncertainty:
 The recreation that clears the tail is the experiment's intervention only; it must
 never become a shipped runtime/layout self-heal.
 
+## Attribution result — 2026-09-12 (H1 rejected, H2 rejected)
+
+Added opt-in presentation-edge counters (`core/diagnostics/visualizer_attribution.py`,
+GUI-thread, allocated only under the experiment admission) and a boundary
+`[PERF] [ABC-ATTR]` snapshot logged by the driver at each scored window start/end.
+It assembles H1 ownership + generation/activation identity (from the existing
+`resource_ownership_snapshot`), the render-node sync/render/draw counts, and the H2
+presentation counts kept strictly separate (pacer opportunities, publications, item
+present requests, fallback window updates, frame swaps). One matched A and one
+matched B run (`main_mc.py /s --usage --viz --perf --life`, slot 1, 4 workers);
+evidence in `logs/abc_evidence/{A,B}_attr.perf.log`.
+
+H1 (stale ownership) — REJECTED. At the settled B window the render-host ownership
+is identical to the A control: `resolved_mode_ids == {bubble}`, bubble
+`has_resources == False`, one shared quad (VAO+VBO), zero release failures,
+`release_failure_unresolved == False`. B's `renderer_resolve_count == 26` with
+inactive releases `25/25/0` exactly track the 25 completed switches 1:1 with no
+leak; `resolve_counts_by_mode` shows every mode including `sphere: 5`, so the exact
+loaded P4 path (Sphere included) retires cleanly — closing the gap P3 left by
+excluding Sphere. No stale/inactive renderer, no multiplied resource, no
+stale-generation ownership.
+
+H2 (presentation/update amplification) — REJECTED. Over the 120 s window the A-vs-B
+presentation cadence is equivalent (deltas): pacer opportunities 7194 / 7193,
+publications 7189 / 7187, item present_requests 7189 / 7187, fallback window updates
+0 / 0, frame swaps 7237 / 7325, render 7237 / 7326, draw 7237 / 7325. B is ~1.2%
+higher, not amplified or duplicated, and the publication->request->render->swap
+relationship stays ~1:1 in both.
+
+Yet B's event-loop late tail is 5-10x A's. Cross-checking `over_*_ms` counts in the
+same windows: B has ~7x more moderate 25-50 ms GUI event-loop stalls than A (over_25
+164 vs 23, over_50 51 vs 15) while extreme spikes are not higher (over_100 12 vs 15),
+and there are no logical tick-breakdown spikes (>50 ms) in either — the logical
+thread stays ~90 Hz. So the degradation is a **per-operation GUI-thread cost
+increase, not a count increase**: the same number of frames/presentations, but
+individual iterations more often stall moderately after the switch exposure.
+
+Conclusion: neither H1 nor H2 survives; per the interpretation table's "ownership
+AND presentation/update cadence equivalent" branch, do not force an H1/H2 verdict.
+C was not run — A/B leave no H1/H2 ambiguity to resolve. Next MEASUREMENT (not a
+repair): time the per-draw `_InheritedGlState.capture()/restore()` fence (its
+synchronous GL state queries run once per draw; draw counts are equal in A/B, so
+only a per-draw duration measurement can test whether post-switch driver/GL state
+makes each capture costlier), with GC / Quick-generation-owned state accumulated
+across 25 activations (H4) as the alternate GUI-thread stall source. Measure before
+changing; no repair until a specific owner/path is identified.
+
 ## Phase P5 — repairs only after attribution
 
 ### If H1
