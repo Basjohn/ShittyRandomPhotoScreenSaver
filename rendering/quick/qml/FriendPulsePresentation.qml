@@ -103,6 +103,21 @@ OverlayWidget {
         }
     }
 
+    function clampScrollToBounds(view) {
+        // A shrinking roster (a periodic Steam refresh returning fewer friends)
+        // can leave contentY beyond the new content end. With StopAtBounds the
+        // flickable only self-corrects during a live flick, so a programmatic
+        // shrink otherwise keeps the view scrolled past its content and keeps
+        // reporting a stale, out-of-range visible window to the avatar-hydration
+        // runtime. Clamp here; the resulting contentY change re-reports a valid
+        // range through onContentYChanged.
+        if (!view)
+            return
+        var maxY = Math.max(0.0, view.contentHeight - view.height)
+        if (view.contentY > maxY)
+            view.contentY = maxY
+    }
+
     function triggerChangeGlow(rowIndex) {
         var view = friendPulseModel.viewMode === "rows" ? activityRowsView : activityGridView
         if (!view.visible || view.moving
@@ -222,6 +237,7 @@ OverlayWidget {
     ListView {
         id: activityRowsView
         objectName: "friendPulseRowsView"
+        onContentHeightChanged: friendRoot.clampScrollToBounds(activityRowsView)
         visible: friendRoot.friendPulseModel.viewMode === "rows" && friendRoot.friendPulseModel.hasRows
                  && (friendRoot.friendPulseModel.viewState === "ready" || friendRoot.friendPulseModel.viewState === "stale")
         x: 18.0; y: 91.0; width: friendRoot.friendPulseModel.authoredWidth - 36.0
@@ -400,6 +416,7 @@ OverlayWidget {
     GridView {
         id: activityGridView
         objectName: "friendPulseGridView"
+        onContentHeightChanged: friendRoot.clampScrollToBounds(activityGridView)
         visible: friendRoot.friendPulseModel.viewMode === "grid" && friendRoot.friendPulseModel.hasRows
                  && (friendRoot.friendPulseModel.viewState === "ready" || friendRoot.friendPulseModel.viewState === "stale")
         x: 18.0; y: 91.0; width: friendRoot.friendPulseModel.authoredWidth - 36.0
