@@ -94,15 +94,20 @@ Item {
         : 1.0
 
     // Shared inner-stroke scaling contract. Small borders/lines should not
-    // balloon with a whole-card CUSTOM transform: visible thickness is allowed
-    // to move by at most +/-1 px from its authored baseline and never below 1 px.
-    // Families with their own authored-canvas transform (Steam cards) pass that
-    // explicit scale; ordinary uniform-transform families use presentationScale.
+    // balloon with a whole-card CUSTOM transform, but they do earn a modest
+    // boost as the card enlarges: visible thickness may rise by at most +1.5 px
+    // above its authored baseline at large sizes. Shrinking never thins a stroke
+    // below its authored baseline (the downward delta is floored at 0), so a
+    // smaller card simply returns to the authored thickness rather than going
+    // fainter; nothing ever renders below 1 px. The outer card/shell border
+    // bypasses this entirely and scales with the transform directly. Families
+    // with their own authored-canvas transform (Steam cards) pass that explicit
+    // scale; ordinary uniform-transform families use presentationScale.
     function scaleAwareStrokeWidthForScale(baseWidth, scaleValue) {
         if (baseWidth <= 0.0)
             return 0.0
         const scale = Math.max(0.05, scaleValue)
-        const delta = Math.max(-1.0, Math.min(1.0, (scale - 1.0) * 2.0))
+        const delta = Math.max(0.0, Math.min(1.5, (scale - 1.0) * 2.0))
         const visibleTarget = Math.max(1.0, baseWidth + delta)
         return visibleTarget / scale
     }
