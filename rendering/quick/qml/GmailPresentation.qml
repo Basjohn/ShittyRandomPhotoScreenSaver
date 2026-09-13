@@ -27,13 +27,55 @@ OverlayWidget {
     // row/content-derived and excludes the shell inset, so only height needs
     // compensation for recreation containment.  Adding shellInset to width
     // lies to CUSTOM about the editable outer rect and breaks alignment.
-    preferredContentWidth: Math.max(
-        gmailModel.contentWidth,
-        headerFrame.implicitWidth
-            + (refreshGlyph.visible ? refreshGlyph.width + 10.0 : 0.0)
-            + gmailRoot.shellInset
-    )
-    preferredContentHeight: gmailModel.contentHeight + gmailRoot.shellInset
+    // CUSTOM content-extent box (0 = none). Vertical drives the effective visible
+    // email count then row/separator spread; horizontal widens the card so more
+    // sender/subject text shows before width-elide. `limit` stays the SSOT
+    // default visible count when no extent is active.
+    readonly property real cExtentW: gmailModel.contentExtentWidth
+    readonly property real cExtentH: gmailModel.contentExtentHeight
+    readonly property real naturalRowHeight: Math.max(28.0, gmailModel.fontSize * 1.65)
+    readonly property real baseRowSpacing: 4.0
+    readonly property int heldEmailCount: messageRepeater.count
+    readonly property real chromeHeight: headerArea.height
+        + (statusArea.visible ? statusArea.height + baseRowSpacing : 0.0)
+        + gmailRoot.shellInset
+    readonly property real emailRailBudget: Math.max(0.0, cExtentH - chromeHeight)
+    readonly property int effectiveVisibleCount: {
+        var held = Math.max(0, heldEmailCount)
+        if (held === 0)
+            return 0
+        if (cExtentH <= 0.0)
+            return Math.min(held, gmailModel.emailLimit)   // SSOT default count
+        var fit = Math.floor(emailRailBudget / (naturalRowHeight + baseRowSpacing))
+        return Math.max(1, Math.min(held, fit))            // CUSTOM: 1..held (<=cap)
+    }
+    // Rows grow to fill the box once the count caps (past-limit vertical padding).
+    readonly property real extentRowHeight: {
+        if (cExtentH <= 0.0 || effectiveVisibleCount <= 0)
+            return naturalRowHeight
+        var gaps = Math.max(0, effectiveVisibleCount - 1)
+        return Math.max(
+            naturalRowHeight,
+            (emailRailBudget - gaps * baseRowSpacing) / effectiveVisibleCount
+        )
+    }
+    // Separator thicknesses stay the authored settings by default and scale up
+    // with the row spread in CUSTOM (setting = default, extent = override).
+    readonly property real extentSeparatorScale: cExtentH > 0.0
+        ? Math.max(1.0, Math.min(2.5, extentRowHeight / naturalRowHeight))
+        : 1.0
+
+    preferredContentWidth: cExtentW > 0.0
+        ? cExtentW
+        : Math.max(
+            gmailModel.contentWidth,
+            headerFrame.implicitWidth
+                + (refreshGlyph.visible ? refreshGlyph.width + 10.0 : 0.0)
+                + gmailRoot.shellInset
+        )
+    preferredContentHeight: cExtentH > 0.0
+        ? cExtentH
+        : gmailModel.contentHeight + gmailRoot.shellInset
 
     signal openInboxRequested()
     signal openMessageRequested(string messageId)
@@ -245,7 +287,8 @@ OverlayWidget {
                 )
                 objectName: "gmailMessageRow_" + index
                 width: contentColumn.width
-                height: boundary.height + baseRowHeight
+                visible: index < gmailRoot.effectiveVisibleCount
+                height: visible ? boundary.height + gmailRoot.extentRowHeight : 0.0
 
                 Rectangle {
                     id: boundary
@@ -254,9 +297,11 @@ OverlayWidget {
                     width: parent.width
                     height: visible ? gmailRoot.scaleAwareStrokeWidth(
                         gmailRoot.gmailModel.boundarySeparatorThickness
+                            * gmailRoot.extentSeparatorScale
                     ) : 0.0
                     visible: gmailRoot.gmailModel.showSeparators
                         && messageRow.boundaryBefore
+                        && messageRow.index < gmailRoot.effectiveVisibleCount
                     color: gmailRoot.gmailModel.boundarySeparatorColor
                 }
 
@@ -264,7 +309,7 @@ OverlayWidget {
                     id: rowContent
                     anchors.top: boundary.bottom
                     width: parent.width
-                    height: messageRow.baseRowHeight
+                    height: gmailRoot.extentRowHeight
 
                     Image {
                         id: envelope
@@ -415,12 +460,13 @@ OverlayWidget {
                 Rectangle {
                     objectName: "gmailSeparator_" + messageRow.index
                     visible: gmailRoot.gmailModel.showSeparators
-                        && messageRow.index < messageRepeater.count - 1
+                        && messageRow.index < gmailRoot.effectiveVisibleCount - 1
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: visible ? gmailRoot.scaleAwareStrokeWidth(
                         gmailRoot.gmailModel.separatorThickness
+                            * gmailRoot.extentSeparatorScale
                     ) : 0.0
                     color: gmailRoot.gmailModel.separatorColor
                 }

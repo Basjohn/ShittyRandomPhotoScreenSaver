@@ -653,7 +653,10 @@ def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_pl
         assert first_row is not None
         assert model.viewState == "ready"
         assert service.current_snapshot().source == "cache"
-        assert row_model.rowCount() == 2
+        # The model now retains a buffer up to the cache cap; ``limit`` (SSOT,
+        # exposed as emailLimit) still governs the visible count + authored height.
+        assert row_model.rowCount() == 3
+        assert model.emailLimit == 2
         two_row_height = model.contentHeight
 
         presentation.apply_input_state(
@@ -829,9 +832,12 @@ def test_gmail_qml_is_presentation_only_and_keeps_popup_height_independent() -> 
     # made width the header-aware max of that content width and the header's own
     # required width, while only row-derived height carries the shell inset.
     assert "uniformScaleTransform: true" in qml
-    assert "preferredContentWidth: Math.max(" in qml
+    # A CUSTOM content-extent overrides preferred size; the non-CUSTOM fallback is
+    # still the header-aware content width and the row-derived height + shell inset.
+    assert "preferredContentWidth: cExtentW > 0.0" in qml
     assert "gmailModel.contentWidth," in qml
-    assert "preferredContentHeight: gmailModel.contentHeight + gmailRoot.shellInset" in qml
+    assert "preferredContentHeight: cExtentH > 0.0" in qml
+    assert "gmailModel.contentHeight + gmailRoot.shellInset" in qml
     # The content term must not gain a shell inset inline (naive outer-rect lie).
     assert "preferredContentWidth: gmailModel.contentWidth +" not in qml
     # Logo desaturation now lives inside the shared BrandedHeader, driven by the
@@ -942,3 +948,24 @@ def test_retained_gmail_wrapper_routes_semantic_actions_without_recreation(
     assert model.is_active is False
     assert service.stopped == 1
     assert service.detached == 1
+
+
+def test_gmail_content_extent_override_is_ssot_safe() -> None:
+    config = _config(limit=10)
+    model = GmailPresentationModel(config, _style(config))
+    assert model.emailLimit == 10
+    assert model.maxHeldEmails >= 10
+    assert model.contentExtentWidth == 0.0
+    assert model.contentExtentHeight == 0.0
+
+    assert model.set_content_extent(760.0, 900.0) is True
+    assert model.contentExtentWidth == pytest.approx(760.0)
+    assert model.contentExtentHeight == pytest.approx(900.0)
+    # The extent is CUSTOM-scoped presentation state; the `limit` SSOT default is
+    # never rewritten by a resize.
+    assert model.emailLimit == 10
+
+    assert model.set_content_extent(760.0, 900.0) is False
+    assert model.clear_content_extent() is True
+    assert model.contentExtentHeight == 0.0
+    assert model.emailLimit == 10

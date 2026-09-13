@@ -473,6 +473,13 @@ class GmailPresentationSnapshot:
     interaction_enabled: bool = False
 
 
+# The model retains a buffer up to the list-widget capacity cap so a CUSTOM
+# vertical content-extent can reveal more than the authored ``limit`` (the SSOT
+# default visible count) without a re-fetch. ``limit`` still governs the default
+# shown count; this is only a data buffer, never a second count authority.
+_MAX_HELD_EMAILS = LIST_WIDGET_MAX_CAPACITY
+
+
 class GmailPresentationModel(QObject):
     stateChanged = Signal()
 
@@ -496,6 +503,9 @@ class GmailPresentationModel(QObject):
         self._runtime_attached = False
         self._active = False
         self._retired = False
+        # CUSTOM content-extent override (logical content box, pre-uniform-scale).
+        # None on every non-CUSTOM path -> authored size + ``limit`` govern.
+        self._content_extent: tuple[int, int] | None = None
 
     @property
     def config(self) -> GmailPresentationConfig:
@@ -578,9 +588,9 @@ class GmailPresentationModel(QObject):
             # budget. Group the accepted shared inbox window first, then cap the
             # resulting rows so a six-message conversation does not silently turn
             # a requested 10-row widget into only five visible entries.
-            display_rows = group_emails(list(snapshot.emails))[: config.limit]
+            display_rows = group_emails(list(snapshot.emails))[:_MAX_HELD_EMAILS]
         else:
-            display_rows = list(snapshot.emails[: config.limit])
+            display_rows = list(snapshot.emails[:_MAX_HELD_EMAILS])
         rows = []
         for item in display_rows:
             email = item.email if hasattr(item, "email") else item
@@ -684,6 +694,41 @@ class GmailPresentationModel(QObject):
         if normalized == self._snapshot.interaction_enabled:
             return False
         self._snapshot = replace(self._snapshot, interaction_enabled=normalized)
+        self.stateChanged.emit()
+        return True
+
+    def set_content_extent(
+        self,
+        width: float | None,
+        height: float | None,
+    ) -> bool:
+        """Apply a CUSTOM content-box override, or clear it when either is None.
+
+        Presentation/layout-only: the box overrides the effective visible count
+        and row spread while in CUSTOM. The ``limit`` setting remains the SSOT
+        default; this never writes settings.
+        """
+
+        if width is None or height is None:
+            return self.clear_content_extent()
+        try:
+            resolved_width = int(round(float(width)))
+            resolved_height = int(round(float(height)))
+        except (TypeError, ValueError):
+            return False
+        resolved_width = max(300, min(2000, resolved_width))
+        resolved_height = max(80, min(4000, resolved_height))
+        extent = (resolved_width, resolved_height)
+        if extent == self._content_extent:
+            return False
+        self._content_extent = extent
+        self.stateChanged.emit()
+        return True
+
+    def clear_content_extent(self) -> bool:
+        if self._content_extent is None:
+            return False
+        self._content_extent = None
         self.stateChanged.emit()
         return True
 
@@ -890,18 +935,41 @@ class GmailPresentationModel(QObject):
     def contentWidth(self) -> float:
         return float(self.config.width)
 
+    @Property(int, notify=stateChanged)
+    def emailLimit(self) -> int:
+        # SSOT default visible count (non-CUSTOM). CUSTOM content-extent overrides
+        # the *effective* count in QML but never rewrites this setting.
+        return int(self.config.limit)
+
+    @Property(int, constant=True)
+    def maxHeldEmails(self) -> int:
+        return int(_MAX_HELD_EMAILS)
+
+    @Property(float, notify=stateChanged)
+    def contentExtentWidth(self) -> float:
+        return float(self._content_extent[0]) if self._content_extent else 0.0
+
+    @Property(float, notify=stateChanged)
+    def contentExtentHeight(self) -> float:
+        return float(self._content_extent[1]) if self._content_extent else 0.0
+
     @Property(float, notify=stateChanged)
     def contentHeight(self) -> float:
         header_height = 36.0
         row_height = max(28.0, self.fontSize * 1.65)
         rows = self._row_model.rows
-        if self._snapshot.view_state == "ready" and rows:
-            boundaries = sum(1 for row in rows if row.boundary_before)
+        # The model retains a buffer up to the cache cap, but the authored height
+        # reflects only the SSOT ``limit`` visible rows. A CUSTOM content-extent
+        # overrides the preferred height in QML, so this stays the non-CUSTOM base.
+        visible = min(len(rows), int(self.config.limit))
+        if self._snapshot.view_state == "ready" and visible > 0:
+            shown = rows[:visible]
+            boundaries = sum(1 for row in shown if row.boundary_before)
             body_height = (
-                row_height * len(rows)
+                row_height * visible
                 + self.config.boundary_separator_thickness * boundaries
             )
-            gaps = len(rows)
+            gaps = visible
         else:
             body_height = max(42.0, self.fontSize * 1.8)
             gaps = 1
@@ -975,10 +1043,18 @@ class RetainedGmailPresentation:
         self,
         payload: Mapping[str, object],
     ) -> None:
-        # Gmail now uses one retained whole-card CUSTOM transform.  Ignore stale
-        # pre-migration ``font_size`` payloads so authored Settings remain the
-        # baseline and saved geometry alone determines visible scale.
-        del payload
+        # Stale pre-migration ``font_size`` payloads stay ignored. The one key
+        # honoured is ``content_extent`` (the CUSTOM-scoped side-resize box):
+        # vertical drives the effective visible count + row/separator spread,
+        # horizontal widens the card (less width-elide). Its absence clears any
+        # override so the card returns to its ``limit``/authored size. Runs for
+        # both live edit and committed replay, so a saved extent restores on load
+        # + slot.
+        extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
+        if isinstance(extent, (tuple, list)) and len(extent) == 2:
+            self._model.set_content_extent(extent[0], extent[1])
+        else:
+            self._model.clear_content_extent()
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

@@ -1562,6 +1562,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="gmail_font",
+        content_extent_axes=("horizontal", "vertical"),
     ),
     WidgetRuntimeDescriptor(
         widget_id="achievement_pulse",
