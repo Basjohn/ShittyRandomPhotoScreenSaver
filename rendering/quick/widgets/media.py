@@ -1294,7 +1294,7 @@ class MediaPresentationModel(QObject):
         border = self.style.card_style
         if border.border_width <= 0.0 or border.border_color.alpha() <= 0:
             return 0.0
-        return 2.0
+        return 2.75
 
     @Property(QColor, notify=stateChanged)
     def headerFillColor(self) -> QColor:

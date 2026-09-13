@@ -437,7 +437,7 @@ def test_media_config_and_style_project_canonical_settings_and_direction() -> No
 
     model = MediaPresentationModel(config, style, MediaArtworkImageProvider())
     assert model.artworkBorderColor == style.card_style.border_color
-    assert model.artworkBorderWidth == pytest.approx(2.0)
+    assert model.artworkBorderWidth == pytest.approx(2.75)
     assert model.progressHeight == pytest.approx(9.0)
     assert model.progressFillColor == QColor(45, 190, 250, 230)
     assert model.progressGlowColor == QColor(45, 190, 250, 180)

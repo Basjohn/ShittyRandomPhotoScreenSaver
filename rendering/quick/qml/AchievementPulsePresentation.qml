@@ -244,7 +244,7 @@ OverlayWidget {
                         ? achievementRoot.achievementModel.accentColor
                         : achievementRoot.achievementModel.steamArtworkBorderColor
                     border.width: achievementRoot.scaleAwareStrokeWidthForScale(
-                        2.0, achievementRoot.contentScale
+                        2.25, achievementRoot.contentScale
                     )
                 }
 
@@ -412,7 +412,7 @@ OverlayWidget {
                     color: "transparent"
                     border.color: achievementRoot.achievementModel.steamArtworkBorderColor
                     border.width: achievementRoot.scaleAwareStrokeWidthForScale(
-                        1.0, achievementRoot.contentScale
+                        1.15, achievementRoot.contentScale
                     )
                     z: 2
                 }
