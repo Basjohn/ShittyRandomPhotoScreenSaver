@@ -175,25 +175,28 @@ Friend Pulse content-extent experiment lands.
 
 ## 7. Content-extent resize rollout (in progress, added 2026-09-13)
 
-Friend Pulse content-extent side resize is **implemented + operator-validated** (both axes;
-sides reflow, corners uniform; darker-blue handles; persisted via CUSTOM `size_payload` +
-slots; no teardown). Reusable stack lives in `custom_layout_session` / `custom_layout_owner`
-/ `custom_layout_overlay` / `CustomLayoutOverlay.qml`, gated by the descriptor
-`content_extent_axes` field.
+The chosen model is one **uniform CUSTOM-scoped presentation override** (no settings
+mutation): the extent overrides the *effective* count / padding / separator / truncation
+while in CUSTOM; the widget's real settings (`limit`, separator/word-count) stay the SSOT
+default. One authority per context (setting = default, extent = CUSTOM override), persisted
+via CUSTOM `size_payload` + slots, no teardown. Reusable stack lives in
+`custom_layout_session` / `custom_layout_owner` / `custom_layout_overlay` /
+`CustomLayoutOverlay.qml`, gated by the descriptor `content_extent_axes` field; a family
+opts in by declaring axes + consuming `content_extent` in its payload handler + reflowing.
 
-Next targets — **Reddit and Gmail** (settings-driven, unlike Friend Pulse's pure layout box):
-
-- [ ] **Vertical, below the item limit:** show more items (Reddit posts capped at 25 = cache
-  limit; Gmail emails). **Past the limit:** further vertical resize instead increases
-  **vertical padding** and **separator thickness** — these are (or should be) real settings,
-  adjusted live and **saved batched at edit-mode save**, not per-drag.
-- [ ] **Horizontal:** reduce **truncation** (also a real setting) with the extra width, plus a
-  little padding (Gmail).
-- [ ] **No new teardowns** — settings adjustments must apply reactively during edit and persist
-  at save without triggering a settings teardown/rebuild. Only add a teardown if a critical
-  flaw is found.
-- [ ] Reuse the shared content-extent stack; declare axes on each descriptor. Games You Follow
-  (future) gets both axes when it exists.
+- [x] **Friend Pulse** — both axes; operator-validated.
+- [x] **Reddit (reddit + reddit2)** — vertical count ± (buffer up to 25, `limit` = SSOT
+  default) then row/separator spread; horizontal = free width-elide. Tested.
+- [x] **Gmail** — vertical count ± (buffer up to cap, `limit` = SSOT default) then
+  row/boundary-separator spread; horizontal = free width-elide + preferred-width widen.
+  Tested.
+- [ ] **Gmail horizontal truncation (max_words override).** Gmail word-caps sender/subject at
+  projection (`max_sender_words`/`max_subject_words`), so free width-elide alone can't reveal
+  more. Add a CUSTOM-scoped `max_words` override driven by the horizontal extent (setting =
+  default, extent = override) + row re-projection, so wider genuinely shows more text.
+- [ ] **Games You Follow** (future) gets both axes when it exists (reuse the shared stack).
+- Note: padding/separator/truncation are **not** promoted to real settings (Reddit had none;
+  promoting would add per-widget schema + migration and risk SSOT). Kept CUSTOM-scoped.
 
 ## Standing guardrails
 
