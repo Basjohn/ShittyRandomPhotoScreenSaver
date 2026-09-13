@@ -50,23 +50,69 @@ def build_system_stats_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.system_stats_enabled.setProperty("circleIndicator", True)
     tab.system_stats_enabled.setChecked(tab._default_bool("system_stats", "enabled"))
     tab.system_stats_enabled.setToolTip(
-        "Show the retained whole-system CPU and memory card. Sampling exists only while a card is admitted."
+        "Show CPU, memory, uptime and network throughput."
     )
     tab.system_stats_enabled.stateChanged.connect(tab._save_settings)
     tab.system_stats_enabled.stateChanged.connect(tab._update_stack_status)
     root.addWidget(tab.system_stats_enabled)
 
-    info = QLabel(
-        "Experimental: one shared low-cost CPU/RAM sample every 10 seconds. GPU and VRAM are omitted from v1 because "
-        "an honest low-cost system aggregate did not pass admission. No process list or diagnostic usage collector is used."
-    )
-    info.setWordWrap(True)
-    root.addWidget(info)
-
     tab._system_stats_controls_container = QWidget()
     controls = QVBoxLayout(tab._system_stats_controls_container)
     controls.setContentsMargins(0, 0, 0, 8)
     controls.setSpacing(12)
+
+    sampling_toggle, sampling_body, sampling_controls = build_bucket_toggle(
+        controls,
+        "Sampling",
+        expanded=tab.get_widget_bucket_state("system_stats", "sampling"),
+        on_toggle=lambda checked: tab.set_widget_bucket_state(
+            "system_stats", "sampling", checked
+        ),
+        defer_initial_visibility=True,
+    )
+    sampling_row, _sampling_label = add_aligned_row(
+        sampling_controls, "Update Interval:", label_width=140
+    )
+    tab.system_stats_sample_interval_seconds = QSpinBox()
+    tab.system_stats_sample_interval_seconds.setRange(10, 3600)
+    tab.system_stats_sample_interval_seconds.setSuffix(" sec")
+    tab.system_stats_sample_interval_seconds.setValue(
+        tab._default_int("system_stats", "sample_interval_seconds")
+    )
+    tab.system_stats_sample_interval_seconds.setToolTip(
+        "How often System Stats updates. Minimum 10 seconds."
+    )
+    tab.system_stats_sample_interval_seconds.valueChanged.connect(tab._save_settings)
+    sampling_row.addWidget(tab.system_stats_sample_interval_seconds)
+    sampling_row.addStretch()
+    finalize_bucket_body(sampling_toggle, sampling_body)
+
+    metrics_toggle, metrics_body, metrics_controls = build_bucket_toggle(
+        controls,
+        "Metrics",
+        expanded=tab.get_widget_bucket_state("system_stats", "metrics"),
+        on_toggle=lambda checked: tab.set_widget_bucket_state(
+            "system_stats", "metrics", checked
+        ),
+        defer_initial_visibility=True,
+    )
+    metrics_controls.addWidget(QLabel("Choose which metrics appear on the card."))
+    tab.system_stats_show_cpu = QCheckBox("CPU Load")
+    tab.system_stats_show_memory = QCheckBox("Memory")
+    tab.system_stats_show_uptime = QCheckBox("Uptime")
+    tab.system_stats_show_network = QCheckBox("Network Throughput")
+    for checkbox, key in (
+        (tab.system_stats_show_cpu, "show_cpu"),
+        (tab.system_stats_show_memory, "show_memory"),
+        (tab.system_stats_show_uptime, "show_uptime"),
+        (tab.system_stats_show_network, "show_network"),
+    ):
+        checkbox.setProperty("circleIndicator", True)
+        checkbox.setChecked(tab._default_bool("system_stats", key))
+        checkbox.stateChanged.connect(tab._save_settings)
+        checkbox.stateChanged.connect(tab._update_stack_status)
+        metrics_controls.addWidget(checkbox)
+    finalize_bucket_body(metrics_toggle, metrics_body)
 
     layout_toggle, layout_body, layout_controls = build_bucket_toggle(
         controls,
@@ -167,6 +213,21 @@ def load_system_stats_settings(tab: "WidgetsTab", widgets: Mapping[str, Any]) ->
     tab.system_stats_font_size.setValue(
         tab._config_int("system_stats", values, "font_size")
     )
+    tab.system_stats_sample_interval_seconds.setValue(
+        max(10, tab._config_int("system_stats", values, "sample_interval_seconds"))
+    )
+    tab.system_stats_show_cpu.setChecked(
+        tab._config_bool("system_stats", values, "show_cpu")
+    )
+    tab.system_stats_show_memory.setChecked(
+        tab._config_bool("system_stats", values, "show_memory")
+    )
+    tab.system_stats_show_uptime.setChecked(
+        tab._config_bool("system_stats", values, "show_uptime")
+    )
+    tab.system_stats_show_network.setChecked(
+        tab._config_bool("system_stats", values, "show_network")
+    )
     _set_controls_visible(tab)
 
 
@@ -184,6 +245,13 @@ def save_system_stats_settings(tab: "WidgetsTab") -> dict[str, Any]:
             ),
             "font_family": tab.system_stats_font_family.currentFont().family(),
             "font_size": int(tab.system_stats_font_size.value()),
+            "sample_interval_seconds": int(
+                tab.system_stats_sample_interval_seconds.value()
+            ),
+            "show_cpu": bool(tab.system_stats_show_cpu.isChecked()),
+            "show_memory": bool(tab.system_stats_show_memory.isChecked()),
+            "show_uptime": bool(tab.system_stats_show_uptime.isChecked()),
+            "show_network": bool(tab.system_stats_show_network.isChecked()),
         }
     )
     return payload

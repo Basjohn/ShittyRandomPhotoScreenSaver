@@ -468,7 +468,7 @@ class DisplayTab(QWidget):
         self.widget_glow_intensity_slider.valueChanged.connect(
             lambda value: self.widget_glow_intensity_label.setText(f"{value}%")
         )
-        self.widget_glow_intensity_slider.valueChanged.connect(self._save_settings)
+        self.widget_glow_intensity_slider.valueCommitted.connect(self._save_settings)
         widget_glow_intensity_row.addWidget(self.widget_glow_intensity_slider, 1)
         widget_glow_intensity_row.addWidget(self.widget_glow_intensity_label)
         widget_glow_intensity_row.addStretch()
@@ -501,7 +501,7 @@ class DisplayTab(QWidget):
         self.widget_glow_distance_slider.valueChanged.connect(
             lambda value: self.widget_glow_distance_label.setText(f"{value} px")
         )
-        self.widget_glow_distance_slider.valueChanged.connect(self._save_settings)
+        self.widget_glow_distance_slider.valueCommitted.connect(self._save_settings)
         widget_glow_distance_row.addWidget(self.widget_glow_distance_slider, 1)
         widget_glow_distance_row.addWidget(self.widget_glow_distance_label)
         widget_glow_distance_row.addStretch()

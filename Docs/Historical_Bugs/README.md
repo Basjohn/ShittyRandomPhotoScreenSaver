@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -26,7 +26,6 @@ Rehome surviving regression coverage before deleting an old owner.
 
 ## Active / Pending Acceptance
 
-- [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md) — **IMPLEMENTED / AWAITING PHYSICAL VALIDATION**.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN at `5b3cbaef`; only physical dual-display acceptance remains.
 
 Current migration implementation sequencing is **not** owned by this folder. Read `Current_Plan.md` for current status.
@@ -38,7 +37,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 ## R Records
 
 - [R-80 — ABC Event-Loop Rolling History Contaminated Named Steady Windows](R-80_ABC_EventLoop_Rolling_Window_Contamination.md)
-- [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md)
+- [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md) — **SOLVED / PHYSICAL WAKE VALIDATED 2026-09-12**.
 - [R-78 — Particle Center-Outward Swirl Had A Radial Branch Cut](R-78_Particle_Center_Outward_Swirl_Branch_Cut.md)
 - [R-73 — Quick Card-Shadow Extra Offset Translation And Visualizer Omission](R-73_Quick_Card_Shadow_Extra_Offset_Translation_And_Visualizer_Omission.md)
 - [R-72 — Production Shutdown Imported A Dead Performance Parser](R-72_Production_Shutdown_Imported_Dead_Perf_Parser.md)

@@ -91,7 +91,7 @@ OverlayWidget {
                 interactionEnabled: redditRoot.redditModel.interactionEnabled
                 fillColor: redditRoot.redditModel.headerFillColor
                 borderColor: redditRoot.redditModel.headerBorderColor
-                borderWidth: redditRoot.scaleAwareStrokeWidth(
+                borderWidth: redditRoot.scaleAwareHeaderStrokeWidth(
                     redditRoot.redditModel.headerBorderWidth
                 )
                 textColor: redditRoot.redditModel.headerTextColor

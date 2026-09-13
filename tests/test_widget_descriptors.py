@@ -206,7 +206,10 @@ def test_widget_custom_position_option_descriptors_follow_section_contract():
 
     media = next(item for item in descriptors if item.widget_id == "media")
     assert media.combo_attr == "media_position"
-    assert media.fallback_position == "Bottom Left"
+    # Position defaults have one authority: canonical widget settings.  The
+    # descriptor must not reintroduce a copied fallback literal.
+    assert not hasattr(media, "fallback_position")
+    assert get_default_settings()["widgets"]["media"]["position"] == "Top Left"
 
 
 def test_widget_section_index_resolution_prefers_stable_section_id():
@@ -242,7 +245,6 @@ def test_widget_programmatic_dependency_indices_capture_media_visualizer_default
     index_map = get_widget_section_index_map(descriptors)
 
     assert get_widget_programmatic_dependency_indices(("media",), descriptors) == (
-        index_map["visualizers"],
         index_map["defaults"],
         index_map["media"],
     )
@@ -261,7 +263,9 @@ def test_widget_section_signal_block_attrs_follow_descriptor_registry():
     assert "media_enabled" in attrs
     assert "reddit_enabled" in attrs
     assert "vis_enabled_checkbox" in attrs
-    assert "devcurve_growth" in attrs
+    assert "devcurve_base_level" in attrs
+    # Growth was retired; the signal-block registry must not resurrect its UI.
+    assert "devcurve_growth" not in attrs
 
 
 def test_build_widget_section_buttons_uses_descriptor_metadata(qt_app):
@@ -762,9 +766,14 @@ def test_sync_custom_layout_restore_routes_tracks_last_non_custom_authored_state
 
     restore_map = widgets_cfg["custom_layout_restore"]["widgets"]
     assert restore_map["clock"]["position"] == "Top Right"
-    assert restore_map["clock"]["monitor"] == "ALL"
+    assert restore_map["clock"]["monitor"] == "1"
+    # Clock clones intentionally share the base clock authored position route
+    # while retaining their own monitor routes. Missing monitor state repairs
+    # from canonical defaults rather than inventing an ALL fallback.
     assert restore_map["clock2"]["position"] == "Top Right"
     assert restore_map["clock2"]["monitor"] == "2"
+    assert restore_map["clock3"]["position"] == "Top Right"
+    assert restore_map["clock3"]["monitor"] == "1"
     assert restore_map["weather"]["position"] == "Bottom Left"
     assert restore_map["weather"]["monitor"] == "1"
     assert "gmail" not in restore_map

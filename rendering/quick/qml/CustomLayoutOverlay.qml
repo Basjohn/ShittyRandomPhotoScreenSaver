@@ -37,7 +37,7 @@ Item {
             objectName: "customLayoutVerticalGuide"
             property string guideKind: String(modelData.kind)
             x: Number(modelData.position)
-            width: 2
+            width: 3
             height: customLayoutOverlay.height
             color: "#aa5ea8ff"
         }
@@ -51,7 +51,7 @@ Item {
             property string guideKind: String(modelData.kind)
             y: Number(modelData.position)
             width: customLayoutOverlay.width
-            height: 2
+            height: 3
             color: "#aa5ea8ff"
         }
     }
@@ -69,6 +69,7 @@ Item {
             required property bool duplicate
             required property bool resizable
             required property bool viewportResizeCapable
+            required property bool sizeResetCapable
             required property real resizeScale
             required property bool canTransferLeft
             required property bool canTransferRight
@@ -167,6 +168,40 @@ Item {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: customLayoutOverlay.sessionModel.closeItem(editFrame.index)
+                }
+            }
+
+            Rectangle {
+                id: restoreSizeControl
+                objectName: "customLayoutRestoreSize-" + editFrame.widgetId
+                visible: editFrame.sizeResetCapable
+                width: 22
+                height: 22
+                radius: width / 2
+                x: 10
+                y: Math.max(1.0, editFrame.height - height - 10.0)
+                z: 40
+                antialiasing: true
+                color: customLayoutOverlay.closeButtonColor
+                border.width: 1
+                border.color: customLayoutOverlay.closeButtonBorderColor
+
+                // Restore-size glyph. Keep this a real glyph, not hand-drawn
+                // chrome, and deliberately distinct from the widget refresh ↺.
+                Text {
+                    anchors.centerIn: parent
+                    text: "↶"
+                    color: customLayoutOverlay.closeButtonGlyphColor
+                    font.pixelSize: 15
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: customLayoutOverlay.sessionModel.restoreSize(editFrame.index)
                 }
             }
 

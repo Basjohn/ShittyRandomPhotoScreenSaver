@@ -10,6 +10,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from core.logging.logger import get_logger
 from core.steam.backend import build_endpoint, fetch_json
 from core.steam.cache import cache_path_for_profile_key, get_steam_source_refresh_lock, read_cache_record, write_success_result
 from core.steam.credentials import SteamCredentialPayload, derive_profile_cache_key
@@ -20,6 +21,10 @@ from core.steam.friend_pulse import (
     sanitize_friend_list_payload,
     sanitize_player_summaries_payload,
 )
+from core.steam.friend_messages import (
+    FriendMessageSnapshot,
+    parse_friend_message_sessions,
+)
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 from core.steam.request_policy import SteamBackoffPolicy, SteamRequestCoordinator, SteamRequestKey, backoff_result
 
@@ -28,6 +33,7 @@ FRIEND_LIST_CACHE_KEY = "friend_pulse_friend_list"
 PLAYER_SUMMARIES_CACHE_KEY = "friend_pulse_player_summaries"
 MAX_PLAYER_SUMMARIES_BATCH = 100
 DEFAULT_SOURCE_FRESH_SECONDS = 10.0 * 60.0
+logger = get_logger(__name__)
 _request_coordinator = SteamRequestCoordinator()
 _request_backoff = SteamBackoffPolicy()
 
@@ -88,6 +94,43 @@ def refresh_friend_pulse_cache(
     return build_friend_pulse_snapshot(friend_result=safe_friend, summaries_result=summaries, now=reference_now, previous=previous)
 
 
+def refresh_friend_message_sessions(
+    *,
+    credential: SteamCredentialPayload,
+    friend_steam_ids: dict[str, str],
+    opener: Callable | None = None,
+    now: float | None = None,
+) -> FriendMessageSnapshot:
+    """Fetch unread friend-message sessions through the shared Steam policy.
+
+    This function has no scheduler.  Friend Pulse calls it only from the same
+    generation-owned worker that already refreshes the roster, so unread state
+    cannot accidentally create a second polling/cadence owner.
+    """
+
+    reference_now = time.time() if now is None else float(now)
+    profile_key = derive_profile_cache_key(credential.profile_identifier)
+    result = _fetch_live(
+        profile_key=profile_key,
+        source_id=SteamSourceId.FRIEND_MESSAGE_SESSIONS,
+        credential=credential,
+        params={"only_sessions_with_messages": "1"},
+        opener=opener,
+        now=reference_now,
+    )
+    if not result.ok:
+        return FriendMessageSnapshot(
+            status=result.status,
+            accepted_at=result.fetched_at or reference_now,
+            source_available=False,
+        )
+    return parse_friend_message_sessions(
+        result.payload or {},
+        friend_steam_ids=friend_steam_ids,
+        accepted_at=result.fetched_at or reference_now,
+    )
+
+
 def _fetch_summaries(**kwargs) -> SteamResult:
     profile_key, friend_ids, credential = kwargs["profile_key"], kwargs["friend_ids"], kwargs["credential"]
     profile, root, opener, now, force = kwargs["profile"], kwargs["root"], kwargs["opener"], kwargs["now"], kwargs["force"]
@@ -133,6 +176,13 @@ def _fetch_live(*, profile_key: str, source_id: SteamSourceId, credential: Steam
         return SteamResult(status=SteamResultStatus.STALE_GENERATION, source_id=source_id, message="Friend Pulse request already in flight.")
     endpoint = build_endpoint(source_id, api_key=credential.api_key, steamid=credential.profile_identifier, **params)
     result = _request_coordinator.complete(handle, fetch_json(endpoint, opener=opener))
+    if not result.ok:
+        logger.warning(
+            "[STEAM] Source request result source=%s status=%s http_status=%s",
+            source_id.value,
+            result.status.value,
+            result.http_status if result.http_status is not None else "none",
+        )
     _request_backoff.record_result(key, result, now=now)
     return result
 

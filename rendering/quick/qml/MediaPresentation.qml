@@ -114,7 +114,7 @@ OverlayWidget {
             logoSource: mediaRoot.mediaModel.providerLogoSource
             fillColor: mediaRoot.mediaModel.headerFillColor
             borderColor: mediaRoot.mediaModel.headerBorderColor
-            borderWidth: mediaRoot.scaleAwareStrokeWidth(mediaRoot.mediaModel.headerBorderWidth)
+            borderWidth: mediaRoot.scaleAwareHeaderStrokeWidth(mediaRoot.mediaModel.headerBorderWidth)
             textColor: mediaRoot.mediaModel.headerTextColor
             fontFamily: mediaRoot.mediaModel.fontFamily
             textShadowEnabled: mediaRoot.mediaModel.textShadowEnabled
@@ -184,33 +184,38 @@ OverlayWidget {
                 id: artworkFrame
                 objectName: "mediaArtworkFrame"
                 visible: mediaRoot.mediaModel.hasArtwork || mediaArtwork.transitionVisible
-                // Keep the header->seek span as the visual reference. Width stays
-                // on the accepted narrowed Slice-3 rail, but the frame now reaches
-                // the header's top edge and grows only downward to the old lower
-                // boundary. This makes the border align with the header without
-                // widening the artwork or crowding metadata. PreserveAspectCrop
-                // remains authoritative.
+                // Keep the accepted top alignment and narrow right-hand rail, but
+                // spend the *actual* free vertical space below the artwork.  The
+                // seek band is not a global lower boundary: it only constrains the
+                // artwork if its real horizontal rectangle could intersect this
+                // right-hand column.  The full-width transport row remains the
+                // normal hard lower boundary.
                 readonly property real topInColumn: headerFrame.visible
                     ? headerFrame.y
                     : mainBand.y
-                readonly property real bottomInColumn: progressBand.visible
-                    ? progressBand.y + progressTrack.y + progressTrack.height
-                    : mainBand.y + mainBand.height
+                readonly property real normalBottomInColumn: controlsRow.visible
+                    ? controlsRow.y - mediaColumn.spacing
+                    : mediaColumn.height
+                readonly property bool seekWouldIntersectArtwork: progressBand.visible
+                    && (progressTrack.x + progressTrack.width) > (artworkFrame.x - 2.0)
+                readonly property real bottomInColumn: seekWouldIntersectArtwork
+                    ? progressBand.y - mediaColumn.spacing
+                    : normalBottomInColumn
                 readonly property real referenceHeight: Math.max(
                     1.0, bottomInColumn - topInColumn
                 )
                 readonly property real widthScale: 0.85 * 0.85
-                // The old 0.85 centred height left 7.5% of the reference span
-                // above and below. Move that upper 7.5% into the artwork while
-                // preserving the previous lower edge: 0.85 + 0.075 = 0.925.
-                readonly property real heightScale: 0.925
+                readonly property real artworkStrokeWidth: mediaRoot.scaleAwareStrokeWidth(
+                    mediaRoot.mediaModel.artworkBorderWidth
+                )
+                readonly property real imageInset: Math.max(0.75, artworkStrokeWidth * 0.65)
                 width: visible
                     ? Math.min(
                         mediaRoot.mediaModel.artworkSize * widthScale,
                         mainBand.width
                     )
                     : 0.0
-                height: visible ? referenceHeight * heightScale : 0.0
+                height: visible ? referenceHeight : 0.0
                 anchors.right: parent.right
                 y: visible ? topInColumn - mainBand.y : 0.0
                 radius: mediaRoot.mediaModel.roundedArtwork ? width / 8.0 : 0.0
@@ -239,6 +244,7 @@ OverlayWidget {
                     id: mediaArtwork
                     objectName: "mediaArtwork"
                     anchors.fill: parent
+                    anchors.margins: artworkFrame.imageInset
                     source: mediaRoot.mediaModel.artworkSource
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
@@ -257,7 +263,7 @@ OverlayWidget {
                 Rectangle {
                     id: artworkMask
                     anchors.fill: mediaArtwork
-                    radius: artworkFrame.radius
+                    radius: Math.max(0.0, artworkFrame.radius - artworkFrame.imageInset)
                     visible: false
                     layer.enabled: true
                 }
@@ -266,7 +272,7 @@ OverlayWidget {
                     anchors.fill: parent
                     radius: artworkFrame.radius
                     color: "transparent"
-                    border.width: mediaRoot.scaleAwareStrokeWidth(mediaRoot.mediaModel.artworkBorderWidth)
+                    border.width: artworkFrame.artworkStrokeWidth
                     border.color: mediaRoot.mediaModel.artworkBorderColor
                 }
             }

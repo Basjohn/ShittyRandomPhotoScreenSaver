@@ -7,6 +7,13 @@ OverlayWidget {
 
     required property var friendPulseModel
     semanticDoubleClickEnabled: friendPulseModel.interactionEnabled
+
+    // Friend Pulse's family-local chrome was visually too faint at authored size.
+    // Add 1 authored px before the shared scale-aware envelope; the shared
+    // BrandedHeader deliberately does not use this helper.
+    function friendStrokeWidth(baseWidth) {
+        return friendRoot.scaleAwareStrokeWidth(baseWidth + 1.0)
+    }
     uniformScaleTransform: true
     preferredContentWidth: friendPulseModel.authoredWidth
     preferredContentHeight: friendPulseModel.authoredHeight
@@ -14,6 +21,8 @@ OverlayWidget {
     signal refreshRequested()
     signal friendActionRequested(int rowIndex)
     signal gameActionRequested(int rowIndex)
+    signal friendPinToggleRequested(int rowIndex)
+    signal messageActionRequested(int rowIndex)
     signal friendMenuActionRequested(string action, int rowIndex)
     signal actionMenuPointerGesture()
     signal visibleRangeChanged(int firstIndex, int lastIndex)
@@ -30,6 +39,7 @@ OverlayWidget {
     property int _reportedLastVisible: -2
     property var pendingChangeRows: ({})
     property bool viewportReportingReady: false
+    property bool messageMenuOpen: false
 
     function closeActionMenu(armPointerGuard) {
         if (menuRowIndex < 0)
@@ -40,9 +50,23 @@ OverlayWidget {
             actionMenuPointerGesture()
     }
 
+    function closeMessageMenu(armPointerGuard) {
+        if (!messageMenuOpen)
+            return
+        messageMenuOpen = false
+        if (armPointerGuard)
+            actionMenuPointerGesture()
+    }
+
+    function twoDigitCount(value) {
+        var count = Math.max(0, Math.floor(Number(value) || 0))
+        return count < 10 ? "0" + String(count) : String(count)
+    }
+
     function openActionMenu(rowIndex, friendAvailable, gameAvailable, anchor) {
         if (!friendPulseModel.interactionEnabled || !friendAvailable)
             return
+        closeMessageMenu(false)
         var mapped = anchor.mapToItem(friendRoot, 0, anchor.height)
         menuFriendActionAvailable = friendAvailable
         menuGameActionAvailable = gameAvailable
@@ -56,6 +80,19 @@ OverlayWidget {
             mapped.y + 4.0,
             friendRoot.height - actionPopup.height - 8.0
         ))
+    }
+
+    function activateUnreadMessages() {
+        var count = friendPulseModel.unreadMessageCount
+        if (!friendPulseModel.interactionEnabled || count <= 0)
+            return
+        closeActionMenu(false)
+        if (count === 1) {
+            messageActionRequested(0)
+            actionMenuPointerGesture()
+            return
+        }
+        messageMenuOpen = true
     }
 
     function reportVisibleRange(forceReport) {
@@ -162,7 +199,8 @@ OverlayWidget {
     }
 
     TapHandler {
-        enabled: friendRoot.friendPulseModel.interactionEnabled && friendRoot.menuRowIndex < 0
+        enabled: friendRoot.friendPulseModel.interactionEnabled
+            && friendRoot.menuRowIndex < 0 && !friendRoot.messageMenuOpen
         acceptedButtons: Qt.LeftButton
         onDoubleTapped: friendRoot.refreshRequested()
     }
@@ -171,10 +209,15 @@ OverlayWidget {
         target: friendRoot.friendPulseModel
         function onStateChanged() {
             friendRoot.closeActionMenu(false)
+            if (friendRoot.friendPulseModel.unreadMessageCount <= 1)
+                friendRoot.closeMessageMenu(false)
             friendRoot.pendingChangeRows = ({})
         }
         function onFriendChangePulseRequested(rowIndex) {
             friendRoot.triggerChangeGlow(rowIndex)
+        }
+        function onUnreadMessagePulseRequested() {
+            unreadMessageLine.triggerEventGlow()
         }
     }
 
@@ -188,7 +231,7 @@ OverlayWidget {
         logoSource: friendRoot.friendPulseModel.logoSource
         fillColor: friendRoot.friendPulseModel.headerFillColor
         borderColor: friendRoot.friendPulseModel.headerBorderColor
-        borderWidth: friendRoot.scaleAwareStrokeWidth(friendRoot.friendPulseModel.headerBorderWidth)
+        borderWidth: friendRoot.scaleAwareHeaderStrokeWidth(friendRoot.friendPulseModel.headerBorderWidth)
         textColor: friendRoot.friendPulseModel.headerTextColor
         fontFamily: friendRoot.friendPulseModel.fontFamily
         textShadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
@@ -208,30 +251,82 @@ OverlayWidget {
         objectName: "friendPulseSummary"
         x: 296.0; y: 13.0
         width: friendRoot.friendPulseModel.authoredWidth - x - 18.0; height: 56.0
-        ShadowedText {
-            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-            height: 34.0; text: friendRoot.friendPulseModel.primaryMetric
-            color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily
-            font.pointSize: friendRoot.friendPulseModel.fontSize * 1.32; font.bold: true
-            horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
-            fontSizeMode: Text.HorizontalFit; minimumPointSize: 8.0; elide: Text.ElideRight
-            shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor
-            shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
-        }
-        ShadowedText {
-            anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-            height: 20.0; text: friendRoot.friendPulseModel.secondaryMetric
-            color: friendRoot.friendPulseModel.mutedTextColor; font.family: friendRoot.friendPulseModel.fontFamily
-            font.pointSize: friendRoot.friendPulseModel.fontSize * 0.72; font.bold: true
-            horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
-            shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor
-            shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
+        Rectangle {
+            id: unreadMessageLine
+            objectName: "friendPulseUnreadMessageLine"
+            property real eventGlowLevel: 0.0
+            anchors.fill: parent
+            visible: friendRoot.friendPulseModel.unreadMessageCount > 0
+            radius: 8.0
+            color: "transparent"
+
+            function triggerEventGlow() {
+                messageGlowAnimation.stop()
+                eventGlowLevel = 0.0
+                messageGlowAnimation.restart()
+            }
+
+            SequentialAnimation {
+                id: messageGlowAnimation
+                onRunningChanged: {
+                    if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
+                        widgetFrameDemand.setAnimationActive(messageGlowAnimation, running)
+                }
+                NumberAnimation { target: unreadMessageLine; property: "eventGlowLevel"; to: 1.0; duration: 2000; easing.type: Easing.InOutQuad }
+                NumberAnimation { target: unreadMessageLine; property: "eventGlowLevel"; to: 0.0; duration: 3000; easing.type: Easing.OutCubic }
+            }
+
+            ShaderEffect {
+                readonly property real glowDistance: 4.0 + unreadMessageLine.eventGlowLevel
+                readonly property real glowScale: Math.max(0.5, glowDistance / 12.0)
+                x: -glowDistance; y: -glowDistance
+                width: unreadMessageLine.width + glowDistance * 2.0
+                height: unreadMessageLine.height + glowDistance * 2.0
+                property vector2d effectSize: Qt.vector2d(width / glowScale, height / glowScale)
+                property vector2d cardSize: Qt.vector2d(unreadMessageLine.width / glowScale, unreadMessageLine.height / glowScale)
+                property real cornerRadius: unreadMessageLine.radius / glowScale
+                property color glowColor: friendRoot.friendPulseModel.accentColor
+                opacity: unreadMessageLine.eventGlowLevel * 0.82
+                visible: opacity > 0.001
+                z: -1
+                fragmentShader: "shaders/widget_glow.frag.qsb"
+            }
+
+            ShadowedText {
+                anchors.fill: parent
+                text: friendRoot.friendPulseModel.unreadMessageText
+                color: unreadSummaryHover.hovered && friendRoot.friendPulseModel.unreadMessageCount > 0
+                    ? friendRoot.friendPulseModel.accentColor
+                    : friendRoot.friendPulseModel.mutedTextColor
+                font.family: friendRoot.friendPulseModel.fontFamily
+                font.pointSize: friendRoot.friendPulseModel.fontSize * 1.02
+                font.bold: true
+                fontSizeMode: Text.HorizontalFit
+                minimumPointSize: 8.0
+                horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
+                shadowColor: friendRoot.friendPulseModel.textShadowColor
+                shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
+                shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
+            }
+            HoverHandler {
+                id: unreadSummaryHover
+                enabled: friendRoot.friendPulseModel.interactionEnabled
+                    && friendRoot.friendPulseModel.unreadMessageCount > 0
+            }
+            TapHandler {
+                enabled: friendRoot.friendPulseModel.interactionEnabled
+                    && friendRoot.friendPulseModel.unreadMessageCount > 0
+                acceptedButtons: Qt.LeftButton
+                onTapped: friendRoot.activateUnreadMessages()
+            }
         }
     }
 
     Rectangle {
         x: 18.0; y: 81.0; width: friendRoot.friendPulseModel.authoredWidth - 36.0
-        height: friendRoot.scaleAwareStrokeWidth(1.0); color: friendRoot.friendPulseModel.rowInnerBorderColor
+        height: friendRoot.friendStrokeWidth(1.0); color: friendRoot.friendPulseModel.rowInnerBorderColor
     }
 
     ListView {
@@ -282,14 +377,16 @@ OverlayWidget {
             required property int friendCount
             required property bool friendActionAvailable
             required property bool gameActionAvailable
+            required property bool pinned
             required property int index
             property real eventGlowLevel: 0.0
             objectName: "friendPulseRow_" + index
             x: 6.0; width: activityRowsView.width - 12.0; height: 50.0; radius: 9.0
             color: friendRoot.friendPulseModel.rowSurfaceColor
             border.color: friendRoot.friendPulseModel.rowBorderColor
-            border.width: friendRoot.scaleAwareStrokeWidth(1.0)
+            border.width: friendRoot.friendStrokeWidth(1.0)
             antialiasing: true
+            HoverHandler { id: activityRowHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
             function triggerEventGlow() {
                 if (!visible)
@@ -351,53 +448,71 @@ OverlayWidget {
                 width: 36.0; height: width; radius: 8.0
                 color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g,
                                friendRoot.friendPulseModel.accentColor.b, rowAvatarHover.hovered ? 0.38 : 0.22)
-                border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.scaleAwareStrokeWidth(1.0); antialiasing: true
-                Image {
-                    id: rowAvatarImage
+                border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true
+                Item {
+                    id: rowAvatarClip
                     anchors.fill: parent
-                    source: avatarSource
-                    visible: avatarSource.length > 0
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    cache: true
-                    layer.enabled: avatarSource.length > 0
-                    layer.effect: MultiEffect {
-                        maskEnabled: true
-                        maskSource: rowAvatarMask
+                    anchors.margins: Math.max(1.0, friendRoot.friendStrokeWidth(1.0) / 2.0)
+                    clip: true
+                    Image {
+                        id: rowAvatarImage
+                        anchors.fill: parent
+                        source: avatarSource
+                        visible: avatarSource.length > 0
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: true
+                        layer.enabled: avatarSource.length > 0
+                        layer.effect: MultiEffect {
+                            saturation: isOnline ? 0.0 : -1.0
+                            maskEnabled: true
+                            maskSource: rowAvatarMask
+                        }
+                    }
+                    Rectangle {
+                        id: rowAvatarMask
+                        anchors.fill: parent
+                        radius: Math.max(0.0, rowAvatarFrame.radius - 1.0)
+                        visible: false
+                        layer.enabled: true
                     }
                 }
-                Rectangle {
-                    id: rowAvatarMask
-                    anchors.fill: parent
-                    radius: rowAvatarFrame.radius
-                    visible: false
-                    layer.enabled: true
-                }
-                Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : "•"; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.1; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.scaleAwareStrokeWidth(1.0); antialiasing: true; z: 2 }
+                Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.1; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true; z: 2 }
                 HoverHandler { id: rowAvatarHover; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
                 TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendActionRequested(index) }
             }
-            Rectangle {
-                width: 11.0; height: 11.0; radius: width / 2.0
-                anchors.left: rowAvatarFrame.right; anchors.leftMargin: -5.0; anchors.bottom: rowAvatarFrame.bottom; anchors.bottomMargin: -2.0
-                color: isOnline ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor
-                border.color: friendRoot.friendPulseModel.rowSurfaceColor; border.width: friendRoot.scaleAwareStrokeWidth(2.0)
-            }
             Item {
-                x: 54.0; y: 5.0; width: parent.width - x - 38.0; height: 40.0
-                ShadowedText { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 23.0; text: primaryText; color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize; font.bold: true; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
+                x: 54.0; y: 5.0; width: parent.width - x - 65.0; height: 40.0
+                ShadowedText { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 23.0; text: primaryText; color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize; font.bold: true; verticalAlignment: Text.AlignVCenter; wrap: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 7.0; elide: Text.ElideNone; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
                 ShadowedText {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 18.0
-                    text: secondaryText.length > 0
-                        ? secondaryText + "  •  " + presenceText
-                        : presenceText
+                    text: (secondaryText.length > 0
+                        ? secondaryText + "  " + presenceText
+                        : presenceText).toUpperCase()
                     color: rowGameHover.hovered ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.72; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                     HoverHandler { id: rowGameHover; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.gameActionRequested(index) }
                 }
+            }
+            Rectangle {
+                id: rowPinButton
+                objectName: "friendPulsePinButton_" + index
+                visible: friendActionAvailable && activityRowHover.hovered
+                width: 22.0; height: 22.0; radius: 6.0
+                anchors.right: rowMenuButton.left; anchors.rightMargin: 2.0; anchors.verticalCenter: parent.verticalCenter
+                color: rowPinHover.hovered || pinned
+                    ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, pinned ? 0.34 : 0.22)
+                    : "transparent"
+                Item {
+                    anchors.centerIn: parent; width: 11.0; height: 14.0
+                    Rectangle { x: 2.0; y: 1.0; width: 7.0; height: 7.0; radius: 1.0; rotation: 45; color: pinned ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
+                    Rectangle { x: 4.5; y: 6.0; width: 2.0; height: 7.0; radius: 1.0; color: pinned ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
+                }
+                HoverHandler { id: rowPinHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
+                TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendPinToggleRequested(index) }
             }
             Rectangle {
                 id: rowMenuButton
@@ -475,6 +590,7 @@ OverlayWidget {
             required property int friendCount
             required property bool friendActionAvailable
             required property bool gameActionAvailable
+            required property bool pinned
             required property int index
             width: activityGridView.cellWidth; height: activityGridView.cellHeight
             property int gridRow: Math.floor(index / activityGridView.activeColumns)
@@ -492,8 +608,9 @@ OverlayWidget {
                 property real eventGlowLevel: 0.0
                 radius: 11.0; color: friendRoot.friendPulseModel.rowSurfaceColor
                 border.color: friendRoot.friendPulseModel.rowBorderColor
-                border.width: friendRoot.scaleAwareStrokeWidth(1.0)
+                border.width: friendRoot.friendStrokeWidth(1.0)
                 antialiasing: true
+                HoverHandler { id: gridTileHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
                 function triggerEventGlow() {
                     if (!visible)
@@ -552,31 +669,37 @@ OverlayWidget {
                     anchors.horizontalCenter: parent.horizontalCenter; y: 12.0
                     width: Math.min(58.0, Math.max(38.0, parent.width * 0.42)); height: width; radius: 12.0
                     color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, gridAvatarHover.hovered ? 0.38 : 0.22)
-                    border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.scaleAwareStrokeWidth(1.0); antialiasing: true
-                    Image {
-                        id: gridAvatarImage
+                    border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true
+                    Item {
+                        id: gridAvatarClip
                         anchors.fill: parent
-                        source: avatarSource
-                        visible: avatarSource.length > 0
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: true
-                        layer.enabled: avatarSource.length > 0
-                        layer.effect: MultiEffect {
-                            maskEnabled: true
-                            maskSource: gridAvatarMask
+                        anchors.margins: Math.max(1.0, friendRoot.friendStrokeWidth(1.0) / 2.0)
+                        clip: true
+                        Image {
+                            id: gridAvatarImage
+                            anchors.fill: parent
+                            source: avatarSource
+                            visible: avatarSource.length > 0
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            cache: true
+                            layer.enabled: avatarSource.length > 0
+                            layer.effect: MultiEffect {
+                                saturation: isOnline ? 0.0 : -1.0
+                                maskEnabled: true
+                                maskSource: gridAvatarMask
+                            }
+                        }
+                        Rectangle {
+                            id: gridAvatarMask
+                            anchors.fill: parent
+                            radius: Math.max(0.0, gridAvatarFrame.radius - 1.0)
+                            visible: false
+                            layer.enabled: true
                         }
                     }
-                    Rectangle {
-                        id: gridAvatarMask
-                        anchors.fill: parent
-                        radius: gridAvatarFrame.radius
-                        visible: false
-                        layer.enabled: true
-                    }
-                    Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : "•"; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.28; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.scaleAwareStrokeWidth(1.0); antialiasing: true; z: 2 }
-                    Rectangle { anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.rightMargin: -2.0; anchors.bottomMargin: -2.0; width: 13.0; height: 13.0; radius: 6.5; color: isOnline ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor; border.color: friendRoot.friendPulseModel.rowSurfaceColor; border.width: friendRoot.scaleAwareStrokeWidth(2.0) }
+                    Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.28; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true; z: 2 }
                     HoverHandler { id: gridAvatarHover; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendActionRequested(index) }
                 }
@@ -590,7 +713,8 @@ OverlayWidget {
                         : 0.0
                     visible: friendRoot.friendPulseModel.showNames; text: primaryText; color: friendRoot.friendPulseModel.textColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.nameFontSize; font.bold: true
-                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                    wrap: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 7.0; elide: Text.ElideNone
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                 }
                 ShadowedText {
@@ -599,15 +723,32 @@ OverlayWidget {
                         ? gridNameText.y + gridNameText.height + 2.0
                         : gridAvatarFrame.y + gridAvatarFrame.height + 5.0
                     height: 30.0
-                    text: secondaryText.length > 0
-                        ? presenceText + "  •  " + secondaryText
-                        : presenceText
+                    text: (secondaryText.length > 0
+                        ? presenceText + "  " + secondaryText
+                        : presenceText).toUpperCase()
                     color: gridGameHover.hovered ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.68
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; maximumLineCount: 2; wrap: true; elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                     HoverHandler { id: gridGameHover; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.gameActionRequested(index) }
+                }
+                Rectangle {
+                    id: gridPinButton
+                    objectName: "friendPulsePinButton_" + index
+                    visible: friendActionAvailable && gridTileHover.hovered
+                    anchors.left: parent.left; anchors.leftMargin: 6.0; anchors.top: parent.top; anchors.topMargin: 6.0
+                    width: 22.0; height: 22.0; radius: 6.0
+                    color: gridPinHover.hovered || pinned
+                        ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, pinned ? 0.34 : 0.22)
+                        : "transparent"
+                    Item {
+                        anchors.centerIn: parent; width: 11.0; height: 14.0
+                        Rectangle { x: 2.0; y: 1.0; width: 7.0; height: 7.0; radius: 1.0; rotation: 45; color: pinned ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
+                        Rectangle { x: 4.5; y: 6.0; width: 2.0; height: 7.0; radius: 1.0; color: pinned ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
+                    }
+                    HoverHandler { id: gridPinHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
+                    TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendPinToggleRequested(index) }
                 }
                 Rectangle {
                     id: gridMenuButton
@@ -632,9 +773,9 @@ OverlayWidget {
         visible: activeView.visible && activeView.contentHeight > activeView.height + 1.0
         x: friendRoot.friendPulseModel.authoredWidth - 14.0
         y: 94.0
-        width: 3.0
+        width: 3.5
         height: friendRoot.friendPulseModel.authoredHeight - y - 22.0
-        radius: 1.5
+        radius: 1.75
         color: Qt.rgba(
             friendRoot.friendPulseModel.mutedTextColor.r,
             friendRoot.friendPulseModel.mutedTextColor.g,
@@ -665,9 +806,119 @@ OverlayWidget {
         objectName: "friendPulseQuietState"
         visible: !activityRowsView.visible && !activityGridView.visible
         x: 36.0; y: 104.0; width: friendRoot.friendPulseModel.authoredWidth - 72.0; height: friendRoot.friendPulseModel.authoredHeight - y - 32.0
-        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 8.0; width: 54.0; height: 54.0; radius: 27.0; color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.16); border.color: friendRoot.friendPulseModel.rowBorderColor; border.width: friendRoot.scaleAwareStrokeWidth(1.0); Text { anchors.fill: parent; text: friendRoot.friendPulseModel.viewState === "private" ? "◌" : "●"; color: friendRoot.friendPulseModel.accentColor; font.pixelSize: 25.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 8.0; width: 54.0; height: 54.0; radius: 27.0; color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.16); border.color: friendRoot.friendPulseModel.rowBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); Text { anchors.fill: parent; text: friendRoot.friendPulseModel.viewState === "private" ? "◌" : "●"; color: friendRoot.friendPulseModel.accentColor; font.pixelSize: 25.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
         ShadowedText { anchors.left: parent.left; anchors.right: parent.right; y: 73.0; height: 34.0; text: friendRoot.friendPulseModel.primaryMetric; color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.18; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
         ShadowedText { anchors.left: parent.left; anchors.right: parent.right; y: 108.0; height: 42.0; text: friendRoot.friendPulseModel.viewState === "connect_required" ? "Connect Steam in Settings to see the friend roster." : (friendRoot.friendPulseModel.viewState === "private" ? "Steam is not exposing this friend roster." : (friendRoot.friendPulseModel.viewState === "stale" ? "This friend roster uses the last accepted Steam observation." : (friendRoot.friendPulseModel.viewState === "loading" ? "Loading the account-private friend roster first…" : "The next accepted friend-roster observation will appear here."))); color: friendRoot.friendPulseModel.mutedTextColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.76; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; wrap: true; maximumLineCount: 2; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
+    }
+
+    Item {
+        id: messageMenuLayer
+        objectName: "friendPulseMessageMenuLayer"
+        anchors.fill: parent; z: 105
+        visible: friendRoot.messageMenuOpen
+        MouseArea {
+            anchors.fill: parent
+            enabled: parent.visible && friendRoot.friendPulseModel.interactionEnabled
+            onClicked: friendRoot.closeMessageMenu(true)
+        }
+        Rectangle {
+            id: messagePopup
+            objectName: "friendPulseMessagePopup"
+            width: Math.min(300.0, Math.max(220.0, friendRoot.friendPulseModel.authoredWidth * 0.48))
+            height: Math.min(200.0, messageList.contentHeight) + 16.0
+            radius: 10.0
+            x: friendRoot.friendPulseModel.authoredWidth - width - 18.0
+            y: 72.0
+            color: friendRoot.friendPulseModel.headerFillColor
+            border.color: friendRoot.friendPulseModel.headerBorderColor
+            border.width: friendRoot.friendStrokeWidth(2.0)
+
+            ListView {
+                id: messageList
+                x: 8.0; y: 8.0; width: parent.width - 16.0
+                height: parent.height - 16.0
+                spacing: 3.0; clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                model: friendRoot.friendPulseModel.messageModel
+                delegate: Rectangle {
+                    id: messageRow
+                    required property string displayName
+                    required property string avatarSource
+                    required property int unreadCount
+                    required property int lastMessageAt
+                    required property int index
+                    width: messageList.width; height: 42.0; radius: 7.0
+                    color: messageRowHover.hovered
+                        ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r,
+                                  friendRoot.friendPulseModel.accentColor.g,
+                                  friendRoot.friendPulseModel.accentColor.b, 0.22)
+                        : "transparent"
+                    Rectangle {
+                        id: messageAvatarFrame
+                        x: 5.0; anchors.verticalCenter: parent.verticalCenter
+                        width: 30.0; height: width; radius: 7.0
+                        color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r,
+                                       friendRoot.friendPulseModel.accentColor.g,
+                                       friendRoot.friendPulseModel.accentColor.b, 0.18)
+                        border.color: friendRoot.friendPulseModel.rowInnerBorderColor
+                        border.width: friendRoot.friendStrokeWidth(1.0)
+                        Item {
+                            anchors.fill: parent; anchors.margins: 1.0; clip: true
+                            Image {
+                                anchors.fill: parent; source: avatarSource
+                                visible: avatarSource.length > 0
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true; cache: true
+                                layer.enabled: visible
+                                layer.effect: MultiEffect {
+                                    maskEnabled: true
+                                    maskSource: messageAvatarMask
+                                }
+                            }
+                            Rectangle {
+                                id: messageAvatarMask
+                                anchors.fill: parent; radius: 6.0
+                                visible: false; layer.enabled: true
+                            }
+                        }
+                        Text {
+                            anchors.fill: parent; visible: avatarSource.length === 0
+                            text: displayName.length > 0 ? displayName.charAt(0).toUpperCase() : ""
+                            color: friendRoot.friendPulseModel.accentColor
+                            font.family: friendRoot.friendPulseModel.fontFamily
+                            font.pointSize: friendRoot.friendPulseModel.fontSize * 0.85
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                    ShadowedText {
+                        anchors.left: messageAvatarFrame.right; anchors.leftMargin: 9.0
+                        anchors.right: parent.right; anchors.rightMargin: 8.0
+                        anchors.verticalCenter: parent.verticalCenter; height: 28.0
+                        text: friendRoot.twoDigitCount(unreadCount) + "  " + displayName.toUpperCase()
+                        color: friendRoot.friendPulseModel.textColor
+                        font.family: friendRoot.friendPulseModel.fontFamily
+                        font.pointSize: friendRoot.friendPulseModel.fontSize * 0.76
+                        font.bold: true; elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                        shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
+                        shadowColor: friendRoot.friendPulseModel.textShadowColor
+                        shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
+                        shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
+                    }
+                    HoverHandler { id: messageRowHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
+                    TapHandler {
+                        enabled: friendRoot.friendPulseModel.interactionEnabled
+                        acceptedButtons: Qt.LeftButton
+                        onTapped: {
+                            friendRoot.messageActionRequested(index)
+                            friendRoot.closeMessageMenu(true)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Item {
@@ -688,7 +939,7 @@ OverlayWidget {
             y: friendRoot.actionPopupY
             color: friendRoot.friendPulseModel.headerFillColor
             border.color: friendRoot.friendPulseModel.headerBorderColor
-            border.width: friendRoot.scaleAwareStrokeWidth(2.0)
+            border.width: friendRoot.friendStrokeWidth(2.0)
             Column {
                 id: actionColumn
                 x: 8.0; y: 8.0; width: parent.width - 16.0; spacing: 3.0

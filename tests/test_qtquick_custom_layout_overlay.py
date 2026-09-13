@@ -52,6 +52,8 @@ def _item(
     baseline_viewport_extent: tuple[float, float] | None = None,
     content_extent_axes: frozenset[str] = frozenset(),
     baseline_content_extent: tuple[float, float] | None = None,
+    size_reset_capable: bool = False,
+    authored_reference_size: tuple[float, float] | None = None,
 ) -> CustomLayoutSessionItem:
     return CustomLayoutSessionItem(
         source_key=CustomLayoutKey(widget_id, display_identity),
@@ -68,6 +70,8 @@ def _item(
         baseline_viewport_extent=baseline_viewport_extent,
         content_extent_axes=content_extent_axes,
         baseline_content_extent=baseline_content_extent,
+        size_reset_capable=size_reset_capable,
+        authored_reference_size=authored_reference_size,
     )
 
 
@@ -112,6 +116,43 @@ def test_overlay_model_mutates_shared_session_items_without_copying_authority() 
     assert model.rowCount() == 0
     assert foreign.current_enabled is True
     assert foreign.removed is False
+
+
+def test_overlay_restore_size_role_and_action_route_through_owner_handler() -> None:
+    session = CustomLayoutSession()
+    friend = _item(
+        "friend_pulse",
+        "display:a",
+        QRect(110, 220, 700, 420),
+        resizable=True,
+        size_reset_capable=True,
+        authored_reference_size=(420.0, 220.0),
+    )
+    session.add_item(friend)
+    calls = []
+
+    def restore(item):
+        calls.append(id(item))
+        current = item.current_global_rect
+        item.restore_authored_size(
+            QRect(current.x(), current.y(), 420, 220),
+            size_payload={},
+            resize_scale=1.0,
+        )
+        return True
+
+    model = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+        size_reset_handler=restore,
+    )
+    roles = {bytes(name).decode(): role for role, name in model.roleNames().items()}
+    index = model.index(0, 0)
+
+    assert model.data(index, roles["sizeResetCapable"]) is True
+    assert model.restoreSize(0) is True
+    assert calls == [id(friend)]
+    assert friend.current_global_rect == QRect(110, 220, 420, 220)
 
 
 def test_visualizer_overlay_exposes_discrete_display_hop_without_copying_state() -> None:

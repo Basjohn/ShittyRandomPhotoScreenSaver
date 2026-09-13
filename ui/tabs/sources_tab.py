@@ -185,6 +185,7 @@ class SourcesTab(QWidget):
         self.ratio_slider.setObjectName("presetModeSlider")
         self.ratio_slider.setToolTip("Drag to adjust the balance between local and RSS sources")
         self.ratio_slider.valueChanged.connect(self._on_ratio_slider_changed)
+        self.ratio_slider.valueCommitted.connect(self._save_ratio)
         slider_column.addWidget(self.ratio_slider)
 
         self._ratio_notch_bar = _RatioNotchBar(5)
@@ -757,13 +758,9 @@ class SourcesTab(QWidget):
         self.rss_ratio_label.setEnabled(both_available)
     
     def _on_ratio_slider_changed(self, value: int) -> None:
-        """Handle ratio slider change - the only control for adjusting ratio."""
-        # Update display labels
+        """Update ratio labels live; persistence commits on slider release."""
         self.local_ratio_label.setText(f"{value}% Local")
         self.rss_ratio_label.setText(f"{100 - value}% RSS")
-        
-        # Save immediately
-        self._save_ratio(value)
     
     def _save_ratio(self, local_ratio: int) -> None:
         """Save the local ratio setting."""

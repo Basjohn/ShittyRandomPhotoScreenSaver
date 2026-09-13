@@ -258,12 +258,16 @@ class OverlayGeometryBinding:
         policy: OverlayGeometryPolicy,
         display_bounds: OverlayWidgetGeometry,
         geometry_sink,
+        authored_geometry_sink=None,
     ) -> None:
         if not callable(geometry_sink):
             raise TypeError("overlay geometry sink must be callable")
+        if authored_geometry_sink is not None and not callable(authored_geometry_sink):
+            raise TypeError("authored geometry sink must be callable")
         self._policy = policy
         self._display_bounds = display_bounds
         self._geometry_sink = geometry_sink
+        self._authored_geometry_sink = authored_geometry_sink
         self._last_content_size: tuple[float, float] | None = None
         self._current_geometry: OverlayWidgetGeometry | None = None
         self._preferred_size_signal = None
@@ -295,6 +299,7 @@ class OverlayGeometryBinding:
         # CUSTOM rect (if any) still apply independently of content size.
         if size[0] > 0.0 and size[1] > 0.0:
             self._last_content_size = size
+            self._publish_authored_geometry(size)
         return self._reapply()
 
     def set_display_bounds(
@@ -305,6 +310,8 @@ class OverlayGeometryBinding:
         if self._retired:
             return None
         self._display_bounds = display_bounds
+        if self._last_content_size is not None:
+            self._publish_authored_geometry(self._last_content_size)
         return self._reapply()
 
     def set_committed_rect(
@@ -342,12 +349,25 @@ class OverlayGeometryBinding:
         self._preferred_size_signal = signal
         self._preferred_size_callback = callback
 
-    def retarget(self, display_bounds: OverlayWidgetGeometry, geometry_sink) -> None:
+    def retarget(
+        self,
+        display_bounds: OverlayWidgetGeometry,
+        geometry_sink,
+        *,
+        authored_geometry_sink=None,
+    ) -> None:
         """Keep the size subscription while moving its existing display owner."""
         if self._retired:
             raise RuntimeError("cannot retarget a retired geometry binding")
+        if not callable(geometry_sink):
+            raise TypeError("overlay geometry sink must be callable")
+        if authored_geometry_sink is not None and not callable(authored_geometry_sink):
+            raise TypeError("authored geometry sink must be callable")
         self._display_bounds = display_bounds
         self._geometry_sink = geometry_sink
+        self._authored_geometry_sink = authored_geometry_sink
+        if self._last_content_size is not None:
+            self._publish_authored_geometry(self._last_content_size)
 
     def retire(self) -> bool:
         """Disconnect QML size publication before the retained item retires."""
@@ -365,7 +385,26 @@ class OverlayGeometryBinding:
         self._preferred_size_signal = None
         self._preferred_size_callback = None
         self._geometry_sink = None
+        self._authored_geometry_sink = None
         return True
+
+    def _publish_authored_geometry(
+        self, content_size: tuple[float, float]
+    ) -> OverlayWidgetGeometry | None:
+        """Project authored geometry with any committed CUSTOM rect removed."""
+
+        sink = self._authored_geometry_sink
+        if sink is None:
+            return None
+        authored_policy = OverlayGeometryPolicy(
+            widget_id=self._policy.widget_id,
+            anchor=self._policy.anchor,
+            margin=self._policy.margin,
+            committed_rect=None,
+        )
+        geometry = authored_policy.resolve(content_size, self._display_bounds)
+        sink(geometry)
+        return geometry
 
     def _reapply(self) -> OverlayWidgetGeometry | None:
         # A committed CUSTOM rectangle does not need a content size; anchored

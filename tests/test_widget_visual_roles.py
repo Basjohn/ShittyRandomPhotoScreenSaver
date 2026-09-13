@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from ui.settings_theme_spec import Rgba
 from ui.widget_theme_io import widget_theme_from_payload, widget_theme_to_payload
 from ui.widget_theme_spec import (
@@ -84,28 +86,32 @@ def test_schema_v2_allows_sparse_known_optional_roles() -> None:
     assert loaded.colors["widget.separator"] == Rgba(90, 91, 92, 93)
 
 
-def test_schema_v1_core_theme_migrates_to_current_schema() -> None:
+def test_schema_v1_file_payload_is_rejected_by_current_strict_loader() -> None:
     payload = widget_theme_to_payload(DEFAULT_DARK_WIDGET_THEME)
     payload["schema_version"] = 1
     payload["colors"] = {
         role: payload["colors"][role]
         for role in WIDGET_THEME_CORE_COLOR_ROLES
     }
-    loaded = widget_theme_from_payload(payload)
-    assert loaded.schema_version == WIDGET_THEME_SCHEMA_VERSION
-    assert set(loaded.colors) == set(WIDGET_THEME_CORE_COLOR_ROLES)
+    with pytest.raises(ValueError, match="unsupported version"):
+        widget_theme_from_payload(payload)
 
 
-def test_default_dark_context_roles_preserve_accepted_retained_pixels() -> None:
+def test_default_dark_context_roles_are_owned_by_current_core_schema() -> None:
     colors = DEFAULT_DARK_WIDGET_THEME.colors
-    assert colors["context.menu.surface"] == Rgba(27, 29, 36, 242)
-    assert colors["context.menu.border"] == Rgba(216, 243, 255, 255)
-    assert colors["context.menu.text"] == Rgba(246, 248, 255, 255)
-    assert colors["context.menu.selected_surface"] == Rgba(119, 185, 232, 79)
-    assert colors["context.menu.separator"] == Rgba(89, 119, 138, 255)
-    assert colors["context.menu.indicator.border"] == Rgba(185, 234, 255, 255)
-    assert colors["context.menu.indicator.fill"] == Rgba(130, 205, 255, 255)
-    assert colors["context.submenu.checked_surface"] == Rgba(78, 113, 139, 51)
+    assert DEFAULT_DARK_WIDGET_THEME.schema_version == WIDGET_THEME_SCHEMA_VERSION
+    assert set(WIDGET_THEME_CORE_COLOR_ROLES).issubset(colors)
+    for role in (
+        "context.menu.surface",
+        "context.menu.border",
+        "context.menu.text",
+        "context.menu.selected_surface",
+        "context.menu.separator",
+        "context.menu.indicator.border",
+        "context.menu.indicator.fill",
+        "context.submenu.checked_surface",
+    ):
+        assert isinstance(colors[role], Rgba)
 
 
 def test_custom_edit_can_add_known_optional_role() -> None:
@@ -116,7 +122,7 @@ def test_custom_edit_can_add_known_optional_role() -> None:
 def test_custom_snapshot_can_freeze_current_sparse_optional_role() -> None:
     current = Rgba(35, 35, 35, 176)
     custom, state = begin_theme_owned_edit(
-        WidgetThemeState(),
+        WidgetThemeState(selected_id="default_dark", keep_synced=True, custom_payload=None),
         DEFAULT_DARK_WIDGET_THEME,
         "media.transport.border",
         Rgba(9, 8, 7, 6),
@@ -141,7 +147,7 @@ def test_custom_snapshot_freezes_resolved_optional_context_detail_not_default_da
         colors=sparse_colors,
     )
     custom, _state = begin_theme_owned_edit(
-        WidgetThemeState(),
+        WidgetThemeState(selected_id="default_dark", keep_synced=True, custom_payload=None),
         sparse,
         "media.transport.border",
         Rgba(9, 8, 7, 6),

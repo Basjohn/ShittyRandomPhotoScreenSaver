@@ -33,6 +33,7 @@ ResizeWheelHandler = Callable[[CustomLayoutSessionItem, int], bool]
 MoveFinishedHandler = Callable[[], None]
 DisplayTransferCapability = Callable[[CustomLayoutSessionItem, str], bool]
 DisplayTransferHandler = Callable[[CustomLayoutSessionItem, str], bool]
+SizeResetHandler = Callable[[CustomLayoutSessionItem], bool]
 
 # Semantic edge-handle ids for the one-axis viewport-extent operation. Visualizer
 # corners are also viewport gestures, but their two-axis dispatch is owned by the
@@ -62,6 +63,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     _CAN_TRANSFER_LEFT_ROLE = _WIDGET_ID_ROLE + 9
     _CAN_TRANSFER_RIGHT_ROLE = _WIDGET_ID_ROLE + 10
     _CONTENT_EXTENT_AXES_ROLE = _WIDGET_ID_ROLE + 11
+    _SIZE_RESET_CAPABLE_ROLE = _WIDGET_ID_ROLE + 12
 
     def __init__(
         self,
@@ -77,6 +79,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         move_finished_handler: MoveFinishedHandler | None = None,
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
+        size_reset_handler: SizeResetHandler | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -93,6 +96,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._move_finished_handler = move_finished_handler
         self._display_transfer_capability = display_transfer_capability
         self._display_transfer_handler = display_transfer_handler
+        self._size_reset_handler = size_reset_handler
         self._items: list[CustomLayoutSessionItem] = []
         session.subscribe_changes(self._on_session_item_changed)
         self.refresh()
@@ -111,6 +115,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._CAN_TRANSFER_LEFT_ROLE: QByteArray(b"canTransferLeft"),
             self._CAN_TRANSFER_RIGHT_ROLE: QByteArray(b"canTransferRight"),
             self._CONTENT_EXTENT_AXES_ROLE: QByteArray(b"contentExtentAxes"),
+            self._SIZE_RESET_CAPABLE_ROLE: QByteArray(b"sizeResetCapable"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # type: ignore[override]
@@ -145,6 +150,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return self._can_transfer(item, "right")
         if role == self._CONTENT_EXTENT_AXES_ROLE:
             return sorted(item.content_extent_axes)
+        if role == self._SIZE_RESET_CAPABLE_ROLE:
+            return bool(item.size_reset_capable)
         return None
 
     @Slot()
@@ -233,6 +240,18 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         session.notify_item_changed(item)
         return True
 
+    @Slot(int, result=bool)
+    def restoreSize(self, row: int) -> bool:
+        """Restore one widget's authored size/shape without leaving CUSTOM."""
+
+        if not 0 <= int(row) < len(self._items):
+            return False
+        item = self._items[int(row)]
+        handler = self._size_reset_handler
+        if not item.size_reset_capable or handler is None:
+            return False
+        return bool(handler(item))
+
     @Slot(int)
     def closeItem(self, row: int) -> None:
         """Apply edit-mode X to working state only."""
@@ -318,6 +337,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._move_finished_handler = None
         self._display_transfer_capability = None
         self._display_transfer_handler = None
+        self._size_reset_handler = None
         self.endResetModel()
 
     def _resizable_item(self, row: int) -> CustomLayoutSessionItem | None:
@@ -398,6 +418,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 self._CAN_TRANSFER_LEFT_ROLE,
                 self._CAN_TRANSFER_RIGHT_ROLE,
                 self._CONTENT_EXTENT_AXES_ROLE,
+                self._SIZE_RESET_CAPABLE_ROLE,
             ],
         )
 
@@ -442,6 +463,7 @@ class RetainedCustomLayoutOverlay:
         move_finished_handler: MoveFinishedHandler | None = None,
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
+        size_reset_handler: SizeResetHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         self.clear_session()
         model = CustomLayoutOverlayModel(
@@ -456,6 +478,7 @@ class RetainedCustomLayoutOverlay:
             move_finished_handler=move_finished_handler,
             display_transfer_capability=display_transfer_capability,
             display_transfer_handler=display_transfer_handler,
+            size_reset_handler=size_reset_handler,
             parent=self.item,
         )
         self._model = model

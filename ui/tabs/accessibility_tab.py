@@ -149,6 +149,7 @@ class AccessibilityTab(QWidget):
         self.dimming_opacity_slider.setTickPosition(NoWheelSlider.TickPosition.TicksBelow)
         self.dimming_opacity_slider.setTickInterval(10)
         self.dimming_opacity_slider.valueChanged.connect(self._on_dimming_opacity_changed)
+        self.dimming_opacity_slider.valueCommitted.connect(self._commit_dimming_opacity)
         opacity_row.addWidget(self.dimming_opacity_slider, 1)
 
         self.dimming_opacity_value = self._add_value_label(
@@ -197,6 +198,7 @@ class AccessibilityTab(QWidget):
         self.pixel_shift_rate_slider.setTickPosition(NoWheelSlider.TickPosition.TicksBelow)
         self.pixel_shift_rate_slider.setTickInterval(1)
         self.pixel_shift_rate_slider.valueChanged.connect(self._on_pixel_shift_rate_changed)
+        self.pixel_shift_rate_slider.valueCommitted.connect(self._commit_pixel_shift_rate)
         shift_row.addWidget(self.pixel_shift_rate_slider, 1)
 
         self.pixel_shift_rate_value = self._add_value_label(
@@ -252,45 +254,47 @@ class AccessibilityTab(QWidget):
         except Exception as e:
             logger.warning("Failed to load accessibility settings: %s", e, exc_info=True)
     
-    def _save_settings(self) -> None:
-        """Save settings to settings manager."""
+    def _commit_setting(self, key: str, value) -> None:
+        """Persist one accessibility setting mutation at its UI commit boundary."""
         if self._loading:
             return
-        
         try:
-            # Background Dimming
-            self._settings.set("accessibility.dimming.enabled", self.dimming_enabled.isChecked())
-            self._settings.set("accessibility.dimming.opacity", self.dimming_opacity_slider.value())
-            
-            # Widget Pixel Shift
-            self._settings.set("accessibility.pixel_shift.enabled", self.pixel_shift_enabled.isChecked())
-            self._settings.set("accessibility.pixel_shift.rate", self.pixel_shift_rate_slider.value())
-            
+            self._settings.set(key, value)
             self.accessibility_changed.emit()
-            logger.debug("Accessibility settings saved")
+            logger.debug("Accessibility setting committed: %s", key)
         except Exception as e:
-            logger.warning("Failed to save accessibility settings: %s", e, exc_info=True)
-    
+            logger.warning("Failed to save accessibility setting %s: %s", key, e, exc_info=True)
+
     def _on_dimming_enabled_changed(self, state: int) -> None:
         """Handle dimming enabled checkbox change."""
         self._update_dimming_controls_state()
-        self._save_settings()
-    
+        self._commit_setting(
+            "accessibility.dimming.enabled",
+            self.dimming_enabled.isChecked(),
+        )
+
     def _on_dimming_opacity_changed(self, value: int) -> None:
-        """Handle dimming opacity slider change."""
+        """Update the live opacity label; persistence commits on slider release."""
         self.dimming_opacity_value.setText(f"{value}%")
-        self._save_settings()
-    
+
+    def _commit_dimming_opacity(self, value: int) -> None:
+        self._commit_setting("accessibility.dimming.opacity", int(value))
+
     def _on_pixel_shift_enabled_changed(self, state: int) -> None:
         """Handle pixel shift enabled checkbox change."""
         self._update_pixel_shift_controls_state()
-        self._save_settings()
-    
+        self._commit_setting(
+            "accessibility.pixel_shift.enabled",
+            self.pixel_shift_enabled.isChecked(),
+        )
+
     def _on_pixel_shift_rate_changed(self, value: int) -> None:
-        """Handle pixel shift rate slider change."""
+        """Update the live rate label; persistence commits on slider release."""
         self.pixel_shift_rate_value.setText(str(value))
-        self._save_settings()
-    
+
+    def _commit_pixel_shift_rate(self, value: int) -> None:
+        self._commit_setting("accessibility.pixel_shift.rate", int(value))
+
     def _update_dimming_controls_state(self) -> None:
         """Update enabled state of dimming controls based on checkbox."""
         enabled = self.dimming_enabled.isChecked()

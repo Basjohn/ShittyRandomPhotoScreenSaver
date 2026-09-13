@@ -42,7 +42,7 @@ state/poll/action owner. The primary Media owner remains intentionally separate.
 
 Friend Pulse now joins one Steam-specific source/avatar owner per runtime
 generation while retaining per-display privacy projections. System Stats uses
-the same lease shape for one low-cost CPU/RAM sampler per runtime generation;
+the same lease shape for one low-cost System Stats sampler per runtime generation;
 neither owner exists until its family and member are admitted.
 
 Heavy provider implementation is imported lazily inside the build callable so a
@@ -396,9 +396,41 @@ _FRIEND_PULSE_SERVICE_SPEC = RuntimeServiceSpec(
 def _build_system_stats_service(
     widget_id: str, widgets_config: Mapping[str, Any]
 ) -> Any:
+    from core.settings.default_contract import require_canonical_default
     from widgets.system_stats_runtime import SystemStatsRuntimeService
 
-    return SystemStatsRuntimeService(shared=True)
+    values = (
+        widgets_config.get("system_stats", {})
+        if isinstance(widgets_config, Mapping)
+        else {}
+    )
+    interval = (
+        values.get("sample_interval_seconds")
+        if isinstance(values, Mapping) and "sample_interval_seconds" in values
+        else require_canonical_default("widgets.system_stats.sample_interval_seconds")
+    )
+
+    def selected(name: str) -> bool:
+        default = bool(require_canonical_default(f"widgets.system_stats.{name}"))
+        return bool(values.get(name, default)) if isinstance(values, Mapping) else default
+
+    metric_selection = {
+        "sample_cpu": selected("show_cpu"),
+        "sample_memory": selected("show_memory"),
+        "sample_uptime": selected("show_uptime"),
+        "sample_network": selected("show_network"),
+    }
+
+    def source_factory():
+        from core.system_stats.source import WholeSystemCpuRamSource
+
+        return WholeSystemCpuRamSource(**metric_selection)
+
+    return SystemStatsRuntimeService(
+        shared=True,
+        source_factory=source_factory,
+        sample_interval_seconds=interval,
+    )
 
 
 def _inject_system_stats_service(widget: Any, service: Any) -> None:

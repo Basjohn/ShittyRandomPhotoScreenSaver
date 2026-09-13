@@ -9,6 +9,7 @@ import pytest
 from core.system_stats.source import CpuRamSample
 from widgets.system_stats_runtime import (
     SAMPLE_INTERVAL_MS,
+    MIN_SAMPLE_INTERVAL_SECONDS,
     SystemStatsRuntimeService,
     reset_shared_system_stats_runtime_for_tests,
     shared_system_stats_owner_count,
@@ -116,6 +117,30 @@ def test_dormant_until_first_lease_then_one_source_and_immediate_warm_sample():
     assert consumer.snapshots[-1].sample.cpu_status == "warming"
     assert [delay for delay, _ in harness.scheduled] == [SAMPLE_INTERVAL_MS]
     assert owner.cardinality()["in_flight"] is False
+
+
+def test_sample_interval_is_configurable_upward_but_never_below_ten_seconds():
+    harness, sources = _Harness(), []
+    consumer = _Consumer(object())
+    service = SystemStatsRuntimeService(
+        source_factory=lambda: sources.append(_Source()) or sources[-1],
+        schedule=harness.schedule,
+        submit_factory=harness.submit_factory,
+        ui_dispatch=harness.ui_dispatch,
+        sample_interval_seconds=25,
+    )
+    service.set_thread_manager(consumer._thread_manager)
+    service.attach_consumer(consumer)
+    assert service.sample_interval_ms == 25_000
+    service.start()
+    harness.fire_next_timer()
+    harness.finish_next()
+    assert [delay for delay, _ in harness.scheduled] == [25_000]
+
+    service.retire()
+    clamped = SystemStatsRuntimeService(sample_interval_seconds=1)
+    assert clamped.sample_interval_ms == MIN_SAMPLE_INTERVAL_SECONDS * 1_000
+
 
 
 def test_two_display_leases_share_one_owner_source_timer_and_snapshot():

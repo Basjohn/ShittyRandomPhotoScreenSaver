@@ -131,6 +131,29 @@ class QuickDisplayPresenter:
 
         return self._base_geometries.get(str(widget_id))
 
+    def _record_authored_geometry(
+        self, widget_id: str, geometry: OverlayWidgetGeometry
+    ) -> None:
+        """Record canonical preferred geometry without absorbing CUSTOM extents.
+
+        Family construction publishes its config-derived preferred size before
+        committed CUSTOM size payloads are hydrated.  That first publication is
+        therefore always admitted, including when the generation starts in
+        persisted CUSTOM mode.  Once an authored rectangle exists, CUSTOM/edit
+        mode freezes it: side-resize ``content_extent`` changes are working/user
+        geometry and must never redefine the Restore Size target.
+
+        In ordinary authored mode, later legitimate preferred-size changes remain
+        live and continue to update the unstacked base used by stacking.
+        """
+
+        if self._retired:
+            return
+        identity = str(widget_id)
+        if identity in self._base_geometries and not self._authored_layout_enabled:
+            return
+        self._base_geometries[identity] = geometry
+
     def presentation_for_widget_id(self, widget_id: str) -> object | None:
         """Return one retained family presentation without exposing the host."""
 
@@ -273,6 +296,9 @@ class QuickDisplayPresenter:
                 geometry_sink=lambda geometry, wid=widget_id: self._apply_binding_geometry(
                     wid, geometry
                 ),
+                authored_geometry_sink=lambda geometry, wid=widget_id: self._record_authored_geometry(
+                    wid, geometry
+                ),
             )
 
             # Clock keeps independent committed analogue/digital rect + font-scale
@@ -389,8 +415,13 @@ class QuickDisplayPresenter:
             target._base_geometries[widget_id] = base
         self._custom_widget_ids.discard(widget_id)
         target._custom_widget_ids.add(widget_id)
-        binding.retarget(target._display_bounds,
-            lambda geometry: target._apply_binding_geometry(widget_id, geometry))
+        binding.retarget(
+            target._display_bounds,
+            lambda geometry: target._apply_binding_geometry(widget_id, geometry),
+            authored_geometry_sink=lambda geometry: target._record_authored_geometry(
+                widget_id, geometry
+            ),
+        )
         set_context = getattr(family, "set_display_context", None)
         if callable(set_context):
             set_context(str(target._runtime.display_identity.screen_key), target._display_bounds)
@@ -483,11 +514,10 @@ class QuickDisplayPresenter:
     def _apply_binding_geometry(
         self, widget_id: str, geometry: OverlayWidgetGeometry
     ) -> None:
-        """Record one binding's authored rect, then project ordinary stacking."""
+        """Project one binding's effective rectangle through ordinary stacking."""
 
         if self._retired:
             return
-        self._base_geometries[widget_id] = geometry
         observer = self._layout_observer if self._authored_layout_enabled else None
         if observer is not None:
             try:

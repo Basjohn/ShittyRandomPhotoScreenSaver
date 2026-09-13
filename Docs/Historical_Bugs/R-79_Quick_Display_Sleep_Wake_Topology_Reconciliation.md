@@ -3,9 +3,9 @@
 ## Classification
 
 - [ ] COMPLETELY FUCKED
-- [x] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 ## Evidence
 
@@ -25,8 +25,14 @@ The overnight diagnostic run began at `05:43:59` while Qt exposed one screen. St
 
 ## Regression coverage
 
-`tests/test_qtquick_monitor_wake_reconcile.py` pins same-count metric-change reconciliation, same-signature resume geometry repair, metric-first/resume-second intent preservation, inactive-state no-op, primary-screen signature visibility, burst coalescing and retirement disconnect/fencing. `tests/test_qtquick_window.py` pins the public bound-screen revalidation seam. Physical dual-display sleep/wake remains required because Qt/native resume ordering cannot be proved by a synthetic unit test.
+`tests/test_qtquick_monitor_wake_reconcile.py` pins same-count metric-change reconciliation, same-signature resume geometry repair, metric-first/resume-second intent preservation, inactive-state no-op, primary-screen signature visibility, burst coalescing and retirement disconnect/fencing. `tests/test_qtquick_window.py` pins the public bound-screen revalidation seam.
+
+## Physical closure — 2026-09-12
+
+An installed diagnostic dual-display wake run exercised repeated real topology churn (`2 -> 1 -> 2 -> 1 -> 2`). Each topology edge retired the old Quick generation and admitted a fresh generation rather than leaving a stale native surface behind. The final stable generation admitted both displays, rebound the Visualizer to its requested screen, completed coordinated retained reveal and presented sane per-display geometry. The operator also confirmed the visible wake behavior succeeded. No duplicate owner/rebuild loop or stranded/straddled old generation remained.
+
+This physical run closes R-79. The same-signature `ApplicationActive` repair branch remains permanently owned by automated coverage because that exact OS/Qt ordering is nondeterministic in a physical wake attempt.
 
 ## Closure bar
 
-Run the focused Windows/PySide suites and one installed dual-display off/sleep -> wake soak. The incident closes only if every admitted display returns to one correctly bound full-screen Quick surface with no straddled/stale geometry and no duplicate owner/rebuild loop.
+**PASSED.** Automated wake/reconcile coverage is green and the installed dual-display power/wake case returned to one correctly bound full-screen Quick surface per admitted display.

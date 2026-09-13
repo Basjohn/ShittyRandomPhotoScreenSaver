@@ -62,7 +62,7 @@ OverlayWidget {
             logoSource: achievementRoot.achievementModel.logoSource
             fillColor: achievementRoot.achievementModel.headerFillColor
             borderColor: achievementRoot.achievementModel.headerBorderColor
-            borderWidth: achievementRoot.scaleAwareStrokeWidthForScale(
+            borderWidth: achievementRoot.scaleAwareHeaderStrokeWidthForScale(
                 achievementRoot.achievementModel.headerBorderWidth,
                 achievementRoot.contentScale
             )
@@ -186,6 +186,11 @@ OverlayWidget {
                 y: 14.0
                 width: normalContent.artworkWidth
                 height: normalContent.artworkHeight
+                readonly property real artworkStrokeWidth:
+                    achievementRoot.scaleAwareStrokeWidthForScale(
+                        2.25, achievementRoot.contentScale
+                    )
+                readonly property real imageInset: Math.max(2.0, artworkStrokeWidth)
 
                 RectangularShadow {
                     anchors.fill: artworkBackground
@@ -210,7 +215,7 @@ OverlayWidget {
                     id: artworkImage
                     objectName: "achievementArtworkImage"
                     anchors.fill: parent
-                    anchors.margins: 2.0
+                    anchors.margins: artworkFrame.imageInset
                     source: achievementRoot.achievementModel.artworkSource
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
@@ -225,7 +230,7 @@ OverlayWidget {
                 Rectangle {
                     id: artworkMask
                     anchors.fill: artworkImage
-                    radius: 5.0
+                    radius: Math.max(0.0, artworkBackground.radius - artworkFrame.imageInset)
                     visible: false
                     layer.enabled: true
                 }
@@ -243,9 +248,7 @@ OverlayWidget {
                     border.color: artworkHover.hovered
                         ? achievementRoot.achievementModel.accentColor
                         : achievementRoot.achievementModel.steamArtworkBorderColor
-                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
-                        2.25, achievementRoot.contentScale
-                    )
+                    border.width: artworkFrame.artworkStrokeWidth
                 }
 
                 HoverHandler {

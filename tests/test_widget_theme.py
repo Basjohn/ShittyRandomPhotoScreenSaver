@@ -146,7 +146,7 @@ def test_selection_resolution_falls_back_for_unknown_id(tmp_path):
 
 def test_resolve_defaults_to_dark(tmp_path):
     catalog = build_widget_theme_catalog(tmp_path)
-    resolved = resolve_widget_theme(WidgetThemeState(), catalog)
+    resolved = resolve_widget_theme(WidgetThemeState(selected_id="default_dark", keep_synced=True, custom_payload=None), catalog)
     assert resolved.theme == DEFAULT_DARK_WIDGET_THEME
     assert resolved.is_custom is False
 
@@ -161,12 +161,12 @@ def test_keep_synced_uses_linked_id_when_on_and_stored_selection_when_off(tmp_pa
     catalog = build_widget_theme_catalog(tmp_path)
 
     # Sync ON: the linked (mirrored) widget theme id wins over the stored selection.
-    state = WidgetThemeState(selected_id="default_dark", keep_synced=True)
+    state = WidgetThemeState(selected_id="default_dark", keep_synced=True, custom_payload=None)
     resolved = resolve_widget_theme(state, catalog, synced_widget_theme_id="ocean")
     assert resolved.theme.theme_id == "ocean"
 
     # Sync OFF: the explicit selection wins, sync id ignored.
-    state_off = WidgetThemeState(selected_id="default_dark", keep_synced=False)
+    state_off = WidgetThemeState(selected_id="default_dark", keep_synced=False, custom_payload=None)
     resolved_off = resolve_widget_theme(
         state_off, catalog, synced_widget_theme_id="ocean"
     )
@@ -177,6 +177,7 @@ def test_corrupt_custom_snapshot_falls_back_to_default_dark(tmp_path):
     catalog = build_widget_theme_catalog(tmp_path)
     state = WidgetThemeState(
         selected_id=CUSTOM_WIDGET_THEME_ID,
+        keep_synced=False,
         custom_payload={"format": "wrong"},
     )
     resolved = resolve_widget_theme(state, catalog)
@@ -191,7 +192,7 @@ def test_theme_owned_edit_snapshots_to_custom_and_unsyncs(tmp_path):
     new_border = Rgba(10, 120, 200, 255)
 
     snapshot, state = begin_theme_owned_edit(
-        WidgetThemeState(keep_synced=True),
+        WidgetThemeState(selected_id="default_dark", keep_synced=True, custom_payload=None),
         active,
         "card.border",
         new_border,

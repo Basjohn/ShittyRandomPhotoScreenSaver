@@ -24,8 +24,11 @@ def test_custom_alignment_guides_have_explicit_above_below_layering() -> None:
     assert "id: customLayoutOverlay" in scene
     assert "z: 100" in scene
 
-    # Peer-edge alignment is a gentle blue high-layer guide.
+    # Peer-edge alignment is a gentle blue high-layer guide, one pixel thicker
+    # than the former baseline.
     assert 'color: "#aa5ea8ff"' in overlay
+    assert 'width: 3' in overlay
+    assert 'height: 3' in overlay
     assert 'objectName: "customLayoutVerticalGuide"' in overlay
     assert 'objectName: "customLayoutHorizontalGuide"' in overlay
 
@@ -34,6 +37,12 @@ def test_custom_alignment_guides_have_explicit_above_below_layering() -> None:
     assert 'objectName: "customLayoutVerticalCenterGuide"' in underlay
     assert 'objectName: "customLayoutHorizontalCenterGuide"' in underlay
     assert 'color: "#70ffffff"' in underlay
+    assert 'border.width: 2' in underlay
+    assert underlay.count('width: 3') >= 2
+    assert underlay.count('height: 3') >= 2
+    # Generic grid lines deliberately remain at the original 1 px.
+    assert 'width: 1' in underlay
+    assert 'height: 1' in underlay
     assert 'color: index % 4 === 0 ? "#3affffff" : "#1cffffff"' in underlay
 
 
@@ -48,6 +57,8 @@ def test_custom_move_publishes_existing_snap_metadata_without_new_cadence() -> N
     assert 'getattr(resolution, "vertical_assists", ())' in owner
     assert 'getattr(resolution, "horizontal_assists", ())' in owner
     assert "move_finished_handler=self.clear_move_guides" in owner
+    assert "self._publish_uniform_wheel_guides(item)" in owner
+    assert "never feed the resolver's suggested scale back into geometry" in owner
     assert "def set_custom_layout_guides(" in scene
     assert 'center_kinds = {"display_center", "peer_center"}' in scene
     assert "onReleased: customLayoutOverlay.sessionModel.finishMove()" in overlay_qml

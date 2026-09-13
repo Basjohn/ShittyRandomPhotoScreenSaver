@@ -11,7 +11,7 @@ from rendering.quick.bootstrap import quick_qml_root
 from rendering.quick.input_controller import QuickInputController
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
 from rendering.quick.state import QuickInputState, QuickWindowPolicy
-from rendering.quick.widgets.host import OverlayWidgetGeometry
+from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
 from rendering.quick.window import QuickDisplayWindow
 
 
@@ -194,13 +194,42 @@ def test_passive_click_reaches_existing_action_and_holds_until_target_changes(
     assert glow.property("intensity") == 0.0
 
 
+def test_frameless_ordinary_widget_is_ineligible_for_hover_click_and_jedi(
+    glow_scene, qt_app
+):
+    scene, controller, window = glow_scene
+    events = []
+    scene.jedi_mode_requested.connect(lambda trigger, identity: events.append((trigger, identity)))
+    controller.configure_widget_glow(
+        on_hover=True,
+        on_click=True,
+        intensity=1.0,
+        color=(130, 205, 255, 255),
+        jedi_mode=True,
+    )
+    widget = _widget(scene)
+    assert _glow(widget.item) is not None
+    widget.set_card_style(OverlayCardStyle(shell_enabled=False))
+    qt_app.processEvents()
+    assert widget.item.property("cardShellEnabled") is False
+    assert widget.item.property("interactionGlowEligible") is False
+    assert _glow(widget.item) is None
+
+    _mouse(window, QEvent.Type.MouseButtonPress, 80, 80, Qt.LeftButton, Qt.LeftButton)
+    _mouse(window, QEvent.Type.MouseButtonRelease, 80, 80, Qt.LeftButton)
+    assert widget.item.property("widgetGlowClicked") is False
+    widget.item.jediModeRequested.emit("hover")
+    assert events == []
+
+
+
 def test_feedback_has_no_polling_or_texture_capture():
     code = (quick_qml_root() / "WidgetInteractionGlow.qml").read_text(encoding="utf-8")
     for forbidden in ("Timer {", "FrameAnimation", "Animation.Infinite", "layer.enabled", "MultiEffect", "ShaderEffectSource"):
         assert forbidden not in code
 
 
-def test_glow_projects_visualizer_frame_and_shell_less_digital_clock_bounds():
+def test_glow_requires_a_real_card_shell_for_all_widget_families_and_visualizer():
     qml = quick_qml_root()
     visualizer = (qml / "VisualizerPresentation.qml").read_text(encoding="utf-8")
     clock = (qml / "ClockPresentation.qml").read_text(encoding="utf-8")
@@ -208,10 +237,12 @@ def test_glow_projects_visualizer_frame_and_shell_less_digital_clock_bounds():
     glow = (qml / "WidgetInteractionGlow.qml").read_text(encoding="utf-8")
 
     assert 'objectName: "visualizerInteractionGlowLoader"' in visualizer
-    assert "widgetGlowAdmitted" in visualizer
+    assert "readonly property bool interactionGlowEligible: cardShellEnabled" in visualizer
+    assert "readonly property bool interactionGlowEligible: cardShellEnabled" in overlay
+    assert "interactionGlowEligible" in visualizer and "interactionGlowEligible" in overlay
     assert "HoverHandler" in visualizer and "blocking: false" in visualizer
-    assert "_isDigital && !cardShellEnabled" in clock
-    assert "interactionGlowWidth" in clock and "digitalFace.preferredContentWidth" in clock
+    assert "_digitalGlowMargin" not in clock
+    assert "_isDigital && !cardShellEnabled" not in clock
     assert "property real interactionGlowWidth" in overlay
     assert "hovered ? 0.80 : 0.0" in glow
     assert "property real distancePx: 14.0" in glow

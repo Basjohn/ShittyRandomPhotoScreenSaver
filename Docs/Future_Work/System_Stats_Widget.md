@@ -1,6 +1,6 @@
 # System Stats Widget — Low-Burden Product Decomposition
 
-Status: **CPU/RAM IMPLEMENTED / PUBLIC / AWAITING S7 SOAK**
+Status: **CPU/MEMORY/UPTIME/NETWORK IMPLEMENTED / PUBLIC / AWAITING S7 SOAK**
 Last updated: 2026-09-13
 Current sequencing authority: `Current_Plan.md`
 Stable widget/family id: `system_stats`
@@ -13,9 +13,9 @@ A small System Stats card is acceptable **only if its own measurement cost is be
 remains completely dormant without an admitted card consumer**. The existing `--usage` telemetry is useful evidence and
 must remain diagnostics-only; it is intentionally much broader than this product needs.
 
-This decomposition began with a sampler admission experiment. CPU/RAM cleared the source-cost gate; optional GPU/VRAM
-did not. Later metrics remain shelved rather than weakening Visualizer cadence/reactivity or disguising expensive
-collection behind a slower UI.
+This decomposition began with a sampler admission experiment. CPU/RAM cleared the source-cost gate; the GPU/VRAM candidate
+did not. A later product pass admitted two additional OS-maintained values on the **same** sampler pulse: boot-derived
+system uptime and aggregate network receive/transmit counters. No second cadence or hardware/provider layer was added.
 
 ### 0.1 Landed implementation state
 
@@ -26,11 +26,12 @@ closed all query/counter state and is **not** in the product. No diagnostic or P
 S1-S6 are implemented as a normal product family. The family is activated by default so Setup and its pill are visible;
 the member remains disabled by default. One
 runtime-generation owner submits a low-priority sample only while at least one real retained-card lease is active;
-additional displays share its immutable snapshot. The cadence is a fixed completion+10 seconds, one sample may be in
+additional displays share its immutable snapshot. The cadence is fixed-delay from completion with a canonical 10-second minimum/default (user-adjustable slower); one sample may be in
 flight, and final release fences completion and closes/clears source ownership. Settings construction stays source-inert.
 
-The retained card shows CPU load and RAM percentage plus used/total in two fixed panels. It uses semantic Widget Theme
-roles, ordinary stacking/global-CUSTOM/40% normalization, finite width easing and an original packaged monochrome gear
+The retained card shows CPU load, RAM percentage plus used/total, system uptime and aggregate Network ↓/↑ throughput in
+four fixed panels. It uses semantic Widget Theme roles, ordinary stacking/global-CUSTOM/40% normalization, finite width
+easing and an original packaged monochrome gear
 and spanner header asset. Focused automated source/runtime/dormancy/multi-display/Settings/QML/binder/build checks and
 real Quick standard/busy/40%-floor captures are GREEN. The temporary `--devstats` feature gate is retired, with a one-time
 profile migration admitting the formerly hidden family without enabling its member; the old CLI token is only an inert
@@ -39,12 +40,15 @@ off-vs-on Visualizer contention, long-run, repeated retirement/recreation and tw
 
 ## 1. Product goal
 
-Provide a quiet glanceable card for:
+Provide a quiet glanceable card for exactly the admitted public metrics:
 
 - whole-system CPU usage;
 - whole-system RAM usage;
-- optional system/adapter GPU usage **only if an honest low-cost aggregate can be proven**;
-- optional VRAM used/total **only if an honest low-cost adapter/system value can be proven**.
+- system uptime;
+- aggregate network receive/transmit throughput.
+
+GPU/VRAM and other hardware telemetry are not pending System Stats work. The preserved S0 GPU/VRAM probe is historical
+evidence for why the product stops at the four metrics above unless the operator explicitly opens a new scope later.
 
 This is not Task Manager and not SRPSS diagnostics.
 
@@ -58,7 +62,7 @@ Version 1 must not collect or display:
 - process tree / child enumeration;
 - process/thread/handle counts;
 - per-process CPU/GPU tables;
-- IO counters;
+- per-process or disk IO enumeration/counters;
 - temperatures/fan sensors;
 - per-core graphs;
 - historical database/long-lived charts;
@@ -93,7 +97,7 @@ Therefore **do not instantiate, wrap, subclass or silently enable `UsageTelemetr
 
 Activation/dormancy should be event-owned. Usage percentages themselves are rate measurements and require observations
 over time, so a tiny bounded periodic sample while a consumer exists is acceptable and more truthful than pretending
-CPU/GPU utilization can be fully event-driven.
+CPU/network utilization can be fully event-driven.
 
 Design target:
 
@@ -109,11 +113,10 @@ No QML polling timer. No timer per monitor. No sampler when lease count is zero.
 
 ### Cadence
 
-- **Start at 10 seconds fixed cadence.**
-- 5 seconds is the only planned faster candidate if eyes-on validation proves 10 s feels unacceptably stale and A/B
-  performance still shows no meaningful burden.
-- Do not expose a cadence knob initially. A user-facing slider invites pathological high-frequency monitoring and adds
-  product complexity without clear value.
+- **10 seconds is the canonical minimum/default interval.** Settings may make the shared sampler slower, up to one hour.
+- Faster-than-10-second product sampling is forbidden; the UI enforces the same minimum.
+- There is still exactly one fixed-delay owner. Changing the interval alters only its next completion-relative one-shot;
+  Uptime and Network never create their own timers.
 - One collection may be in flight. If a cadence edge arrives while it is still running, skip it; never queue telemetry
   samples.
 - Sampling phase does not need wall-clock exactness. Low priority and bounded drift are preferable to competing with
@@ -144,26 +147,22 @@ Read one whole-system memory-status snapshot on the same sampling pulse:
 - no USS/private/process memory;
 - no extra cadence.
 
-### 5.3 GPU utilization — optional admission
+### 5.3 Uptime — admitted
 
-GPU is not allowed to make the whole widget expensive or semantically dishonest.
+Capture boot time once when the admitted source is constructed and derive elapsed system uptime on the existing sample
+pulse. No polling source, history or per-frame clock is required.
 
-Probe the current Windows counter infrastructure / PDH adapter-engine facilities and determine whether SRPSS can obtain
-a stable, understandable system/adapter utilization value without:
+### 5.4 Network throughput — admitted
 
-- process enumeration;
-- rebuilding wildcard counter sets every sample;
-- summing unrelated engines into impossible >100% values;
-- silently picking an arbitrary adapter on multi-GPU systems;
-- long synchronous query refresh on the GUI or Visualizer logical thread.
+Read one aggregate OS network byte-counter snapshot on the existing pulse. The first observation warms a private baseline;
+subsequent receive/transmit rates are deltas divided by actual monotonic elapsed time. This performs no network request,
+per-process enumeration or adapter rediscovery and owns no second cadence.
 
-If the only easy number is ambiguous, omit GPU utilization from v1 and ship honest CPU/RAM first.
+### 5.5 GPU/VRAM — rejected historical candidate
 
-### 5.4 VRAM — optional admission
-
-If an adapter-level dedicated-memory used/total figure can be read cheaply and mapped coherently to the same GPU
-identity used for utilization, expose it. Otherwise omit it. Do not substitute SRPSS-process VRAM from `--usage` and
-label it as system VRAM.
+The S0 Windows PDH candidate was too costly/fragile for this product and remains rejected. There is no pending GPU/VRAM
+implementation phase, fallback provider or hardware-driver work in System Stats. Reconsideration requires an explicit new
+operator request rather than this document acting as a dormant invitation.
 
 ## 6. Sampler owner
 
@@ -186,7 +185,7 @@ Do not create one sampler per display/card.
 
 - first admitted card lease starts/warms the sampler;
 - additional displays reuse the same accepted snapshot;
-- last lease release cancels future cadence and closes/clears the admitted CPU/RAM source state;
+- last lease release cancels future cadence and closes/clears the admitted System Stats source state;
 - in-flight completion carries generation and is discarded after last-release/recreation;
 - family deactivation forces lease release;
 - ordinary card disable forces that card’s lease release;
@@ -245,9 +244,11 @@ The landed cross-thread payload is tiny and immutable:
 SystemStatsRuntimeSnapshot
     revision
     accepted_monotonic
-    CpuRamSample
+    CpuRamSample  # historical class name retained for compatibility
         cpu_status / cpu_pct | None
         ram_status / ram_used_bytes / ram_total_bytes | None
+        uptime_status / uptime_seconds | None
+        network_status / network_rx_bps / network_tx_bps | None
 ```
 
 Formatting (GB strings, whole-number percentages, labels) belongs in neutral preparation/presentation, not the source
@@ -258,15 +259,21 @@ its tree just because another 10-second sample arrived.
 
 ## 10. Product UI
 
-The initial card is deliberately quiet and readable:
+The card is deliberately quiet and readable, with four fixed metric panels:
 
 ```text
-SYSTEM STATS                      WHOLE SYSTEM • 10 SEC
+SYSTEM STATS
 CPU LOAD                         63%
-Across all logical processors    [bounded bar]
+Across all logical processors
 MEMORY                           71%
-22.7 GB of 32.0 GB used          [bounded bar]
+22.7 GB of 32.0 GB used
+UPTIME                           3d 14h
+Since system boot
+NETWORK                          ↓ 6.20 MB/s
+                                 ↑ 340 KB/s
 ```
+
+No cadence/rejection/architecture commentary belongs on the user-facing card.
 
 Exact labels/layout are eyes-on work, but principles are binding:
 
@@ -275,7 +282,7 @@ Exact labels/layout are eyes-on work, but principles are binding:
 - small presentation easing between accepted samples is optional, finite and purely visual;
 - displayed value changes do not change preferred geometry;
 - configured metric capacity owns preferred height;
-- rejected GPU/VRAM is omitted; CPU/RAM does not collapse into a different card architecture when one value is warming
+- rejected GPU/VRAM is omitted; the admitted metrics do not collapse into a different card architecture when one value is warming
   or unavailable.
 
 ## 11. Icon contract
@@ -319,16 +326,11 @@ Landed settings:
 - family activation entry;
 - Enabled;
 - Position / Monitor;
-- ordinary font family/size controls consistent with other families.
+- ordinary font family/size controls consistent with other families;
+- one user-facing Update Interval in seconds, canonical default/minimum 10 and maximum one hour.
 
-Do not initially expose:
-
-- cadence;
-- worker priority;
-- counter backend;
-- diagnostic process fields;
-- history length;
-- GPU query strategy.
+Do not expose worker priority, counter backend, diagnostic process fields, history length or rejected hardware-provider
+strategy. The interval control changes the one existing shared fixed-delay owner; it does not create another timer.
 
 Defaults live only in `core/settings/default_settings.py`; derived snapshot/SST outputs must be regenerated/audit-gated.
 Any new bucket ids participate in canonical UI-state schema with closed-by-default, one-open local scope.
@@ -343,7 +345,7 @@ Compare:
 A: feature absent / no sampler
 B: CPU + RAM sampler at 10 s
 C: CPU + RAM + candidate GPU/VRAM sampler at 10 s
-D: only if needed, admitted set at 5 s
+D: historical faster-cadence comparison only; not an admitted product setting
 ```
 
 Test under:
@@ -375,7 +377,7 @@ tens of milliseconds, investigate/reject it rather than normalizing that cost be
 
 - prove cheap whole-system CPU/RAM source;
 - probe honest GPU/VRAM candidate separately;
-- A/B at 10 s; optionally 5 s only after 10 s passes;
+- A/B the admitted 10 s product floor; historical faster probes do not authorize a faster user setting;
 - no product Settings/UI yet.
 
 ### S1 — canonical owner + leases — implemented
@@ -411,14 +413,9 @@ Only after S0–S2 are green:
 - unavailable/warming/error states;
 - no graphs.
 
-### S5 — optional GPU/VRAM — probed and rejected
+### S5 — GPU/VRAM candidate — probed and rejected
 
-Only metrics that passed S0:
-
-- one coherent adapter/system identity;
-- stable counter ownership;
-- no >100% aggregate nonsense;
-- graceful unsupported state.
+The candidate did not pass admission and is not pending work. No product fallback/provider was added.
 
 ### S6 — icon / presentation polish — implemented
 
@@ -431,7 +428,6 @@ Only metrics that passed S0:
 
 - off-vs-on contention comparison;
 - 10-second long run;
-- optional 5-second comparison if genuinely needed;
 - repeated enable/disable;
 - display/runtime recreation;
 - multi-monitor/card cardinality;
@@ -463,10 +459,10 @@ Do **not** respond by:
 System Stats is GREEN only when:
 
 - one shared sampler feeds every card instance;
-- 10-second default cadence is sufficient, with 5 seconds admitted only by evidence;
+- 10-second minimum/default cadence remains sufficient; slower user-selected intervals are allowed;
 - no consumer means literally no recurring product telemetry work;
 - CPU/RAM sources avoid process/thread enumeration;
-- GPU/VRAM is shown only if cheap and semantically honest;
+- rejected GPU/VRAM hardware telemetry remains absent;
 - no diagnostic `--usage` service or heavy collector is reused;
 - ordinary widget normalization/theme/CUSTOM contracts are inherited;
 - the header has a canonical themed glyph or project-owned gear+spanner asset without a new icon subsystem;
