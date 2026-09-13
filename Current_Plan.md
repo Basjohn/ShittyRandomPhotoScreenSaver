@@ -153,6 +153,25 @@ Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this ac
 
 ---
 
+## 6. Widget polish / follow-ups (deferred, added 2026-09-13)
+
+Observed during the content-extent resize work; not yet started. Deal with after the
+Friend Pulse content-extent experiment lands.
+
+- [ ] **Media Artwork escapes its frame at large scales.** The album artwork appears to
+  overflow/escape its bordered frame when the Media card is scaled up large. Investigate the
+  artwork clip/frame bounds vs. the uniform scale.
+- [ ] **Friend Pulse line work is too thin at base.** Every Friend Pulse stroke except the
+  shared BrandedHeader (headers are reused across widgets, so leave them out here) needs a
+  ~0.5px baseline thickness increase across the board.
+- [ ] **Avatar-name text is not Title Cased** when it should be, and it **truncates instead of
+  wrapping to a second row + shrinking to fit** its cell/box. Fix the grid/rows name text to
+  Title Case + double-row-with-shrink-to-fit inside its allotted box.
+- [ ] **Verify headers actually get the scale-up stroke boost.** The scale-aware stroke
+  envelope should thicken the BrandedHeader frame as the card enlarges, but it may not be
+  visible. Confirm whether headers route through the boost; if they already do, add a further
+  ~25% to the header boost specifically.
+
 ## Standing guardrails
 
 - **Voxel Sphere golden preservation:** current accepted Sphere reactivity/motion/preset behaviour is golden. Keep the mode architecturally isolated; do not retune or migrate it into permanent/shared Visualizer owners unless the operator explicitly requests that work.
