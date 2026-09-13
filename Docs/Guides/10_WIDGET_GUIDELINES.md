@@ -102,8 +102,8 @@ backend abstraction.
 
 ### Steam cards
 
-Use current neutral Steam models/runtime/cache/privacy/provenance seams. Do not manufacture Quick ports for
-unfinished Steam Journey/Progress or Friend Pulse scaffolds.
+Use current neutral Steam models/runtime/cache/privacy/provenance seams. Friend Pulse is a retained public card;
+do not manufacture a Quick port for the unfinished Steam Journey/Progress scaffold.
 
 ## 4. Import dormancy is architecture
 

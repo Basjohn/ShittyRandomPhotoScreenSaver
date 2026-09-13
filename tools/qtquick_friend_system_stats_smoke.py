@@ -8,6 +8,7 @@ credential, cache, network, timer, or system-sampler work.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 from pathlib import Path
 import sys
@@ -98,6 +99,9 @@ class _InertService:
     def refresh(self) -> bool:
         return False
 
+    def update_visible_range(self, _first_index: int, _last_index: int) -> bool:
+        return True
+
 
 def _settle(milliseconds: int) -> None:
     loop = QEventLoop()
@@ -120,6 +124,16 @@ def _grab(item: QQuickItem) -> QImage:
     if image.isNull():
         raise RuntimeError("retained card capture returned no pixels")
     return image
+
+
+def _find_visual_item(root: QQuickItem, object_name: str) -> QQuickItem | None:
+    pending = [root]
+    while pending:
+        item = pending.pop()
+        if item.objectName() == object_name:
+            return item
+        pending.extend(item.childItems())
+    return None
 
 
 def _save_on_busy_background(image: QImage, path: Path) -> None:
@@ -191,9 +205,13 @@ def run(output_dir: Path) -> dict[str, object]:
     _avatar(avatar_paths[1], QColor("#c995ff"), QColor("#6c3ca5"), "L")
 
     messages: list[str] = []
-    prior_handler = qInstallMessageHandler(
-        lambda _kind, _context, message: messages.append(str(message))
-    )
+
+    def record_qt_message(_kind: Any, _context: Any, message: str) -> None:
+        rendered = str(message)
+        messages.append(rendered)
+        print(f"Qt: {rendered}", file=sys.stderr, flush=True)
+
+    prior_handler = qInstallMessageHandler(record_qt_message)
     owner = QObject()
     factory = QuickSceneFactory(owner)
     window = QQuickWindow()
@@ -241,7 +259,7 @@ def run(output_dir: Path) -> dict[str, object]:
         status=SteamResultStatus.SUCCESS,
         authoritative=True,
         playing_count=4,
-        online_count=11,
+        online_count=7,
         entries=(
             FriendPulseEntry(
                 "ada",
@@ -249,57 +267,87 @@ def run(output_dir: Path) -> dict[str, object]:
                 70,
                 "Half-Life",
                 persona_state=1,
-                changed=True,
             ),
             FriendPulseEntry("lee", "Lee", 1245620, "ELDEN RING", persona_state=3),
             FriendPulseEntry("sam", "Sam", 220, "Half-Life 2", persona_state=2),
             FriendPulseEntry("zoe", "Zoë", 753640, "Outer Wilds", persona_state=1),
-        ),
-    )
-    rich = project_friend_pulse(
-        friend_snapshot,
-        privacy_mode="Rich",
-        capacity=3,
-        avatar_sources={
-            "ada": avatar_paths[0].resolve().as_uri(),
-            "lee": avatar_paths[1].resolve().as_uri(),
-        },
-    )
-    friend_model.on_friend_pulse_runtime_snapshot(friend_snapshot, rich)
-
-    six_config = FriendPulsePresentationConfig.from_widgets_mapping(
-        {"friend_pulse": {"visible_row_capacity": 6}}
-    )
-    six_snapshot = FriendPulseSnapshot(
-        status=SteamResultStatus.SUCCESS,
-        authoritative=True,
-        playing_count=6,
-        online_count=15,
-        entries=(
-            *friend_snapshot.entries,
             FriendPulseEntry(
                 "grace",
                 "Grace Hopper",
-                367520,
-                "Hollow Knight",
                 persona_state=1,
             ),
             FriendPulseEntry(
                 "dennis",
                 "Dennis Ritchie",
-                620,
-                "Portal 2",
                 persona_state=3,
             ),
+            FriendPulseEntry(
+                "linus",
+                "Linus Torvalds",
+                persona_state=2,
+            ),
+            FriendPulseEntry(
+                "margaret",
+                "Margaret Hamilton",
+                persona_state=0,
+            ),
+            FriendPulseEntry("ken", "Ken Thompson", persona_state=0),
+            FriendPulseEntry("barbara", "Barbara Liskov", persona_state=0),
+            FriendPulseEntry("edsger", "Edsger Dijkstra", persona_state=0),
+            FriendPulseEntry("radia", "Radia Perlman", persona_state=0),
         ),
     )
-    six_projection = project_friend_pulse(
-        six_snapshot,
+    rich = project_friend_pulse(
+        friend_snapshot,
         privacy_mode="Rich",
-        capacity=6,
+        capacity=friend_config.capacity,
         avatar_sources={
             "ada": avatar_paths[0].resolve().as_uri(),
             "lee": avatar_paths[1].resolve().as_uri(),
+        },
+        friend_action_identities={
+            entry.identity_fingerprint for entry in friend_snapshot.entries
+        },
+    )
+    friend_model.on_friend_pulse_runtime_snapshot(friend_snapshot, rich)
+    changed_snapshot = replace(
+        friend_snapshot,
+        entries=(
+            replace(
+                friend_snapshot.entries[0],
+                game_appid=20,
+                game_name="Team Fortress 2",
+                changed=True,
+            ),
+            *friend_snapshot.entries[1:],
+        ),
+    )
+    changed_rich = project_friend_pulse(
+        changed_snapshot,
+        privacy_mode="Rich",
+        capacity=friend_config.capacity,
+        avatar_sources={
+            "ada": avatar_paths[0].resolve().as_uri(),
+            "lee": avatar_paths[1].resolve().as_uri(),
+        },
+        friend_action_identities={
+            entry.identity_fingerprint for entry in changed_snapshot.entries
+        },
+    )
+
+    roster_config = FriendPulsePresentationConfig.from_widgets_mapping(
+        {"friend_pulse": {"visible_row_capacity": 12}}
+    )
+    roster_projection = project_friend_pulse(
+        friend_snapshot,
+        privacy_mode="Rich",
+        capacity=12,
+        avatar_sources={
+            "ada": avatar_paths[0].resolve().as_uri(),
+            "lee": avatar_paths[1].resolve().as_uri(),
+        },
+        friend_action_identities={
+            entry.identity_fingerprint for entry in friend_snapshot.entries
         },
     )
 
@@ -331,9 +379,18 @@ def run(output_dir: Path) -> dict[str, object]:
     )
 
     cases: list[dict[str, object]] = []
+    observed_event_glow_level = 0.0
     try:
         window.show()
-        _settle(900)
+        _settle(120)
+        friend_model.on_friend_pulse_runtime_snapshot(changed_snapshot, changed_rich)
+        _settle(1900)
+        event_tile = _find_visual_item(friend.item, "friendPulseGridTile_0")
+        if event_tile is None:
+            raise RuntimeError("changed Friend Pulse tile was not retained")
+        observed_event_glow_level = float(event_tile.property("eventGlowLevel"))
+        if observed_event_glow_level <= 0.75:
+            raise RuntimeError("changed Friend Pulse tile did not begin its event glow")
         cases.append(
             _capture_case(
                 name="friend_pulse_rich",
@@ -341,6 +398,21 @@ def run(output_dir: Path) -> dict[str, object]:
                 output_dir=output_dir,
             )
         )
+        friend.item.setProperty("menuRowIndex", 0)
+        friend.item.setProperty("menuFriendActionAvailable", True)
+        friend.item.setProperty("menuGameActionAvailable", True)
+        friend.item.setProperty("actionPopupX", 360.0)
+        friend.item.setProperty("actionPopupY", 88.0)
+        friend.item.setProperty("activeActionIdentity", "friend-row-0")
+        _settle(80)
+        cases.append(
+            _capture_case(
+                name="friend_pulse_action_menu",
+                presentation=friend,
+                output_dir=output_dir,
+            )
+        )
+        friend.item.setProperty("activeActionIdentity", "")
         cases.append(
             _capture_case(
                 name="system_stats_ready",
@@ -393,34 +465,37 @@ def run(output_dir: Path) -> dict[str, object]:
         )
 
         friend.retire()
-        six_model = FriendPulsePresentationModel(
-            six_config,
-            FriendPulsePresentationStyle.project(six_config, shadows),
+        roster_model = FriendPulsePresentationModel(
+            roster_config,
+            FriendPulsePresentationStyle.project(roster_config, shadows),
             runtime_generation=501,
             parent=owner,
         )
-        six_model.set_runtime_service(_InertService())
-        six_friend = RetainedFriendPulsePresentation(
+        roster_model.set_runtime_service(_InertService())
+        roster_friend = RetainedFriendPulsePresentation(
             host=host,
-            model=six_model,
+            model=roster_model,
             geometry=OverlayWidgetGeometry(
                 28,
                 28,
-                six_config.authored_width,
-                six_config.authored_height,
+                roster_config.authored_width,
+                roster_config.authored_height,
             ),
         )
-        six_friend.activate(object())
-        six_model.on_friend_pulse_runtime_snapshot(six_snapshot, six_projection)
+        roster_friend.activate(object())
+        roster_model.on_friend_pulse_runtime_snapshot(
+            friend_snapshot,
+            roster_projection,
+        )
         _settle(120)
         cases.append(
             _capture_case(
-                name="friend_pulse_six_grid",
-                presentation=six_friend,
+                name="friend_pulse_twelve_grid",
+                presentation=roster_friend,
                 output_dir=output_dir,
             )
         )
-        six_friend.retire()
+        roster_friend.retire()
 
         rows_config = FriendPulsePresentationConfig.from_widgets_mapping(
             {"friend_pulse": {"view_mode": "rows"}}
@@ -468,6 +543,7 @@ def run(output_dir: Path) -> dict[str, object]:
         "graphics_api": "OpenGL",
         "render_loop": "threaded",
         "device_pixel_ratio": window.devicePixelRatio(),
+        "friend_event_glow_level": observed_event_glow_level,
         "cases": cases,
         "qml_messages": messages,
     }

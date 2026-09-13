@@ -75,7 +75,15 @@ def test_canonical_defaults_activate_every_transition():
 
 def test_default_family_activation_keys_are_explicit_for_stable_families():
     activation = get_default_settings()["widgets"]["family_activation"]
-    for family_id in ("clocks", "weather", "media", "reddit", "gmail", "steam"):
+    for family_id in (
+        "clocks",
+        "weather",
+        "media",
+        "reddit",
+        "gmail",
+        "steam",
+        "system_stats",
+    ):
         assert activation[family_id] is True
 
 

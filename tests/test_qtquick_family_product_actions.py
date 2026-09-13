@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from core.widget_product_actions import (
@@ -158,3 +160,58 @@ def test_failed_or_invalid_steam_action_never_exits():
     )
     assert len(attempts) == 1
     assert exits == []
+
+
+@pytest.mark.qt
+def test_display_steam_routes_profile_and_private_clipboard_actions(
+    qt_app,
+    monkeypatch,
+):
+    from engine.display_manager import DisplayManager
+    from rendering import runtime_input
+    from core import build_profile, mc
+    from core.windows import secure_url_launcher
+
+    opened = []
+    exits = []
+    manager = SimpleNamespace(
+        _retired=False,
+        _on_exit_requested=lambda: exits.append("exit"),
+    )
+    monkeypatch.setattr(
+        runtime_input,
+        "runtime_pointer_input_is_suppressed",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(build_profile, "is_diagnostic_build", lambda: False)
+    monkeypatch.setattr(mc, "is_mc_build", lambda: False)
+    monkeypatch.setattr(
+        secure_url_launcher,
+        "open_steam_target",
+        lambda target, **_kwargs: opened.append(target) or True,
+    )
+
+    assert DisplayManager._open_quick_steam_target(
+        manager,
+        "friend_pulse",
+        "friend_profile",
+        "76561198000000001",
+    )
+    assert opened[0].kind == "friend_profile"
+    assert exits == ["exit"]
+
+    exits.clear()
+    assert DisplayManager._open_quick_steam_target(
+        manager,
+        "friend_pulse",
+        "copy_steam_id",
+        "76561198000000001",
+    )
+    assert qt_app.clipboard().text() == "76561198000000001"
+    assert exits == []
+    assert not DisplayManager._open_quick_steam_target(
+        manager,
+        "friend_pulse",
+        "copy_steam_id",
+        "not-an-id",
+    )

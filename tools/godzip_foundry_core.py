@@ -81,7 +81,7 @@ RUN_FLAG_DESCRIPTIONS = {
     "--viz-diagnostics": "Extra Spotify visualizer diagnostics",
     "--fresh": "Clear current logs before starting",
     "--devcurve": "Legacy compatibility no-op",
-    "--devsteam": "Show unfinished Steam development cards",
+    "--devsteam": "Show the unfinished Steam Journey scaffold",
     "--diag-pair-warm-finish": "Internal paired warm-finish diagnostics",
     "--diag-p4-stages": "Internal P4 stage diagnostics",
     "--diag-p4-no-perf-hud": "Internal P4 diagnostics without perf HUD",

@@ -18,7 +18,7 @@ from core.steam.models import SteamResult, SteamResultStatus
 
 @dataclass(frozen=True)
 class FriendPulseEntry:
-    """One neutral playing observation from account-private source state."""
+    """One neutral roster observation from account-private source state."""
 
     identity_fingerprint: str
     display_name: str | None = None
@@ -46,8 +46,8 @@ class FriendPulseSnapshot:
     @property
     def usable(self) -> bool:
         # A coherent cached success remains useful evidence even when its
-        # truthful content is "nobody playing". Private/error cache states are
-        # never promoted to usable activity.
+        # truthful content is an empty roster. Private/error cache states are
+        # never promoted to usable roster state.
         return self.authoritative or (
             self.from_cache and self.status == SteamResultStatus.SUCCESS
         )
@@ -128,9 +128,11 @@ def sanitize_player_summaries_payload(
             ("personastate", "persona_state"),
         ):
             value = row.get(source_key)
-            if source_key in {"gameid", "personastate"}:
+            if source_key == "gameid":
+                value = _positive_int_or_none(value)
+            elif source_key == "personastate":
                 value = _int_or_none(value)
-            elif source_key != "gameid":
+            else:
                 value = _text(value)
             if value is not None:
                 item[target_key] = value
@@ -192,12 +194,9 @@ def build_friend_pulse_snapshot(
         if not fingerprint or fingerprint not in friend_fingerprints:
             continue
         persona_state = _int_or_none(row.get("persona_state"))
-        if persona_state is not None and persona_state > 0:
+        appid = _positive_int_or_none(row.get("game_appid"))
+        if (persona_state is not None and persona_state > 0) or appid is not None:
             online_count += 1
-        appid = _int_or_none(row.get("game_appid"))
-        game_name = _text(row.get("game_name"))
-        if appid is None or not game_name:
-            continue
         entries.append(
             FriendPulseEntry(
                 identity_fingerprint=fingerprint,
@@ -207,18 +206,12 @@ def build_friend_pulse_snapshot(
                 ),
                 display_name=_text(row.get("display_name")),
                 game_appid=appid,
-                game_name=game_name,
+                game_name=_text(row.get("game_name")),
                 avatar_url=_text(row.get("avatar_url")),
                 persona_state=persona_state,
             )
         )
-    entries.sort(
-        key=lambda entry: (
-            (entry.game_name or "").casefold(),
-            (entry.display_name or "").casefold(),
-            entry.identity_fingerprint,
-        )
-    )
+    entries.sort(key=_entry_rank)
     snapshot = FriendPulseSnapshot(
         status=SteamResultStatus.SUCCESS,
         accepted_at=max(
@@ -233,7 +226,7 @@ def build_friend_pulse_snapshot(
             stale or friend_result.from_cache or summaries_result.from_cache
         ),
         entries=tuple(entries),
-        playing_count=len(entries),
+        playing_count=sum(_is_playing(entry) for entry in entries),
         online_count=online_count,
     )
     return with_change_evidence(snapshot, previous)
@@ -261,23 +254,14 @@ def with_change_evidence(
     marked = tuple(
         replace(
             entry,
-            changed=(old_games.get(entry.identity_fingerprint) != entry.game_appid),
+            changed=(
+                _is_playing(entry)
+                and old_games.get(entry.identity_fingerprint) != entry.game_appid
+            ),
         )
         for entry in snapshot.entries
     )
-    # Freshly proven transitions are the most useful bounded rows. Stable rows
-    # retain deterministic game/name ordering behind them.
-    ranked = tuple(
-        sorted(
-            marked,
-            key=lambda entry: (
-                not entry.changed,
-                (entry.game_name or "").casefold(),
-                (entry.display_name or "").casefold(),
-                entry.identity_fingerprint,
-            ),
-        )
-    )
+    ranked = tuple(sorted(marked, key=_entry_rank))
     return replace(snapshot, entries=ranked)
 
 
@@ -297,12 +281,13 @@ def project_friend_pulse(
         frozenset(friend_action_identities)
         if friend_action_identities is not None
         else frozenset(
-            entry.identity_fingerprint
-            for entry in snapshot.entries
-            if entry.steam_id
+            entry.identity_fingerprint for entry in snapshot.entries if entry.steam_id
         )
     )
-    limit = max(1, int(capacity))
+    # Capacity belongs to retained-card geometry.  The source projection must
+    # retain the accepted roster so a viewport change cannot silently erase
+    # friends from the semantic model.
+    del capacity
     if snapshot.status == SteamResultStatus.PRIVATE:
         return FriendPulseProjection("private", "Private / unavailable", ())
     if snapshot.status != SteamResultStatus.SUCCESS:
@@ -310,35 +295,40 @@ def project_friend_pulse(
     if not snapshot.entries:
         return FriendPulseProjection(
             "stale" if snapshot.stale else "empty",
-            "No friends playing (cached)" if snapshot.stale else "No friends playing",
+            "No friends (cached)" if snapshot.stale else "No friends",
             (),
         )
     if mode == "strict":
-        groups = Counter(
-            (entry.game_appid, entry.game_name or "Unknown game")
-            for entry in snapshot.entries
-        )
+        groups = Counter(_strict_group(entry) for entry in snapshot.entries)
         rows = tuple(
             FriendPulseRow(
-                primary=game,
-                secondary=f"{count} {'friend' if count == 1 else 'friends'} playing",
-                presence_text="In game",
-                online=True,
+                primary=label,
+                secondary=_strict_group_secondary(label, count, playing),
+                presence_text="In game" if playing else label,
+                online=online,
                 count=count,
-                game_appid=appid,
+                game_appid=appid if playing else None,
             )
-            for (appid, game), count in sorted(
+            for (playing, online, appid, label), count in sorted(
                 groups.items(),
-                key=lambda item: (-item[1], item[0][1].casefold()),
+                key=lambda item: (
+                    not item[0][1],
+                    not item[0][0],
+                    item[0][3].casefold(),
+                    item[0][2] or -1,
+                ),
             )
         )
     else:
         rows = tuple(
             FriendPulseRow(
                 primary=entry.display_name or "Friend",
-                secondary=entry.game_name or "Unknown game",
-                presence_text=_presence_text(entry.persona_state),
-                online=entry.persona_state is None or entry.persona_state > 0,
+                secondary=entry.game_name or "",
+                presence_text=_presence_text(
+                    entry.persona_state,
+                    playing=_is_playing(entry),
+                ),
+                online=_is_online(entry),
                 changed=entry.changed,
                 avatar_url=local_avatars.get(entry.identity_fingerprint)
                 if mode == "rich"
@@ -351,19 +341,20 @@ def project_friend_pulse(
             )
             for entry in snapshot.entries
         )
-    playing_count = snapshot.playing_count or 0
-    metric = f"{playing_count} {'friend' if playing_count == 1 else 'friends'} playing"
+    online_count = snapshot.online_count or 0
+    metric = f"{online_count} online"
     if snapshot.stale:
         metric += " (cached)"
     return FriendPulseProjection(
         "stale" if snapshot.stale else "ready",
         metric,
-        rows[:limit],
-        max(0, len(rows) - limit),
+        rows,
     )
 
 
-def _presence_text(persona_state: int | None) -> str:
+def _presence_text(persona_state: int | None, *, playing: bool = False) -> str:
+    if playing:
+        return "In game"
     return {
         0: "Offline",
         1: "Online",
@@ -372,7 +363,52 @@ def _presence_text(persona_state: int | None) -> str:
         4: "Snooze",
         5: "Looking to trade",
         6: "Looking to play",
-    }.get(persona_state, "In game")
+    }.get(persona_state, "Unknown")
+
+
+def _is_online(entry: FriendPulseEntry) -> bool:
+    """Treat a reported game or non-zero persona state as online evidence."""
+
+    return _is_playing(entry) or bool(
+        entry.persona_state is not None and entry.persona_state > 0
+    )
+
+
+def _is_playing(entry: FriendPulseEntry) -> bool:
+    """Steam's game app id, rather than optional display text, is game evidence."""
+
+    return bool(entry.game_appid is not None and entry.game_appid > 0)
+
+
+def _entry_rank(entry: FriendPulseEntry) -> tuple[bool, bool, bool, str, str]:
+    """Keep accepted roster order deterministic and useful without truncating it."""
+
+    online = _is_online(entry)
+    return (
+        not online,
+        not entry.changed if online else True,
+        not _is_playing(entry) if online else True,
+        (entry.display_name or "").casefold(),
+        entry.identity_fingerprint,
+    )
+
+
+def _strict_group(entry: FriendPulseEntry) -> tuple[bool, bool, int | None, str]:
+    """Return an anonymous aggregation key for one retained roster member."""
+
+    if _is_playing(entry):
+        return (
+            True,
+            _is_online(entry),
+            entry.game_appid,
+            entry.game_name or "Unknown game",
+        )
+    return False, _is_online(entry), None, _presence_text(entry.persona_state)
+
+
+def _strict_group_secondary(label: str, count: int, playing: bool) -> str:
+    noun = "friend" if count == 1 else "friends"
+    return f"{count} {noun} {'playing' if playing else label.casefold()}"
 
 
 def _friend_rows(payload: Mapping[str, Any] | None) -> tuple[Mapping[str, Any], ...]:
@@ -447,6 +483,11 @@ def _int_or_none(value: Any) -> int | None:
         return parsed if parsed >= 0 else None
     except (TypeError, ValueError):
         return None
+
+
+def _positive_int_or_none(value: Any) -> int | None:
+    parsed = _int_or_none(value)
+    return parsed if parsed is not None and parsed > 0 else None
 
 
 def _time_or_zero(value: Any) -> float:

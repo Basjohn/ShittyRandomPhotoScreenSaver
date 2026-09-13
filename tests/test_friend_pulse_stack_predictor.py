@@ -11,7 +11,7 @@ from ui.widget_stack_predictor import (
 
 
 @pytest.mark.parametrize("view_mode", ("rows", "grid"))
-@pytest.mark.parametrize("capacity", range(1, 7))
+@pytest.mark.parametrize("capacity", range(1, 25))
 def test_friend_pulse_predictor_matches_retained_capacity_geometry(
     view_mode: str,
     capacity: int,
@@ -25,15 +25,16 @@ def test_friend_pulse_predictor_matches_retained_capacity_geometry(
     if view_mode == "rows":
         expected_height = 102 + capacity * 58
     else:
-        columns = 2 if capacity <= 4 or width < 540 else 3
+        content_width = width - 36
+        columns = min(capacity, 6, max(1, int((content_width + 10) // 120)))
         rows = (capacity + columns - 1) // columns
-        expected_height = 120 + rows * 102 + max(0, rows - 1) * 10
+        expected_height = 120 + rows * 132 + max(0, rows - 1) * 10
 
     assert (width, height) == (420, expected_height)
 
 
 @pytest.mark.parametrize("view_mode", ("rows", "grid"))
-@pytest.mark.parametrize("capacity", range(1, 7))
+@pytest.mark.parametrize("capacity", range(1, 25))
 def test_friend_pulse_stack_estimate_uses_view_and_capacity(
     view_mode: str,
     capacity: int,

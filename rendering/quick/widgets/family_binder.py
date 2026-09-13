@@ -28,7 +28,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Optional, Protocol, runtime_checkable
 
-from core.dev_gates import is_named_gate_enabled
 from core.logging.logger import get_logger
 from core.settings.default_contract import require_canonical_default
 from rendering.widget_descriptors import widget_route_admits_screen
@@ -692,7 +691,7 @@ class AbandonmentIssuesFamilyAdapter:
 
 
 class FriendPulseFamilyAdapter:
-    """Adapter for the dev-gated, shared-source Steam Friend Pulse card."""
+    """Adapter for the normally available, shared-source Steam Friend Pulse card."""
 
     def __init__(
         self,
@@ -708,8 +707,6 @@ class FriendPulseFamilyAdapter:
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        if not is_named_gate_enabled("steam"):
-            return ()
         shared = widgets_config.get("steam", {})
         if not isinstance(shared, Mapping):
             shared = {}
@@ -767,7 +764,7 @@ class FriendPulseFamilyAdapter:
 
 
 class SystemStatsFamilyAdapter:
-    """Adapter for the dev-gated whole-system CPU/RAM card."""
+    """Adapter for the normally available whole-system CPU/RAM card."""
 
     @property
     def family_id(self) -> str:
@@ -776,8 +773,6 @@ class SystemStatsFamilyAdapter:
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        if not is_named_gate_enabled("system_stats"):
-            return ()
         return _enabled_from_candidates(widgets_config, ("system_stats",))
 
     def build(

@@ -66,6 +66,49 @@ def test_setup_is_default_landing_and_lists_families(qt_app, settings_manager):
         tab.deleteLater()
 
 
+def test_system_stats_is_activated_and_has_a_visible_pill_while_member_is_off(
+    qt_app,
+    settings_manager,
+):
+    tab = _make_tab(settings_manager)
+    try:
+        family = get_widget_family_descriptor("system_stats")
+        assert family is not None
+        assert tab._family_activation_checkboxes["system_stats"].isChecked() is True
+        pill = _family_pill(tab, family)
+        assert pill is not None and pill.isHidden() is False
+
+        # Family activation admits the Settings page; ordinary member enablement
+        # remains a separate, dormant-by-default authority.
+        assert settings_manager.get("widgets.system_stats.enabled") is False
+        assert not hasattr(tab, "system_stats_enabled")
+    finally:
+        tab.deleteLater()
+
+
+def test_formerly_hidden_system_stats_profile_migrates_to_visible_pill(
+    qt_app,
+    settings_manager,
+):
+    widgets = settings_manager.get("widgets", {})
+    widgets["family_activation"]["system_stats"] = False
+    widgets["system_stats"]["enabled"] = False
+    settings_manager.set("widgets", widgets)
+    settings_manager._settings.update_metadata(widget_capability_schema_version=0)
+
+    settings_manager._run_persisted_widget_capability_schema_migrations()
+    tab = _make_tab(settings_manager)
+    try:
+        family = get_widget_family_descriptor("system_stats")
+        assert family is not None
+        assert tab._family_activation_checkboxes["system_stats"].isChecked() is True
+        pill = _family_pill(tab, family)
+        assert pill is not None and pill.isHidden() is False
+        assert settings_manager.get("widgets.system_stats.enabled") is False
+    finally:
+        tab.deleteLater()
+
+
 def test_deactivating_family_persists_and_hides_pill(qt_app, settings_manager):
     tab = _make_tab(settings_manager)
     try:

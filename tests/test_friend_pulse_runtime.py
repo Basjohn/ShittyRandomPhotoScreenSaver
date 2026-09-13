@@ -77,11 +77,13 @@ def _service(
     scheduled=None,
     avatar_fetcher=None,
     ui_dispatch=None,
+    capacity=8,
 ):
     return FriendPulseRuntimeService(
         config=FriendPulseRuntimeConfig(
             privacy_mode=mode,
             refresh_minutes=refresh_minutes,
+            capacity=capacity,
         ),
         runtime_generation=9,
         cache_loader=cache or (lambda **_kwargs: _snapshot()),
@@ -307,6 +309,77 @@ def test_rich_visible_rows_hydrate_once_with_local_sources_and_fence_stale_compl
         {"safe-id": image.resolve().as_uri()},
     )
     assert len(fetched) == 1
+
+
+def test_full_roster_projects_but_avatar_work_tracks_only_visible_viewport(
+    tmp_path: Path,
+):
+    manager = _Manager()
+    image = tmp_path / "avatar.jpg"
+    image.write_bytes(b"avatar")
+    fetched: list[str] = []
+    roster = FriendPulseSnapshot(
+        status=SteamResultStatus.SUCCESS,
+        authoritative=True,
+        playing_count=1,
+        online_count=3,
+        entries=tuple(
+            FriendPulseEntry(
+                f"safe-{index}",
+                f"Friend {index}",
+                10 if index == 0 else None,
+                "Game" if index == 0 else None,
+                avatar_url=f"https://avatars.steamstatic.com/{index}.jpg",
+                persona_state=1 if index < 3 else 0,
+            )
+            for index in range(5)
+        ),
+    )
+
+    def avatar_fetcher(*, cache_dir, url):
+        del cache_dir
+        fetched.append(url)
+        from core.steam.assets import SteamAssetRecord
+
+        return SteamAssetRecord("safe", image, image.stat().st_size, "jpg")
+
+    consumer = _Consumer(9, manager)
+    service = _service(
+        manager,
+        capacity=2,
+        cache=lambda **_kwargs: roster,
+        avatar_fetcher=avatar_fetcher,
+    )
+    service.attach_consumer(consumer)
+    service.start()
+    manager.complete(0, manager.tasks[0][0]())
+
+    first_avatar_index = next(
+        index
+        for index, task in enumerate(manager.tasks)
+        if task[2] == "friend_pulse_avatar_hydration"
+    )
+    manager.complete(first_avatar_index, manager.tasks[first_avatar_index][0]())
+
+    assert len(consumer.received[-1][1].rows) == 5
+    assert fetched == [
+        "https://avatars.steamstatic.com/0.jpg",
+        "https://avatars.steamstatic.com/1.jpg",
+    ]
+
+    assert service.update_visible_range(2, 3) is True
+    second_avatar_index = len(manager.tasks) - 1
+    assert manager.tasks[second_avatar_index][2] == "friend_pulse_avatar_hydration"
+    manager.complete(second_avatar_index, manager.tasks[second_avatar_index][0]())
+
+    assert fetched[-2:] == [
+        "https://avatars.steamstatic.com/2.jpg",
+        "https://avatars.steamstatic.com/3.jpg",
+    ]
+    assert "https://avatars.steamstatic.com/4.jpg" not in fetched
+    task_count = len(manager.tasks)
+    assert service.update_visible_range(-1, -1) is True
+    assert len(manager.tasks) == task_count
 
 
 def test_stale_avatar_completion_releases_slot_and_hydrates_new_snapshot(

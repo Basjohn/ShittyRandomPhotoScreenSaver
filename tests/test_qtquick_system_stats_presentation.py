@@ -8,7 +8,6 @@ from PySide6.QtCore import QObject, QUrl
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
-from core import dev_gates
 from core.settings.default_contract import require_canonical_default
 from core.settings.widget_family_catalog import get_widget_family_descriptor
 from core.system_stats.source import CpuRamSample
@@ -92,31 +91,20 @@ def test_fixed_cpu_ram_capacity_owns_geometry_and_values_do_not() -> None:
     assert service.stopped == service.detached == 1
 
 
-def test_system_stats_family_is_dev_gated_and_default_disabled() -> None:
-    prior = dev_gates.is_system_stats_enabled()
-    try:
-        dev_gates.force_gate(system_stats=False)
-        assert get_widget_family_descriptor("system_stats") is None
-        assert get_widget_runtime_descriptor("system_stats") is None
-        assert get_widget_settings_section_descriptor("system_stats") is None
-        dev_gates.force_gate(system_stats=True)
-        family = get_widget_family_descriptor("system_stats")
-        descriptor = get_widget_runtime_descriptor("system_stats")
-        section = get_widget_settings_section_descriptor("system_stats")
-        assert family is not None and family.member_widget_ids == ("system_stats",)
-        assert descriptor is not None
-        assert descriptor.custom_layout_resize_mode == "ordinary_uniform"
-        assert descriptor.service_backed is True
-        assert section is not None and section.persisted_widget_keys == (
-            "system_stats",
-        )
-        assert get_runtime_service_spec("system_stats") is not None
-        assert (
-            require_canonical_default("widgets.family_activation.system_stats") is False
-        )
-        assert require_canonical_default("widgets.system_stats.enabled") is False
-    finally:
-        dev_gates.force_gate(system_stats=prior)
+def test_system_stats_family_is_public_but_member_defaults_dormant() -> None:
+    family = get_widget_family_descriptor("system_stats")
+    descriptor = get_widget_runtime_descriptor("system_stats")
+    section = get_widget_settings_section_descriptor("system_stats")
+    assert family is not None and family.member_widget_ids == ("system_stats",)
+    assert descriptor is not None
+    assert descriptor.custom_layout_resize_mode == "ordinary_uniform"
+    assert descriptor.service_backed is True
+    assert section is not None and section.persisted_widget_keys == (
+        "system_stats",
+    )
+    assert get_runtime_service_spec("system_stats") is not None
+    assert require_canonical_default("widgets.family_activation.system_stats") is True
+    assert require_canonical_default("widgets.system_stats.enabled") is False
 
 
 def test_system_stats_registry_icon_and_qml_are_presentation_only() -> None:

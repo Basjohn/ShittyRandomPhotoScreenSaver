@@ -75,6 +75,55 @@ class TestSettingsManagerBasics:
         )
         assert reloaded.get("persist.key") == "value123"
 
+    def test_system_stats_family_admission_migrates_once_and_then_respects_user_choice(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        storage_root = tmp_path / "settings"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+
+        # Recreate a profile written by the hidden-preview release: the family
+        # activation was persisted false even though no UI could expose it.
+        widgets = manager.get_widgets_map()
+        widgets["family_activation"]["system_stats"] = False
+        widgets["system_stats"]["enabled"] = False
+        manager.set_widgets_map(widgets)
+        manager._settings.update_metadata(widget_capability_schema_version=0)
+        manager.save()
+
+        admitted = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        admitted_widgets = admitted.get_widgets_map()
+        assert admitted_widgets["family_activation"]["system_stats"] is True
+        assert admitted_widgets["system_stats"]["enabled"] is False
+        assert (
+            admitted._settings.metadata().get("widget_capability_schema_version")
+            == SettingsManager._WIDGET_CAPABILITY_SCHEMA_VERSION
+        )
+
+        # Once public, a deliberate Setup deactivation is ordinary user state
+        # and must survive future construction.
+        admitted_widgets["family_activation"]["system_stats"] = False
+        admitted.set_widgets_map(admitted_widgets)
+        admitted.save()
+        reloaded = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        assert (
+            reloaded.get_widgets_map()["family_activation"]["system_stats"]
+            is False
+        )
+
     def test_widgets_map_persists_visualizer_custom_position_and_monitor(self, tmp_path: Path) -> None:
         storage_root = tmp_path / "settings"
         app_name = f"TestApp_{uuid.uuid4().hex}"

@@ -51,7 +51,7 @@ def _steam_settings_module():
 def test_retained_and_unported_steam_descriptors_are_public_while_scaffolds_stay_gated() -> None:
     prior = _with_steam_gate(False)
     try:
-        substantive = {"achievement_pulse", "abandonment_issues"}
+        substantive = {"achievement_pulse", "abandonment_issues", "friend_pulse"}
         unfinished = set(STEAM_WIDGET_IDS) - substantive
         factory_ids = {descriptor.settings_key for descriptor in get_factory_widget_descriptors()}
         runtime_ids = {descriptor.widget_id for descriptor in get_widget_runtime_descriptors()}
@@ -69,7 +69,7 @@ def test_retained_and_unported_steam_descriptors_are_public_while_scaffolds_stay
         _restore_steam_gate(prior)
 
 
-def test_steam_phase3_descriptors_are_complete_behind_dev_gate() -> None:
+def test_steam_descriptors_are_complete_with_journey_scaffold_gate() -> None:
     prior = _with_steam_gate(True)
     try:
         factory_keys = [descriptor.settings_key for descriptor in get_factory_widget_descriptors()]
@@ -118,7 +118,7 @@ def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
     widgets = get_default_settings()["widgets"]
 
     steam = widgets["steam"]
-    assert isinstance(steam["enabled"], bool)
+    assert steam["enabled"] is False
     assert steam["privacy_mode"] in {"Strict", "Balanced", "Rich"}
     assert 5 <= steam["refresh_minutes"] <= 240
     assert isinstance(steam["show_connection_info_icon"], bool)
@@ -177,8 +177,11 @@ def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
         assert isinstance(abandonment[bool_key], bool)
     assert len(abandonment["accent_color"]) == 4
     friend_pulse = widgets["friend_pulse"]
+    assert friend_pulse["enabled"] is False
     assert friend_pulse["view_mode"] in {"grid", "rows"}
-    assert 1 <= int(friend_pulse["visible_row_capacity"]) <= 6
+    assert 1 <= int(friend_pulse["visible_row_capacity"]) <= 24
+    assert isinstance(friend_pulse["show_names"], bool)
+    assert 8 <= int(friend_pulse["name_font_size"]) <= 18
     assert len(friend_pulse["accent_color"]) == 4
 
 
@@ -265,6 +268,9 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
                 QColor(180, 110, 55, 170)
             )
             tab.friend_pulse_view_mode.setCurrentIndex(1)
+            tab.friend_pulse_visible_row_capacity.setValue(12)
+            tab.friend_pulse_show_names.setChecked(False)
+            tab.friend_pulse_name_font_size.setValue(17)
 
             preview = build_widget_stack_preview_config(tab)
             assert preview["steam_progress"]["enabled"] is False
@@ -323,7 +329,9 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert abandonment_payload["accent_color"] == [180, 110, 55, 170]
             friend_payload = collect_widget_section_save_result(tab, "steam")[4]
             assert friend_payload["view_mode"] == "rows"
-            assert friend_payload["visible_row_capacity"] == 4
+            assert friend_payload["visible_row_capacity"] == 12
+            assert friend_payload["show_names"] is False
+            assert friend_payload["name_font_size"] == 17
         finally:
             tab.deleteLater()
     finally:
@@ -383,17 +391,16 @@ def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settin
         _restore_steam_gate(prior)
 
 
-def test_only_unfinished_steam_card_buckets_are_hidden_without_dev_gate(qt_app, settings_manager) -> None:
+def test_only_steam_journey_bucket_is_hidden_without_dev_gate(qt_app, settings_manager) -> None:
     prior = _with_steam_gate(False)
     try:
         tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
         try:
-            for label in ("Achievement Pulse", "Abandonment Issues"):
+            for label in ("Achievement Pulse", "Abandonment Issues", "Friend Pulse"):
                 promoted = _find_toggle(tab._steam_container, label)
                 assert promoted is not None and promoted.isHidden() is False
-            for label in ("Steam Journey", "Friend Pulse"):
-                toggle = _find_toggle(tab._steam_container, label)
-                assert toggle is not None and toggle.isHidden() is True
+            journey = _find_toggle(tab._steam_container, "Steam Journey")
+            assert journey is not None and journey.isHidden() is True
         finally:
             tab.deleteLater()
     finally:

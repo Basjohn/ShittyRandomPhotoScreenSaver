@@ -18,7 +18,7 @@ Membership vs availability:
   environment-independent.
 - Family-level *availability* (a family may be gated to a specific env) is
   expressed here via the neutral ``core.dev_gates`` / env authority.
-- Member-level runtime availability (e.g. the ``--devsteam``-only Steam members)
+- Member-level runtime availability (currently the ``--devsteam``-only Steam Journey scaffold)
   is a runtime concern resolved from the runtime widget descriptors, so
   ``rendering.widget_descriptors.get_active_member_widget_ids`` — not this module —
   owns it. This keeps one dev-gate authority (``core.dev_gates``) without
@@ -139,7 +139,6 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
         member_widget_ids=("system_stats",),
         settings_section_id="system_stats",
         description="Sparse whole-system CPU and memory usage card.",
-        dev_feature_gate="system_stats",
     ),
 )
 

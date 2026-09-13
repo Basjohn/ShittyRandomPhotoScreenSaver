@@ -1,6 +1,6 @@
 # System Stats Widget — Low-Burden Product Decomposition
 
-Status: **CPU/RAM IMPLEMENTED / DEV-GATED / AWAITING S7 SOAK**
+Status: **CPU/RAM IMPLEMENTED / PUBLIC / AWAITING S7 SOAK**
 Last updated: 2026-09-13
 Current sequencing authority: `Current_Plan.md`
 Stable widget/family id: `system_stats`
@@ -23,7 +23,8 @@ S0 admitted only whole-system CPU/RAM: direct source observations measured rough
 CPU-contention runs. The persistent Windows GPU/VRAM candidate returned `query_error`, took about 363 ms on first setup,
 closed all query/counter state and is **not** in the product. No diagnostic or PID-scoped fallback was added.
 
-S1-S6 are implemented behind `--devstats` and the family remains deactivated/member-disabled by default. One
+S1-S6 are implemented as a normal product family. The family is activated by default so Setup and its pill are visible;
+the member remains disabled by default. One
 runtime-generation owner submits a low-priority sample only while at least one real retained-card lease is active;
 additional displays share its immutable snapshot. The cadence is a fixed completion+10 seconds, one sample may be in
 flight, and final release fences completion and closes/clears source ownership. Settings construction stays source-inert.
@@ -31,8 +32,10 @@ flight, and final release fences completion and closes/clears source ownership. 
 The retained card shows CPU load and RAM percentage plus used/total in two fixed panels. It uses semantic Widget Theme
 roles, ordinary stacking/global-CUSTOM/40% normalization, finite width easing and an original packaged monochrome gear
 and spanner header asset. Focused automated source/runtime/dormancy/multi-display/Settings/QML/binder/build checks and
-real Quick standard/busy/40%-floor captures are GREEN. S7 remains open for installed off-vs-on Visualizer contention,
-long-run, repeated retirement/recreation and two-display resource/cardinality validation; `--devstats` remains until then.
+real Quick standard/busy/40%-floor captures are GREEN. The temporary `--devstats` feature gate is retired, with a one-time
+profile migration admitting the formerly hidden family without enabling its member; the old CLI token is only an inert
+mode-parser compatibility no-op. S7 remains open for installed
+off-vs-on Visualizer contention, long-run, repeated retirement/recreation and two-display resource/cardinality validation.
 
 ## 1. Product goal
 
@@ -195,12 +198,11 @@ now.
 
 ## 7. Dormancy contract
 
-Proposed admission:
+Implemented admission:
 
 ```text
 widgets.family_activation.system_stats
 AND widgets.system_stats.enabled
-AND temporary dev/member gate while experimental
 AND at least one admitted presentation consumer
 ```
 
@@ -425,7 +427,7 @@ Only metrics that passed S0:
 - Widget Theme/Style Overrides/glow/stacking/CUSTOM acceptance;
 - finite sample-to-sample visual easing only if it helps readability.
 
-### S7 — soak / ungate — automated gate GREEN, installed/long-run cells pending
+### S7 — soak — automated gate GREEN, installed/long-run cells pending
 
 - off-vs-on contention comparison;
 - 10-second long run;
@@ -434,7 +436,7 @@ Only metrics that passed S0:
 - display/runtime recreation;
 - multi-monitor/card cardinality;
 - installed build resource/icon validation;
-- ungate only if the widget cannot be identified as a meaningful burden on the rest of SRPSS.
+- keep the widget public only while it remains beneath a meaningful burden on the rest of SRPSS.
 
 ## 16. Failure / fallback policy
 

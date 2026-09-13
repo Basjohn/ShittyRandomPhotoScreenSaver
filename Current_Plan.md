@@ -18,13 +18,15 @@ R-79 fixed the Qt topology-authority split exposed by the 2026-09-12 overnight r
 
 ---
 
-## 1. Steam Friend Pulse — implemented behind `--devsteam`, awaiting live/installed acceptance
+## 1. Steam Friend Pulse — public implementation complete, awaiting live/installed acceptance
 
 Execution authority: `Docs/Future_Work/Steam_Friend_Pulse.md`.
 
-The retained implementation is complete through F6. It is a playing-first card with a default dynamically centred
-**Avatar Grid** and selectable compact **Activity Rows** view. Both use one stable presentation model and configured
-capacity-owned geometry; privacy changes reproject accepted state without creating a second source/model.
+The retained implementation is complete through F6. It is a full friend-roster card with a default dynamically centred
+**Avatar Grid** and selectable compact **Activity Rows** view. Online friends lead the model and offline friends fill the
+remaining configured viewport; every accepted friend remains scroll-reachable. Both views use one stable virtualized
+presentation model and fixed capacity-owned geometry, so roster size never owns card height and privacy changes do not
+create a second source/model.
 
 - [x] Pin pre-feature HEAD `e0314691` and preserve the maintained Steam request/cache/privacy fixtures.
 - [x] Add immutable normalized Friend Pulse source/cache state. Validated Steam IDs may remain in the user's
@@ -32,33 +34,41 @@ capacity-owned geometry; privacy changes reproject accepted state without creati
   action URL and QML emits only a current row index.
 - [x] Add cache-first FriendList + bounded PlayerSummaries preparation through existing Steam locks, request
   coordination, backoff and redaction. The only cadence setting remains canonical `widgets.steam.refresh_minutes`.
-- [x] Add one runtime-generation shared source/avatar owner with per-display leases. The dev gate, Steam family
-  activation, `widgets.steam.enabled`, member enable and a real presentation consumer all precede work; last release
+- [x] Add one runtime-generation shared source/avatar owner with per-display leases. Steam family activation,
+  `widgets.steam.enabled`, member enable and a real presentation consumer all precede work; last release
   stops cadence, clears comparison/avatar state and fences source/avatar completions.
-- [x] Add Strict/Balanced/Rich projection, useful changed-first ranking, honest private/connect/empty/stale/failure
-  states, per-friend presence/game details, Rich-only visible-row local-avatar hydration, and no Strict identity leak.
-- [x] Add retained Quick Grid/Rows presentation, branded/theme roles, finite NEW emphasis, `ordinary_uniform`, global
-  CUSTOM/40% floor, ordinary stacking/auto-fit, lazy transactional Settings and generated-default authority.
-- [x] Add generation-fenced semantic clicks: friend avatar/NEW marker -> directed Steam chat with public-profile
-  fallback; Friend game label and Achievement/Abandonment artwork -> Steam Store. MC/diagnostic tries the Steam client;
-  normal screensaver routes HTTPS through the existing secure helper and exits once after accepted handoff.
-- [x] Focused source/runtime/privacy/cache/request/Settings/QML/binder/cardinality/normalization tests and real-Quick
-  standard/busy/40% captures are GREEN with zero QML warnings.
+- [x] Add Strict/Balanced/Rich projection, online-first/offline-fill roster ordering, honest private/connect/empty/stale/
+  failure states, per-friend presence/game details, Rich-only current-viewport local-avatar hydration, and no Strict
+  identity leak.
+- [x] Add retained virtualized Quick Grid/Rows presentation, dynamically spaced and centred avatar tiles, incomplete-row
+  centring, optional centred names with bounded font size, branded/theme roles, finite theme-colored change glow,
+  `ordinary_uniform`, global CUSTOM/40% floor, ordinary stacking/auto-fit, lazy transactional Settings and
+  generated-default authority.
+- [x] Add generation-fenced semantic clicks and one retained Gmail-style three-dot popup per card. Direct avatar actions
+  request Steam chat with public-profile fallback; menu actions offer Profile, Chat, Copy Steam ID and Store when
+  a current AppID exists. Friend game labels and Achievement/Abandonment artwork open the Store. MC/diagnostic tries the
+  Steam client; normal screensaver routes HTTPS through the existing secure helper and exits once after accepted handoff.
+  Join Game is deliberately absent because the admitted summaries prove only an AppID, not a joinable lobby/server token.
+- [x] Focused source/runtime/privacy/cache/request/Settings/QML/binder/cardinality/normalization/action tests are GREEN;
+  the real threaded-OpenGL DPR 1.5 roster/menu/Strict/Rows/40% capture is warning-free and proves the finite event glow.
+- [x] Remove Friend Pulse's temporary product gate across Steam Settings, runtime/preview descriptors and retained
+  binder admission. It is now always visible inside the Steam family; `--devsteam` owns only unfinished Games You Follow.
 - [ ] **Awaiting Validation:** use a real connected Steam account to inspect long names/game names, Rich avatar-cache
   hydration, Strict/Balanced reprojection, private/unavailable/stale wording, manual refresh behavior, friend chat/profile
-  routing and game Store routing. A NEW marker is a game-change cue, not a sourced Steam message notification.
+  routing, game Store routing, rounded avatar/tile borders and the finite change glow against real themes. The glow is a
+  game-change cue, not a sourced Steam message notification.
 - [ ] **Awaiting Validation:** installed two-display/DPI/theme/CUSTOM/stacking soak must confirm one shared source owner,
   no refresh multiplication and clean last-card/family-deactivation retirement.
-- [ ] Remove `--devsteam` from Friend Pulse only after those live/installed eyes-on and performance cells are green.
 
 ---
 
-## 2. System Stats — CPU/RAM implementation complete behind `--devstats`, awaiting soak/ungate
+## 2. System Stats — public CPU/RAM implementation complete, awaiting installed soak
 
 Execution authority: `Docs/Future_Work/System_Stats_Widget.md`.
 
 The dedicated product source and S1-S6 implementation are complete. This does **not** reuse or activate diagnostic
-`--usage`: the card samples only whole-system CPU/RAM and remains deactivated plus dev-gated by default.
+`--usage`: the family is normally visible/activated, while the CPU/RAM card remains disabled by default and therefore
+starts no sampler until the user enables it and a retained presentation consumer exists.
 
 - [x] Run S0 idle/contention source admission. CPU/RAM measured roughly 0.5–1.5 ms and passed; the persistent Windows
   GPU/VRAM candidate returned `query_error`, took ~363 ms on first setup and was rejected without fallback.
@@ -67,18 +77,21 @@ The dedicated product source and S1-S6 implementation are complete. This does **
   with no surviving recurring work.
 - [x] Keep product scope to CPU load plus RAM percentage/used/total. No process/core enumeration, diagnostic collector,
   GPU/VRAM, temperatures, history graphs, per-process data, log parsing or user cadence control entered the product path.
-- [x] Add dev-gated/deactivated canonical family/default/descriptor ownership and a lazy transactional Settings page;
+- [x] Add canonical family/default/descriptor ownership and a lazy transactional Settings page;
   opening Settings imports/starts no sampler. Derived JSON/SST defaults are regenerated and authority checks are GREEN.
 - [x] Add the retained two-panel Quick card, fixed metric-capacity geometry, semantic theme roles, `ordinary_uniform`,
   stacking/global-CUSTOM/40% contracts, finite width easing and original packaged monochrome gear + spanner header asset.
 - [x] Focused source/runtime/dormancy/multi-display/stale-generation/Settings/QML/binder/build-contract tests and
   real-Quick standard/busy/40% captures are GREEN with zero QML warnings.
+- [x] Retire `--devstats` as a feature gate, make System Stats a normal Setup family and pill, and migrate the formerly
+  hidden persisted family-off default exactly once. Later explicit family deactivation remains respected; member enable
+  stays off. The parser accepts the old token only as an inert compatibility no-op so old shortcuts cannot alter mode.
 - [ ] **Awaiting Validation:** installed 10-second off-vs-on Visualizer contention run must confirm no meaningful
   freshness/reactivity or event-loop/presentation-tail regression.
 - [ ] **Awaiting Validation:** repeated enable/disable, runtime recreation and two-display soak must confirm bounded owner,
   task and handle counts plus packaged icon availability.
-- [ ] Remove `--devstats` only after those S7 cells are green. A future disk/network metric needs its own S0 admission;
-  GPU/VRAM stays rejected unless a truthful low-cost aggregate is independently proven.
+- [ ] A future disk/network metric needs its own S0 admission; GPU/VRAM stays rejected unless a truthful low-cost
+  aggregate is independently proven.
 
 ---
 
@@ -103,7 +116,24 @@ competing stylesheet authority completely.
 
 ---
 
-## 4. Test / debris reconciliation
+## 4. Steam Games You Follow — dev-gated feasibility-first future slice
+
+Execution authority: `Docs/Future_Work/Steam_Games_You_Follow.md`.
+
+This replaces the unfinished Steam Progress / Steam Journey scaffold while retaining `steam_progress` as its
+compatibility id. It is a bounded retained card for news from explicitly followed games, not a personalised Steam or
+whole-library news feed. It stays behind `--devsteam` until its source/follow-list and source-article URL boundaries
+are proven.
+
+- [ ] Complete G0 before implementation: prove the follow-set authority (or obtain explicit approval for a local
+  validated-AppID list), APP_NEWS field/response budget, and safe source-article URL/helper policy. Do not infer
+  follows from ownership/recent play or add a fallback source.
+- [ ] Then implement only through the documented G1-G5 sequence: feature-owned cache/model, one shared
+  generation owner, retained Quick rows, canonical Settings/default migration and ordinary/CUSTOM acceptance.
+
+---
+
+## 5. Test / debris reconciliation
 
 Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this active plan carries sequencing only.
 
@@ -111,7 +141,10 @@ Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this ac
   add production defaults/fallbacks or restore retired QWidget/compositor/polling architecture to satisfy them.
   Four currently observed `test_widget_visual_roles.py` reds still assert schema-v1 import, superseded dark-context
   pixels, or construct the current required `WidgetThemeState` without arguments; the new Friend/System semantic-role
-  contract passes and production must not regain those retired defaults merely to satisfy the stale assertions.
+  contract passes and production must not regain those retired defaults merely to satisfy the stale assertions. A
+  2026-09-13 convenience run also reproduced four old `test_widget_descriptors.py`, seven transition-default
+  `test_capability_activation.py`, and two Godzip AppData-string assertions; the dedicated Friend/System public-admission
+  suite is 258/258 GREEN, so reconcile those fossils only under this broad inventory row.
 - [ ] Retire the temporary Visualizer `enabled_modes` compatibility migration only after automated persisted-profile/import
   coverage proves supported profiles no longer rely on it. Current runtime/default/UI state remains the canonical
   `widgets.spotify_visualizer.mode_activation` boolean map.
