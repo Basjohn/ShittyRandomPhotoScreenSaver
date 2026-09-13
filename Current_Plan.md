@@ -190,10 +190,6 @@ opts in by declaring axes + consuming `content_extent` in its payload handler + 
 - [x] **Gmail** — vertical count ± (buffer up to cap, `limit` = SSOT default) then
   row/boundary-separator spread; horizontal = free width-elide + preferred-width widen.
   Tested.
-- [ ] **Gmail horizontal truncation (max_words override).** Gmail word-caps sender/subject at
-  projection (`max_sender_words`/`max_subject_words`), so free width-elide alone can't reveal
-  more. Add a CUSTOM-scoped `max_words` override driven by the horizontal extent (setting =
-  default, extent = override) + row re-projection, so wider genuinely shows more text.
 - [ ] **Games You Follow** (future) gets both axes when it exists (reuse the shared stack).
 - Note: padding/separator/truncation are **not** promoted to real settings (Reddit had none;
   promoting would add per-widget schema + migration and risk SSOT). Kept CUSTOM-scoped.
