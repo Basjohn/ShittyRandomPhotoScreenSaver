@@ -21,15 +21,52 @@ OverlayWidget {
     // requires it - never shrinking below the authored floor. Height is content
     // driven. Intrinsic sources only (no width<->preferredWidth feedback). J
     // refines parity.
-    preferredContentWidth: Math.max(
-        600.0,
-        headerFrame.implicitWidth
-            + (refreshGlyph.visible ? refreshGlyph.width + 10.0 : 0.0)
-            + redditRoot.shellInset
-    )
-    preferredContentHeight: Math.max(
-        60.0, contentColumn.childrenRect.height
-    ) + redditRoot.shellInset
+    // CUSTOM content-extent box (0 = none). Vertical drives the effective visible
+    // post count then row/separator spread; horizontal relaxes width truncation.
+    // The `limit` setting stays the SSOT default when no extent is active.
+    readonly property real cExtentW: redditModel.contentExtentWidth
+    readonly property real cExtentH: redditModel.contentExtentHeight
+    readonly property real naturalRowHeight: Math.max(28.0, redditModel.fontSize * 1.55)
+    readonly property real baseRowSpacing: 4.0
+    readonly property int heldPostCount: postRepeater.count
+    readonly property real chromeHeight: headerArea.height
+        + (statusArea.visible ? statusArea.height + baseRowSpacing : 0.0)
+        + redditRoot.shellInset
+    readonly property real postRailBudget: Math.max(0.0, cExtentH - chromeHeight)
+    readonly property int effectiveVisibleCount: {
+        var held = Math.max(0, heldPostCount)
+        if (held === 0)
+            return 0
+        if (cExtentH <= 0.0)
+            return Math.min(held, redditModel.postLimit)   // SSOT default count
+        var fit = Math.floor(postRailBudget / (naturalRowHeight + baseRowSpacing))
+        return Math.max(1, Math.min(held, fit))            // CUSTOM: 1..held (<=cache cap)
+    }
+    // Rows grow to fill the box once the count caps (past-limit vertical padding).
+    readonly property real extentRowHeight: {
+        if (cExtentH <= 0.0 || effectiveVisibleCount <= 0)
+            return naturalRowHeight
+        var gaps = Math.max(0, effectiveVisibleCount - 1)
+        return Math.max(
+            naturalRowHeight,
+            (postRailBudget - gaps * baseRowSpacing) / effectiveVisibleCount
+        )
+    }
+    readonly property real extentSeparatorThickness: cExtentH > 0.0
+        ? Math.max(1.0, Math.min(4.0, extentRowHeight / naturalRowHeight))
+        : 1.0
+
+    preferredContentWidth: cExtentW > 0.0
+        ? cExtentW
+        : Math.max(
+            600.0,
+            headerFrame.implicitWidth
+                + (refreshGlyph.visible ? refreshGlyph.width + 10.0 : 0.0)
+                + redditRoot.shellInset
+        )
+    preferredContentHeight: cExtentH > 0.0
+        ? cExtentH
+        : Math.max(60.0, contentColumn.childrenRect.height) + redditRoot.shellInset
 
     Column {
         id: contentColumn
@@ -154,7 +191,8 @@ OverlayWidget {
 
                 objectName: "redditPostRow_" + index
                 width: contentColumn.width
-                height: Math.max(28.0, redditRoot.redditModel.fontSize * 1.55)
+                visible: index < redditRoot.effectiveVisibleCount
+                height: visible ? redditRoot.extentRowHeight : 0.0
 
                 Item {
                     id: ageText
@@ -245,11 +283,13 @@ OverlayWidget {
                 Rectangle {
                     objectName: "redditPostSeparator_" + postRow.index
                     visible: redditRoot.redditModel.showSeparators
-                        && postRow.index < postRepeater.count - 1
+                        && postRow.index < redditRoot.effectiveVisibleCount - 1
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    height: redditRoot.scaleAwareStrokeWidth(1.0)
+                    height: redditRoot.scaleAwareStrokeWidth(
+                        redditRoot.extentSeparatorThickness
+                    )
                     color: redditRoot.redditModel.separatorColor
                 }
 

@@ -463,6 +463,14 @@ class RedditPresentationSnapshot:
     interaction_enabled: bool = False
 
 
+# The runtime cache holds up to this many candidates. The model retains up to
+# this buffer so a CUSTOM vertical content-extent can reveal more than the
+# authored ``limit`` (the SSOT default visible count) without a re-fetch. The
+# authored ``limit`` still governs the default shown count; this is only a data
+# buffer, never a second count authority.
+_MAX_HELD_POSTS = 25
+
+
 class RedditPresentationModel(QObject):
     """Stable coherent state for one Reddit or Reddit2 retained card."""
 
@@ -486,6 +494,9 @@ class RedditPresentationModel(QObject):
         )
         self._active = False
         self._retired = False
+        # CUSTOM content-extent override (logical content box, pre-uniform-scale).
+        # None on every non-CUSTOM path -> authored size + ``limit`` govern.
+        self._content_extent: tuple[int, int] | None = None
 
     @property
     def config(self) -> RedditPresentationConfig:
@@ -559,8 +570,8 @@ class RedditPresentationModel(QObject):
             )
             if self._runtime_service is not None:
                 self._runtime_service.set_subreddit(config.subreddit)
-        elif len(self._row_model.rows) > config.limit:
-            self._row_model.replace_rows(self._row_model.rows[: config.limit])
+        elif len(self._row_model.rows) > _MAX_HELD_POSTS:
+            self._row_model.replace_rows(self._row_model.rows[:_MAX_HELD_POSTS])
         self.stateChanged.emit()
         return True
 
@@ -587,7 +598,7 @@ class RedditPresentationModel(QObject):
                 age=_age_label(post.created_utc, now),
                 url=str(post.url or ""),
             )
-            for post in tuple(posts)[: self.config.limit]
+            for post in tuple(posts)[:_MAX_HELD_POSTS]
             if str(post.title or "").strip() and str(post.url or "").strip()
         )
         rows_changed = self._row_model.replace_rows(rows)
@@ -660,6 +671,41 @@ class RedditPresentationModel(QObject):
         )
         return True
 
+    def set_content_extent(
+        self,
+        width: float | None,
+        height: float | None,
+    ) -> bool:
+        """Apply a CUSTOM content-box override, or clear it when either is None.
+
+        Presentation/layout-only: the box overrides the effective visible count
+        and row spread while in CUSTOM. The ``limit`` setting remains the SSOT
+        default; this never writes settings.
+        """
+
+        if width is None or height is None:
+            return self.clear_content_extent()
+        try:
+            resolved_width = int(round(float(width)))
+            resolved_height = int(round(float(height)))
+        except (TypeError, ValueError):
+            return False
+        resolved_width = max(300, min(2000, resolved_width))
+        resolved_height = max(80, min(4000, resolved_height))
+        extent = (resolved_width, resolved_height)
+        if extent == self._content_extent:
+            return False
+        self._content_extent = extent
+        self.stateChanged.emit()
+        return True
+
+    def clear_content_extent(self) -> bool:
+        if self._content_extent is None:
+            return False
+        self._content_extent = None
+        self.stateChanged.emit()
+        return True
+
     def admit_url(self, url: object) -> bool:
         if not self.is_active or not self._snapshot.interaction_enabled:
             return False
@@ -709,6 +755,24 @@ class RedditPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def fontSize(self) -> float:
         return float(self.config.font_size)
+
+    @Property(int, notify=stateChanged)
+    def postLimit(self) -> int:
+        # SSOT default visible count (non-CUSTOM). CUSTOM content-extent overrides
+        # the *effective* count in QML but never rewrites this setting.
+        return int(self.config.limit)
+
+    @Property(int, constant=True)
+    def maxHeldPosts(self) -> int:
+        return _MAX_HELD_POSTS
+
+    @Property(float, notify=stateChanged)
+    def contentExtentWidth(self) -> float:
+        return float(self._content_extent[0]) if self._content_extent else 0.0
+
+    @Property(float, notify=stateChanged)
+    def contentExtentHeight(self) -> float:
+        return float(self._content_extent[1]) if self._content_extent else 0.0
 
     @Property(float, notify=stateChanged)
     def ageFontSize(self) -> float:
@@ -853,13 +917,18 @@ class RetainedRedditPresentation:
         self,
         payload: Mapping[str, object],
     ) -> None:
-        # H9: Reddit CUSTOM resize is one uniform retained-presentation scale
-        # (``OverlayWidget.uniformScaleTransform``) derived from the outer rect,
-        # so it carries no per-value size payload and never mutates the
-        # Settings-owned font size. A stale scaled ``font_size`` from a
-        # pre-H9 committed layout is intentionally ignored here so replay resolves
-        # the correct uniform scale from geometry alone.
-        del payload
+        # H9: the uniform CUSTOM scale is still derived from the outer rect, so a
+        # stale scaled ``font_size`` from a pre-H9 committed layout is ignored.
+        # The one key honoured is ``content_extent`` (the CUSTOM-scoped side-resize
+        # box): vertical drives the effective visible count + row/separator spread,
+        # horizontal relaxes width truncation. Its absence clears any override so
+        # the card returns to its ``limit``/authored size. Runs for both live edit
+        # and committed replay, so a saved extent restores on load + slot.
+        extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
+        if isinstance(extent, (tuple, list)) and len(extent) == 2:
+            self._model.set_content_extent(extent[0], extent[1])
+        else:
+            self._model.clear_content_extent()
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

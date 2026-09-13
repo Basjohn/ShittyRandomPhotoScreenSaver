@@ -1512,6 +1512,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
+        content_extent_axes=("horizontal", "vertical"),
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit2",
@@ -1535,6 +1536,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
+        content_extent_axes=("horizontal", "vertical"),
     ),
     WidgetRuntimeDescriptor(
         widget_id="gmail",
