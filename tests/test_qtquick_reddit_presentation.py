@@ -174,7 +174,11 @@ def test_reddit_model_keeps_one_row_model_and_coherent_ready_cached_error_state(
     )
 
     assert model.row_model is row_model
-    assert row_model.rowCount() == 2
+    # The model now retains a buffer up to the cache cap (25). ``limit`` remains
+    # the SSOT default visible count (surfaced to QML as ``postLimit``); the QML
+    # renders only that many unless a CUSTOM content-extent overrides it.
+    assert row_model.rowCount() == 3
+    assert model.postLimit == 2
     assert row_model.rows[0].title == "NASA Launches Again"
     assert row_model.rows[0].age == "01HR AGO"
     assert model.viewState == "ready"
@@ -184,7 +188,7 @@ def test_reddit_model_keeps_one_row_model_and_coherent_ready_cached_error_state(
     assert model.viewState == "ready"
     assert model.errorText == "offline"
     assert model.row_model is row_model
-    assert row_model.rowCount() == 2
+    assert row_model.rowCount() == 3
 
     model.apply_config(replace(model.config, subreddit="python"))
     assert model.viewState == "loading"
@@ -532,3 +536,76 @@ def test_reddit_qml_and_registry_are_static_presentation_only() -> None:
     descriptor = ordinary_widget_family_component("reddit")
     assert descriptor.qml_filename == "RedditPresentation.qml"
     assert descriptor.presentation_model_kind == "RedditPresentationModel"
+
+
+def test_reddit_content_extent_override_is_ssot_safe() -> None:
+    model = _model(limit=20)
+    assert model.postLimit == 20
+    assert model.maxHeldPosts == 25
+    assert model.contentExtentWidth == 0.0
+    assert model.contentExtentHeight == 0.0
+
+    assert model.set_content_extent(720.0, 900.0) is True
+    assert model.contentExtentWidth == pytest.approx(720.0)
+    assert model.contentExtentHeight == pytest.approx(900.0)
+    # The extent is CUSTOM-scoped presentation state; it never rewrites the
+    # `limit` SSOT default.
+    assert model.postLimit == 20
+
+    # Idempotent + clearing returns to no override without touching the setting.
+    assert model.set_content_extent(720.0, 900.0) is False
+    assert model.clear_content_extent() is True
+    assert model.contentExtentHeight == 0.0
+    assert model.postLimit == 20
+
+
+def test_reddit_content_extent_drives_visible_count_and_spread(qt_app) -> None:
+    owner = QObject()
+    factory = QuickSceneFactory(owner)
+    context, root, host = _create_host(factory, owner)
+    model = _model(limit=4)
+    # Held buffer of 10 posts (> the SSOT limit of 4).
+    model.publish_posts(tuple(_post(i) for i in range(1, 11)), now_ts=20_000.0)
+    presentation = RetainedRedditPresentation(
+        host=host,
+        model=model,
+        geometry=OverlayWidgetGeometry(25.0, 30.0, 620.0, 400.0),
+        on_open_requested=lambda url: True,
+        on_refresh_requested=lambda: True,
+    )
+    item = presentation.item
+    engine = QQmlEngine.contextForObject(item).engine()
+    try:
+        presentation.activate()
+        qt_app.processEvents()
+        natural = float(item.property("naturalRowHeight"))
+        # Default: the SSOT `limit` governs the visible count.
+        assert int(item.property("effectiveVisibleCount")) == 4
+
+        # Tall extent reveals more posts (up to the 10 held) and, past the count
+        # cap, spreads rows taller + thickens separators.
+        model.set_content_extent(620.0, 2000.0)
+        qt_app.processEvents()
+        assert int(item.property("effectiveVisibleCount")) == 10
+        assert float(item.property("extentRowHeight")) > natural
+        assert float(item.property("extentSeparatorThickness")) > 1.0
+
+        # Short extent decreases the visible count below the default.
+        model.set_content_extent(620.0, 140.0)
+        qt_app.processEvents()
+        assert int(item.property("effectiveVisibleCount")) < 4
+
+        # Clearing returns to the SSOT default exactly.
+        model.clear_content_extent()
+        qt_app.processEvents()
+        assert int(item.property("effectiveVisibleCount")) == 4
+        assert QQmlEngine.contextForObject(item).engine() is engine
+    finally:
+        host.retire_all()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        owner.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()

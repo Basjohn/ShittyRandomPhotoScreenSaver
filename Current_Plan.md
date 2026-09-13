@@ -173,6 +173,28 @@ Friend Pulse content-extent experiment lands.
   visible. Confirm whether headers route through the boost; if they already do, add a further
   ~25% to the header boost specifically.
 
+## 7. Content-extent resize rollout (in progress, added 2026-09-13)
+
+Friend Pulse content-extent side resize is **implemented + operator-validated** (both axes;
+sides reflow, corners uniform; darker-blue handles; persisted via CUSTOM `size_payload` +
+slots; no teardown). Reusable stack lives in `custom_layout_session` / `custom_layout_owner`
+/ `custom_layout_overlay` / `CustomLayoutOverlay.qml`, gated by the descriptor
+`content_extent_axes` field.
+
+Next targets — **Reddit and Gmail** (settings-driven, unlike Friend Pulse's pure layout box):
+
+- [ ] **Vertical, below the item limit:** show more items (Reddit posts capped at 25 = cache
+  limit; Gmail emails). **Past the limit:** further vertical resize instead increases
+  **vertical padding** and **separator thickness** — these are (or should be) real settings,
+  adjusted live and **saved batched at edit-mode save**, not per-drag.
+- [ ] **Horizontal:** reduce **truncation** (also a real setting) with the extra width, plus a
+  little padding (Gmail).
+- [ ] **No new teardowns** — settings adjustments must apply reactively during edit and persist
+  at save without triggering a settings teardown/rebuild. Only add a teardown if a critical
+  flaw is found.
+- [ ] Reuse the shared content-extent stack; declare axes on each descriptor. Games You Follow
+  (future) gets both axes when it exists.
+
 ## Standing guardrails
 
 - **Voxel Sphere golden preservation:** current accepted Sphere reactivity/motion/preset behaviour is golden. Keep the mode architecturally isolated; do not retune or migrate it into permanent/shared Visualizer owners unless the operator explicitly requests that work.
