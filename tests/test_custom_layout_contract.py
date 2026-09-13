@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from PySide6.QtCore import QPoint, QRect, QSize
 
 import inspect
@@ -17,7 +18,9 @@ from rendering.custom_layout_contract import (
     get_widget_layout_variant_payload,
     load_custom_layout_map,
     normalize_local_rect,
+    resolve_resize_edge_snap,
     resolve_snap_local_rect_for_edit,
+    resolve_uniform_scale_snap,
     should_transfer_rect_to_screen,
     snap_local_rect_for_edit,
     set_screen_layout_entry,
@@ -115,6 +118,75 @@ def test_snap_local_rect_for_edit_snaps_to_peer_edges_and_grid():
     )
     assert flush_left.left() == 144
     assert flush_left.top() == 288
+
+
+def test_resolve_resize_edge_snap_snaps_moving_edge_to_peer_and_anchors_opposite():
+    display_size = QSize(1000, 600)
+    peer = QRect(300, 200, 180, 90)  # right edge (exclusive) at 480
+
+    # Drag the RIGHT edge to 476, 4px shy of the peer's right edge; left anchored.
+    resolution = resolve_resize_edge_snap(
+        QRect(120, 210, 356, 70),
+        display_size,
+        horizontal_edge="right",
+        peer_rects=[peer],
+    )
+    assert resolution.rect.x() == 120  # anchored opposite edge preserved
+    assert resolution.rect.x() + resolution.rect.width() == 480  # snapped to peer
+    assert resolution.vertical_guides
+    assert resolution.vertical_guides[0].kind == "peer"
+    assert resolution.vertical_guides[0].position == 480
+    # Only the horizontal edge moved, so no vertical-edge (y) guide is produced.
+    assert resolution.horizontal_guides == ()
+
+
+def test_resolve_resize_edge_snap_does_not_grid_snap():
+    # Unlike a move, a resized edge with no alignment line nearby stays exactly
+    # under the cursor - it must not notch to the 12px grid.
+    display_size = QSize(1000, 600)
+    resolution = resolve_resize_edge_snap(
+        QRect(120, 210, 350, 70),  # right edge 470, far from centre (500) and edges
+        display_size,
+        horizontal_edge="right",
+        peer_rects=[],
+    )
+    assert resolution.rect.x() + resolution.rect.width() == 470
+    assert resolution.vertical_guides == ()
+
+
+def test_resolve_uniform_scale_snap_lands_edge_on_peer_preserving_aspect():
+    # Aspect-locked, centre-x/top-anchored: free right edge = 700 + 600/2 = 1000,
+    # 20px past the peer's left edge at 980. Snapping lands the right edge on 980
+    # by choosing a single scale (560/600) that preserves the aspect ratio.
+    snap = resolve_uniform_scale_snap(
+        1.0,
+        center_x=700.0,
+        top=100.0,
+        free_width=600.0,
+        free_height=300.0,
+        display_size=QSize(2000, 1200),
+        peer_rects=[QRect(980, 100, 300, 400)],
+    )
+    assert snap.scale == pytest.approx(560.0 / 600.0)
+    assert snap.vertical_guides
+    assert snap.vertical_guides[0].kind == "peer"
+    assert snap.vertical_guides[0].position == 980
+    assert snap.horizontal_guides == ()
+
+
+def test_resolve_uniform_scale_snap_is_noop_without_peers():
+    snap = resolve_uniform_scale_snap(
+        1.0,
+        center_x=700.0,
+        top=100.0,
+        free_width=600.0,
+        free_height=300.0,
+        display_size=QSize(2000, 1200),
+        peer_rects=[],
+    )
+    assert snap.scale == pytest.approx(1.0)
+    assert snap.vertical_guides == ()
+    assert snap.horizontal_guides == ()
 
 
 def test_resolve_snap_local_rect_for_edit_reports_active_guides():
