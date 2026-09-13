@@ -18,7 +18,6 @@ from PySide6.QtCore import (
     QModelIndex,
     QObject,
     Property,
-    Slot,
     Qt,
     Signal,
 )
@@ -514,11 +513,26 @@ class FriendPulsePresentationModel(QObject):
             and (row.identity_fingerprint, row.game_appid) not in previous_event_keys
         )
         if len(projection.rows) != previous_row_count:
-            # The List/Grid view can clamp after a count change.  Its forced,
-            # queued viewport report consumes these candidates against the new
-            # visible range after the model mutation has fully unwound.
-            self._pending_pulse_indices = event_indices
-            pulse_indices: tuple[int, ...] = ()
+            clamped: tuple[int, int] | None = None
+            if len(projection.rows) < previous_row_count:
+                # Roster shrank: the Quick view can be left scrolled past its
+                # content (StopAtBounds only self-corrects during a live flick),
+                # so relying solely on the view's forced report can publish a
+                # stale, out-of-range window to the avatar-hydration runtime and
+                # drop a legitimate change pulse.  Re-clamp the runtime window
+                # ourselves; the view's later async report is idempotent against
+                # this clamped range.  A growing/first-populated roster keeps the
+                # historical defer-to-view behaviour.
+                clamped = self._clamp_visible_range_to_rows()
+            if clamped is None:
+                self._pending_pulse_indices = event_indices
+                pulse_indices: tuple[int, ...] = ()
+            else:
+                first, last = clamped
+                self._pending_pulse_indices = ()
+                pulse_indices = tuple(
+                    index for index in event_indices if first <= index <= last
+                )
         else:
             visible_first, visible_last = self._visible_row_range or (0, -1)
             pulse_indices = tuple(
@@ -601,8 +615,45 @@ class FriendPulsePresentationModel(QObject):
             "copy_id": ("copy_steam_id", target),
         }[normalized]
 
-    @Slot(int, int, result=bool)
+    def _clamp_visible_range_to_rows(self) -> tuple[int, int] | None:
+        """Clamp and republish the runtime visible window against the roster.
+
+        Used when the roster count changes.  The window width follows the
+        configured visible capacity (the same width used to seed the range at
+        construction), anchored at its previous start but pulled fully in-bounds,
+        so a shrunk roster never leaves the runtime hydrating rows that no longer
+        exist.  Returns the clamped range, or ``None`` when there is nothing to
+        show or no live reporter.
+        """
+
+        if not self.is_active or self._runtime_service is None:
+            return None
+        reporter = getattr(self._runtime_service, "update_visible_range", None)
+        if not callable(reporter):
+            return None
+        row_count = len(self._row_model.rows)
+        if row_count <= 0:
+            self._visible_row_range = None
+            reporter(-1, -1)
+            return None
+        window = max(1, int(self.config.capacity))
+        previous_first = 0
+        if self._visible_row_range is not None:
+            previous_first = max(0, int(self._visible_row_range[0]))
+        first = max(0, min(previous_first, max(0, row_count - window)))
+        last = min(row_count - 1, first + window - 1)
+        self._visible_row_range = (first, last)
+        reporter(first, last)
+        return (first, last)
+
     def report_visible_range(self, first_index: int, last_index: int) -> bool:
+        # NOTE: This is deliberately a plain method, not a ``@Slot(..., result=bool)``.
+        # It is the QML ``visibleRangeChanged(int, int)`` handler, and PySide6
+        # faults (native access violation) when a QML signal is delivered to a
+        # decorated slot that declares a non-void result across the QML->Python
+        # boundary during ListView layout/scroll. Every other QML-signal handler
+        # in this family is a plain bound method for the same reason; the direct
+        # Python callers below still receive the bool return normally.
         if not self.is_active or self._runtime_service is None:
             return False
         try:
