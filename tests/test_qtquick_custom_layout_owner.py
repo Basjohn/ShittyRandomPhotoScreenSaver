@@ -1287,3 +1287,79 @@ def test_custom_layout_visualizer_display_transaction_rolls_scene_back_on_lifecy
 
     assert source_scene.transfers == [target_scene]
     assert target_scene.transfers == [source_scene]
+
+
+def test_content_extent_side_drag_and_uniform_scale_math() -> None:
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    owner._bindings = {
+        "display:a": _DisplayBinding(
+            identity="display:a",
+            monitor_route="1",
+            unit=SimpleNamespace(),
+            screen=None,
+            geometry=QRect(0, 0, 3840, 2160),
+        )
+    }
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("friend_pulse", "display:a"),
+        model_identity="friend_pulse",
+        baseline_global_rect=QRect(100, 100, 610, 334),
+        current_global_rect=QRect(100, 100, 610, 334),
+        baseline_size_payload={},
+        current_size_payload={},
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+        content_extent_axes=frozenset({"vertical", "horizontal"}),
+        baseline_content_extent=(610.0, 334.0),
+    )
+    assert item.current_content_extent == (610.0, 334.0)
+    assert item.resize_scale == pytest.approx(1.0)
+
+    # Vertical side drag: outer height and content-box height grow by the cursor
+    # delta (scale 1); width and the box width are preserved exactly.
+    start = QPoint(item.current_global_rect.center())
+    assert owner.begin_resize(item, "bottom", start) is True
+    assert owner.update_resize(
+        item, "bottom", QPoint(start.x(), start.y() + 120), True
+    ) is True
+    assert item.current_global_rect.width() == 610
+    assert item.current_global_rect.height() == pytest.approx(454, abs=1)
+    assert item.current_content_extent[0] == pytest.approx(610.0)
+    assert item.current_content_extent[1] == pytest.approx(454.0, abs=1)
+    assert item.current_size_payload["content_extent"][1] == pytest.approx(
+        item.current_content_extent[1]
+    )
+
+    # Uniform wheel: corners/wheel stay enlarge/shrink, scaling the whole box;
+    # the logical content box value itself is carried through unchanged.
+    box_before = item.current_content_extent
+    assert owner.resize_wheel(item, 120) is True
+    assert item.resize_scale > 1.0
+    assert item.current_content_extent == box_before
+    assert item.current_global_rect.width() == pytest.approx(
+        round(box_before[0] * item.resize_scale), abs=1
+    )
+    assert item.current_global_rect.height() == pytest.approx(
+        round(box_before[1] * item.resize_scale), abs=1
+    )
+    assert item.current_size_payload["content_extent"][0] == pytest.approx(
+        box_before[0]
+    )
+
+    # Horizontal side drag narrows the content box width (grid column reflow lives
+    # in the widget model; here we assert the box axis math).
+    scale_now = float(item.resize_scale)
+    start2 = QPoint(item.current_global_rect.center())
+    assert owner.begin_resize(item, "left", start2) is True
+    assert owner.update_resize(
+        item, "left", QPoint(start2.x() + 100, start2.y()), True
+    ) is True
+    # Left edge moved inward by 100px -> narrower outer width, narrower box width.
+    assert item.current_content_extent[0] < box_before[0] * scale_now
+    assert item.current_content_extent[1] == pytest.approx(box_before[1])

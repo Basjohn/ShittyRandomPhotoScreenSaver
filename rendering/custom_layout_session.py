@@ -102,6 +102,15 @@ class CustomLayoutSessionItem:
     viewport_resize_capable: bool = False
     baseline_viewport_extent: ViewportExtent | None = None
     current_viewport_extent: ViewportExtent | None = None
+    # Ordinary content-extent resize working state (distinct from the visualizer
+    # viewport above). ``content_extent_axes`` names which side axes reflow the
+    # widget's logical content box ("horizontal" and/or "vertical"); corners stay
+    # uniform enlarge/shrink. The box is a pre-uniform-scale content size the
+    # widget consumes to reflow (more rows / column reflow / less truncation)
+    # instead of letterboxing. ``None`` means the canonical config-derived size.
+    content_extent_axes: frozenset[str] = frozenset()
+    baseline_content_extent: ViewportExtent | None = None
+    current_content_extent: ViewportExtent | None = None
 
     def __post_init__(self) -> None:
         self.model_identity = str(self.model_identity or self.source_key.widget_id)
@@ -129,6 +138,19 @@ class CustomLayoutSessionItem:
             if self.current_viewport_extent is not None
             else self.baseline_viewport_extent
         )
+        self.content_extent_axes = frozenset(
+            str(axis)
+            for axis in self.content_extent_axes
+            if str(axis) in {"horizontal", "vertical"}
+        )
+        self.baseline_content_extent = normalize_viewport_extent(
+            self.baseline_content_extent
+        )
+        self.current_content_extent = normalize_viewport_extent(
+            self.current_content_extent
+            if self.current_content_extent is not None
+            else self.baseline_content_extent
+        )
         self.current_display_identity = (
             str(self.current_display_identity or "").strip()
             or self.source_key.display_identity
@@ -147,6 +169,10 @@ class CustomLayoutSessionItem:
             geometry_variant=self.source_key.geometry_variant,
         )
 
+    @property
+    def content_extent_capable(self) -> bool:
+        return bool(self.content_extent_axes)
+
     def set_geometry(
         self,
         global_rect: QRect,
@@ -154,6 +180,7 @@ class CustomLayoutSessionItem:
         size_payload: Mapping[str, Any] | None = None,
         resize_scale: float | None = None,
         viewport_extent: ViewportExtent | None = None,
+        content_extent: ViewportExtent | None = None,
     ) -> None:
         self.current_global_rect = QRect(global_rect)
         if size_payload is not None:
@@ -162,6 +189,8 @@ class CustomLayoutSessionItem:
             self.resize_scale = float(resize_scale)
         if viewport_extent is not None:
             self.current_viewport_extent = normalize_viewport_extent(viewport_extent)
+        if content_extent is not None:
+            self.current_content_extent = normalize_viewport_extent(content_extent)
 
     def set_viewport_extent(self, width: float, height: float) -> None:
         """Set the current logical world (edge operation) without touching scale."""
@@ -201,6 +230,7 @@ class CustomLayoutSessionItem:
         self.current_enabled = self.baseline_enabled
         self.resize_scale = self.baseline_resize_scale
         self.current_viewport_extent = self.baseline_viewport_extent
+        self.current_content_extent = self.baseline_content_extent
         self.removed = False
 
 

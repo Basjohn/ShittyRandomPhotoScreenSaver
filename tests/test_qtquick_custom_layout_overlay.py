@@ -50,6 +50,8 @@ def _item(
     resizable: bool = False,
     viewport_capable: bool = False,
     baseline_viewport_extent: tuple[float, float] | None = None,
+    content_extent_axes: frozenset[str] = frozenset(),
+    baseline_content_extent: tuple[float, float] | None = None,
 ) -> CustomLayoutSessionItem:
     return CustomLayoutSessionItem(
         source_key=CustomLayoutKey(widget_id, display_identity),
@@ -64,6 +66,8 @@ def _item(
         resize_capable=resizable,
         viewport_resize_capable=viewport_capable,
         baseline_viewport_extent=baseline_viewport_extent,
+        content_extent_axes=content_extent_axes,
+        baseline_content_extent=baseline_content_extent,
     )
 
 
@@ -1107,3 +1111,75 @@ def test_quick_custom_layout_overlay_is_presentation_only() -> None:
     assert "sessionModel.transferItem(editFrame.index, \"right\")" in qml
     assert "canTransferLeft" in qml
     assert "canTransferRight" in qml
+
+
+def test_overlay_gates_content_extent_edges_per_axis_and_exposes_axes() -> None:
+    session = CustomLayoutSession()
+    both = _item(
+        "friend_pulse",
+        "display:a",
+        QRect(100, 100, 610, 334),
+        resizable=True,
+        content_extent_axes=frozenset({"vertical", "horizontal"}),
+        baseline_content_extent=(610.0, 334.0),
+    )
+    vertical_only = _item(
+        "gmail",
+        "display:a",
+        QRect(0, 500, 420, 300),
+        resizable=True,
+        content_extent_axes=frozenset({"vertical"}),
+        baseline_content_extent=(420.0, 300.0),
+    )
+    clock = _item("clock", "display:a", QRect(0, 0, 180, 80), resizable=True)
+    session.add_item(both)
+    session.add_item(vertical_only)
+    session.add_item(clock)
+
+    def _begin(item, handle, cursor):
+        return True
+
+    def _update(item, handle, cursor, finalize):
+        return True
+
+    model = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+        resize_begin_handler=_begin,
+        resize_update_handler=_update,
+    )
+    role_names = {bytes(v).decode(): k for k, v in model.roleNames().items()}
+    assert "contentExtentAxes" in role_names
+    axes_role = role_names["contentExtentAxes"]
+
+    def _row(widget_id: str) -> int:
+        return next(
+            r
+            for r in range(model.rowCount())
+            if model.data(model.index(r, 0), role_names["widgetId"]) == widget_id
+        )
+
+    both_row = _row("friend_pulse")
+    vertical_row = _row("gmail")
+    clock_row = _row("clock")
+
+    assert sorted(model.data(model.index(both_row, 0), axes_role)) == [
+        "horizontal",
+        "vertical",
+    ]
+    assert model.data(model.index(vertical_row, 0), axes_role) == ["vertical"]
+    assert model.data(model.index(clock_row, 0), axes_role) == []
+
+    # Both-axis item accepts every side edge and corners.
+    for edge in ("left", "right", "top", "bottom", "bottom_right"):
+        assert model.beginResize(both_row, edge, 0.0, 0.0) is True
+    # Vertical-only item accepts top/bottom, refuses left/right, keeps corners.
+    assert model.beginResize(vertical_row, "top", 0.0, 0.0) is True
+    assert model.beginResize(vertical_row, "bottom", 0.0, 0.0) is True
+    assert model.beginResize(vertical_row, "left", 0.0, 0.0) is False
+    assert model.beginResize(vertical_row, "right", 0.0, 0.0) is False
+    assert model.beginResize(vertical_row, "bottom_right", 0.0, 0.0) is True
+    # Uniform clock is refused every side edge but keeps corners.
+    for edge in ("left", "right", "top", "bottom"):
+        assert model.beginResize(clock_row, edge, 0.0, 0.0) is False
+    assert model.beginResize(clock_row, "bottom_right", 0.0, 0.0) is True

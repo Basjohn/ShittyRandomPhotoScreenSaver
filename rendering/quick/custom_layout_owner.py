@@ -643,7 +643,11 @@ class QuickCustomLayoutOwner:
             item.viewport_resize_capable and handle_id in viewport_handles
         )
         if handle_id in {"left", "right", "top", "bottom"}:
-            if not item.viewport_resize_capable:
+            axis = "horizontal" if handle_id in {"left", "right"} else "vertical"
+            if not (
+                item.viewport_resize_capable
+                or axis in item.content_extent_axes
+            ):
                 return False
         elif not item.resize_capable:
             return False
@@ -681,7 +685,10 @@ class QuickCustomLayoutOwner:
             return False
         handle_id = str(handle or "")
         if handle_id in {"left", "right", "top", "bottom"}:
-            changed = self._resize_viewport_edge(item, origin, handle_id, cursor)
+            if item.viewport_resize_capable:
+                changed = self._resize_viewport_edge(item, origin, handle_id, cursor)
+            else:
+                changed = self._resize_content_edge(item, origin, handle_id, cursor)
         elif (
             item.viewport_resize_capable
             and handle_id in {
@@ -954,8 +961,20 @@ class QuickCustomLayoutOwner:
         requested_scale: float,
         anchor_rect: QRect,
     ) -> bool:
-        descriptor = self._descriptors[item.source_key]
         binding = self._bindings[item.current_display_identity]
+        if (
+            item.content_extent_capable
+            and not item.viewport_resize_capable
+            and item.current_content_extent is not None
+        ):
+            # Corners/wheel stay uniform enlarge/shrink for content-extent widgets,
+            # but scale the user's current logical content box (which a side drag
+            # may have given a non-authored aspect) rather than the authored
+            # reference, so a taller/wider box keeps its reflowed content.
+            return self._apply_content_extent_uniform_scale(
+                item, requested_scale, anchor_rect, binding
+            )
+        descriptor = self._descriptors[item.source_key]
         baseline = item.baseline_global_rect
         admitted_scale = max(1.0e-6, float(item.baseline_resize_scale))
         reference_width = max(1.0, float(baseline.width()) / admitted_scale)
@@ -1289,6 +1308,116 @@ class QuickCustomLayoutOwner:
             change_width=True,
             change_height=True,
         )
+
+    def _resize_content_edge(
+        self,
+        item: CustomLayoutSessionItem,
+        origin: _ResizeOrigin,
+        edge: str,
+        cursor: QPoint,
+    ) -> bool:
+        """Resize one axis of an ordinary widget's logical content box.
+
+        A side handle changes the outer rect on its axis at constant uniform
+        scale; the new logical box dimension is ``outer_axis / scale`` and the
+        untouched axis is preserved exactly. The widget consumes the box to
+        reflow (more rows / grid columns / less truncation) rather than
+        letterboxing. Python owns all geometry; QML only emitted the edge id.
+        """
+
+        binding = self._bindings[item.current_display_identity]
+        minimum = quick_custom_minimum_size(item)
+        rect = self._viewport_resize_rect(
+            origin,
+            binding,
+            minimum,
+            cursor,
+            horizontal_edge=edge if edge in {"left", "right"} else None,
+            vertical_edge=edge if edge in {"top", "bottom"} else None,
+        )
+        scale = max(1.0e-6, float(origin.scale))
+        change_width = edge in {"left", "right"}
+        change_height = edge in {"top", "bottom"}
+        box = item.current_content_extent
+        if box is None:
+            box = (float(rect.width()) / scale, float(rect.height()) / scale)
+        next_box = (
+            float(rect.width()) / scale if change_width else float(box[0]),
+            float(rect.height()) / scale if change_height else float(box[1]),
+        )
+        payload = dict(item.current_size_payload)
+        payload.update(
+            width=rect.width(),
+            height=rect.height(),
+            content_extent=[next_box[0], next_box[1]],
+        )
+        item.set_geometry(rect, size_payload=payload, content_extent=next_box)
+        return True
+
+    def _apply_content_extent_uniform_scale(
+        self,
+        item: CustomLayoutSessionItem,
+        requested_scale: float,
+        anchor_rect: QRect,
+        binding: _DisplayBinding,
+    ) -> bool:
+        """Uniform corner/wheel scale for a content-extent widget.
+
+        Scale is absolute against the current logical content box, so the box's
+        reflowed aspect is preserved and only overall size changes. The box value
+        itself is carried through unchanged in geometry + payload.
+        """
+
+        box = item.current_content_extent
+        assert box is not None
+        reference_width = max(1.0, float(box[0]))
+        reference_height = max(1.0, float(box[1]))
+        minimum = quick_custom_minimum_size(item)
+        max_scale = min(
+            float(binding.geometry.width()) / reference_width,
+            float(binding.geometry.height()) / reference_height,
+        )
+        floor_scale = max(
+            CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
+            float(minimum.width()) / reference_width,
+            float(minimum.height()) / reference_height,
+        )
+        scale = min(max_scale, max(floor_scale, float(requested_scale)))
+        if abs(scale - float(item.resize_scale)) < 1e-6:
+            return False
+        width = max(1, int(round(reference_width * scale)))
+        height = max(1, int(round(reference_height * scale)))
+        center_x = float(anchor_rect.x()) + float(anchor_rect.width()) / 2.0
+        local = QRect(
+            int(round(center_x - width / 2.0)) - binding.geometry.x(),
+            anchor_rect.y() - binding.geometry.y(),
+            width,
+            height,
+        )
+        local = clamp_local_rect_to_bounds(
+            local,
+            binding.geometry.size(),
+            min_size=minimum,
+        )
+        geometry = QRect(
+            binding.geometry.x() + local.x(),
+            binding.geometry.y() + local.y(),
+            local.width(),
+            local.height(),
+        )
+        payload = dict(item.current_size_payload)
+        payload.update(
+            width=local.width(),
+            height=local.height(),
+            content_extent=[box[0], box[1]],
+        )
+        item.set_geometry(
+            geometry,
+            size_payload=payload,
+            resize_scale=scale,
+            content_extent=box,
+        )
+        return True
 
     def _peer_local_rects(
         self,

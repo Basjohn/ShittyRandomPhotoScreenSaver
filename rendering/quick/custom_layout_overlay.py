@@ -61,6 +61,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     _RESIZE_SCALE_ROLE = _WIDGET_ID_ROLE + 8
     _CAN_TRANSFER_LEFT_ROLE = _WIDGET_ID_ROLE + 9
     _CAN_TRANSFER_RIGHT_ROLE = _WIDGET_ID_ROLE + 10
+    _CONTENT_EXTENT_AXES_ROLE = _WIDGET_ID_ROLE + 11
 
     def __init__(
         self,
@@ -109,6 +110,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._RESIZE_SCALE_ROLE: QByteArray(b"resizeScale"),
             self._CAN_TRANSFER_LEFT_ROLE: QByteArray(b"canTransferLeft"),
             self._CAN_TRANSFER_RIGHT_ROLE: QByteArray(b"canTransferRight"),
+            self._CONTENT_EXTENT_AXES_ROLE: QByteArray(b"contentExtentAxes"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # type: ignore[override]
@@ -141,6 +143,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return self._can_transfer(item, "left")
         if role == self._CAN_TRANSFER_RIGHT_ROLE:
             return self._can_transfer(item, "right")
+        if role == self._CONTENT_EXTENT_AXES_ROLE:
+            return sorted(item.content_extent_axes)
         return None
 
     @Slot()
@@ -339,7 +343,10 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return None
         item = self._items[int(row)]
         if _is_viewport_edge_handle(handle):
-            return item if item.viewport_resize_capable else None
+            if item.viewport_resize_capable:
+                return item
+            axis = "horizontal" if str(handle) in {"left", "right"} else "vertical"
+            return item if axis in item.content_extent_axes else None
         return item if item.resize_capable else None
 
     def _can_transfer(self, item: CustomLayoutSessionItem, direction: str) -> bool:
@@ -390,6 +397,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 self._RESIZE_SCALE_ROLE,
                 self._CAN_TRANSFER_LEFT_ROLE,
                 self._CAN_TRANSFER_RIGHT_ROLE,
+                self._CONTENT_EXTENT_AXES_ROLE,
             ],
         )
 
