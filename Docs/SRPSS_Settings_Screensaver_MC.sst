@@ -491,7 +491,7 @@
         "margin": 30,
         "monitor": "ALL",
         "position": "Top Right",
-        "separator_thickness": 3,
+        "separator_thickness": 4,
         "shared_tick": true,
         "show_background": false,
         "show_date": false,
@@ -499,7 +499,7 @@
         "show_numerals": true,
         "show_seconds": true,
         "show_separator": true,
-        "show_timezone": true,
+        "show_timezone": false,
         "timezone": "local"
       },
       "clock2": {
@@ -907,12 +907,12 @@
         ],
         "direction": "SE",
         "enabled": true,
-        "frame_extra_offset": 0,
+        "frame_extra_offset": 4,
         "frame_opacity": 0.77,
         "header_enabled": true,
         "text_enabled": true,
-        "text_extra_offset": 0,
-        "text_opacity": 0.33
+        "text_extra_offset": 2,
+        "text_opacity": 0.39
       },
       "spotify_visualizer": {
         "bubble_adaptive_sensitivity": false,
