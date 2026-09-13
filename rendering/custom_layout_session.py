@@ -109,6 +109,7 @@ class CustomLayoutSessionItem:
     # widget consumes to reflow (more rows / column reflow / less truncation)
     # instead of letterboxing. ``None`` means the canonical config-derived size.
     content_extent_axes: frozenset[str] = frozenset()
+    content_extent_minimum_size: ViewportExtent | None = None
     baseline_content_extent: ViewportExtent | None = None
     current_content_extent: ViewportExtent | None = None
     # Per-widget Restore Size authority.  This is deliberately distinct from
@@ -151,6 +152,9 @@ class CustomLayoutSessionItem:
             str(axis)
             for axis in self.content_extent_axes
             if str(axis) in {"horizontal", "vertical"}
+        )
+        self.content_extent_minimum_size = normalize_viewport_extent(
+            self.content_extent_minimum_size
         )
         self.baseline_content_extent = normalize_viewport_extent(
             self.baseline_content_extent

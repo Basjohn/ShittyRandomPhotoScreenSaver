@@ -110,12 +110,36 @@ def quick_custom_minimum_size(item: CustomLayoutSessionItem) -> QSize:
     return QSize(CUSTOM_LAYOUT_MIN_WIDGET_SIZE)
 
 
+def quick_custom_content_extent_minimum_size(
+    item: CustomLayoutSessionItem,
+) -> QSize:
+    """Return the physical floor for one direct content-extent side gesture.
+
+    ``content_extent_minimum_size`` is family-owned *logical* geometry.  A
+    content-extent widget may already be uniformly scaled, so direct side
+    handles must project that logical floor through the current uniform scale.
+    Corner/wheel uniform resize deliberately does not consume this floor: its
+    existing ordinary whole-widget scale contract remains independent.
+    """
+
+    minimum = item.content_extent_minimum_size
+    if minimum is None:
+        return quick_custom_minimum_size(item)
+    scale = max(1.0e-6, float(item.resize_scale))
+    width, height = minimum
+    return QSize(
+        max(CUSTOM_LAYOUT_MIN_WIDGET_SIZE, int(round(float(width) * scale))),
+        max(CUSTOM_LAYOUT_MIN_WIDGET_SIZE, int(round(float(height) * scale))),
+    )
+
+
 __all__ = [
     "CUSTOM_LAYOUT_MIN_RESIZE_SCALE",
     "CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY",
     "UNIFORM_TRANSFORM_RESIZE_MODES",
     "capture_quick_size_payload",
     "is_uniform_transform_resize_mode",
+    "quick_custom_content_extent_minimum_size",
     "quick_custom_minimum_size",
     "quick_custom_payload_minimum_scale",
     "scale_quick_size_payload",

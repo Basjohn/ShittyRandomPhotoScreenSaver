@@ -21,7 +21,7 @@ def test_friend_pulse_recovery_visual_contract_is_explicit() -> None:
     assert "friendPulseRowStatus" not in qml
     assert "friendPulseGridStatus" not in qml
 
-    # Names remain readable while status/game/message chrome is explicitly all-caps.
+    # Names remain readable while status/game chrome is explicitly all-caps.
     assert "maximumLineCount: 2" in qml
     assert "fontSizeMode: Text.Fit" in qml
     assert qml.count(".toUpperCase()") >= 3
@@ -33,32 +33,19 @@ def test_friend_pulse_recovery_visual_contract_is_explicit() -> None:
     assert qml.count("friendPinToggleRequested(index)") == 2
 
 
-def test_unread_summary_fully_replaces_old_activity_metrics() -> None:
+
+def test_online_count_summary_replaces_dropped_unread_message_feature() -> None:
     qml = _text("rendering/quick/qml/FriendPulsePresentation.qml")
     model = _text("rendering/quick/widgets/friend_pulse.py")
+    runtime = _text("widgets/friend_pulse_runtime.py")
 
-    start = qml.index("    Item {\n        id: activitySummary")
-    depth = 0
-    end = None
-    for index in range(start, len(qml)):
-        if qml[index] == "{":
-            depth += 1
-        elif qml[index] == "}":
-            depth -= 1
-            if depth == 0:
-                end = index + 1
-                break
-    assert end is not None
-    summary = qml[start:end]
-    assert "primaryMetric" not in summary
-    assert "secondaryMetric" not in summary
-    assert "unreadMessageText" in summary
-    assert "onUnreadMessagePulseRequested" in qml
-    assert "messageActionRequested(0)" in qml
-    assert 'return f"{count:02d} UNREAD {noun}"' in model
-    assert 'return "MESSAGES UNAVAILABLE"' not in model
-    assert 'if count <= 0:' in model
-    assert 'visible: friendRoot.friendPulseModel.unreadMessageCount > 0' in qml
+    assert "unreadMessage" not in qml
+    assert "messageMenu" not in qml
+    assert "FriendMessage" not in model
+    assert "friend_message_sessions" not in runtime
+    assert "onlineFriendsText" in qml
+    assert "showOnlineCount" in qml
+    assert 'return f"{count} {noun} ONLINE"' in model
 
 
 def test_restore_size_uses_real_distinct_glyph_and_no_baseline_reset() -> None:
@@ -93,3 +80,19 @@ def test_restore_size_authored_geometry_is_not_the_committed_custom_rect() -> No
     end = presenter.index("\n    def ", start + 10)
     block = presenter[start:end]
     assert "_base_geometries[widget_id] = geometry" not in block
+
+
+def test_friend_pulse_wide_grid_and_online_count_contract() -> None:
+    model = _text("rendering/quick/widgets/friend_pulse.py")
+    qml = _text("rendering/quick/qml/FriendPulsePresentation.qml")
+    settings = _text("ui/tabs/widgets_tab_steam.py")
+    defaults = _text("core/settings/defaults_snapshot.json")
+
+    assert 'min(normalized_capacity, 6, fitted)' not in model
+    assert 'return min(normalized_capacity, fitted)' in model
+    assert 'resolved_width = max(420, min(4000, resolved_width))' in model
+    assert '"show_online_count": true' in defaults.lower()
+    assert 'Show Friends Online Count' in settings
+    assert 'payload["show_online_count"]' in settings
+    assert "onlineFriendsText" in qml
+    assert "showOnlineCount" in qml

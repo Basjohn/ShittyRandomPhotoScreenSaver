@@ -99,26 +99,6 @@ SOURCE_EVIDENCE: dict[SteamSourceId, SteamSourceEvidence] = {
         requires_user_key=True,
         notes=("Useful for observable persona/avatar/current-game details.",),
     ),
-    SteamSourceId.FRIEND_MESSAGE_SESSIONS: SteamSourceEvidence(
-        source_id=SteamSourceId.FRIEND_MESSAGE_SESSIONS,
-        status=SteamSourceStatus.CONDITIONAL,
-        endpoint="IFriendMessagesService/GetActiveMessageSessions/v1",
-        requires_user_key=True,
-        notes=(
-            "Undocumented Steam service exposing server-backed unread-session counts.",
-            "Client runtime must fail closed when the configured Web API key is not accepted.",
-        ),
-    ),
-    SteamSourceId.FRIEND_RECENT_MESSAGES: SteamSourceEvidence(
-        source_id=SteamSourceId.FRIEND_RECENT_MESSAGES,
-        status=SteamSourceStatus.CONDITIONAL,
-        endpoint="IFriendMessagesService/GetRecentMessages/v1",
-        requires_user_key=True,
-        notes=(
-            "Undocumented Steam service for recent friend-chat messages.",
-            "Message bodies are never admitted to the persistent Friend Pulse cache.",
-        ),
-    ),
     SteamSourceId.APP_NEWS: SteamSourceEvidence(
         source_id=SteamSourceId.APP_NEWS,
         status=SteamSourceStatus.CONDITIONAL,
@@ -350,10 +330,6 @@ def _source_url(source_id: SteamSourceId) -> str:
         return "https://api.steampowered.com/ISteamUser/GetFriendList/v1/"
     if source_id == SteamSourceId.PLAYER_SUMMARIES:
         return "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
-    if source_id == SteamSourceId.FRIEND_MESSAGE_SESSIONS:
-        return "https://api.steampowered.com/IFriendMessagesService/GetActiveMessageSessions/v1/"
-    if source_id == SteamSourceId.FRIEND_RECENT_MESSAGES:
-        return "https://api.steampowered.com/IFriendMessagesService/GetRecentMessages/v1/"
     raise ValueError(f"Unsupported Steam source: {source_id.value}")
 
 

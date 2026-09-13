@@ -21,10 +21,6 @@ from core.steam.friend_pulse import (
     sanitize_friend_list_payload,
     sanitize_player_summaries_payload,
 )
-from core.steam.friend_messages import (
-    FriendMessageSnapshot,
-    parse_friend_message_sessions,
-)
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 from core.steam.request_policy import SteamBackoffPolicy, SteamRequestCoordinator, SteamRequestKey, backoff_result
 
@@ -92,43 +88,6 @@ def refresh_friend_pulse_cache(
     )
     safe_friend = _sanitized_friend_result(friend)
     return build_friend_pulse_snapshot(friend_result=safe_friend, summaries_result=summaries, now=reference_now, previous=previous)
-
-
-def refresh_friend_message_sessions(
-    *,
-    credential: SteamCredentialPayload,
-    friend_steam_ids: dict[str, str],
-    opener: Callable | None = None,
-    now: float | None = None,
-) -> FriendMessageSnapshot:
-    """Fetch unread friend-message sessions through the shared Steam policy.
-
-    This function has no scheduler.  Friend Pulse calls it only from the same
-    generation-owned worker that already refreshes the roster, so unread state
-    cannot accidentally create a second polling/cadence owner.
-    """
-
-    reference_now = time.time() if now is None else float(now)
-    profile_key = derive_profile_cache_key(credential.profile_identifier)
-    result = _fetch_live(
-        profile_key=profile_key,
-        source_id=SteamSourceId.FRIEND_MESSAGE_SESSIONS,
-        credential=credential,
-        params={"only_sessions_with_messages": "1"},
-        opener=opener,
-        now=reference_now,
-    )
-    if not result.ok:
-        return FriendMessageSnapshot(
-            status=result.status,
-            accepted_at=result.fetched_at or reference_now,
-            source_available=False,
-        )
-    return parse_friend_message_sessions(
-        result.payload or {},
-        friend_steam_ids=friend_steam_ids,
-        accepted_at=result.fetched_at or reference_now,
-    )
 
 
 def _fetch_summaries(**kwargs) -> SteamResult:

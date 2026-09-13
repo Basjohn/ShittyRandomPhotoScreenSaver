@@ -82,7 +82,7 @@ OverlayWidget {
         border.color: Qt.rgba(
             accentColor.r, accentColor.g, accentColor.b, 0.55
         )
-        border.width: statsRoot.scaleAwareStrokeWidth(1.0)
+        border.width: statsRoot.scaleAwareStrokeWidth(1.25)
 
         Rectangle {
             x: 0.0

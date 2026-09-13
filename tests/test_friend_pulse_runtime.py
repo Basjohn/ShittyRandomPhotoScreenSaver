@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import pytest
 
 from core.steam.credentials import safe_fingerprint
-from core.steam.friend_messages import FriendMessageSession, FriendMessageSnapshot
 from core.steam.friend_pulse import FriendPulseEntry, FriendPulseSnapshot
 from core.steam.models import SteamResultStatus
 from widgets.friend_pulse_runtime import (
@@ -37,16 +36,12 @@ class _Consumer:
         self._runtime_generation = generation
         self._thread_manager = manager
         self.received = []
-        self.messages = []
 
     def is_friend_pulse_consumer_alive(self):
         return True
 
     def on_friend_pulse_runtime_snapshot(self, snapshot, projection):
         self.received.append((snapshot, projection))
-
-    def on_friend_pulse_runtime_messages(self, snapshot):
-        self.messages.append(snapshot)
 
 
 def _snapshot(
@@ -86,13 +81,9 @@ def _service(
     ui_dispatch=None,
     capacity=8,
     credentials=None,
-    message_loader=None,
     pin_loader=None,
     pin_saver=None,
 ):
-    unavailable_messages = lambda **_kwargs: FriendMessageSnapshot(
-        status=SteamResultStatus.NOT_CONFIGURED, source_available=False
-    )
     return FriendPulseRuntimeService(
         config=FriendPulseRuntimeConfig(
             privacy_mode=mode,
@@ -116,7 +107,6 @@ def _service(
         ),
         avatar_fetcher=avatar_fetcher,
         avatar_cache_dir_resolver=lambda _profile_key: Path("C:/safe/avatar-cache"),
-        message_loader=message_loader or unavailable_messages,
         pin_loader=pin_loader or (lambda _profile_key: frozenset()),
         pin_saver=pin_saver or (lambda _profile_key, _pins: None),
     )
@@ -655,64 +645,6 @@ def test_rejected_avatar_ui_dispatch_fails_closed_and_fences_source_work(
 
 
 
-def test_unread_sessions_share_existing_refresh_transaction_and_publish_to_consumer():
-    manager = _Manager()
-    steam_id = "76561198000000001"
-    fingerprint = safe_fingerprint(steam_id)
-    roster = FriendPulseSnapshot(
-        status=SteamResultStatus.SUCCESS,
-        authoritative=True,
-        entries=(
-            FriendPulseEntry(
-                fingerprint,
-                "Ada",
-                persona_state=1,
-                steam_id=steam_id,
-            ),
-        ),
-        online_count=1,
-    )
-    message_calls = []
-
-    def message_loader(**kwargs):
-        message_calls.append(kwargs)
-        return FriendMessageSnapshot(
-            status=SteamResultStatus.SUCCESS,
-            source_available=True,
-            sessions=(FriendMessageSession(fingerprint, 1, 200, 150),),
-        )
-
-    consumer = _Consumer(9, manager)
-    service = _service(
-        manager,
-        cache=lambda **_kwargs: roster,
-        refresh=lambda **_kwargs: roster,
-        message_loader=message_loader,
-    )
-    service.attach_consumer(consumer)
-    service.start()
-
-    # Cache admission queues the one existing credentialed refresh owner.
-    manager.complete(0, manager.tasks[0][0]())
-    assert [task[2] for task in manager.tasks].count("friend_pulse_refresh") == 1
-
-    # The unread source is executed inside that refresh worker, not as a task
-    # or cadence of its own.
-    refresh_index = next(
-        index for index, task in enumerate(manager.tasks)
-        if task[2] == "friend_pulse_refresh"
-    )
-    manager.complete(refresh_index, manager.tasks[refresh_index][0]())
-
-    assert len(message_calls) == 1
-    assert message_calls[0]["friend_steam_ids"] == {fingerprint: steam_id}
-    assert all(task[2] != "friend_pulse_message_refresh" for task in manager.tasks)
-    assert consumer.messages[-1].source_available is True
-    assert consumer.messages[-1].total_unread == 1
-    assert consumer.messages[-1].sessions[0].identity_fingerprint == fingerprint
-    assert steam_id not in repr(consumer.messages[-1])
-
-
 def test_pin_load_toggle_reprojects_immediately_and_persists_without_new_cadence():
     manager = _Manager()
     steam_id = "76561198000000001"
@@ -768,7 +700,7 @@ def test_pin_load_toggle_reprojects_immediately_and_persists_without_new_cadence
     assert cadence_categories_after[:-1] == cadence_categories_before
 
 
-def test_final_lease_clears_private_ids_unread_state_and_pin_state():
+def test_final_lease_clears_private_ids_and_pin_state():
     manager = _Manager()
     steam_id = "76561198000000001"
     fingerprint = safe_fingerprint(steam_id)
@@ -778,19 +710,11 @@ def test_final_lease_clears_private_ids_unread_state_and_pin_state():
         entries=(FriendPulseEntry(fingerprint, "Ada", steam_id=steam_id),),
     )
 
-    def message_loader(**_kwargs):
-        return FriendMessageSnapshot(
-            status=SteamResultStatus.SUCCESS,
-            source_available=True,
-            sessions=(FriendMessageSession(fingerprint, 2),),
-        )
-
     consumer = _Consumer(9, manager)
     service = _service(
         manager,
         cache=lambda **_kwargs: roster,
         refresh=lambda **_kwargs: roster,
-        message_loader=message_loader,
         pin_loader=lambda _profile_key: frozenset({fingerprint}),
     )
     service.attach_consumer(consumer)
@@ -804,11 +728,10 @@ def test_final_lease_clears_private_ids_unread_state_and_pin_state():
     owner = service.shared_owner
 
     assert owner._friend_steam_ids == {fingerprint: steam_id}  # noqa: SLF001
-    assert owner._message_snapshot.total_unread == 2  # noqa: SLF001
     assert owner._pinned_fingerprints == frozenset({fingerprint})  # noqa: SLF001
 
     service.stop()
 
     assert owner._friend_steam_ids == {}  # noqa: SLF001
-    assert owner._message_snapshot.total_unread == 0  # noqa: SLF001
     assert owner._pinned_fingerprints == frozenset()  # noqa: SLF001
+

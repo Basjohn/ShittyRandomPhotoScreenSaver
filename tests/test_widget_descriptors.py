@@ -960,6 +960,8 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
 
     assert descriptors["media"].attr_name == "media_widget"
     assert descriptors["media"].custom_layout_resize_mode == "media_scale"
+    assert descriptors["media"].content_extent_axes == ("horizontal", "vertical")
+    assert descriptors["media"].content_extent_minimum_size == (520, 210)
 
     assert descriptors["gmail"].supports_layout_resize_edit is True
     assert descriptors["reddit"].requires_size_reset_affordance is True

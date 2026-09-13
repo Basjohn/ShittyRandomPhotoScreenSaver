@@ -47,6 +47,7 @@ def test_system_stats_uses_shared_content_extent_reflow_contract() -> None:
     assert "systemStatsModel.showMemory" in qml
     assert "systemStatsModel.showUptime" in qml
     assert "systemStatsModel.showNetwork" in qml
+    assert "border.width: statsRoot.scaleAwareStrokeWidth(1.25)" in qml
 
 
 def test_widgets_nav_pills_reserve_full_label_width() -> None:

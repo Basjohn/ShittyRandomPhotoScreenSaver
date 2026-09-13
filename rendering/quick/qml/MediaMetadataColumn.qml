@@ -10,6 +10,7 @@ Item {
     id: metadataFade
 
     required property var mediaModel
+    property real rowSpacing: 7.0
 
     property string _currentTitle: ""
     property string _currentArtist: ""
@@ -79,7 +80,7 @@ Item {
     Column {
         id: currentColumn
         width: parent.width
-        spacing: 7.0
+        spacing: metadataFade.rowSpacing
         // Incoming metadata must paint above the outgoing snapshot so its fade-in
         // is visible immediately instead of being hidden under an opaque sibling.
         z: 1
@@ -153,7 +154,7 @@ Item {
         id: outgoingColumn
         visible: metadataFade._outgoingVisible
         width: parent.width
-        spacing: 7.0
+        spacing: metadataFade.rowSpacing
         z: 0
 
         ShadowedText {

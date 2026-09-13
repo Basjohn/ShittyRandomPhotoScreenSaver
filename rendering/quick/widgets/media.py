@@ -165,6 +165,7 @@ class MediaPresentationConfig:
     show_playback_state: bool
     artwork_size: int
     rounded_artwork_border: bool
+    allow_landscape_artwork: bool
     show_controls: bool
     playback_progress_enabled: bool
     playback_progress_height: int
@@ -223,6 +224,7 @@ class MediaPresentationConfig:
             show_playback_state=_as_bool(merged["show_playback_state"], bool(defaults["show_playback_state"])),
             artwork_size=_bounded_int(merged["artwork_size"], int(defaults["artwork_size"]), 48, 512),
             rounded_artwork_border=_as_bool(merged["rounded_artwork_border"], bool(defaults["rounded_artwork_border"])),
+            allow_landscape_artwork=_as_bool(merged["allow_landscape_artwork"], bool(defaults["allow_landscape_artwork"])),
             show_controls=_as_bool(merged["show_controls"], bool(defaults["show_controls"])),
             playback_progress_enabled=_as_bool(
                 merged["playback_progress_enabled"], bool(defaults["playback_progress_enabled"])
@@ -578,6 +580,10 @@ class MediaPresentationModel(QObject):
             style=style,
             provider=config.provider,
         )
+        # CUSTOM side-resize owns only this presentation-local logical box.
+        # Settings remain the sole authority for font/artwork values; corner/
+        # wheel resize continues to apply the retained root's uniform transform.
+        self._content_extent: tuple[int, int] | None = None
         self._active = False
         self._retired = False
 
@@ -717,6 +723,44 @@ class MediaPresentationModel(QObject):
         self._replace_snapshot(
             replace(self._snapshot, interaction_enabled=normalized)
         )
+        return True
+
+    def set_content_extent(
+        self,
+        width: float | None,
+        height: float | None,
+    ) -> bool:
+        """Apply one CUSTOM-only Media reflow box.
+
+        The shared CUSTOM owner supplies the logical *outer* retained footprint,
+        including the optional fixed-width volume accessory.  QML consumes this
+        box to reflow the card while keeping Settings-owned font/artwork values
+        untouched.  No source/runtime ownership changes here.
+        """
+
+        if width is None or height is None:
+            return self.clear_content_extent()
+        try:
+            resolved_width = int(round(float(width)))
+            resolved_height = int(round(float(height)))
+        except (TypeError, ValueError):
+            return False
+        resolved_width = max(520, min(4000, resolved_width))
+        resolved_height = max(210, min(4000, resolved_height))
+        extent = (resolved_width, resolved_height)
+        if extent == self._content_extent:
+            return False
+        self._content_extent = extent
+        self.stateChanged.emit()
+        return True
+
+    def clear_content_extent(self) -> bool:
+        """Return Media to its canonical config-derived authored content box."""
+
+        if self._content_extent is None:
+            return False
+        self._content_extent = None
+        self.stateChanged.emit()
         return True
 
     def request_transport(self, key: str) -> bool:
@@ -1282,8 +1326,24 @@ class MediaPresentationModel(QObject):
         return float(self.config.artwork_size)
 
     @Property(bool, notify=stateChanged)
+    def contentExtentActive(self) -> bool:
+        return self._content_extent is not None
+
+    @Property(float, notify=stateChanged)
+    def contentExtentWidth(self) -> float:
+        return float(self._content_extent[0]) if self._content_extent is not None else 0.0
+
+    @Property(float, notify=stateChanged)
+    def contentExtentHeight(self) -> float:
+        return float(self._content_extent[1]) if self._content_extent is not None else 0.0
+
+    @Property(bool, notify=stateChanged)
     def roundedArtwork(self) -> bool:
         return self.config.rounded_artwork_border
+
+    @Property(bool, notify=stateChanged)
+    def allowLandscapeArtwork(self) -> bool:
+        return self.config.allow_landscape_artwork
 
     @Property(QColor, notify=stateChanged)
     def artworkBorderColor(self) -> QColor:
@@ -1323,11 +1383,17 @@ class MediaPresentationModel(QObject):
 
     @Property(bool, notify=stateChanged)
     def showAlbum(self) -> bool:
-        return self.config.show_album
+        if not self.config.show_album:
+            return False
+        # Vertical direct-resize sheds lower-priority metadata before the sane
+        # Media floor.  Authored/uniform-only layouts preserve Settings exactly.
+        return self._content_extent is None or self._content_extent[1] >= 255
 
     @Property(bool, notify=stateChanged)
     def showPlaybackState(self) -> bool:
-        return self.config.show_playback_state
+        if not self.config.show_playback_state:
+            return False
+        return self._content_extent is None or self._content_extent[1] >= 225
 
     @Property(bool, notify=stateChanged)
     def controlsAvailable(self) -> bool:
@@ -1444,13 +1510,15 @@ class RetainedMediaPresentation:
         self,
         payload: Mapping[str, object],
     ) -> None:
-        # H9: Media CUSTOM resize is one uniform retained-presentation scale
-        # (``OverlayWidget.uniformScaleTransform``) derived from the outer rect,
-        # so it carries no per-value size payload and never mutates the
-        # Settings-owned font or artwork sizes. Stale scaled ``font_size`` /
-        # ``artwork_size`` from a pre-H9 committed layout are intentionally
-        # ignored so replay resolves the correct uniform scale from geometry.
-        del payload
+        # Media keeps H9's one uniform retained transform for corner/wheel
+        # resize, while side handles may additionally carry one CUSTOM-only
+        # logical content box.  Stale pre-H9 per-value font/artwork payloads are
+        # still ignored: Settings remains their sole authority.
+        extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
+        if isinstance(extent, (tuple, list)) and len(extent) == 2:
+            self._model.set_content_extent(extent[0], extent[1])
+        else:
+            self._model.clear_content_extent()
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

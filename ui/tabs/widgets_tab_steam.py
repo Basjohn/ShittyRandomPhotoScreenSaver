@@ -1071,6 +1071,16 @@ def _build_card_group(
         tab.friend_pulse_show_names = show_names
         appearance_layout.addWidget(show_names)
 
+        show_online_count = QCheckBox("Show Friends Online Count")
+        show_online_count.setProperty("circleIndicator", True)
+        show_online_count.setChecked(tab._default_bool(key, "show_online_count"))
+        show_online_count.setToolTip(
+            "Show X FRIENDS ONLINE in the top-right Friend Pulse summary area."
+        )
+        show_online_count.stateChanged.connect(tab._save_settings)
+        tab.friend_pulse_show_online_count = show_online_count
+        appearance_layout.addWidget(show_online_count)
+
         name_font_row = _aligned_row(appearance_layout, "Name Font Size:")
         name_font_size = QSpinBox()
         name_font_size.setRange(8, 18)
@@ -1777,6 +1787,14 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             tab.friend_pulse_show_names.setChecked(
                 bool(config.get("show_names", tab._default_bool(key, "show_names")))
             )
+            tab.friend_pulse_show_online_count.setChecked(
+                bool(
+                    config.get(
+                        "show_online_count",
+                        tab._default_bool(key, "show_online_count"),
+                    )
+                )
+            )
             try:
                 tab.friend_pulse_name_font_size.setValue(
                     int(
@@ -2153,6 +2171,9 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
             tab.friend_pulse_visible_row_capacity.value()
         )
         payload["show_names"] = bool(tab.friend_pulse_show_names.isChecked())
+        payload["show_online_count"] = bool(
+            tab.friend_pulse_show_online_count.isChecked()
+        )
         payload["name_font_size"] = int(tab.friend_pulse_name_font_size.value())
     return payload
 

@@ -181,6 +181,7 @@ def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
     assert friend_pulse["view_mode"] in {"grid", "rows"}
     assert 1 <= int(friend_pulse["visible_row_capacity"]) <= 24
     assert isinstance(friend_pulse["show_names"], bool)
+    assert friend_pulse["show_online_count"] is True
     assert 8 <= int(friend_pulse["name_font_size"]) <= 18
     assert len(friend_pulse["accent_color"]) == 4
 
@@ -270,6 +271,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.friend_pulse_view_mode.setCurrentIndex(1)
             tab.friend_pulse_visible_row_capacity.setValue(12)
             tab.friend_pulse_show_names.setChecked(False)
+            tab.friend_pulse_show_online_count.setChecked(False)
             tab.friend_pulse_name_font_size.setValue(17)
 
             preview = build_widget_stack_preview_config(tab)
@@ -331,6 +333,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert friend_payload["view_mode"] == "rows"
             assert friend_payload["visible_row_capacity"] == 12
             assert friend_payload["show_names"] is False
+            assert friend_payload["show_online_count"] is False
             assert friend_payload["name_font_size"] == 17
         finally:
             tab.deleteLater()
