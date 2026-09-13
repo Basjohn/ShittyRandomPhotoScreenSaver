@@ -177,7 +177,11 @@ OverlayWidget {
                 anchors.rightMargin: artworkFrame.visible ? 18.0 : 0.0
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: mediaRoot.metadataSpacing
-                transformOrigin: Item.Center
+                // Vertical compaction must never visually translate the metadata
+                // lane away from its authored left edge.  Scaling around the
+                // centre made title/artist appear to drift right during some
+                // CUSTOM reflows even though the layout anchors were correct.
+                transformOrigin: Item.Left
                 scale: implicitHeight > mainBand.height && implicitHeight > 0.0
                     ? Math.max(0.1, (mainBand.height - 2.0) / implicitHeight)
                     : 1.0

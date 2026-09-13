@@ -45,6 +45,8 @@ def test_online_count_summary_replaces_dropped_unread_message_feature() -> None:
     assert "friend_message_sessions" not in runtime
     assert "onlineFriendsText" in qml
     assert "showOnlineCount" in qml
+    assert "_rebuild_message_rows" not in model
+    assert "message_rows_changed" not in model
     assert 'return f"{count} {noun} ONLINE"' in model
 
 
@@ -89,10 +91,32 @@ def test_friend_pulse_wide_grid_and_online_count_contract() -> None:
     defaults = _text("core/settings/defaults_snapshot.json")
 
     assert 'min(normalized_capacity, 6, fitted)' not in model
-    assert 'return min(normalized_capacity, fitted)' in model
+    assert 'column_limit = 24 if custom_horizontal_extent else normalized_capacity' in model
+    assert 'return min(column_limit, fitted)' in model
+    assert 'custom_horizontal_extent=custom_extent' in model
     assert 'resolved_width = max(420, min(4000, resolved_width))' in model
     assert '"show_online_count": true' in defaults.lower()
     assert 'Show Friends Online Count' in settings
     assert 'payload["show_online_count"]' in settings
     assert "onlineFriendsText" in qml
     assert "showOnlineCount" in qml
+
+
+def test_friend_pulse_custom_width_can_exceed_baseline_visible_capacity() -> None:
+    import ast
+
+    source = _text("rendering/quick/widgets/friend_pulse.py")
+    tree = ast.parse(source)
+    target = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_grid_columns_for"
+    )
+    module = ast.Module(body=[target], type_ignores=[])
+    namespace = {"_GRID_GAP": 12}
+    exec(compile(module, "<friend-grid-helper>", "exec"), namespace)
+    helper = namespace["_grid_columns_for"]
+
+    assert helper(4, 560) == 4
+    assert helper(4, 900, custom_horizontal_extent=True) > 4
+    assert helper(4, 900, custom_horizontal_extent=True) == 7

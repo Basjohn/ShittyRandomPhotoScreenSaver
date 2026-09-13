@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
+from shiboken6 import isValid as _is_valid_qobject
 
 from core.settings.settings_manager import SettingsManager
 from core.threading.manager import ThreadManager
@@ -436,7 +437,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
         for binding in self._iter_custom_position_combo_bindings():
             combo = getattr(self, binding.combo_attr, None)
-            if combo is None:
+            if combo is None or not _is_valid_qobject(combo):
                 continue
             descriptor = get_widget_runtime_descriptor(binding.widget_id)
             if descriptor is None or not descriptor.supports_custom_position_slot:
@@ -475,7 +476,12 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
     ) -> bool:
         for combo_attr in binding.position_combo_attrs:
             combo = getattr(self, combo_attr, None)
-            if combo is not None and str(combo.currentText()).strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower():
+            if (
+                combo is not None
+                and _is_valid_qobject(combo)
+                and str(combo.currentText()).strip().lower()
+                == CUSTOM_POSITION_OPTION_LABEL.lower()
+            ):
                 return True
         return any(
             is_custom_position_selected_for_widget(widget_id, widgets_cfg)
@@ -488,10 +494,14 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             return None
         existing = self._custom_resize_lock_notice_labels.get(section_id)
         if existing is not None:
-            return existing
+            if _is_valid_qobject(existing):
+                return existing
+            # A lazy/deactivated section may already have deleted its QLabel.
+            # Never retain dead wrappers across a section retire/rebuild cycle.
+            self._custom_resize_lock_notice_labels.pop(section_id, None)
 
         anchor_control = getattr(self, str(binding.anchor_attr), None)
-        if anchor_control is None:
+        if anchor_control is None or not _is_valid_qobject(anchor_control):
             return None
         row_widget = anchor_control.parentWidget()
         parent_widget = row_widget.parentWidget() if row_widget is not None else None
@@ -531,7 +541,11 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             section_id = str(binding.section_id)
             lock_active = self._is_custom_resize_lock_active(binding, widgets_cfg)
             controls = [getattr(self, attr, None) for attr in binding.control_attrs]
-            controls = [control for control in controls if control is not None]
+            controls = [
+                control
+                for control in controls
+                if control is not None and _is_valid_qobject(control)
+            ]
             for control in controls:
                 control.setEnabled(not lock_active)
             notice = self._ensure_custom_resize_lock_notice(binding)
@@ -541,6 +555,9 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
                 active_sections.add(section_id)
 
         for section_id, notice in list(self._custom_resize_lock_notice_labels.items()):
+            if not _is_valid_qobject(notice):
+                self._custom_resize_lock_notice_labels.pop(section_id, None)
+                continue
             if section_id not in active_sections:
                 notice.hide()
 
@@ -1034,6 +1051,17 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         container = getattr(self, descriptor.container_attr_name, None)
         if container is None:
             return  # not built; nothing to retire
+
+        # Invalidate any save callback captured against the section being
+        # retired. A fresh activation/deactivation save will arm a new token
+        # after the section ownership has been updated.
+        self._save_coalesce_token += 1
+        self._save_coalesce_pending = False
+
+        # CUSTOM-resize notices are owned visually by the family container but
+        # retained separately for fast refresh. Drop that side reference before
+        # Qt destroys the child so no delayed save can touch a dead wrapper.
+        self._custom_resize_lock_notice_labels.pop(section_id, None)
         try:
             container.setParent(None)
             container.deleteLater()
@@ -1045,6 +1073,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             pass
         if idx >= 0:
             self._subtab_content_built.discard(idx)
+            self._subtab_content_building.discard(idx)
         self._hydrated_widget_sections.discard(section_id)
         self._blocked_unhydrated_save_sections.discard(section_id)
         # Delete control/guard attributes so the descriptor-driven load/save/

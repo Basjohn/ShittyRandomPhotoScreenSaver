@@ -493,8 +493,8 @@ This ranking contains dormant ideas only. Active/promoted work is deliberately a
 5. **Deformable 3D Sphere / Blob Sphere experiment**;
 6. **Organic Growth / Ink Bloom** prototype;
 7. other 3D visualizer experiments;
-8. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use;
-9. **Optional true two-texture artwork crossfade [LOW]** only if the current event-driven fade still has a demonstrated visual discontinuity worth the extra texture residency.
+8. **Games You Follow** — feasibility-gated only after the existing-key `GetGamesFollowed` route is live/fixture-proved; first retained implementation must use both shared `content_extent` axes with side reflow + corner/wheel uniform scaling;
+9. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use without changing ownership.
 
 Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if their first prototypes are abandoned. Their intended identities should not collapse into generic `shatter`, `pixel dissolve`, or `audio sphere` effects.
 
@@ -508,6 +508,6 @@ Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a q
 
 Use FlowContainers in additional Settings sections only where they materially improve alignment and space usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct otherwise lazy bodies.
 
-## 10.2 Optional artwork crossfade [LOW]
+## 10.2 Shared artwork replacement — landed architecture
 
-The shared artwork/metadata fades are landed current architecture and are not future work. A true outgoing+incoming two-texture artwork crossfade is a separate optional experiment only if eyes-on validation proves the current fade insufficient. Measure texture residency and transition cost before keeping it.
+`ArtworkFadeImage` is the single current artwork-swap owner. It retains the displayed texture until the incoming texture is ready, fades the incoming image over it through event-driven frame demand, then releases the inactive texture. Do not add a second per-widget crossfade/timer/texture-residency system to “improve” a consumer locally; fix the shared primitive only when a proven defect exists.

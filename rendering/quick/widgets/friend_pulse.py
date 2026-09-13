@@ -91,14 +91,26 @@ def _title_case_friend_name(value: object) -> str:
     return _FRIEND_NAME_WORD_RE.sub(_normalize_word, text)
 
 
-def _grid_columns_for(capacity: int, authored_width: int) -> int:
-    """Fit readable avatar cells to the normalized authored card width."""
+def _grid_columns_for(
+    capacity: int,
+    authored_width: int,
+    *,
+    custom_horizontal_extent: bool = False,
+) -> int:
+    """Fit readable avatar cells to the current logical card width.
+
+    ``visible_row_capacity`` owns the authored/baseline card, but a CUSTOM
+    horizontal content extent is an explicit request to use additional width.
+    In that mode the width itself may admit additional columns instead of
+    retaining the baseline slot count as an accidental column ceiling.
+    """
 
     normalized_capacity = max(1, min(24, int(capacity)))
     normalized_width = max(420, min(4000, int(authored_width)))
     content_width = normalized_width - 36
     fitted = max(1, int((content_width + _GRID_GAP) // (110 + _GRID_GAP)))
-    return min(normalized_capacity, fitted)
+    column_limit = 24 if custom_horizontal_extent else normalized_capacity
+    return min(column_limit, fitted)
 
 
 @dataclass(frozen=True)
@@ -590,14 +602,13 @@ class FriendPulsePresentationModel(QObject):
         )
         self._snapshot = snapshot
         self._projection = projection
-        message_rows_changed = self._rebuild_message_rows()
         current_state = (
             projection.state,
             projection.primary_metric,
             projection.overflow_count,
             snapshot.online_count,
         )
-        if rows_changed or message_rows_changed or current_state != previous_state:
+        if rows_changed or current_state != previous_state:
             self.stateChanged.emit()
         for index in pulse_indices:
             self.friendChangePulseRequested.emit(index)
@@ -853,16 +864,21 @@ class FriendPulsePresentationModel(QObject):
 
     @Property(int, notify=stateChanged)
     def gridColumns(self) -> int:
-        # A horizontal content-extent override reflows the avatar grid: a wider
-        # box fits more columns, a narrower one fewer (bounded by roster + the
-        # canonical column cap in ``_grid_columns_for``). Falls back to the
-        # authored width outside CUSTOM.
+        # A horizontal content-extent override reflows the avatar grid. The
+        # authored baseline still respects ``visible_row_capacity``; once the
+        # user explicitly widens the CUSTOM content box, width owns how many
+        # readable columns can fit (up to the project-wide 24-friend ceiling).
+        custom_extent = self._content_extent is not None
         width = (
             self._content_extent[0]
-            if self._content_extent is not None
+            if custom_extent
             else self.config.authored_width
         )
-        return _grid_columns_for(self.config.capacity, width)
+        return _grid_columns_for(
+            self.config.capacity,
+            width,
+            custom_horizontal_extent=custom_extent,
+        )
 
     @Property(int, constant=True)
     def visibleCapacity(self) -> int:

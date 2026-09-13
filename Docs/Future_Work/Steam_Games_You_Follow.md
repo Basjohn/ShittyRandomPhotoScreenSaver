@@ -20,13 +20,25 @@ members. `steam_progress` remains the compatibility id until a caller-proven
 migration can retire it; no parallel `games_you_follow` runtime identity,
 provider, settings root, or legacy presenter is to be introduced.
 
-The only currently confirmed relevant source is public, app-specific
-`ISteamNews/GetNewsForApp/v2` (`APP_NEWS`). It has transport/schema evidence for
-an app id, stable item id, title/body, date, feed metadata/tags, and source URL.
-It is **not** a personalised library-wide or account-following endpoint.
-Neither a Steam account's actual followed-game list nor the exact safe policy
-for arbitrary source article hosts is currently proven. Those are G0 admission
-spikes, not implementation assumptions.
+The source shape is now concrete enough to plan against without inventing a
+second authentication model. Steam exposes `IStoreService/GetGamesFollowed/v1`
+for the account's followed AppIDs. Current Steam protocol metadata marks that
+method `eWebAPIKeyRequirement=1`; the request body itself is only the linked
+SteamID64, so the intended SRPSS route is the **same user Web API key + linked
+SteamID64 credential class already admitted for the Steam family**. This must
+still be fixture/live-proved with the exact client request form before product
+code is admitted; if Valve rejects the current user-key path, the feature stays
+dev-gated. Do not add QR/Steam Guard auth, cookies, browser automation, a second
+Steam login/session, or relabel owned/recent/wishlist data as follows.
+
+For each admitted followed AppID, public app-specific
+`ISteamNews/GetNewsForApp/v2` (`APP_NEWS`) supplies bounded news material. It has
+transport/schema evidence for app id, stable item id, title/body, date, feed
+metadata/tags, and source URL and does not require the publisher-only
+`GetNewsForAppAuthed` path. It is not a library-wide personalised feed. The
+remaining G0 work is therefore **credential/request-shape proof, bounded fan-out
+measurement, URL/image policy and fixtures**, not discovery of a speculative
+follow authority.
 
 ## 1. Product contract
 
@@ -58,11 +70,13 @@ spikes, not implementation assumptions.
 
 ## 2. G0 — required feasibility decisions before any product code
 
-- [ ] Decide the follow-set authority. First prove an allowed Steam endpoint
-  actually yields the user's follows with sufficient auth/privacy semantics. If
-  none is available, obtain explicit product approval for a user-authored local
-  `followed_appids` settings list with validated AppIDs. Do not relabel owned or
-  recent games as follows.
+- [ ] Fixture/live-prove the existing-credential follow-set route:
+  `IStoreService/GetGamesFollowed/v1` + linked SteamID64 + the already configured
+  user Web API key, through the existing backend/request/redaction machinery.
+  Confirm response shape, private/unavailable behavior and whether the current
+  client request form is accepted. If this exact route fails, stop the feature at
+  G0; do **not** add QR/Steam Guard auth, cookies, a second Steam session, Store
+  scraping, or an owned/recent/wishlist semantic substitute.
 - [ ] Capture fixture-backed `APP_NEWS` response evidence: identity/date/title,
   direct news-image fields or safely extractable structured media, missing/
   malformed fields, URL forms, empty response, 401/403/429, cache use, and
@@ -79,10 +93,11 @@ spikes, not implementation assumptions.
   reference proven by fixtures, then validate host, scheme, bytes and image
   signature before local caching. If that evidence is absent, use app artwork;
   never fetch or scrape the article page merely to discover an image.
-- [ ] Verify whether public APP_NEWS needs no user key in this client path and
-  define the account/privacy behavior for the chosen follow-set authority. Keys
-  and SteamIDs stay in existing credential/account-private storage, never in
-  Settings, QML roles, logs, fixtures, or action URLs.
+- [ ] Verify the exact public `APP_NEWS` client request form and keep the
+  publisher-only `GetNewsForAppAuthed` endpoint excluded. Define the privacy
+  behavior of `GetGamesFollowed`: key/SteamID stay in existing
+  credential/account-private storage, never in Settings, QML roles, logs,
+  fixtures, cache filenames, or action URLs.
 - [ ] Pin pre-feature HEAD and preserve the `steam_progress` scaffold/default
   migration inputs only. It is not a visual or runtime fidelity target.
 
@@ -93,7 +108,7 @@ publisher-only `NEWS_AUTHED`, a bundled key, or a substitute provider.
 ## 3. Target source, cache, and model seam after G0 passes
 
 ```text
-validated follow-set authority
+existing-key GetGamesFollowed authority
     -> bounded APP_NEWS requests through existing backend/request policy
     -> account-private versioned cache records per approved app/batch
     -> immutable GamesYouFollowSnapshot
@@ -117,9 +132,15 @@ validated follow-set authority
   when policy-approved, and source/cache freshness provenance. Never cache raw
   response bodies merely for convenience.
 - Cache only successful coherent results. Private, failed, malformed, rejected
-  URL, or stale-generation completions never freshen a record. A coherent cached
-  snapshot may render as explicitly cached/stale without creating a new-news
-  claim.
+  URL, or stale-generation completions never freshen a record. **Successful
+  cache records do not expire merely because their freshness window passes.**
+  Freshness controls refresh admission and stale labeling, not usability or
+  deletion. On source failure keep the last-good followed set and last-good news
+  visible indefinitely as cached/stale evidence until a later coherent refresh
+  succeeds. Only explicit account/cache reset, schema rejection/corruption, or a
+  proven identity change may remove that retained evidence. Never substitute
+  owned/recent/wishlist games or unrelated news just because fresh follow data is
+  unavailable.
 - Deduplicate by app id plus stable source item id; define a deterministic
   fallback identity only after the endpoint fixture proves which stable fields
   survive. No persistent reading-history/dismissal database enters v1 unless a
@@ -184,7 +205,7 @@ AND widgets.steam.enabled
 AND widgets.steam_progress.enabled
 AND --devsteam
 AND a real Games You Follow presentation consumer
-AND G0-approved source/follow-set configuration
+AND the G0-proved existing-key GetGamesFollowed source configuration
 ```
 
 - Build one shared owner per runtime generation and one lease per admitted
@@ -193,9 +214,11 @@ AND G0-approved source/follow-set configuration
 - Use only canonical `widgets.steam.refresh_minutes` for periodic refresh after
   G0 proves an appropriate bounded request budget. Manual refresh is one bounded
   source request through that same owner, never a new loop.
-- Cache-first startup delivers an accepted snapshot before optional refresh.
-  Unchanged snapshot/model data causes no row rebuild, image churn, or layout
-  solve. Settings opening imports/starts nothing.
+- Cache-first startup delivers the last-good accepted snapshot before optional
+  refresh, regardless of age. An old snapshot is marked cached/stale but remains
+  useful; refresh failure never clears it. Unchanged snapshot/model data causes
+  no row rebuild, image churn, or layout solve. Settings opening imports/starts
+  nothing.
 - Last effective lease release stops/suppresses schedule work, cancels/fences
   completion, clears feature-only selected/action/artwork state, and retires the
   shared owner. It must not shut down Steam work legitimately owned by the other
@@ -228,28 +251,67 @@ or `portrait`; headline line clamp, alignment, and explicit truncation policy
 must leave a measured readable text rectangle. The optional reveal is only a
 short-lived event-driven tooltip on an elided visible title, not a persistent
 animation/cadence.
-- Declare the stable preferred outer dimensions to the ordinary host and use
-`custom_layout_resize_mode="ordinary_uniform"`, shared whole-card CUSTOM
-resizing, scale-aware strokes, shared 40% absolute floor, and edit Save/Cancel.
-No family-local geometry persistence, resize timer, placement solver, or
-stacking workaround.
-- Outside global CUSTOM, enter the normal stacking/autofit predictor with exact
-single/double-row geometry. Global CUSTOM disables stacking for this card just
-as for every other ordinary widget.
+- Declare stable preferred **outer** dimensions for both `single_row` and
+  `double_row` from the start. They are authored presentation variants, not
+  content-count-derived sizes, and each must expose truthful preferred width and
+  height to the ordinary host/predictor.
+- Opt into the already-landed shared `content_extent` contract on **both axes in
+  the first implementation**. This is not deferred polish. Horizontal and
+  vertical side handles must reflow the retained card at constant uniform scale;
+  corners and wheel must continue to use the one shared whole-card uniform
+  transform. No Games You Follow code may add family-local resize persistence,
+  a second geometry owner, a QML resize timer/debounce, or a private placement
+  solver.
+- Horizontal `content_extent` changes only the logical content width: artwork and
+  text lanes reallocate inside the existing row count, headline/source metadata
+  gain or lose measured readable width, and normal elision/truncation remains
+  authoritative. It must not silently switch `single_row`/`double_row`, change
+  source ranking, or alter the configured visible story count.
+- Vertical `content_extent` changes only the logical content height: row height,
+  internal spacing/padding and artwork crop/allocation may reflow within the
+  selected `single_row` or `double_row` variant. It must not create additional
+  source rows, mutate the persisted `view`, or turn accepted-item count into a
+  geometry authority.
+- Family-owned direct-axis readability floors are allowed only through the
+  shared descriptor/session policy. G3 must measure and declare the minimum
+  logical width/height needed for the selected row variant and artwork/text
+  contract; do not hide a second clamp in QML or persist those floors as product
+  Settings. The generic shared whole-card uniform floor still governs
+  corner/wheel scaling.
+- A side-reflowed card remains one retained presentation: subsequent
+  corner/wheel resize uniformly scales the complete reflowed result, including
+  branded header, artwork, text and interaction surfaces. Save/Cancel/re-entry
+  must round-trip uniform scale and `content_extent` without compounding either.
+- Shared Restore Size clears Games You Follow `content_extent` and returns to the
+  active view variant's canonical authored outer size/shape while preserving
+  current X/Y/display. It must not invoke stacking/auto-fit or learn its target
+  from committed CUSTOM extent.
+- Layout slots must round-trip the visible `view` (`single_row`/`double_row`),
+  ordinary ON/OFF, uniform CUSTOM geometry and `content_extent` together, while
+  source/cache/account state remains excluded. A slot load may therefore restore
+  the same row variant and the same horizontal/vertical reflow that was visible
+  when saved without creating another settings authority.
+- Outside global CUSTOM, enter the normal stacking/autofit predictor with the
+  active variant's exact preferred outer geometry. Global CUSTOM disables
+  stacking for this card just as for every other ordinary widget. Cross-display
+  edit transfer must preserve the logical extent/scale contract across DPRs via
+  the existing session/owner path rather than pixel-copying a family-local box.
 
 ## 6. Settings, defaults, and migration
 
 - Retain stable settings root `widgets.steam_progress` for v1 compatibility,
 but change all new Settings labels to **Games You Follow**. Do not create a
 second `widgets.games_you_follow` authority.
-- G0 decides the follow-list mechanism. If locally authored follows are approved,
-store only canonical validated AppIDs in the existing settings/default pipeline;
-never titles, source URLs, keys, or account identity. Give add/remove/import UI
-its own lazy, transactional, closed-by-default bucket state.
+- The product follow list is source-owned by the G0-proved
+  `GetGamesFollowed` route. Do not create a parallel Settings-authored follow
+  list while that contract is valid; that would become a second semantic
+  authority. Never store titles, source URLs, keys, or account identity in the
+  Games You Follow settings payload.
 - Required card settings: enabled; ordinary position/monitor; font family/size;
   view (`single_row`/`double_row`); text alignment (`left`/`center`/`right`);
   artwork shape (`wide` default, `square`, `portrait`); headline truncation
-  threshold. Steam refresh and privacy remain family-owned, not duplicated here.
+  threshold. Steam refresh/privacy/credentials and the followed-game set remain
+  family/source-owned, not duplicated here.
 - Bound and normalise every persisted enum/int at the settings/config seam.
 Migration retains existing generic scaffold position/font/card-style fields,
 sets all new fields to canonical defaults, and removes only caller-proven dead
@@ -291,8 +353,15 @@ only index plus semantic action.
 unapproved URL, and helper failure; Store/source routes use the established
 diagnostic versus normal-screensaver behavior.
 - [ ] Predictor/descriptor/normalisation tests prove normal stacking, global
-CUSTOM dormancy, uniform resize, 40% floor, stale Save/Cancel replay, and one
-truthful overflow summary.
+  CUSTOM dormancy, horizontal-only `content_extent`, vertical-only
+  `content_extent`, corner/wheel whole-card uniform scaling, direct-axis logical
+  floors, Restore Size, stale Save/Cancel/re-entry replay, slot replay of
+  `single_row`/`double_row` + extent state, and one truthful overflow summary.
+- [ ] Geometry integration covers both row variants at authored size, after
+  horizontal-only reflow, after vertical-only reflow, after combined side
+  reflow followed by corner/wheel scale, and after cross-display/DPR transfer;
+  no path may compound scale, mutate source settings, or create a family-local
+  geometry payload.
 
 ### Physical acceptance
 
@@ -300,9 +369,14 @@ truthful overflow summary.
   scoped follows, stale/private/failure copy, one- and two-row readability,
   long headlines, all alignments, truncation/full-title behavior, news-image-first
   selection, all shapes/app-art fallback, and Store/article click routes.
+- [ ] Installed geometry pass on both row variants: drag left/right and top/bottom
+  side handles through compact and expanded extents, then corner/wheel-scale the
+  reflowed card, Save/Cancel/re-enter, Restore Size, load a saved layout slot,
+  and move between mixed-DPI displays. Require stable X/Y/display ownership,
+  no row-mode mutation, no scale compounding and no clipped interaction lanes.
 - [ ] Installed two-display/DPI/theme/CUSTOM/stacking soak: one owner, no
-refresh multiplication, bounded task/cache/image count, clean last-card/family
-retirement, and helper fail-closed behavior.
+  refresh multiplication, bounded task/cache/image count, clean last-card/family
+  retirement, and helper fail-closed behavior.
 - [ ] Compare enabled versus disabled Steam family under a realistic background;
 do not close on average FPS alone. Reject added frame-cadence work, repeated
 unchanged model mutation, unbounded follow scans, or source/image request fanout.
@@ -329,12 +403,17 @@ canonical cadence, source/action/artwork fencing, and cardinality tests.
 ### G3 — retained presentation and actions
 
 - [ ] Add one retained Quick model/QML card, both row variants, semantic
-Store/article signals, and no business/network exposure in QML.
+  Store/article signals, and no business/network exposure in QML.
+- [ ] Implement both-axis shared `content_extent` consumption in that first
+  retained card: measured horizontal/vertical reflow, family logical side floors,
+  corner/wheel whole-card scale, Restore Size, and no local geometry owner.
 
 ### G4 — settings, normalisation, and admission
 
 - [ ] Add lazy transactional Settings/default/migration/descriptor/predictor
-work, ordinary/CUSTOM proof, and dev-gated preview admission.
+  work, including both content-extent axes, active-view preferred geometry,
+  layout-slot view/extent replay, ordinary/CUSTOM proof, mixed-DPI edit transfer,
+  and dev-gated preview admission.
 
 ### G5 — acceptance and public-admission decision
 

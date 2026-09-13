@@ -1,6 +1,6 @@
 # Steam Friend Pulse — Current-Architecture Product Decomposition
 
-Status: **IMPLEMENTED / PUBLIC / AWAITING LIVE + INSTALLED ACCEPTANCE**
+Status: **IMPLEMENTED / PUBLIC — CURRENT ARCHITECTURE REFERENCE**
 Last updated: 2026-09-13
 Current sequencing authority: `Current_Plan.md`  
 Stable widget id: `friend_pulse`
@@ -21,33 +21,42 @@ family.
 
 ### 0.1 Landed implementation state
 
-F0-F6 are implemented. The retained card defaults to a dynamically spaced and centred **Avatar Grid** with eight visible
-friend slots; width determines one to six readable columns, and the final incomplete row is centred. A selectable compact
-**Activity Rows** view consumes the same stable row model and accepted snapshot. Both are virtualized fixed viewports:
-all online friends lead the roster, offline friends fill remaining visible space, and every accepted friend remains
-scroll-reachable without allowing source cardinality to change card geometry. Grid names are optional, centred beneath
-avatars and independently size-adjustable. Tiles/rows show privacy-permitted identity, normalized persona presence and
-the current game; Strict mode groups anonymously and exposes neither names, avatars nor per-friend actions.
+The retained card defaults to a dynamically spaced and centred **Avatar Grid** with eight authored visible friend slots;
+a selectable compact **Activity Rows** view consumes the same stable row model and accepted snapshot. Both are virtualized
+viewports: all online friends lead the roster, pinned friends retain priority inside the permitted projection, offline
+friends fill remaining visible space, and every accepted friend remains scroll-reachable without allowing source
+cardinality to own ordinary card height. Authored/non-CUSTOM grid width respects configured visible capacity; a CUSTOM
+horizontal `content_extent` deliberately decouples columns from that baseline capacity and lets readable width admit more
+columns up to the project-wide 24-friend ceiling. The final incomplete row remains centred. Grid names are optional,
+Title-Case/bold/two-line fit, centred beneath avatars and independently size-adjustable. Tiles/rows show privacy-permitted
+identity, ALL-CAPS presence/game chrome, offline-avatar desaturation and hard clipping. The redundant lower-right avatar
+presence dot is retired. Strict mode groups anonymously and exposes neither names, avatars nor per-friend actions.
 
 The source/cache/runtime path is cache-first, uses existing Steam locks/request coordination/backoff/redaction, and has
-one Friend Pulse owner per runtime generation shared by every display. Rich avatar hydration follows only the current
-bounded viewport and delivers local `file:` sources. Zero admitted consumers means no source refresh, avatar work or live
-cadence; retirement fences source and avatar completion and discards bounded comparison state.
+one Friend Pulse owner per runtime generation shared by every display. A coherent successful FriendList/PlayerSummaries
+cache has **no age-expiry semantics**: freshness decides whether refresh is due and whether presentation is marked
+cached/stale, while refresh failure keeps last-good data visible indefinitely. Rich avatar hydration follows only the
+current bounded viewport and delivers local `file:` sources. Zero admitted consumers means no source refresh, avatar work
+or live cadence; retirement fences source/avatar completion and discards bounded comparison state without deleting
+last-good account cache.
 
 Validated Steam IDs are permitted in the user's account-private Friend Pulse cache and the shared runtime owner. The
 owner maps them to opaque fingerprints, strips them before delivering presentation snapshots, and QML emits only a row
-index. An admitted friend avatar requests a directed Steam chat with public-profile fallback. Each friend
-also has one small three-dot action menu offering View Profile, Start Chat, Copy Steam ID, and View Game in Store when a
-current AppID exists. The popup is retained once per card, revalidates the current row in Python and uses the shared
-pointer-suppression seam. No Join Game item is shown because PlayerSummaries proves only an AppID, not a joinable lobby,
-server or connect token. In interactive MC/diagnostic runs the action router tries the Steam client; normal screensaver
-runs send approved HTTPS profile/Store targets through the existing secure URL helper. No Steam message body or
-individual message notification is sourced or rendered.
+index. Hover reveals a separate pin/favourite affordance; any number of accepted friends may be pinned and the
+account-private persistence stores opaque friend fingerprints rather than presentation IDs. An admitted friend avatar
+requests a directed Steam chat with public-profile fallback. Each friend also has one small three-dot action menu offering
+View Profile, Start Chat, Copy Steam ID, and View Game in Store when a current AppID exists. The popup is retained once per
+card, revalidates the current row in Python and uses the shared pointer-suppression seam. No Join Game item is shown because
+PlayerSummaries proves only an AppID, not a joinable lobby/server/connect token. In interactive MC/diagnostic runs the
+action router tries the Steam client; normal screensaver runs send approved HTTPS profile/Store targets through the
+existing secure URL helper. The abandoned FriendMessages/unread experiment is not product architecture: no unread source,
+message rows/menu, second Steam session, QR auth or message backoff traffic remains.
 
-Focused automated source/runtime/privacy/cache/request/Settings/QML/binder/cardinality/normalization checks and real
-Quick standard/busy/40%-floor captures are GREEN. Friend Pulse is now a normal visible Steam-family member, disabled by
-default at its ordinary member toggle. F7 remains open only for a real connected-account readability/privacy pass and
-installed two-display/DPI/theme/CUSTOM/retirement soak; `--devsteam` now owns only unfinished Games You Follow.
+Friend Pulse is a normal visible Steam-family member, disabled by default at its ordinary member toggle. The implementation
+also exposes a default-on themed `Show Friends Online Count` option that renders `X FRIEND(S) ONLINE` in the top-right
+summary area from the already-owned snapshot count; it adds no source work. Shared CUSTOM side-axis reflow and Restore Size
+are current architecture, not Friend Pulse-local geometry systems. `--devsteam` now owns only unfinished Games You Follow.
+Live/installed acceptance debt is tracked only in `Current_Plan.md`; this document describes the landed product contract.
 
 ## 1. Current foundation to reuse
 
@@ -101,13 +110,14 @@ own” is not a product requirement.
 
 ### 3.2 Useful summary
 
-The compact card should provide:
+The compact card provides:
 
 - header: **FRIEND PULSE** using the current shared Steam/branded-header vocabulary;
-- primary metric: number of friends online, when source state is authoritative;
+- optional default-on top-right **`X FRIEND(S) ONLINE`** summary when a ready/stale snapshot exists;
 - bounded visible viewport with every accepted friend retained in the scrollable model;
-- secondary aggregate with playing and total friend counts;
 - a brief theme-colored event glow only for transitions proven from two accepted snapshots.
+
+The former `playing / total friends` summary rail and the abandoned unread-message summary are not current UI contracts.
 
 All online friends precede offline friends. Playing/change state may order friends within the online partition, but must
 never erase online-idle friends. Offline friends fill any remaining visible slots and remain available by scrolling.
@@ -117,8 +127,10 @@ never erase online-idle friends. Offline friends fill any remaining visible slot
 The default visible capacity is **eight**, user-adjustable from one through twenty-four. It is configuration-owned rather
 than a height that expands/contracts with every refresh.
 
-Configured capacity and authored width own preferred geometry. Momentary source count never owns card height. A retained
-`GridView`/`ListView` scrolls the full model instead of truncating it or creating an eager delegate tree.
+Configured capacity and authored width own the baseline preferred geometry. Momentary source count never owns ordinary
+card height. A retained `GridView`/`ListView` scrolls the full model instead of truncating it or creating an eager delegate
+tree. CUSTOM horizontal content extent is presentation state and may admit additional readable grid columns beyond the
+configured baseline capacity; this does not mutate `visible_row_capacity` or the card's authored defaults.
 
 ### 3.4 Empty / private / stale / failure states
 
@@ -127,8 +139,8 @@ These states are semantically distinct:
 - authoritative success + empty accepted roster -> honest **No friends** / equivalent quiet state;
 - private friend list -> **Private / unavailable**, never “0 friends”;
 - missing credentials/profile -> existing Steam connection/setup semantics;
-- rate-limited/network failure with usable cache -> cached state visibly marked stale using the Steam family’s existing
-  connection/staleness vocabulary;
+- rate-limited/network failure with usable cache -> keep the last-good roster visible indefinitely and mark it cached/stale
+  using the Steam family’s existing connection/staleness vocabulary; age never deletes a coherent successful cache;
 - failure with no accepted cache -> explicit unavailable/error state;
 - source response missing a friend/game field -> omit/unknown, never fabricate.
 
@@ -301,7 +313,8 @@ Presentation requirements:
 
 - stable root/list-model identity across ordinary snapshot updates;
 - selectable Avatar Grid and Activity Rows views over that same retained model;
-- deterministic width-derived one-to-six-column spacing and incomplete-row centering derived from configured capacity;
+- deterministic width-derived grid spacing and incomplete-row centering: authored layout respects configured capacity,
+  while CUSTOM horizontal extent may use additional readable columns up to the 24-friend ceiling;
 - optional centred grid names plus a bounded independent name-font setting;
 - one retained per-card three-dot action popup; never one popup per delegate and never the global right-click menu;
 - presentation-safe presence plus current-game details in both views;
@@ -316,11 +329,14 @@ Presentation requirements:
 
 Friend Pulse inherits the ordinary-widget contract, including:
 
-- descriptor `custom_layout_resize_mode="ordinary_uniform"` / current equivalent;
-- shared whole-card uniform CUSTOM resizing and absolute 40% floor;
+- descriptor/shared `ordinary_uniform` outer scale plus horizontal/vertical `content_extent` presentation reflow;
+- corners/wheel remain whole-card uniform; side extent changes logical content only and does not mutate Settings;
+- shared Restore Size clears extent and returns to separately retained authored geometry while preserving X/Y/display and
+  remaining in CUSTOM;
+- shared whole-card uniform normalization/40% floor outside family side-drag policy;
 - global CUSTOM disables authored stacking/adjacency rather than family code compensating locally;
 - non-CUSTOM shared stacking/auto-fit participation;
-- configured-capacity preferred geometry;
+- configured-capacity preferred baseline geometry;
 - shared Widget Theme / Style Overrides / card border / header semantics;
 - shared hover/click glow behavior;
 - shared edit-mode X / duplicate / Save / Cancel ownership;
@@ -416,7 +432,9 @@ current closed-by-default / one-open-per-local-scope contract.
 - bucket/default schema updates only where genuinely needed;
 - remove obsolete mock card presentation path if caller proof says it is dead.
 
-### F7 — acceptance — automated gate GREEN, live/installed cells pending
+### F7 — retained acceptance checklist
+
+Implementation is landed. Live/installed validation status is owned only by `Current_Plan.md`; this section preserves the durable acceptance contract.
 
 - deterministic fixtures;
 - request/backoff/cache tests;
@@ -445,7 +463,7 @@ reactivity or freshness.
 
 ## 14. Removal boundary
 
-Until accepted, the implementation should remain removable as:
+The implementation remains deliberately removable as:
 
 - Friend Pulse preparation/runtime/model/QML implementation;
 - bounded descriptor/registration wiring;
@@ -457,7 +475,7 @@ Removing Friend Pulse must not require editing Achievement Pulse or Abandonment 
 
 ## 15. Acceptance summary
 
-Friend Pulse is GREEN only when:
+The durable Friend Pulse contract is:
 
 - it retains the complete accepted roster, orders all online friends first and fills remaining space with offline friends;
 - private/unavailable is never misrepresented as zero activity;

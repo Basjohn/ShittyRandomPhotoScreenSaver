@@ -15,6 +15,7 @@ Follow.
 - Unknown/private/unavailable data is a first-class state. Do not infer dates, ownership, friends, or progress from absence.
 - No authenticated Store scraping, cookies, browser automation, Steam Guard handling, or Steam password handling.
 - Public app-news is allowed as app-specific source material, not as a personalized whole-library feed.
+- Persistent Steam caches are last-good evidence, not expiring leases. Freshness windows decide whether refresh is due and whether presentation is marked cached/stale; they do **not** make a successful cache unusable. Failed/private/invalid refreshes never overwrite or freshen last-good cache.
 
 ## Authentication Model
 
@@ -31,8 +32,9 @@ Follow.
 | Recently played games | `IPlayerService/GetRecentlyPlayedGames/v1` | Conditional | app id, recent playtime, ordered recent app list | Requires user key and profile id; response depends on account visibility and Steam behavior | Achievement Pulse may use this for dynamic recent selection after fixture/live validation |
 | Owned library | `IPlayerService/GetOwnedGames/v1` | Conditional; locally proven | app id, title/icon when appinfo is included, playtime forever, `rtime_last_played` when returned | Returns owned games only when owned-game details are visible to caller. Valve's method page does not promise the response field list, so runtime validation remains required | Library index and Abandonment candidate foundation; cannot fabricate missing apps or dates |
 | Per-app achievements | `ISteamUserStats/GetPlayerAchievements/v1` + `GetSchemaForGame/v2` | Conditional | achievement list, unlock state/time, schema totals/names, achieved/unachieved icon URLs when supplied | Requires user key, profile id, app id; per-app availability and icon fields may vary | Achievement Pulse uses schema display names/icons; Abandonment ranking reuses bounded cache hints, then its worker may fetch exactly the committed selected app for enabled count/latest-unlock shelves |
-| Friends | `ISteamUser/GetFriendList/v1` + `GetPlayerSummaries/v2` | Conditional | relationship list, persona/avatar/current game summary | Private friends list returns unauthorized; unavailable must not become “everyone offline” | Friend Pulse can proceed only with privacy-aware empty states |
-| App news | `ISteamNews/GetNewsForApp/v2` | Transport/schema proven; product use conditional | app id, stable item id, title/body, date, feed metadata, tags, URL | Public app-specific endpoint; not personalized and not library-wide | Games You Follow may use only a bounded explicitly followed-app set after follow-authority, URL-policy, and response-budget G0 evidence |
+| Friends | `ISteamUser/GetFriendList/v1` + `GetPlayerSummaries/v2` | Conditional | relationship list, persona/avatar/current game summary | Private friends list returns unauthorized; unavailable must not become “everyone offline” | Friend Pulse uses this through cache-first, privacy-aware projection |
+| Followed games | `IStoreService/GetGamesFollowed/v1` | **Target source; existing-key fixture/live proof still required** | followed AppIDs for linked SteamID64 | Steam protocol metadata marks the method as requiring a Web API key. Intended SRPSS route is the existing user Web API key + linked SteamID64; if that route is rejected, the feature stays dev-gated rather than adding another auth model | Games You Follow follow-set authority; never substitute owned/recent/wishlist semantics |
+| App news | `ISteamNews/GetNewsForApp/v2` | Transport/schema proven; product use conditional | app id, stable item id, title/body, date, feed metadata, tags, URL | Public app-specific endpoint; not personalized and not library-wide. Publisher-only `GetNewsForAppAuthed` remains excluded | Games You Follow may fan out only across the bounded accepted followed-AppID set after G0 budget/URL/image evidence |
 | General per-game last played | `IPlayerService/GetOwnedGames/v1` `rtime_last_played` | Conditional; locally proven | Unix timestamp plus explicit verified/unknown provenance | A redacted controlled-account probe found the field on every returned owned row and a positive timestamp on every played row. Missing, zero, non-numeric, or future values remain unknown; account privacy/unavailability is not “never played” | Abandonment Issues may make smart age claims only for individually verified rows |
 | Single-game playtime | `IPlayerService/GetSingleGamePlaytime/v1` | Unavailable | app playtime only for associated app key | Requires Web API key associated with that app | Not a general client feature |
 | Publisher app ownership / authed news | publisher-only endpoints | Excluded | none | Requires publisher key and secure server, never direct clients | Must not be called or exposed as fallback |
@@ -52,6 +54,7 @@ Follow.
 
 - Proceeds through the implemented cache-first path without `--devsteam`; the card remains disabled by default until the user enables it.
 - Maintained fixtures cover private friend list, empty friend list, current-game summaries, missing avatars, and partial player summaries.
+- The 10-minute Friend Pulse source window is **freshness only**. Any coherent last-good FriendList/PlayerSummaries cache remains usable indefinitely as cached/stale data; a failed refresh returns that cache and does not clear or overwrite it. Explicit account/cache reset or cache corruption/schema rejection are separate boundaries.
 - Default display is a complete online-first roster with offline friends filling remaining viewport space; playing/change
   evidence enriches and orders rows without filtering non-playing friends. Private/unavailable must not be shown as an
   offline roster.
@@ -70,18 +73,17 @@ Follow.
 
 ### Games You Follow
 
+- The follow-set authority is no longer speculative: target `IStoreService/GetGamesFollowed/v1` using the **existing** user Web API key + linked SteamID64. Current protocol metadata marks it Web-API-key gated. G0 still requires exact fixture/live proof that SRPSS's existing credential path is accepted before product code is admitted.
 - The public app-news transport and stable item/date/url/feed fields are proven for a bounded app-specific request.
-- Production remains blocked on the user's follow-set authority, safe source-article URL/redirect policy, per-follow-set
-  response/candidate budget, and malformed/noise/failure fixtures. It must not scan the whole library frequently by
-  default or pretend public app news is personalized progress.
-- `NEWS_AUTHED`/publisher endpoints remain excluded; no Store scraping, cookies, browser automation, or implicit
-  owned/recent-game substitution is an allowed follow/news fallback.
+- Production remains blocked on that existing-credential live proof, safe source-article URL/redirect policy, per-follow-set response/candidate budget, and malformed/noise/failure fixtures. It must not scan the whole library frequently by default or pretend public app news is personalized progress.
+- Cache policy is cache-first and non-expiring: last-good followed AppIDs and last-good admitted news remain visible indefinitely as cached/stale evidence when refresh fails. Freshness affects refresh and labeling only. Never replace stale followed data with owned/recent/wishlist games.
+- Publisher `NEWS_AUTHED` endpoints remain excluded; no QR/Steam Guard auth, second Steam session, Store scraping, cookies, browser automation, or implicit semantic substitution is an allowed fallback.
 
 ## Implementation Consequences
 
 - `core/steam/backend.py` owns endpoint metadata, source status, redaction, source exclusion, and fixture-safe transport.
 - `core/steam/models.py` owns frozen result/source/view data types.
-- `core/steam/cache.py` owns versioned atomic cache envelopes. Failed/private/invalid responses must not freshen cache.
+- `core/steam/cache.py` owns versioned atomic cache envelopes. Failed/private/invalid responses must not freshen cache. Successful cache records have no TTL-deletion semantics: age is freshness metadata, not permission to discard last-good evidence.
 - Source refreshes are process-coordinated by opaque profile/cache identity. A successful response authoritatively freshens its source record even when byte-equivalent; immediate followers reuse that fresh record, while unchanged visible models avoid repaint/artwork churn.
 - `core/steam/request_policy.py`, `profile_state.py`, `assets.py`, `events.py`, and `mock_backend.py` complete the Phase 2 non-UI foundation: coalescing, stale-generation drops, bounded backoff, account-private policy state, validated asset cache, narrow data-ready publication, and fixture-only backend injection.
 - `core/steam/achievement_pulse.py`, `achievement_pulse_cache.py`, and the Steam card widget/components own the first real card path and current family baseline: cache resolution before first reveal, up-to-five recent candidate achievement probes followed by selected-schema-only refresh, positive-unlock-time selection order with stable missing-evidence fallback, immediate multi-display follower suppression after a successful source batch, up to five latest unlock labels, optional measured-text-adjacent primary schema-icon flair, achievement-recency Previous presentation, validated Wide header plus Square/default Portrait library artwork, widened fitted Unlocked geometry, collision-free whole-rail compositions, compact or default-on all-field double capsules with independent font-driven growth, alpha-capable capsule styling, and presentation-only GUI preferences that never become source authority.
@@ -95,4 +97,5 @@ Follow.
 - Steam Achievements: https://partner.steamgames.com/doc/features/achievements
 - `ISteamUser`: https://partner.steamgames.com/doc/webapi/ISteamUser
 - `ISteamNews`: https://partner.steamgames.com/doc/webapi/ISteamNews
+- `IStoreService/GetGamesFollowed` protocol/API inventory: https://github.com/SteamTracking/SteamTracking/blob/master/API/IStoreService.json
 - Steam Library Assets: https://partner.steamgames.com/doc/store/assets/libraryassets

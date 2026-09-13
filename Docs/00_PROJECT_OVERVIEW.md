@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-09-07
+Last updated: 2026-09-13
 
 SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated transitions, a
 high-fidelity multi-mode visualizer, configurable runtime overlays and durable settings.
@@ -47,12 +47,31 @@ Bubble is included and its capability policy is no longer an accepted place to h
 ## Ordinary widget pattern
 
 ```text
-neutral runtime/backend
+canonical settings/capability
+-> neutral runtime/backend owner
 -> coherent accepted state
 -> stable presentation model
 -> retained family QML
 -> OrdinaryWidgetPresentationHost
+-> one shared CUSTOM/session geometry authority
 ```
+
+Uniform whole-card scaling remains the default normalization contract for new ordinary widgets. Families that genuinely
+benefit from presentation reflow may opt into the shared `content_extent` side-axis contract instead of inventing local
+resize persistence: side handles change a logical content box, corners/wheel keep one uniform outer transform, family
+policy may supply bounded logical side-drag floors, and Restore Size returns to separately retained authored geometry
+without changing CUSTOM X/Y/display or waking non-CUSTOM stacking. Current consumers include Friend Pulse, Reddit, Gmail,
+System Stats and Media. This is an extension of the same normalization/session architecture, not a second layout system.
+
+Provider/runtime lifetime remains independent from pixels. Shared owners use real consumer cardinality; lazy Settings
+family bodies and retained presentation wrappers must invalidate queued UI work and clear retained QObject references
+before retirement. Dormant families must not keep provider/backend/sampler work alive merely because Settings metadata or
+common Quick infrastructure is imported.
+
+Successful caches are last-good evidence, not leases. Freshness decides whether refresh is due and whether presentation
+is labelled cached/stale; age alone never makes a coherent cache unusable. Refresh failure therefore preserves the last
+accepted cached experience until explicit user/account/cache reset, schema rejection/corruption, or a proven identity
+change invalidates it.
 
 ## Migration continuity policy
 

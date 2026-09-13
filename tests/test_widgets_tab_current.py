@@ -31,6 +31,7 @@ from core.settings.visualizer_mode_registry import (
 )
 from core.settings.visualizer_presets import MODE_KEY_PREFIXES
 from rendering.widget_descriptors import get_widget_settings_section_descriptors
+from rendering.widget_descriptors import get_widget_custom_resize_lock_descriptors
 from rendering.widget_descriptors import get_widgets_tab_settings_section_descriptors
 from rendering.widget_descriptors import get_widget_position_option_labels
 
@@ -52,6 +53,55 @@ def widgets_tab(qt_app, settings_manager):
 
 class TestWidgetsTab:
     """Tests for Widgets tab UI component."""
+
+
+    @pytest.mark.parametrize(
+        "section_id",
+        [descriptor.section_id for descriptor in get_widget_custom_resize_lock_descriptors()],
+    )
+    def test_lazy_widget_family_retire_rebuild_is_qobject_safe(
+        self,
+        qt_app,
+        settings_manager,
+        section_id,
+    ):
+        """Every retireable family must drop dead child refs before delayed saves."""
+
+        tab = WidgetsTab(settings_manager, lazy_sections=True)
+        try:
+            idx = tab._widget_section_index(section_id)
+            assert idx >= 0
+            tab._build_lazy_subtab_content(idx)
+            assert idx in tab._subtab_content_built
+
+            # Populate any family-owned CUSTOM-lock notice side reference. The
+            # production regression was a QLabel retained here after its family
+            # container had been deleteLater()'d.
+            tab._refresh_custom_resize_lock_state()
+            assert section_id in tab._custom_resize_lock_notice_labels
+
+            tab._retire_widget_section(section_id)
+            qt_app.processEvents()
+
+            assert idx not in tab._subtab_content_built
+            assert idx not in tab._subtab_content_building
+            assert section_id not in tab._custom_resize_lock_notice_labels
+
+            # Match the activation-toggle path: saving after retirement must be
+            # safe even after Qt has processed the child deletions.
+            tab._save_settings()
+            token = tab._save_coalesce_token
+            tab._save_settings_now(token)
+            tab._refresh_custom_resize_lock_state()
+
+            # Reactivation must be a real rebuild, not reuse of dead wrappers.
+            tab._build_lazy_subtab_content(idx)
+            qt_app.processEvents()
+            assert idx in tab._subtab_content_built
+            tab._refresh_custom_resize_lock_state()
+        finally:
+            tab.deleteLater()
+            qt_app.processEvents()
 
     def test_widgets_tab_creation(self, qt_app, settings_manager):
         """WidgetsTab can be created and wired to SettingsManager."""

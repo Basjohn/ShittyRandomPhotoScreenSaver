@@ -48,7 +48,7 @@ Before any performance patch, confirm every relevant box remains binding:
 - [ ] Media remains native-event-owned plus slow reconciliation/watchdog; no fast polling resurrection.
 - [ ] Cursor Halo passive pointer motion remains native `QCursor` presentation; do not turn pointer motion back into QML scene invalidation.
 - [ ] R-63 keeps `black=0`; a harmless bounded shared-edge device-pixel overshoot is preferable to exact-cover logic that can revive fullscreen-flip black flashes.
-- [ ] Ordinary CUSTOM uniform scale remains absolute/persisted with the shared 40% floor; Visualizer keeps independent scale vs viewport extent.
+- [ ] Ordinary CUSTOM uniform scale remains absolute/persisted with the shared 40% floor. Any admitted family `content_extent` remains orthogonal session-owned reflow state and must not become a second scale/normalization/cadence authority. Visualizer keeps independent scale vs viewport extent.
 - [ ] No silent performance fallback changes renderer, presenter, source owner, cadence owner, analysis owner, or degraded observation semantics.
 
 ## 3. What performance work should target

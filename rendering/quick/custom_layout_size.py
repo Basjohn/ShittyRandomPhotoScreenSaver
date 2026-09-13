@@ -127,9 +127,10 @@ def quick_custom_content_extent_minimum_size(
         return quick_custom_minimum_size(item)
     scale = max(1.0e-6, float(item.resize_scale))
     width, height = minimum
+    generic_floor = quick_custom_minimum_size(item)
     return QSize(
-        max(CUSTOM_LAYOUT_MIN_WIDGET_SIZE, int(round(float(width) * scale))),
-        max(CUSTOM_LAYOUT_MIN_WIDGET_SIZE, int(round(float(height) * scale))),
+        max(generic_floor.width(), int(round(float(width) * scale))),
+        max(generic_floor.height(), int(round(float(height) * scale))),
     )
 
 

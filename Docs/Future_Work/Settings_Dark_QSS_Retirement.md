@@ -1,6 +1,6 @@
 # Settings `dark.qss` Retirement
 
-Last updated: 2026-09-07
+Last updated: 2026-09-13
 
 ## Purpose
 
@@ -10,9 +10,11 @@ The permanent theme/backdrop architecture remains `Docs/Architecture/Settings_Th
 
 The objective is deliberately strict:
 
-> **Delete `themes/dark.qss` with zero intended pixel or interaction change.**
+> **Retire every production dependency on `themes/dark.qss` with zero intended pixel or interaction change, then remove any remaining packaged/source asset.**
 
 `dark.qss` is legacy debris, but the current product looks correct. Its removal is a dependency/ownership cleanup, not an opportunity to redesign controls, tweak spacing, “improve” colours, change native materials, or simplify fragile geometry by eye.
+
+**2026-09-13 reconciliation:** a current GODZIP/workspace may not physically contain `themes/dark.qss`, while `ui/settings_theme.py` and `ui/system_tray.py` still explicitly attempt to load it. Treat that as a packaging/source-state discrepancy to audit, not as successful retirement. Stage 0 must establish the actual installed/source asset provenance and current callers before any selector migration or deletion work. Never recreate the legacy file merely so it can later be deleted.
 
 ---
 
