@@ -129,11 +129,11 @@ For a new mode or any meaningful reactivity change, read `Docs/Guides/Visualizer
 - `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md` — Bubble aspect response and presentation cost
 - `Docs/Future_Work/Edit_Layout_Live_Commit.md` — Live Edit commit (retired / historical reference)
 - `Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md` — Ordinary Widget Resize Normalization (retired / historical reference)
-- `Docs/Future_Work/Settings_Dark_QSS_Retirement.md` — Settings `dark.qss` Retirement
+- `Docs/Future_Work/Settings_Dark_QSS_Retirement.md` — audited retirement of the remaining `dark.qss` loader/dependency surface; missing asset bytes alone are not completion
 - `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` — Voxel Sphere — accepted experimental preservation and future migration gate
-- `Docs/Future_Work/Steam_Friend_Pulse.md` — public retained Friend Pulse architecture and live/installed acceptance authority
-- `Docs/Future_Work/Steam_Games_You_Follow.md` — dev-gated Games You Follow feasibility-first retained Steam news-card decomposition
-- `Docs/Future_Work/System_Stats_Widget.md` — public dormant-by-default CPU/Memory/Uptime/Network System Stats architecture, rejected GPU/VRAM historical evidence and S7 acceptance authority
+- `Docs/Future_Work/Steam_Friend_Pulse.md` — public retained Friend Pulse architecture/current implementation contract; live validation status remains in Current_Plan
+- `Docs/Future_Work/Steam_Games_You_Follow.md` — dev-gated Games You Follow decomposition using existing-key GetGamesFollowed proof + bounded app-news, non-expiring last-good caches, no auth expansion, and first-pass two-axis shared content-extent geometry
+- `Docs/Future_Work/System_Stats_Widget.md` — public CPU/Memory/Uptime/Network System Stats architecture/current implementation contract; installed validation status remains in Current_Plan
 - `Docs/Future_Work/SST_9of10_Settings.md` — SST 9/10 Settings — closeout/reference checklist (Strategy B)
 - `Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md` — Visualizer replay reactivity floor (landed regression reference)
 - `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` — Visualizer visual regression recovery (historical evidence)
@@ -172,7 +172,7 @@ For a new mode or any meaningful reactivity change, read `Docs/Guides/Visualizer
 - `Docs/Historical_Bugs/A-01_Settings_Dialog_Placeholder_Investigation.md` — A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived
 - `Docs/Historical_Bugs/A-02_Visualizer_Crossover_Persistence_Blob.md` — A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)
 - `Docs/Historical_Bugs/A-03_Settings_Dialog_Flicker_Resolved_Archive.md` — A-03 — 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved) - USER NOTE: UNRESOLVED BUT LOW PRIORITY NOW. SEE DUPLICATION OF THIS ISSUE IN THIS VERY DOCUMENT.
-- `Docs/Historical_Bugs/A-04_MC_Keyboard_Focus_Ctrl_Halo_Archive.md` — A-04 — 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Historical Partial Fixes Archived; superseded by [U-05](U-05_MC_Keyboard_Focus_Ctrl_Halo.md))
+- `Docs/Historical_Bugs/A-04_MC_Keyboard_Focus_Ctrl_Halo_Archive.md` — A-04 — 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Historical Partial Fixes Archived; superseded by [U-05](Docs/Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md))
 - `Docs/Historical_Bugs/A-05_Blob_Ghost_Pulse_Investigation.md` — A-05 — 2026-03-22 — Blob Ghost/Pulse Investigation (Resolved Subsystems Archived)
 - `Docs/Historical_Bugs/A-06_Visualizer_Mode_Preset_Bleed_Investigation.md` — A-06 — 2026-05-06 — Visualizer Runtime Mode/Preset Bleed Survived Audio Resets (Archived Investigation; superseded by R-22)
 - `Docs/Historical_Bugs/Defaults_Canonical_Schema_Dedup_2026-09-06.md` — Historical Bug — Canonical defaults schema drift and duplicate authority
@@ -257,12 +257,13 @@ For a new mode or any meaningful reactivity change, read `Docs/Guides/Visualizer
 - `Docs/Historical_Bugs/R-78_Particle_Center_Outward_Swirl_Branch_Cut.md` — R-78 — Particle Center-Outward Swirl Had A Radial Branch Cut
 - `Docs/Historical_Bugs/R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md` — R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays
 - `Docs/Historical_Bugs/R-80_ABC_EventLoop_Rolling_Window_Contamination.md` — R-80 — ABC event-loop rolling history contaminated named steady windows
+- `Docs/Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md` — R-81 — Clock layout slot restored variant geometry without restoring per-display face state
 - `Docs/Historical_Bugs/README.md` — Historical Bug Records
 - `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` — Runtime Card Backdrop Materials Rejected — 2026-09-02
 - `Docs/Historical_Bugs/Theme_Defaults_Split_Authority_2026-09-06.md` — Historical Bug — Theme defaults split authority
 - `Docs/Historical_Bugs/U-02_Bubble_Blob_Signal_Contract.md` — U-02 — 2026-04-10 / 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)
 - `Docs/Historical_Bugs/U-03_Spectrum_Vocal_Lane_Migration.md` — U-03 — 2026-04-08 / 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)
-- `Docs/Historical_Bugs/U-04_Settings_Dialog_Flicker_Investigation_Archive.md` — U-04 — 2026-04-21 — Settings Dialog Flicker / Taskbar Ghost (Investigation Archive; Superseded by [R-18](R-18_Settings_Dialog_Taskbar_Ghost.md))
+- `Docs/Historical_Bugs/U-04_Settings_Dialog_Flicker_Investigation_Archive.md` — U-04 — 2026-04-21 — Settings Dialog Flicker / Taskbar Ghost (Investigation Archive; Superseded by [R-18](Docs/Historical_Bugs/R-18_Settings_Dialog_Taskbar_Ghost.md))
 - `Docs/Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md` — U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)
 - `Docs/Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md` — U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)
 - `Docs/Historical_Bugs/U-07_Bubble_Loud_Path_Oracle_Drift.md` — U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)

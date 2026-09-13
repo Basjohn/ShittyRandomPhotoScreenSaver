@@ -5,7 +5,7 @@ Contains UI building, settings loading/saving for Clock 1/2/3.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
@@ -64,6 +64,23 @@ def _combo_data_or_canonical(tab: WidgetsTab, combo, section: str, key: str):
     """Use combo data when selected; otherwise repair from canonical widget state."""
     value = combo.currentData()
     return value if value not in (None, "") else tab._widget_default(section, key)
+
+
+def _clock_mode_overrides_from_settings(tab: WidgetsTab, widget_id: str) -> dict[str, str]:
+    """Preserve runtime-authored per-display Clock face state across UI saves."""
+
+    widgets = tab._settings.get_widgets_map()
+    section = widgets.get(widget_id, {}) if isinstance(widgets, Mapping) else {}
+    overrides = section.get("display_mode_overrides", {}) if isinstance(section, Mapping) else {}
+    if not isinstance(overrides, Mapping):
+        return {}
+    result: dict[str, str] = {}
+    for raw_identity, raw_mode in overrides.items():
+        identity = str(raw_identity or "").strip()
+        mode = str(raw_mode or "").strip().lower()
+        if identity and mode in {"analog", "digital"}:
+            result[identity] = mode
+    return result
 
 
 def _update_clock_enabled_visibility(tab: WidgetsTab) -> None:
@@ -769,5 +786,14 @@ def save_clock_settings(tab: WidgetsTab) -> tuple[dict, dict, dict]:
         'timezone': clock3_timezone,
     }
     clock3_config['monitor'] = tab._monitor_value_from_combo('clock3', tab.clock3_monitor_combo)
+
+    # Double-click is an explicit per-display Clock state author, not a rewrite
+    # of the shared Settings baseline. A Settings save replaces these section
+    # mappings wholesale, so carry that independent state forward deliberately.
+    # This keeps mixed analogue/digital displays stable while the checkbox
+    # continues to mean the global/default face for displays without overrides.
+    clock_config['display_mode_overrides'] = _clock_mode_overrides_from_settings(tab, 'clock')
+    clock2_config['display_mode_overrides'] = _clock_mode_overrides_from_settings(tab, 'clock2')
+    clock3_config['display_mode_overrides'] = _clock_mode_overrides_from_settings(tab, 'clock3')
 
     return clock_config, clock2_config, clock3_config

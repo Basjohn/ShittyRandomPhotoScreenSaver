@@ -20,6 +20,7 @@ not automatic current architecture instructions.
 ## Active / Pending Acceptance Records
 
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
+- [R-81 — Clock Layout Slot Restored Variant Geometry Without Restoring Per-Display Face State](Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md) — **RESOLVED IN CODE / AWAITING VALIDATION**. Dedicated automated coverage is intentionally deferred to the next test pass; current sequencing remains in `Current_Plan.md`.
 
 No other R-series record is current implementation sequencing. Current migration work is owned by
 `Current_Plan.md`; historical Phase/P-number status prose never admits current work.
@@ -30,6 +31,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-81 — Clock Layout Slot Restored Variant Geometry Without Restoring Per-Display Face State](Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md)
 - [R-80 — ABC Event-Loop Rolling History Contaminated Named Steady Windows](Historical_Bugs/R-80_ABC_EventLoop_Rolling_Window_Contamination.md)
 - [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](Historical_Bugs/R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md) — **SOLVED / PHYSICAL WAKE VALIDATED 2026-09-12**.
 - [R-78 — Particle Center-Outward Swirl Had A Radial Branch Cut](Historical_Bugs/R-78_Particle_Center_Outward_Swirl_Branch_Cut.md)

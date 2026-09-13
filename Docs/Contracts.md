@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-09-03
+Last updated: 2026-09-13
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -38,8 +38,10 @@ On the current frameless translucent Settings HWND, Acrylic and Glass deliberate
 family. Acrylic = state 4 with theme native tint. Glass = untinted state 3; semantic Qt RGBA surfaces own its visible
 colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the documented `DwmEnableBlurBehindWindow` API.
 
-`themes/dark.qss` is legacy base-stylesheet residue, not visual authority. Its audited retirement is owned by
-`Future_Cleanup.md`; do not alter native backdrop or forged-edge geometry merely to delete it.
+`themes/dark.qss` is legacy structural stylesheet residue, not visual authority. Current Settings/tray source still
+contains explicit loader/caller references, so a missing workspace copy is not retirement proof. Its audited dependency
+removal is owned by `Future_Cleanup.md`; do not alter native backdrop/forged-edge geometry, duplicate the QSS into another
+file/string, or weaken theme failure semantics merely to delete it.
 
 Runtime Widget Themes are a separate semantic colour authority over retained Widget/runtime-overlay appearance. Theme identity and Settings-window backdrop material are deliberately separate:
 
@@ -68,6 +70,11 @@ buckets: they retain independent disclosure state so opening a child can never c
 Canonical defaults remain the identity/schema registry, so unknown bucket keys stay fail-loud even though persisted maps
 are sparse. Legacy full boolean maps normalize
 to one open winner per local scope and are rewritten sparsely on the next bucket interaction, not during Settings startup.
+
+**Lazy Settings-section lifetime:** family body retirement invalidates queued/coalesced UI callbacks admitted by the old
+section generation and drops retained references to child QObjects before `deleteLater()`. Generic follow-up UI refreshes
+must validate the underlying C++ QObject before dereference and prune stale wrappers. Never keep hidden bodies alive, pump
+the event loop, add a retry timer, or special-case a family to avoid deleted-object failures.
 
 **Widget Theme palette precedence:** Widget Theme colours are the ordinary shared baseline. Explicit surviving specialized `widgets.<family>.*` colour values remain higher-precedence only where a genuine family-level authoring contract still exists; they are not silently reclassified as theme state. Branded Header Fill/Text/Border are **not** such family contracts anymore: Media/Gmail/Reddit/Steam resolve them through shared `header.*` semantics, with Header Fill exposed once in `Widgets -> General -> Style Overrides`. The Context Menu has no family override layer and takes Widget Theme palette values directly. A surviving specialized family swatch edit therefore does not create Widget Theme `Custom`; editing a Widget-Theme-owned shared value does.
 
@@ -189,10 +196,36 @@ Host owns item creation/retirement, display rect, family-authored root fade, ind
 | Gmail | runtime-generation shared Gmail + `GmailBackend.instance()` + display lease | retained model/QML |
 | Achievement Pulse | neutral Steam runtime/preparation/cache/selection owners | retained model/QML |
 | Abandonment Issues | neutral Steam runtime/data/cache/rotation owners | retained model/QML |
+| Friend Pulse | runtime-generation shared FriendList/PlayerSummaries/cache/avatar owner + display leases | retained Grid/Rows model/QML |
+| System Stats | runtime-generation shared low-priority CPU/Memory/Uptime/Network sampler + display leases | retained model/QML |
 
 Presentation destruction does not automatically mean backend destruction; shared owners use real consumer cardinality.
 
-**Scene-local accessory lane:** an ordinary retained widget may reserve presentation width beside its card through `OverlayWidget.rightAccessoryExtent/rightAccessoryContent` without creating a second retained root or geometry/lifecycle owner. The card occupies `authoredRoot.width - rightAccessoryExtent`; the accessory remains in the same root, display route, startup/family fades and uniform CUSTOM transform. The ordinary display-level card shadow binds the card-only visual width, not the accessory lane. Media app-volume is the canonical first consumer. Accessory content may own its own hit target and visual shadow, but not a second provider/model/poller/service or independent monitor. If a future accessory needs independently movable CUSTOM geometry, that requires an explicit new child-geometry contract rather than silently promoting this lane.
+**Scene-local accessory lane:** an ordinary retained widget may reserve presentation width beside its card through `OverlayWidget.rightAccessoryExtent/rightAccessoryContent` without creating a second retained root or geometry/lifecycle owner. The card occupies `authoredRoot.width - rightAccessoryExtent`; the accessory remains in the same root, display route and startup/family fades. Corner/wheel CUSTOM resize scales the whole root uniformly. A family-owned shared `content_extent` may reflow the card logical box without promoting the accessory into an independent widget; Media horizontal extent therefore leaves app-volume width unchanged, while vertical extent changes the common presentation height and the anchored volume-track length. The ordinary display-level card shadow binds the card-only visual width, not the accessory lane. Accessory content may own its own hit target and visual shadow, but not a second provider/model/poller/service or independent monitor. If a future accessory needs independently movable CUSTOM geometry, that requires an explicit new child-geometry contract rather than silently promoting this lane.
+
+### Ordinary CUSTOM geometry / normalization
+
+`ordinary_uniform` is the default new-family contract: one authored outer rectangle, one session-owned uniform transform,
+shared 40% whole-card normalization floor and no family-local geometry persistence. Families with a proven presentation
+benefit may opt into the shared `content_extent_axes` descriptor/session/owner path. Side handles then mutate a logical
+content box at constant uniform scale; corners/wheel remain whole-card uniform. Family models/QML may reflow presentation
+inside that box and may declare bounded logical direct-axis floors through shared policy, but may not create another
+placement solver, timer/debounce, Settings-backed geometry value or payload owner.
+
+Restore Size is shared edit infrastructure, not `restore_baseline()`: authored preferred geometry is retained separately
+from effective/committed CUSTOM geometry before CUSTOM payload hydration. Restore clears content extent, keeps current
+X/Y/display, stays in CUSTOM and bypasses stacking/ordinary auto-fit/shrink. Only an authored rectangle that physically
+cannot fit the owning display may receive uniform emergency reduction. CUSTOM side reflow must never overwrite the
+authored restore target.
+
+### Last-good cache / freshness
+
+For durable provider caches, freshness controls refresh admission and cached/stale labeling only. A coherent successful
+cache record remains usable indefinitely and is the preferred fallback after network/private/rate-limit/provider failure.
+Failed, malformed or stale-generation responses never overwrite/freshen last-good evidence. Deletion requires explicit
+user/account/cache reset, schema rejection/corruption, or a proven identity change. Do not substitute semantically
+different data simply because the intended source is stale; Games You Follow, if admitted, may not replace stale follows
+with owned/recent/wishlist games.
 
 ### Startup composition
 
@@ -240,11 +273,18 @@ Dynamic image precedent is process-engine `MediaArtworkImageProvider` over runti
 identity/bounded retention. No QPixmap worker transport, base64/tempfile churn or unchanged reupload.
 
 Dynamic artwork presentation invariant: **every changing artwork surface fades**. Media, Achievement Pulse and
-Abandonment Issues use the shared retained `ArtworkFadeImage.qml` fade-through primitive; its two retained image buffers
-are hard-clipped to the caller-assigned artwork rectangle, while each family owns its rounded mask and keeps the image
-inset beneath the scale-aware border so enlarged artwork cannot bleed past rough frame edges. Future dynamic artwork must
-reuse the same contract or an explicitly superior retained equivalent. Source changes never become visible as an instant
-texture swap: old art fades to zero, the new source waits for `Image.Ready`, then fades in. Slice 8's shared gentle baseline is `200 ms` out / `340 ms` in (family lifecycle choreography may explicitly shorten a fade that is already fully hidden). These are bounded event-driven QML animations only while artwork changes; no recurring timer/poller/cadence owner is permitted for artwork fading. Media metadata follows the same ownership principle: provider/model Title/Artist/Album truth updates immediately, while `MediaMetadataColumn.qml` may retain only the outgoing rendered strings for one bounded presentation crossfade (`240 ms` out / `340 ms` in). Animation must never become data authority or delay fresh metadata.
+Abandonment Issues use the shared retained `ArtworkFadeImage.qml` two-buffer primitive; both buffers are hard-clipped to
+the caller-assigned artwork rectangle, while each family owns its rounded mask and keeps the image inset beneath the
+scale-aware border so enlarged artwork cannot bleed past rough frame edges. Future dynamic artwork must reuse the same
+contract or an explicitly superior retained equivalent. On replacement, the currently displayed texture remains visible
+until the incoming `Image` reports `Ready`; the incoming buffer then fades over it for the shared **520 ms `InOutSine`**
+baseline and the old texture is released only after coverage is complete. An explicit empty source fades the displayed
+texture out over **280 ms**. The inactive buffer's source is cleared at idle, so the contract does not retain a second
+artwork texture indefinitely. These are bounded event-driven QML animations only while artwork changes; no recurring
+timer/poller/cadence owner is permitted. Media metadata follows the same ownership principle: provider/model
+Title/Artist/Album truth updates immediately, while `MediaMetadataColumn.qml` may retain only outgoing rendered strings
+for one bounded presentation crossfade. Animation must never become data authority, alter alignment/layout authority or
+delay fresh metadata.
 
 ## Shadow authority
 
@@ -351,8 +391,12 @@ CUSTOM disables this derived planner; first Edit preserves the visible footprint
 
 
 `CustomLayoutSession` owns working geometry/state independent of QWidget. Geometry keys include display identity and
-variant. Save/Cancel and layout slots preserve ordinary ON/OFF semantics without crossing capability activation.
-Cross-display transfer has one live retained pixel owner and preserves logical runtime/model identity.
+variant. Save/Cancel and layout slots preserve ordinary ON/OFF semantics without crossing capability activation. Clock
+keeps behavior and geometry separate: `display_mode` plus per-display `display_mode_overrides` are visible Clock state,
+while digital/analogue rects remain variant geometry. A numbered slot must round-trip both layers and restore mode state
+before the fenced rebuild; an empty saved override map clears later overrides rather than inheriting them. Legacy slots that
+never recorded overrides replay their saved shared baseline. Cross-display transfer has one live retained pixel owner and
+preserves logical runtime/model identity.
 Healthy Edit Save transfers ordinary family/binding/service retirement records to that target without
 reconstruction, reinjection or provider restart. Clock variant/action context follows the destination.
 A geometry display crossing alone never requires generation replacement; slot-load and proven-corruption
@@ -369,4 +413,4 @@ recurring timer, polling loop, render callback, or worker.
 
 CUSTOM wheel resize remains free uniform scaling: it may publish the same nearby peer-alignment guides as drag resize, but it must never apply the guide resolver's suggested snap scale. Authored peer/centre/safe-gutter guide strokes are one pixel thicker than their former baseline; the generic edit grid remains 1 px.
 
-Ordinary uniform CUSTOM scale is absolute against stable authored/preferred geometry with a shared 40% floor; re-entering CUSTOM must not compound shrink. Reddit/Reddit2, Media, Gmail, Abandonment Issues, Achievement Pulse and Weather use whole-card retained uniform scaling. New ordinary cards default to the `ordinary_uniform` descriptor mode; Clock alone retains variant-aware per-value sizing. Older current-format per-value payloads are inert for normalized families, and genuine product Settings remain authoritative. Media's preferred width may include a scene-local accessory extent; that extent scales as part of the same authored root while the card keeps its own authored width, so external app volume does not become a second geometry owner. Gmail model width is already outer width; its row-derived preferred height alone receives shell inset. Visualizer is intentionally separate: `uniform_visual_scale` and `viewport_extent` remain independent intents.
+Ordinary uniform CUSTOM scale is absolute against stable authored/preferred geometry with a shared 40% floor; re-entering CUSTOM must not compound shrink. New ordinary cards default to the `ordinary_uniform` descriptor mode and whole-card scaling remains the stable outer transform even for families that additionally opt into shared side-axis `content_extent`. Abandonment Issues, Achievement Pulse and Weather currently use uniform-only ordinary resizing; Friend Pulse, Reddit/Reddit2, Gmail, System Stats and Media additionally use admitted content-extent reflow. Clock alone retains variant-aware per-value sizing. Older current-format per-value payloads are inert for normalized families, and genuine product Settings remain authoritative. Media's preferred width may include a scene-local accessory extent; that extent scales as part of the same authored root while horizontal content extent reflows only the card lane, so external app volume does not become a second geometry owner. Gmail model width is already outer width; its row-derived preferred height alone receives shell inset. Visualizer is intentionally separate: `uniform_visual_scale` and `viewport_extent` remain independent intents.

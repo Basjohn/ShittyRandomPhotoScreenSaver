@@ -1,6 +1,6 @@
 # System Stats Widget — Low-Burden Product Decomposition
 
-Status: **CPU/MEMORY/UPTIME/NETWORK IMPLEMENTED / PUBLIC / AWAITING S7 SOAK**
+Status: **CPU/MEMORY/UPTIME/NETWORK IMPLEMENTED / PUBLIC — CURRENT ARCHITECTURE REFERENCE**
 Last updated: 2026-09-13
 Current sequencing authority: `Current_Plan.md`
 Stable widget/family id: `system_stats`
@@ -29,18 +29,22 @@ runtime-generation owner submits a low-priority sample only while at least one r
 additional displays share its immutable snapshot. The cadence is fixed-delay from completion with a canonical 10-second minimum/default (user-adjustable slower); one sample may be in
 flight, and final release fences completion and closes/clears source ownership. Settings construction stays source-inert.
 
-The retained card shows CPU load, RAM percentage plus used/total, system uptime and aggregate Network ↓/↑ throughput in
-four fixed panels. It uses semantic Widget Theme roles, ordinary stacking/global-CUSTOM/40% normalization, finite width
-easing and an original packaged monochrome gear
-and spanner header asset. Focused automated source/runtime/dormancy/multi-display/Settings/QML/binder/build checks and
-real Quick standard/busy/40%-floor captures are GREEN. The temporary `--devstats` feature gate is retired, with a one-time
-profile migration admitting the formerly hidden family without enabling its member; the old CLI token is only an inert
-mode-parser compatibility no-op. S7 remains open for installed
-off-vs-on Visualizer contention, long-run, repeated retirement/recreation and two-display resource/cardinality validation.
+The retained card can show CPU load, RAM percentage plus used/total, system uptime and aggregate Network ↓/↑ throughput.
+Each metric has a canonical default-on presentation/monitoring checkbox. Disabled metrics are skipped inside the **same
+single sampler pulse** rather than spawning alternate samplers or merely hiding work. Enabled metric panels reflow through
+the shared horizontal/vertical `content_extent`: extra width opens text/value lanes, extra height distributes panel
+spacing, and direct-axis CUSTOM changes remain presentation state rather than Settings geometry. The metric-panel outline
+uses the scale-aware 1.25 px baseline so it visually joins the authored 5 px accent block without changing that accent.
+
+The card uses semantic Widget Theme roles, ordinary stacking/global-CUSTOM normalization and an original packaged
+monochrome gear/spanner header asset. The Widgets-page family pill sizes to its actual label instead of clipping `System
+Stats`. The temporary `--devstats` feature gate is retired, with a one-time profile migration admitting the formerly
+hidden family without enabling its member; the old CLI token is only an inert mode-parser compatibility no-op. Installed
+soak/visual debt lives only in `Current_Plan.md`.
 
 ## 1. Product goal
 
-Provide a quiet glanceable card for exactly the admitted public metrics:
+Provide a quiet glanceable card for the user-selected subset of exactly these admitted public metrics:
 
 - whole-system CPU usage;
 - whole-system RAM usage;
@@ -281,7 +285,10 @@ Exact labels/layout are eyes-on work, but principles are binding:
 - no twitchy decimal percentages; integer display is enough unless evidence says otherwise;
 - small presentation easing between accepted samples is optional, finite and purely visual;
 - displayed value changes do not change preferred geometry;
-- configured metric capacity owns preferred height;
+- canonical metric-selection checkboxes decide which underlying observations are sampled and which panels are rendered;
+  they do not create a second sampler/cadence;
+- authored geometry remains stable, while shared CUSTOM `content_extent` may redistribute enabled panels horizontally or
+  vertically without mutating those settings;
 - rejected GPU/VRAM is omitted; the admitted metrics do not collapse into a different card architecture when one value is warming
   or unavailable.
 
@@ -306,8 +313,10 @@ System Stats uses the same ordinary retained-card rules as the mature widgets:
 
 - one retained Quick component inside the existing engine/window;
 - stable item identity;
-- descriptor uses current ordinary uniform-resize contract;
-- shared 40% whole-card CUSTOM floor;
+- descriptor uses the shared ordinary uniform outer-resize contract plus horizontal/vertical `content_extent` axes;
+- side extent reflows enabled metric panels only; corners/wheel remain uniform and shared Restore Size clears extent back
+  to authored geometry without changing X/Y/display;
+- shared whole-card normalization/40% floor outside family side-drag policy;
 - global CUSTOM disables authored stacking/adjacency globally;
 - non-CUSTOM shared stacking/auto-fit;
 - shared Widget Theme/Style Overrides/card border/header/glow semantics;
@@ -327,6 +336,7 @@ Landed settings:
 - Enabled;
 - Position / Monitor;
 - ordinary font family/size controls consistent with other families;
+- default-on CPU, Memory, Uptime and Network metric checkboxes;
 - one user-facing Update Interval in seconds, canonical default/minimum 10 and maximum one hour.
 
 Do not expose worker priority, counter backend, diagnostic process fields, history length or rejected hardware-provider
@@ -424,7 +434,9 @@ The candidate did not pass admission and is not pending work. No product fallbac
 - Widget Theme/Style Overrides/glow/stacking/CUSTOM acceptance;
 - finite sample-to-sample visual easing only if it helps readability.
 
-### S7 — soak — automated gate GREEN, installed/long-run cells pending
+### S7 — retained soak checklist
+
+Implementation is landed. Installed/long-run validation status is owned only by `Current_Plan.md`; this section preserves the durable soak contract.
 
 - off-vs-on contention comparison;
 - 10-second long run;
@@ -450,13 +462,13 @@ Do **not** respond by:
 - sampling on the UI thread;
 - hiding expensive calls behind 30–60 second pauses and calling them free;
 - reducing Visualizer cadence/reactivity;
-- caching stale data indefinitely without freshness labeling;
+- inventing a durable stale-cache layer for sampled values instead of retaining the last accepted in-memory snapshot honestly;
 - using `--usage` diagnostics as a silent fallback;
 - leaving a warm sampler resident while the card is disabled.
 
 ## 17. Acceptance summary
 
-System Stats is GREEN only when:
+Current implementation contract (installed validation status lives in `Current_Plan.md`):
 
 - one shared sampler feeds every card instance;
 - 10-second minimum/default cadence remains sufficient; slower user-selected intervals are allowed;

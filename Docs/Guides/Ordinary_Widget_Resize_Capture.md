@@ -58,3 +58,15 @@ The packing companion also captures `dense_before` / `dense_after` at 900x550,
 which exercises reduction below the former 80% cutoff, followed by full-size
 restoration in the same scene. These are fixed-snapshot visual checks, not live
 provider/topology or performance acceptance.
+
+## Side-axis content-extent companion
+
+The fixed matrix above is primarily a **uniform normalization** harness. Families using shared `content_extent_axes` need
+additional live/PySide evidence for left/right and top/bottom side gestures because presentation reflow is intentionally
+family-specific while geometry ownership remains shared. At minimum capture canonical, widened, narrowed, tall and short
+logical extents, then Restore Size from each shape. Prove corners/wheel still scale the complete result uniformly, direct
+side floors remain axis-only, Restore Size preserves X/Y/display and clears extent, and no side-resize publication rewrites
+the authored preferred geometry.
+
+Do not add family-specific runtime capture timers to obtain this evidence. Extend maintained tooling or focused retained
+fixtures at the presentation boundary; provider/network work remains disabled.

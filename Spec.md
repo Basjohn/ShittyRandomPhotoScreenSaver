@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-09-08
+Last updated: 2026-09-13
 
 Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent closure
 narrative belongs under `Docs/audits/` or historical evidence.
@@ -74,8 +74,11 @@ DWM system-backdrop/redirection-bitmap experiments are not part of the current S
 requires an intentional window/presentation architecture change and new physical proof, not a theme tweak. Native
 activation is not repaired by timers, duplicate calls or QSS replay.
 
-`themes/dark.qss` is legacy stylesheet residue, not theme authority. Its guarded retirement is in `Future_Cleanup.md`.
-The complete permanent contract is `Docs/Architecture/Settings_Theme_Architecture.md`.
+`themes/dark.qss` is legacy structural stylesheet residue, not theme authority. Current Settings/tray source still
+contains explicit loader/caller references, so a missing copy in a source/GODZIP workspace is **not** proof that retirement
+has landed. Retirement remains an audited dependency-removal task in `Future_Cleanup.md`; do not replace it with a copied
+QSS blob, hidden literals, a native-backdrop workaround, or a fail-open theme path. The complete permanent contract is
+`Docs/Architecture/Settings_Theme_Architecture.md`.
 
 ## Runtime Widget Themes / semantic visuals
 
@@ -104,6 +107,12 @@ CUSTOM X and layout-slot replay may change ordinary ON/OFF only. They never acti
 Common Quick scene/host imports must not eagerly import inactive family business/runtime/backend trees. Family
 implementation resolves at actual family caller/activation. Static presentation-only registry metadata is fine.
 Common Quick import must not bootstrap provider/controller/runtime/backend singletons.
+
+Lazy Settings family bodies follow the same lifetime discipline as runtime families. Before a section is retired or its
+QObjects receive `deleteLater()`, invalidate queued/coalesced UI callbacks that were admitted under the old section
+generation and remove retained references to its labels/combos/anchors/other child controls. Any later generic refresh
+must validate the underlying C++ QObject (`shiboken6.isValid()` or equivalent) and fail closed on a stale wrapper. Do not
+solve deleted-object failures with timers, event-loop pumping, leaked hidden sections or family-specific unload exceptions.
 
 ## Shared 3D rendering foundation / dormancy
 
@@ -169,7 +178,9 @@ Current proven patterns are deliberately heterogeneous:
 - Reddit/Reddit2: separate configured member runtime services/models using shared family policy;
 - Gmail: runtime-generation shared Gmail owner/backend with per-display lease;
 - Achievement Pulse: neutral Steam runtime/preparation/cache/selection ownership. `Progress Pulse` is a presentation of the existing Total field: the first numeric value establishes baseline, later numeric changes emit one presentation edge, and the 2 s build / 3 s decay is QML animation frame demand only—no second refresh, polling, worker, thread or application timer. `Shelf Style` is a presentation-only alternate for the supporting fields and reuses existing Steam metric/accent/text semantics;
-- Abandonment Issues: neutral Steam runtime/data/cache/rotation ownership.
+- Abandonment Issues: neutral Steam runtime/data/cache/rotation ownership;
+- Friend Pulse: one runtime-generation Steam friend/cache/avatar owner shared by display leases; cache-first FriendList + bounded PlayerSummaries, account-private pin persistence and retained Grid/Rows presentation. No Steam-chat/message-session backend is part of the product;
+- System Stats: one runtime-generation low-priority sampler shared by display leases; CPU/Memory/Uptime/Network selection suppresses unused underlying observations inside that same owner rather than creating per-metric timers/services.
 
 Do not create services/managers merely for naming symmetry.
 
@@ -177,15 +188,27 @@ App volume is a Media-dependent scene-local accessory, not an independent widget
 presentation is an **external right accessory lane inside the same retained `OverlayWidget` root** as the Media card.
 `OverlayWidget.rightAccessoryExtent/rightAccessoryContent` reserves authored width beside the card; the card then keeps
 its accepted ordinary content width while the accessory receives its own visible bounds/hit target and the whole Media
-presentation still shares one outer geometry, uniform CUSTOM transform, lifecycle and display route. The display-level
-ordinary-card shadow uses the card-only visual width and therefore does not expand over the accessory lane. The lane
-exists only while Media plus provider app-volume capability are effective and is default-enabled by the Media setting.
+presentation still shares one outer geometry/session, lifecycle and display route. Corner/wheel CUSTOM resize applies the
+one uniform transform to card + accessory. Media's shared horizontal `content_extent` changes only the card's logical
+content width and does **not** widen the accessory lane; vertical extent changes the shared presentation height, so the
+already top/bottom-anchored volume track length follows that height. The display-level ordinary-card shadow uses the
+card-only visual width and therefore does not expand over the accessory lane. The lane exists only while Media plus
+provider app-volume capability are effective and is default-enabled by the Media setting.
 It consumes the existing Media presentation model plus its one `MediaVolumeRuntimeService` lease/action seam. It does
 **not** persist an independent CUSTOM child rect, own an independent monitor, create another retained presentation root,
 or gain its own model/controller/poller/service. A future independently movable volume child would require a separately
 approved geometry contract rather than being inferred from this accessory lane. Moving volume back inside the card is
 likewise an explicit presentation option/feature, not a parity fallback, and must not steal the reclaimed Media card
 content width.
+
+### Last-good cache / freshness policy
+
+For network/provider features with a durable cache, **freshness is metadata, not expiry authority**. A coherent successful
+cache record remains eligible for cache-first presentation regardless of age. Freshness decides whether a refresh is due
+and whether presentation is marked cached/stale; a failed/private/rate-limited/malformed refresh must not overwrite,
+freshen, or delete the last-good record. Cache removal requires an explicit user/account/cache reset, schema
+rejection/corruption, or a proven semantic identity change. Do not improve nominal freshness by blanking useful stale
+content. Friend Pulse is the current Steam example and Games You Follow must inherit the same rule if admitted.
 
 ## State / actions
 
@@ -241,7 +264,12 @@ runtime-owned decoded QImage + stable artwork key
 -> retained Image source identity
 ```
 
-No QPixmap worker transport, base64 churn, tempfile-per-update or unchanged-image reupload.
+No QPixmap worker transport, base64 churn, tempfile-per-update or unchanged-image reupload. Dynamic artwork uses the
+shared readiness-gated `ArtworkFadeImage`: the displayed texture stays visible until the replacement reaches
+`Image.Ready`, the incoming buffer fades over it for 520 ms with `InOutSine`, then the old texture is released; an explicit
+empty source fades the current image out over 280 ms. This is finite event-driven frame demand only and retains no second
+artwork texture at idle. Family-specific artwork QML may own geometry/mask/shadow, but not another swap cadence/transition
+owner.
 
 ## Shadows / fade
 
@@ -265,7 +293,24 @@ are excluded from shrink. No-fit remains an explicit overfull diagnostic. Global
 CUSTOM disables this derived planner; first Edit preserves the visible footprint.
 
 
-Ordinary card CUSTOM resize uses one retained whole-card transform, with Settings-authored baseline values unchanged. Wheel resize shows nearby peer-alignment guides but never snaps; the generic edit grid remains 1 px while authored alignment/centre/gutter guides use the thicker guide treatment. Clock retains variant-aware sizing; Visualizer retains separate viewport and visual-scale intents. New-widget implementation starts with the [authoring checklist](Docs/Guides/10_WIDGET_GUIDELINES.md#whole-card-custom-resize-default).
+Ordinary card CUSTOM resize starts with one retained whole-card transform, with Settings-authored baseline values
+unchanged. A family may additionally opt into the **shared `content_extent` presentation-reflow contract** on selected side
+axes. Side handles then change a logical family content box at constant uniform scale; corners/wheel still resize the whole
+retained presentation uniformly. The descriptor/session/owner is the sole persistence authority for that extent. Family
+QML/models may consume it to reflow rows, spacing, metadata or artwork, but may not persist geometry, mutate product
+Settings, create a placement solver, or add a resize timer/debounce/poller. Family-owned logical side-drag floors are
+allowed only through the shared content-extent policy and must not replace the generic whole-card uniform shrink floor.
+
+Restore Size is a separate shared edit action. It uses the canonical preferred geometry captured **before CUSTOM payload
+hydration** and retained separately from effective/committed CUSTOM geometry. It restores only the selected widget's
+authored size/shape, clears family `content_extent`, preserves current X/Y + display, remains in CUSTOM, and does not invoke
+stacking or ordinary auto-fit/shrink. Uniform emergency reduction is allowed only when the authored rectangle itself
+cannot fit the owning display. A live CUSTOM side resize must never redefine that authored restore target.
+
+Wheel resize shows nearby peer-alignment guides but never snaps; the generic edit grid remains 1 px while authored
+alignment/centre/gutter guides use the thicker guide treatment. Clock retains variant-aware sizing; Visualizer retains
+separate viewport and visual-scale intents. New-widget implementation starts with the
+[authoring checklist](Docs/Guides/10_WIDGET_GUIDELINES.md#whole-card-custom-resize-default).
 
 Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.
 Clock digital/analogue are the first required example.
@@ -275,9 +320,14 @@ deactivation. Save/Enter commits; Cancel restores pre-edit geometry/instances/en
 
 Layout slots save/load ordinary visible-layout state, including ordinary ON/OFF, but never capability activation or
 provider/account/source settings. The Visualizer's active `mode` is part of visible layout/hot-swap state and is captured
-with its geometry; per-mode tuning/preset fields are not. Number-key slot **load** applies that map then performs the existing
-fenced runtime rebuild so the restored mode becomes runtime truth. Ordinary live Edit Save, including a successfully
-transferred cross-display Visualizer, is not a slot-load boundary and must not gain teardown/reinit from this rule.
+with its geometry; per-mode tuning/preset fields are not. Clock is the other explicit stateful case: each Clock slot captures
+its shared `display_mode` baseline **and** the complete per-display `display_mode_overrides` map, while `custom_layout`
+continues to own the independent digital/analogue geometry variants. Slot replay applies that mode state before the fenced
+runtime rebuild so the presentation selects the geometry belonging to the saved face. Empty override maps are meaningful
+state; legacy payloads that predate override capture fall back deterministically to their saved shared baseline rather than
+inheriting a newer runtime override. Number-key slot **load** then performs the existing fenced runtime rebuild so restored
+visible state becomes runtime truth. Ordinary live Edit Save, including a successfully transferred cross-display Visualizer,
+is not a slot-load boundary and must not gain teardown/reinit from this rule.
 
 CUSTOM is a **global layout mode**. If any effective widget route is `Custom`, ordinary authored stacking and the
 non-CUSTOM Media/Visualizer adjacency projection are disabled for the entire retained layout, not selectively per

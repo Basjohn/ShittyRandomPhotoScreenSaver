@@ -206,7 +206,7 @@ Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies
 
 ## `dark.qss` status
 
-`themes/dark.qss` is legacy stylesheet debris, not theme authority. It currently remains a base stylesheet dependency and must be removed only through the audited retirement recorded in `Future_Cleanup.md`.
+`themes/dark.qss` is legacy stylesheet debris, not theme authority. Current source still contains explicit Settings/tray loader dependencies on that path even when a particular GODZIP/source workspace does not contain the file. **Physical absence is not retirement proof.** Retirement is complete only when required structural behavior has permanent owners and the production loader dependencies are removed through the audited work in `Future_Cleanup.md`.
 
 Do not delete it casually and do not preserve it by copying its old colours back into Python. Retirement means:
 

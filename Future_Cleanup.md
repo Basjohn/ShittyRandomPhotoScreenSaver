@@ -166,12 +166,10 @@ than preserved as phantom GUI authority. This is migration plumbing, not a suppo
 
 ### `themes/dark.qss` retirement
 
-`themes/dark.qss` remains legacy base-stylesheet geometry/debris, not Settings Theme palette authority. This row is
-cleanup bookkeeping; active sequencing is `Current_Plan.md` section 3. Execution authority is
+`themes/dark.qss` is legacy base-stylesheet geometry/debris, not Settings Theme palette authority. Current source still explicitly attempts to load that path for Settings and tray styling even when the asset is absent from a particular GODZIP/workspace; **missing bytes are not proof of retirement**. This row is cleanup bookkeeping; active sequencing is `Current_Plan.md` section 3. Execution authority is
 `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`. Do not simply delete it, copy literals into
 Python, or disturb native AccentPolicy/frameless/forged-edge behaviour. Final retirement requires the
-physical Default Dark + Acrylic + Glass + dialogs/controls/tray matrix with the file genuinely absent, then
-production loaders and file removed in the same bounded slice.
+physical Default Dark + Acrylic + Glass + dialogs/controls/tray matrix with the legacy dependency genuinely absent, then production loader references and any remaining packaged file removed in the same bounded slice.
 
 The old `ui/settings_theme_paths.py` "temporary packaging/dev fallback" task is **closed**: current source
 already resolves explicit injection -> ProgramData for frozen/installed -> repo source for dev, without

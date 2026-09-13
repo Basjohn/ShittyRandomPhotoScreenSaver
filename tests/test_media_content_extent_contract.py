@@ -26,6 +26,10 @@ def test_media_direct_axis_floor_does_not_replace_uniform_resize_floor() -> None
     assert "def quick_custom_content_extent_minimum_size(" in size
     assert "float(item.resize_scale)" in size
     assert "def quick_custom_minimum_size" in size
+    assert "generic_floor = quick_custom_minimum_size(item)" in size
+    assert "max(generic_floor.width()," in size
+    assert "max(generic_floor.height()," in size
+    assert "max(CUSTOM_LAYOUT_MIN_WIDGET_SIZE," not in size
     generic = size.split("def quick_custom_minimum_size", 1)[1].split(
         "def quick_custom_content_extent_minimum_size", 1
     )[0]
@@ -105,3 +109,11 @@ def test_media_landscape_artwork_is_canonical_default_off_and_only_removes_shape
     assert "? metadataLimitedArtworkWidth" in qml
     assert ": Math.min(referenceHeight, metadataLimitedArtworkWidth)" in qml
     assert "ArtworkFadeImage {" in qml
+
+
+def test_media_metadata_compaction_preserves_left_visual_anchor() -> None:
+    qml = _text("rendering/quick/qml/MediaPresentation.qml")
+    metadata = qml.split("id: metadata", 1)[1].split("MediaMetadataColumn {", 1)[0]
+    assert "anchors.left: parent.left" in metadata
+    assert "transformOrigin: Item.Left" in metadata
+    assert "transformOrigin: Item.Center" not in metadata

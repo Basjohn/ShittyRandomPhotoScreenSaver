@@ -1,6 +1,6 @@
 # Future Work implementation plan
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
 
 The Qt Quick migration is closed and operator-accepted. This file no longer mirrors migration-close gates or keeps
 completed future slices as pseudo-work. `Current_Plan.md` owns active sequencing; `Future_Work.md` owns dormant feature
@@ -19,15 +19,15 @@ Anything promoted into active execution is intentionally omitted from this file.
 5. **Deformable 3D Sphere / Blob Sphere** — separate future experiment; never mutate the accepted Voxel Sphere into it.
 6. **Organic Growth / Ink Bloom** — bounded shader experiment.
 7. **Other 3D Visualizer experiments** — each gets its own isolated mode boundary/decomposition.
-8. **Settings FlowContainer polish [low]** — only for a demonstrated layout improvement.
-9. **Two-texture artwork crossfade [low]** — only if current event-driven fade has a visible defect worth the extra
-   texture residency.
+8. **Games You Follow** — feasibility-gated Steam news card. First prove `IStoreService/GetGamesFollowed/v1` with the existing user Web API key + linked SteamID64 through current request machinery; no QR/session/cookie/scrape fallback. Last-good followed/news caches remain usable indefinitely when stale. Its first retained card must already use shared horizontal/vertical `content_extent` side reflow while corners/wheel stay whole-card uniform.
+9. **Settings FlowContainer polish [low]** — only for a demonstrated layout improvement.
 
 ## Golden / landed work is not backlog
 
 - Current accepted Voxel Sphere reactivity/motion/presets are golden and remain isolated. No Sphere implementation work
   is queued here; future retuning/migration requires an explicit operator request.
 - Widget interaction glow is landed and operator-accepted.
+- Shared readiness-gated artwork replacement is landed current architecture (`ArtworkFadeImage`); do not queue a second artwork-transition owner.
 - Slide Linear/Elastic/Wobble/Flex are landed current architecture. Do not recreate their old proposal sections.
 - Live Edit commit and ordinary resize/auto-fit normalization are landed/accepted; their old decomposition documents are
   historical references only.

@@ -1,9 +1,12 @@
 # Ordinary Widget Authoring Guide
 
-Last updated: 2026-09-08
+Last updated: 2026-09-13
 
 Canonical guide for adding or deeply refactoring a **non-Visualizer runtime widget** in the accepted Qt
-Quick architecture. This guide is based on the landed retained Quick families: Clock, Weather, Media, Reddit/Reddit2, Gmail, Achievement Pulse and Abandonment Issues. It also incorporates the shared colour-only Widget Theme semantics, smart-stacking and global-CUSTOM architecture that later slices added across those families.
+Quick architecture. This guide is based on the landed retained Quick families: Clock, Weather, Media, Reddit/Reddit2,
+Gmail, Achievement Pulse, Abandonment Issues, Friend Pulse and System Stats. It also incorporates the shared colour-only
+Widget Theme semantics, smart-stacking, global-CUSTOM architecture, optional shared side-axis `content_extent` reflow and
+family-retirement lifetime rules that later slices added across those families.
 
 `Current_Plan.md` owns which family may be changed now.
 
@@ -105,6 +108,12 @@ backend abstraction.
 Use current neutral Steam models/runtime/cache/privacy/provenance seams. Friend Pulse is a retained public card;
 do not manufacture a Quick port for the unfinished Steam Journey/Progress scaffold.
 
+### System Stats
+
+System Stats demonstrates the bounded sampled-value exception: one runtime-generation shared sampler exists only while a
+real retained consumer lease exists. CPU/Memory/Uptime/Network selection may skip unused observations **inside that one
+owner**; it does not create per-metric timers or services. Product sampling stays isolated from diagnostic `--usage`.
+
 ## 4. Import dormancy is architecture
 
 Forbidden:
@@ -154,6 +163,15 @@ generation, request generation, account/location/feed/provider identity, activat
 
 Stale work may physically finish; it becomes a fenced no-op. Model retirement makes later callbacks harmless.
 
+### Last-good cache policy
+
+When a family has a durable provider cache, do not treat its freshness window as a TTL. Cache-first presentation may use a
+coherent successful record regardless of age; age decides whether refresh is due and whether the UI marks it cached/stale.
+Failure/private/rate-limit/malformed responses never overwrite or delete the last-good record. Explicit
+user/account/cache reset, schema rejection/corruption, or a proven identity change are the deletion boundaries. Never blank
+useful stale data merely to look fresh, and never substitute a different semantic source (for example owned games for a
+followed-games feature).
+
 ## 7. Lists
 
 Reddit/Gmail/Steam-style rows use bounded stable semantic IDs and coherent update transactions. A simple
@@ -198,6 +216,14 @@ runtime owns decoded QImage + stable key
 No QPixmap worker transport, base64 churn, tempfile per update, unchanged-image reupload, or unearned
 per-widget provider duplication. Static packaged icons can use stable packaged file identities.
 
+Changing artwork surfaces use the shared retained `ArtworkFadeImage` unless a deliberately superior common primitive is
+approved. The old displayed texture remains visible until the incoming image is ready; the incoming buffer then fades over
+it for 520 ms with `InOutSine`, after which the old texture is released. An explicit empty source fades out over 280 ms.
+This is event-driven animation/frame demand only, with the inactive source cleared at idle. Family QML may own mask,
+clipping, aspect and directional shadow geometry, but not a second artwork-swap timer/cadence. Media metadata crossfade is
+likewise presentation-only: source truth changes immediately and the text layer must preserve deterministic alignment and
+layout ownership while animating.
+
 Asset lane is deliberate:
 
 - Settings GUI micro-assets/fonts in `ui/resources/assets.qrc` are embedded and addressed through `:/ui/assets/...`;
@@ -217,6 +243,10 @@ Materially different shapes may have stable variants:
 ```
 
 Clock digital/analogue is the first proven case. Never repeatedly derive one saved variant from the other and accumulate drift.
+The active face is separate persisted state: the shared `display_mode` baseline plus per-display
+`display_mode_overrides` select which independently stored geometry variant is live. A layout slot that restores Clock
+geometry must restore that face-selection state in the same transaction; never smuggle behavior back into the geometry
+payload merely to make replay convenient.
 
 Content-driven natural height may derive from accepted state. Keep it separate from transient overlays. Opening Gmail's three-dot menu must not rewrite Gmail's committed CUSTOM height.
 
@@ -250,6 +280,29 @@ Clock's variant-aware `clock_font` and Visualizer's `visualizer_rect` are explic
 exceptions. The descriptor regression bar rejects new per-value families without
 a deliberate contract change. Genuine family font/artwork Settings remain active;
 CUSTOM geometry is not their authority.
+
+### Optional side-axis content reflow
+
+Uniform whole-card resizing remains the default. Opt into `content_extent_axes` only when extra horizontal/vertical
+playroom has a clear presentation benefit (current examples: Friend Pulse, Reddit, Gmail, System Stats and Media). Reuse
+the shared session/owner/payload path; do not create a family-local resize mode or Settings-backed width/height.
+
+Contract:
+
+- side handle -> logical content width and/or height at the current uniform scale;
+- corner/wheel -> whole retained presentation scales uniformly;
+- family model/QML reflows only presentation (columns, rows, spacing, metadata, artwork, etc.);
+- family may provide bounded **logical side-drag floors** through the shared policy, but those floors do not replace the
+  generic uniform whole-card floor;
+- `content_extent` is CUSTOM state, not a product preference/default;
+- Save/slot persistence use the shared CUSTOM payload; Cancel restores the prior committed extent;
+- Restore Size clears the extent and returns to canonical authored size while preserving X/Y/display and remaining in
+  CUSTOM;
+- side-resize updates may not redefine authored geometry, invoke stacking/auto-fit, or schedule timers/debounce/polling.
+
+A new family should not copy Media/Friend Pulse arithmetic as infrastructure. It should declare axes/minima and consume
+the common logical extent; family-local code owns only its own internal reflow. This keeps normalization extensible without
+creating a second geometry architecture.
 
 ### Non-CUSTOM authored stacking
 
@@ -400,6 +453,11 @@ construct inert model/wrapper
 -> detach/stop lease according to real cardinality
 -> fence stale completion
 ```
+
+Lazy Settings-family retirement is part of the same contract. Invalidate queued/coalesced UI work admitted under the
+old body generation, clear retained labels/combos/anchors/control references before `deleteLater()`, and make generic
+follow-up refresh code validate the C++ QObject before dereference. Never keep a hidden section alive or add a timer/retry
+loop to mask a stale-wrapper bug.
 
 Presentation destruction does not automatically mean backend destruction. Shared owners retire only when
 real consumer set is empty.

@@ -9,10 +9,13 @@ from core.settings.widget_family_catalog import get_family_id_for_widget
 
 
 LAYOUT_SLOTS_VERSION = 1
+LAYOUT_SLOT_PAYLOAD_VERSION = 2
 LAYOUT_SLOTS_SETTINGS_KEY = "layout_slots"
 VALID_LAYOUT_SLOT_IDS = tuple(str(value) for value in range(1, 10)) + ("0",)
 
 _ROOT_LAYOUT_KEYS = ("custom_layout", "custom_layout_restore")
+_CLOCK_WIDGET_IDS = ("clock", "clock2", "clock3")
+_CLOCK_DISPLAY_MODES = frozenset({"analog", "digital"})
 
 _LAYOUT_SECTION_KEYS = frozenset(
     {
@@ -184,7 +187,7 @@ def capture_layout_slot(widgets_config: Mapping[str, Any] | None) -> dict[str, A
         widgets_config = {}
 
     payload: dict[str, Any] = {
-        "version": LAYOUT_SLOTS_VERSION,
+        "version": LAYOUT_SLOT_PAYLOAD_VERSION,
         "widgets": {},
     }
     for root_key in _ROOT_LAYOUT_KEYS:
@@ -204,6 +207,27 @@ def capture_layout_slot(widgets_config: Mapping[str, Any] | None) -> dict[str, A
         }
         if captured:
             sections[str(section_id)] = captured
+    # Clock active face is layout state, but deliberately not geometry state.
+    # The shared baseline (``display_mode``) is captured through the normal layout
+    # fields above; explicit per-display overrides must travel with the slot as
+    # well so loading a slot restores the face that owned the saved variant rect.
+    # Always emit the key for current-format slots, including an empty mapping, so
+    # replay can distinguish "this slot had no override" from legacy v1 payloads
+    # that were incapable of recording the state at all.
+    for clock_id in _CLOCK_WIDGET_IDS:
+        section = widgets_config.get(clock_id, {})
+        if not isinstance(section, Mapping):
+            continue
+        # Real Clock sections always own a display_mode baseline.  Also admit an
+        # explicit override-only section for defensive/imported mappings, but do
+        # not synthesize empty Clock sections in unrelated/minimal fixtures.
+        if "display_mode" not in section and "display_mode_overrides" not in section:
+            continue
+        captured = sections.setdefault(clock_id, {})
+        captured["display_mode_overrides"] = _normalize_clock_mode_overrides(
+            section.get("display_mode_overrides", {})
+        )
+
     payload["widgets"] = sections
     return payload
 
@@ -246,6 +270,38 @@ def apply_layout_slot(
     if not isinstance(payload_sections, Mapping):
         return True
 
+    try:
+        payload_version = int(payload.get("version", 1) or 1)
+    except (TypeError, ValueError):
+        payload_version = 1
+
+    # v1 slots predate per-display Clock mode capture. Leaving a newer runtime
+    # override in place would make the old override defeat the slot's saved
+    # ``display_mode`` baseline and select geometry from the wrong face. The only
+    # deterministic legacy replay is therefore the saved baseline with no screen
+    # overrides. v2+ payloads make the override maps explicit slot state; restore
+    # the complete set before ordinary section fields are applied so a missing/
+    # empty override cannot inherit a later runtime choice.
+    for clock_id in _CLOCK_WIDGET_IDS:
+        saved_clock = payload_sections.get(clock_id)
+        if not isinstance(saved_clock, Mapping):
+            continue
+        # A real captured Clock section always contains display_mode.  Preserve
+        # compatibility with deliberately partial/imported slot payloads by not
+        # touching Clock state that the payload does not represent at all.
+        if "display_mode" not in saved_clock and "display_mode_overrides" not in saved_clock:
+            continue
+        current_clock = widgets_config.get(clock_id, {})
+        if not isinstance(current_clock, dict):
+            current_clock = dict(current_clock) if isinstance(current_clock, Mapping) else {}
+            widgets_config[clock_id] = current_clock
+        if payload_version < LAYOUT_SLOT_PAYLOAD_VERSION:
+            current_clock.pop("display_mode_overrides", None)
+            continue
+        current_clock["display_mode_overrides"] = _normalize_clock_mode_overrides(
+            saved_clock.get("display_mode_overrides", {})
+        )
+
     for section_id, section_payload in payload_sections.items():
         if not isinstance(section_payload, Mapping):
             continue
@@ -255,6 +311,8 @@ def apply_layout_slot(
             widgets_config[str(section_id)] = current_section
         for key, value in section_payload.items():
             key_text = str(key)
+            if key_text == "display_mode_overrides":
+                continue
             if not _is_layout_field(str(section_id), key_text):
                 continue
             if (
@@ -284,6 +342,20 @@ def get_layout_slot_payload(
     if not isinstance(payload, Mapping):
         return None
     return deepcopy(dict(payload))
+
+
+def _normalize_clock_mode_overrides(value: object) -> dict[str, str]:
+    """Return only stable screen-signature -> Clock face state entries."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    normalized: dict[str, str] = {}
+    for raw_identity, raw_mode in value.items():
+        identity = str(raw_identity or "").strip()
+        mode = str(raw_mode or "").strip().lower()
+        if identity and mode in _CLOCK_DISPLAY_MODES:
+            normalized[identity] = mode
+    return normalized
 
 
 def _is_layout_field(section_id: str, key: str) -> bool:
