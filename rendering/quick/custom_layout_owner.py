@@ -82,6 +82,23 @@ class _DisplayBinding:
     geometry: QRect
 
 
+def _parse_content_extent(raw: Any) -> tuple[float, float] | None:
+    """Parse a persisted ``[width, height]`` content-extent box, or ``None``."""
+
+    if not isinstance(raw, (list, tuple)) or len(raw) != 2:
+        return None
+    try:
+        width = float(raw[0])
+        height = float(raw[1])
+    except (TypeError, ValueError):
+        return None
+    if not (math.isfinite(width) and math.isfinite(height)):
+        return None
+    if width <= 0.0 or height <= 0.0:
+        return None
+    return (width, height)
+
+
 @dataclass(frozen=True, slots=True)
 class _ResizeOrigin:
     rect: QRect
@@ -801,6 +818,18 @@ class QuickCustomLayoutOwner:
                 if math.isfinite(parsed_scale) and parsed_scale > 0.0:
                     baseline_resize_scale = parsed_scale
 
+            # A previously-saved content-extent box (a side-drag reflow) is the
+            # authoritative reference for this family's edit envelope. Using the
+            # committed box rather than the live preferred size keeps the H9
+            # canonicalization below a no-op instead of collapsing the reflowed
+            # axis back to the authored aspect.
+            content_axes = frozenset(descriptor.content_extent_axes)
+            committed_content_extent: tuple[float, float] | None = None
+            if content_axes and committed_entry is not None:
+                committed_content_extent = _parse_content_extent(
+                    committed_entry.size_payload.get("content_extent")
+                )
+
             # For retained uniform-transform families, the QML preferred size
             # is the exact authored reference on every admission. Derive the
             # current absolute scale from committed geometry even when metadata
@@ -811,16 +840,20 @@ class QuickCustomLayoutOwner:
             ):
                 qml_item = getattr(presentation, "item", None)
                 if qml_item is not None:
-                    try:
-                        preferred_width = float(
-                            qml_item.property("preferredContentWidth") or 0.0
-                        )
-                        preferred_height = float(
-                            qml_item.property("preferredContentHeight") or 0.0
-                        )
-                    except (TypeError, ValueError, RuntimeError):
-                        preferred_width = 0.0
-                        preferred_height = 0.0
+                    if committed_content_extent is not None:
+                        preferred_width = float(committed_content_extent[0])
+                        preferred_height = float(committed_content_extent[1])
+                    else:
+                        try:
+                            preferred_width = float(
+                                qml_item.property("preferredContentWidth") or 0.0
+                            )
+                            preferred_height = float(
+                                qml_item.property("preferredContentHeight") or 0.0
+                            )
+                        except (TypeError, ValueError, RuntimeError):
+                            preferred_width = 0.0
+                            preferred_height = 0.0
                     if preferred_width > 0.0 and preferred_height > 0.0:
                         inferred_scale = min(
                             float(global_rect.width()) / preferred_width,
@@ -878,6 +911,18 @@ class QuickCustomLayoutOwner:
                                     inferred_scale,
                                 )
 
+            # Carry a committed content-extent box into the session payload so
+            # entering edit mode keeps the reflow (the edit overlay republishes
+            # current_size_payload through apply_custom_layout_size_payload). No
+            # committed box means the family stays uniform until its first side
+            # drag establishes one.
+            if content_axes and committed_content_extent is not None:
+                payload = dict(payload)
+                payload["content_extent"] = [
+                    committed_content_extent[0],
+                    committed_content_extent[1],
+                ]
+
             item = CustomLayoutSessionItem(
                 source_key=key,
                 model_identity=widget_id,
@@ -893,6 +938,8 @@ class QuickCustomLayoutOwner:
                 source_monitor_route=get_effective_monitor_value_for_widget(
                     widget_id, widgets
                 ),
+                content_extent_axes=content_axes,
+                baseline_content_extent=committed_content_extent,
             )
             session.add_item(item)
             descriptors[key] = descriptor
@@ -1497,6 +1544,14 @@ class QuickCustomLayoutOwner:
                 payload["viewport_extent"] = [extent[0], extent[1]]
             else:
                 payload.pop("viewport_extent", None)
+        # Persist the content-extent box only once a side drag has established
+        # one (current_content_extent is None until then), so a uniform-only edit
+        # never pins a box and the family keeps its config-derived authored size.
+        if item.content_extent_capable and item.current_content_extent is not None:
+            box = item.current_content_extent
+            payload["content_extent"] = [box[0], box[1]]
+        else:
+            payload.pop("content_extent", None)
         set_screen_layout_entry(
             custom_map,
             signature,

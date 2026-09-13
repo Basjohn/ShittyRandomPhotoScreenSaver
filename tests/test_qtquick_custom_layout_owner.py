@@ -1363,3 +1363,16 @@ def test_content_extent_side_drag_and_uniform_scale_math() -> None:
     # Left edge moved inward by 100px -> narrower outer width, narrower box width.
     assert item.current_content_extent[0] < box_before[0] * scale_now
     assert item.current_content_extent[1] == pytest.approx(box_before[1])
+
+
+def test_parse_content_extent_accepts_valid_pairs_only() -> None:
+    from rendering.quick.custom_layout_owner import _parse_content_extent
+
+    assert _parse_content_extent([610.0, 566.0]) == (610.0, 566.0)
+    assert _parse_content_extent((420, 300)) == (420.0, 300.0)
+    assert _parse_content_extent(None) is None
+    assert _parse_content_extent([610.0]) is None
+    assert _parse_content_extent([610.0, 0.0]) is None
+    assert _parse_content_extent([-1.0, 300.0]) is None
+    assert _parse_content_extent(["x", "y"]) is None
+    assert _parse_content_extent("610x300") is None
