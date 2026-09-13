@@ -362,7 +362,7 @@ OverlayWidget {
                                 ? abandonmentRoot.abandonmentModel.accentColor
                                 : abandonmentRoot.abandonmentModel.steamArtworkBorderColor
                             border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                                2.0, abandonmentRoot.presentationScale
+                                2.25, abandonmentRoot.presentationScale
                             )
                         }
 
