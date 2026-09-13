@@ -41,17 +41,17 @@ GPU/VRAM is **not admitted on this host**. PDH could not establish the required
 adapter aggregate, and its failed setup alone is far above the CPU/RAM source
 cost. Do not substitute the diagnostic PID-scoped GPU collector.
 
-CPU/RAM is not yet a product-green result. A later runtime-generation shared
-owner must still prove lease dormancy/cardinality and off-vs-on Visualizer and
-event-loop tail behavior before a card is enabled. GPU/VRAM remains omitted
-unless a later source probe succeeds with stable adapter identity, truthful
-counter semantics and comparable cost.
+CPU/RAM passed the source-cost gate. The retained product still needs installed
+off-vs-on Visualizer, event-loop-tail and multi-display soak evidence. GPU/VRAM
+remains omitted unless a later source probe succeeds with stable adapter identity,
+truthful counter semantics and comparable cost.
 
-Follow-through on 2026-09-12: the shared lease owner, dormancy/cardinality
-proof, dev-gated Settings and retained CPU/RAM card are now implemented. The
-remaining product-green boundary is the installed off-vs-on Visualizer tail,
-long-run and multi-display S7 soak recorded in `Current_Plan.md`; this S0 record
-continues to own the source-cost and GPU/VRAM rejection evidence only.
+Follow-through on 2026-09-13: the shared lease owner, dormancy/cardinality proof,
+public lazy Settings page and retained CPU/RAM card are implemented. The family
+is visible while its member remains disabled by default. The remaining
+product-green boundary is the installed off-vs-on Visualizer tail, long-run and
+multi-display S7 soak recorded in `Current_Plan.md`; this S0 record continues to
+own the source-cost and GPU/VRAM rejection evidence only.
 
 ## Reproduction
 

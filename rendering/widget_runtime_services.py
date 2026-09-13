@@ -329,6 +329,7 @@ _ACHIEVEMENT_SERVICE_SPEC = RuntimeServiceSpec(
 def _build_friend_pulse_service(
     widget_id: str, widgets_config: Mapping[str, Any]
 ) -> Any:
+    from core.settings.default_contract import require_canonical_default
     from widgets.friend_pulse_runtime import (
         FriendPulseRuntimeConfig,
         FriendPulseRuntimeService,
@@ -342,11 +343,17 @@ def _build_friend_pulse_service(
     )
     shared = shared if isinstance(shared, Mapping) else {}
     card = card if isinstance(card, Mapping) else {}
+    defaults = require_canonical_default("widgets.friend_pulse")
+    if not isinstance(defaults, Mapping):
+        raise TypeError("Canonical Friend Pulse defaults must be a mapping")
     return FriendPulseRuntimeService(
         config=FriendPulseRuntimeConfig(
             refresh_minutes=shared.get("refresh_minutes", 6),
             privacy_mode=shared.get("privacy_mode", "Rich"),
-            capacity=card.get("visible_row_capacity", 4),
+            capacity=card.get(
+                "visible_row_capacity",
+                defaults["visible_row_capacity"],
+            ),
         )
     )
 

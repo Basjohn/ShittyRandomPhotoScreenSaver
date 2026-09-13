@@ -27,6 +27,20 @@ def friend_message_target(steam_id: object) -> SteamLinkTarget | None:
     )
 
 
+def friend_profile_target(steam_id: object) -> SteamLinkTarget | None:
+    """Build one public profile target without exposing the ID to QML."""
+
+    normalized = normalize_steam_id(steam_id)
+    if normalized is None:
+        return None
+    profile_url = f"https://steamcommunity.com/profiles/{normalized}"
+    return SteamLinkTarget(
+        kind="friend_profile",
+        steam_url=profile_url,
+        browser_url=profile_url,
+    )
+
+
 def store_target(appid: object) -> SteamLinkTarget | None:
     """Build the Steam-client and public-store targets for one app."""
 
@@ -58,6 +72,7 @@ def normalize_appid(value: object) -> int | None:
 __all__ = [
     "SteamLinkTarget",
     "friend_message_target",
+    "friend_profile_target",
     "normalize_appid",
     "normalize_steam_id",
     "store_target",

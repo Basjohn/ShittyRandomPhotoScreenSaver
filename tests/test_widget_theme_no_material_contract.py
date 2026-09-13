@@ -116,6 +116,7 @@ def test_only_preexisting_local_image_multieffects_remain() -> None:
         "AbandonmentIssuesPresentation.qml",
         "AchievementPulsePresentation.qml",
         "BrandedHeader.qml",
+        "FriendPulsePresentation.qml",
         "MediaPresentation.qml",
     }
     found = set()

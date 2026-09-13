@@ -550,6 +550,9 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "friend_pulse_font_family",
             "friend_pulse_font_size",
             "friend_pulse_view_mode",
+            "friend_pulse_visible_row_capacity",
+            "friend_pulse_show_names",
+            "friend_pulse_name_font_size",
         ),
     ),
     WidgetSettingsSectionDescriptor(
@@ -573,7 +576,6 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "system_stats_font_family",
             "system_stats_font_size",
         ),
-        dev_feature_gate="system_stats",
     ),
     WidgetSettingsSectionDescriptor(
         section_id="defaults",
@@ -695,6 +697,8 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
             "achievement_pulse_font_size",
             "abandonment_issues_font_size",
             "friend_pulse_font_size",
+            "friend_pulse_name_font_size",
+            "friend_pulse_visible_row_capacity",
         ),
         anchor_attr="achievement_pulse_font_size",
     ),
@@ -1604,7 +1608,6 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="ordinary_uniform",
-        dev_feature_gate="steam",
     ),
     WidgetRuntimeDescriptor(
         widget_id="system_stats",
@@ -1627,7 +1630,6 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="ordinary_uniform",
-        dev_feature_gate="system_stats",
     ),
     WidgetRuntimeDescriptor(
         widget_id="spotify_visualizer",
@@ -1753,7 +1755,7 @@ def get_active_member_widget_ids(family_id: str) -> tuple[str, ...]:
     """Return the family's member widget ids that are active in this environment.
 
     Family membership comes from the neutral catalog; per-member runtime
-    availability (e.g. the ``--devsteam``-only Steam members) is resolved here
+    availability (currently the ``--devsteam``-only Steam Journey scaffold) is resolved here
     from the runtime widget descriptors, which remain the runtime dev-gate
     consumers.
     """
@@ -2459,9 +2461,13 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("position", "friend_pulse_position", "current_text"),
             WidgetPreviewFieldDescriptor("monitor", "friend_pulse_monitor_combo", "current_text"),
             WidgetPreviewFieldDescriptor("font_size", "friend_pulse_font_size", "value"),
+            WidgetPreviewFieldDescriptor(
+                "visible_row_capacity",
+                "friend_pulse_visible_row_capacity",
+                "value",
+            ),
         ),
         family_enabled_attr_name="steam_enabled",
-        dev_feature_gate="steam",
     ),
     WidgetStackPreviewDescriptor(
         widget_id="system_stats",
@@ -2483,7 +2489,6 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
                 "font_size", "system_stats_font_size", "value"
             ),
         ),
-        dev_feature_gate="system_stats",
     ),
 )
 

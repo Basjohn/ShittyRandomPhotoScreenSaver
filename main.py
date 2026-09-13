@@ -130,8 +130,8 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
     - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
     - --devcurve - Legacy no-op flag kept for compatibility
-    - --devsteam - Show Steam Journey and the experimental Friend Pulse card
-    - --devstats - Show the experimental System Stats card
+    - --devsteam - Show the unfinished Steam Journey scaffold
+    - --devstats - Legacy no-op; System Stats is a normal product family
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)

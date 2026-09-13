@@ -3,7 +3,8 @@
 Building or loading this section must not decrypt credentials, scan cache
 directories, fetch assets, or submit provider work. It may read one bounded
 recent-games cache record on shared IO to label Achievement Pulse choices.
-Achievement Pulse and Abandonment Issues are public while two cards stay dev-gated.
+Achievement Pulse, Abandonment Issues, and Friend Pulse are public; only the
+unfinished Steam Journey scaffold stays dev-gated.
 """
 from __future__ import annotations
 
@@ -1009,6 +1010,19 @@ def _build_card_group(
         view_row.addWidget(view_mode)
         view_row.addStretch()
 
+        capacity_row = _aligned_row(layout, "Visible Friends:")
+        visible_capacity = QSpinBox()
+        visible_capacity.setRange(1, 24)
+        visible_capacity.setValue(tab._default_int(key, "visible_row_capacity"))
+        visible_capacity.setToolTip(
+            "Number of friend slots visible without scrolling. Every online friend "
+            "remains in the roster; offline friends fill unused leading slots."
+        )
+        visible_capacity.valueChanged.connect(tab._save_settings)
+        tab.friend_pulse_visible_row_capacity = visible_capacity
+        capacity_row.addWidget(visible_capacity)
+        capacity_row.addStretch()
+
     _finalize_bucket_body(layout_toggle, layout_body)
     appearance_toggle, appearance_body, appearance_layout = _build_card_subbucket(
         tab,
@@ -1044,6 +1058,29 @@ def _build_card_group(
     font_row.addWidget(font_size)
     font_row.addWidget(QLabel("px"))
     font_row.addStretch()
+
+    if key == "friend_pulse":
+        show_names = QCheckBox("Show Names under Avatars")
+        show_names.setProperty("circleIndicator", True)
+        show_names.setChecked(tab._default_bool(key, "show_names"))
+        show_names.setToolTip(
+            "Show privacy-permitted friend names centered below each avatar in "
+            "Avatar Grid view. Strict privacy remains anonymous."
+        )
+        show_names.stateChanged.connect(tab._save_settings)
+        tab.friend_pulse_show_names = show_names
+        appearance_layout.addWidget(show_names)
+
+        name_font_row = _aligned_row(appearance_layout, "Name Font Size:")
+        name_font_size = QSpinBox()
+        name_font_size.setRange(8, 18)
+        name_font_size.setValue(tab._default_int(key, "name_font_size"))
+        name_font_size.setToolTip("Friend-name size in Avatar Grid view.")
+        name_font_size.valueChanged.connect(tab._save_settings)
+        tab.friend_pulse_name_font_size = name_font_size
+        name_font_row.addWidget(name_font_size)
+        name_font_row.addWidget(QLabel("px"))
+        name_font_row.addStretch()
 
     if key in {"achievement_pulse", "abandonment_issues"}:
         # Keep legacy persisted values load/save-compatible until the explicit
@@ -1573,8 +1610,8 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     connection_layout.setSpacing(12)
 
     info = QLabel(
-        "Achievement Pulse and Abandonment Issues are available normally. Steam Journey remains a scaffold; the "
-        "experimental retained Friend Pulse card is visible only with --devsteam. Opening this section reads "
+        "Achievement Pulse, Abandonment Issues, and Friend Pulse are available normally. Steam Journey remains an "
+        "unfinished scaffold visible only with --devsteam. Opening this section reads "
         "encrypted-storage availability and bounded cached records only; it never decrypts credentials or contacts Steam."
     )
     info.setWordWrap(True)
@@ -1655,7 +1692,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
 
     _finalize_bucket_body(connection_toggle, connection_body)
 
-    show_unfinished_cards = is_steam_enabled()
+    show_steam_journey = is_steam_enabled()
     for key, label, fallback_position in _STEAM_CARD_ORDER:
         _build_card_group(
             tab,
@@ -1663,7 +1700,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
             key,
             label,
             fallback_position,
-            visible=key in {"achievement_pulse", "abandonment_issues"} or show_unfinished_cards,
+            visible=key != "steam_progress" or show_steam_journey,
         )
     _hydrate_achievement_selection_titles(tab)
     _hydrate_abandonment_library_choices(tab)
@@ -1724,6 +1761,35 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                 str(config.get("view_mode", tab._default_str(key, "view_mode"))),
                 canonical_value=tab._default_str(key, "view_mode"),
             )
+            try:
+                tab.friend_pulse_visible_row_capacity.setValue(
+                    int(
+                        config.get(
+                            "visible_row_capacity",
+                            tab._default_int(key, "visible_row_capacity"),
+                        )
+                    )
+                )
+            except Exception:
+                tab.friend_pulse_visible_row_capacity.setValue(
+                    tab._default_int(key, "visible_row_capacity")
+                )
+            tab.friend_pulse_show_names.setChecked(
+                bool(config.get("show_names", tab._default_bool(key, "show_names")))
+            )
+            try:
+                tab.friend_pulse_name_font_size.setValue(
+                    int(
+                        config.get(
+                            "name_font_size",
+                            tab._default_int(key, "name_font_size"),
+                        )
+                    )
+                )
+            except Exception:
+                tab.friend_pulse_name_font_size.setValue(
+                    tab._default_int(key, "name_font_size")
+                )
         if key in {"achievement_pulse", "abandonment_issues"}:
             header_fill_fallback = (11, 16, 22, 230)
             header_text_fallback = (255, 255, 255, 230)
@@ -2083,6 +2149,11 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
                 tab.friend_pulse_view_mode,
             )
         )
+        payload["visible_row_capacity"] = int(
+            tab.friend_pulse_visible_row_capacity.value()
+        )
+        payload["show_names"] = bool(tab.friend_pulse_show_names.isChecked())
+        payload["name_font_size"] = int(tab.friend_pulse_name_font_size.value())
     return payload
 
 

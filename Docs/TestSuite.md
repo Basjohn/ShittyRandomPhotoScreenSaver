@@ -73,26 +73,34 @@ The performance investigation is closed: the corrected A/B result rejects the sy
 
 ---
 
-## 0.12 2026-09-13 Friend Pulse and System Stats implementation gate
+## 0.12 2026-09-13 Friend Pulse and System Stats implementation verification
 
-The F0-F6 Friend Pulse and S0-S6 CPU/RAM System Stats implementation gate is GREEN on Windows/PySide6:
+The F0-F6 Friend Pulse and S0-S6 CPU/RAM System Stats implementation verification is GREEN on Windows/PySide6:
 
 - **281/281 PASS** across Friend source/privacy/cache/request/avatar runtime, System Stats source/shared sampler, both
   retained QML models/components, Steam/System Settings, binder/runtime-manager/family catalog, defaults authority,
   one-open buckets, ordinary uniform resize, display stacking/prediction, build assets and focused semantic theme
-  inheritance. The expanded gate also covers private-cache ID confinement, identity-match validation, row-index-only
+  inheritance. The expanded verification also covers private-cache ID confinement, identity-match validation, row-index-only
   Friend actions, Steam/profile/Store target validation, interactive client fallback, normal secure-helper fail-closed
   routing, exactly-once saver exit, and Achievement/Abandonment artwork actions;
 - **14/14 PASS** across widget import dormancy, capability-catalog neutrality and Widgets SETUP activation routing;
+- **258/258 PASS** for the public-admission follow-up across ungated Friend/System descriptors, Setup/pill visibility,
+  retained binder admission, one-time existing-profile activation migration, later user-deactivation preservation,
+  member-off dormancy, Steam actions, CLI compatibility, generated defaults and build assets;
+- **160/160 PASS** for the final Friend roster correction across full online-first/offline-fill projection, zero-AppID
+  rejection, visible-only avatar hydration, semantic actions, event-owned glow, virtualized Grid/Rows and stable model
+  attachment;
 - generated default snapshot plus both SST documents: **CURRENT** via `defaults_snapshot_builder --check-all`;
-- production-Quick visual smoke at DPR 1.5: canonical Grid, six-friend responsive three-column Grid, Activity Rows,
-  Strict, System Stats and both shared 40% floor captures rendered with **zero QML warnings**;
+- production-Quick threaded-OpenGL visual smoke at DPR 1.5: eight-slot and twelve-friend Grid, Activity Rows, retained
+  action menu, finite change glow, rounded avatar/tile corners, Strict, System Stats and both shared 40% floor captures
+  rendered with **zero QML warnings**;
 - source asset contract: Friend/System QML and the original System Stats gear-and-spanner SVG are required build payloads.
 
-This is not the installed acceptance/ungate claim. Friend Pulse still needs connected-account privacy/readability,
+This is not the installed acceptance claim. Friend Pulse still needs connected-account privacy/readability,
 installed Steam/chat/profile/Store routing, and two-display retirement/cardinality validation. System Stats still needs
-the installed 10-second off-vs-on Visualizer contention/long-run and two-display resource/cardinality cells. Keep
-`--devsteam` / `--devstats` until those plan rows close.
+the installed 10-second off-vs-on Visualizer contention/long-run and two-display resource/cardinality cells. Both are
+public and member-disabled by default; `--devsteam` remains only for unfinished Games You Follow and `--devstats` is retired.
+The parser tolerates the old `--devstats` token as an inert no-op so an existing shortcut cannot change launch mode.
 
 ---
 

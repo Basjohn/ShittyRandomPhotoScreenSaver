@@ -556,7 +556,7 @@
         "media": true,
         "reddit": true,
         "steam": true,
-        "system_stats": false,
+        "system_stats": true,
         "visualizers": true,
         "weather": true
       },
@@ -610,12 +610,14 @@
         ],
         "margin": 30,
         "monitor": "ALL",
+        "name_font_size": 13,
         "position": "Top Left",
-        "preferred_height": 334,
+        "preferred_height": 394,
         "preferred_width": 560,
         "show_background": true,
+        "show_names": true,
         "view_mode": "grid",
-        "visible_row_capacity": 4
+        "visible_row_capacity": 8
       },
       "global": {
         "card_border_width_px": 4,

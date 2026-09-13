@@ -3215,13 +3215,45 @@ class DisplayManager(QObject):
 
         from core.build_profile import is_diagnostic_build
         from core.mc import is_mc_build
-        from core.steam.links import friend_message_target, store_target
+        from core.steam.links import (
+            friend_message_target,
+            friend_profile_target,
+            normalize_steam_id,
+            store_target,
+        )
         from core.widget_product_actions import dispatch_steam_link_product_action
         from core.windows.secure_url_launcher import open_steam_target
 
         kind = str(action_kind or "").strip().lower()
+        if kind == "copy_steam_id":
+            steam_id = normalize_steam_id(target_value)
+            if steam_id is None:
+                logger.warning(
+                    "[STEAM] Rejected invalid clipboard action widget=%s",
+                    str(widget_id or "steam"),
+                )
+                return False
+            try:
+                clipboard = QGuiApplication.clipboard()
+                if clipboard is None:
+                    return False
+                clipboard.setText(steam_id)
+            except Exception:
+                logger.warning(
+                    "[STEAM] Clipboard action failed widget=%s",
+                    str(widget_id or "steam"),
+                    exc_info=True,
+                )
+                return False
+            logger.info(
+                "[STEAM] Copied private Friend Pulse identifier widget=%s",
+                str(widget_id or "steam"),
+            )
+            return True
         if kind == "friend_message":
             target = friend_message_target(target_value)
+        elif kind == "friend_profile":
+            target = friend_profile_target(target_value)
         elif kind == "store":
             target = store_target(target_value)
         else:

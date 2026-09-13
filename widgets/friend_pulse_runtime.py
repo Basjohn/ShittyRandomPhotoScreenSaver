@@ -36,7 +36,7 @@ from core.threading.manager import TaskPriority, ThreadManager
 class FriendPulseRuntimeConfig:
     refresh_minutes: int = 6
     privacy_mode: str = "Rich"
-    capacity: int = 4
+    capacity: int = 8
 
     def normalized(self) -> "FriendPulseRuntimeConfig":
         try:
@@ -46,12 +46,12 @@ class FriendPulseRuntimeConfig:
         try:
             capacity = int(self.capacity)
         except (TypeError, ValueError):
-            capacity = 4
+            capacity = 8
         mode = str(self.privacy_mode or "Rich").strip().title()
         return replace(
             self,
             refresh_minutes=max(5, min(240, refresh)),
-            capacity=max(1, min(12, capacity)),
+            capacity=max(1, min(24, capacity)),
             privacy_mode=mode if mode in {"Strict", "Balanced", "Rich"} else "Rich",
         )
 
@@ -146,9 +146,11 @@ class _SharedFriendPulseOwner:
     def configure_refresh_minutes(self, refresh_minutes: int) -> None:
         """Apply the one canonical Steam cadence to this shared owner."""
 
-        normalized = FriendPulseRuntimeConfig(
-            refresh_minutes=refresh_minutes
-        ).normalized().refresh_minutes
+        normalized = (
+            FriendPulseRuntimeConfig(refresh_minutes=refresh_minutes)
+            .normalized()
+            .refresh_minutes
+        )
         if normalized == self._config.refresh_minutes:
             return
         self._config = replace(self._config, refresh_minutes=normalized)
@@ -388,7 +390,7 @@ class _SharedFriendPulseOwner:
         for lease in tuple(self._active):
             if not lease._wants_rich_avatars():
                 continue
-            for entry in snapshot.entries[: lease.config.capacity]:
+            for entry in lease._visible_avatar_entries(snapshot):
                 candidate = (entry.identity_fingerprint, entry.avatar_url)
                 if (
                     entry.avatar_url
@@ -486,13 +488,14 @@ class _SharedFriendPulseOwner:
             for entry in (self._snapshot.entries if self._snapshot else ())
             if entry.avatar_url
         }
-        source_urls = requested_urls if isinstance(requested_urls, dict) else current_urls
+        source_urls = (
+            requested_urls if isinstance(requested_urls, dict) else current_urls
+        )
         valid = {
             str(key): str(value)
             for key, value in resolved.items()
             if str(value).startswith("file:")
-            and str(source_urls.get(str(key), ""))
-            == current_urls.get(str(key))
+            and str(source_urls.get(str(key), "")) == current_urls.get(str(key))
         }
         changed = {
             key: value
@@ -566,6 +569,14 @@ class _SharedFriendPulseOwner:
         due._srpss_runtime_generation = self._runtime_generation
         self._scheduler(self._config.refresh_minutes * 60_000, due)
 
+    def avatar_view_changed(self) -> None:
+        """Invalidate one visible-only hydration pass without adding cadence."""
+
+        if self._retired or not self._running:
+            return
+        self._avatar_epoch += 1
+        self.request_avatar_hydration()
+
 
 class FriendPulseRuntimeService:
     """Per-display lease joining one generation-scoped neutral owner."""
@@ -590,6 +601,7 @@ class FriendPulseRuntimeService:
         self._consumer_ref: weakref.ReferenceType | None = None
         self._owner: _SharedFriendPulseOwner | None = None
         self._running = self._retired = False
+        self._visible_row_indices = tuple(range(self._config.capacity))
         self._seams = (
             cache_loader,
             refresh_loader,
@@ -696,15 +708,58 @@ class FriendPulseRuntimeService:
             return None
         return self._owner._friend_steam_ids.get(str(identity_fingerprint or ""))
 
+    def update_visible_range(self, first_index: int, last_index: int) -> bool:
+        """Publish a bounded presentation viewport to the shared avatar owner."""
+
+        if self._retired:
+            return False
+        try:
+            requested_first = int(first_index)
+            requested_last = int(last_index)
+        except (TypeError, ValueError):
+            return False
+        if requested_first < 0 and requested_last < 0:
+            resolved: tuple[int, ...] = ()
+        else:
+            first = max(0, requested_first)
+            last = max(first, requested_last)
+            # One partial row of overscan is useful, but QML cannot request an
+            # unbounded all-roster hydration burst through this seam.
+            last = min(last, first + self._config.capacity + 5)
+            resolved = tuple(range(first, last + 1))
+        if resolved == self._visible_row_indices:
+            return False
+        self._visible_row_indices = resolved
+        if self._owner is not None:
+            self._owner.avatar_view_changed()
+        return True
+
+    def _visible_avatar_entries(
+        self,
+        snapshot: FriendPulseSnapshot,
+    ) -> tuple[Any, ...]:
+        entries = snapshot.entries
+        return tuple(
+            entries[index]
+            for index in self._visible_row_indices
+            if 0 <= index < len(entries)
+        )
+
     def configure(self, config: FriendPulseRuntimeConfig) -> None:
+        prior_capacity = self._config.capacity
         self._config = config.normalized()
+        if self._config.capacity != prior_capacity:
+            self._visible_row_indices = tuple(range(self._config.capacity))
         if self._owner is not None:
             self._owner.configure_refresh_minutes(self._config.refresh_minutes)
         snapshot = self.current_snapshot()
         if snapshot is not None:
             self._deliver(snapshot)
         if self._owner is not None:
-            self._owner.request_avatar_hydration()
+            if self._config.capacity != prior_capacity:
+                self._owner.avatar_view_changed()
+            else:
+                self._owner.request_avatar_hydration()
 
     @property
     def config(self) -> FriendPulseRuntimeConfig:

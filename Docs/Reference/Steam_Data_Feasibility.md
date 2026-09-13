@@ -1,12 +1,15 @@
 # Steam Data Feasibility
 
-Last updated: 2026-07-15
+Last updated: 2026-09-13
 
-This document records the supported-source pass for the Steam widget family. Achievement Pulse and Abandonment Issues are normally visible, disabled-by-default cards; this document remains the source gate for Steam Journey and Friend Pulse.
+This document records the supported-source pass for the Steam widget family. Achievement Pulse, Abandonment Issues,
+and Friend Pulse are normally visible, disabled-by-default cards; this document remains the source gate for Games You
+Follow.
 
 ## Rules
 
-- Achievement Pulse, Abandonment Issues, and Steam Settings are visible without a development flag. `--devsteam` exposes only Steam Journey and Friend Pulse prototypes; `steam_progress` remains Steam Journey's compatibility key.
+- Achievement Pulse, Abandonment Issues, Friend Pulse, and Steam Settings are visible without a development flag.
+  `--devsteam` exposes only unfinished Games You Follow; `steam_progress` remains its compatibility key.
 - User Steam API keys/profile identifiers are credentials, not settings.
 - Publisher-key endpoints are excluded from client runtime, even if they would solve a product problem.
 - Unknown/private/unavailable data is a first-class state. Do not infer dates, ownership, friends, or progress from absence.
@@ -29,7 +32,7 @@ This document records the supported-source pass for the Steam widget family. Ach
 | Owned library | `IPlayerService/GetOwnedGames/v1` | Conditional; locally proven | app id, title/icon when appinfo is included, playtime forever, `rtime_last_played` when returned | Returns owned games only when owned-game details are visible to caller. Valve's method page does not promise the response field list, so runtime validation remains required | Library index and Abandonment candidate foundation; cannot fabricate missing apps or dates |
 | Per-app achievements | `ISteamUserStats/GetPlayerAchievements/v1` + `GetSchemaForGame/v2` | Conditional | achievement list, unlock state/time, schema totals/names, achieved/unachieved icon URLs when supplied | Requires user key, profile id, app id; per-app availability and icon fields may vary | Achievement Pulse uses schema display names/icons; Abandonment ranking reuses bounded cache hints, then its worker may fetch exactly the committed selected app for enabled count/latest-unlock shelves |
 | Friends | `ISteamUser/GetFriendList/v1` + `GetPlayerSummaries/v2` | Conditional | relationship list, persona/avatar/current game summary | Private friends list returns unauthorized; unavailable must not become “everyone offline” | Friend Pulse can proceed only with privacy-aware empty states |
-| App news | `ISteamNews/GetNewsForApp/v2` | Transport/schema proven; product use conditional | app id, stable item id, title/body, date, feed metadata, tags, URL | Public app-specific endpoint; not personalized and not library-wide | Steam Journey may use only bounded watched/focus-app scans after its classifier/noise gate |
+| App news | `ISteamNews/GetNewsForApp/v2` | Transport/schema proven; product use conditional | app id, stable item id, title/body, date, feed metadata, tags, URL | Public app-specific endpoint; not personalized and not library-wide | Games You Follow may use only a bounded explicitly followed-app set after follow-authority, URL-policy, and response-budget G0 evidence |
 | General per-game last played | `IPlayerService/GetOwnedGames/v1` `rtime_last_played` | Conditional; locally proven | Unix timestamp plus explicit verified/unknown provenance | A redacted controlled-account probe found the field on every returned owned row and a positive timestamp on every played row. Missing, zero, non-numeric, or future values remain unknown; account privacy/unavailability is not “never played” | Abandonment Issues may make smart age claims only for individually verified rows |
 | Single-game playtime | `IPlayerService/GetSingleGamePlaytime/v1` | Unavailable | app playtime only for associated app key | Requires Web API key associated with that app | Not a general client feature |
 | Publisher app ownership / authed news | publisher-only endpoints | Excluded | none | Requires publisher key and secure server, never direct clients | Must not be called or exposed as fallback |
@@ -47,8 +50,11 @@ This document records the supported-source pass for the Steam widget family. Ach
 
 ### Friend Pulse
 
-- May proceed after fixtures prove private friend list, empty friend list, current-game summaries, missing avatars, and partial player summaries.
-- Default display must be currently playing / observed change oriented. Private/unavailable must not be shown as an offline roster.
+- Proceeds through the implemented cache-first path without `--devsteam`; the card remains disabled by default until the user enables it.
+- Maintained fixtures cover private friend list, empty friend list, current-game summaries, missing avatars, and partial player summaries.
+- Default display is a complete online-first roster with offline friends filling remaining viewport space; playing/change
+  evidence enriches and orders rows without filtering non-playing friends. Private/unavailable must not be shown as an
+  offline roster.
 
 ### Abandonment Issues
 
@@ -62,10 +68,14 @@ This document records the supported-source pass for the Steam widget family. Ach
 - Profile-private selection, exposure cooldowns, and rotation draw state are shared across displays. Smart rotation draws preference tiers with fixed tier weights and then a candidate within the selected tier, so library size cannot drown out the preferred old/short/low-unlock scope; every tier remains reachable and the current game is excluded when an alternative exists. `BACKLOG N/M` reports the selected candidate's preference-rank position and is not a sequential cursor. `widgets.steam.refresh_minutes` is the sole cadence authority for automatic game changes; no card-specific rotation value may compete with it. Persisted selection age is evaluated against the current shared interval, so a rebuild or setting change arms only the true remaining time and overdue state rotates immediately. A widget-level manual refresh forces one non-repeating cache-backed draw and restarts that shared cadence. Semantic selection reads cache only and cannot request owned/recent/candidate-achievement data. Missing achievement evidence for enabled shelves and a missing allowlisted public asset for the one committed app may hydrate on that existing IO job when automatic updates are allowed; a definitive missing/invalid requested art shape permits one bounded alternate-shape fallback, while transient failures do not fan out. `--noupdates` remains cache-only for automatic evidence/artwork hydration. Rotation defers rather than discards an expiry that collides with a parent transition.
 - Guilt Desaturater is optional presentation only: it prepares bucketed local artwork off the UI thread and never changes eligibility or source meaning.
 
-### Steam Journey
+### Games You Follow
 
 - The public app-news transport and stable item/date/url/feed fields are proven for a bounded app-specific request.
-- Production remains blocked on the editorial classifier, candidate budget, history/dismissal policy, and noise/failure fixtures. It must not scan the whole library frequently by default or pretend public app news is personalized progress.
+- Production remains blocked on the user's follow-set authority, safe source-article URL/redirect policy, per-follow-set
+  response/candidate budget, and malformed/noise/failure fixtures. It must not scan the whole library frequently by
+  default or pretend public app news is personalized progress.
+- `NEWS_AUTHED`/publisher endpoints remain excluded; no Store scraping, cookies, browser automation, or implicit
+  owned/recent-game substitution is an allowed follow/news fallback.
 
 ## Implementation Consequences
 

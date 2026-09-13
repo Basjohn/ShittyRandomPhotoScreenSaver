@@ -195,10 +195,18 @@ def test_clock_adapter_enumerates_enabled_instances_without_qt() -> None:
     assert adapter.enabled_instance_ids({"clock": {"enabled": False}}) == ()
 
 
+def test_system_stats_adapter_is_public_but_member_defaults_dormant_without_qt() -> None:
+    adapter = SystemStatsFamilyAdapter()
+    assert adapter.enabled_instance_ids({}) == ()
+    assert adapter.enabled_instance_ids(
+        {"system_stats": {"enabled": True}}
+    ) == ("system_stats",)
+
+
 def test_default_adapter_set_covers_every_wired_family_without_qt() -> None:
     families = [adapter.family_id for adapter in default_ordinary_family_adapters()]
-    # Three Steam-card adapters share the capability id; System Stats is a
-    # distinct dev-gated family.
+    # Three Steam-card adapters share the capability id; System Stats is its
+    # own normally available family.
     assert families == [
         "clocks",
         "weather",

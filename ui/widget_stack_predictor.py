@@ -370,7 +370,7 @@ def estimate_friend_pulse_size(
     *,
     width: int = 560,
     view_mode: str = "grid",
-    capacity: int = 4,
+    capacity: int = 8,
 ) -> Tuple[int, int]:
     """Estimate Friend Pulse geometry from its retained presentation contract.
 
@@ -379,18 +379,19 @@ def estimate_friend_pulse_size(
     predictor follows the same rows/grid contract without importing Qt Quick.
     """
     normalized_width = max(420, min(900, int(width)))
-    normalized_capacity = max(1, min(6, int(capacity)))
+    normalized_capacity = max(1, min(24, int(capacity)))
     normalized_mode = str(view_mode or "grid").strip().lower()
     if normalized_mode not in {"rows", "grid"}:
         normalized_mode = "grid"
     if normalized_mode == "grid":
-        columns = (
-            2
-            if normalized_capacity <= 4 or normalized_width < 540
-            else 3
+        content_width = normalized_width - 36
+        columns = min(
+            normalized_capacity,
+            6,
+            max(1, int((content_width + 10) // 120)),
         )
         rows = (normalized_capacity + columns - 1) // columns
-        height = 120 + rows * 102 + max(0, rows - 1) * 10
+        height = 120 + rows * 132 + max(0, rows - 1) * 10
     else:
         height = 102 + normalized_capacity * 58
     return normalized_width, height

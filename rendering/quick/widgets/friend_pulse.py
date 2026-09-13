@@ -18,6 +18,7 @@ from PySide6.QtCore import (
     QModelIndex,
     QObject,
     Property,
+    Slot,
     Qt,
     Signal,
 )
@@ -63,16 +64,18 @@ if not isinstance(_STEAM_DEFAULTS, Mapping) or not isinstance(
     raise TypeError("Canonical Steam/Friend Pulse defaults must be mappings")
 
 
+_GRID_TILE_HEIGHT = 132
+_GRID_GAP = 10
+
+
 def _grid_columns_for(capacity: int, authored_width: int) -> int:
-    """Choose columns that leave changed-tile titles readable at narrow widths."""
-    normalized_capacity = max(1, min(6, int(capacity)))
+    """Fit readable avatar cells to the normalized authored card width."""
+
+    normalized_capacity = max(1, min(24, int(capacity)))
     normalized_width = max(420, min(900, int(authored_width)))
-    if normalized_capacity <= 4:
-        return 2
-    # Three columns are attractive at large widths, but at the supported narrow
-    # end they leave a changed tile only a few pixels after avatar and NEW-badge
-    # reservations. Two columns keep the title allocation meaningful.
-    return 2 if normalized_width < 540 else 3
+    content_width = normalized_width - 36
+    fitted = max(1, int((content_width + _GRID_GAP) // (110 + _GRID_GAP)))
+    return min(normalized_capacity, 6, fitted)
 
 
 @dataclass(frozen=True)
@@ -94,6 +97,8 @@ class FriendPulsePresentationConfig:
     privacy_mode: str
     view_mode: str
     capacity: int
+    show_names: bool
+    name_font_size: int
     authored_width: int
 
     @classmethod
@@ -178,7 +183,17 @@ class FriendPulsePresentationConfig:
                 merged_card.get("visible_row_capacity"),
                 int(_FRIEND_DEFAULTS["visible_row_capacity"]),
                 1,
-                6,
+                24,
+            ),
+            show_names=as_bool(
+                merged_card.get("show_names"),
+                bool(_FRIEND_DEFAULTS["show_names"]),
+            ),
+            name_font_size=bounded_int(
+                merged_card.get("name_font_size"),
+                int(_FRIEND_DEFAULTS["name_font_size"]),
+                8,
+                18,
             ),
             authored_width=bounded_int(
                 merged_card.get("preferred_width"),
@@ -242,7 +257,9 @@ class FriendPulsePresentationConfig:
         if self.view_mode == "grid":
             columns = _grid_columns_for(self.capacity, self.authored_width)
             grid_rows = (self.capacity + columns - 1) // columns
-            return 120 + grid_rows * 102 + max(0, grid_rows - 1) * 10
+            return (
+                120 + grid_rows * _GRID_TILE_HEIGHT + max(0, grid_rows - 1) * _GRID_GAP
+            )
         return 102 + self.capacity * 58
 
 
@@ -385,6 +402,7 @@ class FriendPulseRowListModel(QAbstractListModel):
 
 class FriendPulsePresentationModel(QObject):
     stateChanged = Signal()
+    friendChangePulseRequested = Signal(int)
 
     def __init__(
         self,
@@ -407,6 +425,8 @@ class FriendPulsePresentationModel(QObject):
         self._active = False
         self._retired = False
         self._interaction_enabled = False
+        self._visible_row_range: tuple[int, int] | None = (0, config.capacity - 1)
+        self._pending_pulse_indices: tuple[int, ...] = ()
 
     @property
     def is_active(self) -> bool:
@@ -454,6 +474,9 @@ class FriendPulsePresentationModel(QObject):
             service.detach_consumer(self)
             self._runtime_attached = False
             raise RuntimeError("Friend Pulse shared service failed to start")
+        visible_range = getattr(service, "update_visible_range", None)
+        if callable(visible_range):
+            visible_range(0, self.config.capacity - 1)
         return True
 
     def on_friend_pulse_runtime_snapshot(
@@ -465,7 +488,44 @@ class FriendPulsePresentationModel(QObject):
             return
         if snapshot == self._snapshot and projection == self._projection:
             return
+        previous_event_keys = {
+            (row.identity_fingerprint, row.game_appid)
+            for row in self._projection.rows
+            if row.changed and row.identity_fingerprint and row.game_appid
+        }
+        previous_row_count = len(self._row_model.rows)
+        self._pending_pulse_indices = ()
+        # Update the retained row model first.  Its synchronous count/content
+        # signals queue a viewport clamp before event admission is finalized,
+        # so a stale pre-shrink range cannot queue a delayed glow.
         rows_changed = self._row_model.replace_rows(projection.rows)
+        prior_observation_was_visible = (
+            self._snapshot is not None
+            and self._projection.state in {"ready", "stale"}
+            and self._visible_row_range is not None
+        )
+        event_indices = tuple(
+            index
+            for index, row in enumerate(projection.rows)
+            if prior_observation_was_visible
+            and row.changed
+            and row.identity_fingerprint
+            and row.game_appid
+            and (row.identity_fingerprint, row.game_appid) not in previous_event_keys
+        )
+        if len(projection.rows) != previous_row_count:
+            # The List/Grid view can clamp after a count change.  Its forced,
+            # queued viewport report consumes these candidates against the new
+            # visible range after the model mutation has fully unwound.
+            self._pending_pulse_indices = event_indices
+            pulse_indices: tuple[int, ...] = ()
+        else:
+            visible_first, visible_last = self._visible_row_range or (0, -1)
+            pulse_indices = tuple(
+                index
+                for index in event_indices
+                if visible_first <= index <= visible_last
+            )
         previous_state = (
             self._projection.state,
             self._projection.primary_metric,
@@ -482,6 +542,8 @@ class FriendPulsePresentationModel(QObject):
         )
         if rows_changed or current_state != previous_state:
             self.stateChanged.emit()
+        for index in pulse_indices:
+            self.friendChangePulseRequested.emit(index)
 
     def request_manual_refresh(self) -> bool:
         return bool(
@@ -517,6 +579,57 @@ class FriendPulsePresentationModel(QObject):
             return None
         return str(appid) if appid is not None and int(appid) > 0 else None
 
+    def menu_action_target(
+        self,
+        action: str,
+        row_index: int,
+    ) -> tuple[str, str] | None:
+        """Revalidate a QML row/action pair against current private owner state."""
+
+        normalized = str(action or "").strip().lower()
+        if normalized == "store":
+            target = self.game_action_target(row_index)
+            return ("store", target) if target is not None else None
+        if normalized not in {"profile", "chat", "copy_id"}:
+            return None
+        target = self.friend_action_target(row_index)
+        if target is None:
+            return None
+        return {
+            "profile": ("friend_profile", target),
+            "chat": ("friend_message", target),
+            "copy_id": ("copy_steam_id", target),
+        }[normalized]
+
+    @Slot(int, int, result=bool)
+    def report_visible_range(self, first_index: int, last_index: int) -> bool:
+        if not self.is_active or self._runtime_service is None:
+            return False
+        try:
+            requested_first = int(first_index)
+            requested_last = int(last_index)
+        except (TypeError, ValueError):
+            return False
+        reporter = getattr(self._runtime_service, "update_visible_range", None)
+        if not callable(reporter):
+            return False
+        if requested_first < 0 and requested_last < 0:
+            self._visible_row_range = None
+            self._pending_pulse_indices = ()
+            return bool(reporter(-1, -1))
+        first = max(0, requested_first)
+        last = min(len(self._row_model.rows) - 1, requested_last)
+        if last < first:
+            self._pending_pulse_indices = ()
+            return False
+        self._visible_row_range = (first, last)
+        reported = bool(reporter(first, last))
+        pending, self._pending_pulse_indices = self._pending_pulse_indices, ()
+        for index in pending:
+            if first <= index <= last:
+                self.friendChangePulseRequested.emit(index)
+        return reported
+
     def set_interaction_enabled(self, enabled: bool) -> bool:
         value = bool(enabled)
         if value == self._interaction_enabled:
@@ -537,6 +650,7 @@ class FriendPulsePresentationModel(QObject):
         self._runtime_service = None
         self._thread_manager = None
         self._snapshot = None
+        self._pending_pulse_indices = ()
         self._row_model.replace_rows(())
 
     @Property(QObject, constant=True)
@@ -562,11 +676,11 @@ class FriendPulsePresentationModel(QObject):
 
     @Property(str, notify=stateChanged)
     def secondaryMetric(self) -> str:
-        if self._projection.overflow_count > 0:
-            return f"+{self._projection.overflow_count} more playing"
-        online = self._snapshot.online_count if self._snapshot is not None else None
-        if online is not None and online > 0:
-            return f"{online} online"
+        if self._snapshot is not None and self._projection.state in {"ready", "stale"}:
+            playing = max(0, int(self._snapshot.playing_count or 0))
+            total = len(self._snapshot.entries)
+            noun = "friend" if total == 1 else "friends"
+            return f"{playing} playing  •  {total} {noun}"
         if self._projection.state == "stale":
             return "Cached Steam snapshot"
         return ""
@@ -586,6 +700,19 @@ class FriendPulsePresentationModel(QObject):
     @Property(int, constant=True)
     def gridColumns(self) -> int:
         return _grid_columns_for(self.config.capacity, self.config.authored_width)
+
+    @Property(int, constant=True)
+    def visibleCapacity(self) -> int:
+        return self.config.capacity
+
+    @Property(bool, constant=True)
+    def showNames(self) -> bool:
+        # Strict rows are aggregate labels rather than personal identities.
+        return self.config.privacy_mode == "Strict" or self.config.show_names
+
+    @Property(float, constant=True)
+    def nameFontSize(self) -> float:
+        return float(self.config.name_font_size)
 
     @Property(str, constant=True)
     def logoSource(self) -> str:
@@ -694,23 +821,60 @@ class RetainedFriendPulsePresentation:
             refresh.connect(model.request_manual_refresh)
         self._connect("friendActionRequested", self._handle_friend_action)
         self._connect("gameActionRequested", self._handle_game_action)
+        self._connect("friendMenuActionRequested", self._handle_menu_action)
+        self._connect("actionMenuPointerGesture", self._arm_action_menu_pointer_guard)
+        self._connect(
+            "visibleRangeChanged",
+            model.report_visible_range,
+            connection_type=Qt.ConnectionType.QueuedConnection,
+        )
 
-    def _connect(self, signal_name: str, callback: Callable[..., Any]) -> None:
+    def _connect(
+        self,
+        signal_name: str,
+        callback: Callable[..., Any],
+        *,
+        connection_type: Qt.ConnectionType | None = None,
+    ) -> None:
         signal = getattr(self._retained.item, signal_name, None)
         if signal is not None and hasattr(signal, "connect"):
-            signal.connect(callback)
+            if connection_type is None:
+                signal.connect(callback)
+            else:
+                signal.connect(callback, connection_type)
 
     def _handle_friend_action(self, row_index: int) -> bool:
+        from rendering.runtime_input import runtime_pointer_input_is_suppressed
+
+        if runtime_pointer_input_is_suppressed("friendPulseFriendActionRequested"):
+            return False
         target = self._model.friend_action_target(row_index)
         if target is None or self._on_steam_action_requested is None:
             return False
         return bool(self._on_steam_action_requested("friend_message", target))
 
     def _handle_game_action(self, row_index: int) -> bool:
+        from rendering.runtime_input import runtime_pointer_input_is_suppressed
+
+        if runtime_pointer_input_is_suppressed("friendPulseGameActionRequested"):
+            return False
         target = self._model.game_action_target(row_index)
         if target is None or self._on_steam_action_requested is None:
             return False
         return bool(self._on_steam_action_requested("store", target))
+
+    def _handle_menu_action(self, action: str, row_index: int) -> bool:
+        resolved = self._model.menu_action_target(action, row_index)
+        if resolved is None or self._on_steam_action_requested is None:
+            return False
+        kind, target = resolved
+        return bool(self._on_steam_action_requested(kind, target))
+
+    @staticmethod
+    def _arm_action_menu_pointer_guard() -> None:
+        from rendering.runtime_input import suppress_runtime_pointer_input
+
+        suppress_runtime_pointer_input(700, reason="friend_pulse_action_menu")
 
     @property
     def item(self) -> Any:

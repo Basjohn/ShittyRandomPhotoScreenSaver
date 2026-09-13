@@ -100,6 +100,7 @@ def test_widget_settings_section_descriptors_default_order():
         "reddit",
         "gmail",
         "steam",
+        "system_stats",
         "defaults",
     ]
 

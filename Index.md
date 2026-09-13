@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-09-11
+Last updated: 2026-09-13
 
 ## Start here
 
@@ -131,8 +131,9 @@ For a new mode or any meaningful reactivity change, read `Docs/Guides/Visualizer
 - `Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md` — Ordinary Widget Resize Normalization (retired / historical reference)
 - `Docs/Future_Work/Settings_Dark_QSS_Retirement.md` — Settings `dark.qss` Retirement
 - `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` — Voxel Sphere — accepted experimental preservation and future migration gate
-- `Docs/Future_Work/Steam_Friend_Pulse.md` — implemented/dev-gated Friend Pulse architecture and live/installed acceptance authority
-- `Docs/Future_Work/System_Stats_Widget.md` — implemented/dev-gated CPU/RAM System Stats architecture, rejected GPU/VRAM evidence and S7 acceptance authority
+- `Docs/Future_Work/Steam_Friend_Pulse.md` — public retained Friend Pulse architecture and live/installed acceptance authority
+- `Docs/Future_Work/Steam_Games_You_Follow.md` — dev-gated Games You Follow feasibility-first retained Steam news-card decomposition
+- `Docs/Future_Work/System_Stats_Widget.md` — public dormant-by-default CPU/RAM System Stats architecture, rejected GPU/VRAM evidence and S7 acceptance authority
 - `Docs/Future_Work/SST_9of10_Settings.md` — SST 9/10 Settings — closeout/reference checklist (Strategy B)
 - `Docs/Future_Work/Visualizer_Replay_Reactivity_Floor.md` — Visualizer replay reactivity floor (landed regression reference)
 - `Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` — Visualizer visual regression recovery (historical evidence)

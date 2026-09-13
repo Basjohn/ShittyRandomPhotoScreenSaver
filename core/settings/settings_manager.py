@@ -56,6 +56,8 @@ class SettingsManager(QObject):
     # Signal emitted when settings change
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = STRUCTURED_SETTINGS_ROOTS
+    _WIDGET_CAPABILITY_SCHEMA_METADATA_KEY = "widget_capability_schema_version"
+    _WIDGET_CAPABILITY_SCHEMA_VERSION = 1
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
     _VISUALIZER_SCHEMA_VERSION = 9
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
@@ -176,6 +178,19 @@ class SettingsManager(QObject):
 
         # Initialize defaults
         self._set_defaults()
+
+        # System Stats was initially shipped as a hidden, deactivated family.
+        # Admit that formerly non-user-selectable family exactly once for
+        # existing profiles before normal dependency repair. Its member widget
+        # remains disabled, so this changes Settings visibility only and starts
+        # no sampler/runtime work.
+        try:
+            self._run_persisted_widget_capability_schema_migrations()
+        except Exception:
+            logger.debug(
+                "Persisted widget capability schema migration failed",
+                exc_info=True,
+            )
 
         # Repair invalid persisted widget-family capability dependencies (e.g.
         # media=False must force visualizers=False) durably, after defaults are
@@ -597,6 +612,69 @@ class SettingsManager(QObject):
         self._settings.update_metadata(
             **{self._VISUALIZER_SCHEMA_METADATA_KEY: self._VISUALIZER_SCHEMA_VERSION}
         )
+
+    def _widget_capability_schema_version(self) -> int:
+        """Return the persisted widget-capability schema version."""
+
+        try:
+            raw = self._settings.metadata().get(
+                self._WIDGET_CAPABILITY_SCHEMA_METADATA_KEY,
+                0,
+            )
+            return int(raw)
+        except Exception:
+            return 0
+
+    def _mark_widget_capability_schema_current_locked(self) -> None:
+        """Record that persisted widget-family admission state is current."""
+
+        if (
+            self._widget_capability_schema_version()
+            >= self._WIDGET_CAPABILITY_SCHEMA_VERSION
+        ):
+            return
+        self._settings.update_metadata(
+            **{
+                self._WIDGET_CAPABILITY_SCHEMA_METADATA_KEY: (
+                    self._WIDGET_CAPABILITY_SCHEMA_VERSION
+                )
+            }
+        )
+
+    def _run_persisted_widget_capability_schema_migrations(self) -> None:
+        """Migrate formerly hidden family activation without overriding future choices.
+
+        System Stats originally entered canonical defaults while its family and
+        Settings page were still launch-gated. SettingsManager consequently
+        persisted ``family_activation.system_stats=False`` even though no user
+        could make that choice. Version 1 admits the now-public family once.
+        Later deliberate deactivation is preserved because the metadata marker
+        prevents this migration from running again.
+        """
+
+        with self._lock:
+            schema_version = self._widget_capability_schema_version()
+            if schema_version >= self._WIDGET_CAPABILITY_SCHEMA_VERSION:
+                return
+
+            widgets = self._settings.value("widgets", {})
+            if isinstance(widgets, Mapping):
+                widgets_dict = deepcopy(dict(widgets))
+                activation = widgets_dict.get("family_activation", {})
+                activation_dict = (
+                    dict(activation) if isinstance(activation, Mapping) else {}
+                )
+                if activation_dict.get("system_stats") is not True:
+                    activation_dict["system_stats"] = True
+                    widgets_dict["family_activation"] = activation_dict
+                    self._store_widgets_root_locked(widgets_dict)
+                    logger.info(
+                        "Activated the now-public System Stats family for an existing profile"
+                    )
+
+            self._mark_widget_capability_schema_current_locked()
+            self._settings.sync()
+            self._clear_cache_locked()
 
     def _normalize_persisted_widget_capability_state(self) -> None:
         """Durably repair invalid persisted widget-family capability deps at load.
@@ -1611,6 +1689,7 @@ class SettingsManager(QObject):
                     )
                     self._store_widgets_root_locked(widgets_dict)
             self._mark_visualizer_schema_current_locked()
+            self._mark_widget_capability_schema_current_locked()
             self._settings.sync()
             self._clear_cache_locked()
 

@@ -97,7 +97,7 @@ def test_snapshot_projects_private_empty_and_privacy_modes_honestly() -> None:
     )
     assert (
         project_friend_pulse(empty, privacy_mode="Balanced", capacity=3).primary_metric
-        == "No friends playing"
+        == "No friends"
     )
     stale_empty = FriendPulseSnapshot(
         status=SteamResultStatus.SUCCESS,
@@ -113,7 +113,7 @@ def test_snapshot_projects_private_empty_and_privacy_modes_honestly() -> None:
     )
     assert stale_empty.usable is True
     assert stale_projection.state == "stale"
-    assert stale_projection.primary_metric == "No friends playing (cached)"
+    assert stale_projection.primary_metric == "No friends (cached)"
 
     snapshot = build_friend_pulse_snapshot(
         friend_result=_result(
@@ -136,15 +136,170 @@ def test_snapshot_projects_private_empty_and_privacy_modes_honestly() -> None:
         avatar_sources={safe_fingerprint(RAW_ID_A): "file:///safe/avatar.jpg"},
     )
     assert strict.rows[0].primary == "Counter-Strike" and "Ada" not in str(strict)
-    assert strict.primary_metric == "1 friend playing"
+    assert strict.primary_metric == "1 online"
     assert strict.rows[0].secondary == "1 friend playing"
     assert balanced.rows[0].primary == "Ada" and balanced.rows[0].avatar_url is None
+    assert balanced.rows[1].primary == "Bea"
+    assert balanced.rows[1].secondary == ""
+    assert balanced.rows[1].presence_text == "Offline"
     assert balanced.rows[0].friend_action_available is True
     assert rich.rows[0].avatar_url == "file:///safe/avatar.jpg"
     assert rich.rows[0].identity_fingerprint == safe_fingerprint(RAW_ID_A)
     assert rich.rows[0].friend_action_available is True
     assert strict.rows[0].friend_action_available is False
     assert RAW_ID_A not in str(rich.rows[0])
+
+
+def test_snapshot_retains_online_idle_and_offline_friends_and_ranks_them() -> None:
+    friend = {
+        "friends": [
+            {"identity_fingerprint": "playing"},
+            {"identity_fingerprint": "idle"},
+            {"identity_fingerprint": "offline"},
+        ]
+    }
+    snapshot = build_friend_pulse_snapshot(
+        friend_result=_result(SteamSourceId.FRIEND_LIST, friend),
+        summaries_result=_result(
+            SteamSourceId.PLAYER_SUMMARIES,
+            {
+                "players": [
+                    {
+                        "identity_fingerprint": "offline",
+                        "display_name": "Ada",
+                        "persona_state": 0,
+                    },
+                    {
+                        "identity_fingerprint": "idle",
+                        "display_name": "Zoë",
+                        "persona_state": 1,
+                    },
+                    {
+                        "identity_fingerprint": "playing",
+                        "display_name": "Bea",
+                        "persona_state": 1,
+                        "game_appid": 10,
+                        "game_name": "Game",
+                    },
+                ]
+            },
+        ),
+    )
+
+    assert [entry.identity_fingerprint for entry in snapshot.entries] == [
+        "playing",
+        "idle",
+        "offline",
+    ]
+    assert snapshot.playing_count == 1
+    assert snapshot.online_count == 2
+
+
+def test_zero_appid_is_not_normalized_or_projected_as_playing_evidence() -> None:
+    sanitized = sanitize_player_summaries_payload(
+        {
+            "response": {
+                "players": [
+                    {
+                        "steamid": RAW_ID_A,
+                        "personaname": "Ada",
+                        "personastate": 0,
+                        "gameid": "0",
+                    }
+                ]
+            }
+        },
+        friend_ids=(RAW_ID_A,),
+    )
+    assert "game_appid" not in sanitized["players"][0]
+
+    fingerprint = safe_fingerprint(RAW_ID_A)
+    snapshot = build_friend_pulse_snapshot(
+        friend_result=_result(
+            SteamSourceId.FRIEND_LIST,
+            {"friends": [{"identity_fingerprint": fingerprint}]},
+        ),
+        summaries_result=_result(
+            SteamSourceId.PLAYER_SUMMARIES,
+            {
+                "players": [
+                    {
+                        "identity_fingerprint": fingerprint,
+                        "display_name": "Ada",
+                        "persona_state": 0,
+                        "game_appid": 0,
+                    }
+                ]
+            },
+        ),
+    )
+
+    assert snapshot.playing_count == 0
+    assert snapshot.online_count == 0
+    projection = project_friend_pulse(
+        snapshot,
+        privacy_mode="Balanced",
+        capacity=1,
+    )
+    assert projection.rows[0].presence_text == "Offline"
+    assert projection.rows[0].game_appid is None
+
+
+def test_projection_keeps_the_full_roster_when_capacity_is_small() -> None:
+    snapshot = FriendPulseSnapshot(
+        status=SteamResultStatus.SUCCESS,
+        entries=(
+            FriendPulseEntry("playing", "Bea", 10, "Game", persona_state=1),
+            FriendPulseEntry("idle", "Zoë", persona_state=1),
+            FriendPulseEntry("offline", "Ada", persona_state=0),
+        ),
+        playing_count=1,
+        online_count=2,
+    )
+
+    balanced = project_friend_pulse(snapshot, privacy_mode="Balanced", capacity=1)
+    rich = project_friend_pulse(
+        snapshot,
+        privacy_mode="Rich",
+        capacity=1,
+        avatar_sources={"playing": "file:///safe/avatar.jpg"},
+    )
+    strict = project_friend_pulse(snapshot, privacy_mode="Strict", capacity=1)
+
+    assert len(balanced.rows) == len(rich.rows) == len(snapshot.entries)
+    assert balanced.overflow_count == rich.overflow_count == 0
+    assert rich.rows[0].avatar_url == "file:///safe/avatar.jpg"
+    assert all(row.avatar_url is None for row in balanced.rows)
+    assert sum(row.count for row in strict.rows) == len(snapshot.entries)
+    assert all(not row.identity_fingerprint for row in strict.rows)
+    assert all(not row.friend_action_available for row in strict.rows)
+
+
+def test_change_evidence_does_not_mark_unchanged_idle_or_offline_members() -> None:
+    previous = FriendPulseSnapshot(
+        status=SteamResultStatus.SUCCESS,
+        authoritative=True,
+        entries=(
+            FriendPulseEntry("idle", "Ada", persona_state=1),
+            FriendPulseEntry("offline", "Bea", persona_state=0),
+        ),
+    )
+    current = FriendPulseSnapshot(
+        status=SteamResultStatus.SUCCESS,
+        authoritative=True,
+        entries=(
+            FriendPulseEntry("idle", "Ada", persona_state=1),
+            FriendPulseEntry("offline", "Bea", persona_state=0),
+        ),
+    )
+
+    ranked = with_change_evidence(current, previous)
+
+    assert [entry.changed for entry in ranked.entries] == [False, False]
+    assert [entry.identity_fingerprint for entry in ranked.entries] == [
+        "idle",
+        "offline",
+    ]
 
 
 def test_snapshot_rejects_cached_id_that_does_not_match_opaque_identity() -> None:

@@ -1,8 +1,9 @@
 """Steam Web API endpoint metadata and safe fixture-friendly transport.
 
 This module describes supported Steam sources and fetches through an injected
-opener, but tests must not perform live network calls. Unfinished cards remain
-behind ``--devsteam`` independently of the production Achievement Pulse path.
+opener, but tests must not perform live network calls. Only the unfinished Steam
+Journey scaffold remains behind ``--devsteam``; all admitted cards share this
+same bounded transport authority.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ logger = get_logger(__name__)
 
 MAX_RESPONSE_BYTES = 1_500_000
 DEFAULT_TIMEOUT_SECONDS = 12.0
-STEAM_USER_AGENT = "SRPSS-Steam-DevGate/0.1"
+STEAM_USER_AGENT = "SRPSS-Steam/0.1"
 
 _SECRET_PARAM_KEYS = frozenset({"key", "steamid", "steamids", "profile_identifier"})
 
