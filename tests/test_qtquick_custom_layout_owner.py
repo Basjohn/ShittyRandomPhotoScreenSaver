@@ -1365,6 +1365,87 @@ def test_content_extent_side_drag_and_uniform_scale_math() -> None:
     assert item.current_content_extent[1] == pytest.approx(box_before[1])
 
 
+def test_resize_side_drag_snaps_to_peer_and_publishes_guide_wheel_does_not() -> None:
+    class _GuideScene:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, tuple[tuple[int, str], ...]]] = []
+
+        def set_custom_layout_guides(self, *, vertical=(), horizontal=()) -> None:
+            self.calls.append({
+                "vertical": tuple(vertical),
+                "horizontal": tuple(horizontal),
+            })
+
+    scene = _GuideScene()
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    owner._bindings = {
+        "display:a": _DisplayBinding(
+            identity="display:a",
+            monitor_route="1",
+            unit=SimpleNamespace(runtime=SimpleNamespace(scene_controller=scene)),
+            screen=None,
+            geometry=QRect(0, 0, 2000, 1200),
+        )
+    }
+    target = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("friend_pulse", "display:a"),
+        model_identity="friend_pulse",
+        baseline_global_rect=QRect(100, 200, 700, 300),
+        current_global_rect=QRect(100, 200, 700, 300),
+        baseline_size_payload={},
+        current_size_payload={},
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+        content_extent_axes=frozenset({"vertical", "horizontal"}),
+        baseline_content_extent=(700.0, 300.0),
+    )
+    # Peer whose left edge sits at x=900; the target's right edge will be dragged
+    # to 896 (4px shy) and should snap flush onto it.
+    peer = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("reddit", "display:a"),
+        model_identity="reddit",
+        baseline_global_rect=QRect(900, 200, 300, 400),
+        current_global_rect=QRect(900, 200, 300, 400),
+        baseline_size_payload={},
+        current_size_payload={},
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+    )
+    owner._session = SimpleNamespace(active_items=lambda: (target, peer))
+
+    start = QPoint(target.current_global_rect.center())
+    assert owner.begin_resize(target, "right", start) is True
+    # Move the cursor +96px right: free right edge = 100 + 700 + 96 = 896.
+    assert owner.update_resize(
+        target, "right", QPoint(start.x() + 96, start.y()), False
+    ) is True
+
+    # Right edge snapped flush to the peer's left edge (900); left edge anchored.
+    assert target.current_global_rect.x() == 100
+    assert (
+        target.current_global_rect.x() + target.current_global_rect.width() == 900
+    )
+    published = [c for c in scene.calls if c["vertical"] or c["horizontal"]]
+    assert published, "resize drag published no alignment guide"
+    assert (900, "peer") in published[-1]["vertical"]
+
+    # Release clears the transient guides at the gesture boundary.
+    owner.update_resize(target, "right", QPoint(start.x() + 96, start.y()), True)
+    assert scene.calls[-1] == {"vertical": (), "horizontal": ()}
+
+    # The wheel is a discrete enlarge/shrink and must NOT snap or publish guides.
+    calls_before_wheel = len(scene.calls)
+    assert owner.resize_wheel(target, 120) is True
+    assert len(scene.calls) == calls_before_wheel
+
+
 def test_parse_content_extent_accepts_valid_pairs_only() -> None:
     from rendering.quick.custom_layout_owner import _parse_content_extent
 

@@ -77,6 +77,15 @@ class SnapResolution:
     horizontal_assists: tuple[SnapGuide, ...] = ()
 
 
+@dataclass(frozen=True)
+class UniformScaleSnap:
+    """Result of snapping an aspect-locked uniform scale to an alignment line."""
+
+    scale: float
+    vertical_guides: tuple[SnapGuide, ...] = ()
+    horizontal_guides: tuple[SnapGuide, ...] = ()
+
+
 def get_screen_signature(screen: QScreen | None) -> str:
     """Return the stable display identity used for CUSTOM layout bindings."""
 
@@ -817,6 +826,254 @@ def resolve_snap_local_rect_for_edit(
         vertical_assists=vertical_assists,
         horizontal_assists=horizontal_assists,
     )
+
+
+def _snap_edge_coordinate(
+    coordinate: int,
+    boundary_span: int,
+    peer_edges: list[tuple[int, int]],
+    *,
+    threshold_px: int = CUSTOM_LAYOUT_SNAP_THRESHOLD_PX,
+    include_grid: bool = True,
+) -> tuple[int, SnapGuide | None]:
+    """Snap one moving resize edge to the nearest alignment line.
+
+    Candidates are the display edges, the display centre, every peer edge/centre
+    and (optionally) the shared grid. Returns the snapped coordinate plus a
+    single guide describing the winning line, or the coordinate unchanged with
+    ``None`` when nothing is within reach. Alignment lines get the same small
+    distance bias the move snap uses so they can be felt over a nearer grid tick.
+    """
+
+    threshold = max(0, int(threshold_px))
+    span = max(0, int(boundary_span))
+    current = max(0, min(int(coordinate), span))
+    candidates: list[tuple[int, int, str]] = [
+        (0, 1, "edge"),
+        (span, 1, "edge"),
+        (int(round(float(span) / 2.0)), 1, "display_center"),
+    ]
+    if include_grid:
+        step = max(1, int(CUSTOM_LAYOUT_GRID_STEP_PX))
+        nearest_grid = int(round(current / step) * step)
+        for grid_candidate in (nearest_grid - step, nearest_grid, nearest_grid + step):
+            if 0 <= grid_candidate <= span:
+                candidates.append((int(grid_candidate), 0, "grid"))
+    for peer_start, peer_end in peer_edges:
+        peer_start = int(peer_start)
+        peer_end = int(peer_end)
+        peer_center = int(round((float(peer_start) + float(peer_end)) / 2.0))
+        candidates.append((peer_start, 1, "peer"))
+        candidates.append((peer_end, 1, "peer"))
+        candidates.append((peer_center, 1, "peer_center"))
+
+    best = current
+    best_priority = 99
+    best_delta = threshold + 1
+    best_score = threshold + 1
+    best_kind = ""
+    alignment_kinds = {"edge", "display_center", "peer", "peer_center"}
+    for candidate, priority, kind in candidates:
+        candidate = max(0, min(int(candidate), span))
+        delta = abs(candidate - current)
+        if delta > threshold:
+            continue
+        score = (
+            max(0, delta - CUSTOM_LAYOUT_ALIGNMENT_SNAG_BIAS_PX)
+            if kind in alignment_kinds
+            else delta
+        )
+        if score < best_score or (score == best_score and priority < best_priority):
+            best = candidate
+            best_priority = priority
+            best_delta = delta
+            best_score = score
+            best_kind = kind
+    if best_delta <= threshold and best_kind:
+        guide = SnapGuide(
+            position=max(0, min(int(best), max(0, span - 1))),
+            kind=best_kind,
+            distance=int(best_delta),
+        )
+        return best, guide
+    return current, None
+
+
+def resolve_resize_edge_snap(
+    rect: QRect,
+    display_size: QSize,
+    *,
+    horizontal_edge: str | None = None,
+    vertical_edge: str | None = None,
+    peer_rects: list[QRect] | tuple[QRect, ...] = (),
+    threshold_px: int = CUSTOM_LAYOUT_SNAP_THRESHOLD_PX,
+    min_size: QSize = CUSTOM_LAYOUT_MIN_WIDGET_SIZE,
+) -> SnapResolution:
+    """Snap the moving edge(s) of a resize rect while anchoring the opposite edges.
+
+    ``horizontal_edge`` in {"left", "right"} and ``vertical_edge`` in
+    {"top", "bottom"} name the edges under the cursor; only those move. The
+    opposite edges stay fixed so a one-axis side drag or an independent two-axis
+    corner never jumps. Peer/centre snaps emit a guide; a display-edge snap still
+    moves the edge but publishes no line (matching the move-snap convention).
+
+    Grid snapping is deliberately excluded here: a resize should attract only to
+    meaningful alignment lines (peers, display edges/centre) and otherwise stay
+    exactly under the cursor, so fine size adjustments never feel notched.
+    """
+
+    peer_list = [QRect(peer) for peer in peer_rects if isinstance(peer, QRect)]
+    width_bound = max(1, int(display_size.width()))
+    height_bound = max(1, int(display_size.height()))
+    min_w = max(1, int(min_size.width()))
+    min_h = max(1, int(min_size.height()))
+    left = int(rect.x())
+    right = int(rect.x() + rect.width())
+    top = int(rect.y())
+    bottom = int(rect.y() + rect.height())
+    vertical_guides: tuple[SnapGuide, ...] = ()
+    horizontal_guides: tuple[SnapGuide, ...] = ()
+
+    x_peer_edges = [(peer.x(), peer.x() + peer.width()) for peer in peer_list]
+    y_peer_edges = [(peer.y(), peer.y() + peer.height()) for peer in peer_list]
+
+    if horizontal_edge == "left":
+        snapped, guide = _snap_edge_coordinate(
+            left, width_bound, x_peer_edges, threshold_px=threshold_px,
+            include_grid=False,
+        )
+        bounded = max(0, min(snapped, right - min_w))
+        if bounded == snapped and guide is not None:
+            vertical_guides = (guide,)
+        left = bounded
+    elif horizontal_edge == "right":
+        snapped, guide = _snap_edge_coordinate(
+            right, width_bound, x_peer_edges, threshold_px=threshold_px,
+            include_grid=False,
+        )
+        bounded = min(width_bound, max(snapped, left + min_w))
+        if bounded == snapped and guide is not None:
+            vertical_guides = (guide,)
+        right = bounded
+
+    if vertical_edge == "top":
+        snapped, guide = _snap_edge_coordinate(
+            top, height_bound, y_peer_edges, threshold_px=threshold_px,
+            include_grid=False,
+        )
+        bounded = max(0, min(snapped, bottom - min_h))
+        if bounded == snapped and guide is not None:
+            horizontal_guides = (guide,)
+        top = bounded
+    elif vertical_edge == "bottom":
+        snapped, guide = _snap_edge_coordinate(
+            bottom, height_bound, y_peer_edges, threshold_px=threshold_px,
+            include_grid=False,
+        )
+        bounded = min(height_bound, max(snapped, top + min_h))
+        if bounded == snapped and guide is not None:
+            horizontal_guides = (guide,)
+        bottom = bounded
+
+    snapped_rect = QRect(
+        left,
+        top,
+        max(min_w, right - left),
+        max(min_h, bottom - top),
+    )
+    return SnapResolution(
+        rect=snapped_rect,
+        vertical_guides=vertical_guides,
+        horizontal_guides=horizontal_guides,
+    )
+
+
+def resolve_uniform_scale_snap(
+    free_scale: float,
+    *,
+    center_x: float,
+    top: float,
+    free_width: float,
+    free_height: float,
+    display_size: QSize,
+    peer_rects: list[QRect] | tuple[QRect, ...] = (),
+    threshold_px: int = CUSTOM_LAYOUT_SNAP_THRESHOLD_PX,
+) -> UniformScaleSnap:
+    """Snap an aspect-locked, centre-x/top-anchored uniform scale to a peer line.
+
+    The uniform corner/drag grows symmetrically about a fixed ``center_x`` and
+    downward from a fixed ``top``. Landing exactly one edge (left, right or
+    bottom) on a peer edge/centre therefore fixes a single scale that preserves
+    the aspect ratio; the closest such line within threshold wins. Inputs and the
+    returned guide positions are display-local. Display edges/centre are not used
+    here - forcing an aspect-locked edge onto the screen border or centreline is
+    rarely the intent - so only peer alignment lines attract.
+    """
+
+    free_scale = float(free_scale)
+    free_width = max(1.0, float(free_width))
+    free_height = max(1.0, float(free_height))
+    if free_scale <= 0.0:
+        return UniformScaleSnap(scale=free_scale)
+
+    peer_list = [QRect(peer) for peer in peer_rects if isinstance(peer, QRect)]
+    if not peer_list:
+        return UniformScaleSnap(scale=free_scale)
+
+    threshold = max(0, int(threshold_px))
+    bias = int(CUSTOM_LAYOUT_ALIGNMENT_SNAG_BIAS_PX)
+    right_free = center_x + free_width / 2.0
+    left_free = center_x - free_width / 2.0
+    bottom_free = top + free_height
+
+    x_lines: list[tuple[int, str]] = []
+    y_lines: list[tuple[int, str]] = []
+    for peer in peer_list:
+        ps_x, pe_x = int(peer.x()), int(peer.x() + peer.width())
+        x_lines.append((ps_x, "peer"))
+        x_lines.append((pe_x, "peer"))
+        x_lines.append((int(round((ps_x + pe_x) / 2.0)), "peer_center"))
+        ps_y, pe_y = int(peer.y()), int(peer.y() + peer.height())
+        y_lines.append((ps_y, "peer"))
+        y_lines.append((pe_y, "peer"))
+        y_lines.append((int(round((ps_y + pe_y) / 2.0)), "peer_center"))
+
+    best_score = threshold + 1
+    best_scale = free_scale
+    best_axis = ""
+    best_line = 0
+    best_kind = ""
+
+    def _consider(free_edge, line, kind, desired_extent, base_extent, axis):
+        nonlocal best_score, best_scale, best_axis, best_line, best_kind
+        if desired_extent <= 0.0 or base_extent <= 0.0:
+            return
+        delta = abs(float(free_edge) - float(line))
+        if delta > threshold:
+            return
+        score = max(0.0, delta - bias)
+        scale = free_scale * desired_extent / base_extent
+        if scale <= 0.0:
+            return
+        if score < best_score:
+            best_score = score
+            best_scale = scale
+            best_axis = axis
+            best_line = int(line)
+            best_kind = kind
+
+    for line, kind in x_lines:
+        _consider(right_free, line, kind, 2.0 * (line - center_x), free_width, "x")
+        _consider(left_free, line, kind, 2.0 * (center_x - line), free_width, "x")
+    for line, kind in y_lines:
+        _consider(bottom_free, line, kind, float(line) - top, free_height, "y")
+
+    if not best_kind:
+        return UniformScaleSnap(scale=free_scale)
+    guide = SnapGuide(position=int(best_line), kind=best_kind, distance=int(best_score))
+    if best_axis == "x":
+        return UniformScaleSnap(scale=best_scale, vertical_guides=(guide,))
+    return UniformScaleSnap(scale=best_scale, horizontal_guides=(guide,))
 
 
 def clamp_local_rect_to_bounds(

@@ -28,10 +28,13 @@ from rendering.custom_layout_contract import (
     load_custom_layout_map,
     normalize_local_rect,
     remove_screen_layout_entry,
+    resolve_resize_edge_snap,
     resolve_snap_local_rect_for_edit,
+    resolve_uniform_scale_snap,
     set_screen_layout_entry,
     should_transfer_rect_to_screen,
     write_custom_layout_map,
+    SnapResolution,
 )
 from rendering.custom_layout_session import (
     CustomLayoutKey,
@@ -490,6 +493,11 @@ class QuickCustomLayoutOwner:
         """Clear transient alignment guides and end the current move gesture."""
 
         self._visualizer_move_transfer_latch.clear()
+        self._clear_all_guides()
+
+    def _clear_all_guides(self) -> None:
+        """Clear transient alignment guides on every bound display."""
+
         for binding in tuple(self._bindings.values()):
             try:
                 binding.unit.runtime.scene_controller.set_custom_layout_guides()
@@ -499,6 +507,46 @@ class QuickCustomLayoutOwner:
                     binding.identity,
                     exc_info=True,
                 )
+
+    def _snap_resize_edges(
+        self,
+        item: CustomLayoutSessionItem,
+        binding: _DisplayBinding,
+        rect: QRect,
+        *,
+        horizontal_edge: str | None,
+        vertical_edge: str | None,
+        min_size: Any,
+    ) -> QRect:
+        """Snap the moving edge(s) of a resize rect to peers and publish guides.
+
+        The opposite edges stay anchored (the incoming rect already anchors them),
+        so this only nudges the dragged edge onto an alignment line when close.
+        Guides are the same peer/centre lines the move gesture renders.
+        """
+
+        local = QRect(
+            rect.x() - binding.geometry.x(),
+            rect.y() - binding.geometry.y(),
+            rect.width(),
+            rect.height(),
+        )
+        resolution = resolve_resize_edge_snap(
+            local,
+            binding.geometry.size(),
+            horizontal_edge=horizontal_edge,
+            vertical_edge=vertical_edge,
+            peer_rects=self._peer_local_rects(item, binding),
+            min_size=min_size,
+        )
+        self._publish_move_guides(item.current_display_identity, resolution)
+        snapped = resolution.rect
+        return QRect(
+            binding.geometry.x() + snapped.x(),
+            binding.geometry.y() + snapped.y(),
+            snapped.width(),
+            snapped.height(),
+        )
 
     def _adjacent_display_binding(
         self,
@@ -636,14 +684,24 @@ class QuickCustomLayoutOwner:
         )
         target_identity = str(display_identity or "")
         for identity, binding in tuple(self._bindings.items()):
-            scene = binding.unit.runtime.scene_controller
-            if identity == target_identity:
-                scene.set_custom_layout_guides(
-                    vertical=vertical,
-                    horizontal=horizontal,
+            try:
+                scene = binding.unit.runtime.scene_controller
+                if identity == target_identity:
+                    scene.set_custom_layout_guides(
+                        vertical=vertical,
+                        horizontal=horizontal,
+                    )
+                else:
+                    scene.set_custom_layout_guides()
+            except (RuntimeError, AttributeError):
+                # Guide projection is a transient edit-only side effect; a display
+                # whose scene is not (or no longer) wired must never fail the
+                # geometry gesture that triggered it.
+                logger.debug(
+                    "[CUSTOM_LAYOUT] Failed publishing transient guides display=%s",
+                    identity,
+                    exc_info=True,
                 )
-            else:
-                scene.set_custom_layout_guides()
 
     def begin_resize(
         self,
@@ -717,6 +775,9 @@ class QuickCustomLayoutOwner:
             changed = self._resize_uniform_drag(item, origin, handle_id, cursor)
         if finalize:
             self._resize_origins.pop(item.source_key, None)
+            # Release ends the gesture: retire the transient alignment guides the
+            # live resize samples published (same boundary as move's finishMove).
+            self._clear_all_guides()
         return changed
 
     def resize_wheel(
@@ -1165,11 +1226,57 @@ class QuickCustomLayoutOwner:
             max(1.0, half_width + (cursor.x() - origin.cursor.x()) * horizontal),
             max(1.0, height + (cursor.y() - origin.cursor.y()) * vertical),
         )
-        return self._apply_uniform_scale(
+        changed = self._apply_uniform_scale(
             item,
             origin.scale * target / base,
             origin.rect,
         )
+        # Aspect-locked corners/drag stay "enlarge/shrink"; snapping only chooses
+        # a scale that lands one edge on a nearby peer line, then shows that line.
+        return self._apply_uniform_resize_snap(item, origin) or changed
+
+    def _apply_uniform_resize_snap(
+        self,
+        item: CustomLayoutSessionItem,
+        origin: _ResizeOrigin,
+    ) -> bool:
+        """Snap the just-applied uniform scale to a peer alignment line.
+
+        The uniform apply anchors ``center_x`` at the gesture-start centre and the
+        top at the gesture-start top, so a single scale lands one edge on a peer
+        line while preserving aspect. Guides are published (or cleared) every
+        sample; ``update_resize`` clears them again at release.
+        """
+
+        binding = self._bindings[item.current_display_identity]
+        free_rect = item.current_global_rect
+        center_x_local = (
+            float(origin.rect.x())
+            + float(origin.rect.width()) / 2.0
+            - float(binding.geometry.x())
+        )
+        top_local = float(origin.rect.y()) - float(binding.geometry.y())
+        snap = resolve_uniform_scale_snap(
+            float(item.resize_scale),
+            center_x=center_x_local,
+            top=top_local,
+            free_width=float(free_rect.width()),
+            free_height=float(free_rect.height()),
+            display_size=binding.geometry.size(),
+            peer_rects=self._peer_local_rects(item, binding),
+        )
+        changed = False
+        if abs(float(snap.scale) - float(item.resize_scale)) > 1e-6:
+            changed = self._apply_uniform_scale(item, float(snap.scale), origin.rect)
+        self._publish_move_guides(
+            item.current_display_identity,
+            SnapResolution(
+                rect=QRect(item.current_global_rect),
+                vertical_guides=snap.vertical_guides,
+                horizontal_guides=snap.horizontal_guides,
+            ),
+        )
+        return changed
 
     @staticmethod
     def _pixels_per_world_from_geometry(
@@ -1321,6 +1428,14 @@ class QuickCustomLayoutOwner:
             horizontal_edge=edge if edge in {"left", "right"} else None,
             vertical_edge=edge if edge in {"top", "bottom"} else None,
         )
+        rect = self._snap_resize_edges(
+            item,
+            binding,
+            rect,
+            horizontal_edge=edge if edge in {"left", "right"} else None,
+            vertical_edge=edge if edge in {"top", "bottom"} else None,
+            min_size=minimum,
+        )
         return self._commit_viewport_resize_geometry(
             item,
             origin,
@@ -1347,6 +1462,14 @@ class QuickCustomLayoutOwner:
             cursor,
             horizontal_edge=horizontal_edge,
             vertical_edge=vertical_edge,
+        )
+        rect = self._snap_resize_edges(
+            item,
+            binding,
+            rect,
+            horizontal_edge=horizontal_edge,
+            vertical_edge=vertical_edge,
+            min_size=minimum,
         )
         return self._commit_viewport_resize_geometry(
             item,
@@ -1381,6 +1504,14 @@ class QuickCustomLayoutOwner:
             cursor,
             horizontal_edge=edge if edge in {"left", "right"} else None,
             vertical_edge=edge if edge in {"top", "bottom"} else None,
+        )
+        rect = self._snap_resize_edges(
+            item,
+            binding,
+            rect,
+            horizontal_edge=edge if edge in {"left", "right"} else None,
+            vertical_edge=edge if edge in {"top", "bottom"} else None,
+            min_size=minimum,
         )
         scale = max(1.0e-6, float(origin.scale))
         change_width = edge in {"left", "right"}
