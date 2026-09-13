@@ -32,14 +32,41 @@ OverlayWidget {
     // Media's card keeps its accepted ordinary 600 px footprint; the optional
     // app-volume rail is a deliberate external accessory and therefore extends
     // the widget footprint instead of stealing 48 px from card content.
-    readonly property real preferredCardWidth: Math.max(
+    readonly property real canonicalPreferredCardWidth: Math.max(
         600.0,
         mediaModel.artworkSize + 18.0 + Math.max(220.0, mediaModel.fontSize * 16.0)
             + mediaRoot.shellInset,
         headerFrame.implicitWidth + mediaRoot.shellInset
     )
+    readonly property real canonicalPreferredHeight: Math.max(
+        220.0, mediaModel.artworkSize + 60.0
+    )
     readonly property real volumeAccessoryExtent:
         mediaModel.appVolumeAvailable ? 48.0 : 0.0
+    readonly property real effectivePreferredWidth: mediaModel.contentExtentActive
+        ? mediaModel.contentExtentWidth
+        : canonicalPreferredCardWidth + volumeAccessoryExtent
+    readonly property real effectivePreferredHeight: mediaModel.contentExtentActive
+        ? mediaModel.contentExtentHeight
+        : canonicalPreferredHeight
+    readonly property real sectionSpacing: mediaModel.contentExtentActive
+        ? Math.max(
+            7.0,
+            Math.min(
+                24.0,
+                12.0 + (effectivePreferredHeight - canonicalPreferredHeight) * 0.045
+            )
+        )
+        : 12.0
+    readonly property real metadataSpacing: mediaModel.contentExtentActive
+        ? Math.max(
+            4.0,
+            Math.min(
+                14.0,
+                7.0 + (effectivePreferredHeight - canonicalPreferredHeight) * 0.028
+            )
+        )
+        : 7.0
     // Keep the external rail on the side with more remaining display space.
     // Comparing the retained outer-rect centre to the display centre is exactly
     // equivalent for a fixed-width widget, and stays event/binding driven: no
@@ -51,8 +78,8 @@ OverlayWidget {
             && (mediaRoot.x + mediaRoot.width / 2.0) > mediaRoot.parent.width / 2.0
     accessorySide: appVolumeOnLeft ? "left" : "right"
     accessoryExtent: volumeAccessoryExtent
-    preferredContentWidth: preferredCardWidth + volumeAccessoryExtent
-    preferredContentHeight: Math.max(220.0, mediaModel.artworkSize + 60.0)
+    preferredContentWidth: effectivePreferredWidth
+    preferredContentHeight: effectivePreferredHeight
 
     function appVolumeLevelAt(y, height) {
         if (height <= 0.0)
@@ -100,7 +127,7 @@ OverlayWidget {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.right: parent.right
-        spacing: 12.0
+        spacing: mediaRoot.sectionSpacing
 
         BrandedHeader {
             id: headerFrame
@@ -149,7 +176,7 @@ OverlayWidget {
                 anchors.right: artworkFrame.visible ? artworkFrame.left : parent.right
                 anchors.rightMargin: artworkFrame.visible ? 18.0 : 0.0
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 7.0
+                spacing: mediaRoot.metadataSpacing
                 transformOrigin: Item.Center
                 scale: implicitHeight > mainBand.height && implicitHeight > 0.0
                     ? Math.max(0.1, (mainBand.height - 2.0) / implicitHeight)
@@ -159,6 +186,7 @@ OverlayWidget {
                     id: trackMetadata
                     width: metadata.width
                     mediaModel: mediaRoot.mediaModel
+                    rowSpacing: mediaRoot.metadataSpacing
                 }
 
                 ShadowedText {
@@ -205,15 +233,30 @@ OverlayWidget {
                     1.0, bottomInColumn - topInColumn
                 )
                 readonly property real widthScale: 0.85 * 0.85
+                readonly property real baseArtworkWidth:
+                    mediaRoot.mediaModel.artworkSize * widthScale
+                readonly property real extraHorizontalRoom:
+                    mediaRoot.authoredCardWidth - mediaRoot.canonicalPreferredCardWidth
+                readonly property real minimumMetadataRoom: Math.max(
+                    180.0, mediaRoot.mediaModel.fontSize * 10.0
+                )
+                readonly property real reflowArtworkWidth: Math.max(
+                    88.0,
+                    baseArtworkWidth + extraHorizontalRoom * 0.35
+                )
                 readonly property real artworkStrokeWidth: mediaRoot.scaleAwareStrokeWidth(
                     mediaRoot.mediaModel.artworkBorderWidth
                 )
                 readonly property real imageInset: Math.max(0.75, artworkStrokeWidth * 0.65)
+                readonly property real metadataLimitedArtworkWidth: Math.max(
+                    1.0, mainBand.width - minimumMetadataRoom
+                )
+                readonly property real shapeLimitedArtworkWidth:
+                    mediaRoot.mediaModel.allowLandscapeArtwork
+                        ? metadataLimitedArtworkWidth
+                        : Math.min(referenceHeight, metadataLimitedArtworkWidth)
                 width: visible
-                    ? Math.min(
-                        mediaRoot.mediaModel.artworkSize * widthScale,
-                        mainBand.width
-                    )
+                    ? Math.min(reflowArtworkWidth, shapeLimitedArtworkWidth)
                     : 0.0
                 height: visible ? referenceHeight : 0.0
                 anchors.right: parent.right

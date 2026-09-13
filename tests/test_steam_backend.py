@@ -71,7 +71,6 @@ def test_client_key_endpoints_use_the_public_steam_web_api_host() -> None:
         SteamSourceId.ACHIEVEMENT_SCHEMA,
         SteamSourceId.FRIEND_LIST,
         SteamSourceId.PLAYER_SUMMARIES,
-        SteamSourceId.FRIEND_MESSAGE_SESSIONS,
     ):
         endpoint = build_endpoint(
             source_id,
@@ -83,18 +82,6 @@ def test_client_key_endpoints_use_the_public_steam_web_api_host() -> None:
 
 
 
-def test_friend_message_sessions_endpoint_requires_key_but_not_profile_id() -> None:
-    endpoint = build_endpoint(
-        SteamSourceId.FRIEND_MESSAGE_SESSIONS,
-        api_key="STEAM_KEY_SHOULD_NOT_LEAK_1234567890",
-        only_sessions_with_messages=1,
-    )
-
-    assert endpoint.requires_user_key is True
-    assert "IFriendMessagesService/GetActiveMessageSessions/v1/" in endpoint.url
-    assert endpoint.params["only_sessions_with_messages"] == 1
-    assert "steamid" not in endpoint.params
-    assert "STEAM_KEY_SHOULD_NOT_LEAK" not in endpoint.redacted_url()
 
 def test_http_status_classification_keeps_private_distinct_from_offline() -> None:
     assert classify_http_status(200) == SteamResultStatus.SUCCESS

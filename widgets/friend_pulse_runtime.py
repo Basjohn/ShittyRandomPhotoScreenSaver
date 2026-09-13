@@ -25,9 +25,6 @@ from core.steam.friend_pulse import (
     FriendPulseSnapshot,
     project_friend_pulse,
 )
-from core.steam.friend_messages import (
-    FriendMessageSnapshot,
-)
 from core.steam.friend_pulse_pins import (
     load_friend_pulse_pins,
     save_friend_pulse_pins,
@@ -35,7 +32,6 @@ from core.steam.friend_pulse_pins import (
 from core.steam.models import SteamResultStatus
 from core.steam.friend_pulse_cache import (
     load_friend_pulse_cache_snapshot,
-    refresh_friend_message_sessions,
     refresh_friend_pulse_cache,
 )
 from core.threading.manager import TaskPriority, ThreadManager
@@ -79,7 +75,6 @@ class FriendPulseRuntimeConfig:
 @dataclass(frozen=True)
 class _FriendPulseWorkResult:
     snapshot: FriendPulseSnapshot
-    messages: FriendMessageSnapshot | None = None
     pins: frozenset[str] | None = None
 
 
@@ -120,7 +115,6 @@ class _SharedFriendPulseOwner:
         scheduler: Callable = ThreadManager.single_shot,
         avatar_fetcher: Callable = fetch_steam_avatar,
         avatar_cache_dir_resolver: Callable[[str], Path] | None = None,
-        message_loader: Callable = refresh_friend_message_sessions,
         pin_loader: Callable = load_friend_pulse_pins,
         pin_saver: Callable = save_friend_pulse_pins,
     ) -> None:
@@ -135,7 +129,6 @@ class _SharedFriendPulseOwner:
         )
         self._ui_dispatch, self._scheduler = ui_dispatch, scheduler
         self._avatar_fetcher = avatar_fetcher
-        self._message_loader = message_loader
         self._pin_loader = pin_loader
         self._pin_saver = pin_saver
         self._avatar_cache_dir_resolver = avatar_cache_dir_resolver or (
@@ -155,9 +148,6 @@ class _SharedFriendPulseOwner:
         self._avatar_source_urls: dict[str, str] = {}
         self._friend_steam_ids: dict[str, str] = {}
         self._profile_key: str | None = None
-        self._message_snapshot = FriendMessageSnapshot(
-            status=SteamResultStatus.NOT_CONFIGURED
-        )
         self._pinned_fingerprints: frozenset[str] = frozenset()
 
     def is_running(self) -> bool:
@@ -236,9 +226,6 @@ class _SharedFriendPulseOwner:
         self._avatar_sources.clear()
         self._avatar_source_urls.clear()
         self._friend_steam_ids.clear()
-        self._message_snapshot = FriendMessageSnapshot(
-            status=SteamResultStatus.NOT_CONFIGURED
-        )
         self._pinned_fingerprints = frozenset()
 
     def retire(self) -> None:
@@ -256,9 +243,6 @@ class _SharedFriendPulseOwner:
         self._avatar_sources.clear()
         self._avatar_source_urls.clear()
         self._friend_steam_ids.clear()
-        self._message_snapshot = FriendMessageSnapshot(
-            status=SteamResultStatus.NOT_CONFIGURED
-        )
         self._pinned_fingerprints = frozenset()
         self._active.clear()
         self._leases.clear()
@@ -353,8 +337,7 @@ class _SharedFriendPulseOwner:
         credential = self._credentials_loader()
         if credential is None:
             return _FriendPulseWorkResult(
-                FriendPulseSnapshot(status=SteamResultStatus.NOT_CONFIGURED),
-                messages=FriendMessageSnapshot(status=SteamResultStatus.NOT_CONFIGURED),
+                FriendPulseSnapshot(status=SteamResultStatus.NOT_CONFIGURED)
             )
         profile_identifier = getattr(credential, "profile_identifier", None)
         if isinstance(profile_identifier, str) and profile_identifier.strip():
@@ -364,22 +347,7 @@ class _SharedFriendPulseOwner:
             previous=self._snapshot,
             force=True,
         )
-        private_ids = {
-            entry.identity_fingerprint: entry.steam_id
-            for entry in snapshot.entries
-            if entry.steam_id
-        }
-        try:
-            messages = self._message_loader(
-                credential=credential,
-                friend_steam_ids=private_ids,
-            )
-        except Exception:
-            messages = FriendMessageSnapshot(
-                status=SteamResultStatus.NETWORK_ERROR,
-                source_available=False,
-            )
-        return _FriendPulseWorkResult(snapshot=snapshot, messages=messages)
+        return _FriendPulseWorkResult(snapshot=snapshot)
 
     def _complete(
         self,
@@ -398,11 +366,9 @@ class _SharedFriendPulseOwner:
             return
         self._in_flight = False
         snapshot: FriendPulseSnapshot | None
-        messages: FriendMessageSnapshot | None = None
         pins: frozenset[str] | None = None
         if isinstance(work_result, _FriendPulseWorkResult):
             snapshot = work_result.snapshot
-            messages = work_result.messages
             pins = work_result.pins
         elif isinstance(work_result, FriendPulseSnapshot):
             # Compatibility seam for focused tests/custom loaders.
@@ -413,10 +379,6 @@ class _SharedFriendPulseOwner:
         if pins is not None and pins != self._pinned_fingerprints:
             self._pinned_fingerprints = frozenset(pins)
             pins_changed = True
-        messages_changed = False
-        if messages is not None and messages != self._message_snapshot:
-            self._message_snapshot = messages
-            messages_changed = True
         action_targets_changed = False
         if snapshot is not None:
             friend_steam_ids = {
@@ -434,7 +396,7 @@ class _SharedFriendPulseOwner:
             self._friend_steam_ids = friend_steam_ids
         snapshot_changed = snapshot is not None and snapshot != self._snapshot
         if snapshot is not None and (
-            snapshot_changed or action_targets_changed or pins_changed or messages_changed
+            snapshot_changed or action_targets_changed or pins_changed
         ):
             if snapshot_changed:
                 accepted_avatar_urls = {
@@ -457,13 +419,11 @@ class _SharedFriendPulseOwner:
                 self._avatar_epoch += 1
             for lease in tuple(self._active):
                 lease._deliver(snapshot)
-            if snapshot_changed or messages_changed:
+            if snapshot_changed:
                 self.request_avatar_hydration()
-        elif (pins_changed or messages_changed) and self._snapshot is not None:
+        elif pins_changed and self._snapshot is not None:
             for lease in tuple(self._active):
                 lease._deliver(self._snapshot)
-            if messages_changed:
-                self.request_avatar_hydration()
         if completed_refresh:
             self._schedule_next()
         elif self._running:
@@ -485,9 +445,6 @@ class _SharedFriendPulseOwner:
         ):
             return
         wanted: list[tuple[str, str]] = []
-        unread_fingerprints = {
-            session.identity_fingerprint for session in self._message_snapshot.sessions
-        }
         for lease in tuple(self._active):
             if not lease._wants_rich_avatars():
                 continue
@@ -495,16 +452,6 @@ class _SharedFriendPulseOwner:
                 candidate = (entry.identity_fingerprint, entry.avatar_url)
                 if (
                     entry.avatar_url
-                    and entry.identity_fingerprint not in self._avatar_sources
-                    and candidate not in wanted
-                ):
-                    wanted.append(candidate)
-        if unread_fingerprints:
-            for entry in snapshot.entries:
-                candidate = (entry.identity_fingerprint, entry.avatar_url)
-                if (
-                    entry.identity_fingerprint in unread_fingerprints
-                    and entry.avatar_url
                     and entry.identity_fingerprint not in self._avatar_sources
                     and candidate not in wanted
                 ):
@@ -657,9 +604,6 @@ class _SharedFriendPulseOwner:
         self._avatar_sources.clear()
         self._avatar_source_urls.clear()
         self._friend_steam_ids.clear()
-        self._message_snapshot = FriendMessageSnapshot(
-            status=SteamResultStatus.NOT_CONFIGURED
-        )
         self._pinned_fingerprints = frozenset()
         for lease in tuple(self._active):
             lease._running = False
@@ -746,7 +690,6 @@ class FriendPulseRuntimeService:
         scheduler: Callable = ThreadManager.single_shot,
         avatar_fetcher: Callable = fetch_steam_avatar,
         avatar_cache_dir_resolver: Callable[[str], Path] | None = None,
-        message_loader: Callable = refresh_friend_message_sessions,
         pin_loader: Callable = load_friend_pulse_pins,
         pin_saver: Callable = save_friend_pulse_pins,
     ) -> None:
@@ -766,7 +709,6 @@ class FriendPulseRuntimeService:
             scheduler,
             avatar_fetcher,
             avatar_cache_dir_resolver,
-            message_loader,
             pin_loader,
             pin_saver,
         )
@@ -824,9 +766,8 @@ class FriendPulseRuntimeService:
                 scheduler=self._seams[5],
                 avatar_fetcher=self._seams[6],
                 avatar_cache_dir_resolver=self._seams[7],
-                message_loader=self._seams[8],
-                pin_loader=self._seams[9],
-                pin_saver=self._seams[10],
+                pin_loader=self._seams[8],
+                pin_saver=self._seams[9],
             )
             _SHARED_OWNERS[key] = owner
         self._owner = owner
@@ -980,6 +921,3 @@ class FriendPulseRuntimeService:
                 ),
             ),
         )
-        message_handler = getattr(consumer, "on_friend_pulse_runtime_messages", None)
-        if callable(message_handler) and self._owner is not None:
-            message_handler(self._owner._message_snapshot)

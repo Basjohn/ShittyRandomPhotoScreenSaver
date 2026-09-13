@@ -552,6 +552,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "friend_pulse_view_mode",
             "friend_pulse_visible_row_capacity",
             "friend_pulse_show_names",
+            "friend_pulse_show_online_count",
             "friend_pulse_name_font_size",
         ),
     ),
@@ -1246,6 +1247,10 @@ class WidgetRuntimeDescriptor:
     # box on that axis (more rows / column reflow / less truncation) instead of
     # uniformly scaling; corners always stay uniform enlarge/shrink.
     content_extent_axes: tuple[str, ...] = ()
+    # Optional family-owned logical floor for direct side-axis content reflow.
+    # Corners/wheel retain the shared uniform-scale floor; this only prevents a
+    # side handle from collapsing a reflowing presentation below a sane layout.
+    content_extent_minimum_size: tuple[int, int] | None = None
     writes_custom_position_key: bool = True
     writes_custom_monitor_key: bool = True
     dev_feature_env: str | None = None
@@ -1499,6 +1504,8 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="media_scale",
+        content_extent_axes=("horizontal", "vertical"),
+        content_extent_minimum_size=(520, 210),
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit",

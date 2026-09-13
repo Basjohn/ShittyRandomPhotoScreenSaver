@@ -659,6 +659,18 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_rounded_artwork.stateChanged.connect(tab._save_settings)
     artwork_layout.addWidget(tab.media_rounded_artwork)
 
+    tab.media_allow_landscape_artwork = QCheckBox("Allow Landscape Artwork")
+    tab.media_allow_landscape_artwork.setProperty("circleIndicator", True)
+    tab.media_allow_landscape_artwork.setChecked(
+        tab._default_bool('media', 'allow_landscape_artwork')
+    )
+    tab.media_allow_landscape_artwork.setToolTip(
+        "Allow horizontal CUSTOM expansion to grow artwork wider than square. "
+        "Artwork clipping, crossfade, shadow, and metadata spacing remain unchanged."
+    )
+    tab.media_allow_landscape_artwork.stateChanged.connect(tab._save_settings)
+    artwork_layout.addWidget(tab.media_allow_landscape_artwork)
+
     tab.media_show_header_frame = QCheckBox("Show Header Pill (Logo + Title)")
     tab.media_show_header_frame.setProperty("circleIndicator", True)
     tab.media_show_header_frame.setChecked(
@@ -1075,6 +1087,9 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab._media_artwork_size = tab._config_int('media', media_config, 'artwork_size')
     tab.media_artwork_size.setValue(tab._media_artwork_size)
     tab.media_rounded_artwork.setChecked(tab._config_bool('media', media_config, 'rounded_artwork_border'))
+    tab.media_allow_landscape_artwork.setChecked(
+        tab._config_bool('media', media_config, 'allow_landscape_artwork')
+    )
     tab.media_show_header_frame.setChecked(tab._config_bool('media', media_config, 'show_header_frame'))
     tab.media_show_album.setChecked(tab._config_bool('media', media_config, 'show_album'))
     tab.media_show_playback_state.setChecked(
@@ -1414,6 +1429,7 @@ def save_media_settings(tab: WidgetsTab) -> dict:
         'spotify_volume_border_color': _qcolor_to_list(tab._media_volume_border_color),
         'artwork_size': tab.media_artwork_size.value(),
         'rounded_artwork_border': tab.media_rounded_artwork.isChecked(),
+        'allow_landscape_artwork': tab.media_allow_landscape_artwork.isChecked(),
         'show_header_frame': tab.media_show_header_frame.isChecked(),
         'show_album': tab.media_show_album.isChecked(),
         'show_playback_state': tab.media_show_playback_state.isChecked(),

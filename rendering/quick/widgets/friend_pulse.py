@@ -30,7 +30,6 @@ from core.steam.friend_pulse import (
     FriendPulseRow,
     FriendPulseSnapshot,
 )
-from core.steam.friend_messages import FriendMessageSnapshot
 from core.steam.models import SteamResultStatus
 
 from .host import (
@@ -96,10 +95,10 @@ def _grid_columns_for(capacity: int, authored_width: int) -> int:
     """Fit readable avatar cells to the normalized authored card width."""
 
     normalized_capacity = max(1, min(24, int(capacity)))
-    normalized_width = max(420, min(900, int(authored_width)))
+    normalized_width = max(420, min(4000, int(authored_width)))
     content_width = normalized_width - 36
     fitted = max(1, int((content_width + _GRID_GAP) // (110 + _GRID_GAP)))
-    return min(normalized_capacity, 6, fitted)
+    return min(normalized_capacity, fitted)
 
 
 @dataclass(frozen=True)
@@ -122,6 +121,7 @@ class FriendPulsePresentationConfig:
     view_mode: str
     capacity: int
     show_names: bool
+    show_online_count: bool
     name_font_size: int
     authored_width: int
 
@@ -212,6 +212,10 @@ class FriendPulsePresentationConfig:
             show_names=as_bool(
                 merged_card.get("show_names"),
                 bool(_FRIEND_DEFAULTS["show_names"]),
+            ),
+            show_online_count=as_bool(
+                merged_card.get("show_online_count"),
+                bool(_FRIEND_DEFAULTS["show_online_count"]),
             ),
             name_font_size=bounded_int(
                 merged_card.get("name_font_size"),
@@ -429,70 +433,9 @@ class FriendPulseRowListModel(QAbstractListModel):
         return True
 
 
-@dataclass(frozen=True)
-class FriendMessagePresentationRow:
-    identity_fingerprint: str
-    display_name: str
-    avatar_source: str
-    unread_count: int
-    last_message_at: int
-
-
-class FriendMessageSessionListModel(QAbstractListModel):
-    DisplayNameRole = int(Qt.ItemDataRole.UserRole) + 1
-    AvatarSourceRole = DisplayNameRole + 1
-    UnreadCountRole = DisplayNameRole + 2
-    LastMessageAtRole = DisplayNameRole + 3
-
-    def __init__(self, parent: QObject | None = None) -> None:
-        super().__init__(parent)
-        self._rows: tuple[FriendMessagePresentationRow, ...] = ()
-
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
-        return 0 if parent.isValid() else len(self._rows)
-
-    def data(
-        self,
-        index: QModelIndex,
-        role: int = int(Qt.ItemDataRole.DisplayRole),
-    ) -> Any:
-        if not index.isValid() or not 0 <= index.row() < len(self._rows):
-            return None
-        row = self._rows[index.row()]
-        return {
-            self.DisplayNameRole: row.display_name,
-            self.AvatarSourceRole: row.avatar_source,
-            self.UnreadCountRole: row.unread_count,
-            self.LastMessageAtRole: row.last_message_at,
-            int(Qt.ItemDataRole.DisplayRole): row.display_name,
-        }.get(int(role))
-
-    def roleNames(self) -> dict[int, bytes]:  # noqa: N802
-        return {
-            self.DisplayNameRole: b"displayName",
-            self.AvatarSourceRole: b"avatarSource",
-            self.UnreadCountRole: b"unreadCount",
-            self.LastMessageAtRole: b"lastMessageAt",
-        }
-
-    @property
-    def rows(self) -> tuple[FriendMessagePresentationRow, ...]:
-        return self._rows
-
-    def replace_rows(self, rows: Iterable[FriendMessagePresentationRow]) -> bool:
-        resolved = tuple(rows)
-        if resolved == self._rows:
-            return False
-        self.beginResetModel()
-        self._rows = resolved
-        self.endResetModel()
-        return True
-
-
 class FriendPulsePresentationModel(QObject):
     stateChanged = Signal()
     friendChangePulseRequested = Signal(int)
-    unreadMessagePulseRequested = Signal()
 
     def __init__(
         self,
@@ -510,11 +453,7 @@ class FriendPulsePresentationModel(QObject):
         self._runtime_service: Any | None = None
         self._runtime_attached = False
         self._row_model = FriendPulseRowListModel(self)
-        self._message_model = FriendMessageSessionListModel(self)
         self._snapshot: FriendPulseSnapshot | None = None
-        self._message_snapshot = FriendMessageSnapshot(
-            status=SteamResultStatus.NOT_CONFIGURED
-        )
         self._projection = FriendPulseProjection("loading", "Checking Steam", ())
         self._active = False
         self._retired = False
@@ -663,69 +602,6 @@ class FriendPulsePresentationModel(QObject):
         for index in pulse_indices:
             self.friendChangePulseRequested.emit(index)
 
-    def on_friend_pulse_runtime_messages(
-        self,
-        snapshot: FriendMessageSnapshot,
-    ) -> None:
-        if not self.is_active or not isinstance(snapshot, FriendMessageSnapshot):
-            return
-        previous_total = self._message_snapshot.total_unread
-        if snapshot == self._message_snapshot:
-            # Avatar hydration can change presentation rows without changing the
-            # server unread observation.
-            if self._rebuild_message_rows():
-                self.stateChanged.emit()
-            return
-        self._message_snapshot = snapshot
-        self._rebuild_message_rows()
-        self.stateChanged.emit()
-        if snapshot.total_unread > previous_total:
-            self.unreadMessagePulseRequested.emit()
-
-    def _rebuild_message_rows(self) -> bool:
-        service = self._runtime_service
-        roster = {
-            row.identity_fingerprint: row
-            for row in self._projection.rows
-            if row.identity_fingerprint
-        }
-        source_entries = {
-            entry.identity_fingerprint: entry
-            for entry in (self._snapshot.entries if self._snapshot else ())
-        }
-        rows: list[FriendMessagePresentationRow] = []
-        for session in self._message_snapshot.sessions:
-            roster_row = roster.get(session.identity_fingerprint)
-            source_entry = source_entries.get(session.identity_fingerprint)
-            if self.config.privacy_mode == "Strict":
-                display_name = "FRIEND"
-                avatar_source = ""
-            else:
-                display_name = _title_case_friend_name(
-                    (roster_row.primary if roster_row else None)
-                    or (source_entry.display_name if source_entry else None)
-                    or "Friend"
-                )
-                avatar_source = ""
-                if self.config.privacy_mode == "Rich" and service is not None:
-                    resolver = getattr(service, "friend_avatar_source", None)
-                    if callable(resolver):
-                        avatar_source = str(
-                            resolver(session.identity_fingerprint) or ""
-                        )
-                        if avatar_source and not avatar_source.lower().startswith("file:"):
-                            avatar_source = ""
-            rows.append(
-                FriendMessagePresentationRow(
-                    identity_fingerprint=session.identity_fingerprint,
-                    display_name=display_name,
-                    avatar_source=avatar_source,
-                    unread_count=max(0, int(session.unread_count)),
-                    last_message_at=max(0, int(session.last_message_at or 0)),
-                )
-            )
-        return self._message_model.replace_rows(rows)
-
     def request_manual_refresh(self) -> bool:
         return bool(
             self.is_active
@@ -750,19 +626,6 @@ class FriendPulsePresentationModel(QObject):
             return False
         toggle = getattr(self._runtime_service, "toggle_pin", None)
         return bool(callable(toggle) and toggle(row.identity_fingerprint))
-
-    def message_action_target(self, row_index: int) -> str | None:
-        if (
-            not self.is_active
-            or not self._interaction_enabled
-            or self._runtime_service is None
-        ):
-            return None
-        try:
-            row = self._message_model.rows[int(row_index)]
-        except (IndexError, TypeError, ValueError):
-            return None
-        return self._runtime_service.friend_steam_id(row.identity_fingerprint)
 
     def friend_action_target(self, row_index: int) -> str | None:
         """Resolve a visible row through the owner-only private ID map."""
@@ -906,7 +769,7 @@ class FriendPulsePresentationModel(QObject):
             resolved_height = int(round(float(height)))
         except (TypeError, ValueError):
             return False
-        resolved_width = max(420, min(900, resolved_width))
+        resolved_width = max(420, min(4000, resolved_width))
         resolved_height = max(120, min(4000, resolved_height))
         extent = (resolved_width, resolved_height)
         if extent == self._content_extent:
@@ -936,41 +799,12 @@ class FriendPulsePresentationModel(QObject):
         self._runtime_service = None
         self._thread_manager = None
         self._snapshot = None
-        self._message_snapshot = FriendMessageSnapshot(
-            status=SteamResultStatus.NOT_CONFIGURED
-        )
         self._pending_pulse_indices = ()
         self._row_model.replace_rows(())
-        self._message_model.replace_rows(())
 
     @Property(QObject, constant=True)
     def rowModel(self) -> QObject:
         return self._row_model
-
-    @Property(QObject, constant=True)
-    def messageModel(self) -> QObject:
-        return self._message_model
-
-    @Property(int, notify=stateChanged)
-    def unreadMessageCount(self) -> int:
-        return self._message_snapshot.total_unread
-
-    @Property(bool, notify=stateChanged)
-    def unreadMessageSourceAvailable(self) -> bool:
-        return bool(self._message_snapshot.source_available)
-
-    @Property(str, notify=stateChanged)
-    def unreadMessageText(self) -> str:
-        # Backend health is diagnostic state, not card content.  Zero unread
-        # and a temporarily unavailable unread source both leave the summary
-        # rail empty; only proven positive unread state is user-visible.
-        if not self._message_snapshot.source_available:
-            return ""
-        count = self._message_snapshot.total_unread
-        if count <= 0:
-            return ""
-        noun = "MESSAGE" if count == 1 else "MESSAGES"
-        return f"{count:02d} UNREAD {noun}"
 
     @Property(bool, notify=stateChanged)
     def hasRows(self) -> bool:
@@ -990,15 +824,20 @@ class FriendPulsePresentationModel(QObject):
         return self._projection.primary_metric
 
     @Property(str, notify=stateChanged)
-    def secondaryMetric(self) -> str:
-        if self._snapshot is not None and self._projection.state in {"ready", "stale"}:
-            playing = max(0, int(self._snapshot.playing_count or 0))
-            total = len(self._snapshot.entries)
-            noun = "friend" if total == 1 else "friends"
-            return f"{playing} playing  •  {total} {noun}"
-        if self._projection.state == "stale":
-            return "Cached Steam snapshot"
-        return ""
+    def onlineFriendsText(self) -> str:
+        if (
+            not self.config.show_online_count
+            or self._snapshot is None
+            or self._projection.state not in {"ready", "stale"}
+        ):
+            return ""
+        count = max(0, int(self._snapshot.online_count or 0))
+        noun = "FRIEND" if count == 1 else "FRIENDS"
+        return f"{count} {noun} ONLINE"
+
+    @Property(bool, constant=True)
+    def showOnlineCount(self) -> bool:
+        return self.config.show_online_count
 
     @Property(bool, notify=stateChanged)
     def interactionEnabled(self) -> bool:
@@ -1152,7 +991,6 @@ class RetainedFriendPulsePresentation:
         self._connect("friendActionRequested", self._handle_friend_action)
         self._connect("gameActionRequested", self._handle_game_action)
         self._connect("friendPinToggleRequested", model.toggle_pin)
-        self._connect("messageActionRequested", self._handle_message_action)
         self._connect("friendMenuActionRequested", self._handle_menu_action)
         self._connect("actionMenuPointerGesture", self._arm_action_menu_pointer_guard)
         self._connect(
@@ -1194,16 +1032,6 @@ class RetainedFriendPulsePresentation:
         if target is None or self._on_steam_action_requested is None:
             return False
         return bool(self._on_steam_action_requested("store", target))
-
-    def _handle_message_action(self, row_index: int) -> bool:
-        from rendering.runtime_input import runtime_pointer_input_is_suppressed
-
-        if runtime_pointer_input_is_suppressed("friendPulseMessageActionRequested"):
-            return False
-        target = self._model.message_action_target(row_index)
-        if target is None or self._on_steam_action_requested is None:
-            return False
-        return bool(self._on_steam_action_requested("friend_message", target))
 
     def _handle_menu_action(self, action: str, row_index: int) -> bool:
         resolved = self._model.menu_action_target(action, row_index)
@@ -1283,6 +1111,5 @@ __all__ = [
     "FriendPulsePresentationModel",
     "FriendPulsePresentationStyle",
     "FriendPulseRowListModel",
-    "FriendMessageSessionListModel",
     "RetainedFriendPulsePresentation",
 ]

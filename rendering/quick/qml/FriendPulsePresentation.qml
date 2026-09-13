@@ -22,7 +22,6 @@ OverlayWidget {
     signal friendActionRequested(int rowIndex)
     signal gameActionRequested(int rowIndex)
     signal friendPinToggleRequested(int rowIndex)
-    signal messageActionRequested(int rowIndex)
     signal friendMenuActionRequested(string action, int rowIndex)
     signal actionMenuPointerGesture()
     signal visibleRangeChanged(int firstIndex, int lastIndex)
@@ -39,7 +38,6 @@ OverlayWidget {
     property int _reportedLastVisible: -2
     property var pendingChangeRows: ({})
     property bool viewportReportingReady: false
-    property bool messageMenuOpen: false
 
     function closeActionMenu(armPointerGuard) {
         if (menuRowIndex < 0)
@@ -50,23 +48,9 @@ OverlayWidget {
             actionMenuPointerGesture()
     }
 
-    function closeMessageMenu(armPointerGuard) {
-        if (!messageMenuOpen)
-            return
-        messageMenuOpen = false
-        if (armPointerGuard)
-            actionMenuPointerGesture()
-    }
-
-    function twoDigitCount(value) {
-        var count = Math.max(0, Math.floor(Number(value) || 0))
-        return count < 10 ? "0" + String(count) : String(count)
-    }
-
     function openActionMenu(rowIndex, friendAvailable, gameAvailable, anchor) {
         if (!friendPulseModel.interactionEnabled || !friendAvailable)
             return
-        closeMessageMenu(false)
         var mapped = anchor.mapToItem(friendRoot, 0, anchor.height)
         menuFriendActionAvailable = friendAvailable
         menuGameActionAvailable = gameAvailable
@@ -80,19 +64,6 @@ OverlayWidget {
             mapped.y + 4.0,
             friendRoot.height - actionPopup.height - 8.0
         ))
-    }
-
-    function activateUnreadMessages() {
-        var count = friendPulseModel.unreadMessageCount
-        if (!friendPulseModel.interactionEnabled || count <= 0)
-            return
-        closeActionMenu(false)
-        if (count === 1) {
-            messageActionRequested(0)
-            actionMenuPointerGesture()
-            return
-        }
-        messageMenuOpen = true
     }
 
     function reportVisibleRange(forceReport) {
@@ -200,7 +171,7 @@ OverlayWidget {
 
     TapHandler {
         enabled: friendRoot.friendPulseModel.interactionEnabled
-            && friendRoot.menuRowIndex < 0 && !friendRoot.messageMenuOpen
+            && friendRoot.menuRowIndex < 0
         acceptedButtons: Qt.LeftButton
         onDoubleTapped: friendRoot.refreshRequested()
     }
@@ -209,15 +180,10 @@ OverlayWidget {
         target: friendRoot.friendPulseModel
         function onStateChanged() {
             friendRoot.closeActionMenu(false)
-            if (friendRoot.friendPulseModel.unreadMessageCount <= 1)
-                friendRoot.closeMessageMenu(false)
             friendRoot.pendingChangeRows = ({})
         }
         function onFriendChangePulseRequested(rowIndex) {
             friendRoot.triggerChangeGlow(rowIndex)
-        }
-        function onUnreadMessagePulseRequested() {
-            unreadMessageLine.triggerEventGlow()
         }
     }
 
@@ -251,76 +217,25 @@ OverlayWidget {
         objectName: "friendPulseSummary"
         x: 296.0; y: 13.0
         width: friendRoot.friendPulseModel.authoredWidth - x - 18.0; height: 56.0
-        Rectangle {
-            id: unreadMessageLine
-            objectName: "friendPulseUnreadMessageLine"
-            property real eventGlowLevel: 0.0
+
+        ShadowedText {
             anchors.fill: parent
-            visible: friendRoot.friendPulseModel.unreadMessageCount > 0
-            radius: 8.0
-            color: "transparent"
-
-            function triggerEventGlow() {
-                messageGlowAnimation.stop()
-                eventGlowLevel = 0.0
-                messageGlowAnimation.restart()
-            }
-
-            SequentialAnimation {
-                id: messageGlowAnimation
-                onRunningChanged: {
-                    if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
-                        widgetFrameDemand.setAnimationActive(messageGlowAnimation, running)
-                }
-                NumberAnimation { target: unreadMessageLine; property: "eventGlowLevel"; to: 1.0; duration: 2000; easing.type: Easing.InOutQuad }
-                NumberAnimation { target: unreadMessageLine; property: "eventGlowLevel"; to: 0.0; duration: 3000; easing.type: Easing.OutCubic }
-            }
-
-            ShaderEffect {
-                readonly property real glowDistance: 4.0 + unreadMessageLine.eventGlowLevel
-                readonly property real glowScale: Math.max(0.5, glowDistance / 12.0)
-                x: -glowDistance; y: -glowDistance
-                width: unreadMessageLine.width + glowDistance * 2.0
-                height: unreadMessageLine.height + glowDistance * 2.0
-                property vector2d effectSize: Qt.vector2d(width / glowScale, height / glowScale)
-                property vector2d cardSize: Qt.vector2d(unreadMessageLine.width / glowScale, unreadMessageLine.height / glowScale)
-                property real cornerRadius: unreadMessageLine.radius / glowScale
-                property color glowColor: friendRoot.friendPulseModel.accentColor
-                opacity: unreadMessageLine.eventGlowLevel * 0.82
-                visible: opacity > 0.001
-                z: -1
-                fragmentShader: "shaders/widget_glow.frag.qsb"
-            }
-
-            ShadowedText {
-                anchors.fill: parent
-                text: friendRoot.friendPulseModel.unreadMessageText
-                color: unreadSummaryHover.hovered && friendRoot.friendPulseModel.unreadMessageCount > 0
-                    ? friendRoot.friendPulseModel.accentColor
-                    : friendRoot.friendPulseModel.mutedTextColor
-                font.family: friendRoot.friendPulseModel.fontFamily
-                font.pointSize: friendRoot.friendPulseModel.fontSize * 1.02
-                font.bold: true
-                fontSizeMode: Text.HorizontalFit
-                minimumPointSize: 8.0
-                horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
-                shadowColor: friendRoot.friendPulseModel.textShadowColor
-                shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
-                shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
-            }
-            HoverHandler {
-                id: unreadSummaryHover
-                enabled: friendRoot.friendPulseModel.interactionEnabled
-                    && friendRoot.friendPulseModel.unreadMessageCount > 0
-            }
-            TapHandler {
-                enabled: friendRoot.friendPulseModel.interactionEnabled
-                    && friendRoot.friendPulseModel.unreadMessageCount > 0
-                acceptedButtons: Qt.LeftButton
-                onTapped: friendRoot.activateUnreadMessages()
-            }
+            visible: friendRoot.friendPulseModel.showOnlineCount
+                && friendRoot.friendPulseModel.onlineFriendsText.length > 0
+            text: friendRoot.friendPulseModel.onlineFriendsText
+            color: friendRoot.friendPulseModel.mutedTextColor
+            font.family: friendRoot.friendPulseModel.fontFamily
+            font.pointSize: friendRoot.friendPulseModel.fontSize * 0.82
+            font.bold: true
+            fontSizeMode: Text.HorizontalFit
+            minimumPointSize: 8.0
+            horizontalAlignment: Text.AlignRight
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
+            shadowColor: friendRoot.friendPulseModel.textShadowColor
+            shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
+            shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
         }
     }
 
@@ -811,115 +726,6 @@ OverlayWidget {
         ShadowedText { anchors.left: parent.left; anchors.right: parent.right; y: 108.0; height: 42.0; text: friendRoot.friendPulseModel.viewState === "connect_required" ? "Connect Steam in Settings to see the friend roster." : (friendRoot.friendPulseModel.viewState === "private" ? "Steam is not exposing this friend roster." : (friendRoot.friendPulseModel.viewState === "stale" ? "This friend roster uses the last accepted Steam observation." : (friendRoot.friendPulseModel.viewState === "loading" ? "Loading the account-private friend roster first…" : "The next accepted friend-roster observation will appear here."))); color: friendRoot.friendPulseModel.mutedTextColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.76; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; wrap: true; maximumLineCount: 2; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
     }
 
-    Item {
-        id: messageMenuLayer
-        objectName: "friendPulseMessageMenuLayer"
-        anchors.fill: parent; z: 105
-        visible: friendRoot.messageMenuOpen
-        MouseArea {
-            anchors.fill: parent
-            enabled: parent.visible && friendRoot.friendPulseModel.interactionEnabled
-            onClicked: friendRoot.closeMessageMenu(true)
-        }
-        Rectangle {
-            id: messagePopup
-            objectName: "friendPulseMessagePopup"
-            width: Math.min(300.0, Math.max(220.0, friendRoot.friendPulseModel.authoredWidth * 0.48))
-            height: Math.min(200.0, messageList.contentHeight) + 16.0
-            radius: 10.0
-            x: friendRoot.friendPulseModel.authoredWidth - width - 18.0
-            y: 72.0
-            color: friendRoot.friendPulseModel.headerFillColor
-            border.color: friendRoot.friendPulseModel.headerBorderColor
-            border.width: friendRoot.friendStrokeWidth(2.0)
-
-            ListView {
-                id: messageList
-                x: 8.0; y: 8.0; width: parent.width - 16.0
-                height: parent.height - 16.0
-                spacing: 3.0; clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                model: friendRoot.friendPulseModel.messageModel
-                delegate: Rectangle {
-                    id: messageRow
-                    required property string displayName
-                    required property string avatarSource
-                    required property int unreadCount
-                    required property int lastMessageAt
-                    required property int index
-                    width: messageList.width; height: 42.0; radius: 7.0
-                    color: messageRowHover.hovered
-                        ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r,
-                                  friendRoot.friendPulseModel.accentColor.g,
-                                  friendRoot.friendPulseModel.accentColor.b, 0.22)
-                        : "transparent"
-                    Rectangle {
-                        id: messageAvatarFrame
-                        x: 5.0; anchors.verticalCenter: parent.verticalCenter
-                        width: 30.0; height: width; radius: 7.0
-                        color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r,
-                                       friendRoot.friendPulseModel.accentColor.g,
-                                       friendRoot.friendPulseModel.accentColor.b, 0.18)
-                        border.color: friendRoot.friendPulseModel.rowInnerBorderColor
-                        border.width: friendRoot.friendStrokeWidth(1.0)
-                        Item {
-                            anchors.fill: parent; anchors.margins: 1.0; clip: true
-                            Image {
-                                anchors.fill: parent; source: avatarSource
-                                visible: avatarSource.length > 0
-                                fillMode: Image.PreserveAspectCrop
-                                asynchronous: true; cache: true
-                                layer.enabled: visible
-                                layer.effect: MultiEffect {
-                                    maskEnabled: true
-                                    maskSource: messageAvatarMask
-                                }
-                            }
-                            Rectangle {
-                                id: messageAvatarMask
-                                anchors.fill: parent; radius: 6.0
-                                visible: false; layer.enabled: true
-                            }
-                        }
-                        Text {
-                            anchors.fill: parent; visible: avatarSource.length === 0
-                            text: displayName.length > 0 ? displayName.charAt(0).toUpperCase() : ""
-                            color: friendRoot.friendPulseModel.accentColor
-                            font.family: friendRoot.friendPulseModel.fontFamily
-                            font.pointSize: friendRoot.friendPulseModel.fontSize * 0.85
-                            font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                    ShadowedText {
-                        anchors.left: messageAvatarFrame.right; anchors.leftMargin: 9.0
-                        anchors.right: parent.right; anchors.rightMargin: 8.0
-                        anchors.verticalCenter: parent.verticalCenter; height: 28.0
-                        text: friendRoot.twoDigitCount(unreadCount) + "  " + displayName.toUpperCase()
-                        color: friendRoot.friendPulseModel.textColor
-                        font.family: friendRoot.friendPulseModel.fontFamily
-                        font.pointSize: friendRoot.friendPulseModel.fontSize * 0.76
-                        font.bold: true; elide: Text.ElideRight
-                        verticalAlignment: Text.AlignVCenter
-                        shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
-                        shadowColor: friendRoot.friendPulseModel.textShadowColor
-                        shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
-                        shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
-                    }
-                    HoverHandler { id: messageRowHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
-                    TapHandler {
-                        enabled: friendRoot.friendPulseModel.interactionEnabled
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: {
-                            friendRoot.messageActionRequested(index)
-                            friendRoot.closeMessageMenu(true)
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     Item {
         id: actionMenuLayer

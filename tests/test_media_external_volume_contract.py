@@ -24,12 +24,13 @@ def test_overlay_widget_has_one_scene_local_bidirectional_accessory_lane() -> No
 
 def test_media_volume_is_external_to_card_and_card_reclaims_old_width() -> None:
     qml = _text("rendering/quick/qml/MediaPresentation.qml")
-    assert "readonly property real preferredCardWidth" in qml
+    assert "readonly property real canonicalPreferredCardWidth" in qml
     assert "readonly property real volumeAccessoryExtent:" in qml
     assert "readonly property bool appVolumeOnLeft:" in qml
     assert 'accessorySide: appVolumeOnLeft ? "left" : "right"' in qml
     assert "accessoryExtent: volumeAccessoryExtent" in qml
-    assert "preferredContentWidth: preferredCardWidth + volumeAccessoryExtent" in qml
+    assert "canonicalPreferredCardWidth + volumeAccessoryExtent" in qml
+    assert "preferredContentWidth: effectivePreferredWidth" in qml
     assert "accessoryContent:" in qml
     assert 'objectName: "mediaAppVolumeSlider"' in qml
     assert "anchors.rightMargin: appVolumeSlider.visible ? 48.0 : 0.0" not in qml

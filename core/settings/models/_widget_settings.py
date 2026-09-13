@@ -288,6 +288,7 @@ class MediaWidgetSettings:
     header_border_color: list[int] = field(default_factory=lambda: _default("widgets.media", "header_border_color"))
     header_text_color: list[int] = field(default_factory=lambda: _default("widgets.media", "header_text_color"))
     rounded_artwork_border: bool = bool(_default("widgets.media", "rounded_artwork_border"))
+    allow_landscape_artwork: bool = bool(_default("widgets.media", "allow_landscape_artwork"))
     provider: str = str(_default("widgets.media", "provider"))
     spotify_volume_enabled: bool = bool(_default("widgets.media", "spotify_volume_enabled"))
     spotify_volume_fill_color: list[int] = field(default_factory=lambda: _default("widgets.media", "spotify_volume_fill_color"))
@@ -354,6 +355,7 @@ class MediaWidgetSettings:
             header_border_color=list(get_value("header_border_color")),
             header_text_color=list(get_value("header_text_color")),
             rounded_artwork_border=bool(get_value("rounded_artwork_border")),
+            allow_landscape_artwork=bool(get_value("allow_landscape_artwork")),
             provider=preserve_provider_setting(get_value("provider")),
             spotify_volume_enabled=bool(get_value("spotify_volume_enabled")),
             spotify_volume_fill_color=list(get_value("spotify_volume_fill_color")),
@@ -393,6 +395,7 @@ class MediaWidgetSettings:
             f"{prefix}.header_border_color": list(self.header_border_color),
             f"{prefix}.header_text_color": list(self.header_text_color),
             f"{prefix}.rounded_artwork_border": self.rounded_artwork_border,
+            f"{prefix}.allow_landscape_artwork": self.allow_landscape_artwork,
             f"{prefix}.provider": self.provider,
             f"{prefix}.spotify_volume_enabled": self.spotify_volume_enabled,
             f"{prefix}.spotify_volume_fill_color": list(self.spotify_volume_fill_color),

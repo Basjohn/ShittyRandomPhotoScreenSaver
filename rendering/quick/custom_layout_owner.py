@@ -53,6 +53,7 @@ from rendering.quick.custom_layout_size import (
     CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY,
     capture_quick_size_payload,
     is_uniform_transform_resize_mode,
+    quick_custom_content_extent_minimum_size,
     quick_custom_minimum_size,
     quick_custom_payload_minimum_scale,
     scale_quick_size_payload,
@@ -1065,6 +1066,7 @@ class QuickCustomLayoutOwner:
                     widget_id, widgets
                 ),
                 content_extent_axes=content_axes,
+                content_extent_minimum_size=descriptor.content_extent_minimum_size,
                 baseline_content_extent=committed_content_extent,
                 size_reset_capable=descriptor.requires_size_reset_affordance,
                 authored_reference_size=(authored_width, authored_height),
@@ -1657,7 +1659,7 @@ class QuickCustomLayoutOwner:
         """
 
         binding = self._bindings[item.current_display_identity]
-        minimum = quick_custom_minimum_size(item)
+        minimum = quick_custom_content_extent_minimum_size(item)
         rect = self._viewport_resize_rect(
             origin,
             binding,

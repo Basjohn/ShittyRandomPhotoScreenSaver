@@ -618,6 +618,7 @@
         "preferred_width": 560,
         "show_background": true,
         "show_names": true,
+        "show_online_count": true,
         "view_mode": "grid",
         "visible_row_capacity": 8
       },
@@ -716,6 +717,7 @@
         "version": 1
       },
       "media": {
+        "allow_landscape_artwork": false,
         "artwork_size": 250,
         "bg_color": [
           35,
