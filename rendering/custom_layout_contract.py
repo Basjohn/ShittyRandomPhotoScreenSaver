@@ -22,6 +22,11 @@ CUSTOM_LAYOUT_RESTORE_VERSION = 1
 CUSTOM_LAYOUT_RESTORE_SETTINGS_KEY = "custom_layout_restore"
 CUSTOM_LAYOUT_GRID_STEP_PX = 12
 CUSTOM_LAYOUT_SNAP_THRESHOLD_PX = 24
+# Resize edges attract over a deliberately narrower band than a whole-widget
+# move: a move is coarse placement, a resize is a precise size adjustment, so a
+# ~30% weaker pull keeps fine sizing under the cursor while still offering the
+# alignment nudge. Used by both edge-drag and uniform-scale resize snapping.
+CUSTOM_LAYOUT_RESIZE_SNAP_THRESHOLD_PX = 17
 CUSTOM_LAYOUT_ALIGNMENT_SNAG_BIAS_PX = 3
 CUSTOM_LAYOUT_SNAP_GUTTER_PX = 30
 CUSTOM_LAYOUT_GUTTER_SNAG_THRESHOLD_PX = 5
@@ -906,7 +911,7 @@ def resolve_resize_edge_snap(
     horizontal_edge: str | None = None,
     vertical_edge: str | None = None,
     peer_rects: list[QRect] | tuple[QRect, ...] = (),
-    threshold_px: int = CUSTOM_LAYOUT_SNAP_THRESHOLD_PX,
+    threshold_px: int = CUSTOM_LAYOUT_RESIZE_SNAP_THRESHOLD_PX,
     min_size: QSize = CUSTOM_LAYOUT_MIN_WIDGET_SIZE,
 ) -> SnapResolution:
     """Snap the moving edge(s) of a resize rect while anchoring the opposite edges.
