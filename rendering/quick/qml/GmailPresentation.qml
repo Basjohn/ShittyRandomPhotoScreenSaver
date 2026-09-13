@@ -116,6 +116,17 @@ OverlayWidget {
         actionPopupY = mapped.y
     }
 
+    // Exact width of a full DD/MM/YYYY date at the timestamp render font
+    // (fontSize-5). Measured once and reused by every row so the fixed date
+    // column always fits the longest date - old-dated rows show the whole date
+    // instead of eliding, and the sender left edge stays aligned on every row.
+    TextMetrics {
+        id: dateMetrics
+        font.family: gmailRoot.gmailModel.fontFamily
+        font.pointSize: gmailRoot.gmailModel.timestampFontSize
+        text: "00/00/0000"
+    }
+
     Connections {
         target: gmailRoot.gmailModel
 
@@ -341,8 +352,11 @@ OverlayWidget {
                             objectName: "gmailTimestamp_" + messageRow.index
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
+                            // Fixed column sized to the widest date (measured, not
+                            // guessed) so full dates never elide; kept constant across
+                            // rows to align the sender edge.
                             width: messageRow.messageTimestamp.length > 0
-                                ? Math.max(58.0, gmailRoot.gmailModel.fontSize * 4.8)
+                                ? Math.max(52.0, dateMetrics.width + 6.0)
                                 : 0.0
                             height: parent.height
                             text: messageRow.messageTimestamp
@@ -360,6 +374,9 @@ OverlayWidget {
                         Item {
                             id: messageTextArea
                             anchors.left: timestampText.right
+                            // Fixed gutter so no date - however long - ever touches the
+                            // sender name; identical on every row for column consistency.
+                            anchors.leftMargin: messageRow.messageTimestamp.length > 0 ? 8.0 : 0.0
                             anchors.right: parent.right
                             height: parent.height
 
