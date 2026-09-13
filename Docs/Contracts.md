@@ -219,8 +219,10 @@ colour through `ui.widget_glow_style` (`card.border` inheritance) plus the canon
 Quick input snapshot/scene-generation gate -> ordinary host -> `OverlayWidget`/`WidgetInteractionGlow`. The input owner
 observes discrete presses without intercepting family actions; the host turns each admitted press into one last-clicked
 ordinary-card boolean target (or clears it on empty space), while the shell observes hover edges. Hover/click fade toward
-their state on entry/selection and remain settled until that state changes, at which point they fade gently out. One lazy
-shader and finite edge-triggered animations own pixels only; no recurring cadence exists.
+their state on entry/selection and remain settled until that state changes, at which point they fade gently out.
+`cardShellEnabled` is the common eligibility gate: shell-less ordinary widgets and frameless Visualizer modes are not
+hover/click glow targets and cannot emit Jedi Mode through this interaction feature; removing a shell clears click state.
+One lazy shader and finite edge-triggered animations own pixels only; no recurring cadence exists.
 
 ```text
 QML semantic action -> Python admission/action owner -> business side effect -> accepted state -> presentation
@@ -238,7 +240,9 @@ Dynamic image precedent is process-engine `MediaArtworkImageProvider` over runti
 identity/bounded retention. No QPixmap worker transport, base64/tempfile churn or unchanged reupload.
 
 Dynamic artwork presentation invariant: **every changing artwork surface fades**. Media, Achievement Pulse and
-Abandonment Issues use the shared retained `ArtworkFadeImage.qml` fade-through primitive; future dynamic artwork must
+Abandonment Issues use the shared retained `ArtworkFadeImage.qml` fade-through primitive; its two retained image buffers
+are hard-clipped to the caller-assigned artwork rectangle, while each family owns its rounded mask and keeps the image
+inset beneath the scale-aware border so enlarged artwork cannot bleed past rough frame edges. Future dynamic artwork must
 reuse the same contract or an explicitly superior retained equivalent. Source changes never become visible as an instant
 texture swap: old art fades to zero, the new source waits for `Image.Ready`, then fades in. Slice 8's shared gentle baseline is `200 ms` out / `340 ms` in (family lifecycle choreography may explicitly shorten a fade that is already fully hidden). These are bounded event-driven QML animations only while artwork changes; no recurring timer/poller/cadence owner is permitted for artwork fading. Media metadata follows the same ownership principle: provider/model Title/Artist/Album truth updates immediately, while `MediaMetadataColumn.qml` may retain only the outgoing rendered strings for one bounded presentation crossfade (`240 ms` out / `340 ms` in). Animation must never become data authority or delay fresh metadata.
 
@@ -362,5 +366,7 @@ that mode. Live Edit captures existing visible rectangles without resetting thei
 A newly constructed uncommitted Visualizer uses Media's plain authored anchor; adjacency is restored
 only after returning to a globally non-CUSTOM generation/session. This switch is event-bound and must never gain a
 recurring timer, polling loop, render callback, or worker.
+
+CUSTOM wheel resize remains free uniform scaling: it may publish the same nearby peer-alignment guides as drag resize, but it must never apply the guide resolver's suggested snap scale. Authored peer/centre/safe-gutter guide strokes are one pixel thicker than their former baseline; the generic edit grid remains 1 px.
 
 Ordinary uniform CUSTOM scale is absolute against stable authored/preferred geometry with a shared 40% floor; re-entering CUSTOM must not compound shrink. Reddit/Reddit2, Media, Gmail, Abandonment Issues, Achievement Pulse and Weather use whole-card retained uniform scaling. New ordinary cards default to the `ordinary_uniform` descriptor mode; Clock alone retains variant-aware per-value sizing. Older current-format per-value payloads are inert for normalized families, and genuine product Settings remain authoritative. Media's preferred width may include a scene-local accessory extent; that extent scales as part of the same authored root while the card keeps its own authored width, so external app volume does not become a second geometry owner. Gmail model width is already outer width; its row-derived preferred height alone receives shell inset. Visualizer is intentionally separate: `uniform_visual_scale` and `viewport_extent` remain independent intents.

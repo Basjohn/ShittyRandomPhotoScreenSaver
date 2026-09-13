@@ -241,3 +241,45 @@ def test_session_copies_mutable_geometry_and_payload_inputs():
     assert item.current_global_rect == QRect(10, 20, 300, 120)
     assert item.baseline_size_payload == {"font_size": 48}
     assert item.current_size_payload == {"font_size": 48}
+
+
+def test_restore_authored_size_changes_only_shape_payload_and_resize_state() -> None:
+    key = CustomLayoutKey("friend_pulse", "display:a")
+    baseline = QRect(60, 80, 420, 220)
+    item = CustomLayoutSessionItem(
+        source_key=key,
+        model_identity="friend_pulse",
+        baseline_global_rect=baseline,
+        current_global_rect=QRect(900, 120, 700, 420),
+        baseline_size_payload={"font_size": 18},
+        current_size_payload={"font_size": 31, "content_extent": [700, 420]},
+        baseline_enabled=True,
+        current_enabled=False,
+        current_display_identity="display:b",
+        source_monitor_route="ALL",
+        current_monitor_route="2",
+        resize_scale=1.7,
+        removed=True,
+        size_reset_capable=True,
+        authored_reference_size=(420.0, 220.0),
+        authored_size_payload={"font_size": 18},
+        baseline_content_extent=(420.0, 220.0),
+        current_content_extent=(700.0, 420.0),
+    )
+    original_baseline = QRect(item.baseline_global_rect)
+
+    item.restore_authored_size(
+        QRect(900, 120, 420, 220),
+        size_payload={"font_size": 18},
+        resize_scale=1.0,
+    )
+
+    assert item.current_global_rect == QRect(900, 120, 420, 220)
+    assert item.current_size_payload == {"font_size": 18}
+    assert item.resize_scale == 1.0
+    assert item.current_content_extent is None
+    assert item.current_display_identity == "display:b"
+    assert item.current_monitor_route == "2"
+    assert item.current_enabled is False
+    assert item.removed is True
+    assert item.baseline_global_rect == original_baseline

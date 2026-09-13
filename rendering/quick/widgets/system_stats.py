@@ -1,7 +1,7 @@
-"""Retained whole-system CPU/RAM card presentation.
+"""Retained whole-system CPU/RAM/Uptime/Network card presentation.
 
-The model consumes one generation-shared immutable sample.  It owns no timer,
-worker, source handle or history and exposes only stable, fixed-capacity card
+The model consumes one generation-shared immutable sample. It owns no timer,
+worker, source handle or history and exposes only stable fixed-capacity card
 state to QML.
 """
 
@@ -66,6 +66,10 @@ class SystemStatsPresentationConfig:
     metric_surface_color: tuple[int, int, int, int]
     metric_border_color: tuple[int, int, int, int]
     track_color: tuple[int, int, int, int]
+    show_cpu: bool
+    show_memory: bool
+    show_uptime: bool
+    show_network: bool
     metric_capacity: int
     authored_width: int
 
@@ -125,11 +129,15 @@ class SystemStatsPresentationConfig:
             metric_surface_color=(35, 46, 62, 188),
             metric_border_color=(151, 187, 214, 128),
             track_color=(8, 14, 22, 176),
+            show_cpu=as_bool(merged.get("show_cpu"), bool(_DEFAULTS["show_cpu"])),
+            show_memory=as_bool(merged.get("show_memory"), bool(_DEFAULTS["show_memory"])),
+            show_uptime=as_bool(merged.get("show_uptime"), bool(_DEFAULTS["show_uptime"])),
+            show_network=as_bool(merged.get("show_network"), bool(_DEFAULTS["show_network"])),
             metric_capacity=bounded_int(
                 merged.get("metric_capacity"),
                 int(_DEFAULTS["metric_capacity"]),
-                2,
-                2,
+                4,
+                4,
             ),
             authored_width=bounded_int(
                 merged.get("preferred_width"),
@@ -268,6 +276,39 @@ def _format_bytes(value: int | None) -> str:
     return f"{gib:.1f} GB"
 
 
+def _format_rate(value: float | None) -> str:
+    if value is None or value < 0.0:
+        return "—"
+    units = ("B/s", "KB/s", "MB/s", "GB/s")
+    scaled = float(value)
+    unit = units[0]
+    for candidate in units[1:]:
+        if scaled < 1024.0:
+            break
+        scaled /= 1024.0
+        unit = candidate
+    if unit == "B/s":
+        return f"{scaled:.0f} {unit}"
+    if scaled >= 100.0:
+        return f"{scaled:.0f} {unit}"
+    if scaled >= 10.0:
+        return f"{scaled:.1f} {unit}"
+    return f"{scaled:.2f} {unit}"
+
+
+def _format_uptime(seconds: float | None) -> str:
+    if seconds is None or seconds < 0.0:
+        return "—"
+    total_minutes = int(seconds // 60.0)
+    days, remainder = divmod(total_minutes, 24 * 60)
+    hours, minutes = divmod(remainder, 60)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
 class SystemStatsPresentationModel(QObject):
     stateChanged = Signal()
 
@@ -287,6 +328,7 @@ class SystemStatsPresentationModel(QObject):
         self._runtime_attached = False
         self._thread_manager: Any | None = None
         self._sample = CpuRamSample("warming", None, "warming", None, None)
+        self._content_extent: tuple[int, int] | None = None
         self._revision = 0
         self._active = False
         self._retired = False
@@ -341,6 +383,35 @@ class SystemStatsPresentationModel(QObject):
         self._sample = sample
         self.stateChanged.emit()
 
+    def set_content_extent(
+        self, width: float | None, height: float | None
+    ) -> bool:
+        """Apply a CUSTOM-only reflow box without mutating System Stats settings."""
+
+        if width is None or height is None:
+            return self.clear_content_extent()
+        try:
+            resolved_width = int(round(float(width)))
+            resolved_height = int(round(float(height)))
+        except (TypeError, ValueError):
+            return False
+        enabled_count = max(1, self.enabled_metric_count)
+        resolved_width = max(440, min(1800, resolved_width))
+        resolved_height = max(110 + enabled_count * 58, min(3000, resolved_height))
+        extent = (resolved_width, resolved_height)
+        if extent == self._content_extent:
+            return False
+        self._content_extent = extent
+        self.stateChanged.emit()
+        return True
+
+    def clear_content_extent(self) -> bool:
+        if self._content_extent is None:
+            return False
+        self._content_extent = None
+        self.stateChanged.emit()
+        return True
+
     def retire(self) -> None:
         if self._retired:
             return
@@ -364,10 +435,6 @@ class SystemStatsPresentationModel(QObject):
             if _SYSTEM_STATS_ICON.is_file()
             else ""
         )
-
-    @Property(str, notify=stateChanged)
-    def cadenceText(self) -> str:
-        return "WHOLE SYSTEM  •  10 SEC"
 
     @Property(str, notify=stateChanged)
     def cpuValue(self) -> str:
@@ -421,6 +488,56 @@ class SystemStatsPresentationModel(QObject):
         return f"{_format_bytes(self._sample.ram_used_bytes)} of {_format_bytes(self._sample.ram_total_bytes)} used"
 
     @Property(str, notify=stateChanged)
+    def uptimeValue(self) -> str:
+        if self._sample.uptime_status != "ok":
+            return "—"
+        return _format_uptime(self._sample.uptime_seconds)
+
+    @Property(str, notify=stateChanged)
+    def uptimeDetail(self) -> str:
+        if self._sample.uptime_status != "ok":
+            return "System uptime unavailable"
+        return "Since system boot"
+
+    @Property(str, notify=stateChanged)
+    def networkValue(self) -> str:
+        if self._sample.network_status != "ok":
+            return "—"
+        return f"↓ {_format_rate(self._sample.network_rx_bps)}"
+
+    @Property(str, notify=stateChanged)
+    def networkDetail(self) -> str:
+        if self._sample.network_status == "warming":
+            return "Warming network baseline"
+        if self._sample.network_status != "ok":
+            return "Network throughput unavailable"
+        return f"↑ {_format_rate(self._sample.network_tx_bps)}"
+
+    @property
+    def enabled_metric_count(self) -> int:
+        return sum((self.config.show_cpu, self.config.show_memory, self.config.show_uptime, self.config.show_network))
+
+    @Property(int, notify=stateChanged)
+    def enabledMetricCount(self) -> int:
+        return self.enabled_metric_count
+
+    @Property(bool, notify=stateChanged)
+    def showCpu(self) -> bool:
+        return self.config.show_cpu
+
+    @Property(bool, notify=stateChanged)
+    def showMemory(self) -> bool:
+        return self.config.show_memory
+
+    @Property(bool, notify=stateChanged)
+    def showUptime(self) -> bool:
+        return self.config.show_uptime
+
+    @Property(bool, notify=stateChanged)
+    def showNetwork(self) -> bool:
+        return self.config.show_network
+
+    @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:
         return self.config.font_family
 
@@ -445,6 +562,14 @@ class SystemStatsPresentationModel(QObject):
     @Property(QColor, notify=stateChanged)
     def ramAccentColor(self) -> QColor:
         return QColor(*self.config.ram_accent_color)
+
+    @Property(QColor, notify=stateChanged)
+    def uptimeAccentColor(self) -> QColor:
+        return QColor(*self.config.ram_accent_color)
+
+    @Property(QColor, notify=stateChanged)
+    def networkAccentColor(self) -> QColor:
+        return QColor(*self.config.cpu_accent_color)
 
     @Property(QColor, notify=stateChanged)
     def metricSurfaceColor(self) -> QColor:
@@ -492,10 +617,14 @@ class SystemStatsPresentationModel(QObject):
 
     @Property(float, notify=stateChanged)
     def authoredWidth(self) -> float:
+        if self._content_extent is not None:
+            return float(self._content_extent[0])
         return float(self.config.authored_width)
 
     @Property(float, notify=stateChanged)
     def authoredHeight(self) -> float:
+        if self._content_extent is not None:
+            return float(self._content_extent[1])
         return float(self.config.authored_height)
 
 
@@ -518,7 +647,16 @@ class RetainedSystemStatsPresentation:
             card_style=model.style.card_style,
         )
         self._retained.add_retirement_callback(model.retire)
-        self._retained.set_custom_layout_size_payload_handler(lambda _payload: None)
+        self._retained.set_custom_layout_size_payload_handler(
+            self._apply_custom_layout_size_payload
+        )
+
+    def _apply_custom_layout_size_payload(self, payload: Mapping[str, Any]) -> None:
+        extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
+        if isinstance(extent, (tuple, list)) and len(extent) == 2:
+            self._model.set_content_extent(extent[0], extent[1])
+        else:
+            self._model.clear_content_extent()
 
     @property
     def item(self) -> Any:

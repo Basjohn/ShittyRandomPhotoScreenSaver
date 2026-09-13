@@ -60,7 +60,7 @@ OverlayWidget {
             logoSource: abandonmentRoot.abandonmentModel.logoSource
             fillColor: abandonmentRoot.abandonmentModel.headerFillColor
             borderColor: abandonmentRoot.abandonmentModel.headerBorderColor
-            borderWidth: abandonmentRoot.scaleAwareStrokeWidthForScale(
+            borderWidth: abandonmentRoot.scaleAwareHeaderStrokeWidthForScale(
                 abandonmentRoot.abandonmentModel.headerBorderWidth,
                 abandonmentRoot.presentationScale
             )
@@ -298,6 +298,11 @@ OverlayWidget {
                     Item {
                         id: artworkFrame
                         objectName: "abandonmentArtworkFrame"
+                        readonly property real artworkStrokeWidth:
+                            abandonmentRoot.scaleAwareStrokeWidthForScale(
+                                2.25, abandonmentRoot.presentationScale
+                            )
+                        readonly property real imageInset: Math.max(1.0, artworkStrokeWidth)
                         x: 5.0
                         y: 4.0
                         width: normalContent.artworkWidth
@@ -331,6 +336,7 @@ OverlayWidget {
                             id: abandonmentArtworkImage
                             objectName: "abandonmentArtworkImage"
                             anchors.fill: parent
+                            anchors.margins: artworkFrame.imageInset
                             source: abandonmentRoot.abandonmentModel.artworkSource
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
@@ -338,7 +344,6 @@ OverlayWidget {
                             // Artwork remains independent from the text/value
                             // rotation fade: keep the accepted texture visible until
                             // the replacement is Ready, then crossfade normally.
-                            fadeInDuration: 340
                             layer.enabled: true
                             layer.effect: MultiEffect {
                                 maskEnabled: true
@@ -348,8 +353,8 @@ OverlayWidget {
 
                         Rectangle {
                             id: artworkMask
-                            anchors.fill: parent
-                            radius: 8.0
+                            anchors.fill: abandonmentArtworkImage
+                            radius: Math.max(0.0, 8.0 - artworkFrame.imageInset)
                             visible: false
                             layer.enabled: true
                         }
@@ -361,9 +366,7 @@ OverlayWidget {
                             border.color: artworkHover.hovered
                                 ? abandonmentRoot.abandonmentModel.accentColor
                                 : abandonmentRoot.abandonmentModel.steamArtworkBorderColor
-                            border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                                2.25, abandonmentRoot.presentationScale
-                            )
+                            border.width: artworkFrame.artworkStrokeWidth
                         }
 
                         HoverHandler {

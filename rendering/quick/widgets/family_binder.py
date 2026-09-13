@@ -764,7 +764,7 @@ class FriendPulseFamilyAdapter:
 
 
 class SystemStatsFamilyAdapter:
-    """Adapter for the normally available whole-system CPU/RAM card."""
+    """Adapter for the normally available whole-system System Stats card."""
 
     @property
     def family_id(self) -> str:

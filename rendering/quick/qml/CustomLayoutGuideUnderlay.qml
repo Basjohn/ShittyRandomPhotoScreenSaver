@@ -50,7 +50,7 @@ Item {
         objectName: "customLayoutAbsoluteCenterVertical"
         visible: guideUnderlay.editActive
         x: Math.round(guideUnderlay.width / 2.0)
-        width: 2
+        width: 3
         height: guideUnderlay.height
         color: "#70ffffff"
     }
@@ -60,7 +60,7 @@ Item {
         visible: guideUnderlay.editActive
         y: Math.round(guideUnderlay.height / 2.0)
         width: guideUnderlay.width
-        height: 2
+        height: 3
         color: "#70ffffff"
     }
 
@@ -69,7 +69,7 @@ Item {
         anchors.fill: parent
         anchors.margins: guideUnderlay.gridGutter
         color: "transparent"
-        border.width: 1
+        border.width: 2
         border.color: "#74b46eff"
     }
 
@@ -81,7 +81,7 @@ Item {
             objectName: "customLayoutVerticalCenterGuide"
             property string guideKind: String(modelData.kind)
             x: Number(modelData.position)
-            width: 2
+            width: 3
             height: guideUnderlay.height
             color: "#a8b46eff"
         }
@@ -95,7 +95,7 @@ Item {
             property string guideKind: String(modelData.kind)
             y: Number(modelData.position)
             width: guideUnderlay.width
-            height: 2
+            height: 3
             color: "#a8b46eff"
         }
     }

@@ -102,6 +102,22 @@ the installed 10-second off-vs-on Visualizer contention/long-run and two-display
 public and member-disabled by default; `--devsteam` remains only for unfinished Games You Follow and `--devstats` is retired.
 The parser tolerates the old `--devstats` token as an inert no-op so an existing shortcut cannot change launch mode.
 
+
+## 0.12 2026-09-13 System Stats expansion + frameless interaction-glow gate
+
+- System Stats now keeps one generation-shared, lease-gated fixed-delay sampler and adds **UPTIME** plus aggregate
+  **NETWORK ↓/↑** to the same immutable snapshot; no new cadence owner exists. Canonical sample interval is user-adjustable
+  only upward from a hard/default 10-second floor.
+- The card has four fixed metrics (CPU LOAD, MEMORY, UPTIME, NETWORK), capacity 4 / authored height 430. User-facing
+  implementation/rejection filler text is removed.
+- Widget interaction glow/Jedi admission now requires the live `cardShellEnabled` truth for ordinary widgets and the
+  Visualizer. Frameless presentations cannot load glow pixels, become click targets, retain click selection, or emit Jedi
+  Mode through the glow path. The old shell-less Digital Clock intrinsic-bounds exception is retired.
+- Local workspace lacks PySide6, so real Settings/QML pytest execution remains **NOT RUN HERE**. Local executable gates
+  for this checkpoint are **8/8 PASS** pure System Stats source contracts, **11/11 PASS** shared-sampler state-machine
+  cases under a Qt-free ThreadManager stub, generated-default authority **GREEN**, **15/15 PASS** changed-Python compile,
+  plus static QML/card-shell policy checks.
+
 ---
 
 ## Current authority
@@ -109,6 +125,10 @@ The parser tolerates the old `--devstats` token as an inert no-op so an existing
 The exact current source tree and the maintained `destination` profile in `tests/run_chunked.py` own executable test truth. `Current_Plan.md` owns execution order. Historical bug records and old migration reports are evidence, not permission to keep tests for retired owners alive indefinitely.
 
 The current product is post-Qt-Quick cutover. The five established visualizer modes remain permanent shared modes; Voxel Sphere is an **accepted experimental, architecturally isolated** sixth mode. Tests must preserve that distinction rather than forcing Sphere into permanent-mode assumptions or treating experimental isolation as exemption from shared persistence/normalization contracts.
+
+## 0.13 2026-09-13 geometry-guide + widget visual polish
+
+Focused acceptance owns: wheel resize publishes alignment guides without snapping; authored guides are +1 px while the generic grid stays 1 px; Media artwork consumes non-overlapping right-column vertical space and insets under its frame; all shared dynamic artwork buffers are hard-contained; Friend Pulse local linework is +0.5 px, roster names are title-cased/two-line shrink-to-fit/bold, and BrandedHeader scale-up stroke delta receives the extra 25% boost. Real PySide/QML execution remains user-environment validation when unavailable to the agent.
 
 This file is a maintained routing/status guide. It deliberately does **not** carry a giant hand-maintained inventory of every `test_*.py` file. That became stale faster than the code and obscured obsolete tests. Source discovery plus the maintained profile are the inventory authorities.
 
@@ -455,7 +475,7 @@ Protect:
 - QML emits semantic actions rather than owning provider/business side effects;
 - ordinary family presentation remains normalized from authored size + one resolved runtime geometry authority.
 
-High-value suites include `test_qtquick_runtime.py`, `test_qtquick_window.py`, `test_qtquick_monitor_wake_reconcile.py`, `test_qtquick_scene_controller.py`, `test_qtquick_family_binder*.py`, `test_qtquick_ordinary_widget_host.py`, lifecycle/terminal-destruction suites and family-specific Quick presentation tests. `test_qtquick_monitor_wake_reconcile.py` permanently pins the event-driven sleep/wake contract: same-count QScreen metric changes reach DisplayManager topology authority, only `ApplicationActive` admits resume repair, metric-first/resume-second bursts preserve that repair intent, unchanged final signatures reapply bound Quick geometry once, primary-screen changes are signature-visible, and retirement disconnects every topology edge.
+High-value suites include `test_qtquick_runtime.py`, `test_qtquick_window.py`, `test_qtquick_monitor_wake_reconcile.py`, `test_qtquick_scene_controller.py`, `test_qtquick_family_binder*.py`, `test_qtquick_ordinary_widget_host.py`, lifecycle/terminal-destruction suites and family-specific Quick presentation tests. `test_qtquick_monitor_wake_reconcile.py` permanently pins the event-driven sleep/wake contract: same-count QScreen metric changes reach DisplayManager topology authority, only `ApplicationActive` admits resume repair, metric-first/resume-second bursts preserve that repair intent, unchanged final signatures reapply bound Quick geometry once, primary-screen changes are signature-visible, and retirement disconnects every topology edge. Installed physical dual-display wake validation passed on 2026-09-12 through real `2 -> 1 -> 2 -> 1 -> 2` topology churn; R-79 is closed while the nondeterministic same-signature resume branch remains automation-owned.
 
 ### 6.2 Widget normalization / CUSTOM
 

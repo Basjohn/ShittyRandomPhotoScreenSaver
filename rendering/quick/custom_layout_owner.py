@@ -215,6 +215,7 @@ class QuickCustomLayoutOwner:
                         self._adjacent_display_binding(item, direction, available) is not None
                     ),
                     display_transfer_handler=self.transfer_display,
+                    size_reset_handler=self.restore_item_size,
                 )
         except Exception:
             for binding in bindings.values():
@@ -790,13 +791,48 @@ class QuickCustomLayoutOwner:
         steps = int(angle_delta_y / 120) if angle_delta_y else 0
         if steps == 0:
             steps = 1 if angle_delta_y > 0 else -1
-        return self._apply_uniform_scale(
+        changed = self._apply_uniform_scale(
             item,
             max(
                 CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
                 float(item.resize_scale) + 0.05 * steps,
             ),
             QRect(item.current_global_rect),
+        )
+        # Wheel resize is intentionally free of magnetic snapping, but nearby peer
+        # alignment is still useful visual feedback.  Resolve the same peer-line
+        # metadata against the already-applied free geometry and publish only its
+        # guides; never feed the resolver's suggested scale back into geometry.
+        self._publish_uniform_wheel_guides(item)
+        return changed
+
+    def _publish_uniform_wheel_guides(
+        self, item: CustomLayoutSessionItem
+    ) -> None:
+        binding = self._bindings.get(item.current_display_identity)
+        if binding is None:
+            self._clear_all_guides()
+            return
+        rect = QRect(item.current_global_rect)
+        snap = resolve_uniform_scale_snap(
+            float(item.resize_scale),
+            center_x=(
+                float(rect.x()) + float(rect.width()) / 2.0
+                - float(binding.geometry.x())
+            ),
+            top=float(rect.y()) - float(binding.geometry.y()),
+            free_width=float(rect.width()),
+            free_height=float(rect.height()),
+            display_size=binding.geometry.size(),
+            peer_rects=self._peer_local_rects(item, binding),
+        )
+        self._publish_move_guides(
+            item.current_display_identity,
+            SnapResolution(
+                rect=QRect(rect),
+                vertical_guides=snap.vertical_guides,
+                horizontal_guides=snap.horizontal_guides,
+            ),
         )
 
     def _live_display_bindings(self) -> dict[str, _DisplayBinding]:
@@ -984,6 +1020,35 @@ class QuickCustomLayoutOwner:
                     committed_content_extent[1],
                 ]
 
+            # Per-widget Restore Size has a different authority from the edit
+            # admission baseline.  The display presenter retains the current
+            # *unstacked authored* rectangle even when the live retained item is
+            # replaying a committed CUSTOM shape.  Capture only its dimensions:
+            # Restore Size must never own authored X/Y or display routing.
+            authored_geometry = binding.unit.presenter.authored_geometry_for(widget_id)
+            if authored_geometry is not None:
+                authored_width = max(1, int(round(authored_geometry.width)))
+                authored_height = max(1, int(round(authored_geometry.height)))
+            else:
+                # Defensive fallback for a family without a base-geometry
+                # record.  Undo the admitted absolute CUSTOM scale so this is
+                # still a size reference rather than a second position source.
+                authored_width = max(
+                    1,
+                    int(round(float(global_rect.width()) / max(1.0e-6, baseline_resize_scale))),
+                )
+                authored_height = max(
+                    1,
+                    int(round(float(global_rect.height()) / max(1.0e-6, baseline_resize_scale))),
+                )
+            authored_rect = QRect(0, 0, authored_width, authored_height)
+            authored_payload = capture_quick_size_payload(
+                descriptor,
+                presentation,
+                authored_rect,
+            )
+            authored_payload.pop("content_extent", None)
+
             item = CustomLayoutSessionItem(
                 source_key=key,
                 model_identity=widget_id,
@@ -1001,6 +1066,9 @@ class QuickCustomLayoutOwner:
                 ),
                 content_extent_axes=content_axes,
                 baseline_content_extent=committed_content_extent,
+                size_reset_capable=descriptor.requires_size_reset_affordance,
+                authored_reference_size=(authored_width, authored_height),
+                authored_size_payload=authored_payload,
             )
             session.add_item(item)
             descriptors[key] = descriptor
@@ -1056,12 +1124,105 @@ class QuickCustomLayoutOwner:
             ),
             viewport_resize_capable=True,
             baseline_viewport_extent=extent,
+            size_reset_capable=descriptor.requires_size_reset_affordance,
+            authored_reference_size=(
+                float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0])
+                * float(presentation.uniform_visual_scale),
+                float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
+                * float(presentation.uniform_visual_scale),
+            ),
+            authored_size_payload={},
+            authored_viewport_extent=(
+                float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0]),
+                float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1]),
+            ),
         )
         session.add_item(item)
         descriptors[key] = descriptor
         self._visualizer_pixels_per_world[key] = (
             self._pixels_per_world_from_geometry(global_rect, extent)
         )
+
+    def restore_item_size(self, item: CustomLayoutSessionItem) -> bool:
+        """Restore one item to authored size/shape while remaining in CUSTOM.
+
+        This is intentionally not ``restore_baseline`` and intentionally never
+        enters authored stacking/fit.  Current display ownership and exact X/Y
+        are preserved.  Only when the authored rectangle itself exceeds the
+        owning display is a uniform emergency reduction admitted.
+        """
+
+        if (
+            not self._active
+            or self._session is None
+            or not item.size_reset_capable
+            or item.authored_reference_size is None
+            or item.current_display_identity not in self._bindings
+        ):
+            return False
+        binding = self._bindings[item.current_display_identity]
+        authored_width = max(1.0, float(item.authored_reference_size[0]))
+        authored_height = max(1.0, float(item.authored_reference_size[1]))
+        display_width = max(1.0, float(binding.geometry.width()))
+        display_height = max(1.0, float(binding.geometry.height()))
+        fit_scale = min(
+            1.0,
+            display_width / authored_width,
+            display_height / authored_height,
+        )
+        width = max(1, int(round(authored_width * fit_scale)))
+        height = max(1, int(round(authored_height * fit_scale)))
+        current = item.current_global_rect
+        rect = QRect(current.x(), current.y(), width, height)
+        descriptor = self._descriptors.get(item.source_key)
+        if descriptor is None:
+            return False
+
+        if descriptor.custom_layout_resize_mode == "visualizer_rect":
+            viewport = (
+                item.authored_viewport_extent
+                or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+            )
+            payload: dict[str, Any] = {
+                "width": width,
+                "height": height,
+            }
+            item.restore_authored_size(
+                rect,
+                size_payload=payload,
+                resize_scale=fit_scale,
+                viewport_extent=viewport,
+            )
+            self._visualizer_pixels_per_world[item.source_key] = min(
+                float(width) / max(1.0, float(viewport[0])),
+                float(height) / max(1.0, float(viewport[1])),
+            )
+        else:
+            payload = scale_quick_size_payload(
+                descriptor,
+                item.authored_size_payload,
+                fit_scale,
+            )
+            payload.pop("content_extent", None)
+            item.restore_authored_size(
+                rect,
+                size_payload=payload,
+                resize_scale=fit_scale,
+            )
+
+        self._session.notify_item_changed(item)
+        logger.info(
+            "[CUSTOM_LAYOUT] Restored widget authored size widget=%s display=%s "
+            "size=%sx%s emergency_fit=%.4f position_preserved=(%s,%s)",
+            item.model_identity,
+            item.current_display_identity,
+            width,
+            height,
+            fit_scale,
+            current.x(),
+            current.y(),
+        )
+        return True
 
     def _apply_uniform_scale(
         self,

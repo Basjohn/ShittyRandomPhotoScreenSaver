@@ -575,6 +575,11 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "system_stats_monitor_combo",
             "system_stats_font_family",
             "system_stats_font_size",
+            "system_stats_sample_interval_seconds",
+            "system_stats_show_cpu",
+            "system_stats_show_memory",
+            "system_stats_show_uptime",
+            "system_stats_show_network",
         ),
     ),
     WidgetSettingsSectionDescriptor(
@@ -780,6 +785,11 @@ def build_widget_section_buttons(
         button = QPushButton(descriptor.button_label)
         button.setCheckable(True)
         button.setStyleSheet(button_style)
+        # FlowLayout asks for the button's size hint before final placement.
+        # Reserve the full text + authored 18 px horizontal padding on both
+        # sides so longer labels such as System Stats cannot be clipped.
+        label_width = button.fontMetrics().horizontalAdvance(descriptor.button_label)
+        button.setMinimumWidth(max(70, label_width + 40))
         setattr(owner, descriptor.button_attr_name, button)
         button_group.addButton(button, idx)
         buttons.append(button)
@@ -1640,6 +1650,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="ordinary_uniform",
+        content_extent_axes=("horizontal", "vertical"),
     ),
     WidgetRuntimeDescriptor(
         widget_id="spotify_visualizer",

@@ -65,13 +65,13 @@ def _model(service: _RuntimeService | None = None) -> SystemStatsPresentationMod
     return model
 
 
-def test_fixed_cpu_ram_capacity_owns_geometry_and_values_do_not() -> None:
+def test_fixed_metric_capacity_owns_base_geometry_and_values_do_not() -> None:
     config = SystemStatsPresentationConfig.from_widgets_mapping(
         {"system_stats": {"preferred_width": 600, "metric_capacity": 99}}
     )
-    assert config.metric_capacity == 2
+    assert config.metric_capacity == 4
     assert config.authored_width == 600
-    assert config.authored_height == 270
+    assert config.authored_height == 430
 
     service = _RuntimeService()
     model = _model(service)
@@ -80,15 +80,51 @@ def test_fixed_cpu_ram_capacity_owns_geometry_and_values_do_not() -> None:
     model.on_system_stats_runtime_snapshot(
         SimpleNamespace(
             revision=1,
-            sample=CpuRamSample("ok", 47.6, "ok", 8 * 1024**3, 16 * 1024**3),
+            sample=CpuRamSample(
+                "ok", 47.6, "ok", 8 * 1024**3, 16 * 1024**3,
+                "ok", 3 * 86400 + 14 * 3600, "ok", 6.2 * 1024**2, 340 * 1024,
+            ),
         )
     )
     assert model.cpuValue == "48%"
     assert model.ramValue == "50%"
     assert "8.0 GB of 16.0 GB" in model.ramDetail
+    assert model.uptimeValue == "3d 14h"
+    assert model.uptimeDetail == "Since system boot"
+    assert model.networkValue.startswith("↓ 6.20 MB/s")
+    assert model.networkDetail.startswith("↑ 340 KB/s")
     assert (model.authoredWidth, model.authoredHeight) == before
     model.retire()
     assert service.stopped == service.detached == 1
+
+
+def test_system_stats_metric_selection_and_custom_extent_are_presentation_only() -> None:
+    config = SystemStatsPresentationConfig.from_widgets_mapping(
+        {
+            "system_stats": {
+                "show_cpu": True,
+                "show_memory": False,
+                "show_uptime": True,
+                "show_network": False,
+            }
+        }
+    )
+    model = SystemStatsPresentationModel(
+        config,
+        SystemStatsPresentationStyle.project(
+            config, dict(require_canonical_default("widgets.shadows"))
+        ),
+    )
+    assert model.enabledMetricCount == 2
+    assert model.showCpu is True
+    assert model.showMemory is False
+    assert model.showUptime is True
+    assert model.showNetwork is False
+    before = (model.authoredWidth, model.authoredHeight)
+    assert model.set_content_extent(760, 640) is True
+    assert (model.authoredWidth, model.authoredHeight) == (760.0, 640.0)
+    assert model.clear_content_extent() is True
+    assert (model.authoredWidth, model.authoredHeight) == before
 
 
 def test_system_stats_family_is_public_but_member_defaults_dormant() -> None:
@@ -98,6 +134,7 @@ def test_system_stats_family_is_public_but_member_defaults_dormant() -> None:
     assert family is not None and family.member_widget_ids == ("system_stats",)
     assert descriptor is not None
     assert descriptor.custom_layout_resize_mode == "ordinary_uniform"
+    assert descriptor.content_extent_axes == ("horizontal", "vertical")
     assert descriptor.service_backed is True
     assert section is not None and section.persisted_widget_keys == (
         "system_stats",
@@ -130,14 +167,17 @@ def test_system_stats_registry_icon_and_qml_are_presentation_only() -> None:
 
 
 @pytest.mark.qt
-def test_system_stats_qml_builds_two_fixed_metric_panels(qt_app) -> None:
+def test_system_stats_qml_reflows_four_enabled_metric_panels(qt_app) -> None:
     service = _RuntimeService()
     model = _model(service)
     model.activate(object())
     model.on_system_stats_runtime_snapshot(
         SimpleNamespace(
             revision=1,
-            sample=CpuRamSample("ok", 36.0, "ok", 5 * 1024**3, 16 * 1024**3),
+            sample=CpuRamSample(
+                "ok", 36.0, "ok", 5 * 1024**3, 16 * 1024**3,
+                "ok", 3600.0, "ok", 1024.0, 2048.0,
+            ),
         )
     )
     engine = QQmlEngine()
@@ -158,8 +198,12 @@ def test_system_stats_qml_builds_two_fixed_metric_panels(qt_app) -> None:
         qt_app.processEvents()
         cpu = item.findChild(QObject, "systemStatsCpuPanel")
         ram = item.findChild(QObject, "systemStatsRamPanel")
-        assert cpu is not None and ram is not None
-        assert float(cpu.property("height")) == float(ram.property("height")) == 72.0
+        uptime = item.findChild(QObject, "systemStatsUptimePanel")
+        network = item.findChild(QObject, "systemStatsNetworkPanel")
+        assert cpu is not None and ram is not None and uptime is not None and network is not None
+        heights = {round(float(panel.property("height")), 2) for panel in (cpu, ram, uptime, network)}
+        assert len(heights) == 1
+        assert next(iter(heights)) > 72.0
     finally:
         item.setParentItem(None)
         item.setParent(None)

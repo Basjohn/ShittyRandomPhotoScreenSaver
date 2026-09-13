@@ -9,6 +9,20 @@ OverlayWidget {
     preferredContentWidth: systemStatsModel.authoredWidth
     preferredContentHeight: systemStatsModel.authoredHeight
 
+    readonly property int visibleMetricCount: systemStatsModel.enabledMetricCount
+    readonly property real metricAreaTop: 88.0
+    readonly property real metricAreaBottomMargin: 18.0
+    readonly property real metricGap: visibleMetricCount > 1
+        ? Math.min(16.0, 9.0 + Math.max(0.0, statsRoot.systemStatsModel.authoredHeight - 430.0) * 0.018)
+        : 0.0
+    readonly property real metricPanelHeight: visibleMetricCount > 0
+        ? Math.max(58.0, (statsRoot.systemStatsModel.authoredHeight - metricAreaTop - metricAreaBottomMargin
+            - metricGap * (visibleMetricCount - 1)) / visibleMetricCount)
+        : 0.0
+    readonly property real metricStep: metricPanelHeight + metricGap
+    readonly property real valueLaneWidth: Math.min(190.0,
+        118.0 + Math.max(0.0, statsRoot.systemStatsModel.authoredWidth - 520.0) * 0.20)
+
     BrandedHeader {
         id: headerFrame
         frameObjectName: "systemStatsHeaderFrame"
@@ -22,7 +36,7 @@ OverlayWidget {
         logoTintColor: statsRoot.systemStatsModel.cpuAccentColor
         fillColor: statsRoot.systemStatsModel.headerFillColor
         borderColor: statsRoot.systemStatsModel.headerBorderColor
-        borderWidth: statsRoot.scaleAwareStrokeWidth(
+        borderWidth: statsRoot.scaleAwareHeaderStrokeWidth(
             statsRoot.systemStatsModel.headerBorderWidth
         )
         textColor: statsRoot.systemStatsModel.headerTextColor
@@ -43,46 +57,6 @@ OverlayWidget {
         shadowOffsetY: statsRoot.cardShadowOffsetY * 1.15
     }
 
-    ShadowedText {
-        x: 298.0
-        y: 20.0
-        width: statsRoot.systemStatsModel.authoredWidth - x - 18.0
-        height: 26.0
-        text: statsRoot.systemStatsModel.cadenceText
-        color: statsRoot.systemStatsModel.mutedTextColor
-        font.family: statsRoot.systemStatsModel.fontFamily
-        font.pointSize: statsRoot.systemStatsModel.fontSize * 0.68
-        font.bold: true
-        horizontalAlignment: Text.AlignRight
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
-        shadowEnabled: statsRoot.systemStatsModel.textShadowEnabled
-        shadowColor: statsRoot.systemStatsModel.textShadowColor
-        shadowOffsetX: statsRoot.systemStatsModel.textShadowOffsetX
-        shadowOffsetY: statsRoot.systemStatsModel.textShadowOffsetY
-    }
-
-    Row {
-        x: statsRoot.systemStatsModel.authoredWidth - 55.0
-        y: 52.0
-        spacing: 5.0
-        Repeater {
-            model: 3
-            delegate: Rectangle {
-                required property int index
-                width: 5.0
-                height: 5.0
-                radius: 2.5
-                color: index === 0
-                    ? statsRoot.systemStatsModel.cpuAccentColor
-                    : (index === 1
-                        ? statsRoot.systemStatsModel.ramAccentColor
-                        : statsRoot.systemStatsModel.metricBorderColor)
-                opacity: 0.82 - index * 0.16
-            }
-        }
-    }
-
     Rectangle {
         x: 16.0
         y: 75.0
@@ -99,9 +73,10 @@ OverlayWidget {
         required property string metricDetail
         required property real metricPercent
         required property color accentColor
+        property bool showTrack: true
 
         width: statsRoot.systemStatsModel.authoredWidth - 32.0
-        height: 72.0
+        height: statsRoot.metricPanelHeight
         radius: 10.0
         color: statsRoot.systemStatsModel.metricSurfaceColor
         border.color: Qt.rgba(
@@ -120,8 +95,8 @@ OverlayWidget {
 
         ShadowedText {
             x: 18.0
-            y: 9.0
-            width: 220.0
+            y: Math.min(18.0, 9.0 + Math.max(0.0, panel.height - 72.0) * 0.10)
+            width: Math.max(180.0, parent.width - statsRoot.valueLaneWidth - 54.0)
             height: 22.0
             text: panel.metricLabel
             color: panel.accentColor
@@ -138,8 +113,9 @@ OverlayWidget {
         ShadowedText {
             objectName: panel.objectPrefix + "Detail"
             x: 18.0
-            y: 31.0
-            width: Math.max(100.0, parent.width - 168.0)
+            y: Math.min(parent.height - 31.0,
+                31.0 + Math.max(0.0, panel.height - 72.0) * 0.30)
+            width: Math.max(100.0, parent.width - statsRoot.valueLaneWidth - 54.0)
             height: 22.0
             text: panel.metricDetail
             color: statsRoot.systemStatsModel.mutedTextColor
@@ -157,8 +133,8 @@ OverlayWidget {
             objectName: panel.objectPrefix + "Value"
             anchors.right: parent.right
             anchors.rightMargin: 16.0
-            y: 8.0
-            width: 118.0
+            y: Math.min(17.0, 8.0 + Math.max(0.0, panel.height - 72.0) * 0.10)
+            width: statsRoot.valueLaneWidth
             height: 37.0
             text: panel.metricValue
             color: statsRoot.systemStatsModel.textColor
@@ -177,7 +153,10 @@ OverlayWidget {
 
         Rectangle {
             x: 18.0
-            y: 58.0
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Math.min(14.0,
+                8.0 + Math.max(0.0, panel.height - 72.0) * 0.08)
+            visible: panel.showTrack
             width: parent.width - 34.0
             height: 6.0
             radius: 3.0
@@ -208,7 +187,8 @@ OverlayWidget {
         objectName: "systemStatsCpuPanel"
         objectPrefix: "systemStatsCpu"
         x: 16.0
-        y: 88.0
+        y: statsRoot.metricAreaTop
+        visible: statsRoot.systemStatsModel.showCpu
         metricLabel: "CPU LOAD"
         metricValue: statsRoot.systemStatsModel.cpuValue
         metricDetail: statsRoot.systemStatsModel.cpuDetail
@@ -220,7 +200,9 @@ OverlayWidget {
         objectName: "systemStatsRamPanel"
         objectPrefix: "systemStatsRam"
         x: 16.0
-        y: 169.0
+        y: statsRoot.metricAreaTop
+            + (statsRoot.systemStatsModel.showCpu ? statsRoot.metricStep : 0.0)
+        visible: statsRoot.systemStatsModel.showMemory
         metricLabel: "MEMORY"
         metricValue: statsRoot.systemStatsModel.ramValue
         metricDetail: statsRoot.systemStatsModel.ramDetail
@@ -228,22 +210,40 @@ OverlayWidget {
         accentColor: statsRoot.systemStatsModel.ramAccentColor
     }
 
-    ShadowedText {
-        x: 18.0
-        y: statsRoot.systemStatsModel.authoredHeight - 23.0
-        width: statsRoot.systemStatsModel.authoredWidth - 36.0
-        height: 16.0
-        text: "SPARSE SAMPLE  •  NO HISTORY  •  CPU + RAM"
-        color: statsRoot.systemStatsModel.mutedTextColor
-        font.family: statsRoot.systemStatsModel.fontFamily
-        font.pointSize: statsRoot.systemStatsModel.fontSize * 0.58
-        font.bold: true
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
-        shadowEnabled: statsRoot.systemStatsModel.textShadowEnabled
-        shadowColor: statsRoot.systemStatsModel.textShadowColor
-        shadowOffsetX: statsRoot.systemStatsModel.textShadowOffsetX
-        shadowOffsetY: statsRoot.systemStatsModel.textShadowOffsetY
+    MetricPanel {
+        objectName: "systemStatsUptimePanel"
+        objectPrefix: "systemStatsUptime"
+        x: 16.0
+        y: statsRoot.metricAreaTop + (
+            (statsRoot.systemStatsModel.showCpu ? 1 : 0)
+            + (statsRoot.systemStatsModel.showMemory ? 1 : 0)
+        ) * statsRoot.metricStep
+        visible: statsRoot.systemStatsModel.showUptime
+        metricLabel: "UPTIME"
+        metricValue: statsRoot.systemStatsModel.uptimeValue
+        metricDetail: statsRoot.systemStatsModel.uptimeDetail
+        metricPercent: 0.0
+        accentColor: statsRoot.systemStatsModel.uptimeAccentColor
+        showTrack: false
     }
+
+    MetricPanel {
+        objectName: "systemStatsNetworkPanel"
+        objectPrefix: "systemStatsNetwork"
+        x: 16.0
+        y: statsRoot.metricAreaTop + (
+            (statsRoot.systemStatsModel.showCpu ? 1 : 0)
+            + (statsRoot.systemStatsModel.showMemory ? 1 : 0)
+            + (statsRoot.systemStatsModel.showUptime ? 1 : 0)
+        ) * statsRoot.metricStep
+        visible: statsRoot.systemStatsModel.showNetwork
+        metricLabel: "NETWORK"
+        metricValue: statsRoot.systemStatsModel.networkValue
+        metricDetail: statsRoot.systemStatsModel.networkDetail
+        metricPercent: 0.0
+        accentColor: statsRoot.systemStatsModel.networkAccentColor
+        showTrack: false
+    }
+
+
 }

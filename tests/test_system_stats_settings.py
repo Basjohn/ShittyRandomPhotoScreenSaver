@@ -45,6 +45,8 @@ def test_system_stats_settings_roundtrip_preserves_canonical_product_scope(
         defaults = get_default_settings()["widgets"]["system_stats"]
         assert tab.system_stats_enabled.isChecked() is defaults["enabled"]
         assert tab._system_stats_controls_container.isHidden() is True
+        assert tab.system_stats_sample_interval_seconds.minimum() == 10
+        assert tab.system_stats_sample_interval_seconds.value() == 10
         assert "widgets.system_stats_runtime" not in sys.modules
 
         tab.system_stats_enabled.setChecked(True)
@@ -60,6 +62,11 @@ def test_system_stats_settings_roundtrip_preserves_canonical_product_scope(
         tab._set_combo_text(tab.system_stats_monitor_combo, "2")
         tab.system_stats_font_family.setCurrentFont(QFont("Jost"))
         tab.system_stats_font_size.setValue(19)
+        tab.system_stats_sample_interval_seconds.setValue(25)
+        tab.system_stats_show_cpu.setChecked(True)
+        tab.system_stats_show_memory.setChecked(False)
+        tab.system_stats_show_uptime.setChecked(True)
+        tab.system_stats_show_network.setChecked(False)
 
         payload = collect_widget_section_save_result(tab, "system_stats")
         assert payload["enabled"] is True
@@ -67,7 +74,12 @@ def test_system_stats_settings_roundtrip_preserves_canonical_product_scope(
         assert payload["monitor"] == 2
         assert payload["font_family"] == "Jost"
         assert payload["font_size"] == 19
-        assert payload["metric_capacity"] == 2
+        assert payload["metric_capacity"] == 4
+        assert payload["sample_interval_seconds"] == 25
+        assert payload["show_cpu"] is True
+        assert payload["show_memory"] is False
+        assert payload["show_uptime"] is True
+        assert payload["show_network"] is False
         assert "cadence" not in payload
         assert "gpu" not in payload
         assert "process" not in payload
@@ -97,4 +109,4 @@ def test_system_stats_participates_in_the_shared_stack_predictor() -> None:
     assert stats.position == "Middle Left"
     assert stats.monitor == "1"
     assert stats.estimated_width == 520
-    assert stats.estimated_height == 270
+    assert stats.estimated_height == 430

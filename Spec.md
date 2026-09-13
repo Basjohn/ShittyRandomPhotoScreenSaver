@@ -198,10 +198,12 @@ interaction/Ctrl/context-menu admission gates the shared retained glow. Hover us
 fades in, settles with no running animation while hovered, and only begins a gentle fade when hover ends. Admitted
 discrete presses select the last-clicked ordinary card or retained Visualizer without consuming its semantic action;
 that click glow remains settled until a later admitted press selects another target or empty space, then fades out.
-The retained Visualizer uses the same primitive around its presentation bounds. A shell-less Digital Clock projects the
-halo around its intrinsic visible text stack rather than an invisible card allocation. Only state edges trigger finite
-Quick animations; there is no new poller, timer, worker, independent frame loop or visualizer clock. Runtime theme
-colours resolve with the existing generation configuration.
+The retained Visualizer uses the same primitive only while its real card/frame shell is rendered. `cardShellEnabled` is
+the single glow-eligibility truth for ordinary widgets and the Visualizer: frameless presentations (including Sphere,
+frameless Clock, Media, Reddit, Weather, or any future shell-less family) receive no hover glow, no click-glow target
+and no Jedi Mode trigger. Losing the shell clears any retained click selection. Only state edges trigger finite Quick
+animations; there is no new poller, timer, worker, independent frame loop or visualizer clock. Runtime theme colours
+resolve with the existing generation configuration.
 
 Producers integrate work then publish coherent accepted current state. Presentation consumes bounded latest state with
 generation/request fencing. No producer wait for paint, paint acknowledgement, FIFO render backlog, catch-up replay or
@@ -234,6 +236,7 @@ Use stable identity and bounded presentation image ownership. Proven Media shape
 
 ```text
 runtime-owned decoded QImage + stable artwork key
+-> retained artwork rectangle hard-clips dynamic image buffers; family mask/border owns rounded edge containment
 -> process-engine image provider
 -> retained Image source identity
 ```
@@ -262,7 +265,7 @@ are excluded from shrink. No-fit remains an explicit overfull diagnostic. Global
 CUSTOM disables this derived planner; first Edit preserves the visible footprint.
 
 
-Ordinary card CUSTOM resize uses one retained whole-card transform, with Settings-authored baseline values unchanged. Clock retains variant-aware sizing; Visualizer retains separate viewport and visual-scale intents. New-widget implementation starts with the [authoring checklist](Docs/Guides/10_WIDGET_GUIDELINES.md#whole-card-custom-resize-default).
+Ordinary card CUSTOM resize uses one retained whole-card transform, with Settings-authored baseline values unchanged. Wheel resize shows nearby peer-alignment guides but never snaps; the generic edit grid remains 1 px while authored alignment/centre/gutter guides use the thicker guide treatment. Clock retains variant-aware sizing; Visualizer retains separate viewport and visual-scale intents. New-widget implementation starts with the [authoring checklist](Docs/Guides/10_WIDGET_GUIDELINES.md#whole-card-custom-resize-default).
 
 Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.
 Clock digital/analogue are the first required example.

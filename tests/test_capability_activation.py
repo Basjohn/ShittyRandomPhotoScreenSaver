@@ -67,10 +67,12 @@ def test_canonical_defaults_activate_every_family():
         assert ca.is_widget_family_activated(widgets, family.family_id) is True
 
 
-def test_canonical_defaults_activate_every_transition():
+def test_canonical_transition_activation_matches_explicit_defaults():
     transitions = get_default_settings()["transitions"]
+    activation = transitions["activation"]
     for name in get_transition_setting_names():
-        assert ca.is_transition_activated(transitions, name) is True
+        assert ca.is_transition_activated(transitions, name) is bool(activation[name])
+    assert any(not bool(value) for value in activation.values())
 
 
 def test_default_family_activation_keys_are_explicit_for_stable_families():
@@ -164,7 +166,7 @@ def test_random_mode_effective_requires_nonempty_pool():
     # Random on, but effective pool empty (only member is deactivated).
     empty = {
         "random_always": True,
-        "pool": {"Burn": True},
+        "pool": {name: name == "Burn" for name in get_transition_setting_names()},
         "activation": {"Burn": False},
     }
     assert ca.is_random_mode_effective(empty) is False
@@ -197,12 +199,19 @@ def test_deactivated_manual_request_resolves_to_activated_fallback():
     resolved = ca.resolve_manual_transition_selection(transitions, "Burn")
     assert resolved != "Burn"
     assert ca.is_transition_activated(transitions, resolved) is True
-    # Crossfade activated by default -> it is the deterministic fallback.
-    assert resolved == "Crossfade"
+    # Missing activation state resolves through canonical defaults; Crossfade is
+    # currently disabled there, so the canonical first activated transition wins.
+    assert resolved == ca.get_default_activated_transition(transitions)
 
 
-def test_default_activated_transition_prefers_crossfade():
-    assert ca.get_default_activated_transition({}) == "Crossfade"
+def test_default_activated_transition_respects_canonical_activation_defaults():
+    resolved = ca.get_default_activated_transition({})
+    assert ca.is_transition_activated({}, resolved) is True
+    assert resolved == next(
+        name for name in get_transition_setting_names()
+        if ca.is_transition_activated({}, name)
+    )
+    assert ca.is_transition_activated({}, "Crossfade") is False
 
 
 def test_default_activated_transition_when_crossfade_deactivated():
@@ -224,8 +233,8 @@ def test_ensure_recovery_reactivates_crossfade_when_deactivated():
     assert ca.is_transition_activated(transitions, "Crossfade") is True
 
 
-def test_ensure_recovery_is_noop_when_crossfade_already_activated():
-    transitions: dict = {}
+def test_ensure_recovery_is_noop_when_crossfade_explicitly_activated():
+    transitions = {"activation": {"Crossfade": True}}
     assert ca.ensure_recovery_transition_activated(transitions) is False
 
 
@@ -255,7 +264,7 @@ def test_normalize_disables_random_on_empty_effective_pool_and_preserves_pool():
     # manual selection, and leaves saved pool membership untouched.
     transitions = {
         "random_always": True,
-        "pool": {"Burn": True},
+        "pool": {name: name == "Burn" for name in get_transition_setting_names()},
         "activation": {"Burn": False},
         "type": "Burn",
     }
@@ -264,7 +273,9 @@ def test_normalize_disables_random_on_empty_effective_pool_and_preserves_pool():
     assert transitions["random_always"] is False
     assert ca.is_transition_activated(transitions, transitions["type"]) is True
     # Saved pool preference preserved (never erased) for later reactivation.
-    assert transitions["pool"] == {"Burn": True}
+    assert transitions["pool"] == {
+        name: name == "Burn" for name in get_transition_setting_names()
+    }
 
 
 def test_normalize_converts_legacy_type_random_to_single_authority():
@@ -287,7 +298,7 @@ def test_normalize_type_random_with_empty_pool_disables_random():
     transitions = {
         "type": "Random",
         "random_always": False,
-        "pool": {"Burn": True},
+        "pool": {name: name == "Burn" for name in get_transition_setting_names()},
         "activation": {"Burn": False},
     }
     changed = ca.normalize_transition_capability_state(transitions)

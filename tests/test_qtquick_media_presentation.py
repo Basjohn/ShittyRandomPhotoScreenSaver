@@ -1050,9 +1050,14 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
         "cached: true",
         "layer.enabled: mediaRoot.mediaModel.roundedArtwork",
         "maskSource: artworkMask",
+        "seekWouldIntersectArtwork",
+        "normalBottomInColumn",
+        "anchors.margins: artworkFrame.imageInset",
+        "scaleAwareHeaderStrokeWidth",
     ):
         assert marker in qml
     assert "anchors.margins: -3.0" not in qml
+    assert "heightScale: 0.925" not in qml
     assert "mediaProgressSeekHandle" not in qml
     assert "MediaPresentation 1.0 MediaPresentation.qml" in (
         QML_ROOT / "qmldir"

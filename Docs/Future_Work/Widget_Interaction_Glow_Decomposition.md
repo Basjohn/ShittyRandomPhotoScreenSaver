@@ -97,3 +97,12 @@ owned reach; the shader was fixed at a 12 px analytical extent. This checkpoint 
 settings-owned distance control above, defaults it to 14 px for a modest softness increase, and hides Intensity/Distance/
 Color when neither Hover nor Click is enabled. The implementation reuses the existing two active-only analytical passes;
 there is still no texture capture, FBO, timer, poller or independent frame request.
+
+
+## 2026-09-13 frameless eligibility follow-up
+
+Operator policy now makes the rendered card/frame shell the sole interaction-glow eligibility truth.
+`cardShellEnabled=false` means **no hover glow, no click target, and no Jedi Mode trigger** for both ordinary widgets and
+the retained Visualizer. This supersedes the 2026-09-05 shell-less Digital Clock content-bounds exception: frameless
+Clock, Sphere, Media, Reddit, Weather and any future shell-less presentation remain completely outside the glow feature.
+The gate is state/event based only; no timer, poller, renderer cadence or family-name allow/deny list was introduced.

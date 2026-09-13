@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from PySide6.QtCore import QRect
@@ -111,6 +111,15 @@ class CustomLayoutSessionItem:
     content_extent_axes: frozenset[str] = frozenset()
     baseline_content_extent: ViewportExtent | None = None
     current_content_extent: ViewportExtent | None = None
+    # Per-widget Restore Size authority.  This is deliberately distinct from
+    # the admission baseline above: baseline may already be a committed CUSTOM
+    # shape/scale, while authored_reference_size is the current non-CUSTOM
+    # family width/height captured from the retained presenter's authored
+    # geometry.  Position/display are intentionally absent from this contract.
+    size_reset_capable: bool = False
+    authored_reference_size: ViewportExtent | None = None
+    authored_size_payload: dict[str, Any] = field(default_factory=dict)
+    authored_viewport_extent: ViewportExtent | None = None
 
     def __post_init__(self) -> None:
         self.model_identity = str(self.model_identity or self.source_key.widget_id)
@@ -150,6 +159,14 @@ class CustomLayoutSessionItem:
             self.current_content_extent
             if self.current_content_extent is not None
             else self.baseline_content_extent
+        )
+        self.size_reset_capable = bool(self.size_reset_capable)
+        self.authored_reference_size = normalize_viewport_extent(
+            self.authored_reference_size
+        )
+        self.authored_size_payload = dict(self.authored_size_payload)
+        self.authored_viewport_extent = normalize_viewport_extent(
+            self.authored_viewport_extent
         )
         self.current_display_identity = (
             str(self.current_display_identity or "").strip()
@@ -232,6 +249,27 @@ class CustomLayoutSessionItem:
         self.current_viewport_extent = self.baseline_viewport_extent
         self.current_content_extent = self.baseline_content_extent
         self.removed = False
+
+    def restore_authored_size(
+        self,
+        global_rect: QRect,
+        *,
+        size_payload: Mapping[str, Any],
+        resize_scale: float,
+        viewport_extent: ViewportExtent | None = None,
+    ) -> None:
+        """Restore only authored size/shape state while preserving ownership.
+
+        The caller owns any display-fit exception.  This method intentionally
+        does not touch display identity, monitor route, X/Y authority, enabled
+        state, duplicate/removal state, or the admission baseline.
+        """
+
+        self.current_global_rect = QRect(global_rect)
+        self.current_size_payload = dict(size_payload)
+        self.resize_scale = max(1.0e-6, float(resize_scale))
+        self.current_content_extent = None
+        self.current_viewport_extent = normalize_viewport_extent(viewport_extent)
 
 
 class CustomLayoutSession:

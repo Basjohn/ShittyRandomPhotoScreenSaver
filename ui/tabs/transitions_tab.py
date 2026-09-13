@@ -296,6 +296,7 @@ class TransitionsTab(QWidget):
         initial_duration = int(_transition_default("duration_ms"))
         self.duration_slider.setValue(initial_duration)
         self.duration_slider.valueChanged.connect(self._on_duration_changed)
+        self.duration_slider.valueCommitted.connect(self._save_settings)
         duration_row.addWidget(self.duration_slider, 1)
         self.duration_value_label = _add_value_label(
             duration_row, f"{initial_duration} ms", width=86
@@ -774,7 +775,7 @@ class TransitionsTab(QWidget):
         self.blinds_feather_slider.setRange(0, 25)
         self.blinds_feather_slider.setSingleStep(1)
         self.blinds_feather_slider.setValue(int(_transition_default("blinds.feather")))
-        self.blinds_feather_slider.valueChanged.connect(self._save_settings)
+        self.blinds_feather_slider.valueCommitted.connect(self._save_settings)
         blinds_feather_row.addWidget(self.blinds_feather_slider, 1)
         self.blinds_feather_label = self._add_value_label(blinds_feather_row, "2")
         blinds_feather_row.addStretch()
@@ -1008,7 +1009,7 @@ class TransitionsTab(QWidget):
         burn_jaggedness_default = int(round(float(_transition_default("burn.jaggedness")) * 100.0))
         self.burn_jaggedness_slider.setValue(burn_jaggedness_default)
         self.burn_jaggedness_slider.setToolTip("Edge noise amplitude (0 = smooth wipe, 100 = very jagged)")
-        self.burn_jaggedness_slider.valueChanged.connect(self._save_settings)
+        self.burn_jaggedness_slider.valueCommitted.connect(self._save_settings)
         burn_jag_row.addWidget(self.burn_jaggedness_slider, 1)
         self.burn_jaggedness_label = self._add_value_label(
             burn_jag_row, f"{burn_jaggedness_default}%"
@@ -1023,7 +1024,7 @@ class TransitionsTab(QWidget):
         burn_glow_default = int(round(float(_transition_default("burn.glow_intensity")) * 100.0))
         self.burn_glow_intensity_slider.setValue(burn_glow_default)
         self.burn_glow_intensity_slider.setToolTip("Warm glow brightness on the burning edge")
-        self.burn_glow_intensity_slider.valueChanged.connect(self._save_settings)
+        self.burn_glow_intensity_slider.valueCommitted.connect(self._save_settings)
         burn_glow_row.addWidget(self.burn_glow_intensity_slider, 1)
         self.burn_glow_intensity_label = self._add_value_label(
             burn_glow_row, f"{burn_glow_default}%"
@@ -1038,7 +1039,7 @@ class TransitionsTab(QWidget):
         burn_char_default = int(round(float(_transition_default("burn.char_width")) * 100.0))
         self.burn_char_width_slider.setValue(burn_char_default)
         self.burn_char_width_slider.setToolTip("Width of the charred/blackened zone behind the burn front")
-        self.burn_char_width_slider.valueChanged.connect(self._save_settings)
+        self.burn_char_width_slider.valueCommitted.connect(self._save_settings)
         burn_char_row.addWidget(self.burn_char_width_slider, 1)
         self.burn_char_width_label = self._add_value_label(
             burn_char_row, f"{burn_char_default}%"
@@ -1087,7 +1088,7 @@ class TransitionsTab(QWidget):
         self.burn_smoke_density_slider.setRange(0, 100)
         burn_smoke_density_default = int(round(float(_transition_default("burn.smoke_density")) * 100.0))
         self.burn_smoke_density_slider.setValue(burn_smoke_density_default)
-        self.burn_smoke_density_slider.valueChanged.connect(self._save_settings)
+        self.burn_smoke_density_slider.valueCommitted.connect(self._save_settings)
         burn_smoke_density_row.addWidget(self.burn_smoke_density_slider, 1)
         self.burn_smoke_density_label = self._add_value_label(
             burn_smoke_density_row, f"{burn_smoke_density_default}%"
@@ -1110,7 +1111,7 @@ class TransitionsTab(QWidget):
         self.burn_ash_density_slider.setRange(0, 100)
         burn_ash_density_default = int(round(float(_transition_default("burn.ash_density")) * 100.0))
         self.burn_ash_density_slider.setValue(burn_ash_density_default)
-        self.burn_ash_density_slider.valueChanged.connect(self._save_settings)
+        self.burn_ash_density_slider.valueCommitted.connect(self._save_settings)
         burn_ash_density_row.addWidget(self.burn_ash_density_slider, 1)
         self.burn_ash_density_label = self._add_value_label(
             burn_ash_density_row, f"{burn_ash_density_default}%"
@@ -1826,9 +1827,8 @@ class TransitionsTab(QWidget):
         self._apply_transition_pill_visibility()
 
     def _on_duration_changed(self, value: int) -> None:
-        """Update label and persist duration to settings."""
+        """Update duration presentation/state live; persistence commits on release."""
         self.duration_value_label.setText(f"{value} ms")
         cur_type = self._current_transition or self.transition_combo.currentText()
         if cur_type:
             self._duration_by_type[cur_type] = value
-        self._save_settings()

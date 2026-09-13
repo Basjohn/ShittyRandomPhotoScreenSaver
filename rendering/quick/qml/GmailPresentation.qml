@@ -179,7 +179,7 @@ OverlayWidget {
                 interactionEnabled: gmailRoot.gmailModel.interactionEnabled
                 fillColor: gmailRoot.gmailModel.headerFillColor
                 borderColor: gmailRoot.gmailModel.headerBorderColor
-                borderWidth: gmailRoot.scaleAwareStrokeWidth(
+                borderWidth: gmailRoot.scaleAwareHeaderStrokeWidth(
                     gmailRoot.gmailModel.showHeaderBorder
                         ? gmailRoot.gmailModel.headerBorderWidth : 0.0
                 )

@@ -46,6 +46,7 @@ from .custom_layout_overlay import (
     ResizeBeginHandler,
     ResizeUpdateHandler,
     ResizeWheelHandler,
+    SizeResetHandler,
     RetainedCustomLayoutOverlay,
 )
 from .image_state import PresentationImage
@@ -611,9 +612,11 @@ class QuickSceneController(QObject):
                 continue
             root.setProperty(name, value)
             changed = True
-        if (not admitted or not input_state.widget_glow_on_click) and bool(
-            root.property("widgetGlowClicked")
-        ):
+        if (
+            not admitted
+            or not input_state.widget_glow_on_click
+            or not bool(root.property("cardShellEnabled"))
+        ) and bool(root.property("widgetGlowClicked")):
             root.setProperty("widgetGlowClicked", False)
             changed = True
         return changed
@@ -672,6 +675,7 @@ class QuickSceneController(QObject):
         root = self._visualizer_root
         visualizer_target = bool(
             root is not None
+            and bool(root.property("cardShellEnabled"))
             and bool(root.property("widgetGlowAdmitted"))
             and bool(root.property("widgetGlowOnClick"))
             and self.visualizer_contains_scene_position(scene_position)
@@ -811,6 +815,7 @@ class QuickSceneController(QObject):
         move_finished_handler: MoveFinishedHandler | None = None,
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
+        size_reset_handler: SizeResetHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind this display's retained pixels to shared CUSTOM working state."""
 
@@ -843,6 +848,7 @@ class QuickSceneController(QObject):
             move_finished_handler=move_finished_handler,
             display_transfer_capability=display_transfer_capability,
             display_transfer_handler=display_transfer_handler,
+            size_reset_handler=size_reset_handler,
         )
         underlay = self._custom_layout_guide_underlay
         if underlay is not None:
@@ -1726,7 +1732,12 @@ class QuickSceneController(QObject):
         jedi_signal = getattr(root, "jediModeRequested", None)
         if jedi_signal is not None and hasattr(jedi_signal, "connect"):
             jedi_signal.connect(
-                lambda trigger: self._publish_jedi_mode_event(trigger, "visualizer")
+                lambda trigger: (
+                    self._publish_jedi_mode_event(trigger, "visualizer")
+                    if self._visualizer_root is not None
+                    and bool(self._visualizer_root.property("cardShellEnabled"))
+                    else None
+                )
             )
         self._visualizer_content_host = content_host
         self._visualizer_item = item

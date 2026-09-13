@@ -206,7 +206,7 @@ def test_model_keeps_one_row_model_and_never_exposes_remote_avatar() -> None:
         "1 friend playing",
         (
             FriendPulseRow(
-                primary="Ada",
+                primary="ada lovelace",
                 secondary="Game",
                 presence_text="Online",
                 online=True,
@@ -225,10 +225,14 @@ def test_model_keeps_one_row_model_and_never_exposes_remote_avatar() -> None:
     presence_role = next(
         role for role, name in row_model.roleNames().items() if name == b"presenceText"
     )
+    primary_role = next(
+        role for role, name in row_model.roleNames().items() if name == b"primaryText"
+    )
     online_role = next(
         role for role, name in row_model.roleNames().items() if name == b"isOnline"
     )
     assert row_model.data(row_model.index(0, 0), avatar_role) == ""
+    assert row_model.data(row_model.index(0, 0), primary_role) == "Ada Lovelace"
     assert row_model.data(row_model.index(0, 0), presence_role) == "Online"
     assert row_model.data(row_model.index(0, 0), online_role) is True
 
@@ -320,6 +324,11 @@ def test_friend_pulse_registry_runtime_and_qml_are_retained_only() -> None:
     ):
         assert forbidden not in qml
     assert "uniformScaleTransform: true" in qml
+    assert "function friendStrokeWidth(baseWidth)" in qml
+    assert "scaleAwareHeaderStrokeWidth" in qml
+    assert qml.count("fontSizeMode: Text.Fit") >= 2
+    assert qml.count("maximumLineCount: 2") >= 3
+    assert qml.count("elide: Text.ElideNone") >= 2
     assert "signal friendActionRequested(int rowIndex)" in qml
     assert "signal gameActionRequested(int rowIndex)" in qml
     assert "signal friendMenuActionRequested(string action, int rowIndex)" in qml

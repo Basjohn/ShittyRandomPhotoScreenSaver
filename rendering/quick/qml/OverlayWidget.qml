@@ -118,12 +118,35 @@ Item {
         )
     }
 
+    // Branded headers already participate in the shared scale-aware stroke
+    // envelope.  Give only the *scale-up delta* a further 25% so base-size
+    // headers stay authored while enlarged cards read less faintly.
+    function scaleAwareHeaderStrokeWidthForScale(baseWidth, scaleValue) {
+        if (baseWidth <= 0.0)
+            return 0.0
+        const scale = Math.max(0.05, scaleValue)
+        const delta = Math.max(0.0, Math.min(1.5, (scale - 1.0) * 2.0)) * 1.25
+        const visibleTarget = Math.max(1.0, baseWidth + delta)
+        return visibleTarget / scale
+    }
+
+    function scaleAwareHeaderStrokeWidth(baseWidth) {
+        return overlayWidget.scaleAwareHeaderStrokeWidthForScale(
+            baseWidth, overlayWidget.presentationScale
+        )
+    }
+
     // Expose the shell inset so families compute preferred size consistently.
     readonly property real shellInset: card.shellInset
 
     // The common card shell is forwarded so the whole ordinary-widget shell
     // stays a single retained component with explicit presentation properties.
     property alias cardShellEnabled: card.shellEnabled
+    readonly property bool interactionGlowEligible: cardShellEnabled
+    onCardShellEnabledChanged: {
+        if (!cardShellEnabled)
+            widgetGlowClicked = false
+    }
     property alias cardBackgroundColor: card.backgroundColor
     property alias cardBorderColor: card.borderColor
     property alias cardBorderWidth: card.borderWidth
@@ -163,10 +186,8 @@ Item {
             + authoredCardX * presentationScale
     readonly property real cardShadowVisualY: (height - cardShadowVisualHeight) / 2.0
 
-    // Interaction feedback usually follows the card shell, but shell-less
-    // presentations (digital Clock) can project their actual visible content
-    // bounds without creating another geometry owner. Values are in authoredRoot
-    // coordinates and therefore inherit the same whole-card CUSTOM transform.
+    // Interaction feedback exists only for a real rendered card shell. Values
+    // are in authoredRoot coordinates and inherit the whole-card CUSTOM transform.
     readonly property real authoredLayoutWidth: authoredRoot.width
     readonly property real authoredLayoutHeight: authoredRoot.height
     property real interactionGlowX: authoredCardX
@@ -203,7 +224,8 @@ Item {
             width: Math.max(0.0, overlayWidget.interactionGlowWidth)
             height: Math.max(0.0, overlayWidget.interactionGlowHeight)
             z: 3
-            active: overlayWidget.widgetGlowAdmitted && overlayWidget.visible
+            active: overlayWidget.interactionGlowEligible
+                && overlayWidget.widgetGlowAdmitted && overlayWidget.visible
                 && overlayWidget.widgetGlowIntensity > 0.0
                 && (overlayWidget.widgetGlowOnHover || overlayWidget.widgetGlowOnClick)
             sourceComponent: WidgetInteractionGlow {
@@ -222,14 +244,16 @@ Item {
         // input owner, so feedback never competes with family MouseAreas.
         HoverHandler {
             id: interactionHover
-            enabled: overlayWidget.widgetGlowOnHover
+            enabled: overlayWidget.interactionGlowEligible
+                && overlayWidget.widgetGlowOnHover
                 && (interactionGlowLoader.active
                     || (overlayWidget.widgetGlowJediMode
                         && overlayWidget.widgetGlowAdmitted
                         && overlayWidget.visible))
             blocking: false
             onHoveredChanged: {
-                if (hovered && overlayWidget.widgetGlowJediMode
+                if (hovered && overlayWidget.interactionGlowEligible
+                        && overlayWidget.widgetGlowJediMode
                         && overlayWidget.widgetGlowAdmitted)
                     overlayWidget.jediModeRequested("hover")
             }

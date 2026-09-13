@@ -25,7 +25,12 @@ Item {
     property real widgetGlowDistance: 14.0
     property color widgetGlowColor: "transparent"
     property bool widgetGlowJediMode: false
+    readonly property bool interactionGlowEligible: cardShellEnabled
     signal jediModeRequested(string trigger)
+    onCardShellEnabledChanged: {
+        if (!cardShellEnabled)
+            widgetGlowClicked = false
+    }
     property color cardShadowColor: "#96000000"
     property real cardShadowBlur: 18.0
     property real cardShadowOffsetX: 0.0
@@ -50,7 +55,8 @@ Item {
         objectName: "visualizerInteractionGlowLoader"
         anchors.fill: parent
         z: 2.8
-        active: visualizerPresentationRoot.widgetGlowAdmitted
+        active: visualizerPresentationRoot.interactionGlowEligible
+            && visualizerPresentationRoot.widgetGlowAdmitted
             && visualizerPresentationRoot.visible
             && visualizerPresentationRoot.widgetGlowIntensity > 0.0
             && (visualizerPresentationRoot.widgetGlowOnHover
@@ -63,21 +69,22 @@ Item {
             intensityScale: visualizerPresentationRoot.widgetGlowIntensity
             distancePx: visualizerPresentationRoot.widgetGlowDistance
             glowColor: visualizerPresentationRoot.widgetGlowColor
-            cornerRadius: visualizerPresentationRoot.cardShellEnabled
-                ? visualizerPresentationRoot.cardCornerRadius : 4.0
+            cornerRadius: visualizerPresentationRoot.cardCornerRadius
         }
     }
 
     HoverHandler {
         id: visualizerInteractionHover
-        enabled: visualizerPresentationRoot.widgetGlowOnHover
+        enabled: visualizerPresentationRoot.interactionGlowEligible
+            && visualizerPresentationRoot.widgetGlowOnHover
             && (visualizerInteractionGlowLoader.active
                 || (visualizerPresentationRoot.widgetGlowJediMode
                     && visualizerPresentationRoot.widgetGlowAdmitted
                     && visualizerPresentationRoot.visible))
         blocking: false
         onHoveredChanged: {
-            if (hovered && visualizerPresentationRoot.widgetGlowJediMode
+            if (hovered && visualizerPresentationRoot.interactionGlowEligible
+                    && visualizerPresentationRoot.widgetGlowJediMode
                     && visualizerPresentationRoot.widgetGlowAdmitted)
                 visualizerPresentationRoot.jediModeRequested("hover")
         }

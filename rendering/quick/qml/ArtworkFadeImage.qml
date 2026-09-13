@@ -17,8 +17,8 @@ Item {
     property int fillMode: Image.PreserveAspectCrop
     property bool asynchronous: true
     property bool cache: true
-    property int fadeOutDuration: 200
-    property int fadeInDuration: 340
+    property int fadeOutDuration: 280
+    property int fadeInDuration: 520
 
     property string _displayedSource: ""
     property string _pendingSource: ""
@@ -26,6 +26,12 @@ Item {
     property string _sourceB: ""
     property int _activeIndex: 0
     property bool _componentReady: false
+
+    // Dynamic artwork may be rounded by a caller-owned mask, but neither buffer
+    // may ever sample outside the caller-assigned artwork rectangle while scaled.
+    // This is rectangular containment only; rounded clipping remains with the
+    // presentation-owned mask so no shared radius/style authority is invented.
+    clip: true
 
     readonly property int status: _pendingSource.length > 0
         ? _inactiveImage().status
@@ -233,7 +239,7 @@ Item {
         id: fadeIn
         property: "opacity"
         duration: fadeImage.fadeInDuration
-        easing.type: Easing.InOutQuad
+        easing.type: Easing.InOutSine
         onFinished: fadeImage._commitIncoming()
         onRunningChanged: fadeImage._demandFrames(fadeIn, running)
     }
@@ -242,7 +248,7 @@ Item {
         id: fadeOut
         property: "opacity"
         duration: fadeImage.fadeOutDuration
-        easing.type: Easing.InOutQuad
+        easing.type: Easing.InOutSine
         onFinished: fadeImage._clearDisplayed()
         onRunningChanged: fadeImage._demandFrames(fadeOut, running)
     }

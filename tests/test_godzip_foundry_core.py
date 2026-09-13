@@ -173,8 +173,11 @@ def test_ui_persists_preferences_repo_locally_not_in_global_appdata() -> None:
 
     assert '".godzip_foundry"' in source
     assert "QSettings" not in source
-    assert "LOCALAPPDATA" not in source
-    assert "AppData" not in source
+    assert 'return repo_root.resolve() / _LOCAL_STATE_DIR / _LOCAL_SETTINGS_FILE' in source
+    assert '_save_local_setting(self.repo_root' in source
+    # LocalAppData is now legitimately consulted only when locating an installed
+    # Git Bash executable; preference persistence remains repository-local.
+    assert 'for root_name in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData")' in source
     assert "SRPSSGodZIP.ico" in source
     assert "QTimer.singleShot(0, self.refresh)" not in source
     assert "QApplication.processEvents()" not in source
@@ -541,8 +544,9 @@ def test_run_tab_is_last_and_remains_repo_local() -> None:
     assert "COPY TO CLIPBOARD" in source
     assert "refresh_native_taskbar_icon" in source
     assert "WM_SETICON" not in source  # numeric native message kept implementation-local, no shell command fallback
-    assert "LOCALAPPDATA" not in source
-    assert "AppData" not in source
+    assert '_load_local_settings(self.repo_root)' in source
+    assert '_save_local_setting(self.repo_root, "run_flags", flags)' in source
+    assert "QSettings" not in source
 
 
 def test_run_auto_logzip_waits_for_process_exit_without_polling_and_is_repo_local() -> None:

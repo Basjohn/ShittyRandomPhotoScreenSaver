@@ -248,7 +248,11 @@ class RetainedOverlayWidget:
             item.setProperty("widgetGlowColor", QColor(*input_state.widget_glow_color))
             item.setProperty("widgetGlowJediMode", input_state.widget_glow_jedi_mode)
             item.setProperty("widgetGlowAdmitted", admitted)
-            if not admitted or not input_state.widget_glow_on_click:
+            if (
+                not admitted
+                or not input_state.widget_glow_on_click
+                or not bool(item.property("cardShellEnabled"))
+            ):
                 item.setProperty("widgetGlowClicked", False)
         handler = self._input_state_handler
         return bool(handler is not None and handler(input_state))
@@ -270,7 +274,12 @@ class RetainedOverlayWidget:
         """Forward one QML interaction edge through the widget's current host."""
 
         host = self._host
-        if host is not None:
+        item = self._item
+        if (
+            host is not None
+            and item is not None
+            and bool(item.property("cardShellEnabled"))
+        ):
             host._emit_jedi_mode_event(str(trigger or "hover"), self._model_identity)
 
     def _retire(self) -> None:
@@ -707,7 +716,11 @@ class OrdinaryWidgetPresentationHost:
                 continue
             if not item.contains(item.mapFromScene(scene_position)):
                 continue
-            if item.property("widgetGlowAdmitted") and item.property("widgetGlowOnClick"):
+            if (
+                bool(item.property("cardShellEnabled"))
+                and item.property("widgetGlowAdmitted")
+                and item.property("widgetGlowOnClick")
+            ):
                 return widget
             break
         return None

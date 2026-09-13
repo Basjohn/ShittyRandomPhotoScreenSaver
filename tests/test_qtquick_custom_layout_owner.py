@@ -1365,7 +1365,7 @@ def test_content_extent_side_drag_and_uniform_scale_math() -> None:
     assert item.current_content_extent[1] == pytest.approx(box_before[1])
 
 
-def test_resize_side_drag_snaps_to_peer_and_publishes_guide_wheel_does_not() -> None:
+def test_resize_side_drag_snaps_and_wheel_only_publishes_guides() -> None:
     class _GuideScene:
         def __init__(self) -> None:
             self.calls: list[dict[str, tuple[tuple[int, str], ...]]] = []
@@ -1440,10 +1440,20 @@ def test_resize_side_drag_snaps_to_peer_and_publishes_guide_wheel_does_not() -> 
     owner.update_resize(target, "right", QPoint(start.x() + 96, start.y()), True)
     assert scene.calls[-1] == {"vertical": (), "horizontal": ()}
 
-    # The wheel is a discrete enlarge/shrink and must NOT snap or publish guides.
+    # The wheel remains a discrete free enlarge/shrink: it may publish a nearby
+    # alignment guide, but the resolver's suggested scale must never snap the
+    # geometry onto that line.
+    target.set_geometry(QRect(147, 200, 765, 300), resize_scale=1.0)
+    right_before = target.current_global_rect.x() + target.current_global_rect.width()
     calls_before_wheel = len(scene.calls)
     assert owner.resize_wheel(target, 120) is True
-    assert len(scene.calls) == calls_before_wheel
+    assert len(scene.calls) > calls_before_wheel
+    right_after = target.current_global_rect.x() + target.current_global_rect.width()
+    assert right_after != 900
+    published = [c for c in scene.calls[calls_before_wheel:] if c["vertical"] or c["horizontal"]]
+    assert published
+    assert (900, "peer") in published[-1]["vertical"]
+    assert right_after != right_before
 
 
 def test_parse_content_extent_accepts_valid_pairs_only() -> None:

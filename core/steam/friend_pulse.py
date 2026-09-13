@@ -69,6 +69,7 @@ class FriendPulseRow:
     # a SteamID and no QML-facing role need expose it.
     identity_fingerprint: str = ""
     friend_action_available: bool = False
+    pinned: bool = False
 
 
 @dataclass(frozen=True)
@@ -272,6 +273,7 @@ def project_friend_pulse(
     capacity: int,
     avatar_sources: Mapping[str, str] | None = None,
     friend_action_identities: Collection[str] | None = None,
+    pinned_identities: Collection[str] | None = None,
 ) -> FriendPulseProjection:
     """Project neutral state into Strict/Balanced/Rich presentation-safe rows."""
 
@@ -284,6 +286,7 @@ def project_friend_pulse(
             entry.identity_fingerprint for entry in snapshot.entries if entry.steam_id
         )
     )
+    pinned_friends = frozenset(pinned_identities or ())
     # Capacity belongs to retained-card geometry.  The source projection must
     # retain the accepted roster so a viewport change cannot silently erase
     # friends from the semantic model.
@@ -338,8 +341,15 @@ def project_friend_pulse(
                 friend_action_available=(
                     entry.identity_fingerprint in actionable_friends
                 ),
+                pinned=entry.identity_fingerprint in pinned_friends,
             )
-            for entry in snapshot.entries
+            for entry in sorted(
+                snapshot.entries,
+                key=lambda entry: (
+                    entry.identity_fingerprint not in pinned_friends,
+                    _entry_rank(entry),
+                ),
+            )
         )
     online_count = snapshot.online_count or 0
     metric = f"{online_count} online"

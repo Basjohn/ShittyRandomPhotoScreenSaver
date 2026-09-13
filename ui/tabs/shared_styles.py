@@ -14,7 +14,7 @@ try:
 except Exception:  # pragma: no cover - PySide test/import fallback
     Shiboken = None  # type: ignore[assignment]
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker, Signal, Qt
 from PySide6.QtGui import QFontDatabase, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -535,18 +535,49 @@ def create_inline_label(
 
 
 class NoWheelSlider(QSlider):
-    """Slider that ignores mouse wheel events to prevent accidental changes.
+    """Slider that ignores wheel changes and exposes a release-time commit signal.
 
-    Also tracks the most-recently-moved slider via a module-level weakref
-    so the QSS ``QSlider[lastMoved="true"]`` selector highlights its handle.
+    ``valueChanged`` remains the live presentation signal for labels/previews.
+    ``valueCommitted`` is the persistence boundary: a mouse drag emits once when
+    released, while discrete non-drag changes (keyboard/programmatic) emit once
+    per accepted value change.  This keeps persistence out of the hot drag path
+    without adding a timer/poller or changing SettingsManager semantics.
+
+    The slider also tracks the most-recently-moved instance via a module-level
+    weakref so the QSS ``QSlider[lastMoved="true"]`` selector highlights its
+    handle.
     """
+
+    valueCommitted = Signal(int)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._commit_drag_active = False
+        self._commit_drag_changed = False
         self.setProperty("lastMoved", False)
+        self.sliderPressed.connect(self._begin_commit_drag)
+        self.sliderReleased.connect(self._finish_commit_drag)
         self.sliderPressed.connect(self._mark_last_moved)
+        self.valueChanged.connect(self._observe_commit_value)
         self.valueChanged.connect(self._mark_last_moved)
         self.destroyed.connect(self._clear_last_moved_ref)
+
+    def _begin_commit_drag(self) -> None:
+        self._commit_drag_active = True
+        self._commit_drag_changed = False
+
+    def _observe_commit_value(self, value: int) -> None:
+        if self._commit_drag_active or self.isSliderDown():
+            self._commit_drag_changed = True
+            return
+        self.valueCommitted.emit(int(value))
+
+    def _finish_commit_drag(self) -> None:
+        changed = self._commit_drag_changed
+        self._commit_drag_active = False
+        self._commit_drag_changed = False
+        if changed:
+            self.valueCommitted.emit(int(self.value()))
 
     def _clear_last_moved_ref(self, *_args) -> None:
         global _last_moved_slider

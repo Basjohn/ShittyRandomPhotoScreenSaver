@@ -241,6 +241,35 @@ def _binding(policy, bounds):
     return binding, applied
 
 
+
+
+def test_binding_keeps_authored_projection_separate_from_committed_custom_rect() -> None:
+    bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 800.0)
+    committed = OverlayWidgetGeometry(111.0, 222.0, 333.0, 144.0)
+    policy = OverlayGeometryPolicy(
+        widget_id="friend_pulse",
+        anchor=OverlayAnchor.TOP_LEFT,
+        margin=30.0,
+        committed_rect=committed,
+    )
+    applied: list[OverlayWidgetGeometry] = []
+    authored: list[OverlayWidgetGeometry] = []
+    binding = OverlayGeometryBinding(
+        policy=policy,
+        display_bounds=bounds,
+        geometry_sink=applied.append,
+        authored_geometry_sink=authored.append,
+    )
+
+    result = binding.update_content_size((560.0, 394.0))
+    assert result == committed
+    assert applied == [committed]
+    assert len(authored) == 1
+    assert authored[0].x == pytest.approx(30.0)
+    assert authored[0].y == pytest.approx(30.0)
+    assert authored[0].width == pytest.approx(560.0)
+    assert authored[0].height == pytest.approx(394.0)
+
 def test_binding_applies_anchored_geometry_on_content_size() -> None:
     bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 800.0)
     policy = OverlayGeometryPolicy(

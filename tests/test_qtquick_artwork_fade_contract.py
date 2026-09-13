@@ -19,6 +19,7 @@ def test_shared_artwork_fade_primitive_is_event_driven_and_timerless() -> None:
     assert "fadeOut.running" in source
     assert "QTimer" not in source
     assert "Timer {" not in source
+    assert "clip: true" in source
     assert "onSourceChanged" in source
     assert "incoming.status !== Image.Ready" in source
     assert '_setSource(oldIndex, "")' in source
@@ -81,7 +82,11 @@ def test_abandonment_rotation_fades_values_not_static_archive_chrome() -> None:
     assert 'target: abandonmentRoot' in source
     assert 'property: "dynamicContentOpacity"' in source
     assert 'target: archiveContent' not in source
-    assert 'fadeInDuration: 340' in source
+    shared = (QML / "ArtworkFadeImage.qml").read_text(encoding="utf-8")
+    assert "property int fadeInDuration: 520" in shared
+    assert "property int fadeOutDuration: 280" in shared
+    assert "Easing.InOutSine" in shared
+    assert "fadeInDuration:" not in source
     assert 'archiveContent.opacity <= 0.001 ? 0 : 340' not in source
     # Static metric chrome/label remains at full opacity; only the per-game value
     # participates in the transition.

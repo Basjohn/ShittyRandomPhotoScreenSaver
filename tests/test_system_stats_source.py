@@ -54,6 +54,80 @@ def test_ram_source_rejects_invalid_snapshot():
     assert sample.ram_used_bytes is None
 
 
+class _Net:
+    def __init__(self, received: int, sent: int) -> None:
+        self.bytes_recv = received
+        self.bytes_sent = sent
+
+
+def test_uptime_and_network_share_the_existing_source_pulse_without_extra_owner():
+    nets = iter((_Net(1_000, 500), _Net(21_480, 10_740)))
+    times = iter((100.0, 110.0))
+    wall = iter((1_100.0, 1_110.0))
+    source = WholeSystemCpuRamSource(
+        cpu_times=lambda: _Times(1, 1, 8),
+        virtual_memory=lambda: SimpleNamespace(total=1_000, used=400),
+        net_io_counters=lambda: next(nets),
+        boot_time=lambda: 1_000.0,
+        wall_time=lambda: next(wall),
+        monotonic=lambda: next(times),
+    )
+    first = source.sample()
+    second = source.sample()
+
+    assert first.uptime_status == "ok"
+    assert first.uptime_seconds == 100.0
+    assert first.network_status == "warming"
+    assert first.network_rx_bps is None and first.network_tx_bps is None
+    assert second.uptime_seconds == 110.0
+    assert second.network_status == "ok"
+    assert second.network_rx_bps == 2048.0
+    assert second.network_tx_bps == 1024.0
+
+
+def test_disabled_system_stats_metrics_are_not_sampled_on_shared_pulse():
+    calls = {"cpu": 0, "memory": 0, "network": 0, "boot": 0, "wall": 0}
+
+    def cpu_times():
+        calls["cpu"] += 1
+        return _Times(1, 1, 8)
+
+    def memory():
+        calls["memory"] += 1
+        return SimpleNamespace(total=1000, used=400)
+
+    def network():
+        calls["network"] += 1
+        return _Net(100, 50)
+
+    def boot():
+        calls["boot"] += 1
+        return 1000.0
+
+    def wall():
+        calls["wall"] += 1
+        return 1100.0
+
+    source = WholeSystemCpuRamSource(
+        cpu_times=cpu_times,
+        virtual_memory=memory,
+        net_io_counters=network,
+        boot_time=boot,
+        wall_time=wall,
+        sample_cpu=False,
+        sample_memory=True,
+        sample_uptime=False,
+        sample_network=False,
+    )
+    sample = source.sample()
+
+    assert sample.cpu_status == "disabled"
+    assert sample.ram_status == "ok"
+    assert sample.uptime_status == "disabled"
+    assert sample.network_status == "disabled"
+    assert calls == {"cpu": 0, "memory": 1, "network": 0, "boot": 0, "wall": 0}
+
+
 class _Pdh:
     def __init__(self, *, available: bool = True) -> None:
         self.available = available

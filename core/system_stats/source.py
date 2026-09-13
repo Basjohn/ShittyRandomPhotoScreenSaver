@@ -1,16 +1,16 @@
-"""Small, hardware-neutral sources for the System Stats S0 admission probe.
+"""Small, hardware-neutral sources for the System Stats card and S0 probes.
 
 The diagnostic ``--usage`` collector is intentionally not imported here: its
 process accounting is neither cheap enough nor semantically valid for a
-whole-system card.  These sources make one whole-system CPU/RAM observation
-and, when Windows exposes suitable PDH counters, retain one adapter-scoped
-query rather than rediscovering PID/process counters on every sample.
+whole-system card. Product CPU, memory, uptime and aggregate network throughput
+share one cheap sample pulse. Optional GPU admission remains isolated below.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+import time
 from typing import Any, Callable, Protocol
 
 import psutil
@@ -18,21 +18,32 @@ import psutil
 
 @dataclass(frozen=True)
 class CpuRamSample:
-    """One immutable whole-system CPU/RAM observation."""
+    """One immutable whole-system System Stats observation.
+
+    The historical name is retained to avoid a pointless migration of the
+    already-shipped CPU/RAM contracts. Uptime and network fields are optional
+    trailing state so older focused fixtures remain source-compatible.
+    """
 
     cpu_status: str
     cpu_pct: float | None
     ram_status: str
     ram_used_bytes: int | None
     ram_total_bytes: int | None
+    uptime_status: str = "unavailable"
+    uptime_seconds: float | None = None
+    network_status: str = "warming"
+    network_rx_bps: float | None = None
+    network_tx_bps: float | None = None
 
 
 class WholeSystemCpuRamSource:
-    """Use OS-wide cumulative CPU time and one memory-status snapshot.
+    """Read one cheap OS-maintained whole-system snapshot per admitted pulse.
 
-    The source owns its baseline instead of using ``psutil.cpu_percent``'s
-    module-global baseline.  That makes the first value honestly warming and
-    avoids coupling the later product to diagnostics or another caller.
+    CPU and network rates own private cumulative baselines. Uptime is derived
+    from one boot-time value captured at source construction. No process/core
+    enumeration, network request, driver, second cadence or history owner is
+    introduced.
     """
 
     def __init__(
@@ -40,11 +51,37 @@ class WholeSystemCpuRamSource:
         *,
         cpu_times: Callable[[], Any] = psutil.cpu_times,
         virtual_memory: Callable[[], Any] = psutil.virtual_memory,
+        net_io_counters: Callable[[], Any] = psutil.net_io_counters,
+        boot_time: Callable[[], float] = psutil.boot_time,
+        wall_time: Callable[[], float] = time.time,
+        monotonic: Callable[[], float] = time.monotonic,
+        sample_cpu: bool = True,
+        sample_memory: bool = True,
+        sample_uptime: bool = True,
+        sample_network: bool = True,
     ) -> None:
         self._cpu_times = cpu_times
         self._virtual_memory = virtual_memory
+        self._net_io_counters = net_io_counters
+        self._wall_time = wall_time
+        self._monotonic = monotonic
+        self._sample_cpu = bool(sample_cpu)
+        self._sample_memory = bool(sample_memory)
+        self._sample_uptime = bool(sample_uptime)
+        self._sample_network = bool(sample_network)
         self._previous_total: float | None = None
         self._previous_idle: float | None = None
+        self._previous_net_rx: int | None = None
+        self._previous_net_tx: int | None = None
+        self._previous_net_monotonic: float | None = None
+        if self._sample_uptime:
+            try:
+                boot = float(boot_time())
+            except (TypeError, ValueError, OSError):
+                boot = -1.0
+            self._boot_time = boot if boot >= 0.0 else None
+        else:
+            self._boot_time = None
 
     @staticmethod
     def _totals(times: Any) -> tuple[float, float] | None:
@@ -83,18 +120,83 @@ class WholeSystemCpuRamSource:
             memory = self._virtual_memory()
             total = int(getattr(memory, "total"))
             used = int(getattr(memory, "used"))
-        except (TypeError, ValueError, AttributeError):
+        except (TypeError, ValueError, AttributeError, OSError):
             return "unavailable", None, None
         if total <= 0 or used < 0 or used > total:
             return "invalid", None, None
         return "ok", used, total
 
-    def sample(self) -> CpuRamSample:
-        """Read CPU and RAM once; CPU needs one prior observation."""
+    def _read_uptime(self) -> tuple[str, float | None]:
+        boot = self._boot_time
+        if boot is None:
+            return "unavailable", None
+        try:
+            seconds = float(self._wall_time()) - boot
+        except (TypeError, ValueError, OSError):
+            return "unavailable", None
+        if seconds < 0.0:
+            return "invalid", None
+        return "ok", seconds
 
-        cpu_status, cpu_pct = self._read_cpu()
-        ram_status, ram_used, ram_total = self._read_ram()
-        return CpuRamSample(cpu_status, cpu_pct, ram_status, ram_used, ram_total)
+    def _read_network(self) -> tuple[str, float | None, float | None]:
+        try:
+            counters = self._net_io_counters()
+            rx = int(getattr(counters, "bytes_recv"))
+            tx = int(getattr(counters, "bytes_sent"))
+            now = float(self._monotonic())
+        except (TypeError, ValueError, AttributeError, OSError):
+            return "unavailable", None, None
+        previous_rx = self._previous_net_rx
+        previous_tx = self._previous_net_tx
+        previous_now = self._previous_net_monotonic
+        self._previous_net_rx = rx
+        self._previous_net_tx = tx
+        self._previous_net_monotonic = now
+        if rx < 0 or tx < 0 or previous_rx is None or previous_tx is None or previous_now is None:
+            return "warming", None, None
+        elapsed = now - previous_now
+        delta_rx = rx - previous_rx
+        delta_tx = tx - previous_tx
+        if elapsed <= 0.0 or delta_rx < 0 or delta_tx < 0:
+            return "invalid_delta", None, None
+        return "ok", delta_rx / elapsed, delta_tx / elapsed
+
+    def sample(self) -> CpuRamSample:
+        """Read only enabled metrics once on the shared pulse.
+
+        Metric selection never creates another cadence owner: disabled metrics are
+        skipped inside this existing aggregate observation and publish explicit
+        ``disabled`` state that the presentation already omits.
+        """
+
+        cpu_status, cpu_pct = (
+            self._read_cpu() if self._sample_cpu else ("disabled", None)
+        )
+        ram_status, ram_used, ram_total = (
+            self._read_ram()
+            if self._sample_memory
+            else ("disabled", None, None)
+        )
+        uptime_status, uptime_seconds = (
+            self._read_uptime() if self._sample_uptime else ("disabled", None)
+        )
+        network_status, network_rx_bps, network_tx_bps = (
+            self._read_network()
+            if self._sample_network
+            else ("disabled", None, None)
+        )
+        return CpuRamSample(
+            cpu_status,
+            cpu_pct,
+            ram_status,
+            ram_used,
+            ram_total,
+            uptime_status,
+            uptime_seconds,
+            network_status,
+            network_rx_bps,
+            network_tx_bps,
+        )
 
 
 class PdhAdapter(Protocol):

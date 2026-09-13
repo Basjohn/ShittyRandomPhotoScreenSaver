@@ -1,9 +1,8 @@
-"""Event-owned shared CPU/RAM sampler leases for the System Stats card.
+"""Event-owned shared System Stats sampler leases for the retained card.
 
 One runtime-generation owner samples only while a retained consumer lease is
-active; each display receives the same immutable snapshot. The product path
-intentionally excludes GPU metrics until their source can meet the same bounded
-cost and reliability contract.
+active; each display receives the same immutable snapshot. GPU hardware telemetry remains rejected/out of scope; this owner serves only the
+admitted CPU, memory, uptime and aggregate network snapshot.
 """
 
 from __future__ import annotations
@@ -17,7 +16,21 @@ from core.system_stats.source import CpuRamSample, WholeSystemCpuRamSource
 from core.threading.manager import TaskPriority, ThreadManager, ThreadPoolType
 
 
-SAMPLE_INTERVAL_MS = 10_000
+DEFAULT_SAMPLE_INTERVAL_SECONDS = 10
+MIN_SAMPLE_INTERVAL_SECONDS = 10
+MAX_SAMPLE_INTERVAL_SECONDS = 3_600
+SAMPLE_INTERVAL_MS = DEFAULT_SAMPLE_INTERVAL_SECONDS * 1_000
+
+
+def normalize_sample_interval_ms(value: Any) -> int:
+    """Clamp the one shared System Stats cadence to the product-safe range."""
+
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        seconds = DEFAULT_SAMPLE_INTERVAL_SECONDS
+    seconds = max(MIN_SAMPLE_INTERVAL_SECONDS, min(MAX_SAMPLE_INTERVAL_SECONDS, seconds))
+    return seconds * 1_000
 
 
 @dataclass(frozen=True)
@@ -101,6 +114,7 @@ class _SharedSystemStatsOwner:
         schedule: OneShotScheduler,
         submit: TaskSubmitter,
         ui_dispatch: UiDispatcher,
+        sample_interval_ms: int,
         registry_key: tuple[str, object] | None = None,
     ) -> None:
         self._thread_manager = thread_manager
@@ -110,6 +124,10 @@ class _SharedSystemStatsOwner:
         self._submit = submit
         self._ui_dispatch = ui_dispatch
         self._registry_key = registry_key
+        self._sample_interval_ms = max(
+            MIN_SAMPLE_INTERVAL_SECONDS * 1_000,
+            min(MAX_SAMPLE_INTERVAL_SECONDS * 1_000, int(sample_interval_ms)),
+        )
         self._leases: weakref.WeakSet[SystemStatsRuntimeService] = weakref.WeakSet()
         self._active_leases: weakref.WeakSet[SystemStatsRuntimeService] = (
             weakref.WeakSet()
@@ -164,6 +182,8 @@ class _SharedSystemStatsOwner:
             and self._thread_manager is not lease._thread_manager
         ):
             raise RuntimeError("shared System Stats leases require one ThreadManager")
+        if lease.sample_interval_ms != self._sample_interval_ms:
+            raise RuntimeError("shared System Stats leases require one sample interval")
         if (
             self._runtime_generation is not None
             and lease.runtime_generation is not None
@@ -319,7 +339,7 @@ class _SharedSystemStatsOwner:
                 and owner_generation == self._owner_generation
                 and token == self._token
             ):
-                self._schedule_sample(SAMPLE_INTERVAL_MS)
+                self._schedule_sample(self._sample_interval_ms)
 
     def _fail_closed_ui_dispatch(self, owner_generation: int, token: int) -> None:
         """Stop rather than strand a live sampler when UI delivery is rejected.
@@ -359,7 +379,7 @@ class _SharedSystemStatsOwner:
         if not bool(getattr(result, "success", False)) or not isinstance(
             getattr(result, "result", None), CpuRamSample
         ):
-            self._schedule_sample(SAMPLE_INTERVAL_MS)
+            self._schedule_sample(self._sample_interval_ms)
             return
         self._revision += 1
         self._snapshot = SystemStatsRuntimeSnapshot(
@@ -371,7 +391,7 @@ class _SharedSystemStatsOwner:
             lease._deliver_snapshot(self._snapshot)
         # Fixed delay is measured from completion, so there is never a queued
         # telemetry pulse competing with an already-running collection.
-        self._schedule_sample(SAMPLE_INTERVAL_MS)
+        self._schedule_sample(self._sample_interval_ms)
 
 
 class SystemStatsRuntimeService:
@@ -386,6 +406,7 @@ class SystemStatsRuntimeService:
         schedule: OneShotScheduler = _default_schedule,
         submit_factory: Callable[[Any], TaskSubmitter] = _default_submit,
         ui_dispatch: UiDispatcher = _default_ui_dispatch,
+        sample_interval_seconds: Any = DEFAULT_SAMPLE_INTERVAL_SECONDS,
     ) -> None:
         self._shared = bool(shared)
         self._runtime_generation = runtime_generation
@@ -393,6 +414,7 @@ class SystemStatsRuntimeService:
         self._schedule = schedule
         self._submit_factory = submit_factory
         self._ui_dispatch = ui_dispatch
+        self._sample_interval_ms = normalize_sample_interval_ms(sample_interval_seconds)
         self._thread_manager: Any = None
         self._consumer_ref: weakref.ReferenceType | None = None
         self._owner: _SharedSystemStatsOwner | None = None
@@ -402,6 +424,10 @@ class SystemStatsRuntimeService:
     @property
     def runtime_generation(self) -> Any:
         return self._runtime_generation
+
+    @property
+    def sample_interval_ms(self) -> int:
+        return self._sample_interval_ms
 
     @property
     def shared_owner(self) -> _SharedSystemStatsOwner | None:
@@ -438,6 +464,7 @@ class SystemStatsRuntimeService:
                 schedule=self._schedule,
                 submit=self._submit_factory(self._thread_manager),
                 ui_dispatch=self._ui_dispatch,
+                sample_interval_ms=self._sample_interval_ms,
                 registry_key=key if self._shared else None,
             )
             if self._shared:
