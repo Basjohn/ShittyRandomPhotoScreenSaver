@@ -426,6 +426,14 @@ class FriendPulsePresentationModel(QObject):
         self._interaction_enabled = False
         self._visible_row_range: tuple[int, int] | None = (0, config.capacity - 1)
         self._pending_pulse_indices: tuple[int, ...] = ()
+        # CUSTOM content-extent override. ``None`` means the card uses its
+        # canonical config-derived authored size (normal + every non-CUSTOM
+        # path). A live edit or a committed CUSTOM entry sets a logical content
+        # box here so the card reflows (vertical -> more rows, horizontal ->
+        # grid column reflow / less truncation) instead of uniformly scaling.
+        # This is presentation-only session/layout state; it never mutates the
+        # normalized ``visible_row_capacity``/``preferred_width`` settings.
+        self._content_extent: tuple[int, int] | None = None
 
     @property
     def is_active(self) -> bool:
@@ -689,6 +697,44 @@ class FriendPulsePresentationModel(QObject):
         self.stateChanged.emit()
         return True
 
+    def set_content_extent(
+        self,
+        width: float | None,
+        height: float | None,
+    ) -> bool:
+        """Apply a CUSTOM content-box override, or clear it when either is None.
+
+        The box is a logical (pre-uniform-scale) content size. Width follows the
+        canonical authored-width bounds; height is floored at one row's worth of
+        card so the ListView/Grid always has real content room. Returns True when
+        the effective override changed.
+        """
+
+        if width is None or height is None:
+            return self.clear_content_extent()
+        try:
+            resolved_width = int(round(float(width)))
+            resolved_height = int(round(float(height)))
+        except (TypeError, ValueError):
+            return False
+        resolved_width = max(420, min(900, resolved_width))
+        resolved_height = max(120, min(4000, resolved_height))
+        extent = (resolved_width, resolved_height)
+        if extent == self._content_extent:
+            return False
+        self._content_extent = extent
+        self.stateChanged.emit()
+        return True
+
+    def clear_content_extent(self) -> bool:
+        """Drop any CUSTOM content-box override and return to the authored size."""
+
+        if self._content_extent is None:
+            return False
+        self._content_extent = None
+        self.stateChanged.emit()
+        return True
+
     def retire(self) -> None:
         if self._retired:
             return
@@ -748,9 +794,18 @@ class FriendPulsePresentationModel(QObject):
     def viewMode(self) -> str:
         return self.config.view_mode
 
-    @Property(int, constant=True)
+    @Property(int, notify=stateChanged)
     def gridColumns(self) -> int:
-        return _grid_columns_for(self.config.capacity, self.config.authored_width)
+        # A horizontal content-extent override reflows the avatar grid: a wider
+        # box fits more columns, a narrower one fewer (bounded by roster + the
+        # canonical column cap in ``_grid_columns_for``). Falls back to the
+        # authored width outside CUSTOM.
+        width = (
+            self._content_extent[0]
+            if self._content_extent is not None
+            else self.config.authored_width
+        )
+        return _grid_columns_for(self.config.capacity, width)
 
     @Property(int, constant=True)
     def visibleCapacity(self) -> int:
@@ -837,10 +892,14 @@ class FriendPulsePresentationModel(QObject):
 
     @Property(float, notify=stateChanged)
     def authoredWidth(self) -> float:
+        if self._content_extent is not None:
+            return float(self._content_extent[0])
         return float(self.config.authored_width)
 
     @Property(float, notify=stateChanged)
     def authoredHeight(self) -> float:
+        if self._content_extent is not None:
+            return float(self._content_extent[1])
         return float(self.config.authored_height)
 
 
@@ -865,7 +924,9 @@ class RetainedFriendPulsePresentation:
             card_style=model.style.card_style,
         )
         self._retained.add_retirement_callback(model.retire)
-        self._retained.set_custom_layout_size_payload_handler(lambda _payload: None)
+        self._retained.set_custom_layout_size_payload_handler(
+            self._apply_custom_layout_size_payload
+        )
         host.set_widget_input_state_handler(self._retained, self.apply_input_state)
         refresh = getattr(self._retained.item, "refreshRequested", None)
         if refresh is not None and hasattr(refresh, "connect"):
@@ -946,6 +1007,26 @@ class RetainedFriendPulsePresentation:
 
     def set_interaction_enabled(self, enabled: bool) -> bool:
         return self._model.set_interaction_enabled(enabled)
+
+    def _apply_custom_layout_size_payload(
+        self,
+        payload: Mapping[str, Any],
+    ) -> None:
+        """Consume the CUSTOM content-box override from the layout payload.
+
+        ``content_extent`` is the only size-payload key Friend Pulse honours; it
+        drives the reflow (vertical -> more rows, horizontal -> grid columns).
+        Its absence clears any prior override so the card returns to its authored
+        size. Legacy per-value keys stay intentionally ignored (H9). This handler
+        runs for both live edits and committed CUSTOM replay, so a saved extent
+        reflows on load and through slot save/restore.
+        """
+
+        extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
+        if isinstance(extent, (tuple, list)) and len(extent) == 2:
+            self._model.set_content_extent(extent[0], extent[1])
+        else:
+            self._model.clear_content_extent()
 
     def apply_input_state(self, input_state: object) -> bool:
         value = (

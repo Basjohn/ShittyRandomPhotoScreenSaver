@@ -897,3 +897,77 @@ def test_narrow_grid_keeps_event_glow_and_friend_title_allocated(
         engine.deleteLater()
         model.retire()
         qt_app.processEvents()
+
+
+def test_content_extent_override_reflows_grid_columns() -> None:
+    service = _RuntimeService()
+    model = _model(service, view_mode="grid", capacity=6, preferred_width=760)
+    base_columns = int(model.gridColumns)
+    base_width = float(model.authoredWidth)
+    base_height = float(model.authoredHeight)
+
+    # Narrow content box -> fewer columns; wide -> as many as the caps allow.
+    assert model.set_content_extent(460.0, base_height) is True
+    assert int(model.gridColumns) < base_columns
+    assert model.authoredWidth == pytest.approx(460.0)
+    assert model.set_content_extent(900.0, base_height) is True
+    assert int(model.gridColumns) >= base_columns
+
+    # Clearing the override returns to the canonical authored size and columns.
+    assert model.clear_content_extent() is True
+    assert int(model.gridColumns) == base_columns
+    assert model.authoredWidth == pytest.approx(base_width)
+    assert model.authoredHeight == pytest.approx(base_height)
+
+
+@pytest.mark.qt
+def test_content_extent_vertical_grows_row_viewport(qt_app) -> None:
+    service = _RuntimeService()
+    model = _model(service, view_mode="rows", capacity=4)
+    model.activate(object())
+    base_width = float(model.authoredWidth)
+    base_height = float(model.authoredHeight)
+
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "FriendPulsePresentation.qml"))
+    )
+    item = component.createWithInitialProperties({"friendPulseModel": model})
+    assert isinstance(item, QQuickItem), [
+        error.toString() for error in component.errors()
+    ]
+    window = _show_item(item, model, qt_app)
+    try:
+        rows_view = item.findChild(QObject, "friendPulseRowsView")
+        assert rows_view is not None
+        base_list_height = float(rows_view.property("height"))
+
+        # A committed/live vertical extent grows the logical content box; the
+        # outer item grows to match so uniform scale stays 1 and the ListView
+        # gains real row room instead of letterboxing.
+        taller = base_height + 232.0
+        assert model.set_content_extent(base_width, taller) is True
+        item.setWidth(base_width)
+        item.setHeight(taller)
+        qt_app.processEvents()
+        assert model.authoredHeight == pytest.approx(taller)
+        assert float(rows_view.property("height")) > base_list_height + 200.0
+
+        # Clearing returns to the authored viewport height exactly.
+        assert model.clear_content_extent() is True
+        item.setWidth(base_width)
+        item.setHeight(base_height)
+        qt_app.processEvents()
+        assert model.authoredHeight == pytest.approx(base_height)
+        assert float(rows_view.property("height")) == pytest.approx(base_list_height)
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        window.close()
+        window.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        model.retire()
+        qt_app.processEvents()
