@@ -166,7 +166,8 @@ Friend Pulse content-extent experiment lands.
   ~0.5px baseline thickness increase across the board.
 - [ ] **Avatar-name text is not Title Cased** when it should be, and it **truncates instead of
   wrapping to a second row + shrinking to fit** its cell/box. Fix the grid/rows name text to
-  Title Case + double-row-with-shrink-to-fit inside its allotted box.
+  Title Case + double-row-with-shrink-to-fit inside its allotted box. Usernames should be
+  **shrunk rather than truncated**, and must **remain bold** at every fitted size.
 - [ ] **Verify headers actually get the scale-up stroke boost.** The scale-aware stroke
   envelope should thicken the BrandedHeader frame as the card enlarges, but it may not be
   visible. Confirm whether headers route through the boost; if they already do, add a further

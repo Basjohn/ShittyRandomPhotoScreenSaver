@@ -72,6 +72,27 @@ Item {
             required property real resizeScale
             required property bool canTransferLeft
             required property bool canTransferRight
+            required property var contentExtentAxes
+
+            // Content-extent side edges for ordinary list/feed widgets, derived
+            // from the family's declared axes. Empty for the viewport-capable
+            // Visualizer (its edges come from the branch above) and for uniform
+            // widgets. Horizontal -> left/right, vertical -> top/bottom.
+            readonly property var contentExtentEdges: {
+                if (editFrame.viewportResizeCapable)
+                    return []
+                var axes = editFrame.contentExtentAxes || []
+                var edges = []
+                if (axes.indexOf("horizontal") >= 0) {
+                    edges.push("left")
+                    edges.push("right")
+                }
+                if (axes.indexOf("vertical") >= 0) {
+                    edges.push("top")
+                    edges.push("bottom")
+                }
+                return edges
+            }
 
             // Gmail/Reddit establish the shared branded-header row at an authored
             // 32 px centreline (14 px card inset + 18 px half-height).  The edit
@@ -371,7 +392,7 @@ Item {
             Repeater {
                 model: editFrame.viewportResizeCapable
                        ? ["left", "right", "top", "bottom"]
-                       : []
+                       : editFrame.contentExtentEdges
 
                 delegate: Rectangle {
                     required property string modelData
@@ -383,9 +404,12 @@ Item {
                     property int edgeThickness: 10
 
                     objectName: "customLayoutViewportEdge-" + editFrame.widgetId + "-" + edge
-                    color: "#c85ec8ff"
+                    // Visualizer viewport edges keep the bright blue; ordinary
+                    // content-extent side edges use a modestly darker blue so the
+                    // two semantics read differently in edit mode.
+                    color: editFrame.viewportResizeCapable ? "#c85ec8ff" : "#c83a78c8"
                     border.width: 1
-                    border.color: "#ff10324b"
+                    border.color: editFrame.viewportResizeCapable ? "#ff10324b" : "#ff0a2038"
                     radius: 2
 
                     width: horizontalEdge

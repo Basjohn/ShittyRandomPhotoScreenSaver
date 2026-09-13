@@ -1230,6 +1230,12 @@ class WidgetRuntimeDescriptor:
     supports_layout_resize_edit: bool = False
     requires_size_reset_affordance: bool = False
     custom_layout_resize_mode: str = "none"
+    # Side-handle content-extent axes for list/feed families ("horizontal" and/or
+    # "vertical"). Empty means uniform-only (corners/wheel). A declared axis shows
+    # a darker-blue side handle in CUSTOM edit that reflows the widget's content
+    # box on that axis (more rows / column reflow / less truncation) instead of
+    # uniformly scaling; corners always stay uniform enlarge/shrink.
+    content_extent_axes: tuple[str, ...] = ()
     writes_custom_position_key: bool = True
     writes_custom_monitor_key: bool = True
     dev_feature_env: str | None = None
@@ -1608,6 +1614,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="ordinary_uniform",
+        content_extent_axes=("horizontal", "vertical"),
     ),
     WidgetRuntimeDescriptor(
         widget_id="system_stats",
