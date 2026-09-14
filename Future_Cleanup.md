@@ -172,17 +172,16 @@ The old `ui/settings_theme_paths.py` "temporary packaging/dev fallback" task is 
 already resolves explicit injection -> ProgramData for frozen/installed -> repo source for dev, without
 silently merging another root. Do not reopen it unless a new packaging defect is observed.
 
-## READY — retire migration-era architecture-selection evidence
+## DONE — migration-era architecture-selection evidence retired (2026-09-14)
 
-The Qt Quick migration is closed and operator-accepted. These bounded architecture-selection artifacts are no longer
-protected by a final-acceptance horizon; they are ordinary caller-proven cleanup candidates:
-
-- `tools/presentation_benchmark_core.py` + `tests/test_presentation_benchmark_core.py`;
-- `tools/qtquick_presentation_spike.py` + `tests/test_qtquick_presentation_spike.py`.
-
-They are bounded architecture-selection evidence, not current product-performance authority. Do not expand them.
-Perform one final exact caller/import search, rehome any still-useful behavioural assertion to a current owner, then
-delete each tool with its spike-only tests. If future performance work is reopened from a genuine traceable issue, use retained built-in/opt-in evidence instead of keeping these migration spikes alive.
+Caller/import proof showed no production consumer of the Qt Quick presentation
+spike tooling, so it was deleted: `tools/presentation_benchmark_core.py`,
+`tools/qtquick_presentation_spike.py`, `tests/test_presentation_benchmark_core.py`
+and `tests/test_qtquick_presentation_spike.py`. Their tests only exercised the
+spike tools' own arg-parsing/pacer/percentile/workload math and source shape —
+no current product owner lost coverage. If future performance work is reopened
+from a genuine traceable issue, use retained built-in/opt-in evidence rather than
+resurrecting these migration spikes.
 
 ## Permanent cleanup guardrails
 
