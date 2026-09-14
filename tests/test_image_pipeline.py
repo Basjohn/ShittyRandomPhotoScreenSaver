@@ -67,7 +67,7 @@ def test_rejected_display_candidate_uses_bounded_queue_replacement(monkeypatch):
     )
     attempted = []
 
-    def _process(_engine, _display, display_index, meta, _lanczos, _sharpen):
+    def _process(_engine, _display, display_index, meta, _lanczos, _sharpen, perf_trace=None):
         attempted.append((display_index, str(meta.local_path)))
         if meta is bad:
             return None
@@ -102,7 +102,7 @@ def test_same_image_replacement_stays_atomic_across_displays(monkeypatch):
     )
     attempted = []
 
-    def _process(_engine, _display, display_index, meta, _lanczos, _sharpen):
+    def _process(_engine, _display, display_index, meta, _lanczos, _sharpen, perf_trace=None):
         attempted.append((display_index, str(meta.local_path)))
         if meta is bad and display_index == 1:
             return None
@@ -150,7 +150,7 @@ def test_same_image_reuses_identical_transform_processing(monkeypatch):
     calls = []
     shared_result = {"path": str(meta.local_path)}
 
-    def _process(_engine, _display, display_index, _meta, _lanczos, _sharpen):
+    def _process(_engine, _display, display_index, _meta, _lanczos, _sharpen, perf_trace=None):
         calls.append(display_index)
         return shared_result
 
@@ -186,7 +186,7 @@ def test_same_image_does_not_reuse_different_dpr_processing(monkeypatch):
     ]
     calls = []
 
-    def _process(_engine, _display, display_index, _meta, _lanczos, _sharpen):
+    def _process(_engine, _display, display_index, _meta, _lanczos, _sharpen, perf_trace=None):
         calls.append(display_index)
         return {"path": str(meta.local_path), "display": display_index}
 
@@ -222,7 +222,7 @@ def test_previous_image_reuses_exact_source_transform_processing(monkeypatch):
     calls = []
     shared_result = {"path": str(shared.local_path)}
 
-    def _process(_engine, _display, display_index, _meta, _lanczos, _sharpen):
+    def _process(_engine, _display, display_index, _meta, _lanczos, _sharpen, perf_trace=None):
         calls.append(display_index)
         return shared_result
 
@@ -257,7 +257,7 @@ def test_previous_image_keeps_different_source_or_dpr_processing_separate(monkey
     ]
     calls = []
 
-    def _process(_engine, _display, display_index, meta, _lanczos, _sharpen):
+    def _process(_engine, _display, display_index, meta, _lanczos, _sharpen, perf_trace=None):
         calls.append((display_index, str(meta.local_path)))
         return {"path": str(meta.local_path), "display": display_index}
 

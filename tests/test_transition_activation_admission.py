@@ -47,6 +47,10 @@ class _FakeSettingsManager:
             return node
         return default
 
+    def get_bool(self, key, default=False):
+        from core.settings.settings_manager import SettingsManager
+        return SettingsManager.to_bool(self.get(key, default), default)
+
     def set(self, key, value):
         if key == "transitions":
             self._transitions = value
