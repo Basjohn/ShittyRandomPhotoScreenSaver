@@ -593,9 +593,12 @@ def test_profile_layering_contains_only_real_behavioral_differences() -> None:
             for key in sorted(set(left) | set(right)):
                 path = f"{prefix}.{key}" if prefix else key
                 if key not in left:
-                    result[path] = (None, right[key])
+                    # Recurse into a newly-added subtree so its leaves match the
+                    # flattened overlay (e.g. a brand-new ``mc`` section becomes
+                    # ``mc.always_on_top`` rather than the whole ``mc`` dict).
+                    result.update(collect_diff({}, right[key], path))
                 elif key not in right:
-                    result[path] = (left[key], None)
+                    result.update(collect_diff(left[key], {}, path))
                 else:
                     result.update(collect_diff(left[key], right[key], path))
             return result
