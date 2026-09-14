@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+import math
 import re
 import time
 from typing import Any
@@ -486,6 +487,9 @@ class RedditPresentationModel(QObject):
     ) -> None:
         super().__init__(parent)
         self._row_model = RedditRowListModel(self)
+        # Source/cache capacity is Python-owned; QML should instantiate only the
+        # rows the current authored/CUSTOM geometry can plausibly display.
+        self._held_rows: tuple[RedditPresentationRow, ...] = ()
         self._runtime_service = runtime_service
         self._snapshot = RedditPresentationSnapshot(
             config=config,
@@ -553,6 +557,7 @@ class RedditPresentationModel(QObject):
             service.stop()
             service.detach_consumer(self)
         self._retired = True
+        self._held_rows = ()
         self._row_model.replace_rows(())
 
     def apply_config(self, config: RedditPresentationConfig) -> bool:
@@ -561,6 +566,7 @@ class RedditPresentationModel(QObject):
         subreddit_changed = config.subreddit.casefold() != self.config.subreddit.casefold()
         self._snapshot = replace(self._snapshot, config=config)
         if subreddit_changed:
+            self._held_rows = ()
             self._row_model.replace_rows(())
             self._snapshot = replace(
                 self._snapshot,
@@ -570,8 +576,8 @@ class RedditPresentationModel(QObject):
             )
             if self._runtime_service is not None:
                 self._runtime_service.set_subreddit(config.subreddit)
-        elif len(self._row_model.rows) > _MAX_HELD_POSTS:
-            self._row_model.replace_rows(self._row_model.rows[:_MAX_HELD_POSTS])
+        else:
+            self._refresh_materialized_rows()
         self.stateChanged.emit()
         return True
 
@@ -601,7 +607,9 @@ class RedditPresentationModel(QObject):
             for post in tuple(posts)[:_MAX_HELD_POSTS]
             if str(post.title or "").strip() and str(post.url or "").strip()
         )
-        rows_changed = self._row_model.replace_rows(rows)
+        held_changed = rows != self._held_rows
+        self._held_rows = rows
+        rows_changed = self._refresh_materialized_rows()
         snapshot = replace(
             self._snapshot,
             view_state="ready" if rows else "empty",
@@ -611,9 +619,9 @@ class RedditPresentationModel(QObject):
         )
         state_changed = snapshot != self._snapshot
         self._snapshot = snapshot
-        if rows_changed or state_changed:
+        if held_changed or rows_changed or state_changed:
             self.stateChanged.emit()
-        return rows_changed or state_changed
+        return held_changed or rows_changed or state_changed
 
     def publish_error(self, error: str) -> None:
         if self._retired:
@@ -621,7 +629,7 @@ class RedditPresentationModel(QObject):
         self._replace_snapshot(
             replace(
                 self._snapshot,
-                view_state="ready" if self._row_model.rows else "error",
+                view_state="ready" if self._held_rows else "error",
                 error_text=str(error or "Reddit unavailable"),
                 refreshing=False,
             )
@@ -696,6 +704,7 @@ class RedditPresentationModel(QObject):
         if extent == self._content_extent:
             return False
         self._content_extent = extent
+        self._refresh_materialized_rows()
         self.stateChanged.emit()
         return True
 
@@ -703,8 +712,33 @@ class RedditPresentationModel(QObject):
         if self._content_extent is None:
             return False
         self._content_extent = None
+        self._refresh_materialized_rows()
         self.stateChanged.emit()
         return True
+
+    def _refresh_materialized_rows(self) -> bool:
+        """Expose only the rows the retained QML card can plausibly show."""
+
+        held_count = len(self._held_rows)
+        if held_count <= 0:
+            return self._row_model.replace_rows(())
+        materialized = min(held_count, max(1, int(self.config.limit)))
+        if self._content_extent is not None:
+            natural_row_height = max(28.0, float(self.config.font_size) * 1.55)
+            conservative_fit = max(
+                1,
+                int(
+                    math.ceil(
+                        float(self._content_extent[1])
+                        / max(1.0, natural_row_height + 4.0)
+                    )
+                ),
+            )
+            materialized = min(
+                held_count,
+                max(materialized, conservative_fit),
+            )
+        return self._row_model.replace_rows(self._held_rows[:materialized])
 
     def admit_url(self, url: object) -> bool:
         if not self.is_active or not self._snapshot.interaction_enabled:

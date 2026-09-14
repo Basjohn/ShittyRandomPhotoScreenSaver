@@ -98,6 +98,34 @@ def test_fixed_metric_capacity_owns_base_geometry_and_values_do_not() -> None:
     assert service.stopped == service.detached == 1
 
 
+def test_system_stats_sample_edge_invalidates_only_dynamic_metric_properties() -> None:
+    service = _RuntimeService()
+    model = _model(service)
+    model.activate(object())
+    sample_edges: list[None] = []
+    state_edges: list[None] = []
+    model.sampleChanged.connect(lambda: sample_edges.append(None))
+    model.stateChanged.connect(lambda: state_edges.append(None))
+
+    model.on_system_stats_runtime_snapshot(
+        SimpleNamespace(
+            revision=1,
+            sample=CpuRamSample(
+                "ok", 48.0, "ok", 8 * 1024**3, 16 * 1024**3,
+                "ok", 3600.0, "ok", 1024.0, 2048.0,
+            ),
+        )
+    )
+
+    assert sample_edges == [None]
+    assert state_edges == []
+    # Layout/config mutation still owns the broad state signal, not the sample.
+    assert model.set_content_extent(760, 640) is True
+    assert state_edges == [None]
+    assert sample_edges == [None]
+    model.retire()
+
+
 def test_system_stats_metric_selection_and_custom_extent_are_presentation_only() -> None:
     config = SystemStatsPresentationConfig.from_widgets_mapping(
         {

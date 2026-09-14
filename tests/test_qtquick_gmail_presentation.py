@@ -653,9 +653,11 @@ def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_pl
         assert first_row is not None
         assert model.viewState == "ready"
         assert service.current_snapshot().source == "cache"
-        # The model now retains a buffer up to the cache cap; ``limit`` (SSOT,
-        # exposed as emailLimit) still governs the visible count + authored height.
-        assert row_model.rowCount() == 3
+        # Python keeps the accepted cache buffer, but normal retained QML only
+        # materializes the authored visible limit. Hidden cached rows must not
+        # become dormant Repeater delegate trees.
+        assert len(model._held_rows) == 3
+        assert row_model.rowCount() == 2
         assert model.emailLimit == 2
         two_row_height = model.contentHeight
 

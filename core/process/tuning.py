@@ -64,6 +64,17 @@ _DEFAULT_CONFIGS: Dict[WorkerType, WorkerTuningConfig] = {
         target_latency_ms=100,      # Image decode can be slow
         max_latency_ms=500,
     ),
+    WorkerType.IMAGE_PREFETCH: WorkerTuningConfig(
+        # ProcessSupervisor queues also carry heartbeat/control traffic and do
+        # not currently consume these advisory queue-size values. Application
+        # single-flight is enforced by ImagePrefetcher ownership, not by making
+        # the transport queue artificially tiny.
+        request_queue_size=64,
+        response_queue_size=64,
+        backpressure_policy=BackpressurePolicy.DROP_OLD,
+        target_latency_ms=500,      # Speculative work has no foreground latency SLA
+        max_latency_ms=5000,
+    ),
     WorkerType.RSS: WorkerTuningConfig(
         request_queue_size=16,      # RSS fetches are infrequent
         response_queue_size=32,     # Multiple images per feed

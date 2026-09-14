@@ -68,6 +68,14 @@ class TestGetWorkerConfig:
         assert config.backpressure_policy == BackpressurePolicy.DROP_OLD
         assert config.target_latency_ms == 100
     
+    def test_speculative_image_worker_config(self):
+        """Speculative derivatives are bounded and explicitly droppable."""
+        config = get_worker_config(WorkerType.IMAGE_PREFETCH)
+        # Queue-size/backpressure values are advisory in the current supervisor;
+        # actual speculative single-flight is an ImagePrefetcher ownership contract.
+        assert config.target_latency_ms == 500
+        assert config.max_latency_ms == 5000
+
     def test_rss_worker_config(self):
         """Test RSS worker has network-tolerant config."""
         config = get_worker_config(WorkerType.RSS)

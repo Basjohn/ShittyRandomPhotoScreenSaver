@@ -1,9 +1,10 @@
 """
 Image prefetcher built on ThreadManager and ImageCache.
 
-- Decodes images into QImage on IO threads (thread-safe)
-- Caches decoded images in an LRU cache
-- Prefetches next N images ahead with limited concurrency
+- Decodes raw images into QImage on IO threads (thread-safe)
+- Sends scaled speculative derivatives to a dedicated low-priority process
+- Keeps foreground ImageWorker latency isolated from speculative work
+- Caches decoded/display-ready images in a bounded LRU cache
 - Supports post-transition delay to reduce IO contention
 """
 from __future__ import annotations
@@ -12,8 +13,7 @@ from collections import deque
 from typing import Any, Dict, List, Optional, Set
 import threading
 import time
-from PySide6.QtCore import QSize
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage
 
 from core.logging.logger import (
     get_logger,
@@ -21,9 +21,9 @@ from core.logging.logger import (
     is_perf_metrics_enabled,
     is_verbose_logging,
 )
+from core.process.types import MessageType, WorkerType
 from core.threading.manager import ThreadManager, TaskPriority, ThreadPoolType
 from rendering.display_modes import DisplayMode
-from rendering.image_processor_async import AsyncImageProcessor
 from utils.image_cache import ImageCache
 
 logger = get_logger(__name__)
@@ -50,9 +50,16 @@ class ImagePrefetcher:
         post_transition_delay_ms: float = 100.0,
         max_pending_requests: Optional[int] = None,
         max_pending_scaled_bytes: Optional[int] = None,
+        process_supervisor: Optional[Any] = None,
     ) -> None:
         self._threads = thread_manager
         self._cache = cache
+        self._process_supervisor = process_supervisor
+        # One process can execute only one prescale at a time. Keep exactly one
+        # application request in flight so stale speculative work never queues
+        # behind itself in the child. The bounded/latest-useful backlog remains
+        # parent-owned where generation pruning is authoritative.
+        self._max_scaled_concurrent = 1
         self._max_concurrent = max(1, min(4, int(max_concurrent)))
         self._max_pending_requests = max(
             self._max_concurrent,
@@ -75,6 +82,7 @@ class ImagePrefetcher:
         self._prefetch_generation = 0
         self._raw_inflight_generations: Dict[str, int] = {}
         self._scaled_inflight_generations: Dict[str, int] = {}
+        self._scaled_correlation_ids: Dict[str, str] = {}
         # Desync: post-transition delay to reduce IO contention
         self._post_transition_delay_ms = max(0.0, float(post_transition_delay_ms))
         self._transition_end_time: float = 0.0
@@ -144,8 +152,14 @@ class ImagePrefetcher:
             }
     
     def clear_inflight(self) -> None:
-        """Invalidate current work and clear queued/inflight ownership."""
+        """Invalidate current work and clear queued/inflight ownership.
+
+        Active speculative process work cannot be interrupted safely, so its
+        correlation is tombstoned at the supervisor. Any late shared-memory
+        response is then reclaimed without becoming cache truth.
+        """
         with self._lock:
+            abandoned_correlations = tuple(self._scaled_correlation_ids.values())
             self._prefetch_generation += 1
             self._inflight.clear()
             self._raw_inflight_generations.clear()
@@ -154,9 +168,27 @@ class ImagePrefetcher:
             self._scaled_inflight.clear()
             self._scaled_inflight_generations.clear()
             self._scaled_inflight_paths.clear()
+            self._scaled_correlation_ids.clear()
             self._pending_scaled_requests.clear()
             self._pending_scaled_keys.clear()
             self._pending_scaled_bytes = 0
+
+        supervisor = self._process_supervisor
+        abandon = getattr(supervisor, "abandon_response", None)
+        if callable(abandon):
+            for correlation_id in abandoned_correlations:
+                try:
+                    abandon(
+                        WorkerType.IMAGE_PREFETCH,
+                        correlation_id,
+                        reason="prefetch_generation_cancelled",
+                    )
+                except Exception as e:
+                    logger.debug(
+                        "[WORKER] Failed to abandon stale speculative image response %s: %s",
+                        correlation_id,
+                        e,
+                    )
         if is_verbose_logging():
             logger.debug("Prefetcher inflight set cleared")
         _cache_trace("Cleared inflight and pending prefetch state")
@@ -271,9 +303,25 @@ class ImagePrefetcher:
             self._pending_scaled_bytes = max(0, self._pending_scaled_bytes - reclaimed_bytes)
         return reclaimed_count, reclaimed_bytes
 
+    def _scaled_worker_available(self) -> bool:
+        supervisor = self._process_supervisor
+        checker = getattr(supervisor, "is_running", None)
+        if not callable(checker):
+            return False
+        try:
+            return bool(checker(WorkerType.IMAGE_PREFETCH))
+        except Exception:
+            return False
+
     def register_scaled_requests(self, requests: List[Dict[str, Any]]) -> int:
         """Queue scaled-variant warmup requests and process them with bounded concurrency."""
         if not requests:
+            return 0
+        if not self._scaled_worker_available():
+            _cache_trace(
+                "Skipped scaled prefetch registration because speculative worker is unavailable count=%d",
+                len(requests),
+            )
             return 0
 
         queued_any = False
@@ -417,10 +465,12 @@ class ImagePrefetcher:
         # has asked prefetch compute to pause briefly.
         if self._is_in_post_transition_delay():
             return
+        if not self._scaled_worker_available():
+            return
 
         requests_to_submit: List[Dict[str, Any]] = []
         with self._lock:
-            available_slots = self._max_concurrent - len(self._scaled_inflight)
+            available_slots = self._max_scaled_concurrent - len(self._scaled_inflight)
             if available_slots <= 0 or not self._pending_scaled_requests:
                 return
 
@@ -479,6 +529,13 @@ class ImagePrefetcher:
             self._submit_scaled_request(request)
 
     def _submit_scaled_request(self, request: Dict[str, Any]) -> None:
+        """Dispatch one speculative derivative to the isolated image process.
+
+        The child is strict single-flight.  The foreground ImageWorker is never
+        used here, and there is deliberately no in-process compute fallback: if
+        the speculative worker is unavailable, foreground presentation remains
+        authoritative and later prefetch planning may try again.
+        """
         try:
             raw_path = str(request["path"])
             cache_key = str(request["cache_key"])
@@ -497,66 +554,129 @@ class ImagePrefetcher:
         if not raw_path or not cache_key or width <= 0 or height <= 0:
             raise ValueError("scaled-prefetch request has invalid path/cache/geometry")
 
-        def _compute_scaled_variant() -> Optional[tuple[str, QImage]]:
-            try:
-                with self._lock:
-                    if (
-                        self._prefetch_generation != generation
-                        or self._scaled_inflight_generations.get(cache_key) != generation
-                    ):
-                        return None
-                base = self._cache.get(raw_path)
-                if isinstance(base, QPixmap) and not base.isNull():
-                    base = base.toImage()
-                if not isinstance(base, QImage) or base.isNull():
-                    return None
-                scaled = AsyncImageProcessor.process_qimage(
-                    base,
-                    QSize(width, height),
-                    display_mode,
-                    use_lanczos=use_lanczos,
-                    sharpen=sharpen,
-                )
-                if scaled.isNull():
-                    return None
-                return cache_key, scaled
-            except Exception as e:
-                logger.debug("Scaled prefetch compute failed for %s: %s", cache_key, e)
-                return None
+        supervisor = self._process_supervisor
+        sender = getattr(supervisor, "send_message", None)
+        registrar = getattr(supervisor, "register_response_callback", None)
+        if not callable(sender) or not callable(registrar):
+            self._release_scaled_owner(cache_key, generation)
+            return
 
-        def _on_done(res) -> None:
+        correlation_id = sender(
+            WorkerType.IMAGE_PREFETCH,
+            MessageType.IMAGE_PRESCALE,
+            {
+                "path": raw_path,
+                # Parent cache identity is diagnostic metadata only; the child
+                # never owns cache publication. Keeping it on the message makes
+                # process traces/correlation attributable without creating a
+                # second cache-key authority.
+                "cache_key": cache_key,
+                "target_width": width,
+                "target_height": height,
+                "mode": display_mode.value,
+                "use_lanczos": use_lanczos,
+                "sharpen": sharpen,
+            },
+        )
+        if not correlation_id:
+            logger.warning(
+                "[WORKER] Speculative image worker rejected scaled prefetch key=%s",
+                cache_key,
+            )
+            self._release_scaled_owner(cache_key, generation)
+            return
+
+        with self._lock:
+            if (
+                self._prefetch_generation != generation
+                or self._scaled_inflight_generations.get(cache_key) != generation
+            ):
+                stale_before_wait = True
+            else:
+                stale_before_wait = False
+                self._scaled_correlation_ids[cache_key] = correlation_id
+
+        if stale_before_wait:
+            abandon = getattr(supervisor, "abandon_response", None)
+            if callable(abandon):
+                abandon(
+                    WorkerType.IMAGE_PREFETCH,
+                    correlation_id,
+                    reason="prefetch_generation_cancelled_before_wait",
+                )
+            return
+
+        def _on_response(response) -> None:
             scaled_cached = False
             try:
-                payload = res.result if res and res.success else None
-                if payload:
-                    key, image = payload
-                    with self._lock:
-                        if (
-                            self._prefetch_generation == generation
-                            and self._scaled_inflight_generations.get(cache_key) == generation
-                        ):
-                            self._cache.put(key, image)
-                            scaled_cached = True
-                            stats = request.get("stats")
-                            if isinstance(stats, dict):
-                                stats["scaled_prefetch_completed"] = int(stats.get("scaled_prefetch_completed", 0)) + 1
-                            if is_perf_metrics_enabled():
-                                logger.info(
-                                    "[PERF] [PREFETCH] Cached scaled variant %s (%dx%d, mode=%s)",
-                                    key,
-                                    width,
-                                    height,
-                                    display_mode.value,
-                                )
-                            _cache_trace(
-                                "Scaled prefetch completed key=%s target=%dx%d mode=%s",
-                                key,
+                with self._lock:
+                    current = (
+                        self._prefetch_generation == generation
+                        and self._scaled_inflight_generations.get(cache_key) == generation
+                        and self._scaled_correlation_ids.get(cache_key) == correlation_id
+                    )
+
+                # ``None`` is supervisor-owned worker-stop/restart cancellation.
+                # The finally block below releases the local speculative owner so
+                # a dead child can never wedge the single-flight slot.
+                if response is None:
+                    return
+                if not current:
+                    disposer = getattr(supervisor, "dispose_response", None)
+                    if callable(disposer):
+                        disposer(response, reason="stale_speculative_prefetch")
+                    return
+                if not bool(getattr(response, "success", False)):
+                    error = getattr(response, "error", None) or "unknown error"
+                    logger.debug(
+                        "Speculative scaled prefetch failed key=%s: %s",
+                        cache_key,
+                        error,
+                    )
+                    disposer = getattr(supervisor, "dispose_response", None)
+                    if callable(disposer):
+                        disposer(response, reason="speculative_prefetch_error")
+                    return
+
+                image = self._qimage_from_worker_response(response)
+                if image is None or image.isNull():
+                    return
+
+                with self._lock:
+                    if (
+                        self._prefetch_generation == generation
+                        and self._scaled_inflight_generations.get(cache_key) == generation
+                        and self._scaled_correlation_ids.get(cache_key) == correlation_id
+                    ):
+                        self._cache.put(cache_key, image)
+                        scaled_cached = True
+                        stats = request.get("stats")
+                        if isinstance(stats, dict):
+                            stats["scaled_prefetch_completed"] = int(
+                                stats.get("scaled_prefetch_completed", 0)
+                            ) + 1
+                        if is_perf_metrics_enabled():
+                            logger.info(
+                                "[PERF] [PREFETCH] Cached isolated scaled variant %s "
+                                "(%dx%d, mode=%s worker_ms=%.1f)",
+                                cache_key,
                                 width,
                                 height,
                                 display_mode.value,
+                                float(getattr(response, "processing_time_ms", 0.0) or 0.0),
                             )
+                        _cache_trace(
+                            "Scaled prefetch completed in isolated worker key=%s "
+                            "target=%dx%d mode=%s",
+                            cache_key,
+                            width,
+                            height,
+                            display_mode.value,
+                        )
             finally:
                 with self._lock:
+                    if self._scaled_correlation_ids.get(cache_key) == correlation_id:
+                        self._scaled_correlation_ids.pop(cache_key, None)
                     if self._scaled_inflight_generations.get(cache_key) == generation:
                         self._scaled_inflight_generations.pop(cache_key, None)
                         self._scaled_inflight.discard(cache_key)
@@ -574,23 +694,137 @@ class ImagePrefetcher:
                                     stats.get("raw_released_after_scaled", 0)
                                 ) + 1
                             _cache_trace(
-                                "Released raw prefetch source after final scaled derivative path=%s",
+                                "Released raw prefetch source after final isolated "
+                                "scaled derivative path=%s",
                                 raw_path,
                             )
                 self._pump_scaled_prefetch()
 
         try:
-            self._threads.submit_compute_task(
-                _compute_scaled_variant,
-                priority=TaskPriority.LOW,
-                callback=_on_done,
-                category="image.prefetch_scaled",
+            registered = bool(
+                registrar(
+                    WorkerType.IMAGE_PREFETCH,
+                    correlation_id,
+                    _on_response,
+                )
             )
         except Exception as e:
-            logger.debug("Scaled prefetch submit failed for %s: %s", cache_key, e)
-            with self._lock:
-                if self._scaled_inflight_generations.get(cache_key) == generation:
-                    self._scaled_inflight_generations.pop(cache_key, None)
-                    self._scaled_inflight.discard(cache_key)
-                    self._scaled_inflight_paths.pop(cache_key, None)
-            self._pump_scaled_prefetch()
+            logger.debug(
+                "Speculative scaled prefetch listener registration failed for %s: %s",
+                cache_key,
+                e,
+            )
+            registered = False
+
+        if not registered:
+            abandon = getattr(supervisor, "abandon_response", None)
+            if callable(abandon):
+                abandon(
+                    WorkerType.IMAGE_PREFETCH,
+                    correlation_id,
+                    reason="prefetch_listener_registration_failed",
+                )
+            self._release_scaled_owner(
+                cache_key,
+                generation,
+                correlation_id=correlation_id,
+            )
+
+    def _release_scaled_owner(
+        self,
+        cache_key: str,
+        generation: int,
+        *,
+        correlation_id: Optional[str] = None,
+    ) -> None:
+        """Release one speculative owner without recursively retrying it."""
+        with self._lock:
+            if (
+                correlation_id is None
+                or self._scaled_correlation_ids.get(cache_key) == correlation_id
+            ):
+                self._scaled_correlation_ids.pop(cache_key, None)
+            if self._scaled_inflight_generations.get(cache_key) == generation:
+                self._scaled_inflight_generations.pop(cache_key, None)
+                self._scaled_inflight.discard(cache_key)
+                self._scaled_inflight_paths.pop(cache_key, None)
+
+    def _qimage_from_worker_response(self, response: Any) -> Optional[QImage]:
+        """Detach one worker RGBA result into process-local QImage ownership."""
+        payload = getattr(response, "payload", None)
+        if not isinstance(payload, dict):
+            return None
+        width = int(payload.get("width", 0) or 0)
+        height = int(payload.get("height", 0) or 0)
+        if width <= 0 or height <= 0:
+            disposer = getattr(self._process_supervisor, "dispose_response", None)
+            if callable(disposer):
+                disposer(response, reason="speculative_invalid_dimensions")
+            return None
+
+        expected_size = width * height * 4
+        if payload.get("shared_memory_name"):
+            declared_size = int(
+                payload.get(
+                    "shared_memory_data_size",
+                    payload.get("shared_memory_size", 0),
+                )
+                or 0
+            )
+            if declared_size != expected_size:
+                disposer = getattr(self._process_supervisor, "dispose_response", None)
+                if callable(disposer):
+                    disposer(response, reason="speculative_invalid_payload_size")
+                return None
+
+            def _copy_shared_rgba(rgba_view: memoryview, _descriptor: object) -> QImage:
+                if len(rgba_view) != expected_size:
+                    raise ValueError(
+                        "Mapped speculative image payload does not match RGBA dimensions"
+                    )
+                source = QImage(
+                    rgba_view,
+                    width,
+                    height,
+                    width * 4,
+                    QImage.Format.Format_RGBA8888,
+                )
+                try:
+                    if source.isNull():
+                        raise ValueError("QImage rejected speculative shared RGBA payload")
+                    owned = source.copy()
+                    if owned.isNull():
+                        raise ValueError("QImage failed to detach speculative RGBA payload")
+                    return owned
+                finally:
+                    del source
+
+            consumer = getattr(self._process_supervisor, "consume_shared_memory_response", None)
+            if not callable(consumer):
+                disposer = getattr(self._process_supervisor, "dispose_response", None)
+                if callable(disposer):
+                    disposer(response, reason="speculative_missing_shm_consumer")
+                return None
+            try:
+                return consumer(response, _copy_shared_rgba)
+            except Exception as e:
+                logger.debug("Speculative shared-memory image consume failed: %s", e)
+                return None
+
+        rgba_data = payload.get("rgba_data")
+        if not rgba_data or len(rgba_data) != expected_size:
+            return None
+        source = QImage(
+            rgba_data,
+            width,
+            height,
+            width * 4,
+            QImage.Format.Format_RGBA8888,
+        )
+        try:
+            if source.isNull():
+                return None
+            return source.copy()
+        finally:
+            del source
+

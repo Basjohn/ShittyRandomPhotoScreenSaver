@@ -900,6 +900,37 @@ def test_optimistic_playback_epoch_is_shared_and_pins_contradictory_result(
     assert owner.expected_playback_state is None
 
 
+def test_duplicate_play_pause_edge_in_same_input_burst_is_coalesced(
+    _isolated_shared_owner,
+) -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track(MediaPlaybackState.PAUSED)})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    tm.complete()
+
+    controller = factory.controllers[0][1]
+    assert service.play_pause() is True
+    assert controller.play_pause_calls == 1
+    assert controller.play_pause_states == [MediaPlaybackState.PLAYING]
+
+    # One physical tap must not become a second provider toggle merely because
+    # the first async command completed quickly enough for another semantic edge
+    # to reach the shared owner in the same native input burst.
+    assert service.play_pause() is True
+    assert controller.play_pause_calls == 1
+    assert consumer.snapshots[-1].info.state == MediaPlaybackState.PLAYING
+
+    owner = service.shared_owner
+    owner._last_play_pause_edge_monotonic -= (
+        owner._PLAY_PAUSE_DUPLICATE_EDGE_WINDOW_SEC + 0.01
+    )
+    assert service.play_pause() is True
+    assert controller.play_pause_calls == 2
+    assert controller.play_pause_states[-1] == MediaPlaybackState.PAUSED
+
+
 def test_seek_routes_clamped_fraction_without_optimistic_timeline_authority() -> None:
     tm = _ThreadManager()
     factory = _ControllerFactory({"spotify": _track()})

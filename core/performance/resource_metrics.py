@@ -564,8 +564,13 @@ def _process_ownership_summary(engine: Any) -> dict[str, Any]:
                 "pid": worker.get("image_worker_pid"),
                 "rss_mb": worker.get("image_worker_rss_mb"),
             }
+            process_summary["image_prefetch_worker"] = {
+                "pid": worker.get("image_prefetch_worker_pid"),
+                "rss_mb": worker.get("image_prefetch_worker_rss_mb"),
+            }
         except Exception:
             process_summary["image_worker"] = {"available": False}
+            process_summary["image_prefetch_worker"] = {"available": False}
 
     usage_service = _safe_getattr(engine, "_usage_telemetry")
     latest_usage_getter = _safe_getattr(

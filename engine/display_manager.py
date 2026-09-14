@@ -198,6 +198,8 @@ class DisplayManager(QObject):
             ),
             reload_request=self._request_custom_layout_runtime_reload,
             visualizer_unit_transfer=self._transfer_quick_visualizer_unit,
+            live_config_commit=self._commit_quick_custom_layout_config_snapshot,
+            visualizer_presence_commit=self._commit_quick_visualizer_presence,
         )
         self._retiring_quick_units: dict[int, QuickDisplayUnit] = {}
         self._retire_manager_when_quick_complete = False
@@ -1417,6 +1419,51 @@ class DisplayManager(QObject):
             lambda _generation, idx=screen_index: self._on_quick_runtime_retired(idx)
         )
         self._quick_readiness_by_screen[screen_index] = runtime.scene_readiness
+
+    def _commit_quick_custom_layout_config_snapshot(
+        self, widgets: Mapping[str, object]
+    ) -> None:
+        """Advance retained widget-config truth after an in-generation Edit Save."""
+
+        if self._retired:
+            raise RuntimeError("cannot commit CUSTOM config into a retired manager")
+        if not isinstance(widgets, Mapping):
+            raise TypeError("CUSTOM live config commit requires a mapping")
+        self._widgets_config_snapshot = deepcopy(dict(widgets))
+
+    def _commit_quick_visualizer_presence(self, enabled: bool) -> bool:
+        """Reconcile the single Visualizer owner without replacing DisplayManager.
+
+        CUSTOM Edit disable is a normal retained-lifecycle retirement, just like
+        monitor failover/reclaim. Use the existing Visualizer lifecycle authority
+        so the controller/logical runtime/GL owner retires exactly once and stale
+        failover callbacks are fenced. Construction is intentionally not invented
+        here; callers that need a new owner use the existing admission path.
+        """
+
+        if self._retired:
+            return False
+        if bool(enabled):
+            return self._quick_visualizer_owner is not None
+        host = self._quick_visualizer_unit
+        owner = self._quick_visualizer_owner
+        if owner is None or host is None:
+            return True
+        from rendering.quick.visualizer_failover_lifecycle import (
+            retire_visualizer_owner,
+        )
+        from rendering.quick.visualizer_failover import (
+            get_visualizer_failover_state,
+        )
+
+        topology = _QuickVisualizerFailoverTopology(self, tuple(self.displays))
+        if not retire_visualizer_owner(topology, host):
+            return False
+        # Per-instance disable supersedes any pending CUSTOM monitor failover. A
+        # stale deadline must never recreate an owner after the explicit Edit Save.
+        get_visualizer_failover_state().clear_visualizer_failover()
+        self._refresh_all_quick_context_menus()
+        return self._quick_visualizer_owner is None
 
     def _request_custom_layout_runtime_reload(self, request_kind: str) -> None:
         """Publish one manager-identity-fenced runtime layout reload request."""

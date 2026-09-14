@@ -89,6 +89,21 @@ Forbidden:
 - catch-up replay;
 - GUI/Quick/GPU mutation from logical workers.
 
+### Speculative image derivative isolation
+
+The dedicated speculative image worker is an approved isolation boundary, not a second presentation owner. Preserve all of these together:
+
+- foreground requested-image work stays on the foreground image path; speculative work must never head-of-line block it;
+- derivative backlog/byte budgets and latest-useful/generation ownership stay parent-owned and bounded; admit at most one speculative application request to the child at a time;
+- generation invalidation must abandon/tombstone the correlation so late or shared-memory results cannot publish stale cache truth;
+- worker unavailable/failing means speculative warmup is skipped. **Do not silently fall back to the main-process compute pool**;
+- the worker may return detached image data/cache candidates only. It must not mutate Qt/Quick/GPU presentation state;
+- lower OS scheduling priority is best-effort isolation, never permission to reduce foreground cadence/reactivity or useful cache semantics.
+- speculative completion is owned by `ProcessSupervisor`, not by a generic ThreadManager executor slot: one persistent daemon listener may block on a worker response queue, but **never** one waiter/thread/timer per request;
+- while that listener is active it is the **single response-queue reader** for the worker. It must route heartbeat/control messages, deliver registered correlations, and buffer unmatched replies for existing synchronous waiters rather than racing `await_response()`/health drains;
+- abandonment and routing share one tombstone authority. Recheck tombstones after dequeue/before callback so a generation clear racing delivery still reclaims inline/shared-memory payloads and cannot publish stale cache truth;
+- worker stop/restart/shutdown must cancel registered callbacks so parent single-flight/cache ownership cannot remain wedged after child death; callbacks may complete detached cache candidates only and must never mutate Qt Quick/GPU state.
+
 ## 6. Startup / recreation
 
 Prepare deterministic current-generation work while hidden where legal.

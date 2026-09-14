@@ -336,6 +336,9 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
             "image_worker_pid": 101,
             "image_worker_rss_mb": 70.0,
             "image_worker_vms_mb": 140.0,
+            "image_prefetch_worker_pid": 202,
+            "image_prefetch_worker_rss_mb": 55.0,
+            "image_prefetch_worker_vms_mb": 110.0,
             "segments_created": 4,
             "segments_live": 0,
             "live_bytes": 0,
@@ -378,6 +381,9 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "qt_default_fbo=qt_owned_untracked" in sample
     assert "image_worker_pid=101" in sample
     assert "image_worker_rss_mb=70.0" in sample
+    assert "image_prefetch_worker_pid=202" in sample
+    assert "image_prefetch_worker_rss_mb=55.0" in sample
+    assert "image_prefetch_worker_vms_mb=110.0" in sample
     assert "shm_segments_created=4" in sample
     assert "shm_segments_live=0" in sample
     assert "shm_live_bytes=0" in sample

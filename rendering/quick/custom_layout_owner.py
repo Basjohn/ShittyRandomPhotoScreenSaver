@@ -42,6 +42,7 @@ from rendering.custom_layout_session import (
     CustomLayoutSessionItem,
     normalize_viewport_extent,
 )
+from rendering.quick.lifecycle_errors import RetainedRuntimeIncoherenceError
 from rendering.quick.custom_layout_hydration import (
     geometry_variant_for_presentation,
     resolve_quick_custom_entry,
@@ -123,12 +124,16 @@ class QuickCustomLayoutOwner:
         visualizer_provider: Callable[[], tuple[Any | None, Any | None]],
         reload_request: Callable[[str], None],
         visualizer_unit_transfer: Callable[[Any], bool] | None = None,
+        live_config_commit: Callable[[Mapping[str, object]], None] | None = None,
+        visualizer_presence_commit: Callable[[bool], bool] | None = None,
     ) -> None:
         self._settings_manager = settings_manager
         self._participants_provider = participants_provider
         self._visualizer_provider = visualizer_provider
         self._reload_request = reload_request
         self._visualizer_unit_transfer = visualizer_unit_transfer
+        self._live_config_commit = live_config_commit
+        self._visualizer_presence_commit = visualizer_presence_commit
         self._session: CustomLayoutSession | None = None
         self._coordinator: QuickCustomLayoutSceneCoordinator | None = None
         self._bindings: dict[str, _DisplayBinding] = {}
@@ -337,21 +342,39 @@ class QuickCustomLayoutOwner:
                 "[CUSTOM_LAYOUT] Save live-committed cross-display "
                 "transfer without generation reconciliation"
             )
-        promotion_error: Exception | None = None
+        promotion_error: RetainedRuntimeIncoherenceError | None = None
         if live_committing:
             try:
-                self._promote_live_geometry_commit()
-            except Exception as exc:
-                # Persistence has already committed. Never leave the shared Edit
-                # session half-alive because retained promotion discovered a dead
-                # or incoherent presentation edge; finish atomically and rebuild
-                # from the newly persisted geometry instead. Healthy live commits
-                # still remain entirely in-generation.
+                self._promote_live_geometry_commit(widgets)
+            except RetainedRuntimeIncoherenceError as exc:
+                # Persistence has already committed. A deliberately classified
+                # retained-owner/liveness failure may rebuild from that persisted
+                # state after the shared edit session is terminalized.
                 promotion_error = exc
-                logger.exception(
-                    "[CUSTOM_LAYOUT] Live geometry promotion failed after persistence; "
-                    "closing session and reconciling retained runtime"
+                logger.error(
+                    "[CUSTOM_LAYOUT] Live geometry promotion found retained-runtime "
+                    "incoherence; closing session and reconciling runtime: %s",
+                    exc,
                 )
+            except Exception:
+                # Do not turn programming defects (TypeError, AttributeError, bad
+                # call contracts, etc.) into a seemingly legitimate generation
+                # replacement. That exact anti-pattern previously hid the broken
+                # _promote_live_geometry_commit call signature and caused every
+                # healthy Edit Save to tear down. Terminalize the edit overlay,
+                # then surface the defect loudly to its caller.
+                cleanup_corruption = self._finish()
+                if cleanup_corruption:
+                    logger.error(
+                        "[CUSTOM_LAYOUT] Unexpected live-promotion defect also "
+                        "encountered cleanup corruption=%s",
+                        cleanup_corruption,
+                    )
+                logger.exception(
+                    "[CUSTOM_LAYOUT] Unexpected live geometry promotion defect; "
+                    "NOT converting programming error into runtime reconstruction"
+                )
+                raise
         else:
             logger.info(
                 "[CUSTOM_LAYOUT] Save retains generation reconciliation reason=%s",
@@ -1878,13 +1901,25 @@ class QuickCustomLayoutOwner:
             section["monitor"] = str(monitor_route or "ALL")
 
     def _live_commit_topology_reason(self) -> str | None:
-        """Return the explicit reason a Save must retain replacement semantics."""
+        """Return the explicit reason a Save must retain replacement semantics.
+
+        Disabling an already-retained *ordinary* widget is not generation
+        topology: the retained presenter and neutral service owner can retire that
+        exact family in place. New admissions, Visualizer presence changes, or a
+        disable combined with routing changes still use the fenced replacement
+        path because those require construction/owner transfer rather than simple
+        retirement.
+        """
 
         session = self._session
         if session is None:
             raise RuntimeError("CUSTOM live-commit admission requires a session")
         items = session.items()
-        if any(item.removed or not item.current_enabled or not item.baseline_enabled for item in items):
+        presence_changed = any(
+            item.removed or not item.current_enabled or not item.baseline_enabled
+            for item in items
+        )
+        if presence_changed and not self._presence_change_live_commit_is_coherent():
             return "family_presence_changed"
         for item in items:
             if item.current_display_identity != item.source_key.display_identity:
@@ -1892,6 +1927,82 @@ class QuickCustomLayoutOwner:
             if item.current_monitor_route != item.source_monitor_route:
                 return "monitor_route_changed"
         return None
+
+    def _presence_change_live_commit_is_coherent(self) -> bool:
+        """Return whether this Save can reconcile removals in-generation.
+
+        Edit-mode removal is a retirement edge, not generation topology. Ordinary
+        retained families retire through their binder/service owner; the single
+        Visualizer retires through the existing manager-owned Visualizer lifecycle
+        seam. New admissions remain outside this narrow path and may still require
+        an explicit construction/reconciliation owner.
+        """
+
+        session = self._session
+        if session is None:
+            return False
+        changed = False
+        for item in session.items():
+            presence_changed = (
+                item.removed
+                or not item.current_enabled
+                or not item.baseline_enabled
+            )
+            if not presence_changed:
+                # An unrelated retained item may have completed its own coherent
+                # display/route transfer in the same Edit transaction.  Presence
+                # retirement coherence is scoped to the family being retired; the
+                # transfer is validated independently by the normal topology pass.
+                continue
+            if item.current_display_identity != item.source_key.display_identity:
+                return False
+            if item.current_monitor_route != item.source_monitor_route:
+                return False
+            changed = True
+            # This retained-edit seam owns retirements only. A previously absent
+            # family needs its normal construction/admission authority instead.
+            if not item.baseline_enabled:
+                return False
+            if item.current_enabled and not item.removed:
+                return False
+            if item.model_identity == "spotify_visualizer":
+                if self._visualizer_presence_commit is None:
+                    return False
+        return changed
+
+    def _ordinary_disable_only_live_commit_is_coherent(self) -> bool:
+        """Return whether presence changes are retire-only ordinary families.
+
+        The runtime already owns exact mid-generation retirement for ordinary
+        retained families. Keep this deliberately narrower than generic topology
+        reconciliation: no new admissions, no Visualizer presence mutation, and
+        no simultaneous display/monitor-route changes.
+        """
+
+        session = self._session
+        if session is None:
+            return False
+        changed = False
+        for item in session.items():
+            if item.current_display_identity != item.source_key.display_identity:
+                return False
+            if item.current_monitor_route != item.source_monitor_route:
+                return False
+            presence_changed = (
+                item.removed
+                or not item.current_enabled
+                or not item.baseline_enabled
+            )
+            if not presence_changed:
+                continue
+            changed = True
+            if not item.baseline_enabled:
+                return False
+            if item.model_identity == "spotify_visualizer":
+                return False
+            if item.current_enabled and not item.removed:
+                return False
+        return changed
 
     def _cross_display_transfer_is_coherent(self) -> bool:
         """Validate exact moved item identity before committing its target owners.
@@ -1925,17 +2036,59 @@ class QuickCustomLayoutOwner:
                 return False
         return True
 
-    def _promote_live_geometry_commit(self) -> None:
-        """Promote all already-retained geometry before CUSTOM clears it."""
+    def _promote_live_geometry_commit(
+        self,
+        widgets: Mapping[str, object] | None = None,
+    ) -> None:
+        """Promote retained CUSTOM state before the edit overlay is cleared.
+
+        ``widgets`` is the just-persisted widget map.  When supplied, the
+        manager-owned retained configuration snapshot is advanced only after
+        every live geometry/presence mutation succeeded.  This keeps the
+        retained generation coherent without requiring a replacement.
+        """
 
         session = self._session
         if session is None:
-            raise RuntimeError("CUSTOM live geometry promotion requires a session")
+            raise RetainedRuntimeIncoherenceError("CUSTOM live geometry promotion requires a session")
         owner, visualizer_unit = self._visualizer_provider()
         for item in session.items():
+            if item.removed or not item.current_enabled:
+                if item.model_identity == "spotify_visualizer":
+                    reconcile = self._visualizer_presence_commit
+                    if reconcile is None or not bool(reconcile(False)):
+                        raise RetainedRuntimeIncoherenceError(
+                            "CUSTOM live Visualizer retirement was not confirmed"
+                        )
+                    logger.info(
+                        "[CUSTOM_LAYOUT] Save live-retired Visualizer owner "
+                        "without generation reconciliation"
+                    )
+                    continue
+                source = self._bindings.get(item.source_key.display_identity)
+                if source is None:
+                    raise RetainedRuntimeIncoherenceError(
+                        "CUSTOM live retirement has no source display binding: "
+                        f"{item.source_key.display_identity!r}"
+                    )
+                if not source.unit.presenter.retire_live_custom_layout_item(
+                    item.model_identity
+                ):
+                    raise RetainedRuntimeIncoherenceError(
+                        "CUSTOM live retirement lost retained family: "
+                        f"{item.model_identity!r}"
+                    )
+                logger.info(
+                    "[CUSTOM_LAYOUT] Save live-retired disabled ordinary family "
+                    "widget=%s display=%s without generation reconciliation",
+                    item.model_identity,
+                    item.source_key.display_identity,
+                )
+                continue
+
             binding = self._bindings.get(item.current_display_identity)
             if binding is None:
-                raise RuntimeError(
+                raise RetainedRuntimeIncoherenceError(
                     f"CUSTOM live geometry has no display binding: {item.current_display_identity!r}"
                 )
             rect = item.current_global_rect
@@ -1947,10 +2100,10 @@ class QuickCustomLayoutOwner:
             )
             if item.model_identity == "spotify_visualizer":
                 if owner is None or visualizer_unit is None:
-                    raise RuntimeError("CUSTOM live geometry has no visualizer owner")
+                    raise RetainedRuntimeIncoherenceError("CUSTOM live geometry has no visualizer owner")
                 extent = item.current_viewport_extent
                 if extent is None:
-                    raise RuntimeError("CUSTOM live visualizer geometry has no viewport extent")
+                    raise RetainedRuntimeIncoherenceError("CUSTOM live visualizer geometry has no viewport extent")
                 owner.commit_live_custom_layout(
                     local_rect=(local.x, local.y, local.width, local.height),
                     viewport_extent=extent,
@@ -1966,6 +2119,14 @@ class QuickCustomLayoutOwner:
                 local,
                 item.current_size_payload,
             )
+
+        if widgets is not None:
+            commit = self._live_config_commit
+            if commit is None:
+                raise RetainedRuntimeIncoherenceError(
+                    "CUSTOM live commit has no retained config snapshot owner"
+                )
+            commit(widgets)
 
     def _finish(self) -> tuple[str, ...]:
         """Close one shared CUSTOM session on every display, even if one is corrupt."""

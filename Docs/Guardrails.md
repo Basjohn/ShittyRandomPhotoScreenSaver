@@ -84,6 +84,24 @@ Stop/reassess when:
 - family port duplicates provider/controller/timer/cache/action authority;
 - migration casually redesigns working family interaction/visual behavior without product intent.
 
+## Evidence, validation and fallback guardrails
+
+**Work is to at most be marked `[~] AWAITING VALIDATION` until a log, the operator, or an extremely high-confidence test proves the required behavior.** Authored code, compilation, source inspection or a plausible mechanism is not `[x]` product closure by itself. If acceptance depends on physical Windows/Qt/GL/provider behavior, keep the item awaiting validation until that evidence exists.
+
+Prefer event-owned state and explicit lifecycle edges over polling, debounce timers, periodic probes or speculative safety fallbacks. Polling is a last resort only when the source genuinely exposes no usable event/notification contract; even then it must be low-cadence, bounded, observable, and documented as reconciliation rather than primary truth. Never add a silent fallback that can become the de-facto owner while logs continue to suggest the intended path is healthy. Any mechanism likely to increase `dt_max`, input latency, main-thread stalls, hidden wakeups, poison/stale ownership or cadence contention requires explicit evidence before admission.
+
+Programming defects are not reconciliation policy. A broad ``except Exception`` must never turn ``TypeError``, ``AttributeError``, bad call signatures, or other coding defects into an apparently legitimate teardown/rebuild/fallback. Expected stale/dead/incoherent-owner recovery must use an explicit classified exception/result owned by that seam. Unexpected defects must be surfaced loudly after any required terminal cleanup so they cannot silently train the runtime to depend on expensive recovery.
+
+Do not create a new generic `Expected_Behaviour.md` ledger by default. When a suspicious behavior is **proven expected**, record that fact at the nearest durable owner: the relevant historical-bug closeout, focused contract/guide, performance guardrail, or regression test. This prevents future agents from reopening already-cleared smells without adding another broad document that will drift.
+
+### Qt Quick presentation-clock guardrail
+
+Do not infer a Qt Quick surface/pacing policy from documentation or pre-Quick history alone. SRPSS owns multiple top-level Quick windows and may run mixed refresh rates; a 2026-09-14 installed two-display A/B **rejected forcing ``swapInterval=1``** because pacing, FPS/headroom and interaction smoothness became materially worse. The production Quick bootstrap therefore retains the known-good release-era ``swapInterval=0`` policy until a better architecture is proven on installed multi-display hardware. Never reintroduce VSync=1 as a generic "Quick-native" cleanup without that evidence.
+
+Likewise, do not tune a GUI ``QTimer`` as a bandage. Qt Quick frame-pacing work must distinguish **logical work cadence**, **scene invalidation/update demand**, and **physical presentation**, and must be A/B tested against the known-good 5.0.0/5.0.1 Quick baseline. Never reduce Visualizer logical freshness/reactivity to make a display-pacing graph look cleaner. Any future removal/replacement of ``QuickFramePacer`` is a separate architecture change and stays ``[~] AWAITING VALIDATION`` until installed evidence proves equivalent transition/widget-animation liveness and improved frame spacing across single- and mixed-refresh multi-display cases.
+
+Qt Quick hot paths are scarce budget: never add dormant per-frame Python/logging/telemetry on ``frameSwapped``/sync/render edges, hidden ``Repeater`` delegate forests, or always-live effect/layer work without measured need. Keep deep render-loop timing behind an explicit diagnostic sidecar with zero normal-runtime cost. Judge smoothness by frame-spacing tails as well as average FPS; CUSTOM Edit FPS is a different demand regime, not a steady-runtime target.
+
 ## Visualizer preset / technical-settings authority guardrail
 
 Technical settings are ordinary Visualizer settings with shared usefulness, **not** a higher-priority authority above presets.

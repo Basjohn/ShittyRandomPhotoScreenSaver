@@ -263,6 +263,11 @@ class _SharedMediaRuntimeOwner:
 
     _PLAYBACK_CONFIRMATION_REFRESH_DELAY_MS = 300
     _PLAYBACK_CONFIRMATION_TIMEOUT_SEC = 3.0
+    # One physical QML tap was observed to admit two play/pause semantic edges
+    # back-to-back after the first provider command completed quickly. Bound the
+    # duplicate at the shared semantic owner, not with a QML timer/poll: a second
+    # play/pause edge inside this tiny input-burst window is the same gesture.
+    _PLAY_PAUSE_DUPLICATE_EDGE_WINDOW_SEC = 0.20
     # Reconciliation / liveness watchdog interval (deep-idle scale, NOT a truth
     # cadence). Native GSMTC events are the normal truth path; this only catches
     # dropped events / provider liveness and logs [MEDIA_EVENT][MISSED_EVENT].
@@ -342,6 +347,7 @@ class _SharedMediaRuntimeOwner:
         self._expected_playback_epoch: int | None = None
         self._playback_confirmation_deadline_monotonic = 0.0
         self._playback_confirmation_token = 0
+        self._last_play_pause_edge_monotonic = float("-inf")
 
         if self._controller is not None:
             self._configure_controller(self._controller)
@@ -1303,6 +1309,18 @@ class _SharedMediaRuntimeOwner:
     def play_pause(self, *, execute: bool = True) -> bool:
         if self._retired or not self._running:
             return False
+        now = time.monotonic()
+        if (
+            execute
+            and now - self._last_play_pause_edge_monotonic
+            < self._PLAY_PAUSE_DUPLICATE_EDGE_WINDOW_SEC
+        ):
+            logger.info(
+                "[MEDIA_INPUT] Suppressed duplicate play/pause semantic edge "
+                "inside %.0f ms input burst",
+                self._PLAY_PAUSE_DUPLICATE_EDGE_WINDOW_SEC * 1000.0,
+            )
+            return True
         info = self._current_info
         next_state = None
         if info is not None and info.state in (
@@ -1322,6 +1340,9 @@ class _SharedMediaRuntimeOwner:
             except Exception:
                 logger.debug("[MEDIA_RUNTIME] play_pause failed", exc_info=True)
                 return False
+            # Arm only after provider admission succeeds. A rejected first edge
+            # must never suppress the user's immediate retry.
+            self._last_play_pause_edge_monotonic = now
         if info is not None and next_state is not None:
             optimistic = replace(info, state=next_state)
             self._begin_playback_confirmation(next_state)

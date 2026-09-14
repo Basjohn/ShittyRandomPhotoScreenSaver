@@ -37,6 +37,7 @@ from rendering.widget_descriptors import (
     get_widget_runtime_descriptor,
 )
 from rendering.quick.custom_layout_size import is_uniform_transform_resize_mode
+from rendering.quick.lifecycle_errors import RetainedRuntimeIncoherenceError
 from rendering.widget_stacking import (
     DisplayStackObstacle,
     DisplayStackParticipant,
@@ -391,19 +392,19 @@ class QuickDisplayPresenter:
         Cancel before Save never enters this path.
         """
         if self._retired or target._retired or self._binder is None or target._binder is None:
-            raise RuntimeError("ordinary transfer requires two live presenters")
+            raise RetainedRuntimeIncoherenceError("ordinary transfer requires two live presenters")
         family = self.presentation_for_widget_id(widget_id)
         target_host = target._runtime.scene_controller.ordinary_widget_host
         retained = target_host.presentation_for_model_identity(widget_id)
         binding = next((bound for key, bound in self._geometry_bindings if key == widget_id), None)
         if family is None or binding is None or widget_id not in self._geometry_sinks:
-            raise RuntimeError(f"ordinary transfer source is incomplete: {widget_id}")
+            raise RetainedRuntimeIncoherenceError(f"ordinary transfer source is incomplete: {widget_id}")
         if retained is None or retained.item is not family.item:
-            raise RuntimeError(f"ordinary transfer lost exact retained item: {widget_id}")
+            raise RetainedRuntimeIncoherenceError(f"ordinary transfer lost exact retained item: {widget_id}")
         if target.presentation_for_widget_id(widget_id) is not None or widget_id in target._geometry_sinks:
-            raise RuntimeError(f"ordinary transfer target already owns binding: {widget_id}")
+            raise RetainedRuntimeIncoherenceError(f"ordinary transfer target already owns binding: {widget_id}")
         if target._display_bounds is None:
-            raise RuntimeError("ordinary transfer target lacks bounds")
+            raise RetainedRuntimeIncoherenceError("ordinary transfer target lacks bounds")
         self._binder.transfer_presentation_to(widget_id, target._binder)
         self._geometry_bindings.remove((widget_id, binding))
         target._geometry_bindings.append((widget_id, binding))
@@ -428,6 +429,54 @@ class QuickDisplayPresenter:
         self._last_stack_inputs = target._last_stack_inputs = None
         self._last_stack_result = target._last_stack_result = None
 
+    def retire_live_custom_layout_item(self, widget_id: str) -> bool:
+        """Retire one disabled ordinary CUSTOM item without replacing runtime.
+
+        Persistence has already made the widget absent. Remove the retained
+        presentation, neutral service ownership and presenter geometry records
+        from this live generation atomically. Any ownership mismatch fails closed
+        to the caller, which can request the existing full reconciliation path.
+        """
+
+        if self._retired or self._binder is None:
+            raise RetainedRuntimeIncoherenceError("ordinary live retirement requires a live presenter")
+        identity = str(widget_id or "").strip()
+        if not identity:
+            raise ValueError("widget_id must not be empty")
+        if self.presentation_for_widget_id(identity) is None:
+            return False
+        binding = next(
+            (bound for bound_id, bound in self._geometry_bindings if bound_id == identity),
+            None,
+        )
+        if binding is None:
+            raise RetainedRuntimeIncoherenceError(
+                f"ordinary live retirement lost geometry binding: {identity}"
+            )
+        if not self._binder.retire_widget(identity):
+            return False
+
+        # Disconnect the preferred-size QML signal and sever the binding's Python
+        # callback/sink closures before dropping presenter ownership.  Merely
+        # removing this binding from _geometry_bindings leaves a self-cycle
+        # (preferred-size callback -> binding) whose geometry sinks capture this
+        # presenter; the lifecycle barrier intentionally does not invoke cyclic GC.
+        binding.retire()
+        self._geometry_bindings = [
+            (bound_id, bound)
+            for bound_id, bound in self._geometry_bindings
+            if bound_id != identity
+        ]
+        self._geometry_sinks.pop(identity, None)
+        self._base_geometries.pop(identity, None)
+        self._custom_widget_ids.discard(identity)
+        self._stack_order = [
+            bound_id for bound_id in self._stack_order if bound_id != identity
+        ]
+        self._last_stack_inputs = None
+        self._last_stack_result = None
+        return True
+
     def commit_live_custom_layout_item(
         self,
         widget_id: str,
@@ -443,7 +492,7 @@ class QuickDisplayPresenter:
         """
 
         if self._retired:
-            raise RuntimeError("cannot commit CUSTOM layout on a retired presenter")
+            raise RetainedRuntimeIncoherenceError("cannot commit CUSTOM layout on a retired presenter")
         identity = str(widget_id or "").strip()
         binding = next(
             (
@@ -454,7 +503,7 @@ class QuickDisplayPresenter:
             None,
         )
         if binding is None:
-            raise RuntimeError(f"CUSTOM layout has no retained binding: {identity!r}")
+            raise RetainedRuntimeIncoherenceError(f"CUSTOM layout has no retained binding: {identity!r}")
         retained = self._runtime.scene_controller.ordinary_widget_host.presentation_for_model_identity(
             identity
         )

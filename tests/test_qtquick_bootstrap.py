@@ -103,6 +103,19 @@ print(json.dumps({
     }
 
 
+
+def test_quick_bootstrap_keeps_installed_release_era_uncapped_policy():
+    source = (ROOT / "rendering" / "quick" / "bootstrap.py").read_text(encoding="utf-8")
+    generic = (ROOT / "rendering" / "gl_format.py").read_text(encoding="utf-8")
+
+    assert "QUICK_SWAP_INTERVAL = 0" in source
+    assert "surface_format.setSwapInterval(QUICK_SWAP_INTERVAL)" in source
+    # Installed mixed-refresh validation rejected forcing interval 1. Quick and
+    # the generic helper currently agree on interval 0; future presentation
+    # changes require a new installed A/B rather than a documentation-only swap.
+    assert "swap_interval = 0" in generic
+
+
 def test_quick_package_contains_no_prohibited_presenter_or_fallback():
     package_source = "\n".join(
         path.read_text(encoding="utf-8")

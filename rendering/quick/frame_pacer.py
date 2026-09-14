@@ -257,6 +257,7 @@ class QuickFramePacer(QObject):
                 for demand in (
                     QuickFrameDemand.TRANSITION,
                     QuickFrameDemand.VISUALIZER,
+                    QuickFrameDemand.WIDGET_ANIMATION,
                 )
                 if self._demands & demand
             ],

@@ -8,6 +8,9 @@ Tests cover:
 - Shared memory header serialization
 - Worker state transitions
 """
+import queue
+import threading
+
 import pytest
 
 from core.process.types import (
@@ -29,6 +32,7 @@ class TestWorkerTypes:
     def test_worker_types_exist(self):
         """Verify all expected worker types are defined."""
         assert WorkerType.IMAGE.value == "image"
+        assert WorkerType.IMAGE_PREFETCH.value == "image_prefetch"
         assert WorkerType.RSS.value == "rss"
         # WorkerType.TRANSITION was retired: transitions are GPU/Quick-owned and
         # no longer run in a supervised worker process.
@@ -562,10 +566,164 @@ class TestProcessSupervisor:
 
         supervisor.shutdown()
 
+    def test_response_listener_dispatches_callback_and_buffers_unmatched(self):
+        supervisor = ProcessSupervisor()
+        responses = queue.Queue()
+        supervisor._response_queues[WorkerType.IMAGE_PREFETCH] = responses
+        supervisor._health[WorkerType.IMAGE_PREFETCH].state = WorkerState.RUNNING
+        supervisor._health[WorkerType.IMAGE_PREFETCH].missed_heartbeats = 2
+
+        delivered = []
+        done = threading.Event()
+
+        def _on_response(response):
+            delivered.append(response)
+            done.set()
+
+        assert supervisor.register_response_callback(
+            WorkerType.IMAGE_PREFETCH,
+            "wanted",
+            _on_response,
+        ) is True
+
+        responses.put(
+            WorkerResponse(
+                msg_type=MessageType.HEARTBEAT_ACK,
+                seq_no=1,
+                correlation_id="heartbeat",
+                success=True,
+            ).to_dict()
+        )
+        responses.put(
+            WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=2,
+                correlation_id="other",
+                success=True,
+                payload={"value": "other"},
+            ).to_dict()
+        )
+        responses.put(
+            WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=3,
+                correlation_id="wanted",
+                success=True,
+                payload={"value": "wanted"},
+            ).to_dict()
+        )
+
+        assert done.wait(1.0) is True
+        assert len(delivered) == 1
+        assert delivered[0] is not None
+        assert delivered[0].correlation_id == "wanted"
+        assert supervisor.get_health(WorkerType.IMAGE_PREFETCH).missed_heartbeats == 0
+
+        later = supervisor.poll_responses(WorkerType.IMAGE_PREFETCH, max_count=5)
+        assert [item.correlation_id for item in later] == ["other"]
+        diag = supervisor.get_detailed_health(WorkerType.IMAGE_PREFETCH)
+        assert diag["response_listener_active"] is True
+        assert diag["response_callbacks_pending"] == 0
+
+        supervisor.shutdown()
+
+    def test_response_listener_abandon_removes_callback_and_drops_late_reply(self):
+        supervisor = ProcessSupervisor()
+        responses = queue.Queue()
+        supervisor._response_queues[WorkerType.IMAGE_PREFETCH] = responses
+
+        delivered = []
+        assert supervisor.register_response_callback(
+            WorkerType.IMAGE_PREFETCH,
+            "cancel-me",
+            delivered.append,
+        ) is True
+        assert supervisor.abandon_response(
+            WorkerType.IMAGE_PREFETCH,
+            "cancel-me",
+            reason="generation_cancelled",
+        ) == 0
+
+        responses.put(
+            WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=1,
+                correlation_id="cancel-me",
+                success=True,
+                payload={"value": "late"},
+            ).to_dict()
+        )
+
+        # The listener must consume the late response without resurrecting the
+        # cancelled callback. A second buffered response proves it advanced.
+        buffered_done = threading.Event()
+        assert supervisor.register_response_callback(
+            WorkerType.IMAGE_PREFETCH,
+            "after",
+            lambda response: buffered_done.set(),
+        ) is True
+        responses.put(
+            WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=2,
+                correlation_id="after",
+                success=True,
+            ).to_dict()
+        )
+        assert buffered_done.wait(1.0) is True
+        assert delivered == []
+        assert "cancel-me" not in supervisor._abandoned_correlations[
+            WorkerType.IMAGE_PREFETCH
+        ]
+
+        supervisor.shutdown()
+
+    def test_response_listener_shutdown_cancels_pending_callback_once(self):
+        supervisor = ProcessSupervisor()
+        supervisor._response_queues[WorkerType.IMAGE_PREFETCH] = queue.Queue()
+
+        delivered = []
+        cancelled = threading.Event()
+
+        def _on_response(response):
+            delivered.append(response)
+            cancelled.set()
+
+        assert supervisor.register_response_callback(
+            WorkerType.IMAGE_PREFETCH,
+            "pending",
+            _on_response,
+        ) is True
+
+        supervisor.shutdown()
+
+        assert cancelled.wait(1.0) is True
+        assert delivered == [None]
+        assert not supervisor._response_callbacks[WorkerType.IMAGE_PREFETCH]
+
 
 class TestWorkerContracts:
     """Tests for worker contract validation."""
     
+    def test_speculative_image_worker_contract(self):
+        """Speculative image requests use a distinct worker identity."""
+        msg = WorkerMessage(
+            msg_type=MessageType.IMAGE_PRESCALE,
+            seq_no=1,
+            correlation_id="prefetch-001",
+            payload={
+                "path": "/path/to/image.jpg",
+                "target_width": 1920,
+                "target_height": 1080,
+                "mode": "fill",
+                "use_lanczos": False,
+                "sharpen": False,
+            },
+            worker_type=WorkerType.IMAGE_PREFETCH,
+        )
+        assert msg.validate_size() is True
+        assert msg.worker_type == WorkerType.IMAGE_PREFETCH
+
     def test_image_worker_contract(self):
         """Test ImageWorker message contract."""
         # Valid request

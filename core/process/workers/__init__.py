@@ -5,13 +5,20 @@ Each worker runs in a separate process and communicates via queues.
 Workers handle heavy computation without blocking the UI thread.
 """
 from .base import BaseWorker
-from .image_worker import ImageWorker, image_worker_main
+from .image_worker import (
+    ImageWorker,
+    SpeculativeImageWorker,
+    image_worker_main,
+    speculative_image_worker_main,
+)
 from .rss_worker import RSSWorker, rss_worker_main
 
 __all__ = [
     "BaseWorker",
     "ImageWorker",
+    "SpeculativeImageWorker",
     "image_worker_main",
+    "speculative_image_worker_main",
     "RSSWorker",
     "rss_worker_main",
 ]

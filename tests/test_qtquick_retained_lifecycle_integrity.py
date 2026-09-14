@@ -13,11 +13,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from PySide6.QtCore import QRect
 
 from engine.display_manager import DisplayManager
 from rendering.custom_layout_session import CustomLayoutSession
 from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner, _DisplayBinding
+from rendering.quick.lifecycle_errors import RetainedRuntimeIncoherenceError
 from rendering.quick.scene_controller import QuickSceneController
 from rendering.quick.widgets import host as host_module
 from rendering.quick.widgets.host import OrdinaryWidgetPresentationHost, RetainedOverlayWidget
@@ -147,7 +149,7 @@ def test_healthy_geometry_save_stays_live_and_never_requests_reconstruction() ->
     owner = _owner(events=events)
     _arm_owner(owner)
     owner._live_commit_topology_reason = lambda: None
-    owner._promote_live_geometry_commit = lambda: events.append("promote")
+    owner._promote_live_geometry_commit = lambda _widgets=None: events.append("promote")
     owner._finish = lambda: events.append("finish") or ()
 
     assert owner.save() is True
@@ -160,7 +162,7 @@ def test_coherent_cross_display_visualizer_save_stays_live_without_teardown_relo
     _arm_owner(owner)
     owner._live_commit_topology_reason = lambda: "display_transfer"
     owner._cross_display_transfer_is_coherent = lambda: True
-    owner._promote_live_geometry_commit = lambda: events.append("promote")
+    owner._promote_live_geometry_commit = lambda _widgets=None: events.append("promote")
     owner._finish = lambda: events.append("finish") or ()
 
     assert owner.save() is True
@@ -189,9 +191,9 @@ def test_live_promotion_failure_finishes_shared_session_before_one_reconstructio
     _arm_owner(owner)
     owner._live_commit_topology_reason = lambda: None
 
-    def _broken_promote() -> None:
+    def _broken_promote(_widgets=None) -> None:
         events.append("promote")
-        raise RuntimeError("dead retained root")
+        raise RetainedRuntimeIncoherenceError("dead retained root")
 
     owner._promote_live_geometry_commit = _broken_promote
     owner._finish = lambda: events.append("finish") or ()
@@ -202,6 +204,32 @@ def test_live_promotion_failure_finishes_shared_session_before_one_reconstructio
         "finish",
         ("reload", "save_corrupt_retained_runtime"),
     ]
+
+
+def test_unexpected_live_promotion_programming_error_is_not_rebuild_policy() -> None:
+    """A programming bug must be loud, not silently relabelled as teardown policy.
+
+    This guards the exact 2026-09-14 failure where a call-signature TypeError was
+    caught by the broad reconciliation fallback and made every healthy Edit Save
+    rebuild the complete Quick generation.
+    """
+
+    events: list[object] = []
+    owner = _owner(events=events)
+    _arm_owner(owner)
+    owner._live_commit_topology_reason = lambda: None
+
+    def _broken_promote(_widgets=None) -> None:
+        events.append("promote")
+        raise TypeError("programming contract mismatch")
+
+    owner._promote_live_geometry_commit = _broken_promote
+    owner._finish = lambda: events.append("finish") or ()
+
+    with pytest.raises(TypeError, match="programming contract mismatch"):
+        owner.save()
+
+    assert events == ["promote", "finish"]
 
 
 def test_cancel_projection_failure_finishes_shared_session_before_one_reconstruction() -> None:
