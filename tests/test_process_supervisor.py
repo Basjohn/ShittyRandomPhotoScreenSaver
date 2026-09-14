@@ -30,7 +30,8 @@ class TestWorkerTypes:
         """Verify all expected worker types are defined."""
         assert WorkerType.IMAGE.value == "image"
         assert WorkerType.RSS.value == "rss"
-        assert WorkerType.TRANSITION.value == "transition"
+        # WorkerType.TRANSITION was retired: transitions are GPU/Quick-owned and
+        # no longer run in a supervised worker process.
     
     def test_worker_types_unique(self):
         """Verify all worker type values are unique."""
@@ -65,7 +66,7 @@ class TestMessageType:
         """Verify worker-specific message types exist."""
         assert MessageType.IMAGE_DECODE.value == "image_decode"
         assert MessageType.RSS_FETCH.value == "rss_fetch"
-        assert MessageType.TRANSITION_PRECOMPUTE.value == "transition_precompute"
+        # MessageType.TRANSITION_PRECOMPUTE was retired with the transition worker.
 
 
 class TestWorkerMessage:
@@ -305,7 +306,7 @@ class TestHealthStatus:
     def test_restart_backoff(self):
         """Test exponential backoff calculation."""
         health = HealthStatus(
-            worker_type=WorkerType.TRANSITION,
+            worker_type=WorkerType.IMAGE,
             state=WorkerState.ERROR,
         )
         
@@ -600,22 +601,9 @@ class TestWorkerContracts:
         assert "feeds" in msg.payload
         assert "max_items" in msg.payload
     
-    def test_transition_worker_contract(self):
-        """Test TransitionPrepWorker message contract."""
-        msg = WorkerMessage(
-            msg_type=MessageType.TRANSITION_PRECOMPUTE,
-            seq_no=1,
-            correlation_id="trans-001",
-            payload={
-                "transition_type": "Diffuse",
-                "params": {"block_size": 16, "shape": "Rectangle"},
-                "duration_ms": 2000,
-                "direction": "LEFT",
-            },
-            worker_type=WorkerType.TRANSITION,
-        )
-        assert "transition_type" in msg.payload
-        assert "params" in msg.payload
+    # Removed test_transition_worker_contract: the TransitionPrepWorker and its
+    # MessageType.TRANSITION_PRECOMPUTE / WorkerType.TRANSITION were retired when
+    # transitions became GPU/Quick-owned. No supervised transition worker exists.
 
 
 if __name__ == "__main__":
