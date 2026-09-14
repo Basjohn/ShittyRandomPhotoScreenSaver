@@ -34,26 +34,51 @@ class _Label:
         self.text = str(value)
 
 
-class _CollectTab:
+def _canonical_widget_default(section, key):
+    from core.settings.default_contract import require_canonical_default
+    return require_canonical_default(f"widgets.{section}.{key}")
+
+
+class _CanonicalDefaultsMixin:
+    """Mirror the production settings-binding canonical default helpers."""
+
+    def _widget_default(self, section, key):
+        return _canonical_widget_default(section, key)
+
+    def _default_int(self, section, key):
+        return int(self._widget_default(section, key))
+
+    def _default_float(self, section, key):
+        return float(self._widget_default(section, key))
+
+    def _default_bool(self, section, key):
+        return bool(self._widget_default(section, key))
+
+    def _config_bool(self, section, config, key):
+        default = self._default_bool(section, key)
+        raw = config.get(key, default) if isinstance(config, dict) else default
+        return bool(raw)
+
+    def _config_float(self, section, config, key):
+        default = self._default_float(section, key)
+        raw = config.get(key, default) if isinstance(config, dict) else default
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return default
+
+
+class _CollectTab(_CanonicalDefaultsMixin):
     def __init__(self):
         self._sine_line4_color = QColor(0, 255, 255, 230)
         self._sine_line4_glow_color = QColor(0, 255, 255, 180)
         self.sine_line4_shift = _Slider(25)
 
 
-class _LoadTab:
+class _LoadTab(_CanonicalDefaultsMixin):
     def __init__(self):
         self.sine_line4_shift = _Slider()
         self.sine_line4_shift_label = _Label()
-
-    def _config_float(self, _section, config, key, default):
-        return float(config.get(key, default))
-
-    def _config_bool(self, _section, config, key, default):
-        return bool(config.get(key, default))
-
-    def _default_float(self, _section, _key, default):
-        return float(default)
 
 
 def test_line4_collects_current_colors_and_normalized_shift():
