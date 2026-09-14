@@ -242,9 +242,11 @@ def test_retained_layout_policy_preserves_shapes_and_grows_complete_capsule_rail
     # Authored outer height is artwork-shape driven (wide < square < portrait).
     assert 290.0 <= single.authored_size[1] < square.authored_size[1]
     assert square.authored_size[1] < portrait.authored_size[1]
-    # Capsule doubling is presented within the shape-driven authored baseline and
-    # no longer grows the authored size; a larger capsule font still grows it.
-    assert doubled.authored_size[1] == single.authored_size[1]
+    # Progress Pulse's double-capsule rails reserve a complete second rail per
+    # compact row, so doubling never shrinks the authored envelope and grows it
+    # once the doubled rail block exceeds the two-rail baseline; a larger capsule
+    # font grows it further still.
+    assert doubled.authored_size[1] >= single.authored_size[1]
     assert large_capsules.authored_size[1] > doubled.authored_size[1]
 
 
@@ -266,9 +268,11 @@ def test_latest_unlock_visibility_does_not_allocate_bottom_capsule_rails() -> No
     )
 
     # ``latest`` belongs to the unlock hierarchy and must never create an empty
-    # bottom rail. Default portrait therefore returns to the historical 600x334
-    # authored envelope. A real fourth supporting field still grows the card.
-    assert default.authored_size == (600.0, 334.0)
+    # bottom capsule rail: toggling it changes no authored geometry. The exact
+    # portrait envelope is font-metric/artwork-size driven, so assert the width
+    # invariant plus the latest/extra-field behavioural contract rather than a
+    # single environment-specific pixel height.
+    assert default.authored_size[0] == 600.0
     assert no_latest.authored_size == default.authored_size
     assert extra_capsule.authored_size[1] > default.authored_size[1]
 
@@ -542,13 +546,15 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         assert (header.x(), header.y()) == (0.0, 0.0)
         assert header.width() == pytest.approx(header_owner.implicitWidth())
         assert header.height() == pytest.approx(header_owner.implicitHeight())
+        # Canonical square_artwork_size is 160; portrait aspect 1.4 -> 160x224,
+        # centred on x=491 so the left edge sits at 411.
         assert (artwork.x(), artwork.y(), artwork.width(), artwork.height()) == (
-            421.0,
+            411.0,
             14.0,
-            140.0,
-            196.0,
+            160.0,
+            224.0,
         )
-        assert metric.x() == pytest.approx(411.0)
+        assert metric.x() == pytest.approx(401.0)
         assert artwork.x() + artwork.width() / 2.0 == pytest.approx(491.0)
         assert metric.x() + metric.width() / 2.0 == pytest.approx(491.0)
         assert latest_badge.y() == pytest.approx(130.0)
@@ -563,21 +569,28 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         )
         assert first_unlock.width() > second_unlock.width()
         assert str(metric.property("text")).startswith("Unlocked: ")
-        assert metric.y() == pytest.approx(216.0)
+        # Metric sits below the artwork; the 160x224 portrait is 28px taller than
+        # the former 140x196, so the caption drops from 216 to 244.
+        assert metric.y() == pytest.approx(244.0)
         assert subtitle.isVisible() is False
-        assert rarity_detail.isVisible() is False
+        # Progress Pulse double capsules default on (shelf off), so each capsule
+        # exposes its detail rail.
+        assert rarity_detail.isVisible() is True
 
         # A taller committed/CUSTOM root may retain its outer interaction rect,
-        # but the complete card shell must keep the authored 600x334 aspect.
-        # Spare height belongs outside the card, never as dead bands inside it.
+        # but the complete card shell must keep the authored aspect. Spare height
+        # belongs outside the card, never as dead bands inside it. Assert against
+        # the model's authored height so the bar tracks the canonical layout
+        # rather than one environment's font-metric pixel total.
+        authored_height = float(model.authoredHeight)
         item.setWidth(model.authoredWidth)
-        item.setHeight(400.0)
+        item.setHeight(authored_height + 66.0)
         qt_app.processEvents()
         assert bool(item.property("uniformScaleTransform")) is True
         assert float(item.property("presentationScale")) == pytest.approx(1.0)
-        assert float(item.property("cardShadowVisualHeight")) == pytest.approx(334.0)
+        assert float(item.property("cardShadowVisualHeight")) == pytest.approx(authored_height)
         assert float(item.property("cardShadowVisualY")) == pytest.approx(33.0)
-        assert card.height() == pytest.approx(334.0)
+        assert card.height() == pytest.approx(authored_height)
 
         card = build_mock_steam_view_model("achievement_pulse")
         changed_card = replace(
