@@ -123,6 +123,9 @@ def worker(qt_app, np_module, monkeypatch):
     buffer = TripleBuffer()
     instance = SpotifyVisualizerAudioWorker(16, buffer)
     instance._activation_id = 7
+    # start() fail-closes unless the block size has been resolved (deliberate
+    # unresolved-config guard); resolve it as the runtime owner would.
+    instance.set_audio_block_size(1024)
     instance.start()
     assert backends, "the worker did not create a capture backend"
     yield instance, backends[-1], buffer
