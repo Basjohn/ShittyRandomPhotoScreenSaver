@@ -818,7 +818,9 @@ class UsageTelemetryService:
                 "gl_renderbuffer_resources=%s gl_renderbuffer_bytes=%s "
                 "gl_pbo_resources=%s gl_pbo_bytes=%s qt_default_fbo=%s "
                 "image_worker_pid=%s image_worker_rss_mb=%s "
-                "image_worker_vms_mb=%s shm_segments_created=%s "
+                "image_worker_vms_mb=%s "
+                "image_prefetch_worker_pid=%s image_prefetch_worker_rss_mb=%s "
+                "image_prefetch_worker_vms_mb=%s shm_segments_created=%s "
                 "shm_segments_live=%s shm_live_bytes=%s "
                 "shm_segments_consumed=%s shm_segments_reclaimed_late=%s "
                 "shm_unlink_failures=%s "
@@ -890,6 +892,9 @@ class UsageTelemetryService:
                 _fmt(resources.get("image_worker_pid")),
                 _fmt(resources.get("image_worker_rss_mb")),
                 _fmt(resources.get("image_worker_vms_mb")),
+                _fmt(resources.get("image_prefetch_worker_pid")),
+                _fmt(resources.get("image_prefetch_worker_rss_mb")),
+                _fmt(resources.get("image_prefetch_worker_vms_mb")),
                 _fmt(resources.get("segments_created")),
                 _fmt(resources.get("segments_live")),
                 _fmt(resources.get("live_bytes")),

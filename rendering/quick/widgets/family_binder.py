@@ -207,6 +207,40 @@ class OrdinaryFamilyPresentationBinder:
         target._bound.append(presentation)
         target._bound_widget_ids.append(widget_id)
 
+    def retire_widget(self, widget_id: str) -> bool:
+        """Retire one owned ordinary presentation and its neutral services.
+
+        This is the mid-generation counterpart to ``retire_all``. It exists for
+        retained CUSTOM disable commits: removing one ordinary card must not
+        require destroying the display/runtime generation. Family-specific
+        multi-service ownership stays in ``widget_runtime_services``.
+        """
+
+        if self._retired:
+            raise RuntimeError("cannot retire a widget from a retired family binder")
+        identity = str(widget_id or "").strip()
+        if identity not in self._bound_widget_ids:
+            return False
+        index = self._bound_widget_ids.index(identity)
+        presentation = self._bound.pop(index)
+        self._bound_widget_ids.pop(index)
+
+        retired = False
+        try:
+            retired = bool(presentation.retire())
+        finally:
+            from rendering.widget_runtime_services import (
+                get_runtime_service_ids_for_presentation,
+            )
+
+            for service_id in get_runtime_service_ids_for_presentation(identity):
+                self._runtime_manager.retire_widget_service(service_id)
+        if not retired:
+            raise RuntimeError(
+                f"retained family refused mid-generation retirement: {identity}"
+            )
+        return True
+
     def bind(self, widgets_config: Mapping[str, object] | None) -> tuple[str, ...]:
         """Build every admitted family instance once for this display generation.
 

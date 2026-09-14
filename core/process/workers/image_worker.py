@@ -497,32 +497,76 @@ class ImageWorker(BaseWorker):
                 )
 
 
-def image_worker_main(request_queue: Queue, response_queue: Queue) -> None:
-    """Entry point for image worker process."""
+class SpeculativeImageWorker(ImageWorker):
+    """Dedicated low-criticality image worker for speculative derivatives.
+
+    It intentionally shares the proven decode/prescale implementation with the
+    foreground ImageWorker while owning a distinct process, queue, health state,
+    and log identity.  Foreground image requests are never routed here.
+    """
+
+    @property
+    def worker_type(self) -> WorkerType:
+        return WorkerType.IMAGE_PREFETCH
+
+
+def _run_image_worker(
+    worker_cls,
+    request_queue: Queue,
+    response_queue: Queue,
+    *,
+    label: str,
+) -> None:
+    """Run one image-worker role with a role-specific process identity."""
     import sys
     import traceback
-    
-    sys.stderr.write("=== IMAGE Worker: Process started ===\n")
+
+    sys.stderr.write(f"=== {label} Worker: Process started ===\n")
     sys.stderr.flush()
-    
+
     try:
         if not PIL_AVAILABLE:
-            sys.stderr.write("IMAGE Worker FATAL: PIL/Pillow not available\n")
+            sys.stderr.write(f"{label} Worker FATAL: PIL/Pillow not available\n")
             sys.stderr.flush()
-            raise RuntimeError("PIL/Pillow is required for ImageWorker")
-        
-        sys.stderr.write("IMAGE Worker: Creating worker instance...\n")
+            raise RuntimeError("PIL/Pillow is required for image workers")
+
+        sys.stderr.write(f"{label} Worker: Creating worker instance...\n")
         sys.stderr.flush()
-        worker = ImageWorker(request_queue, response_queue)
-        
-        sys.stderr.write("IMAGE Worker: Starting main loop...\n")
+        worker = worker_cls(request_queue, response_queue)
+
+        sys.stderr.write(f"{label} Worker: Starting main loop...\n")
         sys.stderr.flush()
         worker.run()
-        
-        sys.stderr.write("IMAGE Worker: Exiting normally\n")
+
+        sys.stderr.write(f"{label} Worker: Exiting normally\n")
         sys.stderr.flush()
     except Exception as e:
-        sys.stderr.write(f"IMAGE Worker CRASHED: {e}\n")
-        sys.stderr.write(f"IMAGE Worker crash traceback:\n{''.join(traceback.format_exc())}\n")
+        sys.stderr.write(f"{label} Worker CRASHED: {e}\n")
+        sys.stderr.write(
+            f"{label} Worker crash traceback:\n{''.join(traceback.format_exc())}\n"
+        )
         sys.stderr.flush()
         raise
+
+
+def image_worker_main(request_queue: Queue, response_queue: Queue) -> None:
+    """Entry point for latency-sensitive foreground image work."""
+    _run_image_worker(
+        ImageWorker,
+        request_queue,
+        response_queue,
+        label="IMAGE",
+    )
+
+
+def speculative_image_worker_main(
+    request_queue: Queue,
+    response_queue: Queue,
+) -> None:
+    """Entry point for isolated speculative scaled-derivative work."""
+    _run_image_worker(
+        SpeculativeImageWorker,
+        request_queue,
+        response_queue,
+        label="IMAGE_PREFETCH",
+    )

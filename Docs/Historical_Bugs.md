@@ -20,6 +20,7 @@ not automatic current architecture instructions.
 
 ## Active / Pending Acceptance Records
 
+- [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) — **REJECTED / ROLLED BACK**. Installed two-display validation showed materially worse pacing/FPS/headroom with Quick swap interval 1; production returned to the known-good interval-0 policy.
 - [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **SOLVED**. The 58-minute Windows soak preserved scaled-prefetch liveness through sustained cache eviction pressure.
 - [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **SOLVED**. The 58-minute Windows soak showed no recursive zero-delay due storm or request multiplication.
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md) — **CORRECTNESS PRESERVED / AWAITING VALIDATION**. No long debounce admitted; physical multi-stage wake remains the acceptance gate.
@@ -35,6 +36,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md)
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md)
 - [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md)
 - [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md)

@@ -16,6 +16,7 @@ from dataclasses import replace
 from typing import Any, Callable, Mapping
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
+from rendering.quick.lifecycle_errors import RetainedRuntimeIncoherenceError
 
 logger = get_logger(__name__)
 
@@ -551,7 +552,7 @@ class QuickDisplayVisualizerOwner:
         """Promote active CUSTOM geometry without recreating its generation."""
 
         if self._retired or not self._started or not self._bound:
-            raise RuntimeError("live CUSTOM layout requires a bound running visualizer")
+            raise RetainedRuntimeIncoherenceError("live CUSTOM layout requires a bound running visualizer")
         x, y, width, height = (float(value) for value in local_rect)
         extent_width, extent_height = (float(value) for value in viewport_extent)
         if not all(
@@ -560,12 +561,12 @@ class QuickDisplayVisualizerOwner:
         ) or width <= 0.0 or height <= 0.0 or extent_width <= 0.0 or extent_height <= 0.0:
             raise ValueError("live CUSTOM visualizer geometry must be finite and positive")
         if not self._controller.has_custom_viewport_override:
-            raise RuntimeError("live CUSTOM visualizer commit requires an active override")
+            raise RetainedRuntimeIncoherenceError("live CUSTOM visualizer commit requires an active override")
         presentation = self._presentation_runtime.scene_controller.visualizer_item.presentation
         if presentation is None:
-            raise RuntimeError("live CUSTOM visualizer has no retained presentation")
+            raise RetainedRuntimeIncoherenceError("live CUSTOM visualizer has no retained presentation")
         if presentation.viewport_extent != (extent_width, extent_height):
-            raise RuntimeError("live CUSTOM visualizer extent differs from retained presentation")
+            raise RetainedRuntimeIncoherenceError("live CUSTOM visualizer extent differs from retained presentation")
         expected = (x, y, width, height)
         # CUSTOM owns an integer QRect while the retained visualizer owns a
         # uniform floating projection.  Each edge of that QRect is rounded
@@ -576,7 +577,7 @@ class QuickDisplayVisualizerOwner:
             abs(value - target) > 0.500001
             for value, target in zip(presentation.outer_rect, expected, strict=True)
         ):
-            raise RuntimeError("live CUSTOM visualizer rectangle differs from retained presentation")
+            raise RetainedRuntimeIncoherenceError("live CUSTOM visualizer rectangle differs from retained presentation")
         # The retained scene already displays this exact projection. Promote
         # it before CUSTOM removes its temporary extent override, so the next
         # ordinary publication resolves the same rect/world pair.

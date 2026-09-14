@@ -126,6 +126,38 @@ def test_binder_routes_each_enabled_instance_to_its_effective_monitor(qt_app) ->
         qt_app.processEvents()
 
 
+def test_binder_mid_generation_retirement_drops_media_service_group_without_qt() -> None:
+    class _Presentation:
+        def __init__(self) -> None:
+            self.retired = 0
+
+        def retire(self) -> bool:
+            self.retired += 1
+            return True
+
+    class _RuntimeManager:
+        def __init__(self) -> None:
+            self.retired: list[str] = []
+
+        def retire_widget_service(self, widget_id: str) -> bool:
+            self.retired.append(widget_id)
+            return True
+
+    presentation = _Presentation()
+    manager = _RuntimeManager()
+    binder = OrdinaryFamilyPresentationBinder.__new__(OrdinaryFamilyPresentationBinder)
+    binder._retired = False
+    binder._runtime_manager = manager
+    binder._bound = [presentation]
+    binder._bound_widget_ids = ["media"]
+
+    assert binder.retire_widget("media") is True
+    assert presentation.retired == 1
+    assert binder._bound == []
+    assert binder._bound_widget_ids == []
+    assert manager.retired == ["media", "spotify_volume", "mute_button"]
+
+
 @pytest.mark.qt
 def test_binder_retire_all_drops_every_item_exactly_once(qt_app) -> None:
     runtime, factory = _make_runtime(qt_app, 81)

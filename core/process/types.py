@@ -20,7 +20,8 @@ from core.constants.timing import (
 
 class WorkerType(Enum):
     """Types of worker processes."""
-    IMAGE = "image"           # decode/prescale with path|scaled:WxH cache keys
+    IMAGE = "image"           # foreground decode/prescale with path|scaled:WxH cache keys
+    IMAGE_PREFETCH = "image_prefetch"  # speculative scaled derivatives only; isolated from foreground image latency
     RSS = "rss"               # fetch/parse/mirror with validated ImageMetadata
 
 
@@ -86,6 +87,7 @@ class WorkerMessage:
         
         limits = {
             WorkerType.IMAGE: self.MAX_IMAGE_PAYLOAD,
+            WorkerType.IMAGE_PREFETCH: self.MAX_IMAGE_PAYLOAD,
             WorkerType.RSS: self.MAX_RSS_PAYLOAD,
         }
         

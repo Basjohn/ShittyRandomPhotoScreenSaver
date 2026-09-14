@@ -1,5 +1,9 @@
 """
-Utilities for constructing QSurfaceFormat instances with VSync disabled.
+Utilities for constructing the legacy/generic QSurfaceFormat policy.
+
+The generic policy remains uncapped for its non-Quick/tool consumers. Production
+Qt Quick overrides the swap interval at ``rendering.quick.bootstrap`` because the
+threaded Quick scene graph owns a different physical-presentation contract.
 
 Centralizes GL surface configuration with VSync completely disabled
 to enable timer-based rendering at display refresh rate for maximum

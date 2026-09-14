@@ -16,6 +16,7 @@ from typing import Any
 
 QUICK_RENDER_LOOP = "threaded"
 QUICK_OPENGL_VERSION = (4, 1)
+QUICK_SWAP_INTERVAL = 0
 QUICK_QML_IMPORT_ENV = "QML_IMPORT_PATH"
 
 
@@ -98,6 +99,11 @@ def configure_quick_graphics(*, reason: str = "quick-bootstrap") -> QuickBootstr
     surface_format.setRenderableType(QSurfaceFormat.RenderableType.OpenGL)
     surface_format.setVersion(*QUICK_OPENGL_VERSION)
     surface_format.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
+    # Keep the established Quick-era uncapped swap policy. Installed two-display
+    # validation rejected forcing swapInterval=1: mixed-refresh presentation lost
+    # headroom and user-visible pacing/interactivity regressed materially. The
+    # display-local Quick pacer and scene demand remain the presentation owners.
+    surface_format.setSwapInterval(QUICK_SWAP_INTERVAL)
     QSurfaceFormat.setDefaultFormat(surface_format)
 
     QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)

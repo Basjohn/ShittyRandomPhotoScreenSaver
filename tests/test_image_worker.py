@@ -14,7 +14,7 @@ import pytest
 from PIL import Image
 
 from core.process.types import MessageType, WorkerMessage, WorkerType
-from core.process.workers.image_worker import ImageWorker
+from core.process.workers.image_worker import ImageWorker, SpeculativeImageWorker
 
 
 class MockQueue:
@@ -38,6 +38,15 @@ class MockQueue:
         items = self._items[:]
         self._items.clear()
         return items
+
+
+def test_speculative_image_worker_has_distinct_identity():
+    worker = SpeculativeImageWorker(MockQueue(), MockQueue())
+    try:
+        assert worker.worker_type == WorkerType.IMAGE_PREFETCH
+        assert worker.worker_type != WorkerType.IMAGE
+    finally:
+        worker._cleanup()
 
 
 @pytest.fixture
@@ -160,6 +169,8 @@ class TestImageWorkerPrescale:
                 "target_width": 800,
                 "target_height": 600,
                 "mode": "fill",
+                "use_lanczos": False,
+                "sharpen": False,
             },
             worker_type=WorkerType.IMAGE,
         )
@@ -186,6 +197,8 @@ class TestImageWorkerPrescale:
                 "target_width": 800,
                 "target_height": 600,
                 "mode": "fit",
+                "use_lanczos": False,
+                "sharpen": False,
             },
             worker_type=WorkerType.IMAGE,
         )
@@ -211,6 +224,8 @@ class TestImageWorkerPrescale:
                 "target_width": 800,
                 "target_height": 600,
                 "mode": "shrink",
+                "use_lanczos": False,
+                "sharpen": False,
             },
             worker_type=WorkerType.IMAGE,
         )
@@ -236,6 +251,8 @@ class TestImageWorkerPrescale:
                 "target_width": 800,
                 "target_height": 600,
                 "mode": "shrink",
+                "use_lanczos": False,
+                "sharpen": False,
             },
             worker_type=WorkerType.IMAGE,
         )
@@ -264,6 +281,8 @@ class TestImageWorkerPrescale:
                 "target_width": 0,
                 "target_height": -100,
                 "mode": "fill",
+                "use_lanczos": False,
+                "sharpen": False,
             },
             worker_type=WorkerType.IMAGE,
         )
@@ -308,6 +327,8 @@ class TestImageWorkerCacheKey:
                 "target_width": 640,
                 "target_height": 480,
                 "mode": "fill",
+                "use_lanczos": False,
+                "sharpen": False,
             },
             worker_type=WorkerType.IMAGE,
         )
@@ -335,6 +356,8 @@ class TestImageWorkerLatency:
                 "target_width": 1920,
                 "target_height": 1080,
                 "mode": "fill",
+                "use_lanczos": False,
+                "sharpen": False,
             },
             worker_type=WorkerType.IMAGE,
         )

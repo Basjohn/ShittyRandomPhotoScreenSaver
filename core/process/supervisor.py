@@ -65,6 +65,7 @@ class ProcessSupervisor:
     RESPONSE_QUEUE_SIZE = 64   # Max pending responses per worker
     MAX_BUFFERED_RESPONSES = 128
     POLL_TIMEOUT_MS = 10       # Non-blocking poll timeout
+    _RESPONSE_LISTENER_STOP = "__SRPSS_RESPONSE_LISTENER_STOP__"
     
     def __init__(
         self,
@@ -108,6 +109,20 @@ class ProcessSupervisor:
         self._abandoned_correlations: dict[WorkerType, dict[str, str]] = {
             wt: {} for wt in WorkerType
         }
+        # Optional correlated-completion ownership for callers that must not
+        # occupy a shared ThreadManager worker while a child process runs.  One
+        # supervisor-owned blocking listener may own a worker response queue at
+        # a time.  While active it is the sole queue reader: internal messages
+        # are processed here, registered correlations are delivered directly,
+        # and everything else enters the same bounded response buffer consumed
+        # by poll_responses()/await_response().
+        self._response_callbacks: dict[
+            WorkerType,
+            dict[str, Callable[[Optional[WorkerResponse]], None]],
+        ] = {wt: {} for wt in WorkerType}
+        self._response_listener_threads: dict[WorkerType, threading.Thread] = {}
+        self._response_listener_stopping: set[WorkerType] = set()
+        self._response_condition = threading.Condition(self._lock)
         self._shared_memory_accounting = SharedMemoryAccounting()
         
         # Initialize health status for all worker types
@@ -202,6 +217,7 @@ class ProcessSupervisor:
                     daemon=True,  # Die with parent
                 )
                 process.start()
+                self._apply_worker_process_priority(worker_type, process.pid)
                 
                 self._workers[worker_type] = process
                 self._health[worker_type].pid = process.pid
@@ -276,6 +292,14 @@ class ProcessSupervisor:
         Returns:
             True if worker stopped successfully
         """
+        # Listener ownership and direct shutdown draining must never race the
+        # same multiprocessing response queue.  Stop/cancel correlated callback
+        # ownership before entering the worker-stop critical section.
+        self._stop_response_listener(
+            worker_type,
+            reason="worker_stopping",
+        )
+
         with self._lock:
             if worker_type not in self._workers:
                 return True
@@ -470,6 +494,11 @@ class ProcessSupervisor:
             return responses[:max_count]
 
         with self._lock:
+            # A response listener is the sole queue reader while active.  Pollers
+            # consume only the listener-populated buffer so they cannot steal a
+            # registered completion or race internal heartbeat processing.
+            if self._response_listener_active_locked(worker_type):
+                return responses
             resp_queue = self._response_queues.get(worker_type)
             if not resp_queue:
                 return responses
@@ -494,6 +523,60 @@ class ProcessSupervisor:
         
         return responses
 
+    def register_response_callback(
+        self,
+        worker_type: WorkerType,
+        correlation_id: str,
+        callback: Callable[[Optional[WorkerResponse]], None],
+    ) -> bool:
+        """Deliver one correlated application response without a pool waiter.
+
+        The first registered callback for a worker starts exactly one persistent
+        supervisor-owned blocking queue listener.  No timer, polling cadence, or
+        per-request thread is introduced.  The callback receives ``None`` only
+        when worker teardown/restart cancels an outstanding completion owner.
+        Explicit ``abandon_response()`` removes the callback silently because
+        the abandoning caller already owns its local cancellation cleanup.
+        """
+        if not correlation_id or not callable(callback):
+            return False
+
+        buffered: Optional[WorkerResponse] = None
+        with self._lock:
+            if self._shutdown or worker_type in self._response_listener_stopping:
+                return False
+            if self._response_queues.get(worker_type) is None:
+                return False
+            if correlation_id in self._abandoned_correlations[worker_type]:
+                return False
+            callbacks = self._response_callbacks[worker_type]
+            if correlation_id in callbacks:
+                raise ValueError(
+                    f"response callback already registered for {worker_type.value} "
+                    f"correlation {correlation_id}"
+                )
+
+            worker_buffer = self._buffered_responses[worker_type]
+            queued = worker_buffer.get(correlation_id)
+            if queued:
+                buffered = queued.pop(0)
+                if not queued:
+                    worker_buffer.pop(correlation_id, None)
+            else:
+                callbacks[correlation_id] = callback
+                if not self._ensure_response_listener_locked(worker_type):
+                    callbacks.pop(correlation_id, None)
+                    return False
+
+        if buffered is not None:
+            self._invoke_response_callback(
+                worker_type,
+                correlation_id,
+                callback,
+                buffered,
+            )
+        return True
+
     def await_response(
         self,
         worker_type: WorkerType,
@@ -515,18 +598,43 @@ class ProcessSupervisor:
             resp_queue = self._response_queues.get(worker_type)
             if not resp_queue:
                 return None
+            listener_active = self._response_listener_active_locked(worker_type)
 
-        deadline = time.time() + max(0.0, timeout_ms / 1000.0)
+        deadline = time.monotonic() + max(0.0, timeout_ms / 1000.0)
+
+        if listener_active:
+            # The listener owns the queue, so a synchronous waiter sleeps on the
+            # supervisor buffer condition rather than competing for queue items.
+            with self._response_condition:
+                while True:
+                    worker_buffer = self._buffered_responses[worker_type]
+                    queued = worker_buffer.get(correlation_id)
+                    if queued:
+                        response = queued.pop(0)
+                        if not queued:
+                            worker_buffer.pop(correlation_id, None)
+                        return response
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0.0:
+                        break
+                    self._response_condition.wait(timeout=remaining)
+            self.abandon_response(
+                worker_type,
+                correlation_id,
+                reason="timeout",
+            )
+            return None
+
         timeout_s = max(0.0, poll_slice_ms / 1000.0)
 
-        while time.time() < deadline:
+        while time.monotonic() < deadline:
             buffered = self._pop_buffered_response(
                 worker_type,
                 correlation_id,
             )
             if buffered is not None:
                 return buffered
-            remaining = deadline - time.time()
+            remaining = deadline - time.monotonic()
             if remaining <= 0.0:
                 break
             try:
@@ -685,10 +793,16 @@ class ProcessSupervisor:
                 (time.time() - health.busy_since) * 1000 
                 if health.is_busy and health.busy_since > 0 else None
             )
-            if worker_type == WorkerType.IMAGE:
+            if worker_type in (WorkerType.IMAGE, WorkerType.IMAGE_PREFETCH):
                 diagnostics["shared_memory"] = (
                     self._shared_memory_accounting.snapshot()
                 )
+            diagnostics["response_listener_active"] = (
+                self._response_listener_active_locked(worker_type)
+            )
+            diagnostics["response_callbacks_pending"] = len(
+                self._response_callbacks[worker_type]
+            )
             
             return diagnostics
 
@@ -697,12 +811,16 @@ class ProcessSupervisor:
         return self._shared_memory_accounting.snapshot()
 
     def get_image_worker_usage_snapshot(self) -> dict[str, Any]:
-        """Return PID-labelled ImageWorker RSS plus shared-memory accounting."""
-        diagnostics = self.get_detailed_health(WorkerType.IMAGE)
+        """Return PID-labelled foreground/speculative image worker usage."""
+        foreground = self.get_detailed_health(WorkerType.IMAGE)
+        speculative = self.get_detailed_health(WorkerType.IMAGE_PREFETCH)
         snapshot: dict[str, Any] = {
-            "image_worker_pid": diagnostics.get("process_pid"),
-            "image_worker_rss_mb": diagnostics.get("memory_rss_mb"),
-            "image_worker_vms_mb": diagnostics.get("memory_vms_mb"),
+            "image_worker_pid": foreground.get("process_pid"),
+            "image_worker_rss_mb": foreground.get("memory_rss_mb"),
+            "image_worker_vms_mb": foreground.get("memory_vms_mb"),
+            "image_prefetch_worker_pid": speculative.get("process_pid"),
+            "image_prefetch_worker_rss_mb": speculative.get("memory_rss_mb"),
+            "image_prefetch_worker_vms_mb": speculative.get("memory_vms_mb"),
         }
         snapshot.update(self._shared_memory_accounting.snapshot())
         return snapshot
@@ -791,6 +909,7 @@ class ProcessSupervisor:
             return 0
         with self._lock:
             self._abandoned_correlations[worker_type][correlation_id] = reason
+            self._response_callbacks[worker_type].pop(correlation_id, None)
             buffered = self._buffered_responses[worker_type].pop(
                 correlation_id,
                 [],
@@ -847,6 +966,12 @@ class ProcessSupervisor:
         if self._heartbeat_timer:
             self._heartbeat_timer.cancel()
             self._heartbeat_timer = None
+
+        for worker_type in WorkerType:
+            self._stop_response_listener(
+                worker_type,
+                reason="supervisor_shutdown",
+            )
 
         for worker_type in WorkerType:
             self._dispose_buffered_responses(
@@ -960,24 +1085,219 @@ class ProcessSupervisor:
         self.dispose_response(response, reason=f"late_{reason}")
         return True
 
+    def _response_listener_active_locked(self, worker_type: WorkerType) -> bool:
+        thread = self._response_listener_threads.get(worker_type)
+        return bool(
+            thread is not None
+            and thread.is_alive()
+            and worker_type not in self._response_listener_stopping
+        )
+
+    def _ensure_response_listener_locked(self, worker_type: WorkerType) -> bool:
+        """Start the one blocking response listener for ``worker_type``.
+
+        Must be called with ``_lock`` held.  The listener owns no cadence; it
+        sleeps inside the multiprocessing response queue until the child emits
+        a message or supervisor teardown posts the private stop sentinel.
+        """
+        if self._response_listener_active_locked(worker_type):
+            return True
+        if worker_type in self._response_listener_stopping:
+            return False
+        response_queue = self._response_queues.get(worker_type)
+        if response_queue is None:
+            return False
+
+        existing = self._response_listener_threads.get(worker_type)
+        if existing is not None and existing.is_alive():
+            return False
+
+        thread = threading.Thread(
+            target=self._response_listener_loop,
+            args=(worker_type, response_queue),
+            name=f"SRPSS_{worker_type.value}_response_listener",
+            daemon=True,
+        )
+        self._response_listener_threads[worker_type] = thread
+        thread.start()
+        return True
+
+    def _response_listener_loop(self, worker_type: WorkerType, response_queue: Queue) -> None:
+        """Block on one worker queue and route responses to their owners."""
+        unexpected_callbacks: list[
+            tuple[str, Callable[[Optional[WorkerResponse]], None]]
+        ] = []
+        try:
+            while True:
+                try:
+                    data = response_queue.get()
+                except (EOFError, OSError, ValueError):
+                    break
+                except Exception as e:
+                    logger.debug(
+                        "[WORKER] %s response listener stopped by queue error: %s",
+                        worker_type.value,
+                        e,
+                    )
+                    break
+
+                if data == self._RESPONSE_LISTENER_STOP:
+                    break
+
+                try:
+                    response = self._response_from_data(data)
+                except Exception as e:
+                    logger.warning(
+                        "[WORKER] %s response listener discarded malformed item: %s",
+                        worker_type.value,
+                        e,
+                    )
+                    continue
+
+                if self._process_internal_response(worker_type, response):
+                    continue
+                if self._dispose_if_abandoned(worker_type, response):
+                    continue
+                self._buffer_response(worker_type, response)
+        finally:
+            with self._response_condition:
+                unexpected_exit = worker_type not in self._response_listener_stopping
+                current = self._response_listener_threads.get(worker_type)
+                if current is threading.current_thread():
+                    self._response_listener_threads.pop(worker_type, None)
+                if unexpected_exit:
+                    unexpected_callbacks = self._take_response_callbacks_locked(worker_type)
+                self._response_condition.notify_all()
+            for correlation_id, callback in unexpected_callbacks:
+                self._invoke_response_callback(
+                    worker_type,
+                    correlation_id,
+                    callback,
+                    None,
+                    cancellation_reason="response_listener_stopped",
+                )
+
+    def _stop_response_listener(
+        self,
+        worker_type: WorkerType,
+        *,
+        reason: str,
+        join_timeout: float = 2.0,
+    ) -> None:
+        """Stop one queue listener before direct shutdown draining begins."""
+        with self._lock:
+            thread = self._response_listener_threads.get(worker_type)
+            response_queue = self._response_queues.get(worker_type)
+            if thread is None:
+                callbacks = self._take_response_callbacks_locked(worker_type)
+            else:
+                self._response_listener_stopping.add(worker_type)
+                callbacks = []
+
+        if thread is not None:
+            if response_queue is not None:
+                try:
+                    # Blocking put is bounded and used only on explicit worker
+                    # retirement.  The live listener is consuming this queue, so
+                    # this cannot create an application cadence or polling loop.
+                    response_queue.put(self._RESPONSE_LISTENER_STOP, timeout=1.0)
+                except Exception as e:
+                    logger.debug(
+                        "[WORKER] Failed to wake %s response listener: %s",
+                        worker_type.value,
+                        e,
+                    )
+            thread.join(timeout=max(0.0, float(join_timeout)))
+
+            with self._lock:
+                if thread.is_alive():
+                    logger.warning(
+                        "[WORKER] %s response listener did not stop before worker teardown",
+                        worker_type.value,
+                    )
+                elif self._response_listener_threads.get(worker_type) is thread:
+                    self._response_listener_threads.pop(worker_type, None)
+                self._response_listener_stopping.discard(worker_type)
+                callbacks = self._take_response_callbacks_locked(worker_type)
+
+        for correlation_id, callback in callbacks:
+            self._invoke_response_callback(
+                worker_type,
+                correlation_id,
+                callback,
+                None,
+                cancellation_reason=reason,
+            )
+
+    def _take_response_callbacks_locked(
+        self,
+        worker_type: WorkerType,
+    ) -> list[tuple[str, Callable[[Optional[WorkerResponse]], None]]]:
+        callbacks = self._response_callbacks[worker_type]
+        items = list(callbacks.items())
+        callbacks.clear()
+        return items
+
+    def _invoke_response_callback(
+        self,
+        worker_type: WorkerType,
+        correlation_id: str,
+        callback: Callable[[Optional[WorkerResponse]], None],
+        response: Optional[WorkerResponse],
+        *,
+        cancellation_reason: str | None = None,
+    ) -> None:
+        try:
+            callback(response)
+        except Exception:
+            logger.exception(
+                "[WORKER] %s response callback failed correlation=%s cancellation=%s",
+                worker_type.value,
+                correlation_id,
+                cancellation_reason,
+            )
+            if response is not None:
+                self.dispose_response(response, reason="response_callback_failed")
+
     def _buffer_response(self, worker_type: WorkerType, response: WorkerResponse) -> None:
-        """Buffer a correlated response for later retrieval."""
+        """Route a registered correlation or buffer it for later retrieval."""
         corr_id = response.correlation_id
         if not corr_id:
             self.dispose_response(response, reason="uncorrelated_drop")
             return
         dropped: list[WorkerResponse] = []
+        callback: Callable[[Optional[WorkerResponse]], None] | None = None
+        abandoned_reason: str | None = None
         with self._lock:
-            worker_buffer = self._buffered_responses[worker_type]
-            worker_buffer.setdefault(corr_id, []).append(response)
-            buffered_count = sum(len(items) for items in worker_buffer.values())
-            while buffered_count > self.MAX_BUFFERED_RESPONSES and worker_buffer:
-                oldest_id = next(iter(worker_buffer))
-                oldest_queue = worker_buffer[oldest_id]
-                dropped.append(oldest_queue.pop(0))
-                buffered_count -= 1
-                if not oldest_queue:
-                    worker_buffer.pop(oldest_id, None)
+            abandoned_reason = self._abandoned_correlations[worker_type].pop(
+                corr_id,
+                None,
+            )
+            if abandoned_reason is None:
+                callback = self._response_callbacks[worker_type].pop(corr_id, None)
+            if abandoned_reason is None and callback is None:
+                worker_buffer = self._buffered_responses[worker_type]
+                worker_buffer.setdefault(corr_id, []).append(response)
+                buffered_count = sum(len(items) for items in worker_buffer.values())
+                while buffered_count > self.MAX_BUFFERED_RESPONSES and worker_buffer:
+                    oldest_id = next(iter(worker_buffer))
+                    oldest_queue = worker_buffer[oldest_id]
+                    dropped.append(oldest_queue.pop(0))
+                    buffered_count -= 1
+                    if not oldest_queue:
+                        worker_buffer.pop(oldest_id, None)
+                self._response_condition.notify_all()
+
+        if abandoned_reason is not None:
+            self.dispose_response(response, reason=f"late_{abandoned_reason}")
+            return
+        if callback is not None:
+            self._invoke_response_callback(
+                worker_type,
+                corr_id,
+                callback,
+                response,
+            )
         for item in dropped:
             self.dispose_response(item, reason="response_buffer_overflow")
 
@@ -1070,12 +1390,55 @@ class ProcessSupervisor:
                     break
         return responses
     
+    def _apply_worker_process_priority(
+        self,
+        worker_type: WorkerType,
+        pid: int | None,
+    ) -> None:
+        """Make speculative derivative work lower-criticality at the OS scheduler.
+
+        Process isolation removes Python-GIL sharing with the main runtime.  This
+        best-effort priority reduction additionally prevents the speculative child
+        from competing as an equal peer with the foreground image worker and Qt
+        process.  Failure to tune priority is observable but not a startup veto.
+        """
+        if worker_type != WorkerType.IMAGE_PREFETCH or not pid:
+            return
+        try:
+            import os
+            import psutil
+
+            process = psutil.Process(int(pid))
+            if os.name == "nt":
+                process.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+                priority_label = "below_normal"
+            else:
+                current = int(process.nice())
+                target = max(current, 10)
+                process.nice(target)
+                priority_label = f"nice={target}"
+            logger.info(
+                "Applied speculative image worker process priority pid=%d priority=%s",
+                pid,
+                priority_label,
+            )
+        except Exception as e:
+            logger.warning(
+                "Unable to lower speculative image worker process priority pid=%s: %s",
+                pid,
+                e,
+            )
+
     def _is_worker_enabled(self, worker_type: WorkerType) -> bool:
         """Check if worker is enabled in settings."""
         if not self._settings_manager:
             return True  # Default to enabled if no settings
         
-        key = f"workers.{worker_type.value}.enabled"
+        key = (
+            "workers.image.enabled"
+            if worker_type == WorkerType.IMAGE_PREFETCH
+            else f"workers.{worker_type.value}.enabled"
+        )
         try:
             return bool(self._settings_manager.get(key))
         except Exception as e:
@@ -1155,12 +1518,15 @@ class ProcessSupervisor:
         
         for worker_type in worker_types:
             # Poll responses to process HEARTBEAT_ACK messages
-            self._drain_worker_response_queue(
-                worker_type,
-                dispose_application=False,
-                reason="heartbeat_drain",
-                max_count=20,
-            )
+            with self._lock:
+                listener_active = self._response_listener_active_locked(worker_type)
+            if not listener_active:
+                self._drain_worker_response_queue(
+                    worker_type,
+                    dispose_application=False,
+                    reason="heartbeat_drain",
+                    max_count=20,
+                )
         
         with self._lock:
             for worker_type, process in list(self._workers.items()):

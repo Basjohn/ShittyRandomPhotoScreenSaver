@@ -310,7 +310,11 @@ def _format_uptime(seconds: float | None) -> str:
 
 
 class SystemStatsPresentationModel(QObject):
+    # Dynamic samples are a high-frequency (10 s minimum) presentation edge.
+    # Keep them separate from layout/style/config invalidation so one CPU/RAM
+    # update does not make QML reevaluate the entire retained card.
     stateChanged = Signal()
+    sampleChanged = Signal()
 
     def __init__(
         self,
@@ -381,7 +385,7 @@ class SystemStatsPresentationModel(QObject):
             return
         self._revision = revision
         self._sample = sample
-        self.stateChanged.emit()
+        self.sampleChanged.emit()
 
     def set_content_extent(
         self, width: float | None, height: float | None
@@ -436,13 +440,13 @@ class SystemStatsPresentationModel(QObject):
             else ""
         )
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=sampleChanged)
     def cpuValue(self) -> str:
         if self._sample.cpu_status != "ok" or self._sample.cpu_pct is None:
             return "—"
         return f"{round(self._sample.cpu_pct)}%"
 
-    @Property(float, notify=stateChanged)
+    @Property(float, notify=sampleChanged)
     def cpuPercent(self) -> float:
         return (
             max(0.0, min(100.0, float(self._sample.cpu_pct)))
@@ -450,7 +454,7 @@ class SystemStatsPresentationModel(QObject):
             else 0.0
         )
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=sampleChanged)
     def cpuDetail(self) -> str:
         if self._sample.cpu_status == "warming":
             return "Warming the independent CPU baseline"
@@ -458,7 +462,7 @@ class SystemStatsPresentationModel(QObject):
             return "Whole-system CPU unavailable"
         return "Across all logical processors"
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=sampleChanged)
     def ramValue(self) -> str:
         if (
             self._sample.ram_status != "ok"
@@ -468,7 +472,7 @@ class SystemStatsPresentationModel(QObject):
             return "—"
         return f"{round(self.ramPercent)}%"
 
-    @Property(float, notify=stateChanged)
+    @Property(float, notify=sampleChanged)
     def ramPercent(self) -> float:
         used = self._sample.ram_used_bytes
         total = self._sample.ram_total_bytes
@@ -481,31 +485,31 @@ class SystemStatsPresentationModel(QObject):
             return 0.0
         return max(0.0, min(100.0, 100.0 * used / total))
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=sampleChanged)
     def ramDetail(self) -> str:
         if self._sample.ram_status != "ok":
             return "Whole-system memory unavailable"
         return f"{_format_bytes(self._sample.ram_used_bytes)} of {_format_bytes(self._sample.ram_total_bytes)} used"
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=sampleChanged)
     def uptimeValue(self) -> str:
         if self._sample.uptime_status != "ok":
             return "—"
         return _format_uptime(self._sample.uptime_seconds)
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=sampleChanged)
     def uptimeDetail(self) -> str:
         if self._sample.uptime_status != "ok":
             return "System uptime unavailable"
         return "Since system boot"
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=sampleChanged)
     def networkValue(self) -> str:
         if self._sample.network_status != "ok":
             return "—"
         return f"↓ {_format_rate(self._sample.network_rx_bps)}"
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=sampleChanged)
     def networkDetail(self) -> str:
         if self._sample.network_status == "warming":
             return "Warming network baseline"

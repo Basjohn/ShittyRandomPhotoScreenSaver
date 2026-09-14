@@ -130,7 +130,7 @@ def test_healthy_live_save_does_not_request_runtime_reload() -> None:
     owner._active = True
     owner._session = CustomLayoutSession()
     owner._live_commit_topology_reason = lambda: None
-    owner._promote_live_geometry_commit = lambda: None
+    owner._promote_live_geometry_commit = lambda _widgets=None: None
     owner._finish = lambda: ()
 
     assert owner.save() is True
@@ -143,7 +143,7 @@ def test_save_requests_one_reconstruction_only_after_cleanup_reports_corruption(
     owner._active = True
     owner._session = CustomLayoutSession()
     owner._live_commit_topology_reason = lambda: None
-    owner._promote_live_geometry_commit = lambda: None
+    owner._promote_live_geometry_commit = lambda _widgets=None: None
     owner._finish = lambda: ("display:1:ordinary:gmail",)
 
     assert owner.save() is True

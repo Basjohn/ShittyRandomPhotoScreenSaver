@@ -174,3 +174,37 @@ def test_presenter_binds_once_and_retires_idempotently(qt_app) -> None:
         runtime.close_runtime()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_live_retirement_disconnects_geometry_binding_before_dropping_owner(qt_app) -> None:
+    runtime, factory = _make_runtime(qt_app, 94)
+    try:
+        host = runtime.scene_controller.ordinary_widget_host
+        presenter = QuickDisplayPresenter(runtime, adapters=(ClockFamilyAdapter(),))
+        presenter.bind_families(
+            widgets_config={"clock": {"enabled": True, "monitor": "ALL"}},
+            display_bounds=_BOUNDS,
+            shadow_values=_SHADOWS,
+        )
+        binding = next(
+            bound for widget_id, bound in presenter._geometry_bindings
+            if widget_id == "clock"
+        )
+        assert binding._preferred_size_callback is not None
+        assert binding._geometry_sink is not None
+
+        assert presenter.retire_live_custom_layout_item("clock") is True
+
+        assert host.live_count == 0
+        assert binding._retired is True
+        assert binding._preferred_size_signal is None
+        assert binding._preferred_size_callback is None
+        assert binding._geometry_sink is None
+        assert binding._authored_geometry_sink is None
+        assert presenter.bound_widget_ids == ()
+    finally:
+        presenter.retire()
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()

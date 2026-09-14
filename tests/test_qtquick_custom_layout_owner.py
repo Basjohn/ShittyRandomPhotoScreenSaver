@@ -739,6 +739,125 @@ def test_display_manager_menu_routes_one_quick_custom_owner(qt_app) -> None:
         qt_app.processEvents()
 
 
+def test_disable_only_ordinary_presence_change_can_live_commit_without_reload() -> None:
+    def _item(model: str, *, current_enabled: bool, removed: bool = False):
+        return SimpleNamespace(
+            model_identity=model,
+            baseline_enabled=True,
+            current_enabled=current_enabled,
+            removed=removed,
+            current_display_identity="display:a",
+            source_key=SimpleNamespace(display_identity="display:a"),
+            current_monitor_route="ALL",
+            source_monitor_route="ALL",
+        )
+
+    ordinary = SimpleNamespace(
+        _session=SimpleNamespace(items=lambda: [_item("system_stats", current_enabled=False)])
+    )
+    assert QuickCustomLayoutOwner._ordinary_disable_only_live_commit_is_coherent(ordinary) is True
+    assert QuickCustomLayoutOwner._live_commit_topology_reason(ordinary) is None
+
+    visualizer = SimpleNamespace(
+        _session=SimpleNamespace(items=lambda: [_item("spotify_visualizer", current_enabled=False)]),
+        _visualizer_presence_commit=lambda enabled: not enabled,
+    )
+    assert QuickCustomLayoutOwner._ordinary_disable_only_live_commit_is_coherent(visualizer) is False
+    assert QuickCustomLayoutOwner._presence_change_live_commit_is_coherent(visualizer) is True
+    assert QuickCustomLayoutOwner._live_commit_topology_reason(visualizer) is None
+
+    moved = _item("system_stats", current_enabled=False)
+    moved.current_display_identity = "display:b"
+    routed = SimpleNamespace(_session=SimpleNamespace(items=lambda: [moved]))
+    assert QuickCustomLayoutOwner._ordinary_disable_only_live_commit_is_coherent(routed) is False
+    assert QuickCustomLayoutOwner._live_commit_topology_reason(routed) == "family_presence_changed"
+
+
+def test_disable_ordinary_plus_unrelated_visualizer_transfer_keeps_live_commit_path() -> None:
+    ordinary = SimpleNamespace(
+        model_identity="system_stats",
+        baseline_enabled=True,
+        current_enabled=False,
+        removed=False,
+        current_display_identity="display:a",
+        source_key=SimpleNamespace(display_identity="display:a"),
+        current_monitor_route="ALL",
+        source_monitor_route="ALL",
+    )
+    visualizer = SimpleNamespace(
+        model_identity="spotify_visualizer",
+        baseline_enabled=True,
+        current_enabled=True,
+        removed=False,
+        current_display_identity="display:b",
+        source_key=SimpleNamespace(display_identity="display:a"),
+        current_monitor_route="1",
+        source_monitor_route="0",
+    )
+    owner = SimpleNamespace(
+        _session=SimpleNamespace(items=lambda: [ordinary, visualizer]),
+        _visualizer_presence_commit=lambda enabled: True,
+    )
+
+    # Presence coherence belongs only to the family whose admission changed.
+    # The Visualizer transfer is validated independently by the normal transfer
+    # classifier and must not turn a safe ordinary retirement into teardown.
+    assert QuickCustomLayoutOwner._presence_change_live_commit_is_coherent(owner) is True
+    assert QuickCustomLayoutOwner._live_commit_topology_reason(owner) == "display_transfer"
+
+
+def test_live_promotion_retires_disabled_ordinary_family_in_place() -> None:
+    retired: list[str] = []
+    presenter = SimpleNamespace(
+        retire_live_custom_layout_item=lambda widget_id: retired.append(widget_id) or True
+    )
+    item = SimpleNamespace(
+        model_identity="system_stats",
+        baseline_enabled=True,
+        current_enabled=False,
+        removed=False,
+        source_key=SimpleNamespace(display_identity="display:a"),
+        current_display_identity="display:a",
+    )
+    owner = SimpleNamespace(
+        _session=SimpleNamespace(items=lambda: [item]),
+        _bindings={
+            "display:a": SimpleNamespace(unit=SimpleNamespace(presenter=presenter))
+        },
+        _visualizer_provider=lambda: (None, None),
+    )
+
+    QuickCustomLayoutOwner._promote_live_geometry_commit(owner)
+    assert retired == ["system_stats"]
+
+
+
+
+def test_live_promotion_retires_visualizer_through_manager_owned_presence_seam() -> None:
+    retired: list[bool] = []
+    snapshot_commits: list[object] = []
+    item = SimpleNamespace(
+        model_identity="spotify_visualizer",
+        baseline_enabled=True,
+        current_enabled=False,
+        removed=False,
+        source_key=SimpleNamespace(display_identity="display:a"),
+        current_display_identity="display:a",
+    )
+    owner = SimpleNamespace(
+        _session=SimpleNamespace(items=lambda: [item]),
+        _bindings={},
+        _visualizer_provider=lambda: (object(), object()),
+        _visualizer_presence_commit=lambda enabled: retired.append(bool(enabled)) or True,
+        _live_config_commit=lambda widgets: snapshot_commits.append(widgets),
+    )
+    widgets = {"spotify_visualizer": {"enabled": False}}
+
+    QuickCustomLayoutOwner._promote_live_geometry_commit(owner, widgets)
+
+    assert retired == [False]
+    assert snapshot_commits == [widgets]
+
 def test_cross_display_transfer_coherence_gate_is_fail_safe() -> None:
     """Interactive Save may live-commit a cross-display Visualizer move only when
     the transfer already left a fully target-owned graph.

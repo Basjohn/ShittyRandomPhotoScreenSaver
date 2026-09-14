@@ -695,8 +695,29 @@ _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
 }
 
 
+# A retained presentation normally owns the service with the same widget id.
+# Media is the deliberate exception: one visible card consumes three neutral
+# leases. Keep that family-specific knowledge in this registry boundary rather
+# than teaching generic retained-layout code about Media internals.
+_PRESENTATION_RUNTIME_SERVICE_IDS: dict[str, tuple[str, ...]] = {
+    "media": ("media", "spotify_volume", "mute_button"),
+}
+
+
 def get_runtime_service_spec(widget_id: str) -> Optional[RuntimeServiceSpec]:
     """Return the runtime-service spec for a widget id, or None if it owns none."""
     if not isinstance(widget_id, str) or not widget_id:
         return None
     return _RUNTIME_SERVICE_SPECS.get(widget_id)
+
+
+def get_runtime_service_ids_for_presentation(widget_id: str) -> tuple[str, ...]:
+    """Return neutral service ids owned by one retained presentation identity."""
+
+    identity = str(widget_id or "").strip()
+    if not identity:
+        return ()
+    grouped = _PRESENTATION_RUNTIME_SERVICE_IDS.get(identity)
+    if grouped is not None:
+        return grouped
+    return (identity,) if identity in _RUNTIME_SERVICE_SPECS else ()

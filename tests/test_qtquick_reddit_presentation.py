@@ -174,10 +174,10 @@ def test_reddit_model_keeps_one_row_model_and_coherent_ready_cached_error_state(
     )
 
     assert model.row_model is row_model
-    # The model now retains a buffer up to the cache cap (25). ``limit`` remains
-    # the SSOT default visible count (surfaced to QML as ``postLimit``); the QML
-    # renders only that many unless a CUSTOM content-extent overrides it.
-    assert row_model.rowCount() == 3
+    # Python retains the accepted buffer, but normal retained QML materializes
+    # only the authored visible limit. CUSTOM may project more on demand.
+    assert len(model._held_rows) == 3
+    assert row_model.rowCount() == 2
     assert model.postLimit == 2
     assert row_model.rows[0].title == "NASA Launches Again"
     assert row_model.rows[0].age == "01HR AGO"
@@ -188,7 +188,7 @@ def test_reddit_model_keeps_one_row_model_and_coherent_ready_cached_error_state(
     assert model.viewState == "ready"
     assert model.errorText == "offline"
     assert model.row_model is row_model
-    assert row_model.rowCount() == 3
+    assert row_model.rowCount() == 2
 
     model.apply_config(replace(model.config, subreddit="python"))
     assert model.viewState == "loading"
@@ -579,13 +579,16 @@ def test_reddit_content_extent_drives_visible_count_and_spread(qt_app) -> None:
         presentation.activate()
         qt_app.processEvents()
         natural = float(item.property("naturalRowHeight"))
-        # Default: the SSOT `limit` governs the visible count.
+        # Default: the SSOT `limit` governs both visible and materialized rows.
+        assert model.row_model.rowCount() == 4
+        assert len(model._held_rows) == 10
         assert int(item.property("effectiveVisibleCount")) == 4
 
         # Tall extent reveals more posts (up to the 10 held) and, past the count
         # cap, spreads rows taller + thickens separators.
         model.set_content_extent(620.0, 2000.0)
         qt_app.processEvents()
+        assert model.row_model.rowCount() == 10
         assert int(item.property("effectiveVisibleCount")) == 10
         assert float(item.property("extentRowHeight")) > natural
         assert float(item.property("extentSeparatorThickness")) > 1.0
@@ -598,6 +601,7 @@ def test_reddit_content_extent_drives_visible_count_and_spread(qt_app) -> None:
         # Clearing returns to the SSOT default exactly.
         model.clear_content_extent()
         qt_app.processEvents()
+        assert model.row_model.rowCount() == 4
         assert int(item.property("effectiveVisibleCount")) == 4
         assert QQmlEngine.contextForObject(item).engine() is engine
     finally:

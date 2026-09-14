@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+import math
 from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import (
@@ -497,6 +498,11 @@ class GmailPresentationModel(QObject):
         super().__init__(parent)
         self._runtime_generation = runtime_generation
         self._row_model = GmailRowListModel(self)
+        # Keep the accepted source window in Python.  The QML Repeater must not
+        # instantiate every buffered row merely so CUSTOM can reveal it later.
+        # ``_refresh_materialized_rows`` projects only the rows the current
+        # authored/CUSTOM geometry can plausibly display.
+        self._held_rows: tuple[GmailPresentationRow, ...] = ()
         self._runtime_service = runtime_service
         self._snapshot = GmailPresentationSnapshot(config=config, style=style)
         self._last_runtime_snapshot: GmailRuntimeSnapshot | None = None
@@ -626,10 +632,11 @@ class GmailPresentationModel(QObject):
                     ),
                 )
             )
-        self._row_model.replace_rows(rows)
+        self._held_rows = tuple(rows)
+        self._refresh_materialized_rows()
         if snapshot.error:
             state = "error"
-        elif rows:
+        elif self._held_rows:
             state = "ready"
         elif snapshot.refreshing:
             state = "loading"
@@ -722,6 +729,7 @@ class GmailPresentationModel(QObject):
         if extent == self._content_extent:
             return False
         self._content_extent = extent
+        self._refresh_materialized_rows()
         self.stateChanged.emit()
         return True
 
@@ -729,8 +737,40 @@ class GmailPresentationModel(QObject):
         if self._content_extent is None:
             return False
         self._content_extent = None
+        self._refresh_materialized_rows()
         self.stateChanged.emit()
         return True
+
+    def _refresh_materialized_rows(self) -> bool:
+        """Project the Python buffer into the retained QML delegate model.
+
+        Non-CUSTOM runtime materializes exactly the authored visible limit.
+        CUSTOM may need more rows as the card grows vertically.  The estimate
+        intentionally ignores header/chrome height, so it can over-materialize
+        a small number of rows but can never under-materialize rows that QML's
+        stricter rail-budget calculation could reveal.
+        """
+
+        held_count = len(self._held_rows)
+        if held_count <= 0:
+            return self._row_model.replace_rows(())
+        materialized = min(held_count, max(1, int(self.config.limit)))
+        if self._content_extent is not None:
+            natural_row_height = max(28.0, float(self.config.font_size) * 1.65)
+            conservative_fit = max(
+                1,
+                int(
+                    math.ceil(
+                        float(self._content_extent[1])
+                        / max(1.0, natural_row_height + 4.0)
+                    )
+                ),
+            )
+            materialized = min(
+                held_count,
+                max(materialized, conservative_fit),
+            )
+        return self._row_model.replace_rows(self._held_rows[:materialized])
 
     def retire(self) -> None:
         if self._retired:
@@ -743,6 +783,7 @@ class GmailPresentationModel(QObject):
             self._runtime_attached = False
         self._runtime_service = None
         self._last_runtime_snapshot = None
+        self._held_rows = ()
         self._row_model.replace_rows(())
 
     @Property(QObject, constant=True)

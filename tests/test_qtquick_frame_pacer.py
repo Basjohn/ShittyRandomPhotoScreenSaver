@@ -174,6 +174,14 @@ def test_transition_and_visualizer_demands_are_independent_and_idempotent():
     assert timer.stop_count == 1
 
 
+def test_describe_reports_widget_animation_demand() -> None:
+    pacer, _window, _timer, _clock = _pacer()
+
+    pacer.set_widget_animation_active(True)
+
+    assert pacer.describe()["demands"] == ["widget_animation"]
+
+
 def test_late_timer_callback_issues_one_fresh_update_and_counts_skips():
     pacer, window, timer, clock = _pacer(100.0)
     pacer.set_visualizer_active(True)

@@ -40,6 +40,7 @@ from core.process.types import WorkerType
 from core.process.supervisor import ProcessSupervisor
 from core.process.workers import (
     image_worker_main,
+    speculative_image_worker_main,
     rss_worker_main,
 )
 
@@ -391,6 +392,11 @@ class ScreensaverEngine(QObject):
             if not self._initialize_display():
                 logger.error("Failed to initialize display")
                 return False
+
+            # Start image workers before the first prefetch plan is admitted.
+            # Scaled speculative warmup has no in-process compute fallback; its
+            # dedicated process must therefore be ready before registration.
+            self._start_workers()
             self._schedule_prefetch()
             
             # Setup rotation timer
@@ -401,9 +407,6 @@ class ScreensaverEngine(QObject):
 
             # Enable background RSS refresh if applicable
             self._start_rss_background_refresh_if_needed()
-            
-            # Start multiprocessing workers (non-blocking, fallback if workers fail)
-            self._start_workers()
             
             # Transition to STOPPED state (ready to start)
             self._transition_state(EngineState.STOPPED)
@@ -506,8 +509,12 @@ class ScreensaverEngine(QObject):
             
             # Register worker factories
             self._process_supervisor.register_worker_factory(WorkerType.IMAGE, image_worker_main)
+            self._process_supervisor.register_worker_factory(
+                WorkerType.IMAGE_PREFETCH,
+                speculative_image_worker_main,
+            )
             self._process_supervisor.register_worker_factory(WorkerType.RSS, rss_worker_main)
-            logger.info("ProcessSupervisor initialized with 2 worker factories")
+            logger.info("ProcessSupervisor initialized with 3 worker factories")
             
             logger.info("Core systems initialized successfully")
             return True
@@ -746,7 +753,12 @@ class ScreensaverEngine(QObject):
                 )
             self._image_cache = ImageCache(max_items=max_items, max_memory_mb=max_mem_mb)
             if self.thread_manager:
-                self._prefetcher = ImagePrefetcher(self.thread_manager, self._image_cache, max_concurrent=max_conc)
+                self._prefetcher = ImagePrefetcher(
+                    self.thread_manager,
+                    self._image_cache,
+                    max_concurrent=max_conc,
+                    process_supervisor=self._process_supervisor,
+                )
             logger.info(f"Image prefetcher initialized (ahead={self._prefetch_ahead}, max_concurrent={max_conc})")
         except Exception as e:
             logger.debug(f"Prefetcher init failed: {e}")
@@ -1083,9 +1095,11 @@ class ScreensaverEngine(QObject):
     def _start_workers(self) -> None:
         """Start multiprocessing workers based on settings.
         
-        Workers are optional - if they fail to start, the engine falls back
-        to ThreadManager-based processing. This is non-blocking.
-        
+        Workers are optional. Foreground image processing retains its existing
+        fallback, while speculative scaled prefetch deliberately has no in-process
+        compute fallback: if its isolated worker is unavailable, that warmup is
+        skipped.
+
         Respects max_workers setting: 'auto' = half CPU cores, or explicit 1-8.
         """
         if not self._process_supervisor:
@@ -1114,11 +1128,19 @@ class ScreensaverEngine(QObject):
         workers_started = 0
         workers_failed = 0
         
-        # Priority order: Image only
-        # FFT worker removed (deprecated, inline FFT used instead)
-        # RSS and Transition workers use ThreadManager
+        # Foreground ImageWorker always gets the first slot. The speculative
+        # derivative worker is a distinct second process so it can never head-of-
+        # line block a requested image. With an explicit one-worker cap, scaled
+        # prefetch simply remains disabled rather than falling back into the main
+        # process compute pool.
         worker_configs = [
             (WorkerType.IMAGE, 'workers.image.enabled', "ImageWorker", "ThreadManager fallback"),
+            (
+                WorkerType.IMAGE_PREFETCH,
+                'workers.image.enabled',
+                "SpeculativeImageWorker",
+                "scaled speculative warmup disabled",
+            ),
         ]
         
         for worker_type, setting_key, name, fallback_msg in worker_configs:
