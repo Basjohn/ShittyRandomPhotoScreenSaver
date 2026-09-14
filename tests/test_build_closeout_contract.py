@@ -79,23 +79,16 @@ def test_installers_offer_profile_scoped_settings_reset() -> None:
         assert 'Name: "resetsettings"' in source
         assert 'Description: "Revert Settings To Defaults"' in source
 
-    # Post-schema-migration reset checkbox default: the diagnostic runtime keeps
-    # reset opt-in (unchecked), while the standard and Media Center installers
-    # default it to checked so a legacy profile cannot silently re-import stale
-    # values on first launch after the settings-v2 migration.
-    diagnostic_task = next(
-        line.strip()
-        for line in diagnostic.splitlines()
-        if line.strip().startswith('Name: "resetsettings"')
-    )
-    assert "Flags: unchecked" in diagnostic_task
-    for source in (standard, media_center):
+    # EXACT-VALUE INVARIANT: after the one-release 5.0.0 migration window, the
+    # destructive reset remains available but opt-in in every installer. Change
+    # this only with an explicit installer migration/reset policy decision.
+    for source in (standard, diagnostic, media_center):
         reset_task = next(
             line.strip()
             for line in source.splitlines()
             if line.strip().startswith('Name: "resetsettings"')
         )
-        assert "Flags: unchecked" not in reset_task
+        assert "Flags: unchecked" in reset_task
 
     assert '{userappdata}\\SRPSS\\settings_v2.json"; Tasks: resetsettings' in standard
     assert '{userappdata}\\SRPSS\\settings_v2.json"; Tasks: resetsettings' in diagnostic

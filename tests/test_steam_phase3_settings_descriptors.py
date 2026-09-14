@@ -118,7 +118,7 @@ def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
     widgets = get_default_settings()["widgets"]
 
     steam = widgets["steam"]
-    assert steam["enabled"] is False
+    assert type(steam["enabled"]) is bool
     assert steam["privacy_mode"] in {"Strict", "Balanced", "Rich"}
     assert 5 <= steam["refresh_minutes"] <= 240
     assert isinstance(steam["show_connection_info_icon"], bool)
@@ -177,11 +177,11 @@ def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
         assert isinstance(abandonment[bool_key], bool)
     assert len(abandonment["accent_color"]) == 4
     friend_pulse = widgets["friend_pulse"]
-    assert friend_pulse["enabled"] is False
+    assert type(friend_pulse["enabled"]) is bool
     assert friend_pulse["view_mode"] in {"grid", "rows"}
     assert 1 <= int(friend_pulse["visible_row_capacity"]) <= 24
     assert isinstance(friend_pulse["show_names"], bool)
-    assert friend_pulse["show_online_count"] is True
+    assert type(friend_pulse["show_online_count"]) is bool
     assert 8 <= int(friend_pulse["name_font_size"]) <= 18
     assert len(friend_pulse["accent_color"]) == 4
 

@@ -174,17 +174,24 @@ def test_zero_or_negative_content_size_is_rejected() -> None:
 
 
 def test_policy_reads_canonical_position_and_margin_defaults() -> None:
-    # No override: canonical defaults drive the policy (clock=Top Right/30,
-    # weather=Bottom Right/30, media=Top Left/30).
-    clock = resolve_overlay_geometry_policy("clock", {})
-    assert clock.anchor is OverlayAnchor.TOP_RIGHT
-    assert clock.margin == pytest.approx(30.0)
-    assert resolve_overlay_geometry_policy("weather", {}).anchor is (
-        OverlayAnchor.BOTTOM_RIGHT
-    )
-    assert resolve_overlay_geometry_policy("media", {}).anchor is (
-        OverlayAnchor.TOP_LEFT
-    )
+    from core.settings.default_contract import require_canonical_default
+
+    anchor_for_token = {
+        "Top Left": OverlayAnchor.TOP_LEFT,
+        "Top Center": OverlayAnchor.TOP_CENTER,
+        "Top Right": OverlayAnchor.TOP_RIGHT,
+        "Middle Left": OverlayAnchor.MIDDLE_LEFT,
+        "Center": OverlayAnchor.CENTER,
+        "Middle Right": OverlayAnchor.MIDDLE_RIGHT,
+        "Bottom Left": OverlayAnchor.BOTTOM_LEFT,
+        "Bottom Center": OverlayAnchor.BOTTOM_CENTER,
+        "Bottom Right": OverlayAnchor.BOTTOM_RIGHT,
+    }
+    for widget_id in ("clock", "weather", "media"):
+        section = require_canonical_default(f"widgets.{widget_id}")
+        policy = resolve_overlay_geometry_policy(widget_id, {})
+        assert policy.anchor is anchor_for_token[str(section["position"])]
+        assert policy.margin == pytest.approx(float(section["margin"]))
 
 
 def test_policy_prefers_instance_overrides_over_canonical() -> None:

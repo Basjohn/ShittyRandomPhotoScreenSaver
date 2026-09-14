@@ -44,9 +44,12 @@ class TestVisualizerModeEnum:
 
     def test_registry_default_mode_id_matches_canonical_default(self):
         """Verify the shared default-mode helper stays aligned with product defaults."""
-        from core.settings.default_settings import DEFAULT_SETTINGS
+        from core.settings.default_contract import require_canonical_default
         from core.settings.visualizer_mode_registry import get_default_visualizer_mode_id
-        assert get_default_visualizer_mode_id() == DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["mode"]
+
+        assert get_default_visualizer_mode_id() == require_canonical_default(
+            "widgets.spotify_visualizer.mode"
+        )
 
 
 # NOTE: TestVisualizerWidgetModes and TestVisualizerWidgetBasics were removed

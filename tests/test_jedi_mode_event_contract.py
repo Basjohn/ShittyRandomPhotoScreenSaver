@@ -13,6 +13,10 @@ def _text(relative: str) -> str:
 
 def test_jedi_mode_defaults_off_and_settings_ui_is_glow_scoped() -> None:
     defaults = json.loads(_text("core/settings/defaults_snapshot.json"))
+    # EXACT-VALUE INVARIANT: Jedi Mode is an opt-in easter egg that plays audio
+    # from ordinary hover/click edges. It must never become enabled for fresh
+    # users merely because mutable visual defaults are retuned. Change this only
+    # with an explicit product decision to make the easter egg default-on.
     assert defaults["input"]["widget_glow_jedi_mode"] is False
 
     model = _text("core/settings/models/_core.py")

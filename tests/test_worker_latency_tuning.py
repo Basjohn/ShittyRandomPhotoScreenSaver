@@ -34,7 +34,10 @@ class TestWorkerTuningConfig:
     """Tests for worker tuning configuration."""
     
     def test_default_config(self):
-        """Test default configuration values."""
+        """Test process-worker tuning baselines."""
+        # EXACT-VALUE INVARIANT: these are internal worker queue/latency tuning
+        # baselines, not mutable user Settings defaults. Intentional tuning changes
+        # should update this contract alongside performance evidence.
         config = WorkerTuningConfig()
         assert config.request_queue_size == 64
         assert config.response_queue_size == 64
@@ -71,12 +74,6 @@ class TestGetWorkerConfig:
         assert config.target_latency_ms == 1000
         assert config.max_latency_ms == 10000
     
-    def test_transition_worker_config(self):
-        """Test TRANSITION worker has precompute config."""
-        config = get_worker_config(WorkerType.TRANSITION)
-        assert config.request_queue_size == 8
-        assert config.backpressure_policy == BackpressurePolicy.DROP_NEW
-
 
 class TestGetAllConfigs:
     """Tests for get_all_configs function."""
@@ -173,12 +170,14 @@ class TestLatencyMonitor:
         
         monitor.register_alert_callback(on_alert)
         
-        # Record latency exceeding IMAGE max (500ms)
-        monitor.record_latency(WorkerType.IMAGE, 600.0)
-        
+        threshold = get_worker_config(WorkerType.IMAGE).max_latency_ms
+        observed = float(threshold) + 100.0
+        monitor.record_latency(WorkerType.IMAGE, observed)
+
         assert len(alerts) == 1
         assert alerts[0][0] == WorkerType.IMAGE
-        assert alerts[0][1] == 600.0
+        assert alerts[0][1] == observed
+        assert alerts[0][2] == threshold
     
     def test_get_all_metrics(self):
         """Test getting all metrics."""

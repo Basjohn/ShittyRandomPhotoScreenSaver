@@ -140,14 +140,26 @@ class TestInputGainPCMScaling:
 class TestInputGainModelRoundTrip:
     """Verify input_gain persists through model serialization."""
 
-    def test_default_is_one(self):
+    def test_defaults_follow_canonical_per_mode_authority(self):
+        from core.settings.default_contract import require_canonical_default
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_mode_registry import get_technical_profile_mode
+
         model = SpotifyVisualizerSettings()
-        assert model.input_gain == 1.0
-        assert model.spectrum_input_gain == 1.0
-        assert model.bubble_input_gain == 1.0
-        assert model.sine_wave_input_gain == 1.0
-        assert model.oscilloscope_input_gain == 1.0
+        for mode in ("spectrum", "bubble", "sine_wave", "oscilloscope", "devcurve"):
+            key = f"{mode}_input_gain"
+            assert getattr(model, key) == pytest.approx(
+                require_canonical_default(f"widgets.spotify_visualizer.{key}")
+            )
+
+        # input_gain is a compatibility mirror for the active technical profile,
+        # not an independent product-default authority.
+        profile = get_technical_profile_mode(model.mode)
+        assert model.input_gain == pytest.approx(
+            require_canonical_default(
+                f"widgets.spotify_visualizer.{profile}_input_gain"
+            )
+        )
 
     def test_to_dict_contains_input_gain(self):
         from core.settings.models import SpotifyVisualizerSettings

@@ -1,11 +1,9 @@
-"""5.0.0 installer migration-reset policy.
+"""Post-5.0.0 installer migration-reset policy.
 
-The v5 settings/runtime migration is intentionally unusual: Standard and MC
-installers default the reset task ON for 5.0.0 only.  A selected reset must
-remove both the JSON snapshot and the pre-JSON QSettings registry tree, or the
-first v5 launch can simply re-import the legacy state that the installer meant
-to discard.  Diagnostic remains opt-in because it consumes the ordinary SRPSS
-profile deliberately.
+The one-release 5.0.0 default-on reset window is over. Current installers keep
+the surgical reset available as an explicit recovery action but default it OFF.
+A selected reset must still remove both the JSON snapshot and matching pre-JSON
+QSettings registry tree so legacy state cannot immediately repopulate the profile.
 """
 from __future__ import annotations
 
@@ -27,17 +25,20 @@ def _reset_task_line(text: str) -> str:
     )
 
 
-def test_v5_standard_and_mc_reset_are_default_checked_only_by_explicit_policy() -> None:
-    for name in ("SRPSS_Installer.iss", "SRPSS_MediaCenter_Installer.iss"):
+def test_post_migration_installers_keep_reset_available_but_opt_in() -> None:
+    # EXACT-VALUE INVARIANT: the temporary 5.0.0 default-on migration reset has
+    # expired. Current installers must require an explicit reset choice; update
+    # this only for another deliberately approved migration window.
+    for name in (
+        "SRPSS_Installer.iss",
+        "SRPSS_MediaCenter_Installer.iss",
+        "SRPSS_Diagnostic_Installer.iss",
+    ):
         text = _text(name)
-        task = _reset_task_line(text)
-        assert "Flags: unchecked" not in task
-        assert "5.0.0 ONLY:" in text
-        assert "Reconsider/remove the default-on policy after the 5.0.0 migration release" in text
+        assert "Flags: unchecked" in _reset_task_line(text)
 
-    diagnostic = _text("SRPSS_Diagnostic_Installer.iss")
-    assert "Flags: unchecked" in _reset_task_line(diagnostic)
-
+    for name in ("SRPSS_Installer.iss", "SRPSS_MediaCenter_Installer.iss"):
+        assert "5.0.0 migration reset remains available manually, but defaults OFF" in _text(name)
 
 def test_selected_reset_clears_json_and_matching_legacy_qsettings_tree() -> None:
     standard = _text("SRPSS_Installer.iss")

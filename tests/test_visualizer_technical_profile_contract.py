@@ -61,7 +61,7 @@ def test_rejected_smooth_sphere_settings_are_not_canonical_defaults() -> None:
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
     assert DEFAULT_SETTINGS == snapshot
     sphere_defaults = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
-    assert sphere_defaults["sphere_shadow_enabled"] is True
+    assert type(sphere_defaults["sphere_shadow_enabled"]) is bool
     for key in (
         "sphere_antialiasing",
         "sphere_shadow_strength",
@@ -106,6 +106,9 @@ def test_rejected_smooth_sphere_keys_are_forward_stripped() -> None:
 
 
 def test_legacy_sphere_response_controls_migrate_without_retuning() -> None:
+    # EXACT-VALUE INVARIANT: these coefficients encode the retired Sphere
+    # migration transform. They are compatibility signatures, not current
+    # product defaults; update only with an intentional migration-policy change.
     from core.settings.visualizer_settings_contract import migrate_legacy_sphere_control_keys
 
     migrated = migrate_legacy_sphere_control_keys({
@@ -160,11 +163,14 @@ def test_canonical_defaults_normalize_without_synthesizing_retired_sphere_rainbo
     visualizer = CANONICAL_DEFAULTS["widgets"]["spotify_visualizer"]
     assert "sphere_rainbow_enabled" not in visualizer
     assert "sphere_rainbow_speed" not in visualizer
-    assert visualizer["sphere_fragment_strength"] == 1.1475
-    assert visualizer["sphere_particle_distance"] == 1.35
-    assert visualizer["sphere_particle_amount"] == 1.0
-    assert visualizer["sphere_perspective_strength"] == 1.0
-    assert visualizer["sphere_taste_the_rainbow_enabled"] is False
+    for key in (
+        "sphere_fragment_strength",
+        "sphere_particle_distance",
+        "sphere_particle_amount",
+        "sphere_perspective_strength",
+    ):
+        assert isinstance(visualizer[key], (int, float)), key
+    assert type(visualizer["sphere_taste_the_rainbow_enabled"]) is bool
     assert get_default_settings() == CANONICAL_DEFAULTS
 
 

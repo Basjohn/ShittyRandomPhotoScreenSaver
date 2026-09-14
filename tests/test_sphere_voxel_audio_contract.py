@@ -838,42 +838,53 @@ def test_voxel_bloom_curated_preset_exists() -> None:
     assert '"sphere_bump_reactivity"' not in text
 
 
-def test_sphere_optional_presentation_features_are_mode_owned_and_default_off() -> None:
+def test_sphere_optional_presentation_features_are_mode_owned_in_canonical_schema() -> None:
     from core.settings.default_settings import DEFAULT_SETTINGS
     from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
 
     config = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
-    assert config["sphere_allow_overflow"] is True
-    assert config["sphere_cel_shading"] is False
-    assert config["sphere_light_tracer_enabled"] is True
-    assert config["sphere_fragment_interpolation_enabled"] is True
-    assert config["sphere_taste_the_rainbow_enabled"] is False
-    assert config["sphere_taste_the_rainbow_surfaces"] is True
-    assert config["sphere_taste_the_rainbow_edges"] is True
-    assert config["sphere_particle_amount"] == 1.0
-    assert config["sphere_perspective_strength"] == 1.0
-    assert config["sphere_tracer_color"] == [255, 242, 194, 255]
-    assert config["sphere_edge_weight"] == 1.0
-    assert config["sphere_voxel_size_variation"] == 0.35
-    assert config["sphere_depth_shading_enabled"] is True
-    assert config["sphere_depth_shading_strength"] == 0.2
-    assert config["sphere_shadow_enabled"] is True
-    assert config["sphere_shadow_opacity"] == 1.0
-    assert config["sphere_shadow_softness"] == 0.18
-    assert config["sphere_shadow_distance"] == 1.0
-    assert config["sphere_shadow_size"] == 1.0
-    assert config["sphere_incoming_density_response_enabled"] is True
-    assert config["sphere_incoming_transient_velocity_enabled"] is True
+    bool_keys = (
+        "sphere_allow_overflow",
+        "sphere_cel_shading",
+        "sphere_light_tracer_enabled",
+        "sphere_fragment_interpolation_enabled",
+        "sphere_taste_the_rainbow_enabled",
+        "sphere_taste_the_rainbow_surfaces",
+        "sphere_taste_the_rainbow_edges",
+        "sphere_depth_shading_enabled",
+        "sphere_shadow_enabled",
+        "sphere_incoming_density_response_enabled",
+        "sphere_incoming_transient_velocity_enabled",
+        "sphere_fade_incoming_blocks",
+    )
+    numeric_keys = (
+        "sphere_particle_amount",
+        "sphere_perspective_strength",
+        "sphere_edge_weight",
+        "sphere_voxel_size_variation",
+        "sphere_depth_shading_strength",
+        "sphere_shadow_opacity",
+        "sphere_shadow_softness",
+        "sphere_shadow_distance",
+        "sphere_shadow_size",
+        "sphere_gloss",
+        "sphere_specular",
+    )
+    for key in bool_keys:
+        assert type(config[key]) is bool, key
+    for key in numeric_keys:
+        assert isinstance(config[key], (int, float)), key
+    assert len(config["sphere_tracer_color"]) == 4
+    assert len(config["sphere_fill_color"]) == 4
+    assert len(config["sphere_edge_color"]) == 4
+    assert isinstance(config["sphere_finish"], str) and config["sphere_finish"].strip()
+
+    # Retired aliases remain absent; these are schema invariants, not taste defaults.
     assert "sphere_rainbow_ghosting" not in config
-    assert config["sphere_fade_incoming_blocks"] is True
-    assert config["sphere_finish"] == "Neutral"
-    assert config["sphere_fill_color"] == [95, 160, 190, 255]
-    assert config["sphere_edge_color"] == [190, 224, 234, 255]
-    assert config["sphere_gloss"] == 0.2
-    assert config["sphere_specular"] == 0.25
     assert "sphere_material" not in config
     assert "sphere_material_color" not in config
     assert "sphere_material_fx" not in config
+
     descriptors = {item.mode_id: item for item in iter_all_visualizer_mode_descriptors()}
     assert descriptors["sphere"].renderer_overflow_setting == "sphere_allow_overflow"
     assert all(

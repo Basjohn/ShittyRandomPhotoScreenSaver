@@ -9,6 +9,7 @@ import ui.tabs.media.devcurve_builder as devcurve_builder
 import ui.tabs.media.sphere_builder as sphere_builder
 
 from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+from core.settings.visualizer_presets import get_custom_preset_index
 from rendering.widget_descriptors import get_widgets_tab_settings_section_descriptors
 from ui.tabs.visualizers_tab import VisualizersTab
 
@@ -52,11 +53,11 @@ def _vis_settings(mode: str = "bubble", *, enabled_modes=None) -> dict:
         "mode": mode,
         "bubble_big_bass_pulse": 0.50,
         "spectrum_drop_speed": 1.85,
-        "preset_spectrum": 3,
-        "preset_oscilloscope": 3,
-        "preset_sine_wave": 3,
-        "preset_bubble": 3,
-        "preset_devcurve": 3,
+        "preset_spectrum": get_custom_preset_index("spectrum"),
+        "preset_oscilloscope": get_custom_preset_index("oscilloscope"),
+        "preset_sine_wave": get_custom_preset_index("sine_wave"),
+        "preset_bubble": get_custom_preset_index("bubble"),
+        "preset_devcurve": get_custom_preset_index("devcurve"),
     }
     if enabled_modes is not None:
         section["mode_activation"] = build_visualizer_mode_activation(enabled_modes)

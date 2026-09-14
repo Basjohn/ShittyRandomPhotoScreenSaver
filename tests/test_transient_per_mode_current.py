@@ -9,6 +9,7 @@ Verifies:
 from __future__ import annotations
 
 import numpy as np
+import pytest
 import time
 
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
@@ -122,11 +123,15 @@ class TestGlobalTransientClamp:
         assert worker._transient_mid == 0.1
         assert worker._transient_high == 0.05
 
-    def test_clamp_default_is_1_5(self):
-        """Default _transient_clamp should be 1.5 when not set."""
-        worker = _StubWorker()
-        _g_clamp = getattr(worker, '_transient_clamp', 1.5)
-        assert _g_clamp == 1.5
+    def test_legacy_global_clamp_migration_baseline_is_1_5(self):
+        """Pin the retired global clamp only at its migration-contract owner."""
+        from core.settings.visualizer_settings_contract import resolve_visualizer_baselines
+
+        # EXACT-VALUE INVARIANT: 1.5 is the legacy global technical migration
+        # baseline, not a mutable current per-mode product default. Update this
+        # assertion only if the compatibility/migration contract intentionally changes.
+        baselines = resolve_visualizer_baselines(lambda _key, default: default)
+        assert baselines["transient_clamp"] == 1.5
 
     def test_kick_lane_reads_clamped_value(self):
         """Kick express lane should consume the already-clamped transient bass."""
@@ -371,15 +376,16 @@ class TestTransientMixSettingsModel:
         'oscilloscope_transient_width_mix',
     )
 
-    def test_defaults_present_on_model(self):
-        """All mix fields should exist on a fresh model with correct defaults."""
+    def test_defaults_present_on_model_follow_canonical_authority(self):
+        """Mutable product defaults come from the canonical settings authority."""
+        from core.settings.default_contract import require_canonical_default
         from core.settings.models import SpotifyVisualizerSettings
+
         model = SpotifyVisualizerSettings()
-        assert model.spectrum_lane_transient_mix == 0.65
-        assert model.bubble_transient_mix_bass == 0.75
-        assert model.bubble_transient_mix_vocal == 0.25
-        assert model.sine_wave_transient_width_mix == 0.4
-        assert model.oscilloscope_transient_width_mix == 0.35
+        for key in self._MIX_KEYS:
+            assert getattr(model, key) == pytest.approx(
+                require_canonical_default(f"widgets.spotify_visualizer.{key}")
+            )
 
     def test_round_trip_from_mapping(self):
         """Custom values should survive from_mapping → to_dict → from_mapping."""
@@ -406,15 +412,23 @@ class TestTransientMixSettingsModel:
             assert full_key in exported, f"{full_key} missing from to_dict"
             assert abs(exported[full_key] - val) < 1e-9, f"{full_key} value mismatch"
 
-    def test_resolver_methods(self):
-        """Each resolver method should return the correct field value."""
+    def test_resolver_methods_follow_canonical_defaults(self):
+        """Resolver methods should follow canonical mutable per-mode defaults."""
+        from core.settings.default_contract import require_canonical_default
         from core.settings.models import SpotifyVisualizerSettings
+
         model = SpotifyVisualizerSettings()
-        assert model.resolve_spectrum_lane_transient_mix() == 0.65
-        assert model.resolve_bubble_transient_mix_bass() == 0.75
-        assert model.resolve_bubble_transient_mix_vocal() == 0.25
-        assert model.resolve_sine_wave_transient_width_mix() == 0.4
-        assert model.resolve_oscilloscope_transient_width_mix() == 0.35
+        resolver_by_key = {
+            "spectrum_lane_transient_mix": model.resolve_spectrum_lane_transient_mix,
+            "bubble_transient_mix_bass": model.resolve_bubble_transient_mix_bass,
+            "bubble_transient_mix_vocal": model.resolve_bubble_transient_mix_vocal,
+            "sine_wave_transient_width_mix": model.resolve_sine_wave_transient_width_mix,
+            "oscilloscope_transient_width_mix": model.resolve_oscilloscope_transient_width_mix,
+        }
+        for key, resolver in resolver_by_key.items():
+            assert resolver() == pytest.approx(
+                require_canonical_default(f"widgets.spotify_visualizer.{key}")
+            )
 
 
 # ===========================================================================

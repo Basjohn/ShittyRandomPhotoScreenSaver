@@ -45,8 +45,10 @@ def test_system_stats_settings_roundtrip_preserves_canonical_product_scope(
         defaults = get_default_settings()["widgets"]["system_stats"]
         assert tab.system_stats_enabled.isChecked() is defaults["enabled"]
         assert tab._system_stats_controls_container.isHidden() is True
+        # EXACT-VALUE INVARIANT: 10 seconds is the admitted minimum sampler
+        # workload/safety bound, not merely today's mutable default.
         assert tab.system_stats_sample_interval_seconds.minimum() == 10
-        assert tab.system_stats_sample_interval_seconds.value() == 10
+        assert tab.system_stats_sample_interval_seconds.value() == defaults["sample_interval_seconds"]
         assert "widgets.system_stats_runtime" not in sys.modules
 
         tab.system_stats_enabled.setChecked(True)
@@ -74,7 +76,7 @@ def test_system_stats_settings_roundtrip_preserves_canonical_product_scope(
         assert payload["monitor"] == 2
         assert payload["font_family"] == "Jost"
         assert payload["font_size"] == 19
-        assert payload["metric_capacity"] == 4
+        assert payload["metric_capacity"] == defaults["metric_capacity"]
         assert payload["sample_interval_seconds"] == 25
         assert payload["show_cpu"] is True
         assert payload["show_memory"] is False
@@ -108,5 +110,6 @@ def test_system_stats_participates_in_the_shared_stack_predictor() -> None:
 
     assert stats.position == "Middle Left"
     assert stats.monitor == "1"
-    assert stats.estimated_width == 520
-    assert stats.estimated_height == 430
+    system_defaults = defaults["system_stats"]
+    assert stats.estimated_width == int(system_defaults["preferred_width"])
+    assert stats.estimated_height == int(system_defaults["preferred_height"])

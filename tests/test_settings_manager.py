@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from core.settings.settings_manager import SettingsManager
+from core.settings.default_contract import MC_PROFILE, require_canonical_default
 from core.settings.visualizer_presets import (
     normalize_visualizer_custom_snapshot_cache,
 )
@@ -220,9 +221,9 @@ class TestSettingsManagerCacheInvalidation:
         )
 
         visualizer = manager.get("widgets")["spotify_visualizer"]
-        # Follow Media is the visualizer's single canonical default: it drives the
-        # ordinary media-adjacency placement (active in non-custom modes only).
-        assert visualizer["position"] == "Follow Media"
+        assert visualizer["position"] == require_canonical_default(
+            "widgets.spotify_visualizer.position"
+        )
         assert "bubble_input_gain" in visualizer
         assert (
             manager._settings.metadata().get("visualizer_schema_version")
@@ -389,9 +390,9 @@ class TestSettingsManagerCacheInvalidation:
         assert manager.import_from_sst(str(snapshot_path), merge=True) is True
 
         visualizer = manager.get("widgets")["spotify_visualizer"]
-        # Follow Media is the visualizer's single canonical default: it drives the
-        # ordinary media-adjacency placement (active in non-custom modes only).
-        assert visualizer["position"] == "Follow Media"
+        assert visualizer["position"] == require_canonical_default(
+            "widgets.spotify_visualizer.position"
+        )
         assert "bubble_input_gain" in visualizer
         assert (
             manager._settings.metadata().get("visualizer_schema_version")
@@ -540,8 +541,12 @@ class TestSettingsManagerDefaults:
 
         manager.reset_to_defaults()
 
-        assert manager.get("input.interaction_mode") is True
-        assert manager.get("display.show_on_monitors") == [2]
+        assert manager.get("input.interaction_mode") == require_canonical_default(
+            "input.interaction_mode", MC_PROFILE
+        )
+        assert manager.get("display.show_on_monitors") == require_canonical_default(
+            "display.show_on_monitors", MC_PROFILE
+        )
 
     def test_fresh_mc_profile_uses_same_resolved_defaults_as_reset(self, tmp_path: Path) -> None:
         manager = SettingsManager(
@@ -550,11 +555,13 @@ class TestSettingsManagerDefaults:
             storage_base_dir=tmp_path / "fresh_mc_profile",
         )
 
-        assert manager.get("input.interaction_mode") is True
-        assert manager.get("display.show_on_monitors") == [2]
-        # MC profile ships numbered widgets on monitor 2 (int, matching canonical).
-        assert manager.get("widgets.gmail.monitor") == 2
-        assert manager.get("widgets.media.monitor") == 2
+        for key in (
+            "input.interaction_mode",
+            "display.show_on_monitors",
+            "widgets.gmail.monitor",
+            "widgets.media.monitor",
+        ):
+            assert manager.get(key) == require_canonical_default(key, MC_PROFILE)
 
     def test_legacy_hard_exit_alias_migrates_to_interaction_mode(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)

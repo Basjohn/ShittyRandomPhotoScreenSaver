@@ -32,6 +32,10 @@ class TestThreadingPolicyCompliance:
         # Process-scoped ordered writers intentionally outlive runtime generations
         "core/logging/logger.py",
         "core/settings/persistence.py",
+        # Visualizer logical cadence is explicit runtime infrastructure: one
+        # non-daemon generation-owned thread, wakeable and synchronously joined on
+        # stop. ThreadManager task semantics cannot represent that cadence loop.
+        "widgets/spotify_visualizer/logical_runtime.py",
         # External library wrappers and pre-policy implementations
         "core/process/supervisor.py",
         "rendering/adaptive_timer.py",

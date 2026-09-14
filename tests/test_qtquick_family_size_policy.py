@@ -13,6 +13,7 @@ import pytest
 from PySide6.QtCore import QObject
 from PySide6.QtQuick import QQuickItem
 
+from core.settings.default_contract import require_canonical_default
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.widgets.host import OrdinaryWidgetPresentationHost
 
@@ -54,14 +55,16 @@ def _size(item) -> tuple[float, float]:
 # --------------------------------------------------------------------------- #
 # Gmail width clamp is a pure config policy (no Qt needed).                    #
 # --------------------------------------------------------------------------- #
-def test_gmail_authored_width_defaults_600_and_clamps_200_to_1200() -> None:
+def test_gmail_authored_width_follows_default_and_clamps_200_to_1200() -> None:
     from rendering.quick.widgets.gmail import GmailPresentationConfig
 
     def width(value) -> int:
         cfg = {"gmail": {"width": value}} if value is not None else {}
         return GmailPresentationConfig.from_widgets_mapping(cfg).width
 
-    assert GmailPresentationConfig.from_widgets_mapping({}).width == 600
+    assert GmailPresentationConfig.from_widgets_mapping({}).width == int(
+        require_canonical_default("widgets.gmail.width")
+    )
     assert width(800) == 800
     assert width(100) == 200  # clamped up to the floor
     assert width(5000) == 1200  # clamped down to the ceiling

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.capability_activation import is_widget_family_activated
 from rendering.widget_descriptors import (
     get_widget_family_descriptor,
@@ -57,9 +58,12 @@ def test_setup_is_default_landing_and_lists_families(qt_app, settings_manager):
         # One activation checkbox per available family, with tooltips.
         families = get_widget_family_descriptors()
         assert set(tab._family_activation_checkboxes) == {f.family_id for f in families}
+        widgets_cfg = settings_manager.get("widgets", {})
         for family in families:
             cb = tab._family_activation_checkboxes[family.family_id]
-            assert cb.isChecked() is True  # default: all activated
+            assert cb.isChecked() is is_widget_family_activated(
+                widgets_cfg, family.family_id
+            )
             if family.description:
                 assert cb.toolTip() == family.description
     finally:
@@ -74,13 +78,18 @@ def test_system_stats_is_activated_and_has_a_visible_pill_while_member_is_off(
     try:
         family = get_widget_family_descriptor("system_stats")
         assert family is not None
-        assert tab._family_activation_checkboxes["system_stats"].isChecked() is True
+        widgets_cfg = settings_manager.get("widgets", {})
+        assert tab._family_activation_checkboxes["system_stats"].isChecked() is (
+            is_widget_family_activated(widgets_cfg, "system_stats")
+        )
         pill = _family_pill(tab, family)
         assert pill is not None and pill.isHidden() is False
 
-        # Family activation admits the Settings page; ordinary member enablement
-        # remains a separate, dormant-by-default authority.
-        assert settings_manager.get("widgets.system_stats.enabled") is False
+        # System Stats member enablement is a mutable product default; the test
+        # follows canonical authority rather than freezing today's OFF policy.
+        assert settings_manager.get("widgets.system_stats.enabled") is bool(
+            require_canonical_default("widgets.system_stats.enabled")
+        )
         assert not hasattr(tab, "system_stats_enabled")
     finally:
         tab.deleteLater()
@@ -101,15 +110,25 @@ def test_formerly_hidden_system_stats_profile_migrates_to_visible_pill(
     try:
         family = get_widget_family_descriptor("system_stats")
         assert family is not None
+        # EXACT-VALUE INVARIANT: widget capability schema v1 repairs the old
+        # launch-gated System Stats false bit to True exactly once. This is a
+        # persisted-profile migration signature, not the fresh-user default.
         assert tab._family_activation_checkboxes["system_stats"].isChecked() is True
         pill = _family_pill(tab, family)
         assert pill is not None and pill.isHidden() is False
+        # TEST INPUT, NOT A DEFAULT GOLDEN: this migration fixture explicitly
+        # seeded the member disabled above; migration must preserve member state.
         assert settings_manager.get("widgets.system_stats.enabled") is False
     finally:
         tab.deleteLater()
 
 
 def test_deactivating_family_persists_and_hides_pill(qt_app, settings_manager):
+    widgets_cfg = settings_manager.get("widgets", {})
+    activation = dict(widgets_cfg.get("family_activation", {}))
+    activation.update({"clocks": True, "weather": True})
+    widgets_cfg["family_activation"] = activation
+    settings_manager.set("widgets", widgets_cfg)
     tab = _make_tab(settings_manager)
     try:
         clocks = next(f for f in get_widget_family_descriptors() if f.family_id == "clocks")

@@ -24,6 +24,7 @@ from ui.tabs.widgets_tab import WidgetsTab
 from ui.tabs.shared_styles import SPINBOX_STYLE
 from core.settings import SettingsManager
 from core.settings.defaults import get_default_settings
+from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
     get_preset_slider_attr,
@@ -1152,15 +1153,21 @@ class TestWidgetsTab:
             assert saved_shadows["text_enabled"] is True
             assert saved_shadows["header_enabled"] is False
             # F0.5: the General save now writes the full canonical shadow mapping
-            # (direction + darkness/blur/extra-offset) instead of a 3-key partial
-            # map that erased direction/opacity/blur, and never re-persists the
-            # retired ``offset`` pair.
-            assert saved_shadows["direction"] == "SE"
-            assert saved_shadows["frame_opacity"] == pytest.approx(0.77)
-            assert saved_shadows["blur_radius"] == 18
-            assert saved_shadows["frame_extra_offset"] == 0
-            assert saved_shadows["text_opacity"] == pytest.approx(0.33)
-            assert saved_shadows["text_extra_offset"] == 0
+            # instead of a 3-key partial map that erased sibling state. Mutable
+            # values remain owned by canonical defaults rather than this test.
+            for key in (
+                "direction",
+                "frame_opacity",
+                "blur_radius",
+                "frame_extra_offset",
+                "text_opacity",
+                "text_extra_offset",
+            ):
+                expected = require_canonical_default(f"widgets.shadows.{key}")
+                if isinstance(expected, float):
+                    assert saved_shadows[key] == pytest.approx(expected)
+                else:
+                    assert saved_shadows[key] == expected
             assert "offset" not in saved_shadows
             assert widgets_cfg["global"]["card_border_width_px"] == 4
             assert widgets_cfg["global"]["stacking_enabled"] is True
@@ -1319,8 +1326,10 @@ def test_build_visualizer_preset_payload_uses_shared_missing_preset_fallback(qt_
         tab._load_settings()
         payload = tab.build_visualizer_preset_payload(mode)
 
+        from core.settings.visualizer_presets import get_missing_preset_fallback_index
+
         assert payload
-        assert payload["preset_index"] == 0
+        assert payload["preset_index"] == get_missing_preset_fallback_index(mode)
     finally:
         tab.deleteLater()
 
