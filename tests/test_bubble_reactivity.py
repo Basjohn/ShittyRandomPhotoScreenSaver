@@ -58,9 +58,42 @@ def _default_settings(**overrides):
         "bubble_bounce_small_speed": 0.5,
         "bubble_bounce_same_only": False,
         "bubble_collision_pop_mode": "off",
+        # Keys BubbleSimulation.tick() gained; canonical-default values so the
+        # reactivity fixtures stay faithful to shipped behaviour.
+        "bubble_group_drift": False,
+        "bubble_big_bass_pulse": 0.67,
+        "bubble_big_contraction_bias": 0.4,
+        "bubble_big_size_clamp": 2.96,
+        "bubble_small_freq_pulse": 1.1,
+        "bubble_ghosting_enabled": True,
     }
     base.update(overrides)
     return base
+
+
+_COLLISION_RESPONSE_DEFAULTS = dict(
+    bounce_big_pct=0.0,
+    bounce_small_pct=0.0,
+    bounce_big_speed=0.0,
+    bounce_small_speed=0.0,
+    bounce_same_only=False,
+    collision_pop_mode="off",
+    big_bass_pulse=0.0,
+    small_freq_pulse=0.0,
+    big_contraction_bias=1.0,
+    big_size_clamp=0.0,
+)
+
+
+def _collide(sim, dt, **overrides):
+    """Call the current _apply_bubble_collision_response with neutral defaults.
+
+    The production signature grew (bounce_same_only/collision_pop_mode plus the
+    big_bass_pulse/small_freq_pulse/big_contraction_bias/big_size_clamp size
+    controls); each case here overrides only the parameters it exercises.
+    """
+    params = {**_COLLISION_RESPONSE_DEFAULTS, **overrides}
+    sim._apply_bubble_collision_response(dt, **params)
 
 
 def _energy(bass=0.0, mid=0.0, high=0.0, overall=None):
@@ -403,6 +436,9 @@ def test_snapshot_omits_trail_payload_when_no_visible_trails_exist():
         bubble_big_count=4,
         bubble_small_count=10,
         bubble_trail_strength=0.0,
+        # Ghosting is the other visible-trail source; disable it so this contract
+        # truly exercises the no-visible-trail snapshot path.
+        bubble_ghosting_enabled=False,
     )
     _warm_up(sim, settings, frames=30)
 
@@ -2131,7 +2167,7 @@ class TestBubbleBouncePhysics:
         sim._bubbles = [a, b]
 
         random.seed(7)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=0.0,
@@ -2151,7 +2187,7 @@ class TestBubbleBouncePhysics:
         sim._bubbles = [a, b]
 
         random.seed(3)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=0.0,
             bounce_small_pct=0.0,
@@ -2170,7 +2206,7 @@ class TestBubbleBouncePhysics:
         sim._bubbles = [a, b]
 
         random.seed(11)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=0.0,
@@ -2182,7 +2218,7 @@ class TestBubbleBouncePhysics:
         a2, b2 = self._pair(left_big=True, right_big=False)
         sim._bubbles = [a2, b2]
         random.seed(11)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=0.0,
             bounce_small_pct=100.0,
@@ -2237,7 +2273,7 @@ class TestBubbleBouncePhysics:
         ]
 
         random.seed(19)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
@@ -2285,7 +2321,7 @@ class TestBubbleBouncePhysics:
         start_dist = math.hypot(b.x - a.x, b.y - a.y)
 
         random.seed(9)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=0.0,
@@ -2310,7 +2346,7 @@ class TestBubbleBouncePhysics:
         start_b = (b.x, b.y)
 
         random.seed(21)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
@@ -2330,7 +2366,7 @@ class TestBubbleBouncePhysics:
         sim._bubbles = [a, b]
 
         random.seed(22)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
@@ -2346,7 +2382,7 @@ class TestBubbleBouncePhysics:
         a, b = self._pair(left_big=True, right_big=True)
         sim._bubbles = [a, b]
 
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
@@ -2366,7 +2402,7 @@ class TestBubbleBouncePhysics:
         sim._bubbles = [a, b]
 
         random.seed(123)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
@@ -2384,7 +2420,7 @@ class TestBubbleBouncePhysics:
         sim._bubbles = [big_b, small_b]
 
         random.seed(124)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
@@ -2405,7 +2441,7 @@ class TestBubbleBouncePhysics:
         sim._bubbles = [big_b, small_b]
 
         random.seed(125)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
@@ -2429,7 +2465,7 @@ class TestBubbleBouncePhysics:
         sim._bubbles = [a, b]
 
         random.seed(77)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
@@ -2443,7 +2479,7 @@ class TestBubbleBouncePhysics:
         # simulation time instant; pair cooldown should block re-bounce impulse.
         a.x, b.x = 0.49, 0.51
         random.seed(78)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
@@ -2496,7 +2532,7 @@ class TestBubbleBouncePhysics:
         start_a_x = a.x
         start_b_x = b.x
         random.seed(79)
-        sim._apply_bubble_collision_response(
+        _collide(sim, 
             1 / 60,
             bounce_big_pct=100.0,
             bounce_small_pct=100.0,
