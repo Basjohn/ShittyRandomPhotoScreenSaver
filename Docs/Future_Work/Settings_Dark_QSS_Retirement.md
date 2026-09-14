@@ -1,6 +1,6 @@
 # Settings `dark.qss` Retirement
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 ## Purpose
 
@@ -14,7 +14,7 @@ The objective is deliberately strict:
 
 `dark.qss` is legacy debris, but the current product looks correct. Its removal is a dependency/ownership cleanup, not an opportunity to redesign controls, tweak spacing, “improve” colours, change native materials, or simplify fragile geometry by eye.
 
-**2026-09-13 reconciliation:** a current GODZIP/workspace may not physically contain `themes/dark.qss`, while `ui/settings_theme.py` and `ui/system_tray.py` still explicitly attempt to load it. Treat that as a packaging/source-state discrepancy to audit, not as successful retirement. Stage 0 must establish the actual installed/source asset provenance and current callers before any selector migration or deletion work. Never recreate the legacy file merely so it can later be deleted.
+**2026-09-14 implementation status:** the checkpoint worktree remains the code authority; the current repository `themes/dark.qss` was read only as the missing reference oracle because GODZIP Foundry intentionally excludes `themes/`. Caller/precedence audit is complete enough to sever production dependencies without transplanting the monolith. `ui/settings_theme.py` and `ui/system_tray.py` no longer load/reference the file, the color-picker wrapper explicitly owns the only live legacy subsettings chrome found by caller proof, and a Qt-free retirement contract is **6/6 PASS**. The final repository/build asset deletion remains **Needs run** behind the physical Windows/PySide absence matrix. Never recreate or restore the legacy file as a fallback.
 
 ---
 
@@ -37,84 +37,62 @@ If a proposed change alters the current appearance to make the cleanup easier, i
 
 ---
 
-## Current dependency surface
+## Current dependency surface — 2026-09-14
 
-At the reviewed 2026-08-28 source state, there are two production loaders that matter:
+Production runtime dependency is now **zero** in this checkpoint candidate:
 
-1. `ui/settings_theme.py::_load_base_stylesheet()` reads the whole `themes/dark.qss`. `_apply_theme_to_widget()` currently aborts if that load returns `None`, then applies:
+1. `ui/settings_theme.py` no longer has `_load_base_stylesheet()` or a missing-file fail path. `_apply_theme_to_widget()` applies one complete root string from `_build_settings_root_stylesheet(theme)`, composed from a tiny palette-free structural base plus semantic ThemeSpec QSS.
+2. `ui/system_tray.py` no longer reads a stylesheet file. `ui/settings_menu_style.py` renders only the tray `QMenu`/item/separator family from existing `context.menu.*` ThemeSpec roles while preserving the accepted legacy menu geometry.
+3. `_ColorPickerDialog` in `ui/styled_popup.py` owns its frameless wrapper/title/close chrome explicitly. Its body was already semantic/palette-owned; it no longer inherits those rules accidentally from a global Settings stylesheet.
+4. `tools/flicker_test.py` consumes the current semantic Settings-root renderer rather than a legacy file path. Foundry source also has no product dependency/reference.
 
-   ```text
-   dark.qss + semantic _build_custom_styles(theme)
-   ```
-
-   Therefore simply removing/renaming the file **currently prevents the normal semantic Settings stylesheet from being applied at all**. The file-absent acceptance test is only meaningful after this loader dependency has been replaced.
-
-2. `ui/system_tray.py::_load_tray_menu_stylesheet()` independently reads the same whole file and applies it to a single `QMenu`.
-
-Repository-wide search must be repeated immediately before implementation. Historical documents and diagnostic tools that mention the file are not production runtime dependencies, but no agent may assume the loader inventory above remains complete after later commits.
+The physical `themes/dark.qss` repository/build asset is **not** part of GODZIP payloads. Therefore code dependency retirement and physical asset deletion are deliberately separate evidence: the former is landed here; the latter must be done in the real repo only after the file-absent acceptance matrix passes.
 
 ---
 
-## Current measured surface (2026-09-07)
+## Current measured surface and resolved caller audit (2026-09-14)
 
-Concrete ground truth to plan against. Re-measure before implementing — these
-counts move as `SettingsThemeSpec` grows.
+Reference oracle: current public repository `themes/dark.qss`, blob SHA `42ea38a0a299f4950a27a74506971bea41a2be03`, **989 lines**. This file was inspected as reference only; the checkpoint ZIP remains the working tree.
 
-The competing-authority mechanism is `ui/settings_theme.py`:
-`widget.setStyleSheet(dark_qss + _build_custom_styles(theme))`. `dark.qss` is
-applied **first**, and the appended ThemeSpec-driven custom styles only cover the
-selectors they explicitly target, so `dark.qss` hardcodes win everywhere else.
-Two consequences: (1) **themes don't fully apply** — a non-dark theme comes out
-partially dark wherever ThemeSpec's overrides don't reach; (2) **structure lives
-only in `dark.qss`** — geometry/borders/radii/spacing/typography for the selectors
-ThemeSpec doesn't cover, so a naive deletion shifts layout and drops borders.
+The older ~989-line/~98-selector estimate substantially overstated the live migration burden because it counted historical selectors as though they were current callers. Exact object-name/source search plus current semantic-renderer inspection reduced the required migration to a bounded set:
 
-Measured:
+| Legacy family | Current caller/precedence finding | 2026-09-14 disposition |
+| --- | --- | --- |
+| global `*` font | still useful as Settings fallback typography | retained as palette-free structure in `_build_base_structural_styles()` |
+| generic `QCheckBox` typography/background | plain Settings checkboxes still inherit these structural details; semantic renderer owns colours/indicator | retained as palette-free structure; no legacy colour copied |
+| generic `QLabel:disabled` | legacy pseudo-state still beat the current generic semantic `QLabel` rule; deleting the file would otherwise lose disabled-text contrast | moved to current root renderer with existing `text.disabled` role; no new token |
+| `QToolButton[autoRaise="true"]` buckets | current `_build_custom_styles()` already owns geometry **and** semantic palette | legacy rule is redundant; no migration needed |
+| `QToolTip` | current semantic root renderer already owns border/radius/padding/palette | legacy rule is redundant; no migration needed |
+| `QGroupBox` + title | current semantic root renderer owns accepted structure/palette; missing old inherited font-weight/family was made explicit in that owner | permanent current owner confirmed |
+| `QMenu` | Settings "More Options" menus already have local semantic QSS; tray alone depended on the global family | tray moved to narrow `settings_menu_style.py`; no generic monolith |
+| `#subsettingsDialog` / `#titleFrame` / `#titleLabel` / `#closeButton` | live only in `_ColorPickerDialog`; its content body already had its own semantic owner | wrapper/title/close structure moved beside the picker using existing semantic roles |
+| generic `QDialogButtonBox` | can affect Qt-owned/non-native dialog button ordering/margin even without an explicit app-side constructor | preserve its palette-free `button-layout: 1` + 10 px margin in the tiny root structural base; color picker locally overrides margin/padding while retaining button order |
+| `QMainWindow`, overlay/main-frame/title-bar/resize-indicator families | no matching current caller in the Settings/tray path | dead architecture; do not transplant |
+| `QKeySequenceEdit#SettingsKeySequenceEdit`, `SubSettingsSectionLabel`, `QComboArrow`, `QBasicBitchButton`, `QSmolselect*`, action/select/start/settings/about named buttons, loading/opacity-control families | no matching live object-name caller in current source | dead rules; preserve only in history/git |
+| old subsettings scroll-area/corner/scrollbar family | no live caller in the current color-picker wrapper; current main Settings scrolling is owned elsewhere | do not migrate; R-09 remains the guardrail against recreating broad descendants |
 
-- `dark.qss` ~989 lines, ~98 selectors; `_build_custom_styles` covers ~34 →
-  **~89 dark-only selectors** to port (About dialog, subsettings dialog, every
-  button family — start/select/settings/about/action/`QSmolselect`/
-  `QBasicBitchButton`/`QComboArrow` — `QMenu`, scrollbars, title bars, borders,
-  `ResizeIndicator`, `*`, `QMainWindow`, …).
-- **~47 distinct colour literals.** Against `SettingsThemeSpec`'s dark tokens,
-  roughly **24 value-match an existing token** and **~23 need a new token**
-  (e.g. `#2B2B2B`, `#444444`, close-button red `#E81123`, error reds
-  `#FF5757`/`#F1707A`, several white/black/grey alphas).
-- **Alpha-format hazard:** `dark.qss` uses **float** alphas (`rgba(…,1.0)`,
-  `rgba(…,0.8)`) while the ThemeSpec renderer emits **int** alphas (its own
-  comment warns Qt truncates float alpha to 0). Normalising float→int (1.0→255,
-  0.8→204) is visually identical and removes a latent truncation bug — do it as a
-  **standalone, eyeball-once** step (Stage 3 precursor), not mixed into a port.
+### Why no ThemeSpec schema expansion was required
 
-### Safety net — byte-identity guard (the migration hangs on this)
+The earlier plan proposed roughly two dozen new semantic tokens because it assumed most legacy colours still had live callers. Caller proof disproved that premise. Adding those roles would have bloated strict schema-v6 `.srtheme` identity and could invalidate existing theme files for values that no current renderer needs. The landed approach therefore:
 
-Render the tokenised structural base with the **dark** theme's token values and
-assert it equals the current (alpha-normalised) `dark.qss`. If identity holds, the
-dark theme cannot regress; only non-dark themes change (which is the point). This
-is the automated substitute for the eyes-on oracle where pixels can't be proven.
+- reuses existing semantically correct roles for the narrow surviving callers;
+- derives the color-picker close-hover inversion from its current semantic text role instead of minting a dead legacy token;
+- keeps `_build_base_structural_styles()` free of colour literals;
+- does **not** copy the old stylesheet into Python or a replacement `.qss`;
+- leaves strict theme IO/schema shape unchanged.
 
-### Token vocabulary plan (Stage 3 detail)
+### Automated dependency guard
 
-- For the ~24 value-matches, **semantic-review each** — reuse an existing token
-  only when the roles truly move together (do NOT tie a button's black to a
-  swatch mix just because the value matches); otherwise add a dedicated token.
-- Add the ~23 new tokens to `_DEFAULT_DARK_COLORS` (`ui/settings_theme_spec.py`)
-  with dark values = the exact `dark.qss` colours, named semantically
-  (`window.close.hover` = `#E81123`, `feedback.error.text` = `#FF5757`, …), falling
-  back to `settings.<role>` for genuinely generic roles.
-- Extend theme schema/catalog/IO (`ui/settings_theme_catalog.py`,
-  `ui/settings_theme_io.py`, `ui/settings_theme_spec.py`) so a theme file can set
-  every new token; a theme omitting one inherits the dark default.
-- Relocate structure into a Python-rendered base
-  (`_build_base_structural_styles(theme)` in `ui/settings_theme.py` or a new
-  `ui/settings_base_qss.py`), colours as `%(token)s`, **all structure verbatim**.
-- Installer/tooling tail: `scripts/*.iss` copy `themes/*` to the shipped theme
-  dir — confirm removing `dark.qss` breaks no packaged-theme assumption; retire
-  `tools/flicker_test.py`'s `dark.qss` path; grep `styled_popup.py` /
-  `settings_theme_spec.py` for "legacy dark.qss" comments after deletion.
-- Stage-6 guard (mirror `defaults_authority_audit`): **no hardcoded colour
-  literal in the Settings base QSS** — every colour must be a ThemeSpec token, so
-  a later edit cannot reintroduce a shadow colour authority.
+`tests/test_settings_dark_qss_retirement_contract.py` runs without PySide package initialization and currently passes **5/5**. It proves:
+
+- selected production Settings/tray/tool sources contain no legacy path reference and `_load_base_stylesheet` is gone;
+- the tiny permanent base structural owner contains no palette literal;
+- the complete Default Dark root stylesheet renders without unresolved placeholders or legacy file input;
+- tray QMenu structure renders from ThemeSpec context-menu semantics;
+- the color-picker wrapper owns the legacy subsettings chrome semantically;
+- installer/build tooling has no filename-specific dependency on the obsolete stylesheet (`.iss` copies themes generically; build layout admits `.srtheme`/`.srwtheme` assets by extension).
+
+`tests/test_settings_theme_lifetime_contract.py` was reconciled from the retired `BASE + CUSTOM` seam to `_build_settings_root_stylesheet(theme)`. Direct stubbed execution is **2/2 PASS**; ordinary pytest collection is still **Needs run** here because the repository `conftest.py` imports PySide6.
 
 ---
 
@@ -149,32 +127,21 @@ Do not “simplify” direct-child selectors back into broad descendants during 
 
 ---
 
-## Initial risk map — starting evidence, not final caller proof
+## Resolved risk map
 
-The current `dark.qss` contains several rule families that deserve explicit classification before deletion.
+The initial risk-map questions are now answered by the 2026-09-14 caller audit above. Durable lessons:
 
-| Rule family / examples | Why it is risky | Expected destination decision |
-| --- | --- | --- |
-| global `*` font family | can silently affect every descendant and fallback metric | prove whether current explicit/shared typography already owns it; otherwise move only the required typography default to the narrow Settings owner |
-| `QMainWindow`, `#main_frame`, `#borderOverlay`, `#overlayBackdrop`, old title-bar rules | visibly old application/overlay architecture mixed into the file | caller-proof; delete if no current live Settings/tray caller rather than transplanting |
-| `QDialog#settingsDialog`, `#subsettingsDialog`, `#aboutDialog`, border/content/title frames | contains transparency, radius, margins and clip/corner assumptions as well as old colours | split structural declarations from palette; move structure to owning dialog/component only if still live |
-| SubSettings `QScrollArea` / viewport / corner / scrollbar rules | historically specificity-sensitive and tied to rounded-corner cleanup | preserve exact required structural semantics; no broad descendant selectors |
-| close/title label/button rules | mix fixed dimensions, symbol font, margins and old palette | retain only live geometry/behavior in the owning dialog; ThemeSpec/component renderer owns colour |
-| `QKeySequenceEdit#SettingsKeySequenceEdit` | specialized control geometry/focus styling may not be fully duplicated elsewhere | inspect caller and semantic renderer before moving anything |
-| `QDialogButtonBox` | `button-layout` and margin affect behavior/layout rather than palette | preserve only if current dialogs still depend on it |
-| `QToolButton[autoRaise="true"]` | current semantic theme renderer overrides its palette, while `dark.qss` has historically supplied base bucket geometry | migrate only the structural bucket geometry into the bucket/shared-style owner; do not restore old colours |
-| `QToolTip` | semantic theme currently overrides colours but base geometry may still be inherited | make one narrow tooltip renderer own required geometry + semantic tokens |
-| `QMenu` and subcontrols | the tray currently loads the entire file solely to obtain this family | create a narrow tray-menu style owner; do not keep a general stylesheet dependency for one menu |
-| generic `QGroupBox`, buttons, inputs, combo boxes, scrollbars, sliders, lists | later semantic/shared/component QSS may override some but not all declarations | compare final effective responsibility declaration-by-declaration; delete redundant rules, migrate only surviving structure |
-| named legacy buttons such as `QComboArrow`, `QBasicBitchButton`, `QSmolselect`, `QSmolselectMini` | object-name rules can remain live even when generic styling moved | search current object-name callers; move required geometry to their component/shared owner or delete after caller proof |
-
-This table is deliberately not permission to migrate those rules. It tells the implementing agent where to look first.
+- global/named rules are not migrated merely because they exist in the old file;
+- Settings-root typography and plain-checkbox structure are the only generic structural residue retained centrally;
+- buckets, tooltips, group boxes, Settings menus and current inputs already have current owners;
+- tray menu and color-picker wrapper were the only bounded secondary consumers requiring new/narrow ownership;
+- old `QMainWindow`/overlay/title-bar/named-button/scroll-area families are dead for current Settings/tray and must not reappear as compatibility debris.
 
 ---
 
-## Required selector audit
+## Selector-audit method (completed 2026-09-14)
 
-Before modifying code, build a temporary working table with one row per surviving selector/rule family:
+The implementation used one working row per surviving selector/rule family:
 
 | Selector | Live caller(s) | Current precedence | Classification | Destination owner | Action | Validation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -189,109 +156,73 @@ Rules:
 - if a legacy colour currently leaks through because no semantic role owns it, resolve that ownership explicitly. Prefer an existing semantically correct ThemeSpec role; add a narrowly justified semantic role only if no correct role exists. Do **not** create a hidden hard-coded replacement palette;
 - do not preserve dead rules for historical appearance. Git history/historical bugs already preserve evidence.
 
-The completed working table need not become a permanent document unless it exposes a durable new contract, but it should be retained with the implementation/audit evidence until physical acceptance.
+The durable outcome of that table is recorded in the resolved caller audit above; Git/history retain the discarded legacy details. Re-run exact caller/source search immediately before final physical deletion in case later commits introduced a new dependency.
 
 ---
 
-## Migration sequence
+## Migration sequence / live status
 
-### Stage 0 — freeze the visual oracle
+### Stage 0 — reference oracle and asset provenance — **PARTIAL / NEEDS RUN**
 
-Before the first stylesheet edit:
+Landed:
 
-- inspect exact current main;
-- record the current `dark.qss` SHA and both production loaders;
-- capture representative Settings screenshots/notes for Default Dark, one Acrylic theme and one Glass theme;
-- include at least the Themes tab, a dense form/input tab, a scroll-heavy tab and one subdialog/menu state;
-- record current window size/DPI and any known corner/edge behavior;
-- treat the accepted current output as the visual oracle. This cleanup has no planned restyle.
+- current repository file recorded as 989 lines, SHA `42ea38a0a299f4950a27a74506971bea41a2be03`;
+- GODZIP exclusion of `themes/` confirmed, so workspace absence is not treated as product absence;
+- current source callers/precedence audited.
 
-### Stage 1 — caller/precedence inventory
+**Needs run:** capture/compare representative Settings output on the operator's Windows/PySide environment before/after the real file is renamed/removed. Include Default Dark, one materially different theme, Acrylic, Glass, dense/scroll-heavy pages, picker and tray.
 
-Complete the selector audit above before broad removal.
+### Stage 1 — caller/precedence inventory — **LANDED**
 
-Do not begin by copying `dark.qss` into a Python string or a new `.qss` file. That merely moves the albatross.
+Resolved in the 2026-09-14 caller table above. Dead selectors were not migrated. Re-run exact source/object-name search immediately before final physical deletion to catch later changes.
 
-### Stage 2 — sever the tray from the monolith
+### Stage 2 — sever tray from monolith — **LANDED / VISUAL NEEDS RUN**
 
-`ui/system_tray.py` should stop loading the whole file before Settings loses its base dependency.
+`ui/system_tray.py` now uses `ui/settings_menu_style.py`. The renderer owns only `QMenu`/item/separator structure and consumes existing semantic `context.menu.*` roles. Static/Qt-free contract is green; physical tray appearance/interaction remains **Needs run**.
 
-Destination:
+### Stage 3 — migrate only live Settings structure — **LANDED / VISUAL NEEDS RUN**
 
-```text
-ScreensaverTrayIcon
-    -> narrow QMenu structural/style renderer
-    -> only the semantic visual authority actually required by that menu
-```
+The migration is intentionally much smaller than the old estimate:
 
-Requirements:
+- root fallback font + plain-checkbox typography/background + generic dialog-button-box ordering/margin live in `_build_base_structural_styles()` and contain no palette literals;
+- group-box inherited typography was made explicit in the current semantic owner;
+- the live generic disabled-label pseudo-state is now explicitly semantic via existing `text.disabled`;
+- bucket/toolbutton and tooltip structure was already current-owner QSS and was not duplicated;
+- `_ColorPickerDialog` now owns its old subsettings wrapper/title/close structure beside the component;
+- dead overlay/main-window/named-button/scrollbar families were not re-homed.
 
-- only `QMenu`/item/separator behavior used by the tray belongs here;
-- no unrelated Settings selectors;
-- no copied dark palette literals as a new private theme;
-- preserve current padding, separator and disabled/selected behavior unless a semantic owner intentionally already defines the accepted equivalent;
-- physically inspect the tray menu before continuing.
+No new ThemeSpec role was added solely for the cleanup and strict schema-v6 theme identity remains unchanged.
 
-### Stage 3 — migrate Settings structural behavior in bounded families
+### Stage 4 — replace Settings root base-file contract — **LANDED**
 
-Recommended order:
-
-1. root/default typography behavior;
-2. Settings/subsettings/about dialog structure and fixed geometry;
-3. scroll-area/viewport/corner/scrollbar structural rules;
-4. specialized input/control geometry and resources;
-5. bucket/toolbutton and tooltip base geometry;
-6. any remaining proven named-control rules.
-
-For each family:
+`_load_base_stylesheet()` is gone. The root applies:
 
 ```text
-identify live winning declarations
--> move only structural/behavior declarations to the narrow permanent owner
--> use ThemeSpec/component renderer for visuals
--> remove the corresponding legacy declarations from the working base
--> focused test + eyes-on comparison
--> continue
-```
-
-Do not accumulate a second giant “structural qss” monolith. Structural QSS is acceptable where QSS is genuinely the correct renderer, but ownership should sit beside the component/dialog/shared-style code that owns those selectors.
-
-### Stage 4 — replace `settings_theme.py` base-file contract
-
-Before testing with `dark.qss` absent, change the root renderer so semantic theme application no longer depends on `_load_base_stylesheet()` succeeding.
-
-The final shape should be conceptually:
-
-```text
-owned structural Settings QSS/renderers
+_build_base_structural_styles()
         +
-semantic ThemeSpec QSS
+_build_custom_styles(theme)
         -> widget.setStyleSheet(...)
 ```
 
-There must be no “missing dark.qss => return False => apply nothing” path.
+There is no `missing legacy file => return False => apply nothing` path. Theme persistence/runtime notification/native backdrop ownership is unchanged.
 
-Do not change theme persistence/runtime notification/native backdrop behavior while doing this.
+### Stage 5 — real file-absent Windows/PySide gate — **NEEDS RUN**
 
-### Stage 5 — physical file-absent gate
+In the actual repository/install tree, temporarily rename/remove `themes/dark.qss` and execute the matrix below. This is the decisive evidence that the code-dependency cleanup preserved the accepted product, because GODZIPs cannot represent this physical asset.
 
-With all known live structure owned elsewhere, physically remove/rename `themes/dark.qss` in the test worktree and run the complete matrix below.
+If any visual/lifecycle regression appears, inspect the exact missing structural owner. **Do not restore the whole stylesheet as fallback.**
 
-The absence gate must happen **before** final deletion is committed. A green run means the product no longer depends on the file, not merely that no importer mentions it.
+### Stage 6 — final repository/build asset deletion — **PENDING STAGE 5**
 
-### Stage 6 — final deletion boundary
+After the file-absent matrix is green:
 
-Only after the absence gate is green:
+- permanently delete `themes/dark.qss` from the real repository;
+- installer/build audit is already green for filename independence; re-check it after physical deletion and confirm the generic theme copy contains only intended assets;
+- repository-search production code again for the path/name; historical bug/docs references may remain as history;
+- remove any temporary visual/audit probes;
+- update `Current_Plan.md` / `Future_Cleanup.md` / this document from candidate to complete.
 
-- delete `_load_base_stylesheet()` and any now-dead path/import/logging from `ui/settings_theme.py`;
-- delete `_load_tray_menu_stylesheet()` and any now-dead path/import/logging from `ui/system_tray.py`;
-- delete `themes/dark.qss`;
-- delete stale comments claiming `dark.qss` supplies geometry;
-- run repository search proving no production runtime code references the file;
-- remove temporary audit/probe code created for the migration;
-- keep historical references as history unless they falsely claim current authority.
-
-The loader/file deletion belongs in one bounded final cleanup boundary so there is no supported half-state where a required file has been deleted but code still depends on it.
+The production loader deletion has already landed in the checkpoint because the working GODZIP cannot carry the physical asset. This is an intentional two-evidence boundary, not a supported half-state: runtime code must never regain a dependency while the physical cleanup waits for operator validation.
 
 ---
 

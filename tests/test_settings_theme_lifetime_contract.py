@@ -76,8 +76,7 @@ class _FakeShiboken:
 def test_root_qss_registry_prunes_deleted_pyside_wrappers(monkeypatch) -> None:
     module = _load_settings_theme_module(monkeypatch)
     module.Shiboken = _FakeShiboken
-    module._load_base_stylesheet = lambda: "BASE"
-    module._build_custom_styles = lambda _theme: "CUSTOM"
+    module._build_settings_root_stylesheet = lambda _theme: "ROOT"
 
     dead = _FakeWidget(live=False, raises=True)
     live = _FakeWidget(live=True)
@@ -86,15 +85,14 @@ def test_root_qss_registry_prunes_deleted_pyside_wrappers(monkeypatch) -> None:
 
     module._refresh_registered_widgets(types.SimpleNamespace(name="Test"))
 
-    assert live.styles == ["BASECUSTOM"]
+    assert live.styles == ["ROOT"]
     assert dead not in module._THEMED_WIDGETS
 
 
 def test_live_renderer_runtime_error_still_aborts_transaction(monkeypatch) -> None:
     module = _load_settings_theme_module(monkeypatch)
     module.Shiboken = _FakeShiboken
-    module._load_base_stylesheet = lambda: "BASE"
-    module._build_custom_styles = lambda _theme: "CUSTOM"
+    module._build_settings_root_stylesheet = lambda _theme: "ROOT"
 
     broken_live = _FakeWidget(live=True, raises=True)
     module._THEMED_WIDGETS.add(broken_live)

@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 `Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
 
@@ -38,10 +38,11 @@ On the current frameless translucent Settings HWND, Acrylic and Glass deliberate
 family. Acrylic = state 4 with theme native tint. Glass = untinted state 3; semantic Qt RGBA surfaces own its visible
 colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the documented `DwmEnableBlurBehindWindow` API.
 
-`themes/dark.qss` is legacy structural stylesheet residue, not visual authority. Current Settings/tray source still
-contains explicit loader/caller references, so a missing workspace copy is not retirement proof. Its audited dependency
-removal is owned by `Future_Cleanup.md`; do not alter native backdrop/forged-edge geometry, duplicate the QSS into another
-file/string, or weaken theme failure semantics merely to delete it.
+`themes/dark.qss` is legacy structural stylesheet residue, not visual authority. Production Settings/tray code no
+longer loads or references it: permanent narrow renderers own the surviving structure and `SettingsThemeSpec` remains
+the visual authority. The physical repository/build asset is pending a Windows/PySide file-absent acceptance matrix
+because GODZIP Foundry excludes `themes/`. Do not restore a loader, duplicate the QSS into another file/string, alter
+native backdrop/forged-edge geometry, or weaken theme failure semantics merely to finish physical deletion.
 
 Runtime Widget Themes are a separate semantic colour authority over retained Widget/runtime-overlay appearance. Theme identity and Settings-window backdrop material are deliberately separate:
 

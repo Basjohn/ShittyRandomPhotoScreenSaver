@@ -786,7 +786,12 @@ def test_display_manager_owns_layout_slot_persistence_and_fenced_reload(
     class _Settings:
         def __init__(self) -> None:
             self.widgets = {
-                "clock": {"enabled": True, "position": "Top Left"},
+                "clock": {
+                    "enabled": True,
+                    "position": "Top Left",
+                    "display_mode": "digital",
+                    "display_mode_overrides": {"screen:A": "analog"},
+                },
             }
             self.save_calls = 0
 
@@ -810,8 +815,12 @@ def test_display_manager_owns_layout_slot_persistence_and_fenced_reload(
     try:
         assert manager._save_layout_slot("1") is True
         settings.widgets["clock"]["position"] = "Bottom Right"
+        settings.widgets["clock"]["display_mode"] = "analog"
+        settings.widgets["clock"]["display_mode_overrides"] = {"screen:A": "digital"}
         assert manager._load_layout_slot("1") is True
         assert settings.widgets["clock"]["position"] == "Top Left"
+        assert settings.widgets["clock"]["display_mode"] == "digital"
+        assert settings.widgets["clock"]["display_mode_overrides"] == {"screen:A": "analog"}
         assert settings.save_calls == 2
         assert reloads == [("slot_load", 702, id(manager))]
         assert manager._save_layout_slot("bad") is False

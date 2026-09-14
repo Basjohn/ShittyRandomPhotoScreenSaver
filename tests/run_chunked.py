@@ -33,6 +33,7 @@ LOG_DIR = TESTS_DIR.parent / "logs"
 
 DESTINATION_PROFILE = (
     "test_qtquick_h_cutover.py",
+    "test_layout_slots.py",
     "test_qtquick_ctrl_coordinator.py",
     "test_qtquick_display_image_route.py",
     "test_qtquick_display_presenter.py",
@@ -123,6 +124,7 @@ DESTINATION_PROFILE = (
     "test_theme_expansion_light_metal_contract.py",
     "test_settings_theme_lifetime_contract.py",
     "test_settings_theme_qobject_lifetime.py",
+    "test_settings_dark_qss_retirement_contract.py",
     "test_reddit_exit_logic.py::TestContextMenuClickThroughSuppression::test_menu_action_arms_pointer_guard_and_reddit_open_is_refused",
     # Permanent post-H performance/freshness contracts. These are deliberately
     # phase-neutral: I/J must not regain green by weakening reaction cadence,
@@ -136,6 +138,7 @@ DESTINATION_PROFILE = (
     "test_runtime_perf_policy_contracts.py",
     "test_tooling_ownership.py",
     "test_widgets_tab_current.py::TestWidgetsTab::test_widgets_tab_disables_media_size_controls_when_custom_is_active",
+    "test_widgets_tab_current.py::test_clock_settings_save_preserves_runtime_display_mode_overrides",
     "test_settings_eventfilter_teardown_guards.py",
     "test_terminal_runtime_destruction.py",
     "test_qtquick_retained_model_lifetime.py",

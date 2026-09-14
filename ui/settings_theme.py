@@ -7,7 +7,6 @@ preserving the current selector structure and geometry.
 
 from __future__ import annotations
 
-from pathlib import Path
 from weakref import WeakSet
 
 try:
@@ -48,15 +47,32 @@ def _theme_scaled_alpha(theme: SettingsThemeSpec, token: str, scale: float) -> s
     return f"rgba({color.r}, {color.g}, {color.b}, {alpha})"
 
 
-def _load_base_stylesheet() -> str | None:
-    """Read the existing base QSS without owning semantic theme values."""
+def _build_base_structural_styles() -> str:
+    """Render the small live structural base formerly inherited from legacy base stylesheet.
 
-    theme_path = Path(__file__).parent.parent / "themes" / "dark.qss"
-    if not theme_path.exists():
-        logger.warning(f"[FALLBACK] Theme file not found: {theme_path}")
-        return None
-    with open(theme_path, "r", encoding="utf-8") as f:
-        return f.read()
+    This deliberately contains no palette authority.  Caller-proof against the
+    current Settings tree reduced the old monolith to a global fallback font and
+    the typography/background structure still relied upon by plain QCheckBox
+    instances plus the palette-free dialog-button-box ordering/margin.
+    Component-specific structure remains with its owning renderer.
+    """
+
+    return """
+                * {
+                    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+                }
+
+                QCheckBox {
+                    font-family: 'Segoe UI';
+                    font-size: 13px;
+                    background: transparent;
+                }
+
+                QDialogButtonBox {
+                    button-layout: 1;
+                    margin: 10px;
+                }
+    """
 
 
 def _build_custom_styles(theme: SettingsThemeSpec) -> str:
@@ -226,6 +242,8 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     margin-bottom: 12px;
                     padding: 18px 24px 18px 24px;
                     color: %(group_text)s;
+                    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+                    font-weight: 800;
                 }
 
                 QGroupBox::title {
@@ -264,8 +282,8 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     border-bottom: 2px solid %(checkbox_checked_bottom_shadow_border)s;
                 }
 
-                /* Collapsible Settings buckets. Geometry and arrow behavior
-                   remain in dark.qss / Qt; ThemeSpec owns the palette. */
+                /* Collapsible Settings buckets. Geometry remains renderer-owned;
+                   ThemeSpec owns the palette. */
                 QToolButton[autoRaise="true"] {
                     background-color: %(bucket_closed_surface)s;
                     color: %(bucket_closed_text)s;
@@ -289,8 +307,7 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     background-color: %(bucket_open_hover_surface)s;
                 }
 
-                /* dark.qss still supplies base geometry; this later rule makes
-                   tooltip colours belong to the selected Settings theme. */
+                /* Tooltip geometry is renderer-owned; ThemeSpec owns its palette. */
                 QToolTip {
                     background-color: %(tooltip_surface)s;
                     color: %(tooltip_text)s;
@@ -303,6 +320,10 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                 QLabel {
                     color: %(label_text)s;
                     background-color: rgba(0, 0, 0, 0);
+                }
+
+                QLabel:disabled {
+                    color: %(label_disabled_text)s;
                 }
     """ % {
         "dialog_glass": _theme_rgba(theme, "window.dialog_glass"),
@@ -432,7 +453,14 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
         "tooltip_text": _theme_rgba(theme, "tooltip.text"),
         "tooltip_border": _theme_rgba(theme, "tooltip.border"),
         "label_text": _theme_qss_color(theme, "text.primary"),
+        "label_disabled_text": _theme_qss_color(theme, "text.disabled"),
     }
+
+
+def _build_settings_root_stylesheet(theme: SettingsThemeSpec) -> str:
+    """Return the complete Settings-root stylesheet from permanent owners."""
+
+    return _build_base_structural_styles() + _build_custom_styles(theme)
 
 
 def _is_live_qobject(widget) -> bool:
@@ -460,11 +488,7 @@ def _apply_theme_to_widget(widget, theme: SettingsThemeSpec) -> bool:
     if not _is_live_qobject(widget):
         return False
 
-    stylesheet = _load_base_stylesheet()
-    if stylesheet is None:
-        return False
-
-    widget.setStyleSheet(stylesheet + _build_custom_styles(theme))
+    widget.setStyleSheet(_build_settings_root_stylesheet(theme))
     logger.debug("Theme loaded successfully: %s", theme.name)
     return True
 

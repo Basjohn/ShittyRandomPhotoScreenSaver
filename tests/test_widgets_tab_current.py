@@ -1402,6 +1402,35 @@ def test_build_current_widgets_config_uses_live_clock_preview_fields(qt_app, set
         tab.deleteLater()
 
 
+
+def test_clock_settings_save_preserves_runtime_display_mode_overrides(
+    qt_app,
+    settings_manager,
+):
+    from ui.tabs.widgets_tab_clock import save_clock_settings
+
+    widgets = settings_manager.get_widgets_map()
+    widgets.setdefault("clock", {})["display_mode_overrides"] = {
+        "serial:A": "analog",
+        "serial:B": "digital",
+    }
+    widgets.setdefault("clock2", {})["display_mode_overrides"] = {"serial:C": "analog"}
+    widgets.setdefault("clock3", {})["display_mode_overrides"] = {}
+    settings_manager.set_widgets_map(widgets)
+
+    tab = WidgetsTab(settings_manager)
+    try:
+        clock, clock2, clock3 = save_clock_settings(tab)
+        assert clock["display_mode_overrides"] == {
+            "serial:A": "analog",
+            "serial:B": "digital",
+        }
+        assert clock2["display_mode_overrides"] == {"serial:C": "analog"}
+        assert clock3["display_mode_overrides"] == {}
+    finally:
+        tab.deleteLater()
+
+
 def test_clock_calendar_controls_are_conditioned_and_save_canonical_keys(
     qt_app,
     settings_manager,

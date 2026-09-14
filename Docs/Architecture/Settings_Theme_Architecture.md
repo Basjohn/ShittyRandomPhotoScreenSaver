@@ -1,6 +1,6 @@
 # Settings Theme Architecture
 
-Last updated: 2026-09-02
+Last updated: 2026-09-14
 
 Durable contract for the QWidget Settings theme system, native backdrop ownership and theme authoring. This document owns the current Settings-theme architecture. Historical investigation belongs under `Docs/Historical_Bugs/`; temporary theme migration notes do not override this contract.
 
@@ -206,16 +206,15 @@ Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies
 
 ## `dark.qss` status
 
-`themes/dark.qss` is legacy stylesheet debris, not theme authority. Current source still contains explicit Settings/tray loader dependencies on that path even when a particular GODZIP/source workspace does not contain the file. **Physical absence is not retirement proof.** Retirement is complete only when required structural behavior has permanent owners and the production loader dependencies are removed through the audited work in `Future_Cleanup.md`.
+`themes/dark.qss` is now **legacy source/package debris only**, not a production Settings/tray dependency or theme authority. The 2026-09-14 retirement pass removed both runtime loaders after caller-proofing the surviving structure: `ui/settings_theme.py` owns the tiny Settings-root typography/checkbox structural base, `ui/settings_menu_style.py` owns tray-menu structure using existing ThemeSpec context-menu roles, and the color-picker wrapper owns its former subsettings chrome. No legacy palette was copied into a replacement monolith.
 
-Do not delete it casually and do not preserve it by copying its old colours back into Python. Retirement means:
+**Physical absence is still not retirement proof.** GODZIP Foundry intentionally excludes `themes/`, so the real repository asset remains pending deletion until the intended Windows/PySide absence matrix is green. Until then:
 
-1. enumerate every live loader and selector actually depended upon;
-2. classify surviving rules into structural/geometry/resource behavior versus obsolete visual literals;
-3. relocate only required structural behavior to the permanent renderer/component that owns it;
-4. keep colour/opacity/shadow authority in ThemeSpec;
-5. prove Settings and the tray/menu consumers with the file physically absent;
-6. then delete the loader dependency and file together.
+1. never restore a loader/fallback merely because the asset exists in the repository;
+2. keep surviving structure with its narrow permanent renderer/component owner;
+3. keep colour/opacity/shadow authority in ThemeSpec;
+4. run Settings/tray/picker plus Acrylic/Glass fresh-start/live-switch acceptance with the file physically absent;
+5. then delete the repository/build asset and prove packaging no longer carries it.
 
 Native backdrop code and forged edge geometry are outside that cleanup unless an independently proven defect requires change.
 

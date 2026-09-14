@@ -1,12 +1,12 @@
 # Test Suite Guide
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
-## 0.10 2026-09-12 Windows/PySide validation run — supersedes prior NEEDS RUN VALIDATION
+## 0.10 2026-09-12 Windows/PySide validation run — supersedes prior NEEDS RUN
 
 The maintained `destination` profile was executed on the intended **Windows +
 PySide6 6.9.1 + OpenGL** environment (unlike the earlier Linux audit that could
-not import PySide6). This is the actual run the prior "NEEDS RUN VALIDATION"
+not import PySide6). This is the actual run the prior "NEEDS RUN"
 labels were waiting for — treat those labels below as discharged for every
 target that now passes.
 
@@ -103,7 +103,7 @@ public and member-disabled by default; `--devsteam` remains only for unfinished 
 The parser tolerates the old `--devstats` token as an inert no-op so an existing shortcut cannot change launch mode.
 
 
-## 0.12 2026-09-13 System Stats expansion + frameless interaction-glow gate
+## 0.13 2026-09-13 System Stats expansion + frameless interaction-glow gate
 
 - System Stats now keeps one generation-shared, lease-gated fixed-delay sampler and adds **UPTIME** plus aggregate
   **NETWORK ↓/↑** to the same immutable snapshot; no new cadence owner exists. Canonical sample interval is user-adjustable
@@ -126,11 +126,33 @@ The exact current source tree and the maintained `destination` profile in `tests
 
 The current product is post-Qt-Quick cutover. The five established visualizer modes remain permanent shared modes; Voxel Sphere is an **accepted experimental, architecturally isolated** sixth mode. Tests must preserve that distinction rather than forcing Sphere into permanent-mode assumptions or treating experimental isolation as exemption from shared persistence/normalization contracts.
 
-## 0.13 2026-09-13 geometry-guide + widget visual polish
+## 0.14 2026-09-13 geometry-guide + widget visual polish
 
 Focused acceptance owns: wheel resize publishes alignment guides without snapping; authored guides are +1 px while the generic grid stays 1 px; Media artwork consumes non-overlapping right-column vertical space and insets under its frame; all shared dynamic artwork buffers are hard-contained; Friend Pulse local linework is +0.5 px, roster names are title-cased/two-line shrink-to-fit/bold, and BrandedHeader scale-up stroke delta receives the extra 25% boost. Real PySide/QML execution remains user-environment validation when unavailable to the agent.
 
 This file is a maintained routing/status guide. It deliberately does **not** carry a giant hand-maintained inventory of every `test_*.py` file. That became stale faster than the code and obscured obsolete tests. Source discovery plus the maintained profile are the inventory authorities.
+
+## 0.15 2026-09-14 Clock slot face-state persistence
+
+The Clock slot repair has dedicated current-owner regression coverage. Clock analogue/digital face state is independent persisted state and must round-trip separately from the two CUSTOM geometry variants.
+
+- `tests/test_layout_slots.py` now protects v2 capture of `display_mode` + `display_mode_overrides`, exact replay including an explicitly empty override map, and v1 fallback that clears newer stale overrides and uses the legacy slot baseline. **NEEDS RUN**: this nominally data-oriented module still reaches PySide6 through capability/transition imports in this environment.
+- `tests/test_qtquick_h_cutover.py` carries the state through the real `DisplayManager` fenced save/load boundary. **NEEDS RUN** on Windows/PySide; the full file is already a maintained destination target.
+- `tests/test_widgets_tab_current.py::test_clock_settings_save_preserves_runtime_display_mode_overrides` proves a normal Clock Settings save cannot erase double-click/runtime per-display state. **NEEDS RUN** on Windows/PySide.
+- Installed acceptance must cover: save a slot while one display is Digital and another override is Analogue; switch live; load the slot; verify the saved face is restored together with that face's own geometry, then repeat in the opposite direction and with a slot whose saved override map is empty. **NEEDS RUN**.
+
+These tests must never collapse face state into geometry authority: `custom_layout` owns the `digital`/`analog` rectangles; the Clock section owns `display_mode` and per-display overrides.
+
+## 0.16 2026-09-14 legacy Settings base-stylesheet retirement candidate
+
+The production dependency on `themes/dark.qss` is now severed in the checkpoint candidate without copying the monolith into another owner. The repository asset itself is excluded from GODZIPs, so physical deletion is deliberately deferred until the intended Windows/PySide visual matrix confirms the replacement owners.
+
+- `tests/test_settings_dark_qss_retirement_contract.py`: **6/6 PASS** by direct Qt-free execution here. It proves live Settings/tray source has no legacy path reference/loader, the permanent structural base contains no palette literals, the complete Default Dark root renderer resolves with no placeholders/legacy file, generic disabled labels use `text.disabled`, tray `QMenu` geometry is rendered from existing semantic context-menu roles, the color-picker wrapper explicitly owns its old subsettings chrome, and installer/build tooling has no filename-specific dependency on the obsolete stylesheet.
+- `tests/test_settings_theme_lifetime_contract.py` is reconciled to the new complete-root renderer (`_build_settings_root_stylesheet`) rather than the retired base-file concatenation seam. Direct stubbed execution is **2/2 PASS**; normal pytest collection in this environment still reaches the PySide6-dependent repository `conftest.py`, so the ordinary pytest route is **NEEDS RUN**.
+- Existing `tests/test_settings_theme_qobject_lifetime.py`, Settings dialog/theme switching, Theme Foundry, tray, picker, native Glass/Acrylic and first-start tests remain **NEEDS RUN** on Windows/PySide.
+- Physical removal of `themes/dark.qss` from the real repository/build is **NEEDS RUN** only after that visual/lifecycle matrix is green. Missing bytes in a GODZIP are not evidence by themselves.
+
+Retirement acceptance is zero intended visual/interaction change: semantic `SettingsThemeSpec` remains palette authority; structural QSS belongs to narrow permanent renderers; no replacement monolithic QSS file is permitted.
 
 ---
 
@@ -247,6 +269,29 @@ tests/test_startup_source_onboarding_resume.py
 
 Direct execution in the current Linux workspace: **4/4 assertions PASS**. The contract protects normal RUN resumption after missing-source onboarding, preserves `/c`, `-c`, `-s` and `--s` as CONFIG-only invocations, verifies the same Settings manager is reused and `quitOnLastWindowClosed` is restored, and requires startup-dependent Interaction Mode resolution to occur after onboarding. Operator-installed launch validation is accepted as of 2026-09-11; only automated test execution debt remains.
 
+## 0.7 2026-09-11 Visualizer dormancy schema + Weather Settings target
+
+Two new Qt-free/current-owner contract modules cover this misc slice without editing a pre-existing test module:
+
+```text
+tests/test_visualizer_mode_activation_schema_current.py
+tests/test_weather_settings_target_contract.py
+```
+
+Direct execution in the Linux workspace: **8/8 assertions PASS**. Visualizer coverage requires the canonical per-mode dormancy authority to be the explicit `mode_activation` boolean map, treats mapping insertion order as irrelevant while protecting registry-order resolution/the last-mode recovery invariant, verifies the typed model serializes no retired `enabled_modes` key, and proves the one temporary legacy reader converts/removes the old list while emitting warning feedback when relied upon. Weather coverage protects the semantic `weather_location` target, retained family callback injection, generation-checked DisplayManager/engine Settings lifecycle route, Widgets -> Weather lazy navigation and synchronous Location focus without a target-specific timer.
+
+Defaults regeneration and authority checking are required for this schema change. Operator-installed validation is accepted as of 2026-09-11 for real Visualizer enable/disable persistence and the retained Weather missing-location SETTINGS click -> modal Settings -> runtime restart path; only automated test execution debt remains.
+
+## 0.8 2026-09-11 Achievement Pulse post-fit percentage scale
+
+One new Qt-free/source-level contract covers the installed visual follow-up without editing a pre-existing test module:
+
+```text
+tests/test_achievement_pulse_progress_text_visual_scale_contract.py
+```
+
+Direct execution in the Linux workspace: **2/2 assertions PASS**. The contract requires the 0.90 reduction to occur as a final presentation transform after `Text.HorizontalFit`, where it cannot be masked by the fitter's existing point-size choice. It separately protects the existing 108x108 pulse geometry and 4 px lift and verifies that the Total parsing/model and authored-size normalization remain in their existing Python owners. Operator-installed visual confirmation is accepted as of 2026-09-11; only automated test execution debt remains.
+
 ## 0.9 2026-09-11 Widget Glow Use Theme button style
 
 One new Qt-free/source-level contract covers the tiny style correction without editing a pre-existing test module:
@@ -264,7 +309,7 @@ Direct execution in the Linux workspace: **2/2 assertions PASS**. The Display ->
 Use these labels consistently:
 
 - **PASS** — executed against the stated current tree/environment and passed.
-- **NEEDS RUN VALIDATION** — current/recent coverage judged valuable and structurally reconciled, but it could not execute in this environment. Run it on the intended Windows/PySide/OpenGL environment before using it as acceptance evidence.
+- **NEEDS RUN** — current/recent coverage judged valuable and structurally reconciled, but it could not execute in this environment. Run it on the intended Windows/PySide/OpenGL environment before using it as acceptance evidence. This is the canonical replacement for older `NEEDS RUN VALIDATION` wording.
 - **ENVIRONMENT BLOCKED** — collection/execution cannot begin because a required external runtime package/platform is missing. This is not a product failure.
 - **OBSOLETE** — test targets a retired owner/architecture and no longer expresses a current contract. Delete it or preserve the lesson in Historical Bugs; do not keep it red forever.
 - **REHOME** — only part of a mixed legacy test still has current value. Move that assertion into the current owner/suite and retire the dead integration shell.
@@ -373,19 +418,19 @@ Important classifications:
 - retained: shared volume-owner leases, provider retargeting, generation fencing, optimistic/debounced writes;
 - removed: old `MediaWidget` + deleted `WidgetManager` anchor integration cells;
 - current Quick service injection is covered by current runtime-service/family-binder/media-presentation suites;
-- **NEEDS RUN VALIDATION** after this rehome because `ThreadManager` imports PySide6 in this environment.
+- **NEEDS RUN** after this rehome because `ThreadManager` imports PySide6 in this environment.
 
 `tests/test_system_mute_runtime.py`
 
 - retained: shared owner/backend semantics, generation fencing, coalescing and UI-owner-thread behavior;
 - removed: old `MediaWidget` + deleted `WidgetManager` anchor integration cells;
 - current Quick injection is covered by current service/family-binder/media-presentation suites;
-- **NEEDS RUN VALIDATION** after this rehome because `ThreadManager` imports PySide6 here.
+- **NEEDS RUN** after this rehome because `ThreadManager` imports PySide6 here.
 
 `tests/test_qtquick_crumble_transition.py`
 
 - received the useful Crumble shader assertions formerly embedded in the deleted mixed dimming/interaction file;
-- **NEEDS RUN VALIDATION** because the retained transition package imports PySide6 here.
+- **NEEDS RUN** because the retained transition package imports PySide6 here.
 
 ### 4.3 Stale assertions corrected in maintained tests
 
@@ -419,7 +464,7 @@ These are test-truth corrections, not permission to change the production contra
 - `test_devcurve_shader_contract_current.py` and `test_retired_runtime_islands_contract.py` are new Qt-free/static replacements for retired-owner assertions; source compilation passed, with normal pytest collection subject to the same global PySide6 blocker.
 - Bucket reachability audit rehomed three mixed tests whose surviving coverage was current but whose bucket expectations were obsolete: `test_widgets_tab.py` -> `test_widgets_tab_current.py`, `test_widgets_tab_general.py` -> `test_widgets_tab_general_current.py`, and `test_visualizer_settings_lazy_bodies.py` -> `test_visualizer_settings_lazy_bodies_current.py`. The old modules are debris; production code is not weakened to retain multi-open/default-open/legacy Technical assertions.
 
-### NEEDS RUN VALIDATION
+### NEEDS RUN
 
 The following are current/recent and could not collect here because PySide6 is unavailable:
 
@@ -513,6 +558,8 @@ Protect:
 - descriptor/load/save/default keys remain mutually complete;
 - schema migrations normalize legacy input once and remove retired aliases;
 - Theme Foundry and Defaults Foundry consume canonical schema rather than inventing parallel fields.
+- production Settings/tray styling must not load `themes/dark.qss`; the root renderer and narrow component renderers own structure while `SettingsThemeSpec` owns semantic palette/backdrop/shadow values;
+- physical deletion of the legacy stylesheet is an installed-acceptance cleanup step, not permission to reintroduce a fallback loader when the file is absent;
 - collapsible bucket persistence remains sparse and page/local-scope accordion behavior stays centralized; canonical defaults enumerate identities but `SettingsManager` must not materialize absent false members.
 
 Primary suites include `test_defaults_schema_authority.py`, settings manager/persistence/binding/default parity, descriptor suites, Theme Foundry and default-settings-editor tests.
@@ -589,6 +636,7 @@ Examples:
 
 - Achievement Pulse Progress Pulse must be viewed at `0%`, one/two-digit values and `100%`, with and without Shelf Style, at normal and CUSTOM sizes;
 - About recolouring must be checked across materially different themes and after live theme switching;
+- legacy Settings stylesheet retirement must be checked with the file physically absent across Default Dark, contrasting light/metal themes, live theme switching, tray menu, color picker, tooltips/group boxes/check boxes, first-start, and native Glass/Acrylic;
 - Voxel Sphere changes require real music, silence, loud-passage and geometry review;
 - visualizer cadence/freshness work requires logs plus eyes-on response, not FPS alone;
 - real-GL shader/resource changes need the intended driver/context environment.
@@ -605,17 +653,19 @@ When changing tests or this guide:
 2. validate every maintained-profile target exists;
 3. run the broad collection diagnostic when practical and classify dependency blockers separately from product reds;
 4. delete whole-file fossils once their remaining current assertions are rehomed or no longer applicable;
-5. add **NEEDS RUN VALIDATION** immediately for newly added/recent tests that cannot execute in the current environment;
+5. add **NEEDS RUN** immediately for newly added/recent tests that cannot execute in the current environment;
 6. remove that label only after an actual appropriate-environment run;
 7. update this file when architecture/test authority changes materially, not for every small assertion edit.
 
-Current 2026-09-11 inventory after this audit:
+Current 2026-09-14 inventory after this pass:
 
 ```text
-338 test_*.py modules (nine caller-dead/mixed-owner modules retired, nine current replacement/contract modules added)
-130 unique maintained destination targets
+367 test_*.py modules
+132 unique maintained destination targets
 0 missing destination target files
 ```
+
+The 2026-09-14 additions place the Clock slot file, the Clock Settings preservation node and the legacy-Settings-stylesheet retirement contract in the maintained destination profile. Environment-gated entries remain **NEEDS RUN** until an intended Windows/PySide execution records their result.
 
 Git and `Docs/Historical_Bugs/` preserve migration history. `Docs/TestSuite.md` should stay current enough to tell an agent **what deserves trust now**.
 
@@ -627,31 +677,8 @@ A test-affecting slice is complete only when:
 
 - production behavior and test expectation agree on the current owner/contract;
 - directly runnable focused tests are green;
-- environment-blocked current tests are explicitly marked **NEEDS RUN VALIDATION** where appropriate;
+- environment-blocked current tests are explicitly marked **NEEDS RUN** where appropriate;
 - obsolete tests have been deleted/re-homed rather than converted into permanent skips;
 - defaults/generated artifacts are checked when settings changed;
 - maintained-profile membership is valid;
 - installed/Qt/GL evidence is requested where static/headless proof cannot close the claim.
-
-## 0.7 2026-09-11 Visualizer dormancy schema + Weather Settings target
-
-Two new Qt-free/current-owner contract modules cover this misc slice without editing a pre-existing test module:
-
-```text
-tests/test_visualizer_mode_activation_schema_current.py
-tests/test_weather_settings_target_contract.py
-```
-
-Direct execution in the Linux workspace: **8/8 assertions PASS**. Visualizer coverage requires the canonical per-mode dormancy authority to be the explicit `mode_activation` boolean map, treats mapping insertion order as irrelevant while protecting registry-order resolution/the last-mode recovery invariant, verifies the typed model serializes no retired `enabled_modes` key, and proves the one temporary legacy reader converts/removes the old list while emitting warning feedback when relied upon. Weather coverage protects the semantic `weather_location` target, retained family callback injection, generation-checked DisplayManager/engine Settings lifecycle route, Widgets -> Weather lazy navigation and synchronous Location focus without a target-specific timer.
-
-Defaults regeneration and authority checking are required for this schema change. Operator-installed validation is accepted as of 2026-09-11 for real Visualizer enable/disable persistence and the retained Weather missing-location SETTINGS click -> modal Settings -> runtime restart path; only automated test execution debt remains.
-
-## 0.8 2026-09-11 Achievement Pulse post-fit percentage scale
-
-One new Qt-free/source-level contract covers the installed visual follow-up without editing a pre-existing test module:
-
-```text
-tests/test_achievement_pulse_progress_text_visual_scale_contract.py
-```
-
-Direct execution in the Linux workspace: **2/2 assertions PASS**. The contract requires the 0.90 reduction to occur as a final presentation transform after `Text.HorizontalFit`, where it cannot be masked by the fitter's existing point-size choice. It separately protects the existing 108x108 pulse geometry and 4 px lift and verifies that the Total parsing/model and authored-size normalization remain in their existing Python owners. Operator-installed visual confirmation is accepted as of 2026-09-11; only automated test execution debt remains.

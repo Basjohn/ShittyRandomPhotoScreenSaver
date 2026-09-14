@@ -7,7 +7,6 @@ mode is enabled.
 from __future__ import annotations
 
 from typing import Optional
-from pathlib import Path
 
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QIcon, QAction
@@ -16,26 +15,10 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
+from ui.settings_menu_style import build_tray_menu_stylesheet
 
 
 logger = get_logger(__name__)
-
-def _load_tray_menu_stylesheet() -> str | None:
-    """Load the dark theme stylesheet for use with the tray menu only.
-
-    This reuses the existing themes/dark.qss file so the tray context
-    menu matches other context menus defined in the theme without
-    duplicating styles in code.
-    """
-    try:
-        theme_path = Path(__file__).parent.parent / "themes" / "dark.qss"
-        if not theme_path.exists():
-            return None
-        return theme_path.read_text(encoding="utf-8")
-    except Exception:
-        logger.debug("Failed to load dark.qss for tray menu", exc_info=True)
-        return None
-
 
 class ScreensaverTrayIcon(QSystemTrayIcon):
     """Minimal system tray icon for the screensaver.
@@ -63,16 +46,14 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
 
         self.setToolTip("SRPSS")
 
-        # Build a small context menu and apply the dark theme so it
-        # matches other context menus styled in dark.qss.
+        # Build a small context menu through the narrow Settings-theme menu
+        # renderer.  The tray no longer loads the legacy base stylesheet.
         menu = QMenu()
 
         try:
-            stylesheet = _load_tray_menu_stylesheet()
-            if stylesheet:
-                menu.setStyleSheet(stylesheet)
+            menu.setStyleSheet(build_tray_menu_stylesheet())
         except Exception:
-            logger.debug("Failed to apply dark.qss to tray menu", exc_info=True)
+            logger.debug("Failed to apply semantic tray menu style", exc_info=True)
 
         settings_action = QAction("Settings", menu)
         exit_action = QAction("Exit", menu)

@@ -1,6 +1,6 @@
 # SRPSS Specification
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; independent closure
 narrative belongs under `Docs/audits/` or historical evidence.
@@ -74,10 +74,11 @@ DWM system-backdrop/redirection-bitmap experiments are not part of the current S
 requires an intentional window/presentation architecture change and new physical proof, not a theme tweak. Native
 activation is not repaired by timers, duplicate calls or QSS replay.
 
-`themes/dark.qss` is legacy structural stylesheet residue, not theme authority. Current Settings/tray source still
-contains explicit loader/caller references, so a missing copy in a source/GODZIP workspace is **not** proof that retirement
-has landed. Retirement remains an audited dependency-removal task in `Future_Cleanup.md`; do not replace it with a copied
-QSS blob, hidden literals, a native-backdrop workaround, or a fail-open theme path. The complete permanent contract is
+`themes/dark.qss` is legacy structural stylesheet residue, not theme authority. Production Settings/tray code has
+severed the loader/caller dependency; the surviving structure is owned by narrow renderers and semantic visual values
+remain in `SettingsThemeSpec`. The real repository/build asset is still awaiting the Windows/PySide file-absent matrix
+because GODZIP workspaces intentionally omit `themes/`. Do not restore a loader, copy the QSS blob/literals elsewhere,
+use native-backdrop workarounds, or add a fail-open theme path. The complete permanent contract is
 `Docs/Architecture/Settings_Theme_Architecture.md`.
 
 ## Runtime Widget Themes / semantic visuals

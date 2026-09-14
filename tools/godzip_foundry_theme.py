@@ -123,13 +123,13 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
     """Render Foundry chrome entirely from Settings ``ThemeSpec`` semantics.
 
     Foundry deliberately owns its QSS structure while consuming the same semantic
-    colour/backdrop roles as Settings.  It does not import ``themes/dark.qss`` or
+    colour/backdrop roles as Settings.  It does not import the legacy Settings base stylesheet or
     mutate the product Settings theme selection.
     """
 
     # Foundry owns its structural QSS.  It consumes Settings ThemeSpec colour
-    # semantics but deliberately does not consume themes/dark.qss; that file is
-    # itself scheduled for retirement from the product Settings architecture.
+    # semantics but deliberately does not consume the legacy Settings base stylesheet; that monolith is
+    # retired from the product Settings architecture.
     base = ""
     primary = _color(theme, "text.primary")
     secondary = _color(theme, "text.secondary")
