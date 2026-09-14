@@ -102,6 +102,7 @@ class BubbleViewportScalingTests(unittest.TestCase):
                 "_bubble_viewport_extent": extent,
                 "bubble_big_count": 1,
                 "bubble_small_count": 0,
+                "bubble_surface_reach": 1.0,
                 "bubble_stream_direction": "none",
                 "bubble_stream_constant_speed": 0.0,
                 "bubble_stream_speed_cap": 0.0,
@@ -113,6 +114,22 @@ class BubbleViewportScalingTests(unittest.TestCase):
                 "bubble_trail_strength": 0.0,
                 "bubble_bounce_big_pct": 0.0,
                 "bubble_bounce_small_pct": 0.0,
+                # All non-impulse motion/size contributors are held neutral so the
+                # preloaded rebound impulse is the only thing that can move the
+                # bubble, keeping this a pure content-space invariance check.
+                "bubble_bounce_big_speed": 0.0,
+                "bubble_bounce_small_speed": 0.0,
+                "bubble_bounce_same_only": True,
+                "bubble_collision_pop_mode": "off",
+                "bubble_big_bass_pulse": 0.0,
+                "bubble_small_freq_pulse": 0.0,
+                "bubble_big_contraction_bias": 1.0,
+                "bubble_big_size_clamp": 0.0,
+                "bubble_big_size_max": 0.037,
+                "bubble_small_size_max": 0.01,
+                "bubble_rotation_amount": 0.0,
+                "bubble_group_drift": False,
+                "bubble_ghosting_enabled": False,
             },
         )
         after = (bubble.x / sim._domain_w, bubble.y / sim._domain_h)
@@ -255,6 +272,10 @@ class BubbleViewportScalingTests(unittest.TestCase):
             bounce_small_pct=0.0,
             bounce_big_speed=0.0,
             bounce_small_speed=0.0,
+            # This contract isolates content-space separation geometry, so keep
+            # the pop path off; big-big overlap still resolves under same-only.
+            bounce_same_only=True,
+            collision_pop_mode="off",
             big_bass_pulse=0.0,
             small_freq_pulse=0.0,
             big_contraction_bias=1.0,
@@ -493,10 +514,10 @@ class OtherModeViewportScalingTests(unittest.TestCase):
         )
         self.assertNotIn("sqrt(raw_hs)", shader)
 
+        # The pre-Quick widgets/.../renderers/spectrum.py owner was retired; the
+        # Quick implementation is now the sole spectrum height-scale consumer.
         quick = (ROOT / "rendering/quick/visualizer/implementations/spectrum.py").read_text()
-        legacy = (ROOT / "widgets/spotify_visualizer/renderers/spectrum.py").read_text()
         self.assertIn("height_scale=compute_spectrum_height_scale(extent_height)", quick)
-        self.assertIn("compute_spectrum_height_scale(cur_h)", legacy)
 
     def test_devcurve_keeps_authored_pixel_tuning_across_viewport_extent(self):
         # Quick DevCurve intentionally converts normalized controls by the
@@ -560,8 +581,11 @@ class OtherModeViewportScalingTests(unittest.TestCase):
     def test_devcurve_authored_bounds_are_applied_before_viewport_projection(self):
         source = (ROOT / "rendering/quick/visualizer/implementations/devcurve.py").read_text()
         # Regression bar for the subtle failure where a projected value was
-        # clamped back to a canonical normalized minimum/maximum.
-        self.assertIn(")\n                * layout.normalized_y_scale,", source)
+        # clamped back to a canonical normalized minimum/maximum. Every projected
+        # offset/width multiplies the *clamped* value by the axis scale: the
+        # specular width/offset apply it to the closed clamp expression, and the
+        # foreground-shadow offset applies it to the already-clamped `value`.
+        self.assertIn("value *= layout.normalized_y_scale", source)
         self.assertIn(")\n            * layout.normalized_x_scale,", source)
         self.assertIn(")\n            * layout.normalized_y_scale,", source)
 
