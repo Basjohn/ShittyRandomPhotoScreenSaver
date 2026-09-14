@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QObject
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout
 
 from ui.tabs.media.spectrum_builder import build_spectrum_ui
@@ -34,17 +35,27 @@ class DummyTab(QObject):
     def _auto_switch_preset_to_custom(self, *args, **kwargs):
         pass
 
-    def _default_bool(self, _section, _key, fallback=True):
-        return fallback
+    def _default_bool(self, section, key, fallback=True):
+        return bool(self._widget_default(section, key))
 
-    def _default_int(self, _section, _key, fallback=0):
-        return fallback
+    def _default_int(self, section, key, fallback=0):
+        return int(self._widget_default(section, key))
 
-    def _default_float(self, _section, _key, fallback=0.0):
-        return fallback
+    def _default_float(self, section, key, fallback=0.0):
+        return float(self._widget_default(section, key))
 
-    def _default_str(self, _section, _key, fallback=""):
-        return fallback
+    def _default_str(self, section, key, fallback=""):
+        return str(self._widget_default(section, key))
+
+    def _widget_default(self, section, key):
+        from core.settings.default_contract import require_canonical_default
+        return require_canonical_default(f"widgets.{section}.{key}")
+
+    def _color_from_default(self, section, key):
+        value = self._widget_default(section, key)
+        if isinstance(value, (list, tuple)) and len(value) >= 3:
+            return QColor(*value)
+        return QColor(255, 255, 255, 255)
 
     # Widget-tab hooks referenced by builders --------------------------
     def _update_spotify_vis_sensitivity_enabled_state(self):
@@ -62,6 +73,27 @@ class DummyTab(QObject):
 
     def set_visualizer_adv_state(self, mode: str, expanded: bool) -> None:
         self._visualizer_adv_state[mode] = bool(expanded)
+
+    # The collapsible "Technical" section expanded-state accessor the current
+    # builders read (renamed from the old "adv" wording); same backing store.
+    def get_visualizer_tech_state(self, mode: str) -> bool:
+        return bool(self._visualizer_adv_state.get(mode, False))
+
+    def set_visualizer_tech_state(self, mode: str, expanded: bool) -> None:
+        self._visualizer_adv_state[mode] = bool(expanded)
+
+    # Per-bucket collapsible Technical leaf state (mode:bucket keyed).
+    def get_visualizer_tech_bucket_state(self, mode: str, bucket: str) -> bool:
+        return bool(self._visualizer_adv_state.get(f"{mode}:{bucket}", False))
+
+    def set_visualizer_tech_bucket_state(self, mode: str, bucket: str, expanded: bool) -> None:
+        self._visualizer_adv_state[f"{mode}:{bucket}"] = bool(expanded)
+
+    def get_visualizer_bucket_state(self, mode: str, bucket: str) -> bool:
+        return bool(self._visualizer_adv_state.get(f"page:{mode}:{bucket}", False))
+
+    def set_visualizer_bucket_state(self, mode: str, bucket: str, expanded: bool) -> None:
+        self._visualizer_adv_state[f"page:{mode}:{bucket}"] = bool(expanded)
 
 
 @pytest.mark.parametrize(
