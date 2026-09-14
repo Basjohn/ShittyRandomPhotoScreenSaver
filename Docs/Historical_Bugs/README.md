@@ -23,7 +23,7 @@ Rehome surviving regression coverage before deleting an old owner.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
-- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. Constant 17-counter PDH generations did not explain the residual ~+16 handles/hour slope; out-of-process handle-type attribution is now required.
+- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **PARTIAL**. Type attribution shows stable steady-generation handles; one bounded 3–5-cycle Settings churn acceptance remains to classify the replacement-generation baseline step.
 
 ## Active / Pending Acceptance
 
@@ -135,7 +135,7 @@ duplicate standalone records are intentionally absent.
 
 - [U-10 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift](U-10_Oscilloscope_Strobe_Waveform_Ghost_Contract.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
-- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. Constant 17-counter PDH generations did not explain the residual ~+16 handles/hour slope; out-of-process handle-type attribution is now required.
+- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **PARTIAL**. Type attribution shows stable steady-generation handles; one bounded 3–5-cycle Settings churn acceptance remains to classify the replacement-generation baseline step.
 - [U-08 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift](U-08_Custom_Replay_Shrink_Minimum_Constraints.md)
 - [U-07 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family](U-07_Bubble_Loud_Path_Oracle_Drift.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](U-06_MC_Shadow_Cache_Corruption.md)

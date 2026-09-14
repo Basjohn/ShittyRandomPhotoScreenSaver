@@ -30,6 +30,8 @@ from core.settings import SettingsManager
 from core.settings.default_contract import require_canonical_default
 from rendering.display_modes import DisplayMode
 from rendering.quick.display_processing import DisplayProcessingDescriptor
+from rendering.quick.display_image_route import presentation_image_from_processed_qimage
+from rendering.quick.image_state import PresentationImage
 from rendering.image_processor_async import AsyncImageProcessor
 from sources.base_provider import ImageMetadata
 
@@ -186,42 +188,23 @@ def _schedule_engine_delay(
         )
 
 
-def _pixmap_from_image_with_perf(
-    image: QImage,
-    *,
-    reason: str,
-    display_index: int,
-) -> QPixmap:
-    """Convert one GUI-thread image while exposing bounded segment cost."""
-    perf_enabled = is_perf_metrics_enabled()
-    started_ts = time.perf_counter() if perf_enabled else 0.0
-    try:
-        return QPixmap.fromImage(image)
-    finally:
-        if perf_enabled:
-            logger.info(
-                "[PERF] [IMAGE_UI_SEGMENT] reason=%s display=%d "
-                "stage=qimage_to_qpixmap duration_ms=%.2f size=%dx%d",
-                reason,
-                display_index,
-                max(0.0, (time.perf_counter() - started_ts) * 1000.0),
-                image.width(),
-                image.height(),
-            )
-
-
-def _apply_display_pixmap_with_perf(
+def _apply_display_presentation_with_perf(
     display_manager: object,
-    processed_pixmap: QPixmap,
-    original_pixmap: QPixmap,
+    presentation_image: PresentationImage,
     image_path: str,
     *,
     reason: str,
     display_index: int,
     perf_trace: "ImageChangePerfTrace | None" = None,
 ) -> None:
-    """Apply one display image while exposing setter/transition-start cost."""
-    stage = "present_processed_image"
+    """Publish already-detached Quick image state on the UI thread.
+
+    All pixel conversion/deep-copy work belongs to the compute task.  This
+    seam is intentionally presentation-only so normal rotations do not
+    materialize a QPixmap or copy a full RGBA frame on the GUI thread.
+    """
+
+    stage = "present_detached_image"
     perf_enabled = is_perf_metrics_enabled()
     started_ts = time.perf_counter() if perf_enabled else 0.0
     if perf_trace is not None:
@@ -232,13 +215,14 @@ def _apply_display_pixmap_with_perf(
             image=image_path,
         )
     try:
-        presenter = getattr(display_manager, "present_processed_image", None)
+        presenter = getattr(display_manager, "present_processed_presentation_image", None)
         if not callable(presenter):
-            raise TypeError("DisplayManager has no processed-image publication contract")
+            raise TypeError(
+                "DisplayManager has no detached processed-image publication contract"
+            )
         presentation_outcome = presenter(
             display_index,
-            processed_pixmap,
-            original_pixmap,
+            presentation_image,
             image_path,
         )
         if perf_trace is not None:
@@ -256,6 +240,7 @@ def _apply_display_pixmap_with_perf(
                 )
     finally:
         if perf_enabled:
+            width, height = presentation_image.pixel_size
             logger.info(
                 "[PERF] [IMAGE_UI_SEGMENT] reason=%s display=%d stage=%s "
                 "duration_ms=%.2f size=%dx%d",
@@ -263,8 +248,8 @@ def _apply_display_pixmap_with_perf(
                 display_index,
                 stage,
                 max(0.0, (time.perf_counter() - started_ts) * 1000.0),
-                processed_pixmap.width(),
-                processed_pixmap.height(),
+                width,
+                height,
             )
 
 
@@ -1024,9 +1009,9 @@ _DISPLAY_IMAGE_REPLACEMENT_LIMIT = 3
 
 @dataclass(frozen=True)
 class _ProcessedDisplayImage:
-    """Thread-safe compute result; QPixmap materialization remains on the GUI."""
+    """Thread-safe compute result with fully detached Quick presentation state."""
 
-    image: QImage
+    presentation_image: PresentationImage
     width: int
     height: int
     display_mode: DisplayMode
@@ -1093,7 +1078,7 @@ def _process_display_image_candidate(
     *,
     perf_trace: "ImageChangePerfTrace | None" = None,
 ) -> Optional[_ProcessedDisplayImage]:
-    """Load and prescale one candidate into a GUI-independent QImage payload."""
+    """Load/prescale and detach one candidate into Quick presentation state."""
     from pathlib import Path
 
     img_path = _image_meta_path(meta)
@@ -1234,8 +1219,19 @@ def _process_display_image_candidate(
             target=f"{width}x{height}",
         )
 
+    presentation_image = presentation_image_from_processed_qimage(
+        processed_qimage,
+        image_path=img_path,
+    )
+    if perf_trace is not None:
+        perf_trace.mark(
+            "presentation_captured",
+            display=display_index,
+            bytes=presentation_image.byte_count,
+        )
+
     return _ProcessedDisplayImage(
-        image=processed_qimage,
+        presentation_image=presentation_image,
         width=width,
         height=height,
         display_mode=display_mode,
@@ -1648,42 +1644,25 @@ def load_and_display_image_async(
             # PERF: Stagger transition starts by 100ms per display to avoid
             # simultaneous transition completions which cause 100+ms UI blocks.
             stagger_ms = TRANSITION_STAGGER_MS
-            shared_gui_pixmaps: Dict[int, QPixmap] = {}
-
             for i, descriptor in enumerate(processing_targets):
                 if i not in processed:
                     continue
 
                 proc_data = processed[i]
-                reuse_token = id(proc_data)
-                processed_pixmap = shared_gui_pixmaps.get(reuse_token)
-                if processed_pixmap is None:
-                    processed_pixmap = _pixmap_from_image_with_perf(
-                        proc_data.image,
-                        reason="current_image",
-                        display_index=i,
-                    )
-                    shared_gui_pixmaps[reuse_token] = processed_pixmap
-                original_pixmap = processed_pixmap
+                presentation_image = proc_data.presentation_image
                 img_path = proc_data.path
-
-                if processed_pixmap.isNull():
-                    logger.warning(f"[ASYNC] QPixmap is null for display {i}")
-                    continue
 
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
                     def _delayed_set(
                         manager=display_manager,
-                        pp=processed_pixmap,
-                        op=original_pixmap,
+                        pi=presentation_image,
                         ip=img_path,
                         screen_index=descriptor.screen_index,
                     ):
-                        _apply_display_pixmap_with_perf(
+                        _apply_display_presentation_with_perf(
                             manager,
-                            pp,
-                            op,
+                            pi,
                             ip,
                             reason="transition_display_stagger",
                             display_index=screen_index,
@@ -1699,10 +1678,9 @@ def load_and_display_image_async(
                         callable_label="display_image_apply",
                     )
                 else:
-                    _apply_display_pixmap_with_perf(
+                    _apply_display_presentation_with_perf(
                         display_manager,
-                        processed_pixmap,
-                        original_pixmap,
+                        presentation_image,
                         img_path,
                         reason="transition_display_immediate",
                         display_index=descriptor.screen_index,
@@ -1864,34 +1842,22 @@ def load_and_display_image_async_with_metas(
                         setter(False, screen_index=descriptor.screen_index)
             stagger_ms = TRANSITION_STAGGER_MS
             displayed = []
-            shared_gui_pixmaps: Dict[int, QPixmap] = {}
             for i, descriptor in enumerate(processing_targets):
                 if i not in processed:
                     continue
                 proc = processed[i]
-                reuse_token = id(proc)
-                processed_pixmap = shared_gui_pixmaps.get(reuse_token)
-                if processed_pixmap is None:
-                    processed_pixmap = _pixmap_from_image_with_perf(
-                        proc.image,
-                        reason="previous_image",
-                        display_index=i,
-                    )
-                    shared_gui_pixmaps[reuse_token] = processed_pixmap
-                original_pixmap = processed_pixmap
+                presentation_image = proc.presentation_image
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
                     def _delayed(
                         manager=display_manager,
-                        pp=processed_pixmap,
-                        op=original_pixmap,
+                        pi=presentation_image,
                         ip=proc.path,
                         screen_index=descriptor.screen_index,
                     ):
-                        _apply_display_pixmap_with_perf(
+                        _apply_display_presentation_with_perf(
                             manager,
-                            pp,
-                            op,
+                            pi,
                             ip,
                             reason="previous_image_display_stagger",
                             display_index=screen_index,
@@ -1905,10 +1871,9 @@ def load_and_display_image_async_with_metas(
                         callable_label="previous_image_apply",
                     )
                 else:
-                    _apply_display_pixmap_with_perf(
+                    _apply_display_presentation_with_perf(
                         display_manager,
-                        processed_pixmap,
-                        original_pixmap,
+                        presentation_image,
                         proc.path,
                         reason="previous_image_display_immediate",
                         display_index=descriptor.screen_index,

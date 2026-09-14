@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from types import SimpleNamespace
 
@@ -331,7 +332,7 @@ def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
 
     assert first is not None
     assert second is not None
-    assert first.image is not second.image
+    assert first.presentation_image is not second.presentation_image
     key_1x = _build_scaled_cache_key(
         path,
         4,
@@ -351,8 +352,9 @@ def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
         2.0,
     )
     assert key_1x != key_2x
-    assert store[key_1x] is first.image
-    assert store[key_2x] is second.image
+    assert store[key_1x] is not store[key_2x]
+    assert store[key_1x].size() == QSize(4, 4)
+    assert store[key_2x].size() == QSize(4, 4)
 
 
 def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
@@ -397,7 +399,8 @@ def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
     )
 
     assert result is not None
-    assert result.image is scaled
+    assert result.presentation_image.pixel_size == (4, 4)
+    assert store[scaled_key] is scaled
     assert gets == [scaled_key]
     assert puts == []
     assert engine._cache_runtime_stats["scaled_reuses_without_put"] == 1
@@ -449,7 +452,8 @@ def test_worker_success_does_not_decode_or_cache_redundant_raw(
     )
 
     assert result is not None
-    assert result.image is worker_image
+    assert result.presentation_image.pixel_size == (4, 4)
+    assert result.presentation_image.source_path == str(path)
     assert str(path) not in store
     assert len(puts) == 1
     assert "|scaled:" in puts[0]
@@ -587,6 +591,13 @@ def test_normal_async_retry_retains_existing_image_change_owner():
     assert threads.callbacks[1][1] == "image.load_and_process"
     assert engine._loading_in_progress is True
     assert pending_calls == []
+
+
+def test_normal_async_quick_handoff_never_materializes_qpixmap_on_ui() -> None:
+    source = inspect.getsource(load_and_display_image_async)
+    assert "_apply_display_presentation_with_perf" in source
+    assert "_pixmap_from_image_with_perf" not in source
+    assert "QPixmap.fromImage" not in source
 
 
 def test_cache_trace_can_emit_loud_fallback_records(monkeypatch, caplog):

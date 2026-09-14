@@ -235,35 +235,77 @@ high-volume diagnostic belongs in a dedicated sidecar rather than already-busy `
   recursive burst or request multiplication returned; cooldown-gated manual refresh remained rejected normally. Treat R-83 as
   closed unless zero-delay recursive scheduling reappears.
 
-- [?] **COMPLETELY FUCKED — R-84 residual main-process handle growth survived PDH generation/cardinality accounting.**
-  The 2026-09-14 follow-up soak ran ~58 minutes and produced **233/233 `--usage` samples**, **12 PDH query generations**, and
-  a constant **17 PDH counters** in every generation (15 engine + 1 dedicated-memory + 1 shared-memory). After the final
-  Settings rebuild, the process had ~38.75 minutes of stable runtime: five-sample median `handles_main` moved
-  **1874 -> 1887 (+13)** and linear regression remained about **+16 handles/hour**. Across generation boundaries 4->12 the
-  immediate handle deltas were `+4,-4,+1,-1,+6,+4,-31,+24`, net **+3**; changing PDH cardinality therefore cannot explain
-  the surviving slope. Handles remain noisy rather than monotonic, so this is not yet proof of one leaking owner, but the
-  previous closure criterion definitively failed. R-84 remains **COMPLETELY FUCKED** until handle-class evidence identifies
-  or clears the residual owner. Do not weaken GPU/VRAM coverage or the 300 s PDH rediscovery cadence to flatten this graph.
-- [x] **R-84 attribution instrumentation upgraded (2026-09-14):** Windows `--usage` now starts a dedicated out-of-process
-  `screensaver_handles.log` helper at a low **60 s** cadence. It takes a system extended-handle snapshot, filters to the SRPSS
-  main PID, groups handles by kernel object type, and resolves names by duplicating only representative handles **into the
-  helper process**. It never enumerates per-handle types inside SRPSS and never adds work to `--perf`. The helper PID is
-  excluded from app process/thread/memory/handle aggregates; only the stable parent-side process ownership needed to run the
-  diagnostic remains in `handles_main`. Next soak must correlate type-count deltas with `handles_main` and PDH generations;
-  a growing `Event`/`Thread`/`File`/`Key`/`Section`/etc. class gives the next owner investigation instead of guessing.
-- [x] **`--usage` observer-effect repair authored (2026-09-14; Windows validation required):** the old two-minute Windows
-  heavy refresh used psutil recursive-child discovery plus per-process `num_threads()`, both backed by a GIL-held system-wide
-  snapshot. In this soak the expected heavy samples had median collection ~**79.3 ms** and peaked at **143.55 ms** after
-  startup, while ordinary samples had median ~**24.1 ms**. Windows now obtains recursive PIDs **and thread counts** from one
-  Toolhelp process snapshot via ctypes, whose native calls release the GIL; ordinary 15 s RSS/USS/CPU/handles/IO reads and
-  the 2-minute topology freshness contract are unchanged. `--usage` also records `topology_refresh` + `topology_source` so the
-  next run can prove heavy samples use `toolhelp` rather than silently falling back to psutil. Non-Windows and Toolhelp-failure
-  paths retain the old fallback for telemetry continuity.
-- [x] **Diagnostic-load interpretation pinned:** this soak used both `--usage` and first-time `--verbose` plus the broader
-  diagnostic family. The async logger itself was healthy (**44,870 enqueued/dequeued, zero drops, caller avg 0.0521 ms**), so
-  verbose logging was extra work but not a queue-collapse explanation. `--debug` already writes `screensaver_verbose.log`;
-  routine performance/closure soaks should **omit `--verbose`** unless noisy producer logs are specifically required. This
-  run is valid lifetime/R-82/R-83/R-84 evidence but must not be treated as a clean normal-performance baseline.
+- [?] **R-84 narrowed by handle-class attribution — stable runtime is flat; one replacement-generation baseline step remains.**
+  The 2026-09-14 follow-up soak ran ~56.5 minutes with **226/226 `--usage` samples** and 57 independent
+  `screensaver_handles.log` snapshots. During the long settled generation-0 interval (~18:13–18:40), the five-sample
+  `handles_main` median moved only about **1812 -> 1814** and the persistent object classes were effectively flat
+  (`type_56` ~236/237, `Key` 66, `Section` 390, `File` 419, `Semaphore` roughly 259–263). The old straight-line
+  “+handles/hour” interpretation therefore did **not** reproduce as a continuous steady-generation leak. At the explicit
+  Settings runtime replacement (~18:42), however, the settled generation-1 baseline stepped upward by a persistent bundle
+  of approximately **type_56 +10, Semaphore +10, Key +6, Section +3, File +2**. Later ordinary mode/transition activity did
+  not staircase those classes again. Remaining question: is that one-time native/lazy generation-1 initialization or does
+  **each full runtime replacement** retain another bundle?
+- [x] **R-84 attribution sidecar validated:** the out-of-process 60 s handle classifier ran for the whole soak, its PID stayed
+  excluded from app aggregates, and its object-type history was sufficient to reject the continuous-leak hypothesis above.
+  Do not add another handle probe or broaden cadence. If the final churn test staircases, investigate the already-identified
+  generation retirement/constructor owners directly; if it plateaus after the first replacement, close R-84.
+- [x] **`--usage` Toolhelp observer-effect repair validated (2026-09-14):** after startup, the two-minute topology refresh fell
+  from the previous ~80–144 ms psutil/GIL-heavy samples to roughly **26–59 ms** (median ~47 ms) using `topology_source=toolhelp`,
+  with zero skipped 15 s samples. The previous regular two-minute visualizer/frame hitch signature disappeared; refresh-period
+  frame/event-loop tails are now broadly comparable with ordinary samples. Keep the psutil fallback only for Toolhelp failure/
+  non-Windows continuity; do not restore the GIL-held Windows recursive `children()` + per-process `num_threads()` owner.
+- [x] **Settings 300–500 ms stalls classified by code ownership, not handwaved:** `on_settings_requested()` first performs the
+  explicit full `engine.stop(exit_app=False, reason="settings")` and runtime destruction barrier; the ~335 ms Settings-dialog
+  construction and later replacement `_initialize_display()`/`start()` occur while there is **no live display runtime**. The
+  same full-replacement path is intentionally used only for Settings, committed CUSTOM edit reload, monitor-topology replacement,
+  startup and teardown. Ordinary Visualizer mode/preset changes use the retained owner and do **not** rebuild DisplayManager.
+  Therefore those several-hundred-ms stalls are admissible lifecycle/reconfiguration cost under the current policy. **Any
+  comparable stall observed outside those explicit boundaries is a first-class performance bug and must not be excused as
+  lifecycle noise.**
+- [?] **Normal-runtime image-rotation GUI hitch — owner found and repair authored; Windows proof required.** The soak repeatedly
+  shows ordinary 3840x2160 rotations spending roughly **28–53 ms** in UI-thread `present_processed_image`, often matching the
+  50–72 ms event-loop tail in the same 15 s period. Code trace found a redundant Quick cutover seam: the compute task already
+  owns the processed `QImage`, but the UI callback converts it to `QPixmap`, then `QuickDisplayUnit.capture_image()` converts
+  it back to `QImage`, RGBA8888 and a ~33 MB Python `bytes` snapshot. Repair now captures the immutable `PresentationImage`
+  directly from the processed `QImage` **inside the existing compute task** and publishes that detached value through a new
+  DisplayManager contract. Startup/legacy QPixmap seeding remains intact. Same-transform multi-monitor reuse still shares one
+  immutable detached value; current/previous-image paths both use the detached seam. Required Windows proof: normal rotations
+  must show no `qimage_to_qpixmap` UI stage and `present_detached_image` must collapse toward low-single-digit UI time without
+  changing image pixels/DPR/identity, transition source/destination truth, history/accounting, stale-generation rejection or
+  scaled-cache behavior.
+  **Known remaining copy boundary:** `PresentationImage` still owns a tightly packed Python `bytes` RGBA payload. Moving its
+  capture into the compute task removes the proven GUI-thread QPixmap/QImage bounce, but the ~33 MiB bytes materialization
+  can still briefly hold the GIL. Do not declare the whole image path solved merely because UI publication becomes cheap.
+  The same FINAL churn/acceptance run must verify ordinary image changes no longer create meaningful Python/Visualizer cadence
+  spikes. If a residual image-change spike survives while `present_detached_image` is cheap, the next repair is a **Qt-native
+  detached image/buffer presentation contract through render-thread texture upload**, not another probe and not retuning the
+  Visualizer.
+- [?] **Normal-runtime Context Menu hitch — retained-model invalidation owner found and repair authored; Windows proof required.**
+  Repeated 75–94 ms event-loop periods align with ordinary context-menu open/hide. The Python `open_at()` path itself is tiny;
+  the architectural bug was that `entries`, `menuVisible`, `anchorX` and `anchorY` all used the same `stateChanged` notify.
+  Every open/hide therefore notified the QML `Repeater` that `entries` changed, and the getter returns a fresh list-of-dicts,
+  allowing the retained menu/submenus to be rebuilt even when only visibility/anchor changed. Notifications are now split into
+  `entriesChanged`, `anchorChanged` and `visibilityChanged`; entry delegates invalidate only when the actual immutable entry set
+  changes. Keep the aggregate `stateChanged` signal only as non-QML compatibility telemetry. Required Windows proof: repeated
+  right-click/open/dismiss should no longer create 50+ ms event-loop tails; menu admission, click-outside swallow, submenu hover
+  grace, single-owner policy and theme/shadow appearance must remain identical.
+- [?] **FINAL R-84 diagnostic churn run — no more handle-discovery soaks after this.** Once the image/menu repairs above are in
+  the local tree, run one deliberately bounded Windows acceptance session: keep one mode/preset stable; perform **3–5 explicit
+  Settings open/close cycles**, allowing ~60–90 s of settled runtime after each, and exercise a few ordinary image rotations and
+  context-menu opens between/after cycles. Use `--debug --fresh --usage --perf --life` only; no `--verbose` and no `--gpu-timing`.
+  Decision is binary: (A) settled persistent handle classes staircase by ~20–30 each replacement -> treat as a real generation-
+  retirement leak and repair those owners directly from existing lifecycle/type evidence, **without asking for another broad
+  diagnostic soak**; or (B) only the first replacement steps and later cycles plateau -> close R-84 as one-time lazy/native
+  initialization. The same final run is also the acceptance proof for Toolhelp, detached image publication and Context Menu
+  notification isolation so the user is not asked for a separate performance soak afterward.
+- [ ] **Quick-native startup/legacy image-boundary follow-up — do only after the normal-runtime detached path is proven.**
+  There is real architectural value in extending the same ownership rule, but the paths are not equivalent. Startup desktop
+  seeding originates from `QScreen.grabWindow(0)`, which necessarily yields a GUI-thread `QPixmap` and is already confined to
+  startup/replacement-generation staging; optimize it only if startup profiling justifies the risk. The synchronous legacy
+  `load_and_display_image()` / `show_image()` path still publishes QPixmaps and is reachable as a submission/failure fallback;
+  after the normal async path is accepted, audit whether that fallback can consume/produce detached `QImage`/presentation state
+  directly or be retired. Goal: one Quick-native presentation boundary, with QPixmap confined to genuinely GUI-native capture
+  sources. Do **not** widen the current runtime-hitch repair until its Windows acceptance is known.
 
 - [x] **Monitor wake double rebuild explained; no production optimization admitted yet.** Existing display detection already
   coalesces Qt topology/metric/application edges for 250 ms. On wake Windows exposed a genuinely different MSI-only topology
@@ -276,16 +318,10 @@ high-volume diagnostic belongs in a dedicated sidecar rather than already-busy `
   explicitly protects against “fixing” the soak with a generic multi-second debounce. Do not add sleep/poll/debounce unless
   later evidence provides a reliable wake-specific settling signal; correctness currently outranks hiding this rare hitch.
 
-- [?] **Next Windows closure soak:** R-82/R-83 are already closed by the 58-minute run; do not churn those fixes. Run
-  **30 min minimum / ~60 min preferred**, single-display is sufficient. Lean recommended flags are
-  `--debug --fresh --usage --perf --life`: `--usage` owns handle/GPU/VRAM evidence, `--perf` supplies frame-tail comparison,
-  `--life` keeps lifetime boundaries visible, and `--fresh` prevents prior sidecar/log sessions contaminating analysis. Do **not**
-  add `--verbose` or `--gpu-timing` unless a separate question specifically requires them. Confirm `topology_source=toolhelp` on heavy
-  samples and that their collection/frame spikes collapse toward ordinary samples; confirm full GPU/VRAM fields and 300 s PDH
-  query replacement remain intact; correlate `screensaver_handles.log` object-type counts against `handles_main` and PDH
-  generation boundaries. If one handle class rises, trace that owner next. If type counts and main handles plateau after warmup,
-  R-84 may finally close. Monitor wake remains observational only; two rebuilds are still correct when Windows presents two
-  genuinely distinct settled signatures.
+- [x] **Previous generic 30–60 minute closure-soak request superseded.** The handle sidecar has already answered the broad
+  attribution question; use only the bounded **FINAL R-84 diagnostic churn run** above. Do not ask the user for another hour-long
+  discovery soak for this seam.
+
 
 ---
 
