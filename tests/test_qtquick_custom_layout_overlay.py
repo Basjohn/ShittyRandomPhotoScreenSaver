@@ -922,7 +922,11 @@ def test_visualizer_cross_display_transfer_rehomes_one_render_admission(
 
     source_state = source_controller.describe_scene_state()["visualizer"]
     target_state = target_controller.describe_scene_state()["visualizer"]
-    assert source_state["instantiated"] is False
+    # Only the render admission rehomes. The source keeps its retained (now
+    # idle) shell alive on purpose: deleting the Python-created child
+    # mid-generation would invalidate unrelated Shiboken wrappers on a return
+    # hop. Admission departure is proven by the cleared render identity below.
+    assert source_state["instantiated"] is True
     assert source_state["render_identity"] is None
     assert target_state["instantiated"] is True
     assert target_controller.visualizer_item.render_identity == render_identity
@@ -946,7 +950,10 @@ def test_visualizer_cross_display_transfer_rehomes_one_render_admission(
     source_state = source_controller.describe_scene_state()["visualizer"]
     target_state = target_controller.describe_scene_state()["visualizer"]
     assert source_state["instantiated"] is True
-    assert target_state["instantiated"] is False
+    # Same retention contract in the return direction: the target keeps its idle
+    # shell alive; only the render admission moves back, proven by its cleared
+    # render identity.
+    assert target_state["instantiated"] is True
     assert target_state["render_identity"] is None
     assert source_controller.visualizer_item.render_identity == render_identity
     assert source_controller.visualizer_item.presentation is not None
