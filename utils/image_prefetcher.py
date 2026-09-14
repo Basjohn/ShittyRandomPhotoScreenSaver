@@ -233,6 +233,44 @@ class ImagePrefetcher:
                 pending_total,
             )
 
+    def _prune_unowned_scaled_requests_locked(self) -> tuple[int, int]:
+        """Release derivative intents whose raw parent can no longer exist.
+
+        Caller holds ``self._lock``. A nonresident raw parent is still valid while
+        an active or queued raw producer owns it; otherwise the derivative is
+        undispatchable and must surrender both key and logical-byte ownership.
+        """
+
+        if not self._pending_scaled_requests:
+            return 0, 0
+
+        retained: List[Dict[str, Any]] = []
+        reclaimed_count = 0
+        reclaimed_bytes = 0
+        for request in self._pending_scaled_requests:
+            cache_key = str(request.get("cache_key") or "")
+            raw_path = str(request.get("path") or "")
+            generation = int(request.get("_prefetch_generation", -1))
+            raw_has_producer = raw_path in self._inflight or raw_path in self._pending_raw_keys
+            derivative_ready = bool(cache_key and self._cache.contains(cache_key))
+            raw_owned = bool(
+                raw_path
+                and (self._cache.contains(raw_path) or raw_has_producer)
+            )
+            if generation == self._prefetch_generation and raw_owned and not derivative_ready:
+                retained.append(request)
+                continue
+
+            self._pending_scaled_keys.discard(cache_key)
+            request_bytes = _request_logical_bytes(request)
+            reclaimed_bytes += request_bytes
+            reclaimed_count += 1
+
+        if reclaimed_count:
+            self._pending_scaled_requests = retained
+            self._pending_scaled_bytes = max(0, self._pending_scaled_bytes - reclaimed_bytes)
+        return reclaimed_count, reclaimed_bytes
+
     def register_scaled_requests(self, requests: List[Dict[str, Any]]) -> int:
         """Queue scaled-variant warmup requests and process them with bounded concurrency."""
         if not requests:
@@ -242,7 +280,10 @@ class ImagePrefetcher:
         queued_count = 0
         skipped_without_raw = 0
         skipped_budget = 0
+        reclaimed_count = 0
+        reclaimed_bytes = 0
         with self._lock:
+            reclaimed_count, reclaimed_bytes = self._prune_unowned_scaled_requests_locked()
             for request in requests:
                 cache_key = str(request.get("cache_key") or "")
                 raw_path = str(request.get("path") or "")
@@ -271,6 +312,12 @@ class ImagePrefetcher:
                 queued_any = True
                 queued_count += 1
 
+        if reclaimed_count:
+            _cache_trace(
+                "Reclaimed unowned scaled prefetch requests count=%d bytes=%d",
+                reclaimed_count,
+                reclaimed_bytes,
+            )
         if queued_any:
             with self._lock:
                 pending_total = len(self._pending_scaled_requests)
@@ -314,8 +361,12 @@ class ImagePrefetcher:
                         ):
                             try:
                                 self._cache.put(path, img)
-                                cached = True
-                                if is_verbose_logging():
+                                # ``ImageCache.put`` may legitimately self-evict an
+                                # oversized/new entry while enforcing its hard LRU
+                                # cap. A successful call is therefore not residency
+                                # proof for derivative ownership.
+                                cached = self._cache.contains(path)
+                                if cached and is_verbose_logging():
                                     logger.debug(f"Prefetched and cached: {path}")
                             except Exception as e:
                                 logger.debug("[MISC] Exception suppressed: %s", e)
@@ -346,8 +397,24 @@ class ImagePrefetcher:
                     self._raw_inflight_generations.pop(path, None)
                     self._inflight.discard(path)
             self._pump_raw_prefetch()
+            self._pump_scaled_prefetch()
 
     def _pump_scaled_prefetch(self, preferred_path: Optional[str] = None) -> None:
+        reclaimed_count = 0
+        reclaimed_bytes = 0
+        with self._lock:
+            reclaimed_count, reclaimed_bytes = self._prune_unowned_scaled_requests_locked()
+
+        if reclaimed_count:
+            _cache_trace(
+                "Reclaimed unowned scaled prefetch requests count=%d bytes=%d",
+                reclaimed_count,
+                reclaimed_bytes,
+            )
+
+        # Ownership cleanup is intentionally independent of dispatch cooldown: a
+        # dead derivative must not retain backlog budget merely because rendering
+        # has asked prefetch compute to pause briefly.
         if self._is_in_post_transition_delay():
             return
 

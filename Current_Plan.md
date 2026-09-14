@@ -168,6 +168,105 @@ SettingsManager and not behind a new polling/debounce owner.
 
 ---
 
+
+## 4C. 2026-09-14 overnight soak — performance/lifetime findings
+
+Authority/evidence: the 03:34–13:54 diagnostic soak with `--usage`/cache/perf sidecars and the 2026-09-14 source trace. The
+run began on two displays; Windows removed the MSI panel from the logical topology at ~03:53 while displays were off, so
+most of the overnight interval is a one-logical-display process/service soak. The 13:46 wake sequence is still valuable
+monitor-loss/reconstitution evidence. Diagnose first, tests second, production fixes only after the tests encode the real
+ownership/lifetime invariant. Do not add instrumentation unless end-to-end tracing remains below ~80% confidence; any new
+high-volume diagnostic belongs in a dedicated sidecar rather than already-busy `--perf`.
+
+- [x] **Scaled-prefetch queue root cause proven (>95% confidence).** `ImagePrefetcher.register_scaled_requests()` may admit a
+  derivative while its raw parent is resident or owns an active/pending producer. `_submit_load()` then treats a returning
+  `ImageCache.put(raw)` call as proof of residency even though the hard 256 MiB LRU is allowed to evict the inserted raw
+  immediately; `_pump_scaled_prefetch()` dispatches only resident parents and has no orphan-reclamation path once the parent
+  has neither residency nor a producer. The stranded derivative therefore keeps both `_pending_scaled_keys` and logical-byte
+  budget forever. Soak proof: all 11 scaled-prefetch completions occurred by 03:37:01; the dead queue then stabilized at
+  exactly **125,337,600 bytes** = `2×3840×2160×4 + 4×2560×1440×4`, **93.4%** of the 128 MiB pending-byte cap, while later
+  registrations were repeatedly rejected. At shutdown: **4,675** scaled-prefetch intents, **11** scaled completions,
+  **2,600** completed raw-prefetch IO tasks, only **9** scaled cache hits vs **962** scaled misses. The bounds prevented a
+  memory leak but the pipeline spent most of ~10 h decoding speculative raw inputs with almost no derivative payoff.
+- [x] **Prefetch regression authored before fix (2026-09-14; PySide run still required):** `test_image_prefetcher.py` now
+  models the exact hard-cache case where raw `put()` succeeds but the inserted parent is immediately nonresident. Coverage
+  requires orphan key+byte reclamation, immediate budget reuse by newer valid work, six repeated self-eviction cycles with
+  zero pending drift, and the inverse invariant that a derivative remains owned while its raw parent is still queued/inflight.
+  These are owner/lifetime regressions rather than stale list-shape assertions. `test_image_pipeline` remains separately
+  classified for broader current-owner fixture reconciliation; do not make its old internal shape the new contract.
+- [x] **Prefetch production repair landed after regression gate (2026-09-14):** raw completion now verifies actual
+  post-`put()` cache residency; a bounded ownership sweep releases pending derivatives that are stale/already satisfied or
+  whose raw parent has neither residency nor queued/inflight producer ownership. Cleanup runs before admission and before
+  scaled dispatch, including during the post-transition compute cooldown, and raw-submit failure also triggers cleanup. The
+  inverse producer-owned case is retained. No cache/backlog/concurrency/render/Visualizer limit changed. On the soak state this
+  would release **125,337,600 bytes / 119.53 MiB** of dead logical budget, increasing usable admission headroom from
+  **8.47 MiB to 128 MiB** (default queue: up to eight 2560×1440 derivatives by count, or four 3840×2160 by byte cap).
+  Runtime cost is an O(pending) ownership scan over the already-bounded derivative queue (normally <=8 at concurrency 2),
+  only cheap cache-membership/set checks; no image processing or new task/timer is introduced. Isolated A/B state-machine
+  smoke against the tests-only checkpoint proves old=`1 pending / 16 MiB charged`, repaired=`0 / 0` for self-eviction.
+
+- [x] **Reddit zero-delay due-loop root cause proven (>95% confidence).** The blocked-cooldown path converts a positive
+  floating remainder with `int(... * 1000)`. A positive sub-millisecond remainder becomes `0`; `_schedule_timer()` handles
+  `delay <= 0` by synchronously calling `_on_periodic_due()`, which re-enters `fetch()`, sees the cooldown still positive,
+  re-authors another zero delay and recursively repeats until wall time advances. The soak contains **854** due-arm records,
+  **763** blocked-cooldown arms and **721 zero-delay blocked-cooldown arms** across 27 second-buckets; worst observed burst is
+  **84 synchronous arms in one second**. Network rate limiting still prevented Reddit request multiplication, so the cost is
+  avoidable UI-thread/log churn and recursion risk rather than remote hammering.
+- [x] **Reddit regression authored before fix (2026-09-14; PySide run still required):** drive a controlled positive
+  `0.4 ms` blocked cooldown through the real `fetch()` -> due-authoring -> timer seam and require exactly one deferred
+  `>=1 ms` one-shot with no synchronous `_on_periodic_due()` entry. A second regression pins preserved positive sub-ms
+  monotonic deadlines so they cannot truncate to zero before they are actually due.
+- [x] **Reddit production repair landed after regression gate (2026-09-14):** all positive second remainders now preserve
+  a positive integer delay via ceiling/minimum-one-ms conversion, including preserved monotonic dues and blocked fetches;
+  `_schedule_timer()` always routes even a due-now edge through the existing one-shot instead of synchronously re-entering
+  `_on_periodic_due()`. No timer/poller/cadence owner was added. Against the soak this removes the **721** observed zero-delay
+  blocked-cooldown arms (worst 84/s recursive burst) and replaces each boundary with one deferred edge; the only timing cost
+  is roughly 1–2 ms at an otherwise due-now boundary, negligible beside the 15-minute Reddit cadence. Isolated A/B smoke
+  proves old=`1 synchronous due / 0 shots`, repaired=`0 synchronous / 1 positive shot`.
+
+- [?] **COMPLETELY FUCKED — `--usage` handle trend has a >80% PDH-observer attribution, but the residual application-handle
+  leak question is not closed until the instrumented Windows soak proves it.** Stable 04:00–13:30 RSS/USS/private memory and app/thread/resource ownership are flat while main handles rise about
+  +180 overall. `WindowsGpuUsageCollector` intentionally rebuilds its process-scoped `GPU Engine` / `GPU Process Memory` PDH
+  query every 300 s because GPU-engine instances are dynamic. The process-handle sample is captured before the GPU collector
+  rebuild; the sample immediately after each `gpu_status=warming` boundary therefore reflects the newly enumerated query's
+  current counter cardinality. Across that stable interval those post-rebuild samples contribute **+341 handles**, while all
+  other sample-to-sample changes net **-161**. This is strong attribution, not closure: until the next Windows soak shows no
+  independent residual slope after PDH cardinality is accounted for, R-84 remains **COMPLETELY FUCKED**. The collector closes
+  the old query before opening the new one and rebuild steps
+  can decrease as well as increase, which is inconsistent with a monotonically leaked old query. Rebuild samples are modest:
+  median collection ~17.9 ms vs ~15.4 ms ordinary samples at a 15 s usage cadence / 300 s GPU rediscovery cadence.
+- [x] **Usage instrumentation/regression authored (2026-09-14; Windows soak still required to close R-84):** preserve full GPU/VRAM
+  statistics and the 300 s rediscovery requirement. A dynamic fake-PDH lifecycle test now changes engine/memory instance
+  cardinality across two real `collect()` rebuilds, requires the prior query to close before the replacement opens, proves
+  counter lists are replaced rather than appended, and proves final `close()` drains query/counter ownership. `--usage` now
+  also logs the already-owned `gpu_query_generation`, engine/dedicated/shared counter counts and total PDH counter cardinality
+  beside `handles_main`. This adds no new OS query, enumeration, timer or work when `--usage` is off and preserves full
+  GPU/VRAM fidelity while making the required closure soak possible. Instrumentation is not a fix and does not promote R-84
+  out of **COMPLETELY FUCKED**. Do **not** reduce GPU coverage/cadence merely to flatten `handles_main`. If the Windows soak
+  still shows growth after accounting for PDH cardinality, add targeted handle-type diagnostics in a dedicated sidecar
+  (not `--perf`) and pursue the surviving owner.
+
+- [x] **Monitor wake double rebuild explained; no production optimization admitted yet.** Existing display detection already
+  coalesces Qt topology/metric/application edges for 250 ms. On wake Windows exposed a genuinely different MSI-only topology
+  at 13:46:11 and did not expose the final MSI+LG topology until ~13:46:14, roughly three seconds later. Each generation
+  retired cleanly (destruction barriers ~344 ms and ~610 ms). A longer generic debounce would delay real hotplug/removal and
+  still cannot reliably distinguish a seconds-long transient wake topology from a genuine one-screen state.
+- [x] **Monitor regression/decision gate strengthened (2026-09-14; PySide run still required):** existing tests retain
+  same-burst metric/resume coalescing and same-signature resume revalidation; a new two-stage wake test proves MSI-only can
+  settle/reconcile first and a later genuinely distinct MSI+LG signature intentionally schedules/reconciles again. This
+  explicitly protects against “fixing” the soak with a generic multi-second debounce. Do not add sleep/poll/debounce unless
+  later evidence provides a reliable wake-specific settling signal; correctness currently outranks hiding this rare hitch.
+
+- [?] **Installed validation after soak repairs:** run the new §0.19 regressions in the intended Windows/PySide6 environment,
+  then repeat a bounded cache-heavy soak with cache/usage diagnostics. Confirm scaled-prefetch completions continue after raw
+  eviction pressure, pending scaled bytes do not pin near the cap without producers, Reddit produces no zero-delay due bursts,
+  and use `--usage`'s query/cardinality fields to determine whether any residual main-process handle slope survives. R-84
+  stays **COMPLETELY FUCKED** until that result is known. Also confirm full GPU/VRAM statistics and query replacement/close
+  ownership remain intact. Monitor wake remains an
+  observational gate only; two rebuilds are still correct when Windows presents two genuinely distinct settled signatures.
+
+---
+
 ## 5. Test / debris reconciliation
 
 Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this active plan carries sequencing only.

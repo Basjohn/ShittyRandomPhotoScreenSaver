@@ -2,6 +2,75 @@
 
 Last updated: 2026-09-14
 
+## 0.20 2026-09-14 soak defects — production repair after regression checkpoint
+
+Production repair was permitted only after the §0.19 tests-only checkpoint was frozen. Two behavior owners changed;
+`--usage` sampling/GPU ownership and display-topology behavior remain unchanged, while `--usage` gained passive PDH
+cardinality fields so future handle trends can be attributed without weakening statistics.
+
+- **Image prefetch ownership repaired (`utils/image_prefetcher.py`).** Raw prefetch completion now verifies actual cache
+  residency after `ImageCache.put()` because hard LRU enforcement may self-evict the inserted source. Pending scaled intents
+  are reclaimed when stale/already satisfied or when their raw parent has neither residency nor queued/inflight raw producer
+  ownership. Reclamation runs before new scaled admission and before dispatch even during post-transition compute cooldown;
+  failed raw submission also pumps cleanup. This preserves producer-owned waits and all existing 256 MiB cache / 128 MiB
+  pending / concurrency limits. On the recorded soak state it would reclaim 125,337,600 bytes (119.53 MiB) and restore
+  admission headroom from 8.47 MiB to 128 MiB.
+- **Reddit due scheduling repaired (`widgets/reddit_runtime.py`).** Positive seconds-to-ms conversion uses ceiling/minimum
+  one millisecond, preserved positive monotonic deadlines no longer truncate to zero, and a due-now `_schedule_timer()` edge
+  is deferred through the existing `ThreadManager.single_shot` rather than synchronously calling `_on_periodic_due()`. No
+  new timer/cadence/poller exists. The recorded 721 zero-delay blocked-cooldown arms therefore collapse to one deferred edge
+  per boundary episode, at ~1–2 ms maximum extra boundary latency.
+- **`--usage`: passive attribution added; R-84 remains COMPLETELY FUCKED pending Windows-soak proof (`core/performance/usage_sampler.py`).**
+  The §0.19 fake-PDH regression protects close-before-open query replacement while retaining the 300 s dynamic GPU/VRAM
+  rediscovery. Each usage snapshot/log now includes query generation plus engine/dedicated/shared/total PDH counter
+  cardinality derived from the lists the collector already owns. There is no extra OS enumeration/query/timer and no work
+  when `--usage` is off. `tests/test_usage_sampler.py` pins the cardinality fields and log output. This instrumentation is
+  evidence gathering, not a repair: R-84 stays **COMPLETELY FUCKED** until a multi-hour Windows soak proves there is no
+  independent residual main-process handle slope after PDH cardinality is accounted for. Degrading statistics merely to
+  make `handles_main` visually flatter remains explicitly rejected.
+- **Monitor wake: no production change.** The two-stage wake regression codifies that two genuinely distinct settled screen
+  signatures require two reconciles; a generic multi-second debounce remains rejected without a reliable wake-specific
+  settling signal.
+
+Validation in this container: all touched production/tests compile. Because PySide6 is unavailable, the intended project
+pytest cells remain **NEEDS RUN on Windows/PySide6**. As an auxiliary state-machine check (not a substitute for that run),
+the exact prefetch self-eviction scenario was A/B executed against the §0.19 tests-only checkpoint and repaired source:
+old production retained `1` pending request / `16 MiB`; repaired production returned `0 / 0`. The Reddit 0.4 ms scenario
+likewise changed from `1 synchronous due / 0 scheduled shots` to `0 synchronous / 1 positive shot`; the new prefetch cells
+pass 3/3, Reddit cells 2/2, and fake-PDH lifecycle cell 1/1 under narrow dependency shims.
+
+## 0.19 2026-09-14 overnight-soak regression ownership — authored before production repair
+
+The 03:34–13:54 soak exposed two deterministic lifetime/scheduling defects and two diagnostic/topology questions. Per the
+project's evidence-first rule, regression ownership was strengthened **before** touching production code. This environment
+does not contain PySide6, and `tests/conftest.py` requires it, so the behavioral cells below are accurately **NEEDS RUN**
+here; all four edited test modules pass Python compilation. Do not substitute source-scrape tests merely to obtain local
+green.
+
+- **Image prefetch lifetime (`tests/test_image_prefetcher.py`) — NEEDS RUN.** Added a hard-cap cache double whose successful
+  `put(raw)` immediately removes that same raw parent, matching the soak's self-eviction evidence. New tests require the
+  now-ownerless scaled derivative to release pending key + logical-byte ownership, prove the reclaimed budget immediately
+  admits later valid derivative work, repeat six self-eviction cycles with zero pending drift, and protect the inverse case
+  where a nonresident derivative must remain queued while its raw parent still has queued/inflight producer ownership. This
+  is the durable owner/lifetime invariant that the previous short scheduling-shape coverage did not exercise. The broader
+  `test_image_pipeline` reds from §0.18 remain separately classified rather than being force-blessed to an internal shape.
+- **Reddit cooldown scheduling (`tests/test_reddit_runtime.py`) — NEEDS RUN.** Added a controlled `0.4 ms` blocked-cooldown
+  path through the real `fetch()`/due/timer seam. It requires one positive (`>=1 ms`) deferred one-shot and zero synchronous
+  `_on_periodic_due()` re-entry. A companion cell pins a preserved positive sub-millisecond monotonic deadline so integer
+  conversion cannot turn “not yet due” into zero delay.
+- **Windows GPU usage ownership (`tests/test_usage_sampler.py`) — NEEDS RUN as part of the project suite.** Added a dynamic
+  fake-PDH lifecycle test with changing GPU Engine / GPU Process Memory instance cardinality. Two real `collect()` rebuilds
+  must close the prior query before opening its replacement, replace rather than append counter ownership, and final
+  `close()` must drain the last query/counter lists. This protects the existing 300 s rediscovery and full GPU/VRAM
+  statistics rather than degrading `--usage` to flatten a handle graph.
+- **Monitor wake policy (`tests/test_qtquick_monitor_wake_reconcile.py`) — NEEDS RUN.** Existing same-burst coalescing and
+  same-signature resume tests are retained; a new two-stage topology test pins that one settled MSI-only signature may
+  reconcile and a later distinct MSI+LG signature must deliberately cause a second reconcile. This prevents a generic
+  multi-second debounce from being introduced as a false optimization.
+
+No production source was changed in this regression-authorship slice. The next gate is to package this tests-only state,
+then repair only the proven prefetch and Reddit defects.
+
 ## 0.18 2026-09-14 Fossil-test hygiene + broad-tree reconciliation
 
 Evidence-driven audit of the full `tests/` tree (per-file isolated run) on

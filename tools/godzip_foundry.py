@@ -11,6 +11,7 @@ The UI deliberately never infers deletion from a missing ZIP member.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import ctypes
 import json
 import os
@@ -128,6 +129,7 @@ from godzip_foundry_core import (  # noqa: E402
     RepoFile,
     RUN_DEFAULT_FLAGS,
     RUN_ENTRYPOINTS,
+    RUN_FOUNDRY_HIDDEN_FLAGS,
     apply_godzip,
     build_run_command,
     collect_log_files,
@@ -143,10 +145,12 @@ from godzip_foundry_core import (  # noqa: E402
     git_commit_all,
     git_dirty,
     git_head,
+    git_identity,
     git_pull_ff_only,
     git_push_current,
     inspect_godzip,
     inspect_pull,
+    is_transfer_note_markdown,
     launch_run_command,
     move_paths_to_deleteme,
     read_debris_manifest,
@@ -230,17 +234,29 @@ def _load_local_settings(repo_root: Path) -> dict[str, Any]:
 
 
 def _save_local_setting(repo_root: Path, key: str, value: Any) -> None:
-    """Atomically persist a small preference inside the current repository."""
+    """Atomically persist a small preference inside the current repository.
+
+    Use a process/thread-specific sibling temp file so two Foundry instances do
+    not trample the same fixed ``settings.json.tmp`` staging path.
+    """
     path = _local_settings_path(repo_root)
     state = _load_local_settings(repo_root)
     state[str(key)] = value
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    temp.write_text(
-        json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
+    temp = path.with_name(
+        f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
     )
-    os.replace(temp, path)
+    try:
+        temp.write_text(
+            json.dumps(state, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temp, path)
+    finally:
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 class CheckPathTree(QTreeWidget):
@@ -256,15 +272,43 @@ class CheckPathTree(QTreeWidget):
         self.setUniformRowHeights(True)
         self.setSortingEnabled(False)
         self.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        # Continuous ResizeToContents forces Qt to size-hint every row as large
+        # trees are populated/changed. Foundry trees routinely exceed 1,000
+        # leaves, so keep the path column elastic and use explicit secondary
+        # widths chosen by each view instead of an always-live content scan.
         for column in range(1, len(headers)):
-            self.header().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+            self.header().setSectionResizeMode(column, QHeaderView.ResizeMode.Interactive)
+            self.setColumnWidth(column, 110)
         self.itemChanged.connect(self._item_changed)
         self._changing = False
         self._folders: dict[tuple[str, ...], QTreeWidgetItem] = {}
+        self._leaves: list[QTreeWidgetItem] = []
 
     def clear(self) -> None:  # type: ignore[override]
         self._folders.clear()
+        self._leaves.clear()
         super().clear()
+
+    @contextmanager
+    def bulk_update(self):
+        """Fence bulk row mutation so itemChanged work runs once, not per inserted leaf.
+
+        Both Create and Apply routinely populate 1,000+ rows.  QTreeWidget emits
+        ``itemChanged`` when check states are assigned, and the Foundry summary
+        handlers walk every leaf.  Leaving those signals live turns population into
+        quadratic GUI-thread work and makes unrelated popups appear frozen.
+        """
+
+        previous_blocked = self.signalsBlocked()
+        previous_updates = self.updatesEnabled()
+        self.blockSignals(True)
+        self.setUpdatesEnabled(False)
+        try:
+            yield
+        finally:
+            self.blockSignals(previous_blocked)
+            self.setUpdatesEnabled(previous_updates)
+            self.viewport().update()
 
     def add_path(
         self,
@@ -312,6 +356,7 @@ class CheckPathTree(QTreeWidget):
             self.addTopLevelItem(item)
         else:
             parent.addChild(item)
+        self._leaves.append(item)
         return item
 
     def _set_descendants(self, item: QTreeWidgetItem, state: Qt.CheckState) -> None:
@@ -330,27 +375,19 @@ class CheckPathTree(QTreeWidget):
         if state == Qt.CheckState.PartiallyChecked:
             return
         self._changing = True
+        previous_blocked = self.signalsBlocked()
         self.blockSignals(True)
         try:
             self._set_descendants(item, state)
         finally:
-            self.blockSignals(False)
+            self.blockSignals(previous_blocked)
             self._changing = False
         self.viewport().update()
 
     def leaf_items(self) -> list[QTreeWidgetItem]:
-        result: list[QTreeWidgetItem] = []
-
-        def visit(item: QTreeWidgetItem) -> None:
-            if item.data(0, ROLE_KIND) != "folder":
-                result.append(item)
-                return
-            for i in range(item.childCount()):
-                visit(item.child(i))
-
-        for i in range(self.topLevelItemCount()):
-            visit(self.topLevelItem(i))
-        return result
+        # add_path/clear own the tree's leaf lifecycle; avoid recursively walking
+        # the hierarchy for every summary update and selection profile click.
+        return list(self._leaves)
 
     def checked_paths(self) -> list[str]:
         return [
@@ -360,6 +397,7 @@ class CheckPathTree(QTreeWidget):
         ]
 
     def set_leaf_checks(self, predicate) -> None:
+        previous_blocked = self.signalsBlocked()
         self.blockSignals(True)
         try:
             for item in self.leaf_items():
@@ -368,7 +406,7 @@ class CheckPathTree(QTreeWidget):
                     Qt.CheckState.Checked if predicate(item.data(0, ROLE_PAYLOAD)) else Qt.CheckState.Unchecked,
                 )
         finally:
-            self.blockSignals(False)
+            self.blockSignals(previous_blocked)
         self.viewport().update()
 
     def apply_filter(self, text: str) -> None:
@@ -385,6 +423,8 @@ class CheckPathTree(QTreeWidget):
             item.setHidden(not any_visible)
             if needle and any_visible:
                 item.setExpanded(True)
+            elif not needle:
+                item.setExpanded(False)
             return any_visible
 
         for i in range(self.topLevelItemCount()):
@@ -630,6 +670,13 @@ class CreateTab(QWidget):
         self.window = window
         self.repo_root = window.repo_root
         self.repo_files: list[RepoFile] = []
+        self._loaded = False
+        self._stale = True
+        self._auto_name = ""
+        self._filter_timer = QTimer(self)
+        self._filter_timer.setSingleShot(True)
+        self._filter_timer.setInterval(120)
+        self._filter_timer.timeout.connect(lambda: self._filter(self.filter_edit.text()))
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -656,7 +703,7 @@ class CreateTab(QWidget):
         controls = QHBoxLayout()
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Filter repository paths…")
-        self.filter_edit.textChanged.connect(self._filter)
+        self.filter_edit.textChanged.connect(lambda _text: self._filter_timer.start())
         controls.addWidget(self.filter_edit, 1)
         for label, handler in (
             ("Workflow Defaults", self.select_defaults),
@@ -671,6 +718,9 @@ class CreateTab(QWidget):
         layout.addLayout(controls)
 
         self.tree = CheckPathTree(["Repository path", "Git", "Size", "Default"])
+        self.tree.setColumnWidth(1, 170)
+        self.tree.setColumnWidth(2, 90)
+        self.tree.setColumnWidth(3, 82)
         self.tree.itemChanged.connect(lambda *_: self._update_summary())
         layout.addWidget(self.tree, 1)
 
@@ -693,7 +743,8 @@ class CreateTab(QWidget):
         row.addWidget(open_saved)
         foot.addLayout(row)
         row2 = QHBoxLayout()
-        self.name_edit = QLineEdit(suggested_godzip_name(self.repo_root))
+        self._auto_name = suggested_godzip_name(self.repo_root)
+        self.name_edit = QLineEdit(self._auto_name)
         self.include_debris = QCheckBox("Include checked Manual/Imported debris instructions")
         self.include_debris.setChecked(True)
         row2.addWidget(QLabel("Name"))
@@ -711,20 +762,50 @@ class CreateTab(QWidget):
         foot.addLayout(action)
         layout.addWidget(footer)
 
+    def mark_stale(self) -> None:
+        """Mark the Create view dirty without rebuilding a hidden 1,000-row tree."""
+        self._stale = True
+
+    def ensure_loaded(self) -> None:
+        if not self._loaded or self._stale:
+            self.refresh()
+
     def refresh(self) -> None:
+        # Refresh is expected to update filesystem/Git facts, not throw away a
+        # carefully curated transfer selection or a hand-authored ZIP name.
+        previous_known = {entry.path for entry in self.repo_files} if self._loaded else set()
+        previous_checked = set(self.tree.checked_paths()) if self._loaded else set()
+        current_name = self.name_edit.text().strip()
+        name_is_automatic = not current_name or current_name == self._auto_name
+
         def apply_result(result: list[RepoFile]) -> None:
             self.repo_files = result
-            self.tree.clear()
-            for entry in self.repo_files:
-                default_text = "workflow" if entry.default_selected else "off"
-                self.tree.add_path(
-                    entry.path,
-                    [entry.path, entry.status or "—", human_size(entry.size), default_text],
-                    checked=entry.default_selected,
-                    payload=entry,
-                )
-            self.tree.expandToDepth(0)
-            self.name_edit.setText(suggested_godzip_name(self.repo_root))
+            with self.tree.bulk_update():
+                self.tree.clear()
+                for entry in self.repo_files:
+                    default_text = "workflow" if entry.default_selected else "off"
+                    checked = (
+                        entry.path in previous_checked
+                        if entry.path in previous_known
+                        else entry.default_selected
+                    )
+                    self.tree.add_path(
+                        entry.path,
+                        [entry.path, entry.status or "—", human_size(entry.size), default_text],
+                        checked=checked,
+                        payload=entry,
+                    )
+                # Closed folders are the baseline. A live filter immediately
+                # reopens only matching branches.
+                self.tree.collapseAll()
+                if self.filter_edit.text().strip():
+                    self.tree.apply_filter(self.filter_edit.text())
+            suggested = suggested_godzip_name(self.repo_root)
+            self._auto_name = suggested
+            if name_is_automatic:
+                self.name_edit.setText(suggested)
+            self._loaded = True
+            self._stale = False
             self._update_summary()
             self.window.refresh_repo_header()
             self.window.set_status(f"Repository scan complete — {len(self.repo_files):,} Git-visible files")
@@ -772,6 +853,7 @@ class CreateTab(QWidget):
         if path:
             self.output_edit.setText(path)
             _save_local_setting(self.repo_root, "output_dir", path)
+            self.window.invalidate_zip_discovery_cache()
 
     def open_saved_folder(self) -> None:
         self.window.open_folder(
@@ -805,6 +887,8 @@ class CreateTab(QWidget):
     def _create_archive_now(self, selected: list[str], output: Path, debris: list[dict[str, str]]) -> None:
         def completed(manifest: dict[str, Any]) -> None:
             _save_local_setting(self.repo_root, "output_dir", str(output.parent))
+            self.window.invalidate_zip_discovery_cache()
+            self.mark_stale()
             self.window.set_status(
                 f"Created {output.name} — {len(manifest['files'])} files, {len(manifest['debris'])} debris instructions"
             )
@@ -816,7 +900,8 @@ class CreateTab(QWidget):
                 "Manifest: .godzip/manifest.json\n\n"
                 "The archive passed CRC validation before publication.",
             )
-            self.name_edit.setText(suggested_godzip_name(self.repo_root))
+            self._auto_name = suggested_godzip_name(self.repo_root)
+            self.name_edit.setText(self._auto_name)
 
         self.window.run_task(
             "Hashing selected files and creating GODZIP…",
@@ -837,6 +922,10 @@ class ApplyTab(QWidget):
         self._discovered_zips: list[Path] = []
         self._browser_expanded = False
         self._main_items: dict[str, QTreeWidgetItem] = {}
+        self._filter_timer = QTimer(self)
+        self._filter_timer.setSingleShot(True)
+        self._filter_timer.setInterval(120)
+        self._filter_timer.timeout.connect(lambda: self.tree_filter(self.filter_edit.text()))
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -955,7 +1044,7 @@ class ApplyTab(QWidget):
         tools = QHBoxLayout()
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Filter archive targets…")
-        self.filter_edit.textChanged.connect(self.tree_filter)
+        self.filter_edit.textChanged.connect(lambda _text: self._filter_timer.start())
         tools.addWidget(self.filter_edit, 1)
         for label, handler in (
             ("Changes", self.select_changes),
@@ -991,6 +1080,9 @@ class ApplyTab(QWidget):
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("applySplitter")
         self.tree = CheckPathTree(["Target path", "Local", "Size", "SHA-256"])
+        self.tree.setColumnWidth(1, 285)
+        self.tree.setColumnWidth(2, 90)
+        self.tree.setColumnWidth(3, 112)
         self.tree.setMinimumHeight(260)
         self.tree.itemChanged.connect(lambda *_: self._update_apply_summary())
         self.splitter.addWidget(self.tree)
@@ -1077,10 +1169,9 @@ class ApplyTab(QWidget):
     def refresh_discovered_zips(self, *, force: bool = False) -> None:
         if self._discovery_loaded and not force:
             return
-        self._discovered_zips = discover_zip_candidates(
-            self._zip_search_dirs(),
-            limit=40,
+        self._discovered_zips = self.window.discover_zips(
             project_only=not self.show_all_zips.isChecked(),
+            force=force,
         )
         self.found_combo.blockSignals(True)
         try:
@@ -1213,52 +1304,68 @@ class ApplyTab(QWidget):
             )
         self.strip_wrapper.blockSignals(False)
 
-        self.tree.clear()
-        self.changes_tree.clear()
-        self._main_items.clear()
-        for entry in inspection.files:
-            committed_overlap = entry.target_path.casefold() in overlap
-            tags = [entry.local_state]
-            if entry.timestamp_stale:
-                tags.append("TIMESTAMP OLD")
-            elif entry.local_state not in {"SAME", "NEW"} and entry.local_mtime_ns:
-                tags.append("TIMESTAMP CURRENT/NEWER")
-            if committed_overlap:
-                tags.append("GIT CHANGED")
-            state_text = " · ".join(tags)
-            item = self.tree.add_path(
-                entry.target_path,
-                [entry.target_path, state_text, human_size(entry.size), entry.sha256[:12]],
-                checked=entry.default_selected,
-                payload=entry,
-            )
-            self._main_items[entry.target_path] = item
+        state_colors = {
+            "conflict": self.window.theme_qcolor("popup.icon.error"),
+            "stale": self.window.theme_qcolor("popup.icon.warning"),
+            "dirty": self.window.theme_qcolor("popup.icon.info"),
+            "new": self.window.theme_qcolor("popup.icon.success"),
+            "same": self.window.theme_qcolor("text.tertiary"),
+        }
+        self.changes_tree.setUpdatesEnabled(False)
+        try:
+            with self.tree.bulk_update():
+                self.tree.clear()
+                self.changes_tree.clear()
+                self._main_items.clear()
+                for entry in inspection.files:
+                    committed_overlap = entry.target_path.casefold() in overlap
+                    tags = [entry.local_state]
+                    if entry.timestamp_stale:
+                        tags.append("TIMESTAMP OLD")
+                    elif entry.local_state not in {"SAME", "NEW"} and entry.local_mtime_ns:
+                        tags.append("TIMESTAMP CURRENT/NEWER")
+                    if committed_overlap:
+                        tags.append("GIT CHANGED")
+                    state_text = " · ".join(tags)
+                    item = self.tree.add_path(
+                        entry.target_path,
+                        [entry.target_path, state_text, human_size(entry.size), entry.sha256[:12]],
+                        checked=entry.default_selected and not is_transfer_note_markdown(entry.target_path),
+                        payload=entry,
+                    )
+                    self._main_items[entry.target_path] = item
 
-            row_color: QColor | None = None
-            if entry.timestamp_stale and committed_overlap:
-                row_color = self.window.theme_qcolor("popup.icon.error")
-            elif entry.timestamp_stale:
-                row_color = self.window.theme_qcolor("popup.icon.warning")
-            elif entry.local_dirty:
-                row_color = self.window.theme_qcolor("popup.icon.info")
-            elif entry.local_state == "NEW":
-                row_color = self.window.theme_qcolor("popup.icon.success")
-            elif entry.local_state == "SAME":
-                row_color = self.window.theme_qcolor("text.tertiary")
-            if row_color is not None:
-                for col in range(self.tree.columnCount()):
-                    item.setForeground(col, row_color)
+                    row_color: QColor | None = None
+                    if entry.timestamp_stale and committed_overlap:
+                        row_color = state_colors["conflict"]
+                    elif entry.timestamp_stale:
+                        row_color = state_colors["stale"]
+                    elif entry.local_dirty:
+                        row_color = state_colors["dirty"]
+                    elif entry.local_state == "NEW":
+                        row_color = state_colors["new"]
+                    elif entry.local_state == "SAME":
+                        row_color = state_colors["same"]
+                    if row_color is not None:
+                        for col in range(self.tree.columnCount()):
+                            item.setForeground(col, row_color)
 
-            if entry.local_state != "SAME":
-                changed_item = QTreeWidgetItem([entry.target_path])
-                changed_item.setData(0, ROLE_PATH, entry.target_path)
-                changed_item.setToolTip(0, state_text)
-                if row_color is not None:
-                    changed_item.setForeground(0, row_color)
-                self.changes_tree.addTopLevelItem(changed_item)
+                    if entry.local_state != "SAME":
+                        changed_item = QTreeWidgetItem([entry.target_path])
+                        changed_item.setData(0, ROLE_PATH, entry.target_path)
+                        changed_item.setToolTip(0, state_text)
+                        if row_color is not None:
+                            changed_item.setForeground(0, row_color)
+                        self.changes_tree.addTopLevelItem(changed_item)
+
+                # Create/Apply share the same closed-folder default. A non-empty
+                # filter may immediately reopen matching branches below.
+                self.tree.collapseAll()
+        finally:
+            self.changes_tree.setUpdatesEnabled(True)
+            self.changes_tree.viewport().update()
 
         self.changes_tree.setHeaderLabel(f"CHANGING FILES · {self.changes_tree.topLevelItemCount()}")
-        self.tree.expandToDepth(0)
         self.history_ack.blockSignals(True)
         self.history_ack.setChecked(False)
         self.history_ack.hide()
@@ -1422,7 +1529,7 @@ class ApplyTab(QWidget):
             self.load_zip(
                 inspection.zip_path,
                 preserve_wrapper_choice=True,
-                on_loaded=self.window.create_tab.refresh,
+                on_loaded=self.window.create_tab.mark_stale,
             )
 
         self.window.run_task(
@@ -1494,9 +1601,11 @@ class DebrisTab(QWidget):
         self.tree.setRootIsDecorated(False)
         self.tree.setUniformRowHeights(True)
         self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.tree.header().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        self.tree.header().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
         self.tree.header().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.tree.setColumnWidth(1, 100)
+        self.tree.setColumnWidth(2, 72)
         self.tree.itemChanged.connect(lambda *_: self._changed())
         layout.addWidget(self.tree, 1)
 
@@ -1706,7 +1815,7 @@ class DebrisTab(QWidget):
                 if not exists:
                     item.setCheckState(0, Qt.CheckState.Unchecked)
             self._changed()
-            self.window.create_tab.refresh()
+            self.window.create_tab.mark_stale()
 
         self.window.run_task(
             "Moving checked debris into /deleteme…",
@@ -1801,7 +1910,8 @@ class LogzipTab(QWidget):
         self.tree.setRootIsDecorated(False)
         self.tree.setAlternatingRowColors(True)
         self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        self.tree.setColumnWidth(1, 96)
         self.tree.itemChanged.connect(lambda *_: self._update())
         layout.addWidget(self.tree, 1)
         footer = Panel()
@@ -2042,10 +2152,9 @@ class DiffTab(QWidget):
     def refresh(self, *, force: bool = False) -> None:
         if self._loaded and not force:
             return
-        self._zips = discover_zip_candidates(
-            self.window.zip_search_dirs(),
-            limit=40,
+        self._zips = self.window.discover_zips(
             project_only=not self.show_all.isChecked(),
+            force=force,
         )
         self.combo.blockSignals(True)
         try:
@@ -2139,7 +2248,10 @@ class PushTab(QWidget):
         self.tree.setAlternatingRowColors(True)
         self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for col in range(1, 4):
-            self.tree.header().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+            self.tree.header().setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
+        self.tree.setColumnWidth(1, 110)
+        self.tree.setColumnWidth(2, 82)
+        self.tree.setColumnWidth(3, 92)
         layout.addWidget(self.tree, 1)
         box = Panel()
         bl = QVBoxLayout(box)
@@ -2176,21 +2288,26 @@ class PushTab(QWidget):
     def refresh(self) -> None:
         try:
             changes = git_changes(self.repo_root)
-            self.tree.clear()
-            for change in changes:
-                item = QTreeWidgetItem([
-                    change.path,
-                    change.status,
-                    "staged" if change.staged else "—",
-                    "new" if change.untracked else ("modified" if change.unstaged else "—"),
-                ])
-                self.tree.addTopLevelItem(item)
+            full_head, branch = git_identity(self.repo_root)
+            self.tree.setUpdatesEnabled(False)
+            try:
+                self.tree.clear()
+                for change in changes:
+                    item = QTreeWidgetItem([
+                        change.path,
+                        change.status,
+                        "staged" if change.staged else "—",
+                        "new" if change.untracked else ("modified" if change.unstaged else "—"),
+                    ])
+                    self.tree.addTopLevelItem(item)
+            finally:
+                self.tree.setUpdatesEnabled(True)
             self.summary.setText(
-                f"{len(changes)} current Git change(s) · branch {git_branch(self.repo_root)} · HEAD {git_head(self.repo_root)[:10]}"
+                f"{len(changes)} current Git change(s) · branch {branch} · HEAD {full_head[:10]}"
             )
             self.commit_button.setEnabled(bool(changes))
             self.commit_push_button.setEnabled(bool(changes))
-            self.window.refresh_repo_header()
+            self.window.refresh_repo_header(identity=(full_head, branch), dirty=bool(changes))
         except Exception as exc:
             self.window.show_error("Git change scan failed", exc)
 
@@ -2231,7 +2348,7 @@ class PushTab(QWidget):
             self.window.notify("Git operation complete", detail)
             self.persist_message()
             self.refresh()
-            self.window.create_tab.refresh()
+            self.window.create_tab.mark_stale()
 
         self.window.run_task(
             "Committing Git changes" + (" and pushing…" if push else "…"),
@@ -2354,16 +2471,17 @@ class PullTab(QWidget):
                 "diverged": "older",
             }.get(inspection.relation, "unknown")
             self.banner.set_relation(relation_ui, inspection.relation_detail)
-            self.tree.clear()
-            for entry in inspection.files:
-                local = "LOCAL DIRTY" if entry.local_dirty else "clean"
-                self.tree.add_path(
-                    entry.path,
-                    [entry.path, entry.status, local],
-                    checked=True,
-                    payload=entry,
-                )
-            self.tree.expandToDepth(0)
+            with self.tree.bulk_update():
+                self.tree.clear()
+                for entry in inspection.files:
+                    local = "LOCAL DIRTY" if entry.local_dirty else "clean"
+                    self.tree.add_path(
+                        entry.path,
+                        [entry.path, entry.status, local],
+                        checked=True,
+                        payload=entry,
+                    )
+                self.tree.collapseAll()
             self._update()
             self.window.set_status(
                 f"Remote inspection: {inspection.remote_ref} {inspection.remote_head[:10]} · {len(inspection.files)} incoming path(s)"
@@ -2421,7 +2539,7 @@ class PullTab(QWidget):
         def completed(detail: str) -> None:
             self.window.notify("Pull complete", detail or "Fast-forward pull completed.")
             self.window.refresh_repo_header()
-            self.refresh(on_loaded=self.window.create_tab.refresh)
+            self.refresh(on_loaded=self.window.create_tab.mark_stale)
 
         self.window.run_task(
             "Applying reviewed fast-forward pull…",
@@ -2455,7 +2573,7 @@ class PullTab(QWidget):
                 detail += f"\n\nRollback backup:\n{result.backup_dir}"
             self.window.notify("Selective sync complete", detail)
             self.window.refresh_repo_header()
-            self.refresh(on_loaded=self.window.create_tab.refresh)
+            self.refresh(on_loaded=self.window.create_tab.mark_stale)
 
         self.window.run_task(
             "Synchronizing selected remote file states…",
@@ -2602,7 +2720,11 @@ class RunTab(QWidget):
     def refresh_flags(self) -> None:
         self._building = True
         try:
-            self._flags = discover_run_flags(self.repo_root)
+            self._flags = tuple(
+                flag
+                for flag in discover_run_flags(self.repo_root)
+                if flag not in RUN_FOUNDRY_HIDDEN_FLAGS
+            )
             settings = _load_local_settings(self.repo_root)
             remembered_entrypoint = str(settings.get("run_entrypoint", "main.py"))
             if remembered_entrypoint not in RUN_ENTRYPOINTS:
@@ -3041,6 +3163,7 @@ class GodzipFoundryWindow(QMainWindow):
         self._task_thread: threading.Thread | None = None
         self._native_backdrop_mode: str | None = None
         self._backdrop_applied = False
+        self._zip_discovery_cache: dict[tuple[bool, tuple[str, ...]], tuple[Path, ...]] = {}
 
         self.setWindowTitle(APP_TITLE)
         self.setWindowFlags(
@@ -3064,7 +3187,7 @@ class GodzipFoundryWindow(QMainWindow):
             self.tabs.setCurrentWidget(self.apply_tab)
             QTimer.singleShot(0, lambda: self.apply_tab.load_zip(initial_zip))
         else:
-            self.create_tab.refresh()
+            self.create_tab.ensure_loaded()
         QTimer.singleShot(0, self._apply_native_backdrop_theme)
 
     def open_folder(self, path: Path, *, label: str = "folder") -> None:
@@ -3129,6 +3252,15 @@ class GodzipFoundryWindow(QMainWindow):
             return
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
+        if self._task_active:
+            # Core mutations run on a daemon worker. Letting the GUI process exit
+            # mid-apply/pull/create could terminate that worker in the middle of
+            # a transactional operation. Normal close is therefore fenced until
+            # the current task reports completion.
+            event.ignore()
+            self.set_status("An operation is still running — wait for it to finish before closing Foundry.")
+            QApplication.beep()
+            return
         try:
             self.push_tab.persist_message()
         except Exception:
@@ -3154,6 +3286,36 @@ class GodzipFoundryWindow(QMainWindow):
         if os.name == "nt":
             dirs.append(PERSONAL_GODZIP_DROP_DIR)
         return dirs
+
+    def discover_zips(self, *, project_only: bool, force: bool = False) -> list[Path]:
+        """Share one shallow ZIP discovery result between Apply and Diff.
+
+        Both tabs search the same repo-adjacent/output/drop directories. Repeating
+        that scan is wasted work, especially when the optional drop directory is
+        on a network/mapped drive. Cache keys include the current directory list
+        and filter mode, and explicit Refresh bypasses the cache.
+        """
+        dirs = self.zip_search_dirs()
+        key = (
+            bool(project_only),
+            tuple(os.path.normcase(os.path.abspath(str(path.expanduser()))) for path in dirs),
+        )
+        if not force:
+            cached = self._zip_discovery_cache.get(key)
+            if cached is not None:
+                return list(cached)
+        found = discover_zip_candidates(dirs, limit=40, project_only=project_only)
+        self._zip_discovery_cache[key] = tuple(found)
+        return found
+
+    def invalidate_zip_discovery_cache(self) -> None:
+        self._zip_discovery_cache.clear()
+        apply_tab = getattr(self, "apply_tab", None)
+        if apply_tab is not None:
+            apply_tab._discovery_loaded = False
+        diff_tab = getattr(self, "diff_tab", None)
+        if diff_tab is not None:
+            diff_tab._loaded = False
 
     def _build_ui(self) -> None:
         root = QWidget(self)
@@ -3308,7 +3470,9 @@ class GodzipFoundryWindow(QMainWindow):
             self.cmd_tab_button.setChecked(current is self.command_tab)
         if hasattr(self, "foundries_tab_button"):
             self.foundries_tab_button.setChecked(current is self.foundries_tab)
-        if current is self.run_tab:
+        if current is self.create_tab:
+            self.create_tab.ensure_loaded()
+        elif current is self.run_tab:
             self.run_tab.ensure_loaded()
         elif current is self.pull_tab:
             self.pull_tab.ensure_loaded()
@@ -3329,11 +3493,17 @@ class GodzipFoundryWindow(QMainWindow):
             self.showMaximized()
             self.maximize_button.setText("❐")
 
-    def refresh_repo_header(self) -> None:
+    def refresh_repo_header(
+        self,
+        *,
+        identity: tuple[str, str] | None = None,
+        dirty: bool | None = None,
+    ) -> None:
         try:
-            branch = git_branch(self.repo_root)
-            head = git_head(self.repo_root)[:10]
-            dirty = git_dirty(self.repo_root)
+            full_head, branch = identity if identity is not None else git_identity(self.repo_root)
+            if dirty is None:
+                dirty = git_dirty(self.repo_root)
+            head = full_head[:10]
             self.branch_badge.setText(branch)
             self.head_badge.setText(head)
             self.dirty_badge.setText("DIRTY" if dirty else "CLEAN")

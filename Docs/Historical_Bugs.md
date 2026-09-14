@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -16,9 +16,13 @@ not automatic current architecture instructions.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
+- [R-84 — Usage PDH Counter Cardinality Could Masquerade As A Main-Process Handle Leak](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. Instrumentation exists in `--usage`, but the residual handle-leak question is not closed until a Windows soak accounts for PDH cardinality.
 
 ## Active / Pending Acceptance Records
 
+- [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **RESOLVED IN CODE / AWAITING VALIDATION**. Deterministic ownership regression added; installed PySide/cache-heavy soak remains.
+- [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **RESOLVED IN CODE / AWAITING VALIDATION**. Positive delays remain one-shot/event-driven; installed Reddit soak remains.
+- [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md) — **CORRECTNESS PRESERVED / AWAITING VALIDATION**. No long debounce admitted; physical multi-stage wake remains the acceptance gate.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
 - [R-81 — Clock Layout Slot Restored Variant Geometry Without Restoring Per-Display Face State](Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md) — **RESOLVED IN CODE / AWAITING VALIDATION**. Dedicated automated coverage is intentionally deferred to the next test pass; current sequencing remains in `Current_Plan.md`.
 
@@ -31,6 +35,10 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md)
+- [R-84 — Usage PDH Counter Cardinality Could Masquerade As A Main-Process Handle Leak](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md)
+- [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md)
+- [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md)
 - [R-81 — Clock Layout Slot Restored Variant Geometry Without Restoring Per-Display Face State](Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md)
 - [R-80 — ABC Event-Loop Rolling History Contaminated Named Steady Windows](Historical_Bugs/R-80_ABC_EventLoop_Rolling_Window_Contamination.md)
 - [R-79 — Quick Display Sleep/Wake Topology Authority Split Could Leave A Window Straddling Displays](Historical_Bugs/R-79_Quick_Display_Sleep_Wake_Topology_Reconciliation.md) — **SOLVED / PHYSICAL WAKE VALIDATED 2026-09-12**.
@@ -121,6 +129,7 @@ duplicate records are manufactured.
 
 - [U-10 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift](Historical_Bugs/U-10_Oscilloscope_Strobe_Waveform_Ghost_Contract.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
+- [R-84 — Usage PDH Counter Cardinality Could Masquerade As A Main-Process Handle Leak](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. Instrumentation exists in `--usage`, but the residual handle-leak question is not closed until a Windows soak accounts for PDH cardinality.
 - [U-08 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift](Historical_Bugs/U-08_Custom_Replay_Shrink_Minimum_Constraints.md)
 - [U-07 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family](Historical_Bugs/U-07_Bubble_Loud_Path_Oracle_Drift.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)

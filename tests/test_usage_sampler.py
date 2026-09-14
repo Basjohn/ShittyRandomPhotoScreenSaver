@@ -199,6 +199,10 @@ class _GpuCollector:
             vram_supported=True,
             vram_dedicated_mb=512.0,
             vram_shared_mb=64.0,
+            query_generation=7,
+            engine_counter_count=12,
+            dedicated_counter_count=2,
+            shared_counter_count=2,
         )
 
     def close(self) -> None:
@@ -261,6 +265,11 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "uss_main_mb=300.0" in sample
     assert "uss_children_mb=60.0" in sample
     assert "gpu_busy_pct=67.0" in sample
+    assert "gpu_query_generation=7" in sample
+    assert "gpu_engine_counters=12" in sample
+    assert "gpu_dedicated_counters=2" in sample
+    assert "gpu_shared_counters=2" in sample
+    assert "gpu_pdh_counters_total=16" in sample
     assert "vram_dedicated_mb=512.0" in sample
     assert "tracked_known_bytes=4096" in sample
     assert "cpu_cache_bytes=2048" in sample
@@ -288,6 +297,10 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert lifecycle["uss_app_mb"] == 360.0
     assert lifecycle["handles_main"] == 560
     assert lifecycle["vram_dedicated_mb"] == 512.0
+    assert lifecycle["gpu_query_generation"] == 7
+    assert lifecycle["gpu_engine_counter_count"] == 12
+    assert lifecycle["gpu_dedicated_counter_count"] == 2
+    assert lifecycle["gpu_shared_counter_count"] == 2
     assert lifecycle["sample_age_ms"] >= 0.0
 
     service.stop()
@@ -316,6 +329,108 @@ def test_usage_service_never_overlaps_collection_and_reports_skips(caplog):
     samples = [record.message for record in caplog.records if "[USAGE] sample " in record.message]
     assert len(samples) == 2
     assert "skipped=1" in samples[1]
+
+
+class _FakePdh:
+    PERF_DETAIL_WIZARD = 400
+    PDH_FMT_DOUBLE = 1
+    PDH_FMT_LARGE = 2
+
+    def __init__(self) -> None:
+        self.opened: list[str] = []
+        self.closed: list[str] = []
+        self.events: list[tuple[str, str]] = []
+        self._generation = 0
+
+    def OpenQuery(self):
+        self._generation += 1
+        query = f"query-{self._generation}"
+        self.opened.append(query)
+        self.events.append(("open", query))
+        return query
+
+    def CloseQuery(self, query):
+        self.closed.append(query)
+        self.events.append(("close", query))
+
+    def EnumObjectItems(self, _machine, _data_source, object_name, _detail):
+        if self._generation == 1:
+            instances = {
+                "GPU Engine": [
+                    "pid_100_luid_0x1_engtype_3D",
+                    "pid_100_luid_0x1_engtype_Copy",
+                    "pid_999_luid_0x2_engtype_3D",
+                ],
+                "GPU Process Memory": ["pid_100_luid_0x1_phys_0"],
+            }
+        else:
+            instances = {
+                "GPU Engine": ["pid_100_luid_0x1_engtype_3D"],
+                "GPU Process Memory": [
+                    "pid_100_luid_0x1_phys_0",
+                    "pid_100_luid_0x1_phys_1",
+                ],
+            }
+        return [], instances[object_name]
+
+    def MakeCounterPath(self, parts):
+        _machine, object_name, instance, _parent, _index, counter_name = parts
+        return object_name, instance, counter_name
+
+    def AddCounter(self, query, path):
+        return query, path
+
+    def CollectQueryData(self, _query):
+        return None
+
+    def GetFormattedCounterValue(self, _counter, _fmt):
+        return 0, 1.0
+
+
+def test_gpu_collector_refresh_closes_old_query_and_replaces_counter_ownership(monkeypatch):
+    """Periodic rediscovery may change cardinality but must not retain prior PDH handles."""
+
+    import core.performance.usage_sampler as usage_module
+
+    now = iter((100.0, 401.0))
+    monkeypatch.setattr(usage_module.time, "monotonic", lambda: next(now))
+    pdh = _FakePdh()
+    collector = WindowsGpuUsageCollector(refresh_seconds=300.0)
+    collector._pdh = pdh
+
+    first = collector.collect((100,))
+    assert first.status == "warming"
+    assert first.query_generation == 1
+    assert first.engine_counter_count == 2
+    assert first.dedicated_counter_count == 1
+    assert first.shared_counter_count == 1
+    assert collector._query == "query-1"
+    assert len(collector._engine_counters) == 2
+    assert len(collector._dedicated_counters) == 1
+    assert len(collector._shared_counters) == 1
+    assert pdh.closed == []
+
+    second = collector.collect((100,))
+    assert second.status == "warming"
+    assert second.query_generation == 2
+    assert second.engine_counter_count == 1
+    assert second.dedicated_counter_count == 2
+    assert second.shared_counter_count == 2
+    assert collector._query == "query-2"
+    # Generation two has a smaller engine set and a larger memory-instance set.
+    # Exact lengths prove refresh replaced the lists instead of appending owners.
+    assert len(collector._engine_counters) == 1
+    assert len(collector._dedicated_counters) == 2
+    assert len(collector._shared_counters) == 2
+    assert pdh.closed == ["query-1"]
+    assert pdh.events.index(("close", "query-1")) < pdh.events.index(("open", "query-2"))
+
+    collector.close()
+    assert pdh.closed == ["query-1", "query-2"]
+    assert collector._query is None
+    assert collector._engine_counters == []
+    assert collector._dedicated_counters == []
+    assert collector._shared_counters == []
 
 
 def test_gpu_collector_negative_cache_does_not_rediscover_every_sample(monkeypatch):

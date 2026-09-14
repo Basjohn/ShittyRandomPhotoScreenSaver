@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import time
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -60,6 +61,20 @@ RUN_DEFAULT_FLAGS = (
     "--cache",
     "--fresh",
 )
+
+# Accepted by the product parser for compatibility/history, but intentionally
+# not offered by GODZIP Foundry's RUN UI.  Keep this tool-only policy separate
+# from production CLI retirement so a Foundry cleanup cannot silently change
+# application compatibility.
+RUN_FOUNDRY_HIDDEN_FLAGS = frozenset(
+    {
+        "--devcurve",          # documented product no-op
+        "--devstats",          # documented product no-op
+        "--viz-diagnostics",   # legacy subset; --viz already enables viz diagnostics
+        "--diag-pair-warm-finish",  # parser-only historical diagnostic token
+        "--diag-p4-stages",    # parser-only historical diagnostic token
+    }
+)
 RUN_FLAG_ALIASES = {
     "-d": "--debug",
     "-v": "--verbose",
@@ -67,7 +82,7 @@ RUN_FLAG_ALIASES = {
 }
 RUN_FLAG_DESCRIPTIONS = {
     "--debug": "Enable debug logging",
-    "--verbose": "Enable full verbose log stream",
+    "--verbose": "Unsuppress noisy DEBUG producers (debug already writes screensaver_verbose.log)",
     "--perf": "Performance metrics/logging",
     "--gpu-timing": "Sampled owner-context GPU timing (implies --perf)",
     "--usage": "CPU/GPU/memory/thread usage telemetry",
@@ -327,9 +342,32 @@ def git_branch(repo_root: Path) -> str:
     return result.stdout.decode("utf-8", errors="replace").strip() or "DETACHED"
 
 
+def git_identity(repo_root: Path) -> tuple[str, str]:
+    """Return HEAD and branch with one Git process.
+
+    GODZIP Foundry calls both values together in hot paths such as manifest
+    creation and header refresh. Windows process creation is expensive enough
+    that spawning two git.exe instances for these adjacent reads is noticeable.
+    """
+    result = _run_git(repo_root, "rev-parse", "HEAD", "--abbrev-ref", "HEAD")
+    lines = result.stdout.decode("utf-8", errors="replace").splitlines()
+    if not lines:
+        raise GodzipError("Git did not return a HEAD revision")
+    head = lines[0].strip()
+    branch = lines[1].strip() if len(lines) > 1 and lines[1].strip() else "DETACHED"
+    return head, branch
+
+
 def git_dirty(repo_root: Path) -> bool:
-    result = _run_git(repo_root, "status", "--porcelain", "--untracked-files=all")
-    return bool(result.stdout.strip())
+    result = _run_git(
+        repo_root,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--no-renames",
+    )
+    return bool(result.stdout)
 
 
 def _zlist(raw: bytes) -> list[str]:
@@ -337,19 +375,39 @@ def _zlist(raw: bytes) -> list[str]:
 
 
 def git_status_map(repo_root: Path) -> dict[str, str]:
-    staged = set(_zlist(_run_git(repo_root, "diff", "--cached", "--name-only", "-z").stdout))
-    modified = set(_zlist(_run_git(repo_root, "diff", "--name-only", "-z").stdout))
-    untracked = set(_zlist(_run_git(repo_root, "ls-files", "--others", "--exclude-standard", "-z").stdout))
+    """Return Foundry's compact dirty-state labels from one porcelain query.
+
+    The old implementation spawned three git.exe processes (staged, unstaged,
+    untracked) every time a tree/archive was inspected. Porcelain v1 already
+    carries the same XY information atomically. ``--no-renames`` keeps every
+    NUL record to one path so parsing remains simple and deterministic.
+    """
+    raw = _run_git(
+        repo_root,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--no-renames",
+    ).stdout
     result: dict[str, str] = {}
-    for path in staged | modified | untracked:
+    for record in raw.split(b"\0"):
+        if not record or len(record) < 4:
+            continue
+        xy = record[:2].decode("ascii", errors="replace")
+        # Porcelain -z keeps paths unquoted; surrogateescape preserves unusual
+        # filesystem byte sequences just like _zlist/git ls-files.
+        path = record[3:].decode("utf-8", errors="surrogateescape").replace("\\", "/")
         flags: list[str] = []
-        if path in untracked:
+        if xy == "??":
             flags.append("NEW")
-        if path in staged:
-            flags.append("STAGED")
-        if path in modified:
-            flags.append("MODIFIED")
-        result[path.replace("\\", "/")] = "+".join(flags)
+        else:
+            if xy[0] not in {" ", "?"}:
+                flags.append("STAGED")
+            if xy[1] not in {" ", "?"}:
+                flags.append("MODIFIED")
+        if flags:
+            result[path] = "+".join(flags)
     return result
 
 
@@ -371,6 +429,13 @@ def workflow_default_selected(path: str, status: str = "") -> bool:
     if lower.startswith("docs/"):
         return True
     return True
+
+
+def is_transfer_note_markdown(path: str) -> bool:
+    """True for checkpoint/handoff Markdown that Apply should leave opt-in."""
+
+    name = PurePosixPath(str(path)).name.casefold()
+    return name.endswith(".md") and ("checkpoint" in name or "handoff" in name)
 
 
 def collect_repo_files(repo_root: Path) -> list[RepoFile]:
@@ -419,11 +484,40 @@ def sha256_file(path: Path) -> str:
 
 
 def _zip_member_sha256(archive: zipfile.ZipFile, member: zipfile.ZipInfo) -> str:
+    """Hash one ZIP member while also forcing ZipExtFile's CRC check at EOF."""
+
     digest = hashlib.sha256()
-    with archive.open(member, "r") as handle:
-        while chunk := handle.read(1024 * 1024):
-            digest.update(chunk)
+    try:
+        with archive.open(member, "r") as handle:
+            while chunk := handle.read(1024 * 1024):
+                digest.update(chunk)
+    except (OSError, RuntimeError, zipfile.BadZipFile, zlib.error) as exc:
+        raise GodzipError(f"Archive CRC/read validation failed at {member.filename}") from exc
     return digest.hexdigest()
+
+
+def _validate_unread_zip_members(
+    archive: zipfile.ZipFile,
+    members: Mapping[str, zipfile.ZipInfo],
+    already_read: set[str],
+) -> None:
+    """CRC-drain only members not already consumed by manifest parsing/hashing.
+
+    A normal manifested GODZIP has no work here: the manifest JSON and every
+    declared payload member were already read fully, which makes ``testzip()``
+    a redundant second decompression pass.  Unexpected metadata/extras still
+    receive the same CRC coverage without rereading ordinary payload bytes.
+    """
+
+    for name, info in members.items():
+        if name in already_read:
+            continue
+        try:
+            with archive.open(info, "r") as handle:
+                while handle.read(1024 * 1024):
+                    pass
+        except (OSError, RuntimeError, zipfile.BadZipFile, zlib.error) as exc:
+            raise GodzipError(f"Archive CRC/read validation failed at {name}") from exc
 
 
 def validate_repo_relpath(raw: str, *, allow_metadata: bool = False) -> str:
@@ -533,15 +627,16 @@ def build_manifest(
         )
     debris.sort(key=lambda item: item["path"].casefold())
 
+    source_head, source_branch = git_identity(repo_root)
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return {
         "format": FORMAT_NAME,
         "version": FORMAT_VERSION,
         "generated_at_utc": now,
         "repo_name": repo_root.name,
-        "source_head": git_head(repo_root),
-        "source_branch": git_branch(repo_root),
-        "dirty_worktree": git_dirty(repo_root),
+        "source_head": source_head,
+        "source_branch": source_branch,
+        "dirty_worktree": bool(statuses),
         "archive_scope": "manifest_file_set",
         "omission_means_delete": False,
         "files": records,
@@ -591,16 +686,22 @@ def create_godzip(
 
 
 def _git_commit_exists(repo_root: Path, sha: str) -> bool:
+    sha = str(sha or "").strip()
     if not sha:
         return False
     result = _run_git(repo_root, "cat-file", "-e", f"{sha}^{{commit}}", check=False)
     return result.returncode == 0
 
 
-def compare_source_head(repo_root: Path, source_head: str) -> tuple[str, str]:
+def compare_source_head(
+    repo_root: Path,
+    source_head: str,
+    *,
+    local_head: str | None = None,
+) -> tuple[str, str]:
     """Compare baseline commits only; this does NOT decide whether archive bytes are stale."""
     source_head = str(source_head or "").strip()
-    local_head = git_head(repo_root)
+    local_head = str(local_head or "").strip() or git_head(repo_root)
     if not source_head:
         return "unknown", "Archive has no baseline HEAD."
     if source_head == local_head:
@@ -633,6 +734,8 @@ def _load_manifest_from_archive(
             continue
         try:
             payload = json.loads(archive.read(info).decode("utf-8"))
+        except (zipfile.BadZipFile, zlib.error) as exc:
+            raise GodzipError(f"Archive CRC/read validation failed at {name}") from exc
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError) as exc:
             raise GodzipError(f"Invalid GODZIP manifest JSON: {name}") from exc
         if not isinstance(payload, dict):
@@ -693,10 +796,8 @@ def inspect_godzip(
     statuses = git_status_map(repo_root)
     with archive:
         members = _validate_archive_members(archive)
-        bad = archive.testzip()
-        if bad:
-            raise GodzipError(f"Archive CRC validation failed at {bad}")
         manifest, manifest_member = _load_manifest_from_archive(archive, members)
+        crc_read_members: set[str] = {manifest_member} if manifest_member else set()
         inspection = ArchiveInspection(zip_path=zip_path, manifest=manifest, manifest_member=manifest_member)
 
         if manifest is None:
@@ -720,13 +821,24 @@ def inspect_godzip(
                     continue
                 info = members[name]
                 digest = _zip_member_sha256(archive, info)
+                crc_read_members.add(name)
                 full = repo_root / Path(*PurePosixPath(target).parts)
-                local_digest = sha256_file(full) if full.is_file() else ""
+                try:
+                    local_stat = full.stat()
+                    local_exists = stat.S_ISREG(local_stat.st_mode)
+                except OSError:
+                    local_stat = None
+                    local_exists = False
+                local_digest = (
+                    sha256_file(full)
+                    if local_exists and local_stat is not None and local_stat.st_size == info.file_size
+                    else ""
+                )
                 dirty = bool(statuses.get(target, ""))
-                if full.is_file() and local_digest == digest:
+                if local_exists and local_digest == digest:
                     state = "SAME"
                     selected = False
-                elif not full.exists():
+                elif not local_exists:
                     state = "NEW"
                     selected = workflow_default_selected(target, "NEW")
                 elif dirty:
@@ -741,13 +853,19 @@ def inspect_godzip(
             inspection.relation = "unknown"
             inspection.relation_detail = "LEGACY / UNMANIFESTED archive: source HEAD and deletion intent are unknown."
             inspection.warnings.append("Legacy archives never infer deletion from missing files and cannot carry debris actions.")
+            _validate_unread_zip_members(archive, members, crc_read_members)
             return inspection
 
         _validate_manifest_shape(manifest)
         inspection.source_head = str(manifest.get("source_head", "") or "")
         inspection.source_branch = str(manifest.get("source_branch", "") or "")
         inspection.dirty_worktree = bool(manifest.get("dirty_worktree", False))
-        inspection.baseline_relation, baseline_detail = compare_source_head(repo_root, inspection.source_head)
+        local_head = git_head(repo_root)
+        inspection.baseline_relation, baseline_detail = compare_source_head(
+            repo_root,
+            inspection.source_head,
+            local_head=local_head,
+        )
 
         target_seen: set[str] = set()
         for record in manifest.get("files", []):
@@ -765,6 +883,7 @@ def inspect_godzip(
                 raise GodzipError(f"Manifest target is missing from archive: {target}")
             expected_hash = str(record.get("sha256", "") or "").lower()
             actual_hash = _zip_member_sha256(archive, info)
+            crc_read_members.add(target)
             if not expected_hash or actual_hash != expected_hash:
                 raise GodzipError(f"SHA-256 mismatch for archived file: {target}")
             expected_size = int(record.get("size", info.file_size))
@@ -772,9 +891,18 @@ def inspect_godzip(
                 raise GodzipError(f"Size mismatch for archived file: {target}")
             source_mtime_ns = int(record["mtime_ns"])
             full = repo_root / Path(*PurePosixPath(target).parts)
-            local_exists = full.is_file()
-            local_hash = sha256_file(full) if local_exists else ""
-            local_mtime_ns = full.stat().st_mtime_ns if local_exists else 0
+            try:
+                local_stat = full.stat()
+                local_exists = stat.S_ISREG(local_stat.st_mode)
+            except OSError:
+                local_stat = None
+                local_exists = False
+            local_hash = (
+                sha256_file(full)
+                if local_exists and local_stat is not None and local_stat.st_size == info.file_size
+                else ""
+            )
+            local_mtime_ns = local_stat.st_mtime_ns if local_stat is not None and local_exists else 0
             dirty = bool(statuses.get(target, ""))
             if local_exists and local_hash == actual_hash:
                 state = "SAME"
@@ -835,7 +963,6 @@ def inspect_godzip(
                     raise GodzipError(
                         f"Manifest conflict: {debris.path} is debris but overlaps replacement {target.as_posix()}"
                     )
-        local_head = git_head(repo_root)
         if inspection.baseline_relation == "same":
             inspection.relation = "same"
             inspection.relation_detail = baseline_detail
@@ -894,6 +1021,7 @@ def inspect_godzip(
 
         if inspection.dirty_worktree:
             inspection.warnings.append("Archive was produced from a dirty worktree; baseline HEAD identifies ancestry, not the archive file bytes.")
+        _validate_unread_zip_members(archive, members, crc_read_members)
         return inspection
 
 
@@ -1235,54 +1363,56 @@ def _parse_name_status_z(raw: bytes) -> list[tuple[str, str, str]]:
 
 
 def git_changes(repo_root: Path) -> list[GitChange]:
-    """Return every current worktree/index change, including deletions."""
+    """Return every current worktree/index change, including deletions.
+
+    One porcelain query carries both index/worktree state and untracked files.
+    This avoids the previous three-process staged/unstaged/untracked scan while
+    preserving Foundry's compact status display.  Rename detection is disabled
+    deliberately so every NUL record contains exactly one path.
+    """
     repo_root = repo_root.resolve()
-    staged_raw = _run_git(repo_root, "diff", "--cached", "--name-status", "-z").stdout
-    unstaged_raw = _run_git(repo_root, "diff", "--name-status", "-z").stdout
-    untracked_raw = _run_git(repo_root, "ls-files", "--others", "--exclude-standard", "-z").stdout
-    merged: dict[str, dict[str, object]] = {}
-
-    def note(status: str, path: str, *, staged: bool = False, unstaged: bool = False) -> None:
-        key = path.casefold()
-        entry = merged.setdefault(
-            key,
-            {"path": path, "statuses": [], "staged": False, "unstaged": False, "untracked": False},
-        )
-        statuses = entry["statuses"]
-        assert isinstance(statuses, list)
-        statuses.append(status)
-        entry["staged"] = bool(entry["staged"]) or staged
-        entry["unstaged"] = bool(entry["unstaged"]) or unstaged
-
-    for status, path, _old in _parse_name_status_z(staged_raw):
-        note(status, path, staged=True)
-    for status, path, _old in _parse_name_status_z(unstaged_raw):
-        note(status, path, unstaged=True)
-    for path in _zlist(untracked_raw):
-        rel = path.replace("\\", "/")
-        key = rel.casefold()
-        entry = merged.setdefault(
-            key,
-            {"path": rel, "statuses": [], "staged": False, "unstaged": False, "untracked": False},
-        )
-        statuses = entry["statuses"]
-        assert isinstance(statuses, list)
-        statuses.append("?")
-        entry["untracked"] = True
-
+    raw = _run_git(
+        repo_root,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--no-renames",
+    ).stdout
     result: list[GitChange] = []
-    for entry in merged.values():
-        statuses = entry["statuses"]
-        assert isinstance(statuses, list)
-        result.append(
-            GitChange(
-                path=str(entry["path"]),
-                status="/".join(dict.fromkeys(str(item) for item in statuses)),
-                staged=bool(entry["staged"]),
-                unstaged=bool(entry["unstaged"]),
-                untracked=bool(entry["untracked"]),
+    for record in raw.split(b"\0"):
+        if not record or len(record) < 4:
+            continue
+        xy = record[:2].decode("ascii", errors="replace")
+        path = record[3:].decode("utf-8", errors="surrogateescape").replace("\\", "/")
+        if xy == "??":
+            result.append(
+                GitChange(
+                    path=path,
+                    status="?",
+                    staged=False,
+                    unstaged=False,
+                    untracked=True,
+                )
+            )
+            continue
+        staged = xy[0] not in {" ", "?"}
+        unstaged = xy[1] not in {" ", "?"}
+        statuses = list(
+            dict.fromkeys(
+                code for code in (xy[0] if staged else "", xy[1] if unstaged else "") if code
             )
         )
+        if staged or unstaged:
+            result.append(
+                GitChange(
+                    path=path,
+                    status="/".join(statuses),
+                    staged=staged,
+                    unstaged=unstaged,
+                    untracked=False,
+                )
+            )
     result.sort(key=lambda item: item.path.casefold())
     return result
 
@@ -1391,7 +1521,7 @@ def inspect_pull(repo_root: Path, *, fetch: bool = True) -> PullInspection:
         relation=relation,
         relation_detail=detail,
         files=files,
-        worktree_dirty=git_dirty(repo_root),
+        worktree_dirty=bool(statuses),
     )
 
 
@@ -1525,42 +1655,34 @@ def collect_log_files(repo_root: Path) -> list[Path]:
     return result
 
 
-def _zip_member_names(path: Path) -> tuple[str, ...]:
-    try:
-        with zipfile.ZipFile(path, "r") as archive:
-            return tuple(name.replace("\\", "/").lstrip("/") for name in archive.namelist())
-    except (OSError, zipfile.BadZipFile):
-        return ()
-
-
 def is_probable_srpss_zip(path: Path) -> bool:
     """Return whether a direct ZIP looks related to this SRPSS GODZIP workflow.
 
-    A valid GODZIP manifest is authoritative when present, but discovery does
-    not *require* manifests so older/legacy archives remain usable.  Named
-    GODZIPs are accepted, while unnamed legacy archives need a small SRPSS
-    structural fingerprint.  This keeps a personal download folder useful
-    without flooding it with unrelated ZIPs.
+    Discovery opens each opaque ZIP at most once.  The previous probe reopened
+    manifested archives after reading the central directory, which is needless
+    latency on network/drop folders.
     """
     path = Path(path)
     if path.suffix.lower() != ".zip":
         return False
-    names = _zip_member_names(path)
-    if not names:
+    try:
+        with zipfile.ZipFile(path, "r") as archive:
+            names = tuple(name.replace("\\", "/").lstrip("/") for name in archive.namelist())
+            if not names:
+                return "godzip" in path.name.casefold()
+            by_fold = {name.casefold(): name for name in names}
+            for candidate in MANIFEST_CANDIDATES:
+                actual = by_fold.get(candidate.casefold())
+                if not actual:
+                    continue
+                try:
+                    payload = json.loads(archive.read(actual).decode("utf-8"))
+                except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if isinstance(payload, dict) and payload.get("format") == FORMAT_NAME:
+                    return True
+    except (OSError, zipfile.BadZipFile):
         return "godzip" in path.name.casefold()
-
-    by_fold = {name.casefold(): name for name in names}
-    for candidate in MANIFEST_CANDIDATES:
-        actual = by_fold.get(candidate.casefold())
-        if not actual:
-            continue
-        try:
-            with zipfile.ZipFile(path, "r") as archive:
-                payload = json.loads(archive.read(actual).decode("utf-8"))
-            if isinstance(payload, dict) and payload.get("format") == FORMAT_NAME:
-                return True
-        except (OSError, KeyError, UnicodeDecodeError, json.JSONDecodeError, zipfile.BadZipFile):
-            pass
 
     if "godzip" in path.name.casefold():
         return True
@@ -1609,18 +1731,26 @@ def discover_zip_candidates(
         try:
             if not directory.is_dir():
                 continue
-            for entry in directory.iterdir():
-                try:
-                    if not entry.is_file() or entry.suffix.lower() != ".zip":
+            # os.scandir reuses directory-entry metadata and avoids the repeated
+            # Path.is_file/stat/resolve syscall pattern, which is especially
+            # painful on the optional network/drop folder. Discovery is only a
+            # chooser aid, so an absolute path is sufficient; archive open/apply
+            # resolves and validates the chosen file again.
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    try:
+                        if not entry.name.lower().endswith(".zip"):
+                            continue
+                        if not entry.is_file(follow_symlinks=False):
+                            continue
+                        stamp = entry.stat(follow_symlinks=False).st_mtime
+                        resolved = Path(os.path.abspath(entry.path))
+                    except OSError:
                         continue
-                    stamp = entry.stat().st_mtime
-                    resolved = entry.resolve()
-                except OSError:
-                    continue
-                key = os.path.normcase(str(resolved))
-                current = found.get(key)
-                if current is None or stamp > current[0]:
-                    found[key] = (stamp, resolved)
+                    key = os.path.normcase(str(resolved))
+                    current = found.get(key)
+                    if current is None or stamp > current[0]:
+                        found[key] = (stamp, resolved)
         except OSError:
             continue
 
@@ -1755,12 +1885,6 @@ def run_flag_description(flag: str) -> str:
 
 
 
-def _git_commit_exists(repo_root: Path, revision: str) -> bool:
-    revision = str(revision or "").strip()
-    if not revision:
-        return False
-    return _run_git(repo_root, "cat-file", "-e", f"{revision}^{{commit}}", check=False).returncode == 0
-
 
 def _git_blob_at_revision(repo_root: Path, revision: str, path: str) -> bytes | None:
     if not revision:
@@ -1817,6 +1941,10 @@ def generate_godzip_diff(repo_root: Path, zip_path: Path) -> GodzipDiffResult:
     current non-ignored worktree changes extend the candidate set, allowing new
     files that were created after the GODZIP to appear without treating every
     archive omission as an addition.
+
+    Archived payloads are read one candidate at a time.  Do not retain the
+    whole archive in memory merely to render a textual diff: large GODZIPs can
+    otherwise make DIFF peak RAM scale with the complete archive size.
     """
     root = Path(repo_root).resolve()
     inspection = inspect_godzip(root, Path(zip_path))
@@ -1836,58 +1964,56 @@ def generate_godzip_diff(repo_root: Path, zip_path: Path) -> GodzipDiffResult:
             continue
     clean_candidates = sorted(set(clean_candidates), key=str.casefold)
 
-    archive_bytes: dict[str, bytes] = {}
-    with zipfile.ZipFile(inspection.zip_path, "r") as archive:
-        for rel, member in archived.items():
-            archive_bytes[rel] = archive.read(member)
-
     chunks: list[str] = []
     added = modified = deleted = binary = 0
-    for rel in clean_candidates:
-        before = archive_bytes.get(rel)
-        if before is None and source_head:
-            before = _git_blob_at_revision(root, source_head, rel)
-        after = _current_repo_bytes(root, rel)
-        if before == after:
-            continue
-        if before is None and after is not None:
-            kind = "added"
-            added += 1
-        elif before is not None and after is None:
-            kind = "deleted"
-            deleted += 1
-        else:
-            kind = "modified"
-            modified += 1
+    with zipfile.ZipFile(inspection.zip_path, "r") as archive:
+        for rel in clean_candidates:
+            member = archived.get(rel)
+            before = archive.read(member) if member is not None else None
+            if before is None and source_head:
+                before = _git_blob_at_revision(root, source_head, rel)
+            after = _current_repo_bytes(root, rel)
+            if before == after:
+                continue
+            if before is None and after is not None:
+                kind = "added"
+                added += 1
+            elif before is not None and after is None:
+                kind = "deleted"
+                deleted += 1
+            else:
+                kind = "modified"
+                modified += 1
 
-        before_text = _decode_diff_text(before) if before is not None else ""
-        after_text = _decode_diff_text(after) if after is not None else ""
-        chunks.append(f"diff --godzip {kind} {rel}\n")
-        if before_text is None or after_text is None:
-            binary += 1
-            chunks.append(
-                "Binary content differs "
-                f"(GODZIP={_bytes_digest(before)} size={len(before) if before is not None else 0}; "
-                f"CURRENT={_bytes_digest(after)} size={len(after) if after is not None else 0})\n\n"
+            before_text = _decode_diff_text(before) if before is not None else ""
+            after_text = _decode_diff_text(after) if after is not None else ""
+            chunks.append(f"diff --godzip {kind} {rel}\n")
+            if before_text is None or after_text is None:
+                binary += 1
+                chunks.append(
+                    "Binary content differs "
+                    f"(GODZIP={_bytes_digest(before)} size={len(before) if before is not None else 0}; "
+                    f"CURRENT={_bytes_digest(after)} size={len(after) if after is not None else 0})\n\n"
+                )
+                continue
+
+            fromfile = f"GODZIP/{rel}" if before is not None else "/dev/null"
+            tofile = f"CURRENT/{rel}" if after is not None else "/dev/null"
+            delta = difflib.unified_diff(
+                before_text.splitlines(keepends=True),
+                after_text.splitlines(keepends=True),
+                fromfile=fromfile,
+                tofile=tofile,
+                lineterm="\n",
             )
-            continue
-
-        fromfile = f"GODZIP/{rel}" if before is not None else "/dev/null"
-        tofile = f"CURRENT/{rel}" if after is not None else "/dev/null"
-        delta = difflib.unified_diff(
-            before_text.splitlines(keepends=True),
-            after_text.splitlines(keepends=True),
-            fromfile=fromfile,
-            tofile=tofile,
-            lineterm="\n",
-        )
-        rendered = "".join(delta)
-        chunks.append(rendered)
-        if rendered and not rendered.endswith("\n"):
+            rendered = "".join(delta)
+            chunks.append(rendered)
+            if rendered and not rendered.endswith("\n"):
+                chunks.append("\n")
             chunks.append("\n")
-        chunks.append("\n")
 
     current_head = git_head(root)
+    current_dirty = git_dirty(root)
     changed = added + modified + deleted
     generated = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
     header = [
@@ -1896,7 +2022,7 @@ def generate_godzip_diff(repo_root: Path, zip_path: Path) -> GodzipDiffResult:
         f"# Baseline HEAD: {inspection.source_head or 'unknown'}",
         f"# Baseline archive dirty: {'yes' if inspection.dirty_worktree else 'no/unknown'}",
         f"# Current HEAD: {current_head}",
-        f"# Current worktree dirty: {'yes' if git_dirty(root) else 'no'}",
+        f"# Current worktree dirty: {'yes' if current_dirty else 'no'}",
         f"# Generated: {generated}",
         "# Scope: exact archived bytes + Git changes since baseline HEAD + current non-ignored worktree changes",
         f"# Summary: {changed} changed file(s) | {added} added | {modified} modified | {deleted} deleted | {binary} binary",
@@ -1913,7 +2039,7 @@ def generate_godzip_diff(repo_root: Path, zip_path: Path) -> GodzipDiffResult:
         baseline_head=inspection.source_head,
         current_head=current_head,
         baseline_dirty=inspection.dirty_worktree,
-        current_dirty=git_dirty(root),
+        current_dirty=current_dirty,
     )
 
 
@@ -1995,6 +2121,7 @@ __all__ = [
     "RepoFile",
     "RUN_DEFAULT_FLAGS",
     "RUN_ENTRYPOINTS",
+    "RUN_FOUNDRY_HIDDEN_FLAGS",
     "RUN_FLAG_DESCRIPTIONS",
     "SelectiveSyncResult",
     "apply_godzip",
@@ -2019,6 +2146,7 @@ __all__ = [
     "git_upstream",
     "inspect_godzip",
     "inspect_pull",
+    "is_transfer_note_markdown",
     "is_probable_srpss_zip",
     "launch_run_command",
     "move_paths_to_deleteme",
