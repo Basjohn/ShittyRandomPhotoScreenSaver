@@ -19,6 +19,9 @@ class _MemorySettings:
     def set(self, key, value):
         self.data[key] = deepcopy(value)
 
+    def get_application_name(self) -> str:
+        return "Screensaver"
+
 
 class _ContextHarness(VisualizerSettingsContextMixin):
     def __init__(self):

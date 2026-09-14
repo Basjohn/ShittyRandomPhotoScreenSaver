@@ -153,20 +153,12 @@ class TestSPSCQueueSync:
 class TestSynchronizedTransition:
     """Test synchronized image transitions."""
     
-    def test_show_image_synchronized_falls_back_when_disabled(self, qapp, dummy_pixmap):
-        """Synchronized show should fall back to normal when sync disabled."""
-        dm = DisplayManager()
-        
-        # Mock display object with set_image method
-        class MockDisplay:
-            def set_image(self, pixmap, path):
-                pass
-        
-        dm.displays = [MockDisplay()]
-        
-        # Should not raise, should use normal path
-        dm.show_image_synchronized(dummy_pixmap, "test.jpg")
-    
+    # Removed test_show_image_synchronized_falls_back_when_disabled: it drove the
+    # retired QWidget display contract (a plain object exposing set_image). The
+    # current show_image path presents through a Quick display-unit
+    # image/transition contract, covered by the Quick presentation/runtime
+    # suites. The lock-free SPSC transition-sync queue coverage below is current.
+
     def test_show_image_synchronized_clears_queue(self, qapp, dummy_pixmap):
         """Synchronized show should clear queue before starting."""
         dm = DisplayManager()

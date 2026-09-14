@@ -58,7 +58,6 @@ class _Tab:
         self.devcurve_idle_motion = _Slider(); self.devcurve_idle_motion_label = _Label()
         self.devcurve_idle_speed = _Slider(); self.devcurve_idle_speed_label = _Label()
         self.devcurve_smoothness = _Slider(); self.devcurve_smoothness_label = _Label()
-        self.devcurve_growth = _Slider(); self.devcurve_growth_label = _Label()
         self.devcurve_shape_editor = _ShapeEditor()
         self.devcurve_ghost_enabled = _Check()
         self.devcurve_ghost_opacity = _Slider(); self.devcurve_ghost_opacity_label = _Label()
@@ -83,6 +82,12 @@ class _Tab:
             setattr(self, f"_devcurve_layer_{src}_color", QColor(255, 255, 255, 255))
     def _config_bool(self, _ns, data, key, default): return bool(data.get(key, default))
     def _config_float(self, _ns, data, key, default): return float(data.get(key, default))
+    def _widget_default(self, section, key):
+        from core.settings.default_contract import require_canonical_default
+        return require_canonical_default(f"widgets.{section}.{key}")
+    def _default_int(self, section, key): return int(self._widget_default(section, key))
+    def _default_float(self, section, key): return float(self._widget_default(section, key))
+    def _default_str(self, section, key): return str(self._widget_default(section, key))
 
 
 def test_devcurve_binding_load_and_collect_roundtrip():
@@ -91,7 +96,6 @@ def test_devcurve_binding_load_and_collect_roundtrip():
     cfg = {
         "devcurve_base_level": 0.61,
         "devcurve_smoothness": 0.72,
-        "devcurve_growth": 2.8,
         "devcurve_layer_bass_shape_nodes": [[0.0, 0.52], [1.0, 0.66]],
         "devcurve_layer_bass_alpha": 0.74,
         "devcurve_layer_bass_order": 3,
@@ -111,7 +115,6 @@ def test_devcurve_binding_load_and_collect_roundtrip():
     payload = collect_devcurve_mode_settings(tab)
     assert payload["devcurve_base_level"] == 0.61
     assert payload["devcurve_smoothness"] == 0.72
-    assert payload["devcurve_growth"] == 2.8
     assert payload["devcurve_layer_bass_shape_nodes"] == [[0.0, 0.52], [1.0, 0.66]]
     assert payload["devcurve_layer_bass_alpha"] == 0.74
     assert payload["devcurve_layer_bass_order"] == 3
