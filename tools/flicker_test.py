@@ -11,7 +11,7 @@ Variants:
   7   Tool | Frameless + Translucent
   8   Font registration (addApplicationFont)
   9   QGuiApplication.setFont() global font change
-  10  Full flags + real dark.qss stylesheet
+  10  Full flags + current semantic Settings stylesheet
   11  Full flags + 200 child widgets
   12  All combined: font reg + global font + large QSS + 200 widgets
   13  Actual SettingsDialog import + construction
@@ -111,12 +111,18 @@ QDialog { background-color: transparent; }
 QLabel { color: white; background: rgba(30,30,30,220); padding: 40px; }
 """
 
-# Load the real dark.qss if available, to match real stylesheet size
-_QSS_PATH = Path(__file__).parent.parent / "themes" / "dark.qss"
+# Use the current permanent Settings renderer rather than the retired legacy
+# stylesheet path.  Fall back to repeated synthetic QSS only if the diagnostic
+# is intentionally run outside the normal project import environment.
 try:
-    BIG_STYLESHEET = _QSS_PATH.read_text(encoding="utf-8") + STYLESHEET
+    from ui.settings_theme import _build_settings_root_stylesheet
+    from ui.settings_theme_runtime import get_active_settings_theme
+
+    BIG_STYLESHEET = (
+        _build_settings_root_stylesheet(get_active_settings_theme()) + STYLESHEET
+    )
 except Exception:
-    BIG_STYLESHEET = STYLESHEET * 50  # fallback: repeat small sheet
+    BIG_STYLESHEET = STYLESHEET * 50
 
 # Auto-close observation window per variant (seconds). Override with:
 #   SRPSS_FLICKER_AUTO_CLOSE_S=15 python tools/flicker_test.py 13

@@ -297,7 +297,7 @@ _DEFAULT_DARK_COLORS: dict[str, Rgba] = {
     "navigation.subtab.selected_surface": Rgba(58, 58, 58, 220),
 
     # Collapsible Settings bucket/tool-button chrome. Values preserve the
-    # historical dark.qss visuals while moving palette authority into ThemeSpec.
+    # historical legacy base stylesheet visuals while moving palette authority into ThemeSpec.
     "bucket.closed.surface": Rgba(50, 50, 50, 255),
     "bucket.closed.text": Rgba(220, 220, 220, 255),
     "bucket.closed.border": Rgba(80, 80, 80, 153),

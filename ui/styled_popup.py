@@ -34,6 +34,64 @@ def _theme_rgba255(theme: SettingsThemeSpec, token: str) -> str:
     return f"rgba({value.r}, {value.g}, {value.b}, {value.a})"
 
 
+def _build_color_picker_wrapper_stylesheet(theme: SettingsThemeSpec) -> str:
+    """Own the color-picker wrapper chrome without a global base stylesheet."""
+
+    title_surface = _theme_rgba255(theme, "window.titlebar.surface")
+    title_text_value = theme.color("color_picker.window_text")
+    title_text = _theme_rgba255(theme, "color_picker.window_text")
+    border = _theme_rgba255(theme, "chrome.outer_border")
+    hover = (
+        f"rgba({255 - title_text_value.r}, {255 - title_text_value.g}, "
+        f"{255 - title_text_value.b}, 255)"
+    )
+    return f"""
+        QDialog#subsettingsDialog {{
+            background-color: transparent;
+            border: none;
+            border-radius: 4px;
+            padding: 0;
+            margin: 0;
+        }}
+        QDialog#subsettingsDialog > QFrame#titleFrame {{
+            background-color: {title_surface};
+            border: none;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+            border-bottom: 2px solid {border};
+            margin: 2px 2px 0 2px;
+            padding: 0;
+            min-width: 250px;
+        }}
+        QDialog#subsettingsDialog QLabel#titleLabel {{
+            color: {title_text};
+            font-size: 16px;
+            font-weight: bold;
+            padding: 0 8px;
+            margin: 0;
+            background: transparent;
+        }}
+        QDialog#subsettingsDialog QLabel#closeButton {{
+            background: transparent;
+            border: none;
+            color: {title_text};
+            font-family: "Segoe UI Symbol";
+            font-size: 22px;
+            font-weight: bold;
+            min-width: 24px;
+            min-height: 24px;
+            max-width: 24px;
+            max-height: 24px;
+            padding: 0;
+            margin: 0;
+        }}
+        QDialog#subsettingsDialog QLabel#closeButton:hover {{
+            color: {hover};
+            background: transparent;
+        }}
+    """
+
+
 ButtonDef = Tuple[str, str]
 
 
@@ -343,6 +401,9 @@ class _ColorPickerDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._drag_pos = QPoint()
 
+        picker_theme = get_active_settings_theme()
+        self.setStyleSheet(_build_color_picker_wrapper_stylesheet(picker_theme))
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -360,9 +421,8 @@ class _ColorPickerDialog(QDialog):
 
         close_label = QLabel("×", title_frame)
         close_label.setObjectName("closeButton")
-        # dark.qss gives subsettings close labels an asymmetric margin. The
-        # sibling text-shadow painter intentionally does not parse QSS margins,
-        # so zero it on this owned label to keep source glyph + cast aligned.
+        # Keep the owned close glyph/cast aligned; wrapper chrome deliberately
+        # owns a zero margin rather than inheriting a global stylesheet rule.
         close_label.setStyleSheet("margin: 0; padding: 0;")
         close_label.setCursor(Qt.CursorShape.PointingHandCursor)
         close_label.mousePressEvent = lambda event: self.reject()  # type: ignore[assignment]
@@ -375,12 +435,10 @@ class _ColorPickerDialog(QDialog):
 
         content_frame = QFrame(self)
         content_frame.setObjectName("settingsContentFrame")
-        picker_theme = get_active_settings_theme()
         picker_window = _theme_qcolor(picker_theme, "color_picker.window")
         picker_window_qss = _theme_rgba255(picker_theme, "color_picker.window")
 
-        # Legacy dark.qss deliberately makes generic subsettings content
-        # transparent. This picker owns its body, so override only this frame;
+        # This picker owns its body independently of the Settings-root QSS;
         # QColorDialog descendants remain palette/Qt-owned.
         content_frame.setStyleSheet(
             "QFrame#settingsContentFrame {"
@@ -424,10 +482,9 @@ class _ColorPickerDialog(QDialog):
 
         button_box = self._color_dialog.findChild(QDialogButtonBox)
         if button_box is not None:
-            # dark.qss applies QDialogButtonBox { margin: 10px; }. That QSS
-            # margin does not expand the child paint clip, so neutralize it on
-            # this owned picker and use real layout margins instead.
-            button_box.setStyleSheet("QDialogButtonBox { margin: 0; padding: 0; }")
+            # QSS margins do not expand the child paint clip, so keep this
+            # owned button box neutral and reserve real layout margins instead.
+            button_box.setStyleSheet("QDialogButtonBox { button-layout: 1; margin: 0; padding: 0; }")
             button_box_layout = button_box.layout()
             if button_box_layout is not None:
                 margins = button_box_layout.contentsMargins()

@@ -81,6 +81,106 @@ def test_capture_layout_slot_includes_layout_state_and_excludes_sources():
     assert "layout_slots" not in payload["widgets"]
 
 
+
+def test_clock_layout_slot_v2_captures_face_state_separately_from_variant_geometry():
+    widgets = {
+        "clock": {
+            "enabled": True,
+            "position": "Custom",
+            "display_mode": "digital",
+            "display_mode_overrides": {
+                "serial:A": "analog",
+                "serial:B": "digital",
+                "": "analog",
+                "serial:bad": "sideways",
+            },
+        },
+        "custom_layout": {
+            "version": 2,
+            "displays": {
+                "serial:A": {
+                    "clock": {
+                        "digital": {"rect": {"x": 0.10, "y": 0.20, "w": 0.30, "h": 0.10}},
+                        "analog": {"rect": {"x": 0.55, "y": 0.25, "w": 0.18, "h": 0.18}},
+                    }
+                }
+            },
+        },
+    }
+
+    payload = capture_layout_slot(widgets)
+
+    assert payload["version"] == 2
+    assert payload["widgets"]["clock"]["display_mode"] == "digital"
+    assert payload["widgets"]["clock"]["display_mode_overrides"] == {
+        "serial:A": "analog",
+        "serial:B": "digital",
+    }
+    assert payload["custom_layout"] == widgets["custom_layout"]
+
+
+def test_clock_layout_slot_v2_replays_override_maps_and_clears_saved_empty_state():
+    widgets = {
+        "clock": {
+            "display_mode": "analog",
+            "display_mode_overrides": {"serial:A": "digital"},
+        },
+        "clock2": {
+            "display_mode": "digital",
+            "display_mode_overrides": {"serial:B": "analog"},
+        },
+        "layout_slots": {
+            "version": 1,
+            "slots": {
+                "1": {
+                    "version": 2,
+                    "widgets": {
+                        "clock": {
+                            "display_mode": "digital",
+                            "display_mode_overrides": {"serial:A": "analog"},
+                        },
+                        "clock2": {
+                            "display_mode": "analog",
+                            "display_mode_overrides": {},
+                        },
+                    },
+                    "custom_layout": {"version": 2, "displays": {}},
+                    "custom_layout_restore": {"widgets": {}},
+                }
+            },
+        },
+    }
+
+    assert apply_layout_slot(widgets, "1") is True
+    assert widgets["clock"]["display_mode"] == "digital"
+    assert widgets["clock"]["display_mode_overrides"] == {"serial:A": "analog"}
+    assert widgets["clock2"]["display_mode"] == "analog"
+    assert widgets["clock2"]["display_mode_overrides"] == {}
+
+
+def test_clock_layout_slot_v1_clears_newer_overrides_and_uses_saved_baseline():
+    widgets = {
+        "clock": {
+            "display_mode": "analog",
+            "display_mode_overrides": {"serial:A": "analog"},
+        },
+        "layout_slots": {
+            "version": 1,
+            "slots": {
+                "1": {
+                    "version": 1,
+                    "widgets": {"clock": {"display_mode": "digital"}},
+                    "custom_layout": {"version": 2, "displays": {}},
+                    "custom_layout_restore": {"widgets": {}},
+                }
+            },
+        },
+    }
+
+    assert apply_layout_slot(widgets, "1") is True
+    assert widgets["clock"]["display_mode"] == "digital"
+    assert "display_mode_overrides" not in widgets["clock"]
+
 def test_apply_layout_slot_preserves_sources_and_replaces_layout_fields():
     widgets = {
         "clock": {

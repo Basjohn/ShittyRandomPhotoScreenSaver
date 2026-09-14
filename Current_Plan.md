@@ -1,6 +1,6 @@
 # Current Plan — Active Work
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 Outside of Codex Work Began: `886e6fa419ff130ff2a9aedf5091ae6162d1e958`
 
@@ -103,24 +103,32 @@ consumer is admitted.
 
 ---
 
-## 3. `dark.qss` retirement → ThemeSpec sole authority
+## 3. `dark.qss` retirement → ThemeSpec sole authority — production dependency severed; installed absence gate pending
 
 Execution authority: `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`.
 
-Migrate the Settings dialog's remaining colour **and** structure authority out of
-`themes/dark.qss` into `SettingsThemeSpec`, leaving ThemeSpec as the sole Settings GUI
-style authority. Preserve the accepted dark-theme appearance and eliminate the
-competing stylesheet authority completely.
+The 2026-09-14 audit used the current repository `themes/dark.qss` only as a reference oracle while keeping the
+checkpoint GODZIP as the working authority. The live dependency surface is far smaller than the legacy monolith:
+most named selectors have no current caller; the surviving Settings-root typography/checkbox structure, color-picker
+wrapper chrome, generic disabled-label state, dialog-button-box structure and tray `QMenu` structure now have narrow permanent owners. No palette literal was copied into a new
+fallback authority and the strict Settings ThemeSpec schema was not expanded just to preserve dead stylesheet values.
 
-- [ ] Inventory every remaining selector/property in `themes/dark.qss` against current
-  `SettingsThemeSpec` ownership.
-- [ ] Move required structural and colour semantics into the ThemeSpec-backed path
-  without creating a second fallback authority.
-- [ ] Delete `themes/dark.qss` once no runtime/build path requires it.
-- [ ] Preserve dark-theme appearance with focused regression coverage and physical
-  Settings GUI validation.
-- [ ] Confirm widget themes/runtime theming remain unaffected by the Settings-only
-  authority retirement.
+- [x] Inventory current legacy selector families against live source callers/semantic owners. Current repository
+  reference is 989 lines; caller proof reduced the live migration set to the bounded owners above rather than a
+  monolithic transplant.
+- [x] Remove production Settings root/tray dependency on `themes/dark.qss`. `ui/settings_theme.py` now builds the
+  complete root stylesheet from permanent structure + semantic ThemeSpec QSS; `ui/system_tray.py` consumes a narrow
+  ThemeSpec-backed menu renderer; the color-picker wrapper explicitly owns its old subsettings chrome.
+- [x] Add Qt-free dependency/ownership regression coverage. `tests/test_settings_dark_qss_retirement_contract.py`
+  executes **6/6 PASS** here; lifetime coverage is reconciled to the new complete-root renderer.
+- [?] **Needs run:** Windows/PySide visual/lifecycle matrix with the real repo asset physically absent: Default Dark,
+  materially different light/metal themes, Acrylic/Glass fresh start + live switching, tray, color picker, tooltips,
+  group boxes/check boxes, dense/scroll-heavy Settings pages and first-start/persistence.
+- [x] Confirm installer/build tooling has no filename-specific dependency: installers copy theme directories generically and build-layout validation targets `.srtheme`/`.srwtheme` by extension.
+- [ ] After the visual matrix is green, physically delete `themes/dark.qss` from the real repository/build. GODZIP Foundry
+  intentionally excludes `themes/`, so a checkpoint cannot itself prove or perform that final asset deletion.
+- [?] **Needs run:** confirm widget-theme/runtime theming is unchanged; this retirement is Settings/tray-only and must
+  not create another widget-theme authority.
 
 ---
 
@@ -140,8 +148,9 @@ per-display face override and Clock Settings saves could later discard it.
   their saved shared baseline because those slots never recorded per-display mode state.
 - [x] Clock Settings save preserves the runtime-authored override maps for `clock`, `clock2`, and `clock3` instead of
   replacing those sections and silently dropping double-click state.
-- [ ] Dedicated Clock/slot regression tests are intentionally deferred to the next test pass. `Docs/TestSuite.md` remains
-  untouched in this checkpoint.
+- [x] Dedicated Clock/slot regression coverage is now added and routed in `Docs/TestSuite.md` §0.15. The three direct
+  slot cases, real DisplayManager boundary and Clock Settings preservation case are **Needs run** here because the
+  repository import graph reaches PySide6; installed face/geometry replay remains a separate acceptance cell.
 - [?] Installed validation: save distinct digital/analogue positions, double-click one routed display, save a numbered
   slot, change mode/geometry, then load the slot. Require the saved active face and that face's geometry on every display,
   including mixed analogue/digital ALL routing and restart/Settings-save persistence.
@@ -220,7 +229,7 @@ Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this ac
 - [x] Reconcile the known broad-suite fossil assertions against current owners without changing production authority.
   Completed at the test boundary on 2026-09-13: `test_widget_visual_roles.py` **16/16 PASS**; five touched Widget Theme
   state-machine cases PASS; `test_capability_activation.py` **33/33 PASS**; the four reproduced
-  `test_widget_descriptors.py` fossils **4/4 PASS**; and the two GODZIP/AppData persistence fossils **2/2 PASS**. The
+  `test_widget_descriptors.py` fossils **6/6 PASS**; and the two GODZIP/AppData persistence fossils **2/2 PASS**. The
   repaired assertions now follow strict schema-v3 I/O, explicit canonical Theme state/defaults, current descriptor/lazy
   dependency ownership, shared Clock authored-position routing, retired Growth semantics, and repo-local Foundry settings
   without banning legitimate LocalAppData-based Git Bash discovery. No production defaults/fallbacks, retired QWidget

@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 ## Start here
 
@@ -129,7 +129,7 @@ For a new mode or any meaningful reactivity change, read `Docs/Guides/Visualizer
 - `Docs/Future_Work/Bubble_Aspect_And_Presentation_Decomposition.md` — Bubble aspect response and presentation cost
 - `Docs/Future_Work/Edit_Layout_Live_Commit.md` — Live Edit commit (retired / historical reference)
 - `Docs/Future_Work/Ordinary_Widget_Resize_Normalization.md` — Ordinary Widget Resize Normalization (retired / historical reference)
-- `Docs/Future_Work/Settings_Dark_QSS_Retirement.md` — audited retirement of the remaining `dark.qss` loader/dependency surface; missing asset bytes alone are not completion
+- `Docs/Future_Work/Settings_Dark_QSS_Retirement.md` — production `dark.qss` dependency is severed; Windows/PySide file-absent acceptance + physical repo asset deletion remain
 - `Docs/Future_Work/Sphere_Visualizer_Decomposition.md` — Voxel Sphere — accepted experimental preservation and future migration gate
 - `Docs/Future_Work/Steam_Friend_Pulse.md` — public retained Friend Pulse architecture/current implementation contract; live validation status remains in Current_Plan
 - `Docs/Future_Work/Steam_Games_You_Follow.md` — dev-gated Games You Follow decomposition using existing-key GetGamesFollowed proof + bounded app-news, non-expiring last-good caches, no auth expansion, and first-pass two-axis shared content-extent geometry
