@@ -127,6 +127,10 @@ def test_every_retained_double_click_owner_declares_fallback_admission() -> None
             "enabled: achievementRoot.achievementModel.interactionEnabled",
         ),
         "ClockPresentation.qml": ("semanticDoubleClickEnabled: true",),
+        "FriendPulsePresentation.qml": (
+            "semanticDoubleClickEnabled: friendPulseModel.interactionEnabled",
+            "enabled: friendRoot.friendPulseModel.interactionEnabled",
+        ),
         "GmailPresentation.qml": (
             "semanticDoubleClickEnabled: gmailModel.interactionEnabled",
             "enabled: gmailRoot.gmailModel.interactionEnabled",

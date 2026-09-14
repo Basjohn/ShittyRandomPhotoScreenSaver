@@ -241,6 +241,7 @@ def test_uniform_custom_admission_uses_visible_card_envelope_not_dead_letterbox(
     presenter = SimpleNamespace(
         bound_widget_ids=("reddit",),
         geometry_for=lambda _widget_id: OverlayWidgetGeometry(100, 120, 600, 800),
+        authored_geometry_for=lambda _widget_id: OverlayWidgetGeometry(100, 120, 600, 800),
         presentation_for_widget_id=lambda _widget_id: presentation,
     )
     unit = SimpleNamespace(presenter=presenter)
@@ -1442,8 +1443,12 @@ def test_resize_side_drag_snaps_and_wheel_only_publishes_guides() -> None:
 
     # The wheel remains a discrete free enlarge/shrink: it may publish a nearby
     # alignment guide, but the resolver's suggested scale must never snap the
-    # geometry onto that line.
-    target.set_geometry(QRect(147, 200, 765, 300), resize_scale=1.0)
+    # geometry onto that line. Seat the box just left of the peer with a clean
+    # logical content box so the uniform enlarge grows its right edge toward the
+    # peer (880 -> 895) without ever landing on it.
+    target.set_geometry(
+        QRect(280, 200, 600, 300), resize_scale=1.0, content_extent=(600.0, 300.0)
+    )
     right_before = target.current_global_rect.x() + target.current_global_rect.width()
     calls_before_wheel = len(scene.calls)
     assert owner.resize_wheel(target, 120) is True
