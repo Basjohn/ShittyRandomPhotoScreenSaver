@@ -23,12 +23,12 @@ Rehome surviving regression coverage before deleting an old owner.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
-- [R-84 — Usage PDH Counter Cardinality Could Masquerade As A Main-Process Handle Leak](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. `--usage` attribution was added, but the residual handle-leak question remains open until the Windows soak proves it.
+- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. Constant 17-counter PDH generations did not explain the residual ~+16 handles/hour slope; out-of-process handle-type attribution is now required.
 
 ## Active / Pending Acceptance
 
-- [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **RESOLVED IN CODE / AWAITING VALIDATION**.
-- [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **RESOLVED IN CODE / AWAITING VALIDATION**.
+- [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **SOLVED**. 58-minute Windows soak preserved scaled-prefetch liveness under sustained eviction pressure.
+- [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **SOLVED**. 58-minute Windows soak showed no zero-delay recursive re-arm storm or request multiplication.
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md) — **CORRECTNESS PRESERVED / AWAITING VALIDATION**.
 - [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN at `5b3cbaef`; only physical dual-display acceptance remains.
 
@@ -41,7 +41,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 ## R Records
 
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md)
-- [R-84 — Usage PDH Counter Cardinality Could Masquerade As A Main-Process Handle Leak](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md)
+- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md)
 - [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md)
 - [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md)
 - [R-80 — ABC Event-Loop Rolling History Contaminated Named Steady Windows](R-80_ABC_EventLoop_Rolling_Window_Contamination.md)
@@ -135,7 +135,7 @@ duplicate standalone records are intentionally absent.
 
 - [U-10 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift](U-10_Oscilloscope_Strobe_Waveform_Ghost_Contract.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
-- [R-84 — Usage PDH Counter Cardinality Could Masquerade As A Main-Process Handle Leak](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. `--usage` attribution was added, but the residual handle-leak question remains open until the Windows soak proves it.
+- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. Constant 17-counter PDH generations did not explain the residual ~+16 handles/hour slope; out-of-process handle-type attribution is now required.
 - [U-08 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift](U-08_Custom_Replay_Shrink_Minimum_Constraints.md)
 - [U-07 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family](U-07_Bubble_Loud_Path_Oracle_Drift.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](U-06_MC_Shadow_Cache_Corruption.md)

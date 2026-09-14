@@ -204,6 +204,12 @@ high-volume diagnostic belongs in a dedicated sidecar rather than already-busy `
   Runtime cost is an O(pending) ownership scan over the already-bounded derivative queue (normally <=8 at concurrency 2),
   only cheap cache-membership/set checks; no image processing or new task/timer is introduced. Isolated A/B state-machine
   smoke against the tests-only checkpoint proves old=`1 pending / 16 MiB charged`, repaired=`0 / 0` for self-eviction.
+- [x] **R-82 installed soak closure (2026-09-14, 58 min): PASS.** Under sustained scaled-cache churn the repaired
+  pipeline stayed live: **93 scaled-prefetch requests / 91 completions**, **85 scaled evictions / 2.642 GiB evicted**,
+  **45/45 deferred resume schedules/runs**, and **91** raw-prefetch sources released after their final derivative. Final
+  cache state was bounded at **6 scaled items / 189.8 MiB** with **45 scaled hits / 0 misses / 0 worker requests**. The old
+  stranded-derivative signature did not recur; admission recovered after bounded pressure rather than pinning near 128 MiB.
+  Treat R-82 as closed unless a future regression reproduces orphaned pending bytes or scaled-prefetch death under eviction.
 
 - [x] **Reddit zero-delay due-loop root cause proven (>95% confidence).** The blocked-cooldown path converts a positive
   floating remainder with `int(... * 1000)`. A positive sub-millisecond remainder becomes `0`; `_schedule_timer()` handles
@@ -223,28 +229,41 @@ high-volume diagnostic belongs in a dedicated sidecar rather than already-busy `
   blocked-cooldown arms (worst 84/s recursive burst) and replaces each boundary with one deferred edge; the only timing cost
   is roughly 1–2 ms at an otherwise due-now boundary, negligible beside the 15-minute Reddit cadence. Isolated A/B smoke
   proves old=`1 synchronous due / 0 shots`, repaired=`0 synchronous / 1 positive shot`.
+- [x] **R-83 installed soak closure (2026-09-14, 58 min): PASS.** The run contained two blocked-cooldown
+  boundaries whose formatted remaining delay reached `0.0`, but neither produced the old synchronous re-arm storm. Each
+  boundary advanced into one legitimate due fetch/fallback chain and then authored the normal ~900 s next edge. No same-second
+  recursive burst or request multiplication returned; cooldown-gated manual refresh remained rejected normally. Treat R-83 as
+  closed unless zero-delay recursive scheduling reappears.
 
-- [?] **COMPLETELY FUCKED — `--usage` handle trend has a >80% PDH-observer attribution, but the residual application-handle
-  leak question is not closed until the instrumented Windows soak proves it.** Stable 04:00–13:30 RSS/USS/private memory and app/thread/resource ownership are flat while main handles rise about
-  +180 overall. `WindowsGpuUsageCollector` intentionally rebuilds its process-scoped `GPU Engine` / `GPU Process Memory` PDH
-  query every 300 s because GPU-engine instances are dynamic. The process-handle sample is captured before the GPU collector
-  rebuild; the sample immediately after each `gpu_status=warming` boundary therefore reflects the newly enumerated query's
-  current counter cardinality. Across that stable interval those post-rebuild samples contribute **+341 handles**, while all
-  other sample-to-sample changes net **-161**. This is strong attribution, not closure: until the next Windows soak shows no
-  independent residual slope after PDH cardinality is accounted for, R-84 remains **COMPLETELY FUCKED**. The collector closes
-  the old query before opening the new one and rebuild steps
-  can decrease as well as increase, which is inconsistent with a monotonically leaked old query. Rebuild samples are modest:
-  median collection ~17.9 ms vs ~15.4 ms ordinary samples at a 15 s usage cadence / 300 s GPU rediscovery cadence.
-- [x] **Usage instrumentation/regression authored (2026-09-14; Windows soak still required to close R-84):** preserve full GPU/VRAM
-  statistics and the 300 s rediscovery requirement. A dynamic fake-PDH lifecycle test now changes engine/memory instance
-  cardinality across two real `collect()` rebuilds, requires the prior query to close before the replacement opens, proves
-  counter lists are replaced rather than appended, and proves final `close()` drains query/counter ownership. `--usage` now
-  also logs the already-owned `gpu_query_generation`, engine/dedicated/shared counter counts and total PDH counter cardinality
-  beside `handles_main`. This adds no new OS query, enumeration, timer or work when `--usage` is off and preserves full
-  GPU/VRAM fidelity while making the required closure soak possible. Instrumentation is not a fix and does not promote R-84
-  out of **COMPLETELY FUCKED**. Do **not** reduce GPU coverage/cadence merely to flatten `handles_main`. If the Windows soak
-  still shows growth after accounting for PDH cardinality, add targeted handle-type diagnostics in a dedicated sidecar
-  (not `--perf`) and pursue the surviving owner.
+- [?] **COMPLETELY FUCKED — R-84 residual main-process handle growth survived PDH generation/cardinality accounting.**
+  The 2026-09-14 follow-up soak ran ~58 minutes and produced **233/233 `--usage` samples**, **12 PDH query generations**, and
+  a constant **17 PDH counters** in every generation (15 engine + 1 dedicated-memory + 1 shared-memory). After the final
+  Settings rebuild, the process had ~38.75 minutes of stable runtime: five-sample median `handles_main` moved
+  **1874 -> 1887 (+13)** and linear regression remained about **+16 handles/hour**. Across generation boundaries 4->12 the
+  immediate handle deltas were `+4,-4,+1,-1,+6,+4,-31,+24`, net **+3**; changing PDH cardinality therefore cannot explain
+  the surviving slope. Handles remain noisy rather than monotonic, so this is not yet proof of one leaking owner, but the
+  previous closure criterion definitively failed. R-84 remains **COMPLETELY FUCKED** until handle-class evidence identifies
+  or clears the residual owner. Do not weaken GPU/VRAM coverage or the 300 s PDH rediscovery cadence to flatten this graph.
+- [x] **R-84 attribution instrumentation upgraded (2026-09-14):** Windows `--usage` now starts a dedicated out-of-process
+  `screensaver_handles.log` helper at a low **60 s** cadence. It takes a system extended-handle snapshot, filters to the SRPSS
+  main PID, groups handles by kernel object type, and resolves names by duplicating only representative handles **into the
+  helper process**. It never enumerates per-handle types inside SRPSS and never adds work to `--perf`. The helper PID is
+  excluded from app process/thread/memory/handle aggregates; only the stable parent-side process ownership needed to run the
+  diagnostic remains in `handles_main`. Next soak must correlate type-count deltas with `handles_main` and PDH generations;
+  a growing `Event`/`Thread`/`File`/`Key`/`Section`/etc. class gives the next owner investigation instead of guessing.
+- [x] **`--usage` observer-effect repair authored (2026-09-14; Windows validation required):** the old two-minute Windows
+  heavy refresh used psutil recursive-child discovery plus per-process `num_threads()`, both backed by a GIL-held system-wide
+  snapshot. In this soak the expected heavy samples had median collection ~**79.3 ms** and peaked at **143.55 ms** after
+  startup, while ordinary samples had median ~**24.1 ms**. Windows now obtains recursive PIDs **and thread counts** from one
+  Toolhelp process snapshot via ctypes, whose native calls release the GIL; ordinary 15 s RSS/USS/CPU/handles/IO reads and
+  the 2-minute topology freshness contract are unchanged. `--usage` also records `topology_refresh` + `topology_source` so the
+  next run can prove heavy samples use `toolhelp` rather than silently falling back to psutil. Non-Windows and Toolhelp-failure
+  paths retain the old fallback for telemetry continuity.
+- [x] **Diagnostic-load interpretation pinned:** this soak used both `--usage` and first-time `--verbose` plus the broader
+  diagnostic family. The async logger itself was healthy (**44,870 enqueued/dequeued, zero drops, caller avg 0.0521 ms**), so
+  verbose logging was extra work but not a queue-collapse explanation. `--debug` already writes `screensaver_verbose.log`;
+  routine performance/closure soaks should **omit `--verbose`** unless noisy producer logs are specifically required. This
+  run is valid lifetime/R-82/R-83/R-84 evidence but must not be treated as a clean normal-performance baseline.
 
 - [x] **Monitor wake double rebuild explained; no production optimization admitted yet.** Existing display detection already
   coalesces Qt topology/metric/application edges for 250 ms. On wake Windows exposed a genuinely different MSI-only topology
@@ -257,13 +276,16 @@ high-volume diagnostic belongs in a dedicated sidecar rather than already-busy `
   explicitly protects against “fixing” the soak with a generic multi-second debounce. Do not add sleep/poll/debounce unless
   later evidence provides a reliable wake-specific settling signal; correctness currently outranks hiding this rare hitch.
 
-- [?] **Installed validation after soak repairs:** run the new §0.19 regressions in the intended Windows/PySide6 environment,
-  then repeat a bounded cache-heavy soak with cache/usage diagnostics. Confirm scaled-prefetch completions continue after raw
-  eviction pressure, pending scaled bytes do not pin near the cap without producers, Reddit produces no zero-delay due bursts,
-  and use `--usage`'s query/cardinality fields to determine whether any residual main-process handle slope survives. R-84
-  stays **COMPLETELY FUCKED** until that result is known. Also confirm full GPU/VRAM statistics and query replacement/close
-  ownership remain intact. Monitor wake remains an
-  observational gate only; two rebuilds are still correct when Windows presents two genuinely distinct settled signatures.
+- [?] **Next Windows closure soak:** R-82/R-83 are already closed by the 58-minute run; do not churn those fixes. Run
+  **30 min minimum / ~60 min preferred**, single-display is sufficient. Lean recommended flags are
+  `--debug --fresh --usage --perf --life`: `--usage` owns handle/GPU/VRAM evidence, `--perf` supplies frame-tail comparison,
+  `--life` keeps lifetime boundaries visible, and `--fresh` prevents prior sidecar/log sessions contaminating analysis. Do **not**
+  add `--verbose` or `--gpu-timing` unless a separate question specifically requires them. Confirm `topology_source=toolhelp` on heavy
+  samples and that their collection/frame spikes collapse toward ordinary samples; confirm full GPU/VRAM fields and 300 s PDH
+  query replacement remain intact; correlate `screensaver_handles.log` object-type counts against `handles_main` and PDH
+  generation boundaries. If one handle class rises, trace that owner next. If type counts and main handles plateau after warmup,
+  R-84 may finally close. Monitor wake remains observational only; two rebuilds are still correct when Windows presents two
+  genuinely distinct settled signatures.
 
 ---
 
@@ -287,24 +309,97 @@ production defaults and runtime behavior are not changed merely to satisfy asser
   `regenerate_defaults_artifacts.py --check`, and `regenerate_sst_defaults.py --check`. All 39 edited test modules compile.
   Full pytest execution still requires the intended Windows/PySide6 environment because project `tests/conftest.py` imports
   PySide6 unconditionally.
-- [?] **Production smell — Visualizer transient fallback/default duplication:** `widgets/spotify_visualizer/tick_pipeline.py`
-  still carries legacy literal transient/mix fallbacks (`1.0`, `1.5`, Bubble `0.75/0.25`) while canonical Bubble defaults are
-  now materially different (`0.05`, `1.15`, `0.2/0.15`). `core/settings/visualizer_settings_contract.py` also owns a legacy
-  `_BASELINE_DEFAULTS` table plus `SPECIAL_PER_MODE_KEYS` fallback literals, including the same old Bubble mix values. Trace
-  the complete model/migration/runtime resolver path before changing anything: determine which literals are compatibility
-  migration signatures, which are unreachable defensive fallbacks, and whether any can still become live runtime values. If
-  a live secondary default authority exists, repair the authority/resolver seam; do not merely refresh duplicate literals to
-  today’s defaults or flatten authored preset state into canonical defaults.
+- [x] **Visualizer transient fallback/default duplication resolved without changing preset technical authority (2026-09-14).**
+  End-to-end tracing confirmed the supported Quick lifecycle is configure -> apply complete technical mapping -> bind -> start;
+  mode/preset changes stop/join the sole logical runtime before rebuilding/reapplying technical state and restarting it. Curated
+  presets remain authoritative for every technical key they author, while Custom remains pass-through user-authored state; only a
+  genuinely missing field reaches the model's canonical default. `tick_pipeline.py` therefore no longer invents `1.0/1.5` or
+  Bubble `0.75/0.25` tuning, and Spectrum's FFT express lane no longer invents `kick_lane_gain=1.0` /
+  `spectrum_lane_transient_mix=0.65`; those consumers require the already-resolved values and expose an ordering/ownership defect
+  instead of silently substituting another tuning table. `visualizer_settings_contract.py` now names the old shared/global
+  `1.5`-era values explicitly as **legacy migration baselines only**; special per-mode missing values fall through canonical
+  authority rather than hard-coded compatibility literals. Pre/post semantic fingerprints across every shipped curated Bubble,
+  Spectrum, Sine, Oscilloscope and Dev Curve preset plus arbitrary Custom technical values are byte-equivalent at the resolved
+  value layer (SHA-256 `9a17f78e136f57be2e51b317692f0b4282c82b3fe17a61e089188c49f4eaac39`). Regression
+  coverage now explicitly proves curated presets may author transient technical controls, Custom preserves them, and downstream
+  Bubble/Spectrum consumers cannot regain numeric technical fallbacks. This changes no Bubble/Spectrum equations, tuning, preset
+  payload or canonical product default. Retired global values remain untouched as compatibility signatures.
 - [?] **Production/schema smell — retired transition worker default:** canonical settings still contain
-  `workers.transition.enabled` although the supervised transition worker was retired when transitions became GPU/Quick-owned.
-  Trace persisted-profile/migration/import consumers before removal. If no supported compatibility owner remains, retire the
-  key and regenerate derived artifacts rather than preserving dead schema because tests once referenced it.
-- [?] Windows/PySide6 validation: run the touched defaults/settings tests and re-run the broad red-file inventory. A routine
-  future default change should require changing canonical authority + regenerating derived artifacts, not manual edits across
-  unrelated tests. Any remaining red must be reclassified as a real behavior/integration issue, true exact-value invariant,
-  or another stale test—not left indefinitely as “value drift.”
+  `workers.transition.enabled=True` although the supervised transition worker was retired when transitions became GPU/Quick-owned.
+  Claude's production grep found **zero current production consumers** across core/engine/rendering/widgets. The remaining gate
+  is therefore compatibility only: trace persisted-profile/import/migration handling, then remove the key through canonical
+  schema + generated-artifact regeneration if no supported compatibility owner remains. Do not preserve dead schema because
+  historical tests once referenced it.
+- [x] **Windows/PySide6 mutable-default audit run completed (Claude, commit `f9343b53` preserved):** all **39 changed test
+  modules** were executed. Initial result **760 passed / 9 failed**; two failures were defects introduced by the audit rewrite
+  itself and were repaired test-only (symmetric nested `collect_diff()` handling plus the missing
+  `require_canonical_default` import). Rerun result: **762 passed / 7 failed** with no production/default/artifact change.
+  The seven survivors are now classified instead of being called generic value drift: four stale tests
+  (`visualizer_bucket_toggles...`, Spectrum bucket order, retired Abandonment no-callers, fake rainbow visibility binding) and
+  three real behavior/integration investigations (Spectrum preset-slider/custom index, audio-worker gain-one fixture requiring
+  resolved technical config, MC interaction-mode profile behavior). None is a BTF/real-GL case in this set.
+- [?] **Small positive-coverage gap from that audit:** Achievement runtime uses the same independent five-minute test fixture
+  pattern as Abandonment, but lacks Abandonment's symmetric test proving its runtime default follows canonical
+  `widgets.steam.refresh_minutes`. Runtime currently reads the same canonical Steam defaults, so this is coverage debt rather
+  than a product defect; add the positive authority test when that test family is next touched.
+
 
 ---
+
+## 4E. CUSTOM Visualizer quarter-turn orientation — feasibility accepted, implementation deferred
+
+Feature request: while CUSTOM Edit mode is active, eligible Visualizers gain a small turn/flip glyph. Each click advances the
+content orientation by one clockwise quarter-turn: `0° -> 90° -> 180° -> 270° -> 0°`. Example: a tall Spectrum whose bars
+currently travel upward can be turned so the same authored/reactive visualizer behaves as a wide logical viewport rotated into
+the tall physical card, with bars travelling right, then down, then left on successive clicks.
+
+This is feasible, but it is **not** a finished-pixel/QML `rotation` feature. Viewport shape is semantic input to Bubble,
+Spectrum, Sine, Oscilloscope and Dev Curve; rotating only the final pixels/vertices would bypass existing wide/tall shape
+profiles and can break reaction amplitude, density, clipping, line thickness, Bubble tails/specular/gradient behaviour and
+other viewport-derived invariants. The feature therefore belongs at the shared Visualizer presentation/layout seam.
+
+- [ ] **Initial scope: carded accepted modes only.** Admit Spectrum, Oscilloscope, Sine Waves, Bubble and Dev Curve. Exclude
+  frameless modes and specifically Voxel Sphere initially. Sphere has experimental unclipped overflow, 3-D lighting/shadow and
+  its own coordinate semantics; do not make this feature a reason to couple Sphere back into accepted-mode architecture.
+- [ ] Add one CUSTOM-layout-owned quarter-turn token, preferably `content_rotation_quarters` constrained to `{0,1,2,3}`.
+  It is **layout/presentation state, not a Visualizer setting or preset technical setting**. Persist it inside the Visualizer's
+  existing CUSTOM `size_payload`; old entries with no token resolve to `0`. Do not add a second settings authority or mutate
+  authored preset payloads.
+- [ ] Keep the physical saved geometry authoritative and unchanged. The committed `rect`, monitor route, uniform scale and
+  `viewport_extent` remain exactly what the user edited. For `90°/270°`, resolve an **effective logical content viewport** with
+  width/height swapped, run the existing mode shape/reactivity logic against that logical domain, then apply one shared
+  logical-to-physical quarter-turn transform back into the unchanged card/content clip. `0°/180°` keep the logical axes;
+  `180°` changes direction only. This is the critical distinction that lets a tall card behave like a wide visualizer without
+  rewriting its stored geometry.
+- [ ] Implement the transform once in the common Quick Visualizer render/presentation contract, not separately in five mode
+  renderers. Mode-specific code may need only narrowly proven direction-vector adaptation where a shader currently consumes a
+  screen-space direction directly (for example Bubble gradient/specular direction); prefer deriving those vectors through the
+  common orientation transform rather than adding per-mode orientation settings.
+- [ ] Edit UI: add one themed circular turn glyph to `CustomLayoutOverlay.qml`, visible only for the active Visualizer when the
+  current descriptor admits quarter-turn orientation. It must not steal drag/resize/display-hop input zones and must remain
+  scale/header aligned with existing edit chrome. Clicking changes working session state immediately; Cancel restores the
+  admission value, Save commits it, Restore Size must **not** silently reset orientation unless product UX explicitly decides
+  that Restore Size owns orientation too.
+- [ ] Save/load/slot contract: existing layout slots already capture the whole `custom_layout` root, so orientation must round
+  trip through ordinary CUSTOM save/load and slot Save/Load without a parallel slot schema. Cross-display hop must preserve the
+  token. Legacy layouts/slots with no token must load identically to today (`0`). Version-bump only if the normalizer cannot
+  safely treat the optional size-payload field as backward compatible; do not bump merely because a new optional payload key
+  exists.
+- [ ] **Golden behavioural proof before merge:** with orientation `0`, resolved presentation/render state must be semantically
+  identical to pre-feature behaviour for every accepted mode and curated/Custom preset. Prove quarter-turn does not alter
+  audio/reactivity values, preset technical authority, AGC/floor state, authored mode settings, uniform scale or stored extent.
+  Add pure transform tests for four-click identity, `90+270 == 0`, axis swap only on odd quarters, Save/Cancel/slot round trips,
+  cross-display preservation and legacy-no-token replay. Then run the existing visualizer geometry/reactivity suites plus
+  installed eyes-on checks for extreme wide/tall Bubble, Spectrum, Oscilloscope, Sine and Dev Curve. Bubble's current reaction
+  amplitude/freshness contract remains golden: no compensation that reduces reaction is acceptable.
+- [ ] Performance/lifetime: quarter-turn is event-driven only. No timer, polling, alternate cadence, retained duplicate
+  renderer or per-frame settings lookup. Changing orientation may publish/rebuild the normal immutable presentation snapshot,
+  but must not reconstruct the Visualizer runtime or create a second logical state owner.
+
+**Risk decision:** medium/high implementation risk but architecturally bounded. Keep in Current Plan because the persistence and
+owner seams already exist and the safe shape is clear; do not implement opportunistically during unrelated Visualizer work.
+If the common logical-to-physical transform cannot be made mode-neutral without mode-specific geometry forks, stop and move the
+feature to `Future_Work.md` rather than compromising the existing viewport/preset/reactivity contracts.
 
 ## 5. Test / debris reconciliation
 

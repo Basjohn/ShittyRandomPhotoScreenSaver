@@ -120,7 +120,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --verbose, -v - Enable full verbose log stream
     - --perf - Enable performance logging
     - --gpu-timing - Enable sampled owner-context GL timer queries (implies --perf)
-    - --usage - Enable low-cadence CPU/GPU/memory/thread usage logging
+    - --usage - Enable low-cadence CPU/GPU/memory/thread/handle-attribution logging
     - --viz - Enable visualizer logging and diagnostics
     - --geo - Enable geometry/z-order/edit-layout diagnostics
     - --set - Enable settings mutation/import/schema diagnostics
@@ -564,6 +564,14 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
                 from core.performance.usage_sampler import UsageTelemetryService
                 from core.performance.resource_metrics import collect_resource_accounting
 
+                handle_sidecar = None
+                if os.name == "nt":
+                    from core.performance.windows_handle_attribution import (
+                        WindowsHandleAttributionSidecar,
+                    )
+
+                    handle_sidecar = WindowsHandleAttributionSidecar(get_log_dir())
+
                 if engine.thread_manager is None:
                     raise RuntimeError("ThreadManager unavailable after engine start")
 
@@ -582,6 +590,7 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
                 engine._usage_telemetry = UsageTelemetryService(
                     engine.thread_manager,
                     resource_snapshot_provider=_usage_resource_snapshot,
+                    handle_attribution_sidecar=handle_sidecar,
                 )
                 if not engine._usage_telemetry.start():
                     raise RuntimeError("usage telemetry declined startup")

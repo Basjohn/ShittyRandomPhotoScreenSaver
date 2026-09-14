@@ -84,6 +84,15 @@ Stop/reassess when:
 - family port duplicates provider/controller/timer/cache/action authority;
 - migration casually redesigns working family interaction/visual behavior without product intent.
 
+## Visualizer preset / technical-settings authority guardrail
+
+Technical settings are ordinary Visualizer settings with shared usefulness, **not** a higher-priority authority above presets.
+A curated preset may author any mode-owned technical setting; Custom preserves the user's authored technical state. Resolution
+order is preset/custom-authored value first, then canonical product default only for a genuinely missing field. Runtime/DSP/tick
+consumers must consume the already-resolved technical mapping and must not carry their own numeric fallback tuning. Retired
+shared/global technical literals may remain only as explicit migration signatures and must never be refreshed to today's defaults
+or fed back into live runtime. Never flatten authored preset technical values into baseline defaults to simplify plumbing.
+
 ## Visualizer geometry guardrail
 
 Keep these distinct:

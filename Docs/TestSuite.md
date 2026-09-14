@@ -34,12 +34,13 @@ instead of the retired 5.0.0 migration default. These were stale/misclassified t
 permanent canonical defaults audit plus the explicit test-authority guardrail is preferred over a noisy scanner that would
 misclassify legitimate fixture values.
 
-**Production smells discovered, not silently repaired:** `widgets/spotify_visualizer/tick_pipeline.py` retains legacy
-transient/mix fallback literals and `core/settings/visualizer_settings_contract.py` retains a legacy baseline/fallback table,
-including old Bubble mix values that differ from canonical defaults; these need an end-to-end migration/model/runtime trace
-to determine whether they are compatibility signatures, unreachable defense, or a live secondary default authority. Canonical
-schema also still contains `workers.transition.enabled` despite retirement of the supervised transition worker and needs
-compatibility/migration ownership tracing before deletion. All are active-plan follow-ups.
+**Production-smell follow-up:** the Visualizer transient/default duplication has since been traced and repaired at the
+authority boundary without changing resolved preset behavior. Curated presets remain allowed to author technical settings;
+Custom remains pass-through; canonical defaults fill only genuinely absent fields. Tick/FFT consumers no longer carry numeric
+technical fallbacks, while the old shared/global values in `visualizer_settings_contract.py` are explicitly migration signatures
+only. A pre/post resolved-state fingerprint across every shipped curated Bubble/Spectrum/Sine/Oscilloscope/Dev Curve preset plus
+representative Custom technical values is identical. Canonical schema still contains `workers.transition.enabled` despite
+retirement of the supervised transition worker and still needs compatibility/migration ownership tracing before deletion.
 
 The §0.18 list remains historical evidence of the pre-audit state; do not use its “value-drift goldens” subsection as the
 current owner classification. After Windows/PySide6 execution, remaining reds must be classified individually as real
@@ -63,14 +64,17 @@ cardinality fields so future handle trends can be attributed without weakening s
   is deferred through the existing `ThreadManager.single_shot` rather than synchronously calling `_on_periodic_due()`. No
   new timer/cadence/poller exists. The recorded 721 zero-delay blocked-cooldown arms therefore collapse to one deferred edge
   per boundary episode, at ~1–2 ms maximum extra boundary latency.
-- **`--usage`: passive attribution added; R-84 remains COMPLETELY FUCKED pending Windows-soak proof (`core/performance/usage_sampler.py`).**
-  The §0.19 fake-PDH regression protects close-before-open query replacement while retaining the 300 s dynamic GPU/VRAM
-  rediscovery. Each usage snapshot/log now includes query generation plus engine/dedicated/shared/total PDH counter
-  cardinality derived from the lists the collector already owns. There is no extra OS enumeration/query/timer and no work
-  when `--usage` is off. `tests/test_usage_sampler.py` pins the cardinality fields and log output. This instrumentation is
-  evidence gathering, not a repair: R-84 stays **COMPLETELY FUCKED** until a multi-hour Windows soak proves there is no
-  independent residual main-process handle slope after PDH cardinality is accounted for. Degrading statistics merely to
-  make `handles_main` visually flatter remains explicitly rejected.
+- **`--usage`: R-84 remains COMPLETELY FUCKED; PDH cardinality was ruled out as the full explanation and the next Windows proof uses out-of-process handle-type attribution plus Toolhelp topology observer-effect validation (`core/performance/usage_sampler.py`).**
+  The §0.19 fake-PDH regression still protects close-before-open query replacement while retaining the 300 s dynamic GPU/VRAM
+  rediscovery, and each usage line keeps query generation plus engine/dedicated/shared/total PDH cardinality. The 58-minute
+  Windows soak held that denominator constant at 17 yet retained roughly +16 handles/hour after the final Settings rebuild, so
+  the next gate is kernel-object-class attribution rather than more cardinality guessing. Windows `--usage` now starts a 60 s
+  out-of-process `screensaver_handles.log` sidecar and excludes its PID from app aggregates; the two-minute topology/thread
+  refresh now prefers one Toolhelp snapshot instead of the proven GIL-held psutil path. `tests/test_usage_sampler.py` pins the
+  provider seam, sidecar exclusion, topology log fields, handle grouping, and PDH ownership. This remains evidence gathering,
+  not a leak fix: R-84 stays **COMPLETELY FUCKED** until a lean 30–60 minute Windows run identifies/clears the growing handle
+  class and proves Toolhelp removes the heavy-sample observer hitch. Degrading statistics merely to make `handles_main` flatter
+  remains explicitly rejected.
 - **Monitor wake: no production change.** The two-stage wake regression codifies that two genuinely distinct settled screen
   signatures require two reconciles; a generic multi-second debounce remains rejected without a reliable wake-specific
   settling signal.

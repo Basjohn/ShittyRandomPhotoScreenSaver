@@ -10,9 +10,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any, Dict
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_owned_mode_setting_keys
 
-_BASELINE_DEFAULTS: dict[str, Any] = {
+# Retired shared/global technical defaults are compatibility signatures only.
+# They describe the old global-settings shape for migration helpers; they are
+# deliberately NOT current product defaults and must never feed live runtime.
+_LEGACY_GLOBAL_MIGRATION_BASELINES: dict[str, Any] = {
     "bar_count": 32,
     "adaptive_sensitivity": True,
     "sensitivity": 1.0,
@@ -27,7 +31,7 @@ _BASELINE_DEFAULTS: dict[str, Any] = {
     "audio_block_size": 0,
 }
 
-LEGACY_GLOBAL_TECHNICAL_KEYS: tuple[str, ...] = tuple(_BASELINE_DEFAULTS.keys())
+LEGACY_GLOBAL_TECHNICAL_KEYS: tuple[str, ...] = tuple(_LEGACY_GLOBAL_MIGRATION_BASELINES.keys())
 LEGACY_GLOBAL_SHARED_VISUAL_KEYS: tuple[str, ...] = (
     "bar_fill_color",
     "bar_border_color",
@@ -52,12 +56,12 @@ PER_MODE_BASELINE_KEYS: tuple[tuple[str, Callable[[Any], Any]], ...] = (
     ("bar_count", int),
 )
 
-SPECIAL_PER_MODE_KEYS: tuple[tuple[str, str, str, Any, Callable[[Any], Any]], ...] = (
-    ("spectrum", "lane_transient_mix", "spectrum_lane_transient_mix", 0.65, float),
-    ("bubble", "transient_mix_bass", "bubble_transient_mix_bass", 0.75, float),
-    ("bubble", "transient_mix_vocal", "bubble_transient_mix_vocal", 0.25, float),
-    ("sine_wave", "transient_width_mix", "sine_wave_transient_width_mix", 0.4, float),
-    ("oscilloscope", "transient_width_mix", "oscilloscope_transient_width_mix", 0.35, float),
+SPECIAL_PER_MODE_KEYS: tuple[tuple[str, str, str, Callable[[Any], Any]], ...] = (
+    ("spectrum", "lane_transient_mix", "spectrum_lane_transient_mix", float),
+    ("bubble", "transient_mix_bass", "bubble_transient_mix_bass", float),
+    ("bubble", "transient_mix_vocal", "bubble_transient_mix_vocal", float),
+    ("sine_wave", "transient_width_mix", "sine_wave_transient_width_mix", float),
+    ("oscilloscope", "transient_width_mix", "oscilloscope_transient_width_mix", float),
 )
 
 _SPECTRUM_RENDER_MODE_ALIASES: dict[str, str] = {
@@ -157,30 +161,30 @@ def resolve_spectrum_unique_colors(
 def resolve_visualizer_baselines(read_value: Callable[[str, Any], Any]) -> dict[str, Any]:
     """Resolve legacy shared technical values for visualizer migration only."""
     return {
-        "bar_count": _coerce_int(read_value("bar_count", _BASELINE_DEFAULTS["bar_count"]), _BASELINE_DEFAULTS["bar_count"]),
+        "bar_count": _coerce_int(read_value("bar_count", _LEGACY_GLOBAL_MIGRATION_BASELINES["bar_count"]), _LEGACY_GLOBAL_MIGRATION_BASELINES["bar_count"]),
         "adaptive_sensitivity": _coerce_bool(
-            read_value("adaptive_sensitivity", _BASELINE_DEFAULTS["adaptive_sensitivity"])
+            read_value("adaptive_sensitivity", _LEGACY_GLOBAL_MIGRATION_BASELINES["adaptive_sensitivity"])
         ),
-        "sensitivity": _coerce_float(read_value("sensitivity", _BASELINE_DEFAULTS["sensitivity"]), _BASELINE_DEFAULTS["sensitivity"]),
-        "dynamic_floor": _coerce_bool(read_value("dynamic_floor", _BASELINE_DEFAULTS["dynamic_floor"])),
-        "manual_floor": _coerce_float(read_value("manual_floor", _BASELINE_DEFAULTS["manual_floor"]), _BASELINE_DEFAULTS["manual_floor"]),
+        "sensitivity": _coerce_float(read_value("sensitivity", _LEGACY_GLOBAL_MIGRATION_BASELINES["sensitivity"]), _LEGACY_GLOBAL_MIGRATION_BASELINES["sensitivity"]),
+        "dynamic_floor": _coerce_bool(read_value("dynamic_floor", _LEGACY_GLOBAL_MIGRATION_BASELINES["dynamic_floor"])),
+        "manual_floor": _coerce_float(read_value("manual_floor", _LEGACY_GLOBAL_MIGRATION_BASELINES["manual_floor"]), _LEGACY_GLOBAL_MIGRATION_BASELINES["manual_floor"]),
         "dynamic_range_enabled": _coerce_bool(
-            read_value("dynamic_range_enabled", _BASELINE_DEFAULTS["dynamic_range_enabled"])
+            read_value("dynamic_range_enabled", _LEGACY_GLOBAL_MIGRATION_BASELINES["dynamic_range_enabled"])
         ),
-        "agc_strength": _coerce_float(read_value("agc_strength", _BASELINE_DEFAULTS["agc_strength"]), _BASELINE_DEFAULTS["agc_strength"]),
-        "input_gain": _coerce_float(read_value("input_gain", _BASELINE_DEFAULTS["input_gain"]), _BASELINE_DEFAULTS["input_gain"]),
-        "kick_lane_gain": _coerce_float(read_value("kick_lane_gain", _BASELINE_DEFAULTS["kick_lane_gain"]), _BASELINE_DEFAULTS["kick_lane_gain"]),
+        "agc_strength": _coerce_float(read_value("agc_strength", _LEGACY_GLOBAL_MIGRATION_BASELINES["agc_strength"]), _LEGACY_GLOBAL_MIGRATION_BASELINES["agc_strength"]),
+        "input_gain": _coerce_float(read_value("input_gain", _LEGACY_GLOBAL_MIGRATION_BASELINES["input_gain"]), _LEGACY_GLOBAL_MIGRATION_BASELINES["input_gain"]),
+        "kick_lane_gain": _coerce_float(read_value("kick_lane_gain", _LEGACY_GLOBAL_MIGRATION_BASELINES["kick_lane_gain"]), _LEGACY_GLOBAL_MIGRATION_BASELINES["kick_lane_gain"]),
         "transient_pulse_gain": _coerce_float(
-            read_value("transient_pulse_gain", _BASELINE_DEFAULTS["transient_pulse_gain"]),
-            _BASELINE_DEFAULTS["transient_pulse_gain"],
+            read_value("transient_pulse_gain", _LEGACY_GLOBAL_MIGRATION_BASELINES["transient_pulse_gain"]),
+            _LEGACY_GLOBAL_MIGRATION_BASELINES["transient_pulse_gain"],
         ),
         "transient_clamp": _coerce_float(
-            read_value("transient_clamp", _BASELINE_DEFAULTS["transient_clamp"]),
-            _BASELINE_DEFAULTS["transient_clamp"],
+            read_value("transient_clamp", _LEGACY_GLOBAL_MIGRATION_BASELINES["transient_clamp"]),
+            _LEGACY_GLOBAL_MIGRATION_BASELINES["transient_clamp"],
         ),
         "audio_block_size": _coerce_int(
-            read_value("audio_block_size", _BASELINE_DEFAULTS["audio_block_size"]),
-            _BASELINE_DEFAULTS["audio_block_size"],
+            read_value("audio_block_size", _LEGACY_GLOBAL_MIGRATION_BASELINES["audio_block_size"]),
+            _LEGACY_GLOBAL_MIGRATION_BASELINES["audio_block_size"],
         ),
     }
 
@@ -193,7 +197,7 @@ def build_visualizer_mode_kwargs(
     kwargs: Dict[str, Any] = {}
     for mode in VISUALIZER_MODE_IDS:
         for key, coerce in PER_MODE_BASELINE_KEYS:
-            fallback = baselines.get(key, _BASELINE_DEFAULTS.get(key))
+            fallback = baselines.get(key, _LEGACY_GLOBAL_MIGRATION_BASELINES.get(key))
             raw = read_per_mode_value(mode, key, fallback)
             if coerce is bool:
                 kwargs[f"{mode}_{key}"] = _coerce_bool(raw)
@@ -204,7 +208,13 @@ def build_visualizer_mode_kwargs(
             else:
                 kwargs[f"{mode}_{key}"] = coerce(raw)
 
-    for mode, key, output_key, fallback, coerce in SPECIAL_PER_MODE_KEYS:
+    for mode, key, output_key, coerce in SPECIAL_PER_MODE_KEYS:
+        # Special per-mode controls never existed as retired shared/global keys.
+        # Their missing-value authority is therefore the current canonical
+        # product default, not a compatibility literal in this contract module.
+        fallback = require_canonical_default(
+            f"widgets.spotify_visualizer.{output_key}"
+        )
         raw = read_per_mode_value(mode, key, fallback)
         if coerce is bool:
             kwargs[output_key] = _coerce_bool(raw)

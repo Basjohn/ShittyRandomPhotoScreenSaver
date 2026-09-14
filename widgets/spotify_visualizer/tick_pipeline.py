@@ -624,10 +624,15 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         _onset_detected = bool(getattr(tb, 'onset_detected', False)) if tb else False
         _onset_type = str(getattr(tb, 'onset_type', '')) if tb else ''
         _onset_strength = float(getattr(tb, 'onset_strength', 0.0) or 0.0) if tb else 0.0
-        _t_gain = getattr(widget, '_transient_pulse_gain', 1.0)
-        _t_clamp = getattr(widget, '_transient_clamp', 1.5)
-        _bmix_bass = getattr(widget, '_bubble_transient_mix_bass', 0.75)
-        _bmix_vocal = getattr(widget, '_bubble_transient_mix_vocal', 0.25)
+        # These are complete preset/settings-resolved technical values. Quick
+        # applies them before the logical runtime starts (and stops that runtime
+        # before every mode/preset reconfiguration). A missing attribute is an
+        # ownership/order defect; the tick must never invent a second tuning
+        # table, especially for Bubble's reactivity-critical transient path.
+        _t_gain = widget._transient_pulse_gain
+        _t_clamp = widget._transient_clamp
+        _bmix_bass = widget._bubble_transient_mix_bass
+        _bmix_vocal = widget._bubble_transient_mix_vocal
         _hot_bass_lift = soft_ceiling(
             max(0.0, _pulse_bass - 0.85),
             knee=0.0,

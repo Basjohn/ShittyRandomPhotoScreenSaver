@@ -18,16 +18,15 @@ logger = get_logger(__name__)
 DEFAULT_USAGE_INTERVAL_MS = 15_000
 _MB = 1024.0 * 1024.0
 
-# How many samples pass between the two GIL-held, system-wide Windows
-# enumerations (recursive child discovery + per-process thread counts). Both go
-# through ``NtQuerySystemInformation`` and hold the GIL for the whole call
-# (no ``Py_BEGIN_ALLOW_THREADS``), so at the 15 s cadence they scale with total
-# system process/thread count and directly stall the pure-Python Visualizer
-# logical-cadence thread (proven 2026-09-03: 87-120 ms collect -> 44-65 ms
-# `Tick dt spike`). Every sample still reports fresh RSS/USS/CPU/handles/IO for
-# the known process set; only topology discovery and the thread count are
-# refreshed on this slower sub-cadence. 8 samples ~= 2 min at the default
-# interval. See `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md`.
+# How many samples pass between child-topology/thread-count refreshes. The old
+# Windows path used psutil ``children(recursive=True)`` + ``num_threads()``; both
+# route through a GIL-held ``NtQuerySystemInformation`` snapshot and the
+# 2026-09-14 soak correlated those refreshes with ~80-144 ms collection and
+# ~70-156 ms frame maxima. Windows now resolves the same information through a
+# Toolhelp process snapshot whose kernel calls are made via ctypes (GIL released).
+# Non-Windows platforms retain the psutil fallback. Every sample still reports
+# fresh RSS/USS/CPU/handles/IO against the cached live-process set. 8 samples ~=
+# 2 min at the default 15 s interval.
 DEFAULT_HEAVY_REFRESH_SAMPLES = 8
 
 
@@ -88,15 +87,13 @@ class GpuUsageSnapshot:
 class ProcessUsageCollector:
     """Collect main-process and recursive child totals without blocking intervals.
 
-    The two GIL-held, system-wide Windows enumerations - recursive child
-    discovery (``children(recursive=True)``) and per-process thread counts
-    (``num_threads()``) - are refreshed together on a slow sub-cadence
-    (``heavy_refresh_samples``) rather than every sample, because holding the
-    GIL uninterruptibly for those calls stalls the pure-Python Visualizer
-    logical-cadence thread. Cheap, GIL-releasing per-process metrics (RSS, USS,
-    CPU, handles, IO) run every sample against the cached live-process set, so
-    memory/leak fidelity is unchanged; only child topology and the thread count
-    carry forward between heavy refreshes.
+    Child topology and thread counts refresh on a slow sub-cadence
+    (``heavy_refresh_samples``). On Windows that refresh uses a Toolhelp process
+    snapshot so native enumeration does not hold the Python GIL; non-Windows (or
+    a Windows Toolhelp failure) retains the psutil fallback. Cheap per-process
+    metrics (RSS, USS, CPU, handles, IO) still run every sample against the
+    cached live-process set, so memory/leak fidelity is unchanged; only child
+    topology and the thread count carry forward between refreshes.
     """
 
     def __init__(
@@ -104,16 +101,49 @@ class ProcessUsageCollector:
         process: psutil.Process | None = None,
         *,
         heavy_refresh_samples: int = DEFAULT_HEAVY_REFRESH_SAMPLES,
+        topology_snapshot_provider: Callable[[int], Mapping[int, int]] | None = None,
     ) -> None:
         self._main = process or psutil.Process(os.getpid())
         self._processes: dict[int, psutil.Process] = {self._main.pid: self._main}
+        self._excluded_pids: set[int] = set()
         self._sample_count = 0
         self._heavy_refresh_samples = max(1, int(heavy_refresh_samples))
         # Force a heavy refresh (topology + thread count) on the first collect.
         self._samples_since_heavy = self._heavy_refresh_samples
         self._last_threads_app = 0
+        self.last_sample_was_heavy = False
+        self.last_topology_source = "uninitialized"
+        self._topology_fallback_logged = False
+        if topology_snapshot_provider is not None:
+            self._topology_snapshot_provider = topology_snapshot_provider
+        elif os.name == "nt" and isinstance(self._main, psutil.Process):
+            # Only auto-wire native Windows topology for a real psutil.Process.
+            # Test doubles/custom collectors retain the explicit psutil-style
+            # seam unless they inject a provider, which keeps this constructor
+            # deterministic on Windows as well as non-Windows hosts.
+            try:
+                from core.performance.windows_process_snapshot import (
+                    snapshot_process_tree_threads,
+                )
+
+                self._topology_snapshot_provider = snapshot_process_tree_threads
+            except Exception:
+                self._topology_snapshot_provider = None
+        else:
+            self._topology_snapshot_provider = None
         self._prime_cpu(self._main)
         psutil.cpu_percent(interval=None)
+
+    def exclude_pid(self, pid: int | None) -> None:
+        """Exclude a diagnostic helper process from app aggregate telemetry."""
+
+        if pid is None:
+            return
+        value = int(pid)
+        if value <= 0 or value == self._main.pid:
+            return
+        self._excluded_pids.add(value)
+        self._processes.pop(value, None)
 
     @staticmethod
     def _prime_cpu(process: psutil.Process) -> None:
@@ -122,17 +152,64 @@ class ProcessUsageCollector:
         except (psutil.Error, OSError):
             pass
 
-    def _refresh_topology(self) -> list[psutil.Process]:
-        """Re-enumerate recursive children (GIL-held) and prune dead handles."""
+    def _refresh_topology(self) -> tuple[list[psutil.Process], int | None, str]:
+        """Re-enumerate recursive children and prune dead cached process objects.
+
+        On Windows the preferred provider uses Toolhelp rather than psutil's
+        GIL-held system snapshot. It returns ``pid -> thread_count`` for the
+        main process and all recursive descendants, so the same refresh also
+        replaces the old per-process ``num_threads()`` calls.
+        """
+
+        provider = self._topology_snapshot_provider
+        if provider is not None:
+            try:
+                discovered = {
+                    int(pid): max(0, int(thread_count))
+                    for pid, thread_count in provider(self._main.pid).items()
+                    if int(pid) > 0
+                }
+                discovered.setdefault(self._main.pid, 0)
+                live: list[psutil.Process] = [self._main]
+                live_pids = {self._main.pid}
+                for pid in sorted(discovered):
+                    if pid in live_pids or pid in self._excluded_pids:
+                        continue
+                    cached = self._processes.get(pid)
+                    if cached is None:
+                        try:
+                            cached = psutil.Process(pid)
+                        except (psutil.Error, OSError):
+                            continue
+                        self._processes[pid] = cached
+                        self._prime_cpu(cached)
+                    live.append(cached)
+                    live_pids.add(pid)
+                self._processes = {
+                    pid: process
+                    for pid, process in self._processes.items()
+                    if pid in live_pids and pid not in self._excluded_pids
+                }
+                threads_app = sum(discovered.get(pid, 0) for pid in live_pids)
+                return live, threads_app, "toolhelp"
+            except Exception:
+                if not self._topology_fallback_logged:
+                    logger.warning(
+                        "[USAGE] Windows Toolhelp topology snapshot failed; "
+                        "falling back to psutil heavy enumeration",
+                        exc_info=True,
+                    )
+                    self._topology_fallback_logged = True
+
         try:
             children = self._main.children(recursive=True)
         except (psutil.Error, OSError):
             children = []
 
-        live: list[psutil.Process] = [self._main]
+        live = [self._main]
         live_pids = {self._main.pid}
         for child in children:
-            if child.pid in live_pids:
+            if child.pid in live_pids or child.pid in self._excluded_pids:
                 continue
             cached = self._processes.get(child.pid)
             if cached is None:
@@ -143,22 +220,27 @@ class ProcessUsageCollector:
             live_pids.add(child.pid)
 
         self._processes = {
-            pid: process for pid, process in self._processes.items() if pid in live_pids
+            pid: process
+            for pid, process in self._processes.items()
+            if pid in live_pids and pid not in self._excluded_pids
         }
-        return live
+        return live, None, "psutil"
 
     def collect(self) -> ProcessUsageSnapshot:
-        # Only pay the two GIL-held system-wide enumerations on the slow
-        # sub-cadence. Between refreshes, reuse the cached process handles; dead
-        # children naturally drop out of the per-sample aggregates below because
-        # their per-process reads raise and are skipped.
+        # Refresh process topology/thread counts only on the slow sub-cadence.
+        # Between refreshes, reuse cached process objects; dead children naturally
+        # drop out because their cheap per-process reads raise and are skipped.
         self._samples_since_heavy += 1
         heavy_sample = self._samples_since_heavy >= self._heavy_refresh_samples
+        topology_threads: int | None = None
         if heavy_sample:
             self._samples_since_heavy = 0
-            processes = self._refresh_topology()
+            processes, topology_threads, topology_source = self._refresh_topology()
         else:
             processes = list(self._processes.values())
+            topology_source = "cached"
+        self.last_sample_was_heavy = heavy_sample
+        self.last_topology_source = topology_source
 
         main_cpu = 0.0
         app_cpu = 0.0
@@ -216,10 +298,10 @@ class ProcessUsageCollector:
                 if process.pid == self._main.pid:
                     uss_main = int(uss_value)
 
-            # num_threads() is a system-wide NtQuerySystemInformation snapshot
-            # that holds the GIL for its whole duration; only sample it on the
-            # heavy sub-cadence and carry the last value forward otherwise.
-            if heavy_sample:
+            # On Windows Toolhelp already supplied thread counts for the whole
+            # process tree without the old GIL-held psutil calls. The psutil
+            # path is retained as a fallback/non-Windows implementation.
+            if heavy_sample and topology_threads is None:
                 try:
                     threads_app += int(process.num_threads())
                 except (psutil.Error, OSError, AttributeError):
@@ -245,6 +327,8 @@ class ProcessUsageCollector:
         # last measured value forward on light samples so the field stays
         # populated for leak/plateau tracking without a per-sample GIL stall.
         if heavy_sample:
+            if topology_threads is not None:
+                threads_app = topology_threads
             self._last_threads_app = threads_app
         else:
             threads_app = self._last_threads_app
@@ -495,12 +579,15 @@ class UsageTelemetryService:
         process_collector: ProcessUsageCollector | None = None,
         gpu_collector: WindowsGpuUsageCollector | None = None,
         resource_snapshot_provider: Callable[[], Mapping[str, Any] | Any] | None = None,
+        handle_attribution_sidecar: Any | None = None,
     ) -> None:
         self._thread_manager = thread_manager
         self._interval_ms = max(5_000, int(interval_ms))
         self._process_collector = process_collector or ProcessUsageCollector()
         self._gpu_collector = gpu_collector or WindowsGpuUsageCollector()
         self._resource_snapshot_provider = resource_snapshot_provider
+        self._handle_attribution_sidecar = handle_attribution_sidecar
+        self._handle_sidecar_pid: int | None = None
         self._timer: Any | None = None
         self._stopped = True
         self._in_flight = False
@@ -530,14 +617,29 @@ class UsageTelemetryService:
         if getattr(self._thread_manager, "_shutdown", False):
             return False
         self._stopped = False
+        sidecar = self._handle_attribution_sidecar
+        if sidecar is not None:
+            try:
+                self._handle_sidecar_pid = sidecar.start(os.getpid())
+                exclude_pid = getattr(self._process_collector, "exclude_pid", None)
+                if callable(exclude_pid):
+                    exclude_pid(self._handle_sidecar_pid)
+            except Exception:
+                self._handle_sidecar_pid = None
+                logger.warning(
+                    "[USAGE] Handle-attribution sidecar failed to start",
+                    exc_info=True,
+                )
         self._timer = self._thread_manager.schedule_recurring(
             self._interval_ms,
             self._request_sample,
             description="Whole-process usage telemetry submit",
         )
         logger.info(
-            "[USAGE] session_start interval_ms=%d ui_collection=0 auto_quality_changes=0",
+            "[USAGE] session_start interval_ms=%d ui_collection=0 auto_quality_changes=0 "
+            "handle_sidecar_pid=%s",
             self._interval_ms,
+            _fmt(self._handle_sidecar_pid),
         )
         self._request_sample()
         return True
@@ -553,6 +655,15 @@ class UsageTelemetryService:
                 pass
         if not self._in_flight:
             self._gpu_collector.close()
+        sidecar = self._handle_attribution_sidecar
+        if sidecar is not None:
+            try:
+                sidecar.stop()
+            except Exception:
+                logger.warning(
+                    "[USAGE] Handle-attribution sidecar failed to stop cleanly",
+                    exc_info=True,
+                )
         logger.info("[USAGE] session_stop sequence=%d", self._sequence)
 
     def _request_sample(self) -> None:
@@ -685,6 +796,7 @@ class UsageTelemetryService:
             collect_ms = (time.perf_counter() - started) * 1000.0
             logger.info(
                 "[USAGE] sample seq=%d cadence_gap_ms=%s skipped=%d collect_ms=%s "
+                "topology_refresh=%d topology_source=%s "
                 "cpu_primed=%d cpu_app_pct=%s cpu_main_pct=%s cpu_system_pct=%s "
                 "processes=%d children=%d rss_app_mb=%s rss_main_mb=%s "
                 "rss_children_mb=%s "
@@ -718,6 +830,8 @@ class UsageTelemetryService:
                 _fmt(cadence_gap_ms),
                 skipped,
                 _fmt(collect_ms, 2),
+                int(bool(getattr(self._process_collector, "last_sample_was_heavy", False))),
+                str(getattr(self._process_collector, "last_topology_source", "unknown")),
                 int(process.cpu_primed),
                 _fmt(process.cpu_app_pct),
                 _fmt(process.cpu_main_pct),
