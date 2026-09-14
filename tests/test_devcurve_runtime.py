@@ -10,10 +10,10 @@ from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 
 def _layer_defaults():
     return {
-        "bass": {"enabled": True, "power": 1.0, "offset": 0.0},
-        "vocals": {"enabled": True, "power": 1.0, "offset": 0.0},
-        "mids": {"enabled": True, "power": 1.0, "offset": 0.0},
-        "transients": {"enabled": True, "power": 1.0, "offset": 0.0},
+        "bass": {"enabled": True, "power": 1.0, "offset": 0.0, "order": 1},
+        "vocals": {"enabled": True, "power": 1.0, "offset": 0.0, "order": 2},
+        "mids": {"enabled": True, "power": 1.0, "offset": 0.0, "order": 3},
+        "transients": {"enabled": True, "power": 1.0, "offset": 0.0, "order": 4},
     }
 
 

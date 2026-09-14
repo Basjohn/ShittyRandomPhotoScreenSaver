@@ -6,10 +6,24 @@ from PySide6.QtGui import QMouseEvent
 
 from ui.tabs.media.devcurve_shape_editor import DevCurveShapeEditor
 
+_LAYERS = ("bass", "vocals", "mids", "transients")
+_DEFAULT_LAYER_NODES = {src: [[0.0, 0.5], [1.0, 0.5]] for src in _LAYERS}
+_DEFAULT_LAYER_STRENGTHS = {src: 0.25 for src in _LAYERS}
+
+
+def _make_editor(*, mirrored: bool = False) -> DevCurveShapeEditor:
+    """Build the editor with the per-layer defaults its ctor now requires."""
+    return DevCurveShapeEditor(
+        parent=None,
+        mirrored=mirrored,
+        default_layer_nodes=_DEFAULT_LAYER_NODES,
+        default_layer_strengths=_DEFAULT_LAYER_STRENGTHS,
+    )
+
 
 @pytest.mark.qt
 def test_devcurve_soft_snap_pulls_near_grid_without_hard_lock(qt_app):
-    editor = DevCurveShapeEditor(parent=None, mirrored=False)
+    editor = _make_editor()
     editor.resize(640, 320)
     qt_app.processEvents()
     rect = editor._edit_rect()
@@ -28,7 +42,7 @@ def test_devcurve_soft_snap_pulls_near_grid_without_hard_lock(qt_app):
 
 @pytest.mark.qt
 def test_devcurve_soft_snap_does_not_pull_outside_threshold(qt_app):
-    editor = DevCurveShapeEditor(parent=None, mirrored=False)
+    editor = _make_editor()
     editor.resize(640, 320)
     qt_app.processEvents()
     rect = editor._edit_rect()
@@ -45,7 +59,7 @@ def test_devcurve_soft_snap_does_not_pull_outside_threshold(qt_app):
 
 @pytest.mark.qt
 def test_devcurve_lane_drag_path_does_not_use_soft_snap(qt_app):
-    editor = DevCurveShapeEditor(parent=None, mirrored=False)
+    editor = _make_editor()
     editor.resize(640, 320)
     qt_app.processEvents()
     editor._lane_drag_index = 0
