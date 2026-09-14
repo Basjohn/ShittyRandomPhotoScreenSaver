@@ -42,7 +42,7 @@ def test_settings_theme_selection_is_canonical_and_snapshotted() -> None:
 def test_settings_theme_missing_value_reads_canonical_default() -> None:
     source = _text("ui/settings_theme_catalog.py")
     assert "def _canonical_default_theme_id()" in source
-    assert 'ui_defaults.get("settings_theme_selection")' in source
+    assert 'require_canonical_default("ui.settings_theme_selection")' in source
     assert "_canonical_default_theme_id()," in source
 
 
@@ -58,7 +58,7 @@ def test_widget_theme_missing_values_read_canonical_defaults() -> None:
 
     source = _text("ui/widget_theme_selection.py")
     assert "def _canonical_widget_theme_defaults()" in source
-    assert 'DEFAULT_SETTINGS.get("widget_theme")' in source
+    assert 'require_canonical_default("widget_theme")' in source
     assert 'values.get("selected_id", default_selected)' in source
     assert 'values.get("keep_synced"), default_keep_synced' in source
     assert 'values.get("custom", default_custom)' in source

@@ -140,7 +140,11 @@ def test_block_flip_grid_saves_the_canonical_rows_and_cols_contract(
 ):
     tab = TransitionsTab(settings_manager)
     qtbot.addWidget(tab)
-    # Block Flip's page is lazy; selecting its pill builds it.
+    # Nav is activation-gated: a deactivated transition redirects to SETUP and
+    # never builds its page. Activate Block Puzzle Flip via its activation
+    # checkbox (which takes precedence), then select its pill so the lazy page
+    # (with the grid spinboxes) builds.
+    tab._activation_checkboxes["Block Puzzle Flip"].setChecked(True)
     tab._on_nav_selected("Block Puzzle Flip")
     tab.grid_rows_spin.setValue(7)
     tab.grid_cols_spin.setValue(9)

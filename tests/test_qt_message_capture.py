@@ -24,7 +24,7 @@ def _fresh_capture():
 
 
 def _read(path) -> str:
-    for handler in cap._QML_LOGGER.handlers:
+    for handler in cap._QT_LOGGER.handlers:
         handler.flush()
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
@@ -71,7 +71,7 @@ def test_install_is_idempotent(tmp_path) -> None:
     second = cap.install_qt_message_capture(tmp_path)
     assert first == second
     assert cap._handler is handler_after_first
-    assert len(cap._QML_LOGGER.handlers) == 1
+    assert len(cap._QT_LOGGER.handlers) == 1
 
 
 def test_qt_error_is_forwarded_to_main_log(tmp_path, caplog) -> None:
