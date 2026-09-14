@@ -320,6 +320,8 @@ class QuickContextMenuModel(QObject):
     """Own one display generation's retained menu state and action admission."""
 
     stateChanged = Signal()
+    entriesChanged = Signal()
+    anchorChanged = Signal()
     visibilityChanged = Signal(bool)
 
     def __init__(
@@ -342,19 +344,19 @@ class QuickContextMenuModel(QObject):
         self._admission_open = True
         self._action_handler: Callable[[str, str], bool] | None = None
 
-    @Property("QVariantList", notify=stateChanged)
+    @Property("QVariantList", notify=entriesChanged)
     def entries(self) -> list[dict[str, Any]]:
         return list(self._entries_payload)
 
-    @Property(bool, notify=stateChanged)
+    @Property(bool, notify=visibilityChanged)
     def menuVisible(self) -> bool:
         return self._visible
 
-    @Property(float, notify=stateChanged)
+    @Property(float, notify=anchorChanged)
     def anchorX(self) -> float:
         return self._anchor_x
 
-    @Property(float, notify=stateChanged)
+    @Property(float, notify=anchorChanged)
     def anchorY(self) -> float:
         return self._anchor_y
 
@@ -374,6 +376,7 @@ class QuickContextMenuModel(QObject):
             return False
         self._entries = normalized
         self._entries_payload = [entry.as_dict() for entry in normalized]
+        self.entriesChanged.emit()
         self.stateChanged.emit()
         return True
 
@@ -386,12 +389,19 @@ class QuickContextMenuModel(QObject):
     def open_at(self, x: float, y: float) -> bool:
         if not self._admission_open or not self._entries:
             return False
-        self._anchor_x = float(x)
-        self._anchor_y = float(y)
-        if not self._visible:
+        next_x = float(x)
+        next_y = float(y)
+        anchor_changed = next_x != self._anchor_x or next_y != self._anchor_y
+        self._anchor_x = next_x
+        self._anchor_y = next_y
+        visibility_changed = not self._visible
+        if visibility_changed:
             self._visible = True
             self.visibilityChanged.emit(True)
-        self.stateChanged.emit()
+        if anchor_changed:
+            self.anchorChanged.emit()
+        if visibility_changed or anchor_changed:
+            self.stateChanged.emit()
         return True
 
     @Slot(result=bool)
@@ -425,9 +435,12 @@ class QuickContextMenuModel(QObject):
             return False
         self.dismiss()
         self._admission_open = False
+        had_entries = bool(self._entries_payload)
         self._entries = ()
         self._entries_payload = []
         self._action_handler = None
+        if had_entries:
+            self.entriesChanged.emit()
         self.stateChanged.emit()
         return True
 

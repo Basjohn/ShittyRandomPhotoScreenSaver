@@ -26,6 +26,23 @@ Image selection/history mutation happened before the complete replacement transa
 
 No periodic transition-pending poll loop or second image owner was added.
 
+### 2026-09-14 Quick publication performance refinement
+
+A later performance soak found that the normal async path preserved the transactional ownership above but paid an avoidable
+Qt Quick cutover cost: the compute task finished with a processed `QImage`, the GUI thread converted it to `QPixmap`, and the
+Quick presenter immediately converted/captured it back into detached image state. At 3840x2160 this cost roughly 28–53 ms on
+ordinary image rotations.
+
+The async current/previous-image paths now capture the existing `PresentationImage` value directly from the processed `QImage`
+in the compute task and hand that immutable state to DisplayManager. This is a **presentation-boundary optimization only**:
+transaction admission, transition source/destination truth, queue/history mutation, generation fencing, image accounting,
+scaled-cache ownership, and startup desktop seeding are unchanged.
+
+The immutable presentation state still owns a tightly packed Python RGBA bytes payload. Windows acceptance must therefore prove
+that removing the GUI QPixmap bounce did not merely move a material GIL-held image-copy hitch into the compute phase. If such a
+residual exists, the next architectural seam is a Qt-native detached buffer/image through texture upload; do not weaken the
+transaction contract to chase it.
+
 ## Acceptance Evidence
 
 The 2026-09-01 follow-up logs show natural timer and manual Next transition timing in the same broad range, no separate natural-transition performance smell, successful `runtime_ready_reseed` after replacement generations, and no stranded-latch/rearm storm. The operator continued to report **zero returning black flashes**.

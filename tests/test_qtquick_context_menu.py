@@ -125,6 +125,35 @@ def test_context_menu_qml_shadow_is_high_plane_cached_and_never_qt_translated() 
     assert "z: 300" in scene
 
 
+def test_context_menu_open_close_does_not_invalidate_retained_entry_model() -> None:
+    model = QuickContextMenuModel(screen_index=2, runtime_generation=7)
+    entries_changed = []
+    anchors_changed = []
+    visibility = []
+    model.entriesChanged.connect(lambda: entries_changed.append(True))
+    model.anchorChanged.connect(lambda: anchors_changed.append(True))
+    model.visibilityChanged.connect(visibility.append)
+
+    assert model.replace_entries(_entries()) is True
+    assert len(entries_changed) == 1
+
+    assert model.open_at(120.0, 80.0) is True
+    assert len(entries_changed) == 1
+    assert len(anchors_changed) == 1
+    assert visibility == [True]
+
+    # Moving an already-open menu updates only its anchor; the QML Repeater
+    # must not be told its immutable entries changed.
+    assert model.open_at(140.0, 90.0) is True
+    assert len(entries_changed) == 1
+    assert len(anchors_changed) == 2
+    assert visibility == [True]
+
+    assert model.dismiss() is True
+    assert len(entries_changed) == 1
+    assert visibility == [True, False]
+
+
 def test_context_menu_model_admits_only_live_enabled_semantic_actions() -> None:
     model = QuickContextMenuModel(screen_index=2, runtime_generation=7)
     routed = []

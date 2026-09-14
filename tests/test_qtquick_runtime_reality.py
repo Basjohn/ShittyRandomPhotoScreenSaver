@@ -310,6 +310,19 @@ def test_active_transition_admission_is_transactional_and_rejects_a_newer_image(
         unit.finalize_active()
         assert manager.current_images == {0: "b.jpg"}
         assert manager.has_transition_work_pending() is False
+
+        # Normal async image rotation now reaches DisplayManager already detached;
+        # it must reuse the same transition/accounting contract without recapture.
+        detached = presentation_image_from_processed_pixmap(
+            QPixmap(6, 4),
+            image_path="detached.jpg",
+        )
+        manager.present_processed_presentation_image(0, detached, "detached.jpg")
+        assert unit.active_request is not None
+        assert unit.active_request.destination_image is detached
+        unit.finalize_active()
+        assert manager.current_images == {0: "detached.jpg"}
+        assert manager.has_transition_work_pending() is False
     finally:
         manager.displays = []
         manager.disconnect_monitor_detection()

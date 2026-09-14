@@ -8,10 +8,11 @@ API, plus the runtime's target-size and clear capabilities the flip needs.
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QImage, QPixmap
 
 from rendering.quick.display_image_route import (
     present_processed_pixmap,
+    presentation_image_from_processed_qimage,
     presentation_image_from_processed_pixmap,
 )
 from rendering.quick.image_accounting import aggregate_presentation_image_accounting
@@ -69,6 +70,32 @@ def test_capture_processed_pixmap_produces_packed_presentation_image(qt_app) -> 
     # Tightly packed RGBA deep copy.
     assert image.row_stride == 6 * 4
     assert image.byte_count == 6 * 4 * 4
+
+
+@pytest.mark.qt
+def test_processed_qimage_capture_matches_legacy_qpixmap_semantics(qt_app) -> None:
+    image = QImage(5, 3, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QColor(0, 0, 0, 0))
+    image.setPixelColor(0, 0, QColor(255, 0, 0, 255))
+    image.setPixelColor(1, 0, QColor(0, 255, 0, 128))
+    image.setPixelColor(2, 1, QColor(0, 0, 255, 64))
+
+    direct = presentation_image_from_processed_qimage(
+        image,
+        image_path="C:/img/semantic.png",
+    )
+    legacy = presentation_image_from_processed_pixmap(
+        QPixmap.fromImage(image),
+        image_path="C:/img/semantic.png",
+    )
+
+    assert direct.identity == legacy.identity
+    assert direct.source_path == legacy.source_path
+    assert direct.logical_size == legacy.logical_size
+    assert direct.device_pixel_ratio == legacy.device_pixel_ratio
+    assert direct.pixel_size == legacy.pixel_size
+    assert direct.row_stride == legacy.row_stride
+    assert direct.rgba8 == legacy.rgba8
 
 
 @pytest.mark.qt

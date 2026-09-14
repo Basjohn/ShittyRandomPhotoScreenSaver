@@ -1,25 +1,41 @@
-"""GUI-thread image routing from the legacy pipeline into a Quick runtime (H).
+"""Image routing from processed Qt images into detached Quick state (H).
 
-The image pipeline produces a processed ``QPixmap`` per display on the Qt GUI
-thread. This seam captures that pixmap into immutable :class:`PresentationImage`
-state (a tightly packed RGBA deep copy) and publishes it into the display's
-:class:`~rendering.quick.runtime.QuickDisplayRuntime` through its explicit
-``set_presentation_image`` API - no compositor/private-widget poke, no live
-QPixmap crossing into the render thread.
+Normal async image rotation captures its already-processed ``QImage`` into an
+immutable :class:`PresentationImage` inside the compute task, so the GUI thread
+only admits/publishes detached state.  The legacy/startup ``QPixmap`` seam
+remains for paths that genuinely originate on Qt's GUI thread.
 
-It is deliberately tiny and presentation-neutral: it owns no lifecycle, no
-processing policy and no image accounting; the display orchestrator calls it on
-the GUI thread with an already-processed pixmap.
+This module owns no lifecycle, processing policy, or image accounting; it only
+normalizes processed pixels into the render thread's immutable value contract.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QImage, QPixmap
 
-from .image_boundary import capture_qpixmap
+from .image_boundary import capture_qimage, capture_qpixmap
 from .image_state import PresentationImage
+
+
+
+
+def presentation_image_from_processed_qimage(
+    image: QImage,
+    *,
+    image_path: str = "",
+) -> PresentationImage:
+    """Capture a processed QImage into immutable presentation state.
+
+    Unlike the legacy QPixmap seam this operation is GUI-independent, so the
+    image pipeline can perform the necessary RGBA deep copy in its compute
+    task and hand the UI thread an already-detached presentation value.
+    Identity/DPR semantics intentionally match the QPixmap route.
+    """
+
+    identity = f"{image_path}@{image.width()}x{image.height()}"
+    return capture_qimage(image, identity=identity, source_path=image_path)
 
 
 def presentation_image_from_processed_pixmap(
@@ -60,5 +76,6 @@ def present_processed_pixmap(
 
 __all__ = [
     "present_processed_pixmap",
+    "presentation_image_from_processed_qimage",
     "presentation_image_from_processed_pixmap",
 ]

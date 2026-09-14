@@ -47,6 +47,7 @@ from rendering.quick.custom_layout_hydration import (
 from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
 from rendering.quick.display_unit import QuickDisplayUnit, create_quick_display_unit
 from rendering.quick.display_processing import DisplayProcessingDescriptor
+from rendering.quick.image_state import PresentationImage
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.startup_reveal import (
     QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS,
@@ -3554,17 +3555,40 @@ class DisplayManager(QObject):
         *,
         implicit_expected_screens: Set[int] | None = None,
     ) -> str:
-        """Publish or transition one processed image through a destination unit."""
+        """Legacy/startup QPixmap route into the detached Quick contract."""
+
+        capture = getattr(display, "capture_image", None)
+        if not callable(capture):
+            raise TypeError("display unit has no Quick image capture contract")
+        destination = capture(pixmap, image_path=image_path)
+        return self._present_quick_captured_image(
+            display,
+            destination,
+            image_path,
+            implicit_expected_screens=implicit_expected_screens,
+        )
+
+    def _present_quick_captured_image(
+        self,
+        display: object,
+        destination: PresentationImage,
+        image_path: str,
+        *,
+        implicit_expected_screens: Set[int] | None = None,
+    ) -> str:
+        """Publish or transition one already-detached image through a destination unit."""
+
+        if not isinstance(destination, PresentationImage):
+            raise TypeError("destination must be detached PresentationImage state")
 
         screen_index = int(getattr(display, "screen_index"))
 
-        capture = getattr(display, "capture_image", None)
         current_image = getattr(display, "current_image", None)
         publish = getattr(display, "present_captured_image", None)
         start_transition = getattr(display, "start_transition", None)
         if not all(
             callable(operation)
-            for operation in (capture, current_image, publish, start_transition)
+            for operation in (current_image, publish, start_transition)
         ):
             raise TypeError("display unit has no Quick image/transition contract")
 
@@ -3584,7 +3608,6 @@ class DisplayManager(QObject):
                 implicit_expected_screens or {screen_index}
             )
 
-        destination = capture(pixmap, image_path=image_path)
         source = current_image()
         if source is None:
             publish(destination)
@@ -3968,12 +3991,29 @@ class DisplayManager(QObject):
         original_pixmap: QPixmap,
         image_path: str,
     ) -> str:
-        """Publish one GUI-materialized image through the selected display unit."""
+        """Legacy/startup publication contract for a GUI-materialized QPixmap."""
 
         display = self._display_for_screen_index(screen_index)
         if display is None:
             raise IndexError(f"no selected display for screen index {screen_index}")
         return self._present_quick_image(display, processed_pixmap, image_path)
+
+    def present_processed_presentation_image(
+        self,
+        screen_index: int,
+        presentation_image: PresentationImage,
+        image_path: str,
+    ) -> str:
+        """Publish compute-owned detached image state without GUI pixel copying."""
+
+        display = self._display_for_screen_index(screen_index)
+        if display is None:
+            raise IndexError(f"no selected display for screen index {screen_index}")
+        return self._present_quick_captured_image(
+            display,
+            presentation_image,
+            image_path,
+        )
     
     def show_error(self, message: str, screen_index: Optional[int] = None) -> None:
         """

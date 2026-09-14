@@ -16,7 +16,7 @@ not automatic current architecture instructions.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
-- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. Stable 17-counter PDH generations did not explain the residual ~+16 handles/hour slope; the next Windows soak must use out-of-process handle-type attribution.
+- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **PARTIAL**. Handle-type attribution rejected a continuous steady-generation leak; one bounded 3–5-cycle Settings churn acceptance now decides whether the first replacement-generation handle bundle is one-time lazy initialization or cumulative retention.
 
 ## Active / Pending Acceptance Records
 
@@ -129,7 +129,7 @@ duplicate records are manufactured.
 
 - [U-10 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift](Historical_Bugs/U-10_Oscilloscope_Strobe_Waveform_Ghost_Contract.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
-- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **COMPLETELY FUCKED**. Stable 17-counter PDH generations did not explain the residual ~+16 handles/hour slope; the next Windows soak must use out-of-process handle-type attribution.
+- [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md) — **PARTIAL**. Handle-type attribution rejected a continuous steady-generation leak; one bounded 3–5-cycle Settings churn acceptance now decides whether the first replacement-generation handle bundle is one-time lazy initialization or cumulative retention.
 - [U-08 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift](Historical_Bugs/U-08_Custom_Replay_Shrink_Minimum_Constraints.md)
 - [U-07 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family](Historical_Bugs/U-07_Bubble_Loud_Path_Oracle_Drift.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
