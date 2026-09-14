@@ -184,9 +184,14 @@ Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this ac
 - [x] Maintained `destination` profile executed on Windows/PySide6 6.9.1: **132/132 GREEN** (2026-09-14, see
   `Docs/TestSuite.md` §0.17). Every previously deferred red and destination-target NEEDS RUN was reconciled at the
   test boundary against current production; no production owner/default/fallback was changed.
-- [?] Run the broad full-tree `pytest tests/` reconciliation diagnostic (not just the maintained profile) with real
-  PySide6/Qt resources and reconcile any *additional* current-owner failures. The 2026-09-14 destination run covers the
-  maintained profile only; the complete tree still carries stale pre-cutover modules (see the collect_ignore floor).
+- [x] Broad full-tree fossil-hygiene + reconciliation pass (2026-09-14, see `Docs/TestSuite.md` §0.18). `collect_ignore`
+  confirmed empty (no fossil graveyard), 0 collection errors, module count 368→364. Four whole-file fossils deleted and
+  fossil cells trimmed/rehomed from ~8 files; a large batch of stale current-owner tests reconciled. Broad per-file
+  failures 58→32 files. No production behaviour/default/schema changed; destination profile still 132/132 GREEN.
+- [?] Resolve the remaining 32 broad-tree red files (enumerated in `Docs/TestSuite.md` §0.18). None are fossils — they are
+  current-owner value/behaviour drift (goldens needing per-value confirmation, deeper integration-fixture work, Bubble
+  reactivity BTF judgment, and real-GL acceptance). Reconcile per-owner as each is confirmed intended; do not weaken
+  Bubble goldens or alter production to satisfy them.
 - [ ] Retire the temporary Visualizer `enabled_modes` compatibility migration only after automated persisted-profile/import
   coverage proves supported profiles no longer rely on it. Current runtime/default/UI state remains the canonical
   `widgets.spotify_visualizer.mode_activation` boolean map.
