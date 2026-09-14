@@ -16,8 +16,14 @@ def test_jedi_mode_defaults_off_and_settings_ui_is_glow_scoped() -> None:
     assert defaults["input"]["widget_glow_jedi_mode"] is False
 
     model = _text("core/settings/models/_core.py")
-    assert "widget_glow_jedi_mode: bool = False" in model
-    assert 'settings.get("input.widget_glow_jedi_mode", False)' in model
+    # The field is now SSOT-derived from the canonical default contract rather
+    # than a hardcoded literal; default-off is proven by the snapshot assertion
+    # above, and from_settings reads it through the typed get_bool accessor.
+    assert (
+        'widget_glow_jedi_mode: bool = bool(require_canonical_default("input.widget_glow_jedi_mode"))'
+        in model
+    )
+    assert 'settings.get_bool("input.widget_glow_jedi_mode")' in model
 
     display_tab = _text("ui/tabs/display_tab.py")
     assert 'QCheckBox(\n            "Jedi Mode - Please Don\'t Do This"' in display_tab

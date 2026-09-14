@@ -628,58 +628,12 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
     assert json.loads(proc.stdout.strip().splitlines()[-1]) == []
 
 
-def test_enabled_achievement_has_no_retired_qwidget_caller_in_fresh_process() -> None:
-    probe = r"""
-import json
-import os
-import sys
-os.environ["QT_QPA_PLATFORM"] = "offscreen"
-
-from PySide6.QtWidgets import QApplication, QWidget
-from core.resources.manager import ResourceManager
-from rendering.widget_manager import WidgetManager
-
-class Settings:
-    def get_widgets_map(self):
-        return {
-            "steam": {"enabled": True},
-            "achievement_pulse": {"enabled": True, "monitor": "ALL"},
-            "family_activation": {"steam": True},
-        }
-
-app = QApplication.instance() or QApplication([])
-parent = QWidget()
-manager = WidgetManager(parent, ResourceManager())
-created = manager.setup_all_widgets(Settings(), screen_index=0, thread_manager=None)
-forbidden = {
-    "widgets.steam_achievement_runtime",
-    "widgets.steam_achievement_preparation",
-    "core.steam.achievement_pulse_cache",
-}
-print(json.dumps({
-    "created": sorted(created),
-    "forbidden": sorted(forbidden & set(sys.modules)),
-}))
-manager.cleanup()
-parent.deleteLater()
-"""
-    proc = subprocess.run(
-        [sys.executable, "-c", probe],
-        cwd=Path.cwd(),
-        capture_output=True,
-        text=True,
-    )
-    assert proc.returncode == 0, proc.stderr
-    import json
-
-    payload = json.loads(
-        next(
-            line
-            for line in reversed(proc.stdout.strip().splitlines())
-            if line.startswith("{")
-        )
-    )
-    assert payload == {"created": [], "forbidden": []}
+# Removed test_enabled_achievement_has_no_retired_qwidget_caller_in_fresh_process:
+# it drove the deleted rendering.widget_manager.WidgetManager.setup_all_widgets
+# QWidget path. That path no longer exists, so the "enabling achievement creates
+# no retired QWidget modules" invariant is now structurally guaranteed and is
+# covered by test_registry_import_is_achievement_implementation_dormant_in_fresh_process
+# (current widget_runtime_services owner) plus the module-absence contract below.
 
 
 def test_retired_qwidget_achievement_paths_have_no_production_caller() -> None:
@@ -689,10 +643,15 @@ def test_retired_qwidget_achievement_paths_have_no_production_caller() -> None:
         descriptor.settings_key != "achievement_pulse"
         for descriptor in FACTORY_WIDGET_DESCRIPTORS
     )
+    # These pre-Quick owners were deleted in the cutover; a missing file is the
+    # strongest possible proof of "no production caller". If one still exists it
+    # must not reference the retired QWidget achievement widget.
     for path in (
         Path("rendering/display_input.py"),
         Path("rendering/widget_factories.py"),
     ):
+        if not path.exists():
+            continue
         source = path.read_text(encoding="utf-8").lower()
         assert "achievement_pulse_widget" not in source
     assert not Path("widgets/steam_card_widget.py").exists()
