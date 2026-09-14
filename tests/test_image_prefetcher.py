@@ -37,6 +37,19 @@ class _FakeCache:
         return True
 
 
+class _EvictingCache(_FakeCache):
+    """Cache double that models a hard-cap put which self-evicts the raw parent."""
+
+    def __init__(self, *, evict_on_put=None, store=None):
+        super().__init__(store=store)
+        self.evict_on_put = set(evict_on_put or ())
+
+    def put(self, key, value):
+        super().put(key, value)
+        if key in self.evict_on_put:
+            self.store.pop(key, None)
+
+
 class _FakeThreads:
     def __init__(self):
         self.compute_callbacks = []
@@ -186,6 +199,100 @@ def test_scaled_prefetch_keeps_not_ready_request_while_dispatching_ready_preferr
     assert _submitted_scaled_keys(threads) == ["preferred-ready-scaled", "other-ready-scaled"]
     assert [request["cache_key"] for request in prefetcher._pending_scaled_requests] == ["waiting-scaled"]
     assert prefetcher._pending_scaled_keys == {"waiting-scaled"}
+    assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 16 * 9 * 4
+
+
+def test_scaled_prefetch_reclaims_derivative_when_completed_raw_parent_self_evicts(qt_app):
+    """A successful raw put is not ownership proof if the hard cache evicts it immediately."""
+
+    first_path = r"C:\wall\oversized-first.jpg"
+    second_path = r"C:\wall\replacement.jpg"
+    request_bytes = 2048 * 2048 * 4
+    cache = _EvictingCache(evict_on_put={first_path})
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(
+        threads,
+        cache,
+        max_concurrent=1,
+        max_pending_scaled_bytes=request_bytes,
+    )
+
+    prefetcher.prefetch_paths([first_path])
+    assert prefetcher.register_scaled_requests(
+        [_scaled_request(first_path, "first-scaled", width=2048, height=2048)]
+    ) == 1
+    raw_done = threads.io_callbacks[0][2]
+    raw_done(SimpleNamespace(success=True, result=_solid_qimage(64, 64, "blue")))
+
+    # Hard-cache insertion may legitimately self-evict. Once producer ownership
+    # is gone, its derivative is impossible and must surrender *all* queue budget.
+    assert first_path not in cache.store
+    budget = prefetcher.snapshot_budget_state()
+    assert budget["scaled_pending"] == 0
+    assert budget["scaled_pending_bytes"] == 0
+    assert prefetcher._pending_scaled_keys == set()
+    assert threads.compute_callbacks == []
+
+    # The reclaimed bytes must be immediately reusable by later valid work.
+    cache.store[second_path] = _solid_qimage(64, 64, "green")
+    assert prefetcher.register_scaled_requests(
+        [_scaled_request(second_path, "replacement-scaled", width=2048, height=2048)]
+    ) == 1
+    assert _submitted_scaled_keys(threads) == ["replacement-scaled"]
+
+
+def test_scaled_prefetch_orphan_reclamation_does_not_accumulate_across_cycles(qt_app):
+    """Repeated raw self-eviction must return pending keys/bytes to baseline every cycle."""
+
+    paths = [fr"C:\wall\self-evict-{idx}.jpg" for idx in range(6)]
+    cache = _EvictingCache(evict_on_put=set(paths))
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(
+        threads,
+        cache,
+        max_concurrent=1,
+        max_pending_scaled_bytes=16 * 1024 * 1024,
+    )
+
+    for idx, path in enumerate(paths):
+        prefetcher.prefetch_paths([path])
+        assert prefetcher.register_scaled_requests(
+            [_scaled_request(path, f"self-evict-scaled-{idx}", width=512, height=512)]
+        ) == 1
+        raw_done = threads.io_callbacks[-1][2]
+        raw_done(SimpleNamespace(success=True, result=_solid_qimage(64, 64, "blue")))
+
+        assert path not in cache.store
+        assert prefetcher.snapshot_budget_state()["scaled_pending"] == 0
+        assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 0
+        assert prefetcher._pending_scaled_keys == set()
+        assert prefetcher.snapshot_state()["raw_inflight"] == 0
+
+    assert threads.compute_callbacks == []
+
+
+def test_scaled_prefetch_keeps_derivative_while_raw_parent_is_pending(qt_app):
+    """Orphan cleanup must not steal work from a raw producer still queued for dispatch."""
+
+    active_path = r"C:\wall\active-parent.jpg"
+    pending_path = r"C:\wall\pending-parent.jpg"
+    cache = _FakeCache()
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
+
+    prefetcher.prefetch_paths([active_path, pending_path])
+    assert active_path in prefetcher._inflight
+    assert pending_path in prefetcher._pending_raw_keys
+    assert prefetcher.register_scaled_requests(
+        [_scaled_request(pending_path, "pending-parent-scaled")]
+    ) == 1
+
+    # Pumping while the parent is only pending must preserve derivative ownership.
+    prefetcher._pump_scaled_prefetch()
+    assert [request["cache_key"] for request in prefetcher._pending_scaled_requests] == [
+        "pending-parent-scaled"
+    ]
+    assert prefetcher._pending_scaled_keys == {"pending-parent-scaled"}
     assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 16 * 9 * 4
 
 

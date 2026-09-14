@@ -275,3 +275,33 @@ def test_monitor_detection_disconnect_fences_screen_and_resume_edges(monkeypatch
     screen.geometryChanged.emit(screen.geometry())
     app.applicationStateChanged.emit(Qt.ApplicationState.ApplicationActive)
     assert scheduler.calls == []
+
+def test_distinct_settled_wake_topologies_reconcile_independently(monkeypatch):
+    """A later genuinely different screen set must not be hidden by burst coalescing."""
+
+    lg = _Screen("LG", 0, 2560, 1440)
+    msi = _Screen("MSI", 0, 2560, 1440)
+    manager, app, scheduler = _manager(monkeypatch, [lg])
+    changes: list[int] = []
+    manager.monitors_changed.connect(changes.append)
+
+    # First settled wake state: Windows replaces the old logical screen with MSI.
+    app.screens = [msi]
+    app.primary = msi
+    app.screenAdded.emit(msi)
+    assert len(scheduler.calls) == 1
+    scheduler.run_next()
+    assert changes == [1]
+    assert [part[1] for part in manager._screen_signature] == ["MSI"]
+
+    # A distinct topology arriving after that coalesced pass is real new authority,
+    # not another edge from the first burst. It must schedule a second reconcile.
+    app.screens = [msi, lg]
+    app.primary = msi
+    app.screenAdded.emit(lg)
+    assert len(scheduler.calls) == 1
+    scheduler.run_next()
+    assert changes == [1, 2]
+    assert [part[1] for part in manager._screen_signature] == ["MSI", "LG"]
+    manager.disconnect_monitor_detection()
+

@@ -309,6 +309,64 @@ def test_reddit2_stale_startup_is_paced_without_immediate_provider_call(
     )
 
 
+def test_reddit_positive_sub_millisecond_cooldown_defers_once_without_sync_reentry(
+    monkeypatch,
+) -> None:
+    """A positive cooldown must never truncate to a synchronous recursive due callback."""
+
+    import widgets.reddit_runtime as runtime_module
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    scheduled: list[tuple[int, object]] = []
+    synchronous_due: list[bool] = []
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(
+        RedditRateLimiter,
+        "get_blocked_cooldown_remaining",
+        staticmethod(lambda: 0.0004),
+    )
+    monkeypatch.setattr(
+        runtime_module.ThreadManager,
+        "single_shot",
+        staticmethod(lambda delay, callback: scheduled.append((int(delay), callback))),
+    )
+
+    service = _service(_Provider([]))
+    service.set_thread_manager(_ImmediateThreadManager())
+    service._running = True
+    service._on_periodic_due = lambda: synchronous_due.append(True)
+
+    assert service.fetch() is True
+    assert synchronous_due == []
+    assert len(scheduled) == 1
+    assert scheduled[0][0] >= 1
+    assert service._due_pending is True
+    assert RedditRuntimeService.periodic_due_reason_by_cache_key["reddit"] == "blocked_cooldown_due"
+
+    # Delivery returns through the ordinary due-timeout seam exactly once; it is
+    # deferred, not lost or replaced by a new cadence owner.
+    scheduled[0][1]()
+    assert synchronous_due == [True]
+    assert service._due_pending is False
+
+
+def test_reddit_preserved_positive_sub_millisecond_due_never_becomes_zero(
+    monkeypatch,
+) -> None:
+    """Preserved monotonic deadlines retain a positive timer delay until actually due."""
+
+    import widgets.reddit_runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: 100.0)
+    RedditRuntimeService.periodic_due_by_cache_key["reddit"] = 100.0004
+    RedditRuntimeService.periodic_due_reason_by_cache_key["reddit"] = "preserved_sub_ms_due"
+
+    delay, reason = _service(_Provider([]))._refresh_due_delay_ms(0)
+
+    assert delay >= 1
+    assert reason == "preserved_sub_ms_due"
+
+
 def test_reddit_periodic_due_horizon_survives_runtime_rebuild() -> None:
     due = time.monotonic() + 45.0
     RedditRuntimeService.periodic_due_by_cache_key["reddit"] = due

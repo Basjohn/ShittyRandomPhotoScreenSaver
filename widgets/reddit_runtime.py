@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+import math
 import random
 import threading
 import time
@@ -47,6 +48,17 @@ from widgets.service_widget_runtime import StartupRefreshDecision
 
 
 logger = get_logger(__name__)
+
+
+def _positive_delay_ms(seconds: float) -> int:
+    """Preserve any positive remaining interval as a positive timer delay."""
+
+    value = max(0.0, float(seconds))
+    if value <= 0.0:
+        return 0
+    return max(1, int(math.ceil(value * 1000.0)))
+
+
 _REDDIT_CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "reddit"
 _REDDIT_PROVIDER_SORT = "hot"  # Provider request policy, not a persisted product setting.
 
@@ -479,7 +491,7 @@ class RedditRuntimeService:
             remaining = RedditRateLimiter.BLOCK_COOLDOWN_SECONDS - age
             if remaining <= 0:
                 return None
-            return max(0, int(remaining * 1000) + max(0, int(phase_delay_ms)))
+            return _positive_delay_ms(remaining) + max(0, int(phase_delay_ms))
         except Exception:
             logger.debug("[REDDIT_RT] blocked periodic gate evaluation failed", exc_info=True)
             return None
@@ -489,8 +501,9 @@ class RedditRuntimeService:
         key = self._config.cache_key
         due = _PERIODIC_DUE_BY_CACHE_KEY.get(key)
         if due is not None:
+            remaining = due - now_mono
             return (
-                max(0, int((due - now_mono) * 1000)),
+                _positive_delay_ms(remaining) if remaining > 0.0 else 0,
                 _PERIODIC_DUE_REASON_BY_CACHE_KEY.get(key, "preserved_due"),
             )
         blocked = self._blocked_gate_remaining_delay_ms(phase_delay_ms)
@@ -536,9 +549,10 @@ class RedditRuntimeService:
             delay / 1000.0,
             reason,
         )
-        if delay <= 0:
-            self._on_periodic_due()
-            return
+        # Even a due-now edge is deferred to the next UI turn. This keeps the
+        # cadence event-driven while preventing synchronous due -> fetch -> due
+        # recursion at sub-millisecond cooldown boundaries.
+        delay = max(1, int(delay))
         self._due_token += 1
         token = self._due_token
         self._due_pending = True
@@ -672,7 +686,7 @@ class RedditRuntimeService:
                         return True
                 else:
                     self._set_periodic_due_delay_ms(
-                        int(blocked_wait * 1000), "blocked_cooldown_due"
+                        _positive_delay_ms(blocked_wait), "blocked_cooldown_due"
                     )
                     self._schedule_timer()
                     return True

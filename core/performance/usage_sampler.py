@@ -79,6 +79,10 @@ class GpuUsageSnapshot:
     vram_supported: bool = False
     vram_dedicated_mb: float | None = None
     vram_shared_mb: float | None = None
+    query_generation: int = 0
+    engine_counter_count: int = 0
+    dedicated_counter_count: int = 0
+    shared_counter_count: int = 0
 
 
 class ProcessUsageCollector:
@@ -292,6 +296,7 @@ class WindowsGpuUsageCollector:
         self._shared_counters: list[Any] = []
         self._pids: tuple[int, ...] = ()
         self._last_rebuild = 0.0
+        self._query_generation = 0
         try:
             import win32pdh
 
@@ -331,6 +336,7 @@ class WindowsGpuUsageCollector:
 
     def _rebuild(self, pids: tuple[int, ...], now: float) -> None:
         self._close_query()
+        self._query_generation += 1
         self._pids = pids
         self._last_rebuild = now
         if self._pdh is None or not pids:
@@ -396,10 +402,39 @@ class WindowsGpuUsageCollector:
                 continue
         return values
 
+    def _snapshot(
+        self,
+        supported: bool,
+        active: bool,
+        status: str,
+        *,
+        busy_pct: float | None = None,
+        engine_sum_pct: float | None = None,
+        vram_supported: bool = False,
+        vram_dedicated_mb: float | None = None,
+        vram_shared_mb: float | None = None,
+    ) -> GpuUsageSnapshot:
+        """Freeze usage values together with the currently owned PDH cardinality."""
+
+        return GpuUsageSnapshot(
+            supported=supported,
+            active=active,
+            status=status,
+            busy_pct=busy_pct,
+            engine_sum_pct=engine_sum_pct,
+            vram_supported=vram_supported,
+            vram_dedicated_mb=vram_dedicated_mb,
+            vram_shared_mb=vram_shared_mb,
+            query_generation=self._query_generation,
+            engine_counter_count=len(self._engine_counters),
+            dedicated_counter_count=len(self._dedicated_counters),
+            shared_counter_count=len(self._shared_counters),
+        )
+
     def collect(self, pids: Iterable[int]) -> GpuUsageSnapshot:
         normalized_pids = tuple(sorted({int(pid) for pid in pids if int(pid) > 0}))
         if self._pdh is None:
-            return GpuUsageSnapshot(False, False, "unsupported")
+            return self._snapshot(False, False, "unsupported")
 
         now = time.monotonic()
         if (
@@ -409,8 +444,8 @@ class WindowsGpuUsageCollector:
         ):
             self._rebuild(normalized_pids, now)
             if self._query is None:
-                return GpuUsageSnapshot(True, False, "idle_no_counters", vram_supported=True)
-            return GpuUsageSnapshot(
+                return self._snapshot(True, False, "idle_no_counters", vram_supported=True)
+            return self._snapshot(
                 True,
                 True,
                 "warming",
@@ -418,7 +453,7 @@ class WindowsGpuUsageCollector:
             )
 
         if self._query is None:
-            return GpuUsageSnapshot(True, False, "idle_no_counters", vram_supported=True)
+            return self._snapshot(True, False, "idle_no_counters", vram_supported=True)
 
         try:
             self._pdh.CollectQueryData(self._query)
@@ -431,10 +466,10 @@ class WindowsGpuUsageCollector:
             shared_values = self._values(
                 self._shared_counters, self._pdh.PDH_FMT_LARGE
             )
-            return GpuUsageSnapshot(
-                supported=True,
-                active=bool(engine_values or dedicated_values or shared_values),
-                status="ok",
+            return self._snapshot(
+                True,
+                bool(engine_values or dedicated_values or shared_values),
+                "ok",
                 busy_pct=max(engine_values) if engine_values else None,
                 engine_sum_pct=sum(engine_values) if engine_values else None,
                 vram_supported=bool(self._dedicated_counters or self._shared_counters),
@@ -445,7 +480,8 @@ class WindowsGpuUsageCollector:
             )
         except Exception:
             self._close_query()
-            return GpuUsageSnapshot(True, False, "query_error", vram_supported=True)
+            return self._snapshot(True, False, "query_error", vram_supported=True)
+
 
 
 class UsageTelemetryService:
@@ -641,6 +677,10 @@ class UsageTelemetryService:
                 "vram_supported": gpu.vram_supported,
                 "vram_dedicated_mb": gpu.vram_dedicated_mb,
                 "vram_shared_mb": gpu.vram_shared_mb,
+                "gpu_query_generation": gpu.query_generation,
+                "gpu_engine_counter_count": gpu.engine_counter_count,
+                "gpu_dedicated_counter_count": gpu.dedicated_counter_count,
+                "gpu_shared_counter_count": gpu.shared_counter_count,
             }
             collect_ms = (time.perf_counter() - started) * 1000.0
             logger.info(
@@ -652,7 +692,9 @@ class UsageTelemetryService:
                 "uss_app_mb=%s uss_main_mb=%s uss_children_mb=%s "
                 "vms_app_mb=%s threads_app=%d handles_app=%s handles_main=%s "
                 "io_read_mb=%s io_write_mb=%s gpu_supported=%d gpu_active=%d "
-                "gpu_status=%s gpu_busy_pct=%s gpu_engine_sum_pct=%s "
+                "gpu_status=%s gpu_query_generation=%d gpu_engine_counters=%d "
+                "gpu_dedicated_counters=%d gpu_shared_counters=%d "
+                "gpu_pdh_counters_total=%d gpu_busy_pct=%s gpu_engine_sum_pct=%s "
                 "vram_supported=%d vram_dedicated_mb=%s vram_shared_mb=%s "
                 "tracked_resources=%s tracked_known_bytes=%s "
                 "cpu_cache_resources=%s cpu_cache_bytes=%s "
@@ -700,6 +742,11 @@ class UsageTelemetryService:
                 int(gpu.supported),
                 int(gpu.active),
                 gpu.status,
+                gpu.query_generation,
+                gpu.engine_counter_count,
+                gpu.dedicated_counter_count,
+                gpu.shared_counter_count,
+                gpu.engine_counter_count + gpu.dedicated_counter_count + gpu.shared_counter_count,
                 _fmt(gpu.busy_pct),
                 _fmt(gpu.engine_sum_pct),
                 int(gpu.vram_supported),

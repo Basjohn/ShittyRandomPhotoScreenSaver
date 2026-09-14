@@ -251,10 +251,12 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QPushButton#expandButton {{ background: {tab_surface}; color: {primary}; border: 1px solid {border}; border-radius: 6px; padding: 4px 9px; min-height: 20px; }}
         QPushButton#expandButton:hover {{ background: {tab_hover}; }}
 
-        QCheckBox {{ color: {checkbox_text}; spacing: 7px; }}
-        QCheckBox::indicator {{ width: 15px; height: 15px; border-radius: 7px; background: {checkbox_surface}; border: 1px solid {checkbox_border}; }}
-        QCheckBox::indicator:checked {{ background: {checkbox_checked}; border: 1px solid {checkbox_checked_border}; }}
-        QCheckBox::indicator:disabled {{ background: {subsection}; border-color: {helper}; }}
+        QCheckBox {{ color: {checkbox_text}; spacing: 8px; min-height: 20px; }}
+        /* Even indicator dimensions + vertical breathing room prevent Qt/Windows
+           fractional-DPI clipping that made empty circles render like “( )”. */
+        QCheckBox::indicator {{ width: 14px; height: 14px; border-radius: 7px; margin: 2px 1px; background-color: {checkbox_surface}; border: 1px solid {checkbox_border}; }}
+        QCheckBox::indicator:checked {{ background-color: {checkbox_checked}; border: 1px solid {checkbox_checked_border}; }}
+        QCheckBox::indicator:disabled {{ background-color: {subsection}; border-color: {helper}; }}
 
         QLineEdit, QComboBox, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{ background: {input_surface}; color: {input_text}; border: 1.25px solid {input_border}; border-radius: 7px; padding: 7px 9px; min-height: 20px; selection-background-color: {list_selected}; selection-color: {list_text}; }}
         QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ background: {input_focus}; border-color: {input_border}; }}
