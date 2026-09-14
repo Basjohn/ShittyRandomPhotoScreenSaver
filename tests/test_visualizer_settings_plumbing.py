@@ -2976,6 +2976,7 @@ class TestBubbleSpecularDirection:
 
 
 def test_custom_bubble_activation_ignores_legacy_global_audio_block_size():
+    from core.settings.default_contract import require_canonical_default
     from core.settings.models import SpotifyVisualizerSettings
     from core.settings.visualizer_presets import (
         get_custom_preset_index,
