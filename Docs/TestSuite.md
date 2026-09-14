@@ -7,12 +7,25 @@ Last updated: 2026-09-14
 The full maintained `destination` profile was executed on the intended
 **Windows + PySide6 6.9.1 + OpenGL** environment
 (`python tests/run_chunked.py --profile destination --chunks 4`):
-**132 targets run, 132 passed, 0 failed.** This discharges the nine deferred
-reds recorded in §0.10 and the destination-target NEEDS RUN labels in §0.15
-(Clock slot: `test_layout_slots.py`, `test_qtquick_h_cutover.py`,
+**132 targets run, 132 passed, 0 failed.** The surviving current reds recorded
+in §0.10 were reconciled at the test boundary and are now green; obsolete Sphere
+coverage was retired separately (see the wording note below) rather than counted
+among those passes. This also discharges the destination-target NEEDS RUN labels
+in §0.15 (Clock slot: `test_layout_slots.py`, `test_qtquick_h_cutover.py`,
 `test_widgets_tab_current.py::test_clock_settings_save_preserves_runtime_display_mode_overrides`)
 and §0.16 (`test_settings_dark_qss_retirement_contract.py`,
 `test_settings_theme_lifetime_contract.py`).
+
+**Wording correction for the §0.10 "nine remaining reds":** that list was never
+nine files that later all "passed". `test_sphere_mode_integration.py` was
+deliberately deleted as a retired smooth/material-Sphere fossil (current Voxel
+Sphere contracts supersede it — see §4.1); the remaining current-owner reds
+(`test_qtquick_h_cutover`, `test_qtquick_custom_layout_overlay`,
+`test_visualizer_viewport_scaling_contracts`, `test_visualizer_glow_footprint`,
+`test_visualizer_line_coverage`, `test_bubble_aspect_pixels`,
+`test_qtquick_achievement_pulse_presentation`, `test_sphere_voxel_audio_contract`)
+were reconciled/repaired against current owners. Do not read §0.10 as "all nine
+passed unchanged."
 
 Every fix was a test-side reconciliation to current production; no production
 owner/default/fallback was changed:
@@ -43,10 +56,25 @@ owner/default/fallback was changed:
   `square_artwork_size` defaults to 160 (portrait 160x224), real `QFontMetricsF`
   capsule sizing; card-height bars now track `model.authoredHeight`.
 
-**Still owed (not closed by this run):** physical §8 eyes-on acceptance of the
-Achievement Pulse Progress-Pulse/Shelf layout at 0%/one/two-digit/100% with and
-without Shelf Style; and the broad full-tree `pytest tests/` reconciliation
-diagnostic (this run was the maintained profile, not the complete tree).
+**Operator-accepted 2026-09-14 (physical acceptance COMPLETE — no longer NEEDS RUN):**
+
+- Achievement Pulse §8 physical visual acceptance (Progress-Pulse/Shelf at
+  0% / one- and two-digit / 100%, with and without Shelf Style) — **ACCEPTED**.
+- Clock analogue/digital slot + face + geometry installed acceptance
+  (per-display double-click face state, slot save/load replay, mixed ALL routing,
+  restart persistence) — **ACCEPTED**.
+- `themes/dark.qss` file-absent visual/lifecycle acceptance across Default Dark,
+  contrasting light/metal themes, live switching, tray, colour picker,
+  tooltips/group boxes/check boxes, first-start, and native Glass/Acrylic —
+  **ACCEPTED**, and `themes/dark.qss` has been **physically deleted** from the
+  repository. Architectural rule retained: no replacement monolithic QSS file
+  and no fallback stylesheet loader may be reintroduced; `SettingsThemeSpec`
+  owns semantic palette/backdrop/shadow and narrow permanent renderers own
+  structure.
+
+**Still owed:** the broad full-tree `pytest tests/` reconciliation diagnostic
+(the maintained profile is the primary product gate and is green; broad-tree work
+is a fossil-reconciliation audit, not a mandate to resurrect retired architecture).
 
 ## 0.10 2026-09-12 Windows/PySide validation run — supersedes prior NEEDS RUN
 
@@ -180,25 +208,25 @@ This file is a maintained routing/status guide. It deliberately does **not** car
 
 ## 0.15 2026-09-14 Clock slot face-state persistence
 
-The Clock slot repair has dedicated current-owner regression coverage. Clock analogue/digital face state is independent persisted state and must round-trip separately from the two CUSTOM geometry variants.
+The Clock slot repair has dedicated current-owner regression coverage. Clock analogue/digital face state is independent persisted state and must round-trip separately from the two CUSTOM geometry variants. **All automated coverage is GREEN and installed acceptance is COMPLETE (operator-accepted 2026-09-14; see §0.17).**
 
-- `tests/test_layout_slots.py` now protects v2 capture of `display_mode` + `display_mode_overrides`, exact replay including an explicitly empty override map, and v1 fallback that clears newer stale overrides and uses the legacy slot baseline. **NEEDS RUN**: this nominally data-oriented module still reaches PySide6 through capability/transition imports in this environment.
-- `tests/test_qtquick_h_cutover.py` carries the state through the real `DisplayManager` fenced save/load boundary. **NEEDS RUN** on Windows/PySide; the full file is already a maintained destination target.
-- `tests/test_widgets_tab_current.py::test_clock_settings_save_preserves_runtime_display_mode_overrides` proves a normal Clock Settings save cannot erase double-click/runtime per-display state. **NEEDS RUN** on Windows/PySide.
-- Installed acceptance must cover: save a slot while one display is Digital and another override is Analogue; switch live; load the slot; verify the saved face is restored together with that face's own geometry, then repeat in the opposite direction and with a slot whose saved override map is empty. **NEEDS RUN**.
+- `tests/test_layout_slots.py` protects v2 capture of `display_mode` + `display_mode_overrides`, exact replay including an explicitly empty override map, and v1 fallback that clears newer stale overrides and uses the legacy slot baseline. **GREEN** (2026-09-14 destination run).
+- `tests/test_qtquick_h_cutover.py` carries the state through the real `DisplayManager` fenced save/load boundary. **GREEN** (destination target).
+- `tests/test_widgets_tab_current.py::test_clock_settings_save_preserves_runtime_display_mode_overrides` proves a normal Clock Settings save cannot erase double-click/runtime per-display state. **GREEN** (destination target).
+- Installed acceptance (save a slot with one display Digital and another Analogue, switch live, load the slot, verify the saved face + its own geometry per display, both directions and with an empty override map) — **ACCEPTED 2026-09-14**.
 
 These tests must never collapse face state into geometry authority: `custom_layout` owns the `digital`/`analog` rectangles; the Clock section owns `display_mode` and per-display overrides.
 
-## 0.16 2026-09-14 legacy Settings base-stylesheet retirement candidate
+## 0.16 2026-09-14 legacy Settings base-stylesheet retirement — COMPLETE
 
-The production dependency on `themes/dark.qss` is now severed in the checkpoint candidate without copying the monolith into another owner. The repository asset itself is excluded from GODZIPs, so physical deletion is deliberately deferred until the intended Windows/PySide visual matrix confirms the replacement owners.
+The production dependency on `themes/dark.qss` is severed with no monolith copied into another owner, and the retirement is now fully accepted: the Windows/PySide file-absent visual/lifecycle matrix passed and **`themes/dark.qss` has been physically deleted from the repository** (operator-accepted 2026-09-14; see §0.17).
 
-- `tests/test_settings_dark_qss_retirement_contract.py`: **6/6 PASS** by direct Qt-free execution here. It proves live Settings/tray source has no legacy path reference/loader, the permanent structural base contains no palette literals, the complete Default Dark root renderer resolves with no placeholders/legacy file, generic disabled labels use `text.disabled`, tray `QMenu` geometry is rendered from existing semantic context-menu roles, the color-picker wrapper explicitly owns its old subsettings chrome, and installer/build tooling has no filename-specific dependency on the obsolete stylesheet.
-- `tests/test_settings_theme_lifetime_contract.py` is reconciled to the new complete-root renderer (`_build_settings_root_stylesheet`) rather than the retired base-file concatenation seam. Direct stubbed execution is **2/2 PASS**; normal pytest collection in this environment still reaches the PySide6-dependent repository `conftest.py`, so the ordinary pytest route is **NEEDS RUN**.
-- Existing `tests/test_settings_theme_qobject_lifetime.py`, Settings dialog/theme switching, Theme Foundry, tray, picker, native Glass/Acrylic and first-start tests remain **NEEDS RUN** on Windows/PySide.
-- Physical removal of `themes/dark.qss` from the real repository/build is **NEEDS RUN** only after that visual/lifecycle matrix is green. Missing bytes in a GODZIP are not evidence by themselves.
+- `tests/test_settings_dark_qss_retirement_contract.py`: **GREEN** (destination target). It proves live Settings/tray source has no legacy path reference/loader, the permanent structural base contains no palette literals, the complete Default Dark root renderer resolves with no placeholders/legacy file, generic disabled labels use `text.disabled`, tray `QMenu` geometry is rendered from existing semantic context-menu roles, the color-picker wrapper explicitly owns its old subsettings chrome, and installer/build tooling has no filename-specific dependency on the obsolete stylesheet.
+- `tests/test_settings_theme_lifetime_contract.py` is reconciled to the complete-root renderer (`_build_settings_root_stylesheet`) rather than the retired base-file concatenation seam. **GREEN** (destination target).
+- `tests/test_settings_theme_qobject_lifetime.py`, Settings dialog/theme switching, Theme Foundry, tray, picker, native Glass/Acrylic and first-start behaviour were validated in the file-absent installed matrix — **ACCEPTED 2026-09-14**.
+- Physical removal of `themes/dark.qss` — **DONE**. The application is accepted running without the asset.
 
-Retirement acceptance is zero intended visual/interaction change: semantic `SettingsThemeSpec` remains palette authority; structural QSS belongs to narrow permanent renderers; no replacement monolithic QSS file is permitted.
+Retirement acceptance is zero intended visual/interaction change: semantic `SettingsThemeSpec` remains palette authority; structural QSS belongs to narrow permanent renderers. **Binding architectural rule (retained):** no replacement monolithic QSS file and no fallback stylesheet loader may be reintroduced, even when the asset is absent.
 
 ---
 
@@ -605,7 +633,7 @@ Protect:
 - schema migrations normalize legacy input once and remove retired aliases;
 - Theme Foundry and Defaults Foundry consume canonical schema rather than inventing parallel fields.
 - production Settings/tray styling must not load `themes/dark.qss`; the root renderer and narrow component renderers own structure while `SettingsThemeSpec` owns semantic palette/backdrop/shadow values;
-- physical deletion of the legacy stylesheet is an installed-acceptance cleanup step, not permission to reintroduce a fallback loader when the file is absent;
+- `themes/dark.qss` is physically deleted (retirement operator-accepted 2026-09-14); its absence is never permission to reintroduce a fallback loader or a replacement monolithic Settings QSS;
 - collapsible bucket persistence remains sparse and page/local-scope accordion behavior stays centralized; canonical defaults enumerate identities but `SettingsManager` must not materialize absent false members.
 
 Primary suites include `test_defaults_schema_authority.py`, settings manager/persistence/binding/default parity, descriptor suites, Theme Foundry and default-settings-editor tests.
