@@ -9,7 +9,11 @@ import pytest
 from core.reddit_post_provider import RedditProviderResult
 from core.reddit_preparation import RedditPost, write_reddit_post_cache
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
-from widgets.reddit_runtime import RedditRuntimeConfig, RedditRuntimeService
+from widgets.reddit_runtime import (
+    _REDDIT_PROVIDER_SORT,
+    RedditRuntimeConfig,
+    RedditRuntimeService,
+)
 
 
 class _Consumer:
@@ -82,6 +86,7 @@ def _service(provider, *, widget_id="reddit", subreddit="python"):
             widget_id=widget_id,
             subreddit=subreddit,
             cache_key=widget_id,
+            sort=_REDDIT_PROVIDER_SORT,
         ),
         provider=provider,
     )
@@ -106,7 +111,10 @@ def test_reddit_runtime_config_normalizes_member_identity_and_subreddit() -> Non
     assert config.widget_id == "reddit2"
     assert config.cache_key == "reddit2"
     assert config.subreddit == "Python"
-    assert config.sort == "new"
+    # sort is now a fixed internal provider request policy, not a persisted
+    # product setting: from_mapping ignores any mapping "sort" and always uses
+    # the provider constant.
+    assert config.sort == _REDDIT_PROVIDER_SORT
 
 
 def test_reddit_runtime_loads_startup_cache_without_provider_work(
