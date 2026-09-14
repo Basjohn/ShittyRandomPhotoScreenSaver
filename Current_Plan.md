@@ -148,9 +148,10 @@ per-display face override and Clock Settings saves could later discard it.
   their saved shared baseline because those slots never recorded per-display mode state.
 - [x] Clock Settings save preserves the runtime-authored override maps for `clock`, `clock2`, and `clock3` instead of
   replacing those sections and silently dropping double-click state.
-- [x] Dedicated Clock/slot regression coverage is now added and routed in `Docs/TestSuite.md` §0.15. The three direct
-  slot cases, real DisplayManager boundary and Clock Settings preservation case are **Needs run** here because the
-  repository import graph reaches PySide6; installed face/geometry replay remains a separate acceptance cell.
+- [x] Dedicated Clock/slot regression coverage is added, routed in `Docs/TestSuite.md` §0.15, and now **GREEN on
+  Windows/PySide6** (2026-09-14 destination run): the three direct slot cases, the real DisplayManager boundary
+  (`test_qtquick_h_cutover.py`) and the Clock Settings preservation case all pass. Installed face/geometry replay
+  remains a separate acceptance cell.
 - [?] Installed validation: save distinct digital/analogue positions, double-click one routed display, save a numbered
   slot, change mode/geometry, then load the slot. Require the saved active face and that face's geometry on every display,
   including mixed analogue/digital ALL routing and restart/Settings-save persistence.
@@ -235,9 +236,12 @@ Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this ac
   without banning legitimate LocalAppData-based Git Bash discovery. No production defaults/fallbacks, retired QWidget
   paths, compositor owners, timers or pollers were restored to satisfy tests.
 - [x] 2026-09-13 follow-up pure/source contracts: Friend Pulse recovery/dropped-message absence + Restore Size authored-cache separation + System Stats metric-selection/content-extent/pill-width/source skipping execute directly without PySide. Latest focused direct runs: **9/9 System Stats source**, **4/4 System Stats reflow/selection**, **4/4 Friend Pulse/Restore**. Python compilation is clean for all touched Python modules.
-- [?] Run the full installed `pytest tests/` inventory with real PySide6/Qt resources and reconcile any *additional*
-  current-owner failures. This workspace cannot execute that gate because PySide6 is unavailable; do not treat the
-  targeted direct-module passes above as a substitute for the full installed suite.
+- [x] Maintained `destination` profile executed on Windows/PySide6 6.9.1: **132/132 GREEN** (2026-09-14, see
+  `Docs/TestSuite.md` §0.17). Every previously deferred red and destination-target NEEDS RUN was reconciled at the
+  test boundary against current production; no production owner/default/fallback was changed.
+- [?] Run the broad full-tree `pytest tests/` reconciliation diagnostic (not just the maintained profile) with real
+  PySide6/Qt resources and reconcile any *additional* current-owner failures. The 2026-09-14 destination run covers the
+  maintained profile only; the complete tree still carries stale pre-cutover modules (see the collect_ignore floor).
 - [ ] Retire the temporary Visualizer `enabled_modes` compatibility migration only after automated persisted-profile/import
   coverage proves supported profiles no longer rely on it. Current runtime/default/UI state remains the canonical
   `widgets.spotify_visualizer.mode_activation` boolean map.

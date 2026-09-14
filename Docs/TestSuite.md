@@ -2,6 +2,52 @@
 
 Last updated: 2026-09-14
 
+## 0.17 2026-09-14 Windows/PySide6 destination profile — ALL GREEN (132/132)
+
+The full maintained `destination` profile was executed on the intended
+**Windows + PySide6 6.9.1 + OpenGL** environment
+(`python tests/run_chunked.py --profile destination --chunks 4`):
+**132 targets run, 132 passed, 0 failed.** This discharges the nine deferred
+reds recorded in §0.10 and the destination-target NEEDS RUN labels in §0.15
+(Clock slot: `test_layout_slots.py`, `test_qtquick_h_cutover.py`,
+`test_widgets_tab_current.py::test_clock_settings_save_preserves_runtime_display_mode_overrides`)
+and §0.16 (`test_settings_dark_qss_retirement_contract.py`,
+`test_settings_theme_lifetime_contract.py`).
+
+Every fix was a test-side reconciliation to current production; no production
+owner/default/fallback was changed:
+
+- `test_qtquick_h_cutover.py` no longer hangs. Settings stub gained
+  `get_application_name()`; the minimal-config context-menu test explicitly
+  disables the visualizer family (visualizers now default-on, so the menu
+  legitimately gains Change Visualizer / Edit Widget Layout otherwise); the
+  transient-lane stub gained the third `transient_clamp` arg; `_committed`
+  supplies the neutral card/shadow kwargs the resolver now requires.
+- `test_qtquick_input_controller.py`: `FriendPulsePresentation.qml` added to the
+  double-click fallback-admission owner set.
+- `test_qtquick_custom_layout_owner.py`: wheel-guide case reseated so the uniform
+  enlarge grows toward the peer (880->895) publishing `(900,"peer")` without
+  snapping; presenter stub gained `authored_geometry_for`.
+- `test_qtquick_custom_layout_overlay.py`: cross-display transfer now asserts the
+  deliberate retained-idle-shell design (the source item stays alive to avoid
+  Shiboken wrapper invalidation on a return hop); admission departure is proven
+  by the cleared `render_identity` in both directions.
+- `test_visualizer_viewport_scaling_contracts.py`: collision helper passes the new
+  `bounce_same_only`/`collision_pop_mode` kwargs; impulse-invariance settings
+  dict gained the keys `BubbleSimulation.tick` now requires; devcurve
+  projected-offset bar rehomed onto `value *= layout.normalized_y_scale`; the
+  retired `widgets/.../renderers/spectrum.py` scrape was dropped (Quick
+  implementation is the sole spectrum height-scale owner).
+- `test_qtquick_achievement_pulse_presentation.py`: goldens reconciled to the
+  established Progress-Pulse/Shelf design — `double_capsules` defaults on,
+  `square_artwork_size` defaults to 160 (portrait 160x224), real `QFontMetricsF`
+  capsule sizing; card-height bars now track `model.authoredHeight`.
+
+**Still owed (not closed by this run):** physical §8 eyes-on acceptance of the
+Achievement Pulse Progress-Pulse/Shelf layout at 0%/one/two-digit/100% with and
+without Shelf Style; and the broad full-tree `pytest tests/` reconciliation
+diagnostic (this run was the maintained profile, not the complete tree).
+
 ## 0.10 2026-09-12 Windows/PySide validation run — supersedes prior NEEDS RUN
 
 The maintained `destination` profile was executed on the intended **Windows +
