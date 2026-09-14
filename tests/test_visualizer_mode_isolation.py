@@ -4,12 +4,15 @@ from pathlib import Path
 
 
 def test_dedicated_visualizer_modules_do_not_read_foreign_mode_runtime_fields() -> None:
+    # Post-cutover renderers live under rendering/quick/visualizer/implementations/.
+    # The pre-Quick widgets/spotify_visualizer/renderers/ directory was retired;
+    # the mode-isolation invariant is rehomed onto the current owners.
     contract = {
-        "widgets/spotify_visualizer/renderers/bubble.py": ("_osc_", "_sine_", "_spectrum_"),
-        "widgets/spotify_visualizer/renderers/spectrum.py": ("_osc_", "_sine_", "_bubble_"),
-        "widgets/spotify_visualizer/renderers/oscilloscope.py": ("_bubble_", "_spectrum_"),
+        "rendering/quick/visualizer/implementations/bubble.py": ("_osc_", "_sine_", "_spectrum_"),
+        "rendering/quick/visualizer/implementations/spectrum.py": ("_osc_", "_sine_", "_bubble_"),
+        "rendering/quick/visualizer/implementations/oscilloscope.py": ("_bubble_", "_spectrum_"),
         "widgets/spotify_visualizer/oscilloscope_contract.py": ("_sine_", "_bubble_", "_spectrum_"),
-        "widgets/spotify_visualizer/renderers/sine_wave.py": ("_bubble_", "_spectrum_"),
+        "rendering/quick/visualizer/implementations/sine_wave.py": ("_bubble_", "_spectrum_"),
         "widgets/spotify_visualizer/bubble_simulation.py": ("_osc_", "_sine_", "_spectrum_"),
         "widgets/spotify_visualizer/bar_computation.py": ("_osc_", "_sine_", "_bubble_"),
         "widgets/spotify_visualizer/transient_bus.py": ("_osc_", "_sine_", "_bubble_", "_spectrum_"),

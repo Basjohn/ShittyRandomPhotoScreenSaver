@@ -55,9 +55,15 @@ def test_build_gpu_extra_uses_mode_specific_glow_reactivity() -> None:
         _sine_card_adaptation=0.3,
         _sine_travel_line2=0,
         _sine_travel_line3=0,
+        _sine_travel_line4=0,
+        _sine_travel_line5=0,
+        _sine_travel_line6=0,
         _sine_line1_shift=0.0,
         _sine_line2_shift=0.0,
         _sine_line3_shift=0.0,
+        _sine_line4_shift=0.0,
+        _sine_line5_shift=0.0,
+        _sine_line6_shift=0.0,
         _sine_wave_effect=0.0,
         _sine_micro_wobble=0.0,
         _sine_crawl_amount=0.0,
@@ -144,9 +150,15 @@ def test_line_mode_gpu_extra_uses_neutral_runtime_transport_keys() -> None:
         _sine_card_adaptation=0.3,
         _sine_travel_line2=1,
         _sine_travel_line3=2,
+        _sine_travel_line4=3,
+        _sine_travel_line5=4,
+        _sine_travel_line6=5,
         _sine_line1_shift=0.0,
         _sine_line2_shift=0.0,
         _sine_line3_shift=0.0,
+        _sine_line4_shift=0.0,
+        _sine_line5_shift=0.0,
+        _sine_line6_shift=0.0,
         _sine_wave_effect=0.0,
         _sine_micro_wobble=0.0,
         _sine_crawl_amount=0.0,
@@ -220,33 +232,16 @@ def test_line_mode_gpu_extra_uses_neutral_runtime_transport_keys() -> None:
     assert "osc_line_count" not in osc_extra
 
 
-def test_sine_renderer_source_does_not_depend_on_osc_runtime_fields() -> None:
-    sine_src = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / "sine_wave.py").read_text(encoding="utf-8")
-
-    assert "_osc_" not in sine_src
-
-
-def test_renderer_sources_do_not_read_foreign_mode_runtime_fields() -> None:
-    renderer_contract = {
-        "sine_wave.py": ("_osc_", "_bubble_", "_spectrum_"),
-        "oscilloscope.py": ("_sine_", "_bubble_", "_spectrum_"),
-        "bubble.py": ("_osc_", "_sine_", "_spectrum_"),
-        "spectrum.py": ("_osc_", "_sine_", "_bubble_"),
-    }
-
-    for filename, forbidden_tokens in renderer_contract.items():
-        source = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / filename).read_text(encoding="utf-8")
-        for token in forbidden_tokens:
-            assert token not in source, f"{filename} unexpectedly depends on {token}"
+# Per-mode renderer source isolation is owned by
+# tests/test_visualizer_mode_isolation.py, rehomed onto the current
+# rendering/quick/visualizer/implementations/ owners after the pre-Quick
+# widgets/spotify_visualizer/renderers/ directory was retired. The two former
+# scrape cells here duplicated that invariant against the dead path and were
+# removed rather than kept as redundant fossils.
 
 
-def test_settings_model_legacy_glow_size_falls_back_to_reactivity() -> None:
-    from core.settings.models import SpotifyVisualizerSettings
-
-    model = SpotifyVisualizerSettings.from_mapping({
-        "osc_glow_size": 1.25,
-        "sine_glow_size": 0.85,
-    })
-
-    assert model.osc_glow_reactivity == 1.25
-    assert model.sine_glow_reactivity == 0.85
+# Removed test_settings_model_legacy_glow_size_falls_back_to_reactivity: the
+# legacy `osc_glow_size`/`sine_glow_size` -> `*_glow_reactivity` migration alias
+# was fully retired (no `glow_size` reference remains anywhere in core/settings).
+# The current keys are `osc_glow_reactivity`/`sine_glow_reactivity`; this was a
+# retired-migration fossil, not a live contract.

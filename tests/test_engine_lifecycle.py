@@ -59,13 +59,6 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
         def cleanup(self):
             events.append(("display_cleanup", None))
 
-    class _Coordinator:
-        def set_settings_dialog_active(self, value):
-            events.append(("settings_active", bool(value)))
-
-        def cleanup(self):
-            events.append(("coordinator_cleanup", None))
-
     class _Engine:
         def __init__(self):
             self.display_manager = _DisplayManager()
@@ -100,10 +93,6 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
         engine_handlers,
         "suppress_runtime_pointer_input",
         lambda *_args, **_kwargs: events.append(("suppress_pointer", None)),
-    )
-    monkeypatch.setattr(
-        "rendering.multi_monitor_coordinator.get_coordinator",
-        lambda: _Coordinator(),
     )
 
     engine_handlers.on_settings_requested(_Engine())
@@ -332,10 +321,6 @@ def test_custom_edit_reload_returns_then_admits_exactly_one_replacement(
         def load(self):
             events.append(("settings_load", None))
 
-    class _Coordinator:
-        def cleanup(self):
-            events.append(("coordinator_cleanup", None))
-
     class _Engine:
         def __init__(self):
             self.display_manager = _DisplayManager()
@@ -372,10 +357,6 @@ def test_custom_edit_reload_returns_then_admits_exactly_one_replacement(
         engine_handlers,
         "suppress_runtime_pointer_input",
         lambda *_args, **_kwargs: events.append(("suppress_pointer", None)),
-    )
-    monkeypatch.setattr(
-        "rendering.multi_monitor_coordinator.get_coordinator",
-        lambda: _Coordinator(),
     )
     monkeypatch.setattr(
         engine_handlers.ThreadManager,
@@ -485,19 +466,11 @@ def test_settings_teardown_failure_exits_cleanly_without_opening_dialog(monkeypa
 
     events = []
 
-    class _Coordinator:
-        def set_settings_dialog_active(self, active):
-            events.append(("settings_active", bool(active)))
-
     engine = SimpleNamespace(
         display_manager=SimpleNamespace(displays=[]),
         _settings_dialog_active=False,
         _sources_changed_during_settings=False,
         stop=lambda exit_app=False, reason=None: (_ for _ in ()).throw(RuntimeError("GL deletion failed")),
-    )
-    monkeypatch.setattr(
-        "rendering.multi_monitor_coordinator.get_coordinator",
-        lambda: _Coordinator(),
     )
     monkeypatch.setattr(
         engine_handlers.QApplication,
@@ -512,12 +485,12 @@ def test_settings_teardown_failure_exits_cleanly_without_opening_dialog(monkeypa
 
     engine_handlers.on_settings_requested(engine)
 
+    # The retired multi_monitor_coordinator's set_settings_dialog_active toggling
+    # was rehomed onto engine._settings_dialog_active. The live contract is that a
+    # teardown failure exits cleanly (code 1) without ever opening the dialog and
+    # leaves the flag cleared.
     assert engine._settings_dialog_active is False
-    assert events == [
-        ("settings_active", True),
-        ("settings_active", False),
-        ("exit", 1),
-    ]
+    assert events == [("exit", 1)]
 
 
 def test_terminal_stop_from_stopped_state_is_not_ignored(monkeypatch):

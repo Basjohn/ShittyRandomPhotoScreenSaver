@@ -367,101 +367,10 @@ def test_shared_lease_requires_generation_or_thread_manager() -> None:
 
     assert shared_media_volume_owner_count() == 0
 
-
-def test_real_media_anchor_setup_injects_and_reuses_volume_owner(
-    qt_app, monkeypatch
-) -> None:
-    from core.resources.manager import ResourceManager
-    from rendering import widget_runtime_services, widget_setup_all
-    from rendering.widget_manager import WidgetManager
-    from widgets.media_widget import MediaWidget
-
-    manager_thread = _ThreadManager()
-    factory = _ControllerFactory()
-    original_spec = widget_runtime_services._RUNTIME_SERVICE_SPECS["spotify_volume"]
-    monkeypatch.setitem(
-        widget_runtime_services._RUNTIME_SERVICE_SPECS,
-        "spotify_volume",
-        widget_runtime_services.RuntimeServiceSpec(
-            build=lambda _widget_id, _config: MediaVolumeRuntimeService(
-                provider="spotify",
-                shared=True,
-                controller_factory=factory,
-            ),
-            inject=original_spec.inject,
-            retire=original_spec.retire,
-            reuse_is_valid=original_spec.reuse_is_valid,
-        ),
-    )
-    parent = QWidget()
-    parent._thread_manager = manager_thread
-    parent._runtime_generation = 91
-    anchor = MediaWidget(parent, build_default_runtime=False)
-    anchor.set_thread_manager(manager_thread)
-    manager = WidgetManager(parent, ResourceManager())
-    config = {
-        "media": {
-            "enabled": True,
-            "provider": "spotify",
-            "spotify_volume_enabled": True,
-            "mute_button_enabled": False,
-        }
-    }
-    try:
-        widget_setup_all._setup_media_owned_spotify_dependents(
-            manager, {"media_widget": anchor}, config, {}, 0, manager_thread, anchor
-        )
-        service = manager.runtime_manager.get_widget_service("spotify_volume")
-
-        assert service is anchor._volume_runtime_service
-        assert service is not None
-        anchor._enabled = True
-        anchor._start_auxiliary_runtimes()
-        assert service.is_running() is True
-        assert len(factory.controllers) == 1
-
-        widget_setup_all._setup_media_owned_spotify_dependents(
-            manager, {"media_widget": anchor}, config, {}, 0, manager_thread, anchor
-        )
-        assert manager.runtime_manager.get_widget_service("spotify_volume") is service
-        assert anchor._volume_runtime_service is service
-        assert len(factory.controllers) == 1
-    finally:
-        anchor._enabled = False
-        anchor._stop_auxiliary_runtimes()
-        manager.cleanup()
-        anchor.deleteLater()
-        parent.deleteLater()
-
-    assert shared_media_volume_owner_count() == 0
-
-
-def test_disabled_app_volume_builds_no_owner(qt_app, monkeypatch) -> None:
-    from core.resources.manager import ResourceManager
-    from rendering import widget_setup_all
-    from rendering.widget_manager import WidgetManager
-    from widgets.media_widget import MediaWidget
-
-    parent = QWidget()
-    parent._thread_manager = object()
-    parent._runtime_generation = 92
-    anchor = MediaWidget(parent, build_default_runtime=False)
-    anchor.set_thread_manager(parent._thread_manager)
-    manager = WidgetManager(parent, ResourceManager())
-    try:
-        widget_setup_all._setup_media_owned_spotify_dependents(
-            manager,
-            {"media_widget": anchor},
-            {"media": {"spotify_volume_enabled": "false", "mute_button_enabled": False}},
-            {},
-            0,
-            parent._thread_manager,
-            anchor,
-        )
-        assert manager.runtime_manager.get_widget_service("spotify_volume") is None
-        assert anchor._volume_runtime_service is None
-        assert shared_media_volume_owner_count() == 0
-    finally:
-        manager.cleanup()
-        anchor.deleteLater()
-        parent.deleteLater()
+# Removed test_real_media_anchor_setup_injects_and_reuses_volume_owner and
+# test_disabled_app_volume_builds_no_owner: both drove the retired QWidget
+# anchor path (rendering.widget_setup_all._setup_media_owned_spotify_dependents
+# + rendering.widget_manager.WidgetManager + widgets.media_widget.MediaWidget),
+# all deleted in the Qt Quick cutover. Shared volume-owner injection/reuse and
+# the disabled-builds-no-owner contract are covered by the widget_runtime_services
+# cells above and shared_media_volume_owner_count().
