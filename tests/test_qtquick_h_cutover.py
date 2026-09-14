@@ -40,6 +40,7 @@ from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.frame_pacer import QuickFrameDemand
 from rendering.widget_runtime_manager import WidgetRuntimeManager
 from widgets.spotify_visualizer import tick_pipeline
+from tests._visualizer_presentation import neutral_card_shadow_kwargs
 from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
@@ -82,13 +83,17 @@ class _ManagerVisualizerEngine:
         pass
 
     def set_transient_lane_config(
-        self, kick_lane_gain: float, spectrum_lane_transient_mix: float
+        self,
+        kick_lane_gain: float,
+        spectrum_lane_transient_mix: float,
+        transient_clamp: float,
     ) -> None:
         # Recorded on a dedicated field so it does not perturb the exact
         # source_config_calls ordering assertions elsewhere in this file.
         self.transient_lane_config = (
             float(kick_lane_gain),
             float(spectrum_lane_transient_mix),
+            float(transient_clamp),
         )
 
     def set_spectrum_mirrored(self, mirrored: bool) -> None:
@@ -333,6 +338,9 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
 
         def get_widgets_map(self):
             return deepcopy(self.widgets)
+
+        def get_application_name(self) -> str:
+            return "Screensaver"
 
         def get(self, key: str, default=None):
             if key == "widgets":
@@ -668,16 +676,21 @@ def test_display_manager_populates_and_routes_retained_context_menu(
         def __init__(self) -> None:
             self.data = {
                 "widgets": {
-                    widget_id: {"enabled": False}
-                    for widget_id in (
-                        "clock",
-                        "weather",
-                        "media",
-                        "reddit",
-                        "gmail",
-                        "achievement_pulse",
-                        "abandonment_issues",
-                    )
+                    # No widgets and no visualizer are active here, so the menu
+                    # must omit the visualizer submenu and the layout-edit entry.
+                    "family_activation": {"visualizers": False},
+                    **{
+                        widget_id: {"enabled": False}
+                        for widget_id in (
+                            "clock",
+                            "weather",
+                            "media",
+                            "reddit",
+                            "gmail",
+                            "achievement_pulse",
+                            "abandonment_issues",
+                        )
+                    },
                 },
                 "transitions": {
                     "type": "Crossfade",
@@ -1162,6 +1175,7 @@ def _committed(controller: VisualizerRuntimeController, extent) -> None:
             display_size=(1920.0, 1080.0),
             outer_origin=(40.0, 60.0),
             viewport_extent=extent,
+            **neutral_card_shadow_kwargs(),
         )
     )
 
