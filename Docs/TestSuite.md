@@ -2,6 +2,73 @@
 
 Last updated: 2026-09-14
 
+## 0.18 2026-09-14 Fossil-test hygiene + broad-tree reconciliation
+
+Evidence-driven audit of the full `tests/` tree (per-file isolated run) on
+Windows/PySide6. `collect_ignore` is confirmed **empty** (no fossil graveyard),
+broad collection has **0 collection errors**, and the maintained `destination`
+profile remains **132/132 GREEN**. Test-module count **368 → 364**. Broad-tree
+per-file failures **58 → 32 files**. No production behaviour/default/schema was
+changed to make any test pass.
+
+**Whole-file fossils deleted (retired owners, no surviving current invariant):**
+`test_presentation_benchmark_core.py` + `test_qtquick_presentation_spike.py`
+(migration-era Qt Quick presentation spike tooling — caller-proven, deleted with
+the tools); `test_spotify_overlay_repaint_contract.py` (scraped the retired
+`widgets/spotify_bars_gl_overlay.py`); `test_r77_cleanup_quarantine_gui.py`
+(imported the deleted one-off `SRPSS_R77_Cleanup_Quarantine_GUI.py`).
+
+**Fossil cells trimmed / rehomed (kept the current invariant, dropped the dead
+shell):** `test_p4_native_presentation.py` (dropped 8 `gl_compositor_pkg`
+perf-HUD/present-context cells, kept DWM timing); `test_visualizer_mode_isolation.py`
+(rehomed onto `rendering/quick/visualizer/implementations/`);
+`test_osc_sine_glow_contract.py` (dropped redundant renderer-scrape + the
+fully-retired `glow_size` migration); `test_engine_lifecycle.py` (removed retired
+`multi_monitor_coordinator` scaffolding; settings-dialog-active rehomed onto
+`engine._settings_dialog_active`); `test_media_volume_runtime.py` /
+`test_system_mute_runtime.py` (removed retired `widget_setup_all` + WidgetManager
++ MediaWidget QWidget-anchor cells); `test_multidisplay_sync.py` (removed the
+pre-Quick `set_image` display-contract cell); `test_steam_achievement_runtime.py`
+(removed the WidgetManager fresh-process fossil; retired-path guard tolerates
+absent files); `test_process_supervisor.py` (removed retired
+`WorkerType.TRANSITION` / `MessageType.TRANSITION_PRECOMPUTE` assertions + the
+TransitionPrepWorker contract fossil).
+
+**Stale current-owner tests reconciled** (API/signature/default drift, not
+fossils): jedi SSOT scrape, theme-defaults SSOT scrapes, reddit fixed-sort
+policy, bubble settings/collision signatures (62→1), devcurve runtime/shape-editor/
+settings-binding, sine line4 fields, cache-family list (`settings` family retired),
+qt logger rename, transitions activation-gated nav, SpectrumShapeConfig field,
+image-pipeline `perf_trace`, `_FakeSettingsManager.get_bool`, audio-worker
+block-size guard, and several settings-binding test doubles gaining the current
+canonical-default helpers.
+
+**Remaining broad-tree reds (32 files) are NOT fossils** — they are current-owner
+value/behaviour drift requiring operator judgment or deeper fixture work, and are
+deliberately left rather than force-fixed (test count is not the metric):
+
+- *Bubble reactivity golden (BTF-binding):* one `test_bubble_reactivity`
+  grouped-drift signed-lag-spread oracle — do not retune Bubble to satisfy it.
+- *Value-drift goldens (confirm each is intended before blessing):*
+  `test_custom_layout_contract`, `test_f0_5_shadow_controls`, `test_input_gain`,
+  `test_transient_per_mode_current`, `test_settings_dialog`,
+  `test_default_settings_editor`, `test_display_tab`, `test_transitions_tab_setup`,
+  `test_steam_abandonment_runtime`, `test_steam_credentials`,
+  `test_build_closeout_contract`, `test_installer_v5_reset_policy`,
+  `test_visualizer_settings_lazy_bodies_current`, `test_visualizer_settings_plumbing`,
+  `test_widgets_tab_current` (non-profile cells), `test_widgets_tab_general_current`,
+  `test_worker_latency_tuning`, `tests/unit/test_policy_compliance`.
+- *Deeper behavioural/integration (fixture reconciliation needed):*
+  `test_image_pipeline` (prefetch state shape), `test_image_worker`,
+  `test_image_worker_shared_memory`, `test_save_debounce`,
+  `test_spotify_visualizer_integration` + `test_visualizer_reactivity_quality`
+  (need full resolved technical config to produce FFT output),
+  `test_visualizer_preset_transfer` (fail-closed all-mode-presets contract),
+  `test_reddit_helper_recovery`, `test_reddit_helper_task_harness`,
+  `test_transition_distribution` + `test_visualizer_alignment` (semantic/real-Qt).
+- *Real-GL:* `test_qtquick_render_node`, `test_qtquick_visualizer_clip_smoke`
+  (need real-GL/driver acceptance).
+
 ## 0.17 2026-09-14 Windows/PySide6 destination profile — ALL GREEN (132/132)
 
 The full maintained `destination` profile was executed on the intended
