@@ -8,6 +8,7 @@ second product schema. Legacy-list migration is covered separately by
 """
 from __future__ import annotations
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     apply_visualizer_mode_disable,
@@ -25,16 +26,22 @@ def _activation(*mode_ids: str) -> dict[str, bool]:
     return build_visualizer_mode_activation(mode_ids)
 
 
+def _canonical_enabled_modes() -> tuple[str, ...]:
+    activation = require_canonical_default("widgets.spotify_visualizer.mode_activation")
+    return tuple(mode_id for mode_id in VISUALIZER_MODE_IDS if bool(activation[mode_id]))
+
+
 def test_absent_activation_resolves_through_canonical_defaults():
-    assert resolve_effective_enabled_modes(None) == VISUALIZER_MODE_IDS
+    assert resolve_effective_enabled_modes(None) == _canonical_enabled_modes()
 
 
 def test_malformed_non_mapping_activation_never_disables_the_family():
     # The retired enabled-id list is intentionally NOT a runtime schema anymore.
     # Malformed/currently-invalid shapes recover through canonical defaults.
-    assert resolve_effective_enabled_modes([]) == VISUALIZER_MODE_IDS
-    assert resolve_effective_enabled_modes(["bubble", "spectrum"]) == VISUALIZER_MODE_IDS
-    assert resolve_effective_enabled_modes(123) == VISUALIZER_MODE_IDS
+    expected = _canonical_enabled_modes()
+    assert resolve_effective_enabled_modes([]) == expected
+    assert resolve_effective_enabled_modes(["bubble", "spectrum"]) == expected
+    assert resolve_effective_enabled_modes(123) == expected
 
 
 def test_write_side_builder_dedupes_and_resolver_uses_registry_order():
@@ -203,4 +210,4 @@ def test_apply_disable_never_widens_to_all_modes():
 def test_admissible_modes_intersect_activation_with_dev_active():
     activation = _activation("bubble", "spectrum")
     assert resolve_admissible_enabled_modes(activation) == ("spectrum", "bubble")
-    assert resolve_admissible_enabled_modes(None) == VISUALIZER_MODE_IDS
+    assert resolve_admissible_enabled_modes(None) == _canonical_enabled_modes()

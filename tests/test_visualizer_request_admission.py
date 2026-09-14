@@ -16,6 +16,7 @@ import core.settings.visualizer_presets as visualizer_presets
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     build_visualizer_mode_activation,
+    resolve_effective_enabled_modes,
 )
 from engine.display_manager import DisplayManager
 
@@ -73,9 +74,9 @@ def test_request_admits_enabled_mode_into_activation(monkeypatch):
         mgr._request_quick_visualizer_mode("bubble")
 
 
-def test_request_all_modes_enabled_default_admits_any_active_mode(monkeypatch):
-    # Absent mode_activation -> canonical defaults (all enabled today): no gate
-    # rejection for any dev-active mode.
+def test_request_absent_activation_follows_canonical_mode_defaults(monkeypatch):
+    # Absent mode_activation resolves through canonical activation; this test must
+    # not silently turn today's enabled set into a second product-default authority.
     owner = _Owner()
     section = {"mode": "spectrum"}
     mgr = _make_manager(section, owner)
@@ -89,6 +90,10 @@ def test_request_all_modes_enabled_default_admits_any_active_mode(monkeypatch):
         lambda _section: (_ for _ in ()).throw(_ReachedActivation()),
     )
 
+    enabled = set(resolve_effective_enabled_modes(None))
     for mode in VISUALIZER_MODE_IDS:
-        with pytest.raises(_ReachedActivation):
-            mgr._request_quick_visualizer_mode(mode)
+        if mode in enabled:
+            with pytest.raises(_ReachedActivation):
+                mgr._request_quick_visualizer_mode(mode)
+        else:
+            assert mgr._request_quick_visualizer_mode(mode) is False

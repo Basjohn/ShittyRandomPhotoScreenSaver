@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 from PySide6.QtWidgets import QCheckBox, QSpinBox, QVBoxLayout, QWidget
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.defaults import CANONICAL_DEFAULTS
 from core.settings.models._core import ShadowSettings
 from core.settings.settings_manager import SettingsManager
@@ -114,32 +115,49 @@ def test_no_production_copy_of_retired_profile_behavior_remains() -> None:
 
 def test_shadow_settings_defaults_match_canonical() -> None:
     s = ShadowSettings()
-    assert s.blur_radius == 18
-    assert s.frame_opacity == pytest.approx(0.77)
-    assert s.text_opacity == pytest.approx(0.33)
-    assert s.direction == "SE"
-    assert s.frame_extra_offset == 0
-    assert s.text_extra_offset == 0
+    for attr in (
+        "blur_radius",
+        "frame_opacity",
+        "text_opacity",
+        "direction",
+        "frame_extra_offset",
+        "text_extra_offset",
+    ):
+        expected = require_canonical_default(f"widgets.shadows.{attr}")
+        actual = getattr(s, attr)
+        if isinstance(expected, float):
+            assert actual == pytest.approx(expected)
+        else:
+            assert actual == expected
     assert not hasattr(s, "offset")
 
 
 def test_shadow_settings_round_trip_has_extras_and_no_offset() -> None:
     payload = ShadowSettings().to_dict()
-    assert payload["widgets.shadows.frame_extra_offset"] == 0
-    assert payload["widgets.shadows.text_extra_offset"] == 0
-    assert payload["widgets.shadows.direction"] == "SE"
+    for key in ("frame_extra_offset", "text_extra_offset", "direction"):
+        assert payload[f"widgets.shadows.{key}"] == require_canonical_default(
+            f"widgets.shadows.{key}"
+        )
     assert "widgets.shadows.offset" not in payload
 
 
 def test_canonical_defaults_shadows_are_clean() -> None:
     shadows = CANONICAL_DEFAULTS["widgets"]["shadows"]
-    assert shadows["direction"] == "SE"
-    assert shadows["frame_extra_offset"] == 0
-    assert shadows["text_extra_offset"] == 0
+    # Schema/retirement contract, not a frozen copy of today's product values.
     assert "offset" not in shadows
-    assert shadows["blur_radius"] == 18
-    assert shadows["frame_opacity"] == pytest.approx(0.77)
-    assert shadows["text_opacity"] == pytest.approx(0.33)
+    for key in (
+        "direction",
+        "frame_extra_offset",
+        "text_extra_offset",
+        "blur_radius",
+        "frame_opacity",
+        "text_opacity",
+    ):
+        assert key in shadows
+    assert shadows["direction"] in {direction.value for direction in ShadowDirection}
+    assert isinstance(shadows["blur_radius"], int)
+    assert 0 <= shadows["frame_opacity"] <= 1
+    assert 0 <= shadows["text_opacity"] <= 1
 
 
 def test_retired_offset_pair_is_stripped_on_cleanup(tmp_path: Path) -> None:
@@ -184,11 +202,23 @@ def _fake_general_tab(existing_shadows: dict) -> SimpleNamespace:
     tab.widget_header_shadows_enabled = QCheckBox()
     tab.widget_stacking_enabled = QCheckBox()
     for name, value in (
-        ("widget_shadow_darkness_spin", 77),
-        ("widget_shadow_blur_spin", 18),
-        ("widget_shadow_extra_offset_spin", 0),
-        ("widget_text_shadow_darkness_spin", 33),
-        ("widget_text_shadow_extra_offset_spin", 0),
+        (
+            "widget_shadow_darkness_spin",
+            round(float(require_canonical_default("widgets.shadows.frame_opacity")) * 100),
+        ),
+        ("widget_shadow_blur_spin", int(require_canonical_default("widgets.shadows.blur_radius"))),
+        (
+            "widget_shadow_extra_offset_spin",
+            int(require_canonical_default("widgets.shadows.frame_extra_offset")),
+        ),
+        (
+            "widget_text_shadow_darkness_spin",
+            round(float(require_canonical_default("widgets.shadows.text_opacity")) * 100),
+        ),
+        (
+            "widget_text_shadow_extra_offset_spin",
+            int(require_canonical_default("widgets.shadows.text_extra_offset")),
+        ),
     ):
         spin = QSpinBox()
         spin.setRange(0, 100)
@@ -268,9 +298,10 @@ def test_direction_picker_has_eight_cells_inert_center_and_updates_selection(qt_
 
 
 @pytest.mark.qt
-def test_direction_picker_malformed_stored_token_falls_back_to_se(qt_app) -> None:
+def test_direction_picker_malformed_stored_token_falls_back_to_canonical(qt_app) -> None:
     from core.settings.shadow_direction import resolve_shadow_direction
 
+    canonical = ShadowDirection(require_canonical_default("widgets.shadows.direction"))
     tab = SimpleNamespace()
     tab._save_settings = lambda: None
     host = QWidget()
@@ -279,8 +310,8 @@ def test_direction_picker_malformed_stored_token_falls_back_to_se(qt_app) -> Non
         wtd._build_shadow_direction_picker(
             tab, layout, resolve_shadow_direction("not-a-direction")
         )
-        assert tab._selected_shadow_direction is ShadowDirection.SE
-        assert tab._shadow_direction_buttons[ShadowDirection.SE].isChecked() is True
+        assert tab._selected_shadow_direction is canonical
+        assert tab._shadow_direction_buttons[canonical].isChecked() is True
     finally:
         host.deleteLater()
         qt_app.processEvents()

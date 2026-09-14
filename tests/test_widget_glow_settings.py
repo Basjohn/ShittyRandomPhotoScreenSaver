@@ -7,6 +7,7 @@ from PySide6.QtCore import QCoreApplication, QEvent
 from PySide6.QtGui import QColor
 
 from core.settings import SettingsManager
+from core.settings.default_contract import require_canonical_default
 from core.settings.models import InputSettings
 from ui import widget_theme_active
 from ui.settings_theme_spec import Rgba
@@ -31,19 +32,21 @@ def _settings(tmp_path, name: str):
 def test_widget_glow_defaults_inherit_theme_and_model_roundtrip(tmp_path):
     settings = _settings(tmp_path, "WidgetGlowDefaults")
 
-    assert settings.get("input.widget_glow_on_hover") is True
-    assert settings.get("input.widget_glow_on_click") is False
-    assert settings.get("input.widget_glow_intensity") == 80
-    assert settings.get("input.widget_glow_distance") == 25
-    assert settings.get("input.widget_glow_color") is None
+    keys = (
+        "widget_glow_on_hover",
+        "widget_glow_on_click",
+        "widget_glow_intensity",
+        "widget_glow_distance",
+        "widget_glow_color",
+    )
+    expected = {key: require_canonical_default(f"input.{key}") for key in keys}
+    for key, value in expected.items():
+        assert settings.get(f"input.{key}") == value
 
     model = InputSettings.from_settings(settings)
-    assert model.widget_glow_intensity == 80
-    assert model.widget_glow_distance == 25
-    assert model.widget_glow_color is None
-    assert model.to_dict()["input.widget_glow_intensity"] == 80
-    assert model.to_dict()["input.widget_glow_distance"] == 25
-    assert model.to_dict()["input.widget_glow_color"] is None
+    for key, value in expected.items():
+        assert getattr(model, key) == value
+        assert model.to_dict()[f"input.{key}"] == value
 
     settings.set("input.widget_glow_on_hover", True)
     settings.set("input.widget_glow_on_click", True)

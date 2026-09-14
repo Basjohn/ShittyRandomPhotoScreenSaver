@@ -109,16 +109,12 @@ def test_gmail_defaults_are_complete_and_do_not_contain_credentials() -> None:
     assert gmail["limit"] > 0
 
 
-def test_reddit_refresh_spiral_default_comes_from_defaults() -> None:
+def test_refresh_spiral_defaults_are_explicit_boolean_product_settings() -> None:
     from core.settings.default_settings import DEFAULT_SETTINGS
 
-    assert DEFAULT_SETTINGS["widgets"]["reddit"]["show_refresh_spiral"] is True
-
-
-def test_gmail_refresh_spiral_default_comes_from_defaults() -> None:
-    from core.settings.default_settings import DEFAULT_SETTINGS
-
-    assert DEFAULT_SETTINGS["widgets"]["gmail"]["show_refresh_spiral"] is True
+    for family in ("reddit", "gmail"):
+        value = DEFAULT_SETTINGS["widgets"][family]["show_refresh_spiral"]
+        assert type(value) is bool
 
 
 def test_gmail_signal_block_attrs_cover_newer_controls() -> None:

@@ -1401,8 +1401,14 @@ def test_abandonment_rebuild_arms_persisted_remaining_rotation_delay(
             return True
 
     consumer = _Consumer()
+    # TEST INPUT, NOT A DEFAULT GOLDEN: this timer case deliberately supplies
+    # five minutes and must re-arm from that config, independent of the product
+    # Steam refresh default.
+    fixture_refresh_minutes = 5
     service = AbandonmentRuntimeService(
-        config=_runtime_config(show_artwork=False, refresh_minutes=5),
+        config=_runtime_config(
+            show_artwork=False, refresh_minutes=fixture_refresh_minutes
+        ),
     )
     try:
         service.attach_consumer(consumer)
@@ -1414,7 +1420,7 @@ def test_abandonment_rebuild_arms_persisted_remaining_rotation_delay(
         created[0][1]()
 
         assert created[0][2].active is False
-        assert created[1][0] == 5 * 60 * 1_000
+        assert created[1][0] == fixture_refresh_minutes * 60 * 1_000
         assert rotations == [True]
     finally:
         service.retire()

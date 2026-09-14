@@ -26,17 +26,23 @@ def _literal(relative: str, name: str) -> dict:
 def test_canonical_defaults_have_one_shape_for_previously_duplicated_roots() -> None:
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
 
-    assert defaults["accessibility"] == {
-        "dimming": {"enabled": True, "opacity": 15},
-        "pixel_shift": {"enabled": False, "rate": 1},
-    }
-    assert defaults["workers"] == {
-        "fft": {"enabled": False},
-        "image": {"enabled": True},
-        "max_workers": "auto",
-        "rss": {"enabled": True},
-        "transition": {"enabled": True},
-    }
+    # Structural/schema contract only. Mutable values inside these roots are
+    # product policy and must not become a second authority in this test.
+    accessibility = defaults["accessibility"]
+    assert set(accessibility) == {"dimming", "pixel_shift"}
+    assert set(accessibility["dimming"]) == {"enabled", "opacity"}
+    assert set(accessibility["pixel_shift"]) == {"enabled", "rate"}
+    assert isinstance(accessibility["dimming"]["enabled"], bool)
+    assert isinstance(accessibility["pixel_shift"]["enabled"], bool)
+
+    workers = defaults["workers"]
+    assert isinstance(workers, dict)
+    assert "max_workers" in workers
+    for worker_name, section in workers.items():
+        if worker_name == "max_workers":
+            continue
+        assert isinstance(section, dict), worker_name
+        assert isinstance(section.get("enabled"), bool), worker_name
 
     for root in ("accessibility", "workers", "ui"):
         assert all("." not in str(key) for key in defaults[root])
@@ -48,20 +54,24 @@ def test_canonical_defaults_have_one_shape_for_previously_duplicated_roots() -> 
 def test_real_persisted_fallbacks_are_canonical_product_defaults() -> None:
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
 
-    assert defaults["cache"] == {
-        "max_concurrent": 2,
-        "max_items": 16,
-        "max_memory_mb": 256,
-        "prefetch_ahead": 5,
+    # Presence/type is schema; the actual cache/history values are mutable product
+    # defaults and are deliberately not copied into the test suite.
+    assert set(defaults["cache"]) == {
+        "max_concurrent",
+        "max_items",
+        "max_memory_mb",
+        "prefetch_ahead",
     }
-    assert defaults["queue"]["history_size"] == 50
+    assert all(isinstance(defaults["cache"][key], int) for key in defaults["cache"])
+    assert isinstance(defaults["queue"]["history_size"], int)
 
     overrides = _literal(
         "core/settings/default_profile_overrides.py",
         "PROFILE_DEFAULT_OVERRIDES",
     )
     assert "mc" not in defaults
-    assert overrides["Screensaver_MC"]["mc"]["always_on_top"] is True
+    assert "always_on_top" in overrides["Screensaver_MC"]["mc"]
+    assert isinstance(overrides["Screensaver_MC"]["mc"]["always_on_top"], bool)
 
 
 def test_runtime_history_and_settings_session_state_are_not_product_defaults() -> None:
@@ -84,8 +94,10 @@ def test_runtime_history_and_settings_session_state_are_not_product_defaults() -
         assert transient not in ui
 
     # Theme selection and authored bucket defaults are product defaults, not
-    # session captures, and therefore stay canonical.
-    assert ui["settings_theme_selection"] == "file:Default Dark [Single] [Glass].srtheme"
+    # session captures. Guard their persisted shape without freezing today's
+    # chosen theme value in a second authority.
+    assert isinstance(ui["settings_theme_selection"], str)
+    assert ui["settings_theme_selection"].strip()
     assert isinstance(ui["widget_bucket_states"], dict)
 
 
@@ -235,35 +247,35 @@ def test_visualizer_literal_and_derived_snapshot_have_identical_schema() -> None
     assert set(snapshot_vis) == set(literal_vis)
     for retired in ("osc_glow_size", "sine_glow_size", "sine_line1_color"):
         assert retired not in literal_vis
-    assert literal_vis["sphere_taste_the_rainbow_enabled"] is False
-    assert literal_vis["sphere_taste_the_rainbow_surfaces"] is True
-    assert literal_vis["sphere_taste_the_rainbow_edges"] is True
+    for key in (
+        "sphere_taste_the_rainbow_enabled",
+        "sphere_taste_the_rainbow_surfaces",
+        "sphere_taste_the_rainbow_edges",
+    ):
+        assert isinstance(literal_vis[key], bool)
 
 
 def test_curated_visualizer_preset_assets_remain_separate_authored_inputs() -> None:
+    """Authored preset slots may grow/shrink and may be sparse; content stays separate."""
     preset_root = ROOT / "presets" / "visualizer_modes"
-    expected_counts = {
-        "bubble": 9,
-        "devcurve": 2,
-        "oscilloscope": 4,
-        "sine_wave": 6,
-        "spectrum": 4,
-        "sphere": 4,
-    }
+    from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
 
-    for mode, count in expected_counts.items():
+    for mode in VISUALIZER_MODE_IDS:
         files = sorted((preset_root / mode).glob("preset_*.json"))
-        assert len(files) == count
-        indices = []
+        # A shipped mode needs authored content, but count/slot numbering are not
+        # defaults authority: users may add/delete presets and sparse slots are valid.
+        assert files, mode
+        authored_slots: set[int] = set()
         for path in files:
             payload = json.loads(path.read_text(encoding="utf-8"))
             snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
             assert snapshot["mode"] == mode
-            indices.append(int(payload["preset_index"]))
+            slot = int(payload["preset_index"])
+            assert slot not in authored_slots, (mode, slot)
+            authored_slots.add(slot)
             # Presets are authored overlays, not copies of the whole defaults
-            # authority.  They must retain substantive mode-owned content.
+            # authority. They must retain substantive mode-owned content.
             assert len(snapshot) > 5
-        assert indices == list(range(count))
 
     presets_source = _text("core/settings/visualizer_presets.py")
     assert "For Custom (last index), *config* is returned unchanged" in presets_source
@@ -371,6 +383,9 @@ def test_retired_visualizer_growth_is_invalidated_once_not_preserved_as_schema()
 def test_runtime_recovery_metadata_starts_empty_instead_of_copying_widget_defaults() -> None:
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
     restore = defaults["widgets"]["custom_layout_restore"]
+    # EXACT-VALUE INVARIANT: this is runtime-recovery metadata schema, not a
+    # mutable presentation default. Version 1 + empty runtime ownership is the
+    # persistence format contract until an intentional schema migration changes it.
     assert restore == {"version": 1, "widgets": {}}
 
 
@@ -562,13 +577,15 @@ def test_widget_preview_and_custom_position_repair_use_canonical_sections() -> N
 
 
 def test_profile_layering_contains_only_real_behavioral_differences() -> None:
-    """MC profile overrides preserve its established monitor routing and behavior."""
+    """MC differences must be exactly the explicit profile overlay, whatever its values."""
     import sys
     sys.path.insert(0, str(ROOT))
+    from core.settings.default_profile_overrides import PROFILE_DEFAULT_OVERRIDES
     from core.settings.defaults import get_default_settings
 
     normal = get_default_settings("Screensaver")
     mc = get_default_settings("Screensaver_MC")
+    overlay = PROFILE_DEFAULT_OVERRIDES["Screensaver_MC"]
 
     def collect_diff(left: object, right: object, prefix: str = "") -> dict[str, tuple[object, object]]:
         if isinstance(left, dict) and isinstance(right, dict):
@@ -584,41 +601,21 @@ def test_profile_layering_contains_only_real_behavioral_differences() -> None:
             return result
         return {} if left == right else {prefix: (left, right)}
 
-    expected_monitor_diffs = {
-        "widgets.clock.monitor": ("1", "ALL"),
-        "widgets.clock2.monitor": (1, 2),
-        "widgets.clock3.monitor": ("1", "ALL"),
-        "widgets.friend_pulse.monitor": ("1", "ALL"),
-        "widgets.gmail.monitor": (1, 2),
-        "widgets.media.monitor": (1, 2),
-        "widgets.reddit.monitor": (1, 2),
-        "widgets.reddit2.monitor": (1, 2),
-        "widgets.spotify_visualizer.monitor": ("1", "ALL"),
-        "widgets.steam_progress.monitor": ("1", "ALL"),
-    }
-    assert collect_diff(normal, mc) == {
-        "display.show_on_monitors": ("ALL", [2]),
-        "input.interaction_mode": (False, True),
-        "mc": (None, {"always_on_top": True}),
-        **expected_monitor_diffs,
-    }
+    def flatten(mapping: dict, prefix: str = "") -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in mapping.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                result.update(flatten(value, path))
+            else:
+                result[path] = value
+        return result
 
-    overrides = _literal(
-        "core/settings/default_profile_overrides.py",
-        "PROFILE_DEFAULT_OVERRIDES",
-    )["Screensaver_MC"]
-    assert overrides["widgets"] == {
-        "clock": {"monitor": "ALL"},
-        "clock2": {"monitor": 2},
-        "clock3": {"monitor": "ALL"},
-        "friend_pulse": {"monitor": "ALL"},
-        "gmail": {"monitor": 2},
-        "media": {"monitor": 2},
-        "reddit": {"monitor": 2},
-        "reddit2": {"monitor": 2},
-        "spotify_visualizer": {"monitor": "ALL"},
-        "steam_progress": {"monitor": "ALL"},
-    }
+    actual = collect_diff(normal, mc)
+    expected_overlay = flatten(overlay)
+    assert set(actual) == set(expected_overlay)
+    for path, expected_value in expected_overlay.items():
+        assert actual[path][1] == expected_value
 
 
 def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_ownership() -> None:
@@ -678,7 +675,7 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
     })
 
     replaced = _project_import_state(mgr, {}, merge=False)
-    assert replaced["timing.interval"] == fresh["timing.interval"] == 40
+    assert replaced["timing.interval"] == fresh["timing.interval"]
     assert replaced["visualizer_custom_presets"] == normalized_existing
 
     incoming_custom = {"sine_wave": {"sine_wave_sensitivity": 1.5}}

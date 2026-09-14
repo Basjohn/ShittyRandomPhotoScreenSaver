@@ -42,6 +42,11 @@ class _Consumer:
         self.fade_requests += 1
 
 
+# TEST INPUT, NOT A DEFAULT GOLDEN: runtime tests intentionally use a short
+# configured cadence; the product default may change independently.
+_FIXTURE_REFRESH_MINUTES = 5
+
+
 class _QueuedIoManager:
     def __init__(self) -> None:
         self.tasks: list[SimpleNamespace] = []
@@ -67,7 +72,7 @@ def _config(
         selection=AchievementPulseSelection(mode=selection_mode),
         show_artwork=show_artwork,
         show_latest_artwork=show_latest_artwork,
-        refresh_minutes=5,
+        refresh_minutes=_FIXTURE_REFRESH_MINUTES,
     )
 
 

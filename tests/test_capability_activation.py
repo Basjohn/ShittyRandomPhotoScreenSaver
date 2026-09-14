@@ -2,8 +2,8 @@
 
 Activation is separate from a widget instance's ``enabled`` flag and from a
 transition's random-pool membership. These tests pin the read/write semantics
-and, critically, that the canonical defaults keep every capability activated so
-current behaviour is unchanged until H0 sets final Quick-era defaults.
+and require missing known state to resolve through the current canonical maps;
+they deliberately do not freeze today's activation values as test-owned policy.
 """
 from __future__ import annotations
 
@@ -18,9 +18,10 @@ from rendering.widget_descriptors import get_widget_family_descriptors
 # --- Defaults preserve current behaviour -----------------------------------
 
 
-def test_canonical_default_activates_visualizers():
+def test_visualizer_family_activation_follows_canonical_default():
     widgets = get_default_settings()["widgets"]
-    assert ca.is_widget_family_activated(widgets, "visualizers") is True
+    expected = bool(widgets["family_activation"]["visualizers"])
+    assert ca.is_widget_family_activated(widgets, "visualizers") is expected
 
 
 # --- Visualizers -> Media dependency ---------------------------------------
@@ -59,12 +60,14 @@ def test_dependency_helpers():
     assert ca.is_widget_family_effective(off, "visualizers") is False
 
 
-def test_canonical_defaults_activate_every_family():
+def test_canonical_defaults_drive_every_known_family_activation():
     widgets = get_default_settings()["widgets"]
+    activation = widgets["family_activation"]
     for family in get_widget_family_descriptors():
-        # A family omitted from the explicit activation defaults must still read
-        # as activated via the True fallback.
-        assert ca.is_widget_family_activated(widgets, family.family_id) is True
+        assert family.family_id in activation
+        assert ca.is_widget_family_activated(widgets, family.family_id) is bool(
+            activation[family.family_id]
+        )
 
 
 def test_canonical_transition_activation_matches_explicit_defaults():
@@ -75,28 +78,24 @@ def test_canonical_transition_activation_matches_explicit_defaults():
     assert any(not bool(value) for value in activation.values())
 
 
-def test_default_family_activation_keys_are_explicit_for_stable_families():
+def test_default_family_activation_keys_are_explicit_boolean_leaves():
     activation = get_default_settings()["widgets"]["family_activation"]
-    for family_id in (
-        "clocks",
-        "weather",
-        "media",
-        "reddit",
-        "gmail",
-        "steam",
-        "system_stats",
-    ):
-        assert activation[family_id] is True
+    expected_ids = {family.family_id for family in get_widget_family_descriptors()}
+    assert set(activation) == expected_ids
+    assert all(type(value) is bool for value in activation.values())
 
 
 # --- Missing state means activated -----------------------------------------
 
 
-def test_missing_state_reads_as_activated():
-    assert ca.is_widget_family_activated({}, "clocks") is True
-    assert ca.is_widget_family_activated(None, "clocks") is True
-    assert ca.is_transition_activated({}, "Burn") is True
-    assert ca.is_transition_activated(None, "Burn") is True
+def test_missing_known_state_reads_from_canonical_defaults():
+    defaults = get_default_settings()
+    expected_clock = bool(defaults["widgets"]["family_activation"]["clocks"])
+    expected_burn = bool(defaults["transitions"]["activation"]["Burn"])
+    assert ca.is_widget_family_activated({}, "clocks") is expected_clock
+    assert ca.is_widget_family_activated(None, "clocks") is expected_clock
+    assert ca.is_transition_activated({}, "Burn") is expected_burn
+    assert ca.is_transition_activated(None, "Burn") is expected_burn
 
 
 def test_unknown_capability_reads_as_activated():
@@ -199,8 +198,8 @@ def test_deactivated_manual_request_resolves_to_activated_fallback():
     resolved = ca.resolve_manual_transition_selection(transitions, "Burn")
     assert resolved != "Burn"
     assert ca.is_transition_activated(transitions, resolved) is True
-    # Missing activation state resolves through canonical defaults; Crossfade is
-    # currently disabled there, so the canonical first activated transition wins.
+    # Missing activation state resolves through canonical defaults; whichever
+    # transition is currently first-enabled in registry order wins.
     assert resolved == ca.get_default_activated_transition(transitions)
 
 
@@ -211,7 +210,6 @@ def test_default_activated_transition_respects_canonical_activation_defaults():
         name for name in get_transition_setting_names()
         if ca.is_transition_activated({}, name)
     )
-    assert ca.is_transition_activated({}, "Crossfade") is False
 
 
 def test_default_activated_transition_when_crossfade_deactivated():

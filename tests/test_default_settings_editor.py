@@ -7,6 +7,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QDialog, QFontComboBox
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.defaults import (
     MC_PROFILE,
     NORMAL_PROFILE,
@@ -49,12 +50,17 @@ def test_profile_defaults_resolve_normal_and_mc_without_mutating_base() -> None:
     mc = get_default_settings(MC_PROFILE)
 
     assert base == base_before
-    assert normal["display"]["show_on_monitors"] == "ALL"
-    assert normal["input"]["interaction_mode"] is False
-    assert mc["display"]["show_on_monitors"] == [1]
-    assert mc["input"]["interaction_mode"] is True
-    assert mc["widgets"]["gmail"]["monitor"] == "2"
-    assert mc["widgets"]["media"]["monitor"] == "2"
+    for profile, resolved in ((NORMAL_PROFILE, normal), (MC_PROFILE, mc)):
+        for key in (
+            "display.show_on_monitors",
+            "input.interaction_mode",
+            "widgets.gmail.monitor",
+            "widgets.media.monitor",
+        ):
+            current = resolved
+            for part in key.split("."):
+                current = current[part]
+            assert current == require_canonical_default(key, profile)
 
 
 def test_editor_model_discovers_new_settings_and_compacts_profile_differences(tmp_path) -> None:

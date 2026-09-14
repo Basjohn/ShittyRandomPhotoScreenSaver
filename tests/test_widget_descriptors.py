@@ -209,7 +209,8 @@ def test_widget_custom_position_option_descriptors_follow_section_contract():
     # Position defaults have one authority: canonical widget settings.  The
     # descriptor must not reintroduce a copied fallback literal.
     assert not hasattr(media, "fallback_position")
-    assert get_default_settings()["widgets"]["media"]["position"] == "Top Left"
+    canonical_position = get_default_settings()["widgets"]["media"]["position"]
+    assert isinstance(canonical_position, str) and canonical_position.strip()
 
 
 def test_widget_section_index_resolution_prefers_stable_section_id():
@@ -766,14 +767,18 @@ def test_sync_custom_layout_restore_routes_tracks_last_non_custom_authored_state
 
     restore_map = widgets_cfg["custom_layout_restore"]["widgets"]
     assert restore_map["clock"]["position"] == "Top Right"
-    assert restore_map["clock"]["monitor"] == "1"
+    assert str(restore_map["clock"]["monitor"]) == str(
+        get_default_settings()["widgets"]["clock"]["monitor"]
+    )
     # Clock clones intentionally share the base clock authored position route
     # while retaining their own monitor routes. Missing monitor state repairs
     # from canonical defaults rather than inventing an ALL fallback.
     assert restore_map["clock2"]["position"] == "Top Right"
     assert restore_map["clock2"]["monitor"] == "2"
     assert restore_map["clock3"]["position"] == "Top Right"
-    assert restore_map["clock3"]["monitor"] == "1"
+    assert str(restore_map["clock3"]["monitor"]) == str(
+        get_default_settings()["widgets"]["clock3"]["monitor"]
+    )
     assert restore_map["weather"]["position"] == "Bottom Left"
     assert restore_map["weather"]["monitor"] == "1"
     assert "gmail" not in restore_map

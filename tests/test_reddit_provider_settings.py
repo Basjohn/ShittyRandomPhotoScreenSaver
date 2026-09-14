@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.settings.default_contract import require_canonical_default
 from core.settings.defaults import get_default_settings
 from core.settings.models import RedditWidgetSettings
 from rendering.widget_runtime_services import get_runtime_service_spec
@@ -8,7 +9,9 @@ from rendering.widget_runtime_services import get_runtime_service_spec
 def test_reddit_defaults_use_rss_provider() -> None:
     defaults = get_default_settings()
 
-    assert defaults["widgets"]["reddit"]["provider"] == "rss"
+    assert defaults["widgets"]["reddit"]["provider"] == require_canonical_default(
+        "widgets.reddit.provider"
+    )
 
 
 def test_reddit_widget_settings_round_trip_provider() -> None:
@@ -65,8 +68,11 @@ def test_reddit2_own_provider_overrides_family_inheritance() -> None:
     assert getattr(service, "provider_id", None) == "html"
 
 
-def test_reddit_missing_provider_normalizes_to_rss_default() -> None:
+def test_reddit_missing_provider_normalizes_to_rss_recovery_policy() -> None:
     spec = get_runtime_service_spec("reddit")
     assert spec is not None
     service = spec.build("reddit", {"reddit": {"subreddit": "games"}})
+    # EXACT-VALUE INVARIANT: RSS is the runtime fail-safe when a provider token
+    # is absent/invalid; that resilience policy is independent of today's mutable
+    # product default.
     assert getattr(service, "provider_id", None) == "rss"

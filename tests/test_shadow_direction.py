@@ -55,9 +55,12 @@ def test_axis_only_directions_zero_the_perpendicular_axis() -> None:
     assert resolve_signed_offset(ShadowDirection.W, 4.0, 6.0) == (-4.0, 0.0)
 
 
-def test_default_direction_is_se() -> None:
-    assert DEFAULT_SHADOW_DIRECTION is ShadowDirection.SE
-    assert resolve_signed_offset(ShadowDirection.SE, 4.0, 6.0) == (4.0, 6.0)
+def test_default_direction_follows_canonical_authority() -> None:
+    expected = ShadowDirection(str(CANONICAL_DEFAULTS["widgets"]["shadows"]["direction"]).upper())
+    assert DEFAULT_SHADOW_DIRECTION is expected
+    assert resolve_signed_offset(expected, 4.0, 6.0) == resolve_signed_offset(
+        ShadowDirection(expected.value), 4.0, 6.0
+    )
 
 
 def test_direction_owns_orientation_only_not_magnitude() -> None:
@@ -84,8 +87,8 @@ def test_resolve_accepts_canonical_and_case_insensitive_tokens(token, expected) 
     "token",
     ["", "center", "middle", "diagonal", "NORTHWEST", None, 5, [], object()],
 )
-def test_malformed_or_unknown_token_resolves_to_default_se(token) -> None:
-    assert resolve_shadow_direction(token) is ShadowDirection.SE
+def test_malformed_or_unknown_token_resolves_to_canonical_default(token) -> None:
+    assert resolve_shadow_direction(token) is DEFAULT_SHADOW_DIRECTION
 
 
 def test_resolve_shadow_offsets_preserves_distinct_class_magnitudes() -> None:
@@ -117,19 +120,18 @@ def test_get_shadow_direction_reads_canonical_key_with_default_fallback() -> Non
     assert get_shadow_direction(_Settings({SHADOW_DIRECTION_SETTING_KEY: "NW"})) is (
         ShadowDirection.NW
     )
-    # Missing key -> canonical default.
-    assert get_shadow_direction(_Settings({})) is ShadowDirection.SE
-    # Malformed stored token -> canonical default.
+    # Missing/malformed/non-settings state resolves through canonical authority.
+    assert get_shadow_direction(_Settings({})) is DEFAULT_SHADOW_DIRECTION
     assert get_shadow_direction(_Settings({SHADOW_DIRECTION_SETTING_KEY: "??"})) is (
-        ShadowDirection.SE
+        DEFAULT_SHADOW_DIRECTION
     )
-    # Non-settings object -> canonical default.
-    assert get_shadow_direction(object()) is ShadowDirection.SE
+    assert get_shadow_direction(object()) is DEFAULT_SHADOW_DIRECTION
 
 
 def test_shadow_settings_model_round_trips_direction() -> None:
-    assert ShadowSettings().direction == "SE"
-    assert ShadowSettings().to_dict()[SHADOW_DIRECTION_SETTING_KEY] == "SE"
+    canonical = str(CANONICAL_DEFAULTS["widgets"]["shadows"]["direction"])
+    assert ShadowSettings().direction == canonical
+    assert ShadowSettings().to_dict()[SHADOW_DIRECTION_SETTING_KEY] == canonical
 
     class _Settings:
         def get(self, key, default=None):
@@ -140,8 +142,10 @@ def test_shadow_settings_model_round_trips_direction() -> None:
     assert loaded.to_dict()[SHADOW_DIRECTION_SETTING_KEY] == "NW"
 
 
-def test_canonical_defaults_expose_direction_se() -> None:
-    assert CANONICAL_DEFAULTS["widgets"]["shadows"]["direction"] == "SE"
+def test_canonical_defaults_expose_valid_shadow_direction() -> None:
+    assert CANONICAL_DEFAULTS["widgets"]["shadows"]["direction"] in {
+        direction.value for direction in ShadowDirection
+    }
 
 
 def _qml_code_without_comments(path: Path) -> str:

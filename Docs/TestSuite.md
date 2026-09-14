@@ -2,6 +2,49 @@
 
 Last updated: 2026-09-14
 
+## 0.21 2026-09-14 mutable-default golden audit — §0.18 value-drift bucket superseded
+
+The §0.18 broad-tree audit correctly refused to force 32 red files green, but its “value-drift goldens” label mixed mutable
+default snapshots, legitimate behavioral fixture inputs, stale migration/policy cells, and genuine behavioral contracts.
+A focused test-architecture audit now separates those categories. No production default/runtime behavior was changed in this
+slice.
+
+**Rule:** ordinary product defaults are intentionally mutable policy. Tests must derive expected defaults from canonical
+authority or prove generated-artifact parity. Exact literals remain only when the literal itself is contractual and are
+annotated `EXACT-VALUE INVARIANT:`. Explicit non-default behavioral stimuli/cadences remain literal test inputs and ambiguous
+cases are annotated `TEST INPUT, NOT A DEFAULT GOLDEN`.
+
+**Reconciled:** 39 test modules were edited across Settings/defaults/Visualizer/widget/Steam coverage. Major brittle copies
+now follow canonical authority for shadow/glow defaults, input gain/transient defaults, Display defaults, profile/default
+selection, Visualizer mode activation/custom-preset selectors, widget/family activation, Gmail authored width, System Stats
+defaults, Reddit provider defaults and SettingsManager profile expectations. `test_defaults_schema_authority.py` no longer
+acts as a migration-era snapshot of today’s default dictionaries/counts; it protects authority/shape/type/generated-artifact
+and runtime-state boundaries instead.
+
+**Not default drift:** Steam Abandonment/Achievement cadence cells intentionally choose short fixture cadences and now share
+fixture constants so downstream timer expectations follow the chosen input rather than the current six-minute Steam product
+default. The retired transition-worker latency cell was removed; the policy-compliance test now recognizes the explicitly
+permitted generation-owned Visualizer cadence lifetime; installer reset-policy coverage follows current installer policy
+instead of the retired 5.0.0 migration default. These were stale/misclassified tests, not reasons to freeze product defaults.
+
+**Validation available in this environment:** all 39 edited test modules pass `py_compile`;
+`python tools/check_defaults_authority.py` is GREEN; `python tools/regenerate_defaults_artifacts.py --check` is GREEN; and
+`python tools/regenerate_sst_defaults.py --check` is GREEN. Full pytest execution is **NEEDS RUN on Windows/PySide6** because
+`tests/conftest.py` imports PySide6 unconditionally in this container. No synthetic regex “golden detector” was added: the
+permanent canonical defaults audit plus the explicit test-authority guardrail is preferred over a noisy scanner that would
+misclassify legitimate fixture values.
+
+**Production smells discovered, not silently repaired:** `widgets/spotify_visualizer/tick_pipeline.py` retains legacy
+transient/mix fallback literals and `core/settings/visualizer_settings_contract.py` retains a legacy baseline/fallback table,
+including old Bubble mix values that differ from canonical defaults; these need an end-to-end migration/model/runtime trace
+to determine whether they are compatibility signatures, unreachable defense, or a live secondary default authority. Canonical
+schema also still contains `workers.transition.enabled` despite retirement of the supervised transition worker and needs
+compatibility/migration ownership tracing before deletion. All are active-plan follow-ups.
+
+The §0.18 list remains historical evidence of the pre-audit state; do not use its “value-drift goldens” subsection as the
+current owner classification. After Windows/PySide6 execution, remaining reds must be classified individually as real
+behavior/integration issues, BTF/real-GL acceptance, documented exact-value invariants, or additional stale tests.
+
 ## 0.20 2026-09-14 soak defects — production repair after regression checkpoint
 
 Production repair was permitted only after the §0.19 tests-only checkpoint was frozen. Two behavior owners changed;

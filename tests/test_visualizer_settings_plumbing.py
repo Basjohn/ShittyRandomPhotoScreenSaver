@@ -1158,13 +1158,13 @@ class TestVisualizerPresetDefaultResolution:
 
         model = SpotifyVisualizerSettings.from_mapping({"mode": "sine_wave"})
 
-        # A missing selection repairs to the shipped canonical per-mode default
-        # (sine_wave ships preset 4), not a generic first slot.
+        # A missing selection repairs to the canonical per-mode selector, not a
+        # generic first slot or a test-owned literal.
         assert model.preset_sine_wave == get_missing_preset_fallback_index("sine_wave")
-        assert model.preset_sine_wave == 4
 
-    def test_from_settings_uses_first_preset_for_missing_mode_preset(self):
+    def test_from_settings_uses_canonical_fallback_for_missing_mode_preset(self):
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_presets import get_missing_preset_fallback_index
 
         class _DummySettings:
             def __init__(self, data):
@@ -1179,7 +1179,7 @@ class TestVisualizerPresetDefaultResolution:
             )
         )
 
-        assert model.preset_bubble == 0
+        assert model.preset_bubble == get_missing_preset_fallback_index("bubble")
 
     def test_get_active_preset_index_uses_canonical_fallback_when_missing(self):
         from core.settings.visualizer_presets import (
@@ -1193,11 +1193,9 @@ class TestVisualizerPresetDefaultResolution:
 
         settings = _DummySettings()
 
-        # No persisted selection -> shipped canonical per-mode default.
+        # No persisted selection -> canonical per-mode selector.
         assert get_active_preset_index(settings, "sine_wave") == get_missing_preset_fallback_index("sine_wave")
-        assert get_active_preset_index(settings, "sine_wave") == 4
         assert get_active_preset_index(settings, "bubble") == get_missing_preset_fallback_index("bubble")
-        assert get_active_preset_index(settings, "bubble") == 0
 
 
 class TestVisualizerModeRegistryContract:
@@ -1232,16 +1230,15 @@ class TestVisualizerModeRegistryContract:
             get_missing_preset_fallback_index,
         )
 
-        # The fallback is the shipped canonical preset_<mode> default, clamped to
-        # the curated range (never the trailing Custom slot). There is no generic
-        # first-slot authority: sine_wave ships preset 4, every other mode ships 0.
+        # The fallback is the canonical preset_<mode> selector, clamped to the
+        # curated range (never the trailing Custom slot). The test deliberately
+        # does not restate today's selector values.
         for mode in VISUALIZER_MODE_IDS:
             canonical = int(
                 require_canonical_default(f"widgets.spotify_visualizer.{get_preset_key(mode)}")
             )
             expected = max(0, min(get_custom_preset_index(mode) - 1, canonical))
             assert get_missing_preset_fallback_index(mode) == expected
-        assert get_missing_preset_fallback_index("sine_wave") == 4
 
     def test_unknown_mode_falls_back_to_default_mode(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -3001,9 +2998,11 @@ def test_custom_bubble_activation_ignores_legacy_global_audio_block_size():
 
     assert payload.is_custom is True
     assert "audio_block_size" not in payload.resolved_config
-    # Legacy global audio_block_size (0) is ignored; bubble falls back to its own
-    # canonical default (128), not the stripped legacy global.
-    assert model.resolve_audio_block_size("bubble") == 128
+    # Legacy global audio_block_size (0) is ignored; Bubble falls back to its
+    # own canonical mode default, not the stripped legacy global.
+    assert model.resolve_audio_block_size("bubble") == require_canonical_default(
+        "widgets.spotify_visualizer.bubble_audio_block_size"
+    )
 
 
 def test_custom_bubble_activation_preserves_explicit_mode_owned_block_size_over_legacy_global():

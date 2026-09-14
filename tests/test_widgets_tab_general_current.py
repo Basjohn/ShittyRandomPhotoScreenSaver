@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from core.cache_maintenance import CacheClearResult
+from core.cache_maintenance import CacheClearResult, get_cache_family_descriptors
 from rendering.widget_descriptors import (
     get_widget_settings_section_descriptors,
     get_widgets_tab_settings_section_descriptors,
@@ -35,13 +35,8 @@ def test_general_section_renames_only_user_facing_defaults_surface(qt_app, setti
         assert tab._general_layout_toggle.isChecked() is False
         assert tab._general_cache_toggle.isChecked() is False
         assert tab._general_style_overrides_toggle.isChecked() is False
-        assert tuple(tab.cache_family_checks) == (
-            "rss",
-            "reddit",
-            "weather",
-            "gmail",
-            "steam",
-            "settings",
+        assert tuple(tab.cache_family_checks) == tuple(
+            descriptor.family_id for descriptor in get_cache_family_descriptors()
         )
         assert tab.clear_selected_caches_btn.isEnabled() is False
         tab.cache_family_checks["weather"].setChecked(True)

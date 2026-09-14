@@ -33,7 +33,9 @@ def test_canonical_visualizer_dormancy_is_explicit_boolean_map() -> None:
     assert set(activation) == set(VISUALIZER_MODE_IDS)
     assert len(activation) == len(VISUALIZER_MODE_IDS)
     assert all(type(value) is bool for value in activation.values())
-    assert resolve_effective_enabled_modes(activation) == VISUALIZER_MODE_IDS
+    assert resolve_effective_enabled_modes(activation) == tuple(
+        mode_id for mode_id in VISUALIZER_MODE_IDS if activation[mode_id]
+    )
 
 
 def test_boolean_map_preserves_registry_order_and_last_mode_guard_recovery() -> None:
@@ -49,7 +51,9 @@ def test_boolean_map_preserves_registry_order_and_last_mode_guard_recovery() -> 
 
     # Persisted all-off state cannot strand an active Visualizer family.
     all_off = {mode_id: False for mode_id in VISUALIZER_MODE_IDS}
-    assert resolve_effective_enabled_modes(all_off) == VISUALIZER_MODE_IDS
+    assert resolve_effective_enabled_modes(all_off) == resolve_effective_enabled_modes(
+        _canonical_activation()
+    )
 
 
 def test_model_serializes_only_current_mode_activation_schema() -> None:

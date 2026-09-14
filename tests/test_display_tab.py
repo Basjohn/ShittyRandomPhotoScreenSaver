@@ -6,6 +6,7 @@ import pytest
 import uuid
 from ui.tabs.display_tab import DisplayTab
 from core.settings import SettingsManager
+from core.settings.default_contract import require_canonical_default
 
 
 @pytest.fixture
@@ -165,27 +166,24 @@ class TestDisplayTab:
         
         tab1.deleteLater()
     
-    def test_display_tab_default_values(self, qt_app, tmp_path):
-        """Test that DisplayTab uses correct default values."""
-        # Create fresh settings manager
-        fresh_settings = SettingsManager(organization="Test", application=f"DisplayTabTest_{uuid.uuid4().hex}", storage_base_dir=tmp_path)
-        fresh_settings.reset_to_defaults()
-        
-        tab = DisplayTab(fresh_settings)
-        
-        # Check defaults
-        monitor = fresh_settings.get('display.show_on_monitors', 'ALL')
-        assert monitor == 'ALL'
-        
-        mode = fresh_settings.get('display.mode', 'fill')
-        assert mode == 'fill'
-        
-        interval = fresh_settings.get('timing.interval', 5)
-        assert interval == 40
+    def test_display_tab_default_values_follow_canonical_authority(self, qt_app, settings_manager):
+        """Fresh Settings state and controls should follow canonical defaults."""
+        tab = DisplayTab(settings_manager)
+        try:
+            assert settings_manager.get("display.show_on_monitors") == require_canonical_default(
+                "display.show_on_monitors"
+            )
+            assert settings_manager.get("display.mode") == require_canonical_default("display.mode")
+            assert settings_manager.get("timing.interval") == require_canonical_default(
+                "timing.interval"
+            )
+            canonical_mode = str(require_canonical_default("display.mode"))
+            expected_mode_index = {"fill": 0, "fit": 1, "shrink": 2}[canonical_mode]
+            assert tab.mode_combo.currentIndex() == expected_mode_index
+            assert tab.interval_spin.value() == require_canonical_default("timing.interval")
+        finally:
+            tab.deleteLater()
 
-        tab.deleteLater()
-
-    
     def test_display_tab_invalid_mode_handling(self, qt_app, display_tab):
         """Test handling of invalid display mode."""
         # Set invalid mode

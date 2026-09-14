@@ -267,6 +267,45 @@ high-volume diagnostic belongs in a dedicated sidecar rather than already-busy `
 
 ---
 
+## 4D. Defaults/test authority hygiene — 2026-09-14 audit
+
+The broad §0.18 “value-drift goldens” bucket was too coarse. Ordinary product defaults are intentionally mutable policy,
+so tests must validate canonical ownership/parity rather than freeze today’s literal values. This audit is test/docs only:
+production defaults and runtime behavior are not changed merely to satisfy assertions.
+
+- [x] Audit the previously classified value-drift files plus a wider defaults/settings sweep. Mutable default expectations
+  now derive from `core/settings/default_settings.py` through the canonical read seam or generated authority. Behavioral
+  fixture inputs remain explicit test inputs rather than being coupled to product defaults. Exact literals are retained only
+  when the literal itself is contractual and carry an adjacent `EXACT-VALUE INVARIANT:` rationale.
+- [x] Defuse the Steam cadence trap: Abandonment/Achievement timer tests deliberately use their own short fixture cadence
+  (`_FIXTURE_REFRESH_MINUTES`) and derive expected delays from that fixture. The current six-minute Steam product default may
+  change without making those behavior tests red; separate authority/parity coverage owns the product default.
+- [x] Reconcile non-default fossils misclassified as value drift: remove the retired transition-worker latency cell; align
+  policy-compliance coverage with the explicitly permitted generation-owned Visualizer cadence lifetime; update installer
+  reset-policy coverage to current installer behavior rather than the retired 5.0.0 migration default.
+- [x] Canonical defaults audit and derived-artifact checks remain GREEN after the test rewrite: `check_defaults_authority.py`,
+  `regenerate_defaults_artifacts.py --check`, and `regenerate_sst_defaults.py --check`. All 39 edited test modules compile.
+  Full pytest execution still requires the intended Windows/PySide6 environment because project `tests/conftest.py` imports
+  PySide6 unconditionally.
+- [?] **Production smell — Visualizer transient fallback/default duplication:** `widgets/spotify_visualizer/tick_pipeline.py`
+  still carries legacy literal transient/mix fallbacks (`1.0`, `1.5`, Bubble `0.75/0.25`) while canonical Bubble defaults are
+  now materially different (`0.05`, `1.15`, `0.2/0.15`). `core/settings/visualizer_settings_contract.py` also owns a legacy
+  `_BASELINE_DEFAULTS` table plus `SPECIAL_PER_MODE_KEYS` fallback literals, including the same old Bubble mix values. Trace
+  the complete model/migration/runtime resolver path before changing anything: determine which literals are compatibility
+  migration signatures, which are unreachable defensive fallbacks, and whether any can still become live runtime values. If
+  a live secondary default authority exists, repair the authority/resolver seam; do not merely refresh duplicate literals to
+  today’s defaults or flatten authored preset state into canonical defaults.
+- [?] **Production/schema smell — retired transition worker default:** canonical settings still contain
+  `workers.transition.enabled` although the supervised transition worker was retired when transitions became GPU/Quick-owned.
+  Trace persisted-profile/migration/import consumers before removal. If no supported compatibility owner remains, retire the
+  key and regenerate derived artifacts rather than preserving dead schema because tests once referenced it.
+- [?] Windows/PySide6 validation: run the touched defaults/settings tests and re-run the broad red-file inventory. A routine
+  future default change should require changing canonical authority + regenerating derived artifacts, not manual edits across
+  unrelated tests. Any remaining red must be reclassified as a real behavior/integration issue, true exact-value invariant,
+  or another stale test—not left indefinitely as “value drift.”
+
+---
+
 ## 5. Test / debris reconciliation
 
 Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this active plan carries sequencing only.
@@ -287,10 +326,11 @@ Detailed ownership lives in `Future_Cleanup.md` and `Docs/TestSuite.md`; this ac
   confirmed empty (no fossil graveyard), 0 collection errors, module count 368→364. Four whole-file fossils deleted and
   fossil cells trimmed/rehomed from ~8 files; a large batch of stale current-owner tests reconciled. Broad per-file
   failures 58→32 files. No production behaviour/default/schema changed; destination profile still 132/132 GREEN.
-- [?] Resolve the remaining 32 broad-tree red files (enumerated in `Docs/TestSuite.md` §0.18). None are fossils — they are
-  current-owner value/behaviour drift (goldens needing per-value confirmation, deeper integration-fixture work, Bubble
-  reactivity BTF judgment, and real-GL acceptance). Reconcile per-owner as each is confirmed intended; do not weaken
-  Bubble goldens or alter production to satisfy them.
+- [?] Continue the remaining broad-tree reconciliation using `Docs/TestSuite.md` §0.21 as the current classification.
+  The old §0.18 “value-drift goldens” bucket has been audited/superseded: mutable-default copies were rewritten to authority,
+  several stale policy/migration cells were reconciled, and literal behavioral fixtures were explicitly preserved as test
+  inputs. Outstanding reds are now to be treated individually as behavioral/integration work, BTF/real-GL acceptance, true
+  documented exact-value invariants, or newly discovered stale tests. Do not preserve a red merely because §0.18 once listed it.
 - [ ] Retire the temporary Visualizer `enabled_modes` compatibility migration only after automated persisted-profile/import
   coverage proves supported profiles no longer rely on it. Current runtime/default/UI state remains the canonical
   `widgets.spotify_visualizer.mode_activation` boolean map.

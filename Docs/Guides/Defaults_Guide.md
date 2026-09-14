@@ -1,6 +1,6 @@
 # Defaults Guide
 
-Last updated: 2026-09-07
+Last updated: 2026-09-14
 
 Canonical guidance for defaults, reset behavior, snapshots, import safety and runtime application.
 
@@ -38,6 +38,18 @@ resolved config already passed into a runtime owner. If a missing value is genui
 presentation policy rather than a user-facing product setting, keep it local and name it as such.
 
 `None` is a real persisted value when the schema permits it; it is not interchangeable with a missing key.
+
+### Test expectations
+
+Tests are consumers of the same authority, not a second default registry. For an ordinary mutable product default, obtain
+the expected value from `require_canonical_default(...)`, `get_default_settings(...)`, or the generated artifact being
+validated. A default change should normally require one canonical edit plus regeneration of derived artifacts—not manual
+updates to scattered test literals.
+
+Retain a literal only when its exact value is independently contractual. Annotate those assertions with
+`EXACT-VALUE INVARIANT:` and the reason. Conversely, a behavior test is free to choose an explicit non-default stimulus or
+cadence; if it could be mistaken for a product default, label it `TEST INPUT, NOT A DEFAULT GOLDEN` and calculate later
+expectations from the fixture value.
 
 Collapsible Settings bucket identity is canonical under `ui.gmail_bucket_states`,
 `ui.widget_bucket_states`, `ui.visualizer_bucket_states` and `ui.visualizer_tech_bucket_states`, and every canonical

@@ -11,6 +11,7 @@ import pytest
 
 from core.steam.abandonment_issues import AbandonmentSelection
 from core.threading.manager import TaskResult
+from core.settings.default_contract import require_canonical_default
 from rendering.widget_runtime_services import get_runtime_service_spec
 from widgets.steam_abandonment_preparation import (
     AbandonmentPreparedPresentation,
@@ -19,6 +20,12 @@ from widgets.steam_abandonment_preparation import (
 from widgets.steam_abandonment_runtime import (
     AbandonmentRuntimeService,
 )
+
+
+# TEST INPUT, NOT A DEFAULT GOLDEN: choose a short, non-authoritative cadence so
+# timer tests prove the runtime re-arms from the supplied config. The product
+# default may change independently (currently sourced from widgets.steam.refresh_minutes).
+_FIXTURE_REFRESH_MINUTES = 5
 
 
 class _Consumer:
@@ -75,7 +82,15 @@ def _config(*, mode: str = "smart_rotation") -> AbandonmentRuntimeConfig:
     return AbandonmentRuntimeConfig(
         selection=AbandonmentSelection(mode=mode),
         show_artwork=False,
-        refresh_minutes=5,
+        refresh_minutes=_FIXTURE_REFRESH_MINUTES,
+    )
+
+
+
+
+def test_default_refresh_minutes_follows_canonical_steam_authority() -> None:
+    assert AbandonmentRuntimeConfig().refresh_minutes == int(
+        require_canonical_default("widgets.steam.refresh_minutes")
     )
 
 
@@ -348,7 +363,7 @@ def test_persisted_rotation_delay_rearms_one_full_interval_and_retires_once(
     created[0][1]()
 
     assert created[0][2].active is False
-    assert created[1][0] == 5 * 60 * 1_000
+    assert created[1][0] == _FIXTURE_REFRESH_MINUTES * 60 * 1_000
     assert consumer.rotation_requests == 1
 
     service.retire()

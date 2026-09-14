@@ -221,7 +221,7 @@ def test_config_projects_current_steam_runtime_and_visual_settings() -> None:
     assert config.semantic_palette.artwork_border == (199, 213, 224, 255)
     assert dict(config.field_visibility)["source"] is True
     assert dict(config.field_visibility)["previous"] is False
-    assert config.authored_size[0] == 600.0
+    assert config.authored_size[0] == float(require_canonical_default("widgets.achievement_pulse.preferred_width"))
     runtime = config.runtime_config
     assert runtime.selection.mode == "custom"
     assert runtime.selection.custom_appid == 367520
@@ -238,7 +238,7 @@ def test_retained_layout_policy_preserves_shapes_and_grows_complete_capsule_rail
     doubled = replace(single, double_capsules=True)
     large_capsules = replace(doubled, capsule_font_size=32)
 
-    assert single.authored_size[0] == 600.0
+    assert single.authored_size[0] == float(require_canonical_default("widgets.achievement_pulse.preferred_width"))
     # Authored outer height is artwork-shape driven (wide < square < portrait).
     assert 290.0 <= single.authored_size[1] < square.authored_size[1]
     assert square.authored_size[1] < portrait.authored_size[1]
@@ -272,7 +272,7 @@ def test_latest_unlock_visibility_does_not_allocate_bottom_capsule_rails() -> No
     # portrait envelope is font-metric/artwork-size driven, so assert the width
     # invariant plus the latest/extra-field behavioural contract rather than a
     # single environment-specific pixel height.
-    assert default.authored_size[0] == 600.0
+    assert default.authored_size[0] == float(require_canonical_default("widgets.achievement_pulse.preferred_width"))
     assert no_latest.authored_size == default.authored_size
     assert extra_capsule.authored_size[1] > default.authored_size[1]
 

@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 ## Architecture decision
 
@@ -51,6 +51,19 @@ Historical evidence is not current owner map.
 
 When current source contradicts a durable product contract, do not silently rewrite the contract to match the bug.
 Promote the missing behavior into `Current_Plan.md` unless explicit product intent changed it.
+
+### Defaults test-authority guardrail
+
+Mutable product defaults are policy, not test goldens. Tests that validate a user-facing default must derive the expected
+value from canonical authority (`core/settings/default_settings.py` / the canonical default contract) or prove generated
+artifact parity. Do not copy today’s default literal into unrelated Settings/runtime/UI tests.
+
+A literal expectation may remain only when the **literal itself** is the contract (for example a migration signature, hard
+safety/technical bound, protocol/schema constant, or accepted behavior golden). Mark it adjacent to the assertion with
+`EXACT-VALUE INVARIANT:` and explain what authoritative contract would have to change before the test should change.
+Behavioral tests may intentionally choose non-default values; mark ambiguous cases as `TEST INPUT, NOT A DEFAULT GOLDEN`
+and derive downstream expectations from that fixture input. Never “fix” such a test by coupling it to the current product
+default.
 
 ## Immediate stop conditions
 

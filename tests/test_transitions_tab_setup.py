@@ -5,6 +5,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from core.settings.capability_activation import is_transition_activated
+from core.settings.default_contract import require_canonical_default
 from core.settings.settings_manager import SettingsManager
 from rendering.transition_registry import get_transition_setting_names
 from ui.tabs.transitions_tab import TransitionsTab, _SETUP_NAV_KEY
@@ -53,6 +54,9 @@ def test_setup_module_grid_and_pills_are_responsive(qapp, settings_manager, qtbo
 
 def test_setup_is_default_landing(qapp, settings_manager, qtbot):
     tab = _make(qapp, settings_manager, qtbot)
+    # EXACT-VALUE INVARIANT: SETUP is the authored initial Settings navigation
+    # route, not a mutable persisted product default. Change this only with the
+    # Transitions navigation contract itself.
     assert _SETUP_NAV_KEY in tab._nav_buttons
     assert tab._nav_buttons[_SETUP_NAV_KEY].isChecked() is True
     assert tab._setup_page.isVisible() is True or not tab._setup_page.isHidden()
@@ -60,8 +64,9 @@ def test_setup_is_default_landing(qapp, settings_manager, qtbot):
         assert group.isHidden() is True
     # One activation pill/checkbox per transition.
     assert set(tab._activation_checkboxes) == set(get_transition_setting_names())
-    for cb in tab._activation_checkboxes.values():
-        assert cb.isChecked() is True  # default: all activated
+    activation_defaults = require_canonical_default("transitions.activation")
+    for name, cb in tab._activation_checkboxes.items():
+        assert cb.isChecked() is bool(activation_defaults[name])
 
 
 def test_no_visible_dropdown_or_old_pool_checkbox(qapp, settings_manager, qtbot):
