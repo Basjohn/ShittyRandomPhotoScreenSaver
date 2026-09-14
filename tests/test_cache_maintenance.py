@@ -19,13 +19,13 @@ def test_cache_family_inventory_excludes_credentials_and_settings(tmp_path: Path
         reddit_cache_dir=reddit_root,
     )
 
+    # "settings" is no longer a cache family (settings is not clearable cache).
     assert [item.family_id for item in descriptors] == [
         "rss",
         "reddit",
         "weather",
         "gmail",
         "steam",
-        "settings",
     ]
     target_paths = {
         target.path
@@ -53,7 +53,6 @@ def test_clear_cache_families_removes_only_allowlisted_files(tmp_path: Path) -> 
         app_root / "cache" / "gmail_cache.json": b"gmail",
         app_root / "steam" / "cache" / "opaque-profile" / "owned_games.json": b"steam",
         app_root / "steam" / "cache" / "opaque-profile" / "art" / "header.png": b"art",
-        app_root / "cache" / "settings_dialog_cache.json": b"settings-cache",
     }
     protected = {
         reddit_root / "_startup_gate.touch": b"tracked-marker",
@@ -61,6 +60,8 @@ def test_clear_cache_families_removes_only_allowlisted_files(tmp_path: Path) -> 
         app_root / "steam" / "credentials.bin": b"encrypted-secret",
         app_root / "steam" / "credential_meta.json": b"credential-metadata",
         app_root / "settings_v2.json": b"installed-settings",
+        # The retired "settings" cache family no longer targets this file.
+        app_root / "cache" / "settings_dialog_cache.json": b"settings-cache",
     }
     for path, payload in {**removable, **protected}.items():
         _write(path, payload)
