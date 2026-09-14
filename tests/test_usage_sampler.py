@@ -14,9 +14,11 @@ from core.performance.usage_sampler import (
 
 
 class _CountingProc:
-    """A psutil.Process-like double that counts the two GIL-held system-wide
-    enumerations (``children(recursive=True)`` and ``num_threads()``) so tests
-    can pin that they run only on the heavy sub-cadence."""
+    """A psutil.Process-like double for the fallback topology/thread path.
+
+    The preferred Windows path now injects Toolhelp topology data; these counters
+    pin that psutil enumeration remains slow-cadence fallback behavior only.
+    """
 
     def __init__(self, pid: int = 4242) -> None:
         self.pid = pid
@@ -82,6 +84,38 @@ def test_collector_partitions_system_wide_enumerations_to_heavy_cadence():
     assert heavy.threads_app == 99
 
 
+
+
+def test_collector_injected_topology_snapshot_avoids_gil_held_psutil_enumerations():
+    proc = _CountingProc()
+    snapshots = []
+
+    def topology(pid: int):
+        snapshots.append(pid)
+        return {pid: 23}
+
+    collector = ProcessUsageCollector(
+        proc,
+        heavy_refresh_samples=4,
+        topology_snapshot_provider=topology,
+    )
+
+    first = collector.collect()
+    assert snapshots == [proc.pid]
+    assert proc.children_calls == 0
+    assert proc.num_threads_calls == 0
+    assert first.threads_app == 23
+    assert collector.last_sample_was_heavy is True
+    assert collector.last_topology_source == "toolhelp"
+
+    second = collector.collect()
+    assert second.threads_app == 23
+    assert proc.children_calls == 0
+    assert proc.num_threads_calls == 0
+    assert collector.last_sample_was_heavy is False
+    assert collector.last_topology_source == "cached"
+
+
 def test_collector_heavy_refresh_one_measures_every_sample():
     proc = _CountingProc()
     collector = ProcessUsageCollector(proc, heavy_refresh_samples=1)
@@ -89,6 +123,27 @@ def test_collector_heavy_refresh_one_measures_every_sample():
         collector.collect()
     assert proc.children_calls == 3
     assert proc.num_threads_calls == 3
+
+
+def test_collector_excludes_handle_sidecar_from_toolhelp_tree_and_thread_total():
+    proc = _CountingProc()
+
+    def topology(pid: int):
+        return {pid: 23, 7777: 4}
+
+    collector = ProcessUsageCollector(
+        proc,
+        heavy_refresh_samples=1,
+        topology_snapshot_provider=topology,
+    )
+    collector.exclude_pid(7777)
+
+    snapshot = collector.collect()
+    assert snapshot.pids == (proc.pid,)
+    assert snapshot.process_count == 1
+    assert snapshot.child_count == 0
+    assert snapshot.threads_app == 23
+    assert snapshot.handles_app == 500
 
 
 class _Timer:
@@ -157,6 +212,15 @@ class _Manager:
 
 
 class _ProcessCollector:
+    last_sample_was_heavy = True
+    last_topology_source = "toolhelp"
+
+    def __init__(self) -> None:
+        self.excluded_pids = []
+
+    def exclude_pid(self, pid):
+        self.excluded_pids.append(pid)
+
     def collect(self):
         return ProcessUsageSnapshot(
             pids=(100, 101),
@@ -182,6 +246,37 @@ class _ProcessCollector:
             io_write_mb=3.0,
             cpu_primed=True,
         )
+
+
+class _HandleSidecar:
+    def __init__(self) -> None:
+        self.started_with = None
+        self.stopped = False
+
+    def start(self, target_pid):
+        self.started_with = target_pid
+        return 7777
+
+    def stop(self):
+        self.stopped = True
+
+
+def test_usage_service_excludes_out_of_process_handle_sidecar_from_app_totals():
+    manager = _Manager()
+    process = _ProcessCollector()
+    sidecar = _HandleSidecar()
+    service = UsageTelemetryService(
+        manager,
+        process_collector=process,
+        gpu_collector=_GpuCollector(),
+        handle_attribution_sidecar=sidecar,
+    )
+
+    assert service.start() is True
+    assert sidecar.started_with is not None
+    assert process.excluded_pids == [7777]
+    service.stop()
+    assert sidecar.stopped is True
 
 
 class _GpuCollector:
@@ -254,6 +349,8 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
         assert service.start() is True
 
     sample = next(record.message for record in caplog.records if "[USAGE] sample " in record.message)
+    assert "topology_refresh=1" in sample
+    assert "topology_source=toolhelp" in sample
     assert "cpu_app_pct=42.5" in sample
     assert "handles_app=640" in sample
     assert "handles_main=560" in sample
@@ -450,3 +547,15 @@ def test_gpu_collector_negative_cache_does_not_rediscover_every_sample(monkeypat
 
     assert snapshot.status == "idle_no_counters"
     assert rebuilds == []
+
+
+def test_handle_attribution_summary_groups_resolved_and_unresolved_types():
+    from core.performance.windows_handle_attribution import summarize_handle_types
+
+    counts, indices = summarize_handle_types(
+        [(7, 100), (7, 101), (11, 200), (13, 300)],
+        {7: "Event", 11: "File"},
+    )
+
+    assert counts == {"Event": 2, "File": 1, "type_13": 1}
+    assert indices == {"7": "Event", "11": "File", "13": "type_13"}

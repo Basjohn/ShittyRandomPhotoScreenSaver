@@ -362,8 +362,16 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
     # so kicks register within 1 frame instead of waiting for smoothing.
     _t_bass = getattr(worker, '_transient_bass', 0.0)
     if _t_bass > 0.05:
-        _kick_gain = getattr(worker, '_kick_lane_gain', 1.0)
-        _lane_mix = getattr(worker, '_spectrum_lane_transient_mix', 0.65)
+        # These are preset/settings-resolved technical controls.  The worker
+        # starts with them unresolved and Quick applies the complete technical
+        # mapping before analysis begins.  Do not silently resurrect a second
+        # tuning table here if that ownership/order contract is broken.
+        _kick_gain = worker._kick_lane_gain
+        _lane_mix = worker._spectrum_lane_transient_mix
+        if _kick_gain is None or _lane_mix is None:
+            raise RuntimeError(
+                "visualizer transient-lane technical configuration is unresolved"
+            )
         _bass_end = max(1, getattr(worker, '_agc_bass_split', 4))
         _kick_boost = min(2.0, 1.0 + _t_bass * _kick_gain * _lane_mix)
         for _ki in range(_bass_end):

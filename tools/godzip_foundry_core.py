@@ -85,7 +85,7 @@ RUN_FLAG_DESCRIPTIONS = {
     "--verbose": "Unsuppress noisy DEBUG producers (debug already writes screensaver_verbose.log)",
     "--perf": "Performance metrics/logging",
     "--gpu-timing": "Sampled owner-context GPU timing (implies --perf)",
-    "--usage": "CPU/GPU/memory/thread usage telemetry",
+    "--usage": "CPU/GPU/memory/thread usage + Windows handle attribution",
     "--viz": "Visualizer diagnostics",
     "--geo": "Geometry/z-order/edit-layout diagnostics",
     "--set": "Settings mutation/import/schema diagnostics",

@@ -3073,7 +3073,7 @@ def setup_logging(
         _STEAM_LOGGING_ENABLED,
     )
     root_logger.info(
-        "Specific logs available: always-on Qt/QML=screensaver_qml.log, debug/verbose native faults=native_faults.log, --perf=screensaver_perf.log, --gpu-timing=sampled GL timer queries + screensaver_perf.log, --usage=screensaver_usage.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
+        "Specific logs available: always-on Qt/QML=screensaver_qml.log, debug/verbose native faults=native_faults.log, --perf=screensaver_perf.log, --gpu-timing=sampled GL timer queries + screensaver_perf.log, --usage=screensaver_usage.log+screensaver_handles.log (Windows attribution), --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
     )
     active_specific_logs: list[str] = []
     if _PERF_METRICS_ENABLED:
@@ -3081,7 +3081,7 @@ def setup_logging(
     if _GPU_TIMING_ENABLED:
         active_specific_logs.append("gpu_timing=sampled_owner_gl_queries")
     if _USAGE_LOGGING_ENABLED:
-        active_specific_logs.append("usage=screensaver_usage.log")
+        active_specific_logs.append("usage=screensaver_usage.log+screensaver_handles.log")
     if _VIZ_LOGGING_ENABLED:
         active_specific_logs.append("viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log")
     if _GEOMETRY_LOGGING_ENABLED:

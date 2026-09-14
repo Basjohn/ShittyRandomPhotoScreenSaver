@@ -1,14 +1,14 @@
 # R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously
 
 Date: 2026-09-14  
-Status: Resolved In Code / Installed Soak Validation Pending
+Status: SOLVED — Installed 58-Minute Soak Closed The Scheduler Gate
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 ## Observed Failure
 
@@ -44,17 +44,11 @@ The reduced A/B reproduction changed from **1 synchronous due / 0 scheduled shot
 
 The existing Reddit/cache diagnostics are sufficient long-term evidence. Due-arm reason and delay already route through the cache diagnostic family; no new diagnostic flag or periodic probe is warranted.
 
-## Validation Target
+## Installed Validation — 2026-09-14
 
-Run the focused Reddit runtime/helper suites, then perform an installed cache/service soak with Reddit and Reddit2 enabled.
+The 58-minute Windows soak closed the scheduler gate. Two `blocked_cooldown_due` edges reached a computed **0.0** remaining delay in the log, but neither recreated the old synchronous zero-delay re-arm storm. Each edge proceeded into the legitimate due work once and then established the ordinary **900 s** horizon. Manual refreshes during active cooldown were rejected with their positive remaining delay rather than multiplying requests.
 
-Require:
-
-- no zero-delay or same-second recursive `blocked_cooldown_due` bursts;
-- blocked responses still defer rather than bypass provider/rate-limit policy;
-- manual-refresh bypass rules remain unchanged;
-- ordinary terminal success/failure continues to establish the intended next due horizon;
-- no request multiplication or new recurring timer owner appears.
+Thread telemetry over the run showed only **8 `reddit_fetch` tasks** and **3 `reddit_service_gate` tasks**. There was no same-second recursive burst comparable to the old 84-arm failure and no request/backoff cadence multiplication. R-83 is therefore closed.
 
 ## Guardrail
 

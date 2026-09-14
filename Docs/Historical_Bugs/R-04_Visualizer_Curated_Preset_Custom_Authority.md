@@ -28,9 +28,13 @@
   - curated apply clears mode keys absent from curated payload
   - curated `from_mapping` values win over saved custom/runtime values
   - custom `from_mapping` preserves custom values
+  - 2026-09-14 authority follow-up explicitly proves curated presets may author special transient technical controls, Custom
+    preserves them, and downstream Bubble/Spectrum consumers cannot substitute their own numeric technical defaults
 - **Takeaways:**
   - do not add post-overlay re-merge phases in visualizer preset hydration
   - if curated presets are selected, partial technical carry-over from prior custom state is a correctness bug, not a convenience feature
+  - technical settings are preset-authorable state; canonical defaults are missing-value fallback only, not permission to overwrite a
+    preset's technical tuning, and runtime consumers must not grow a second numeric fallback table
 
 ## Record Provenance
 

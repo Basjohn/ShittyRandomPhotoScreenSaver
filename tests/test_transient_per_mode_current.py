@@ -365,6 +365,81 @@ class TestGPUPushTransientEnergy:
 # 6. Per-Mode Transient Mix — Settings Model Round-Trip (§2.3)
 # ===========================================================================
 
+def test_bubble_tick_does_not_own_technical_setting_fallbacks():
+    """Bubble's tick consumes resolved technical state; it must not invent defaults."""
+    import ast
+    from pathlib import Path
+
+    source_path = (
+        Path(__file__).resolve().parents[1]
+        / "widgets"
+        / "spotify_visualizer"
+        / "tick_pipeline.py"
+    )
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    forbidden = {
+        "_transient_pulse_gain",
+        "_transient_clamp",
+        "_bubble_transient_mix_bass",
+        "_bubble_transient_mix_vocal",
+    }
+    fallback_reads = []
+    direct_reads = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in forbidden:
+            direct_reads.add(node.attr)
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Name) or node.func.id != "getattr":
+            continue
+        if len(node.args) < 2 or not isinstance(node.args[1], ast.Constant):
+            continue
+        attr = node.args[1].value
+        if attr in forbidden and len(node.args) >= 3:
+            fallback_reads.append(attr)
+
+    assert not fallback_reads, (
+        "resolved visualizer technical state regained tick-owned fallbacks: "
+        + ", ".join(sorted(fallback_reads))
+    )
+    assert forbidden <= direct_reads
+
+
+def test_spectrum_fft_does_not_own_transient_technical_setting_fallbacks():
+    """Spectrum FFT consumes resolved transient controls; it must not invent defaults."""
+    import ast
+    from pathlib import Path
+
+    source_path = (
+        Path(__file__).resolve().parents[1]
+        / "widgets"
+        / "spotify_visualizer"
+        / "bar_computation.py"
+    )
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    forbidden = {"_kick_lane_gain", "_spectrum_lane_transient_mix"}
+    fallback_reads = []
+    direct_reads = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in forbidden:
+            direct_reads.add(node.attr)
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Name) or node.func.id != "getattr":
+            continue
+        if len(node.args) < 2 or not isinstance(node.args[1], ast.Constant):
+            continue
+        attr = node.args[1].value
+        if attr in forbidden and len(node.args) >= 3:
+            fallback_reads.append(attr)
+
+    assert not fallback_reads, (
+        "resolved Spectrum transient state regained FFT-owned fallbacks: "
+        + ", ".join(sorted(fallback_reads))
+    )
+    assert forbidden <= direct_reads
+
+
 class TestTransientMixSettingsModel:
     """Verify new transient mix fields survive from_mapping → to_dict."""
 

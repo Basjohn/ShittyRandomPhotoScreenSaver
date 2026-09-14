@@ -1,14 +1,14 @@
 # R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction
 
 Date: 2026-09-14  
-Status: Resolved In Code / Installed Soak Validation Pending
+Status: SOLVED — Installed 58-Minute Soak Closed The Liveness Gate
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 ## Observed Failure
 
@@ -65,18 +65,19 @@ The exact state machine was A/B checked against pre-fix and repaired source: old
 
 `--cache` is the permanent diagnostic owner for this family. Existing cache-sidecar records now expose orphan reclamation count/bytes and bounded-backlog skips; no additional recurring probe or `--perf` instrumentation is justified.
 
-## Validation Target
+## Installed Validation — 2026-09-14
 
-Run the focused prefetch/image-pipeline suites in the normal Windows/PySide6 environment, then perform a cache-heavy installed soak with `--cache --usage`.
+The preferred roughly one-hour Windows diagnostic soak closed the remaining liveness gate:
 
-Require:
+- **93** scaled-prefetch requests and **91** completions occurred during the run;
+- **85** scaled-cache evictions occurred while scaled warmup continued;
+- deferred resume was scheduled **45** times and ran **45** times;
+- raw-prefetch sources were released after the final derivative **91** times;
+- cumulative scaled-cache eviction reached roughly **2.642 GiB** while the live cache finished bounded at about **189.8 MiB / 6 items**;
+- one startup bounded-backlog refusal near the 128 MiB derivative cap recovered normally instead of poisoning admission;
+- presentation recorded **45 scaled hits, zero scaled misses, zero worker requests/fallbacks**, with reuse continuing after eviction pressure.
 
-- scaled-prefetch completions continue well after raw-cache eviction pressure begins;
-- `scaled_pending_bytes` does not pin near the cap while no raw producer can satisfy those requests;
-- reclaimed orphan count/bytes appear only when raw ownership is genuinely gone;
-- no derivative is reclaimed while its raw producer is pending/inflight;
-- raw speculative work again yields scaled warmup rather than thousands of raw completions with near-zero scaled completions;
-- cache memory remains bounded at the existing authority; no cache-budget increase is required.
+The historical failure signature — derivative budget remaining pinned near 128 MiB after raw-parent eviction while scaled completions effectively stop — did not recur. R-82 is therefore closed. Do not churn this repair merely because later performance work touches adjacent diagnostics.
 
 ## Guardrail
 

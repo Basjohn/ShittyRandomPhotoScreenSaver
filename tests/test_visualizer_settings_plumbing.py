@@ -415,6 +415,10 @@ class TestVisualizerPresetSelectionAuthority:
                     "bubble_stream_direction": "up",
                     "bubble_manual_floor": 0.12,
                     "bubble_audio_block_size": 128,
+                    # Curated presets are allowed to author technical settings,
+                    # including the special per-mode transient controls.
+                    "bubble_transient_mix_bass": 0.73,
+                    "bubble_transient_mix_vocal": 0.41,
                 }
             return {}
 
@@ -426,11 +430,15 @@ class TestVisualizerPresetSelectionAuthority:
             "bubble_stream_direction": "right",
             "bubble_manual_floor": 0.27,
             "bubble_audio_block_size": 256,
+            "bubble_transient_mix_bass": 0.11,
+            "bubble_transient_mix_vocal": 0.22,
         }
         model = SpotifyVisualizerSettings.from_mapping(payload)
         assert model.bubble_stream_direction == "up"
         assert model.resolve_manual_floor("bubble") == pytest.approx(0.12)
         assert model.resolve_audio_block_size("bubble") == 128
+        assert model.resolve_bubble_transient_mix_bass() == pytest.approx(0.73)
+        assert model.resolve_bubble_transient_mix_vocal() == pytest.approx(0.41)
 
     def test_from_mapping_custom_preset_keeps_custom_values(self):
         from core.settings import visualizer_presets as vp
@@ -1365,7 +1373,27 @@ class TestVisualizerSettingsContract:
         assert kwargs["devcurve_transient_pulse_gain"] == pytest.approx(1.4)
         assert kwargs["devcurve_transient_clamp"] == pytest.approx(1.8)
         assert kwargs["spectrum_lane_transient_mix"] == pytest.approx(0.72)
-        assert kwargs["bubble_transient_mix_bass"] == pytest.approx(0.75)
+        from core.settings.default_contract import require_canonical_default
+        assert kwargs["bubble_transient_mix_bass"] == pytest.approx(
+            require_canonical_default(
+                "widgets.spotify_visualizer.bubble_transient_mix_bass"
+            )
+        )
+        assert kwargs["bubble_transient_mix_vocal"] == pytest.approx(
+            require_canonical_default(
+                "widgets.spotify_visualizer.bubble_transient_mix_vocal"
+            )
+        )
+        assert kwargs["sine_wave_transient_width_mix"] == pytest.approx(
+            require_canonical_default(
+                "widgets.spotify_visualizer.sine_wave_transient_width_mix"
+            )
+        )
+        assert kwargs["oscilloscope_transient_width_mix"] == pytest.approx(
+            require_canonical_default(
+                "widgets.spotify_visualizer.oscilloscope_transient_width_mix"
+            )
+        )
         assert kwargs["oscilloscope_audio_block_size"] == 384
         assert "bubble_use_raw_energy" not in kwargs
 

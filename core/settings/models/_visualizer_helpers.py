@@ -142,7 +142,7 @@ def _build_live_visualizer_mode_kwargs(
             else:
                 kwargs[f"{mode}_{key}"] = _coerce_live_visualizer_float(raw, float(fallback))
 
-    for mode, key, output_key, _fallback_unused, coerce in SPECIAL_PER_MODE_KEYS:
+    for mode, key, output_key, coerce in SPECIAL_PER_MODE_KEYS:
         fallback = getattr(default_model, output_key)
         raw = read_per_mode_value(mode, key, fallback)
         if coerce is bool:
