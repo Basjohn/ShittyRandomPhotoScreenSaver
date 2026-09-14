@@ -28,14 +28,16 @@ def _make_spectrum_soak_worker(np_module, bar_count: int = 15):
         [0.75, "Hi-Mid"],
         [1.0, "Treble"],
     ]
+    _lane_strengths = {
+        "Bass": 0.7,
+        "Low-Mid": 0.6,
+        "Vocal": 0.55,
+        "Hi-Mid": 0.55,
+        "Treble": 0.50,
+    }
     worker._spectrum_shape_config = SpectrumShapeConfig(
-        lane_strengths_linear={
-            "Bass": 0.7,
-            "Low-Mid": 0.6,
-            "Vocal": 0.55,
-            "Hi-Mid": 0.55,
-            "Treble": 0.50,
-        },
+        lane_strengths_linear=dict(_lane_strengths),
+        lane_strengths_mirrored=dict(_lane_strengths),
         wave_amplitude=0.9,
         profile_floor=0.05,
     )
