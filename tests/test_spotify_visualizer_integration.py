@@ -41,6 +41,7 @@ class TestSpotifyVisualizerIntegration:
         print("Testing FFT mathematical preservation...")
         
         worker = SpotifyVisualizerAudioWorker(bar_count=32)
+        worker.set_audio_block_size(1024)  # resolve fail-closed block-size guard
         
         # CRITICAL: Start the worker to initialize numpy
         try:
@@ -109,6 +110,7 @@ class TestSpotifyVisualizerIntegration:
         print("Testing dynamic floor preservation...")
         
         worker = SpotifyVisualizerAudioWorker(bar_count=32)
+        worker.set_audio_block_size(1024)  # resolve fail-closed block-size guard
         
         try:
             worker.start()
