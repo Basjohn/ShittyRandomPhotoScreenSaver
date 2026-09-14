@@ -103,61 +103,6 @@ consumer is admitted.
 
 ---
 
-## 3. `dark.qss` retirement → ThemeSpec sole authority — production dependency severed; installed absence gate pending
-
-Execution authority: `Docs/Future_Work/Settings_Dark_QSS_Retirement.md`.
-
-The 2026-09-14 audit used the current repository `themes/dark.qss` only as a reference oracle while keeping the
-checkpoint GODZIP as the working authority. The live dependency surface is far smaller than the legacy monolith:
-most named selectors have no current caller; the surviving Settings-root typography/checkbox structure, color-picker
-wrapper chrome, generic disabled-label state, dialog-button-box structure and tray `QMenu` structure now have narrow permanent owners. No palette literal was copied into a new
-fallback authority and the strict Settings ThemeSpec schema was not expanded just to preserve dead stylesheet values.
-
-- [x] Inventory current legacy selector families against live source callers/semantic owners. Current repository
-  reference is 989 lines; caller proof reduced the live migration set to the bounded owners above rather than a
-  monolithic transplant.
-- [x] Remove production Settings root/tray dependency on `themes/dark.qss`. `ui/settings_theme.py` now builds the
-  complete root stylesheet from permanent structure + semantic ThemeSpec QSS; `ui/system_tray.py` consumes a narrow
-  ThemeSpec-backed menu renderer; the color-picker wrapper explicitly owns its old subsettings chrome.
-- [x] Add Qt-free dependency/ownership regression coverage. `tests/test_settings_dark_qss_retirement_contract.py`
-  executes **6/6 PASS** here; lifetime coverage is reconciled to the new complete-root renderer.
-- [?] **Needs run:** Windows/PySide visual/lifecycle matrix with the real repo asset physically absent: Default Dark,
-  materially different light/metal themes, Acrylic/Glass fresh start + live switching, tray, color picker, tooltips,
-  group boxes/check boxes, dense/scroll-heavy Settings pages and first-start/persistence.
-- [x] Confirm installer/build tooling has no filename-specific dependency: installers copy theme directories generically and build-layout validation targets `.srtheme`/`.srwtheme` by extension.
-- [ ] After the visual matrix is green, physically delete `themes/dark.qss` from the real repository/build. GODZIP Foundry
-  intentionally excludes `themes/`, so a checkpoint cannot itself prove or perform that final asset deletion.
-- [?] **Needs run:** confirm widget-theme/runtime theming is unchanged; this retirement is Settings/tray-only and must
-  not create another widget-theme authority.
-
----
-
-## 3A. Clock layout-slot mode-state repair — code landed, dedicated tests/installed validation pending
-
-Clock analogue/digital is two independent pieces of persisted state: the active face selection and that face's CUSTOM
-geometry variant. The geometry architecture was already correct; the numbered layout-slot boundary omitted the
-per-display face override and Clock Settings saves could later discard it.
-
-- [x] Keep `display_mode` as the shared/global Clock baseline and `display_mode_overrides[screen_signature]` as the
-  per-display double-click state. Do not move behavior back into CUSTOM geometry payloads.
-- [x] New layout-slot payloads are version 2 and capture the complete per-display override maps alongside the existing
-  baseline `display_mode`, while `custom_layout` continues to own independent `digital` / `analog` geometry variants.
-  The outer `widgets.layout_slots` container/default remains schema version 1 because its structure did not change.
-- [x] Slot load restores Clock mode state before the existing fenced runtime rebuild. An empty saved override map is
-  explicit state and clears later runtime choices; legacy v1 slots clear current overrides and deterministically replay
-  their saved shared baseline because those slots never recorded per-display mode state.
-- [x] Clock Settings save preserves the runtime-authored override maps for `clock`, `clock2`, and `clock3` instead of
-  replacing those sections and silently dropping double-click state.
-- [x] Dedicated Clock/slot regression coverage is added, routed in `Docs/TestSuite.md` §0.15, and now **GREEN on
-  Windows/PySide6** (2026-09-14 destination run): the three direct slot cases, the real DisplayManager boundary
-  (`test_qtquick_h_cutover.py`) and the Clock Settings preservation case all pass. Installed face/geometry replay
-  remains a separate acceptance cell.
-- [?] Installed validation: save distinct digital/analogue positions, double-click one routed display, save a numbered
-  slot, change mode/geometry, then load the slot. Require the saved active face and that face's geometry on every display,
-  including mixed analogue/digital ALL routing and restart/Settings-save persistence.
-
----
-
 ## 4. Steam Games You Follow — dev-gated feasibility-first future slice
 
 Execution authority: `Docs/Future_Work/Steam_Games_You_Follow.md`.
@@ -306,6 +251,11 @@ opts in by declaring axes + consuming `content_extent` in its payload handler + 
 - **Performance admission:** no Visualizer performance investigation is active. Reopen only from a persistent/growing/traceable defect observed in normal use or logs; do not schedule synthetic probe campaigns to search for one. Any admitted optimization must preserve freshness/reactivity and latency-tail quality and prefer fewer/event-owned mechanisms over polling. See `Docs/Guardrails/Performance_Optimization_Contract.md`.
 - **Defaults SSOT:** `core/settings/default_settings.py` is the sole authority;
   `.json`/`.sst` are derived and audit-gated. Never add a second default authority.
+- **Settings styling authority (dark.qss retired 2026-09-14):** `themes/dark.qss`
+  is physically deleted and the retirement is operator-accepted. Settings/tray
+  styling draws structure from narrow permanent renderers and semantic values
+  from `SettingsThemeSpec`. Never reintroduce a monolithic Settings QSS file or a
+  fallback stylesheet loader, even when the asset is absent.
 - **Visualizer preset ownership:** per-mode preset files are user-authored state. Users may add arbitrary counts, delete down to one, and leave sparse authored numbers. Runtime compacts them into slider positions without renaming/deleting files. A shipped preset manifest is packaging/reconciliation metadata, never runtime authority over user-authored presets.
 - **No fallback architecture:** failures should remain explicit and diagnosable; do
   not solve closeout work by adding silent fallback ownership, timers, or pollers.
