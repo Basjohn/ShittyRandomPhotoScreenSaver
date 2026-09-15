@@ -9,6 +9,11 @@ from PySide6.QtCore import Slot, Qt
 from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGNode
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
+from core.performance.frame_trace import (
+    FrameTraceEvent,
+    current_frame_trace,
+    logical_timestamp_ns,
+)
 from widgets.spotify_visualizer.render_bridge import (
     VisualizerRenderIdentity,
     VisualizerSnapshotBridge,
@@ -183,6 +188,7 @@ class VisualizerRenderItem(QQuickItem):
         self._diag_spectrum_handoff_remaining = 0
         self._diag_bubble_geometry_last_ts = 0.0
         self._diag_bubble_geometry_burst_remaining = 0
+        self._frame_trace = current_frame_trace()
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self.windowChanged.connect(self._bind_window_invalidation)
@@ -469,12 +475,24 @@ class VisualizerRenderItem(QQuickItem):
             if presentation is None
             else (presentation.outer_rect[2], presentation.outer_rect[3])
         )
+        screen_index = int(getattr(self._bound_window, "screen_index", -1))
+        if snapshot is not None and self._frame_trace is not None:
+            self._frame_trace.record(
+                FrameTraceEvent.QUICK_SYNC_CONSUME,
+                screen_index=screen_index,
+                revision=snapshot.logical_revision,
+                logical_timestamp_ns=logical_timestamp_ns(
+                    snapshot.logical.logical_timestamp
+                ),
+                auxiliary=int(snapshot.logical.runtime_generation),
+            )
         node.synchronize(
             identity=identity,
             snapshot=snapshot,
             logical_size=logical_size,
             device_pixel_ratio=(1.0 if presentation is None else presentation.dpr),
             clear_snapshot=clear_snapshot,
+            screen_index=screen_index,
         )
         self._retirement.set_node(
             node,

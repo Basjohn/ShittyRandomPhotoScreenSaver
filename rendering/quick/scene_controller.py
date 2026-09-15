@@ -15,6 +15,7 @@ from PySide6.QtQml import QQmlComponent, QQmlContext, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 from shiboken6 import isValid as _is_valid_qobject
 
+from core.performance.frame_trace import FrameTraceEvent, current_frame_trace
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.visualizer_mode_registry import VisualizerShellPolicy
 from rendering.custom_layout_session import (
@@ -414,6 +415,7 @@ class QuickSceneController(QObject):
         # by Qt and the display pacer already owns cadence.  We only aggregate
         # counters here and update two tiny text labels twice per second.
         self._perf_hud_enabled = bool(is_perf_metrics_enabled())
+        self._frame_trace = current_frame_trace()
         self._perf_pacer_state_provider: Callable[[], Mapping[str, object]] | None = None
         perf_now_ns = time.perf_counter_ns()
         self._perf_window_started_ns = perf_now_ns
@@ -513,6 +515,15 @@ class QuickSceneController(QObject):
             self._on_scene_graph_initialized,
             Qt.ConnectionType.QueuedConnection,
         )
+        # --frame-trace needs the actual scene-graph swap boundary, not a GUI
+        # queue timestamp that may arrive after later draws. The direct hook is
+        # diagnostics-only and records fixed integers; product-side readiness and
+        # PERF work remain on the ordinary queued GUI handler below.
+        if self._frame_trace is not None:
+            window.frameSwapped.connect(
+                self._trace_frame_swapped,
+                Qt.ConnectionType.DirectConnection,
+            )
         window.frameSwapped.connect(
             self._on_frame_swapped,
             Qt.ConnectionType.QueuedConnection,
@@ -1938,6 +1949,28 @@ class QuickSceneController(QObject):
         self._perf_window_started_ns = now_ns
         self._perf_window_swaps = 0
         self._perf_window_dt_max_ms = 0.0
+
+    def _trace_frame_swapped(self) -> None:
+        """Record the real scene-graph swap edge for explicit ``--frame-trace``."""
+
+        trace = self._frame_trace
+        if trace is None:
+            return
+        draw_identity = self._visualizer_telemetry.trace_last_draw()
+        if draw_identity is None:
+            # Diagnostics contention is never allowed to hold the render/swap
+            # boundary. Sacrifice this observer sample rather than waiting.
+            return
+        revision, logical_timestamp = draw_identity
+        trace.record(
+            FrameTraceEvent.FRAME_SWAP,
+            screen_index=int(self._window.screen_index),
+            revision=int(revision),
+            logical_timestamp_ns=int(
+                max(0.0, float(logical_timestamp)) * 1_000_000_000.0
+            ),
+            auxiliary=int(self._window.runtime_generation),
+        )
 
     def _on_frame_swapped(self) -> None:
         self._update_perf_hud_on_swap()

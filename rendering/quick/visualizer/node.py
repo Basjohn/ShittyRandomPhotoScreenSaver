@@ -10,6 +10,11 @@ from PySide6.QtQuick import QSGRenderNode
 
 from core.logging.logger import get_logger
 
+from core.performance.frame_trace import (
+    FrameTraceEvent,
+    current_frame_trace,
+    logical_timestamp_ns,
+)
 from widgets.spotify_visualizer.render_bridge import VisualizerRenderIdentity
 from widgets.spotify_visualizer import mode_capabilities
 from widgets.spotify_visualizer.render_state import VisualizerRenderSnapshot
@@ -58,6 +63,8 @@ class VisualizerRenderNode(QSGRenderNode):
         self._clip_host = VisualizerClipHost()
         self._render_host = QuickVisualizerRenderHost()
         self._released = False
+        self._screen_index = -1
+        self._frame_trace = current_frame_trace()
 
     @property
     def identity(self) -> VisualizerRenderIdentity | None:
@@ -92,6 +99,7 @@ class VisualizerRenderNode(QSGRenderNode):
         logical_size: tuple[float, float],
         device_pixel_ratio: float,
         clear_snapshot: bool = False,
+        screen_index: int = -1,
     ) -> None:
         """Accept detached state during the blocked-GUI synchronization phase."""
 
@@ -124,6 +132,7 @@ class VisualizerRenderNode(QSGRenderNode):
             max(0.0, float(logical_size[1])),
         )
         self._device_pixel_ratio = max(0.01, float(device_pixel_ratio))
+        self._screen_index = int(screen_index)
         self._telemetry.note_sync()
 
     def rect(self) -> QRectF:
@@ -250,6 +259,17 @@ class VisualizerRenderNode(QSGRenderNode):
                 logical_revision=snapshot.logical_revision,
                 logical_timestamp=snapshot.logical.logical_timestamp,
             )
+            trace = self._frame_trace
+            if trace is not None:
+                trace.record(
+                    FrameTraceEvent.RENDER_DRAW,
+                    screen_index=self._screen_index,
+                    revision=snapshot.logical_revision,
+                    logical_timestamp_ns=logical_timestamp_ns(
+                        snapshot.logical.logical_timestamp
+                    ),
+                    auxiliary=int(snapshot.logical.runtime_generation),
+                )
         except Exception as exc:
             self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
             logger.exception("[QUICK] Visualizer render node failed: %s", exc)

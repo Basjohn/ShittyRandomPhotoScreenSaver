@@ -2,39 +2,11 @@
 Tests for ResourceManager object pooling efficiency.
 
 Tests cover:
-- QPixmap/QImage pool management
+- QImage pool management
 - Pool statistics tracking
 - Pool size limits and eviction
 """
 import pytest
-
-
-class TestPixmapPoolManagement:
-    """Tests for QPixmap pool management in ResourceManager."""
-    
-    def test_pixmap_pool_initialization(self):
-        """Test pixmap pool starts empty."""
-        from core.resources.manager import ResourceManager
-        
-        rm = ResourceManager()
-        assert len(rm._pixmap_pool) == 0
-    
-    def test_pixmap_pool_max_size_constant(self):
-        """Test PIXMAP_POOL_MAX_SIZE is reasonable."""
-        from core.resources.manager import ResourceManager
-        
-        assert ResourceManager.PIXMAP_POOL_MAX_SIZE >= 4
-        assert ResourceManager.PIXMAP_POOL_MAX_SIZE <= 32
-    
-    def test_pool_stats_initialization(self):
-        """Test pool stats start at zero."""
-        from core.resources.manager import ResourceManager
-        
-        rm = ResourceManager()
-        assert rm._pool_stats["pixmap_hits"] == 0
-        assert rm._pool_stats["pixmap_misses"] == 0
-        assert rm._pool_stats["image_hits"] == 0
-        assert rm._pool_stats["image_misses"] == 0
 
 
 class TestImagePoolManagement:

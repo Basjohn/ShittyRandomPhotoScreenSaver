@@ -18,7 +18,7 @@ from core.process.shared_memory_transport import (
 from core.process.supervisor import ProcessSupervisor
 from core.process.types import MessageType, WorkerResponse, WorkerState, WorkerType
 from core.process.workers.image_worker import ImageWorker
-from engine.image_pipeline import load_image_via_worker
+from engine.image_pipeline import ImageProcessingStaleRuntimeError, load_image_via_worker
 
 
 def _new_transfer(
@@ -165,6 +165,9 @@ def test_image_pipeline_copies_directly_from_mapping_into_qt_owned_image() -> No
             "synthetic.png",
             2,
             1,
+            display_mode="fill",
+            use_lanczos=False,
+            sharpen=False,
         )
         assert qimage is not None
         assert qimage.width() == 2
@@ -199,7 +202,16 @@ def test_runtime_generation_rejection_reclaims_before_qimage_copy() -> None:
 
     supervisor.send_request_and_await_response = _return_after_generation_change
     try:
-        assert load_image_via_worker(engine, "synthetic.png", 2, 1) is None
+        with pytest.raises(ImageProcessingStaleRuntimeError):
+            load_image_via_worker(
+                engine,
+                "synthetic.png",
+                2,
+                1,
+                display_mode="fill",
+                use_lanczos=False,
+                sharpen=False,
+            )
         accounting = supervisor.get_shared_memory_accounting_snapshot()
         assert accounting["segments_live"] == 0
         assert accounting["live_bytes"] == 0

@@ -1,7 +1,5 @@
 """Passive accounting tests for the existing image-cache behavior."""
 import logging
-import math
-
 import pytest
 from PySide6.QtGui import QImage, QPixmap
 
@@ -44,17 +42,15 @@ def test_qimage_exact_bytes_drive_the_retention_budget():
         snapshot["resources"][0]["tracked_bytes"] = 0
 
 
-def test_qpixmap_exact_bytes_use_depth_rounding(qt_app):
+def test_runtime_image_cache_rejects_qpixmap_entries(qt_app):
     cache = ImageCache(max_items=2)
     pixmap = QPixmap(7, 3)
 
-    cache.put("pixmap", pixmap)
+    with pytest.raises(TypeError, match="QImage only"):
+        cache.put("pixmap", pixmap)
 
-    expected = 7 * 3 * math.ceil(pixmap.depth() / 8)
-    assert cache.tracked_memory_usage() == expected
-    entry = cache.get_accounting_snapshot()["resources"][0]
-    assert entry["tracked_bytes"] == expected
-    assert entry["format"] == f"QPixmap(depth={pixmap.depth()})"
+    assert cache.size() == 0
+    assert cache.tracked_memory_usage() == 0
 
 
 def test_exact_counter_follows_replacement_eviction_remove_and_clear():

@@ -86,6 +86,21 @@ class VisualizerRenderNodeTelemetry:
                 error=self._error,
             )
 
+    def trace_last_draw(self) -> tuple[int, float] | None:
+        """Try to read last-draw identity without blocking the render thread.
+
+        Explicit frame tracing is an observer, never presentation authority. If
+        another diagnostics reader momentarily owns the telemetry lock, sacrifice
+        this trace sample instead of delaying ``frameSwapped``.
+        """
+
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            return self._last_logical_revision, self._last_logical_timestamp
+        finally:
+            self._lock.release()
+
     def note_sync(self) -> None:
         with self._lock:
             self._sync_count += 1

@@ -15,7 +15,6 @@ from typing import Callable
 import weakref
 
 from PySide6.QtCore import QCoreApplication, QObject, QTimer
-from PySide6.QtWidgets import QApplication
 
 from core.logging.logger import get_logger
 
@@ -528,14 +527,14 @@ class RuntimeDestructionBarrier:
             )
             if self._is_terminal:
                 try:
-                    QApplication.quit()
+                    QCoreApplication.quit()
                 except Exception:
                     logger.error(
                         "[LIFECYCLE_BARRIER] Terminal finalization quit failed",
                         exc_info=True,
                     )
             else:
-                QApplication.exit(1)
+                QCoreApplication.exit(1)
 
     def _on_timeout(self) -> None:
         if self._completed:
@@ -592,7 +591,7 @@ class RuntimeDestructionBarrier:
             self._run_continuation()
         else:
             self.cancel_for_terminal_shutdown()
-            QApplication.exit(1)
+            QCoreApplication.exit(1)
         diagnostic_owner_referrers, diagnostic_trace_metadata = (
             self._capture_diagnostic_python_owner_referrers(
                 pending_python_owner_refs

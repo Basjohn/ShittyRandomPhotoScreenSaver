@@ -30,6 +30,12 @@ from __future__ import annotations
 
 import threading
 import time
+
+from core.performance.frame_trace import (
+    FrameTraceEvent,
+    current_frame_trace,
+    logical_timestamp_ns,
+)
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Optional
 
@@ -154,6 +160,19 @@ class LatestStateMailbox:
         self._publication: Optional[LogicalPublication] = None
         self._revision = 0
         self._dropped = 0
+        # Presentation wakeup is event-driven and latest-wins. The callback is
+        # installed only while a retained Quick presentation owner is live. It
+        # is invoked outside the mailbox lock exactly when the slot transitions
+        # empty -> populated, so producer bursts coalesce into one queued GUI
+        # wake while the freshest state continues replacing the unread slot.
+        self._wake_callback: Optional[Callable[[], None]] = None
+        # Explicit --frame-trace only. Cache once so ordinary runtime pays no
+        # global lookup/file/logging work on the producer boundary. The display
+        # owner supplies the current presentation screen as neutral integer
+        # metadata; it is updated on cross-display transfer so two per-display
+        # revision counters can never collide in trace correlation.
+        self._frame_trace = current_frame_trace()
+        self._trace_screen_index = -1
 
     def publish(
         self,
@@ -165,6 +184,7 @@ class LatestStateMailbox:
     ) -> int:
         """Replace the current slot. Returns the new revision."""
 
+        wake: Optional[Callable[[], None]] = None
         with self._lock:
             previous = self._publication
             if previous is not None:
@@ -183,7 +203,56 @@ class LatestStateMailbox:
                 activation_id=int(activation_id),
                 produced_ts=float(now_ts if now_ts is not None else time.monotonic()),
             )
-            return self._revision
+            # Only empty -> populated needs a GUI wake. If the GUI has not yet
+            # drained the slot, newer states replace it and reuse the already
+            # queued wake instead of creating a callback backlog.
+            if previous is None:
+                wake = self._wake_callback
+            revision = self._revision
+            trace_screen_index = self._trace_screen_index
+        trace = self._frame_trace
+        if trace is not None:
+            trace.record(
+                FrameTraceEvent.LOGICAL_PUBLISH,
+                screen_index=trace_screen_index,
+                revision=revision,
+                logical_timestamp_ns=logical_timestamp_ns(
+                    getattr(state, "logical_timestamp", 0.0)
+                ),
+                auxiliary=int(generation),
+            )
+        if wake is not None:
+            wake()
+        return revision
+
+    def set_trace_screen_index(self, screen_index: int) -> None:
+        """Bind frame-trace publication identity to the current presentation screen.
+
+        This is diagnostics metadata only: it owns no Qt object or presentation
+        behavior. The mailbox lock makes a publication observe either the old or
+        new display identity atomically during CUSTOM transfer.
+        """
+
+        with self._lock:
+            self._trace_screen_index = int(screen_index)
+
+    def set_wake_callback(self, callback: Optional[Callable[[], None]]) -> None:
+        """Bind/clear the coalesced retained-Quick publication wake edge.
+
+        The logical runtime stays Qt-free: this is an ordinary callable. The
+        Quick owner supplies a thread-safe signal emitter whose receiver lives
+        on the GUI thread. Installing a callback while a publication is already
+        pending wakes once so startup/transfer cannot strand an unread state.
+        """
+
+        wake_now = False
+        with self._lock:
+            if callback is not None and not callable(callback):
+                raise TypeError("logical mailbox wake callback must be callable or None")
+            self._wake_callback = callback
+            wake_now = callback is not None and self._publication is not None
+        if wake_now and callback is not None:
+            callback()
 
     def peek(self) -> Optional[LogicalPublication]:
         """Read the freshest publication without consuming it."""

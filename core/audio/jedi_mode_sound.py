@@ -11,9 +11,8 @@ import threading
 from dataclasses import dataclass
 from typing import Optional
 
-from PySide6.QtCore import QMetaObject, QObject, QThread, Qt, QUrl, Slot
+from PySide6.QtCore import QCoreApplication, QMetaObject, QObject, QThread, Qt, QUrl, Slot
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PySide6.QtWidgets import QApplication
 
 from core.audio.sound_paths import default_jedi_mode_sound_path, resolve_jedi_mode_sound_path
 from core.logging.logger import get_logger
@@ -39,7 +38,7 @@ class JediModeSoundPlayer(QObject):
     def instance(cls) -> "JediModeSoundPlayer":
         with cls._instance_lock:
             if cls._instance is None:
-                cls._instance = cls(parent=QApplication.instance())
+                cls._instance = cls(parent=QCoreApplication.instance())
             return cls._instance
 
     def __init__(self, parent: QObject | None = None) -> None:

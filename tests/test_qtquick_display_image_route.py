@@ -1,30 +1,30 @@
-"""Quick display image-routing seam bars (H, section 5.5).
+"""Qt Quick image-routing purity contracts.
 
-Prove the GUI-thread pipeline->runtime image route captures a processed pixmap
-into immutable presentation state and publishes it through the runtime's explicit
-API, plus the runtime's target-size and clear capabilities the flip needs.
+Steady-state wallpaper presentation is QImage -> detached PresentationImage.
+There is deliberately no generic QPixmap route or synchronous compatibility
+publication seam in the Quick runtime.
 """
 
 from __future__ import annotations
 
-import pytest
-from PySide6.QtGui import QColor, QImage, QPixmap
+from pathlib import Path
 
-from rendering.quick.display_image_route import (
-    present_processed_pixmap,
-    presentation_image_from_processed_qimage,
-    presentation_image_from_processed_pixmap,
-)
+import pytest
+from PySide6.QtGui import QColor, QImage
+
+from rendering.quick.display_image_route import presentation_image_from_processed_qimage
 from rendering.quick.image_accounting import aggregate_presentation_image_accounting
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 
+ROOT = Path(__file__).resolve().parents[1]
 
-def _pixmap(width: int, height: int, color: str = "#3366cc") -> QPixmap:
-    pixmap = QPixmap(width, height)
-    pixmap.fill(QColor(color))
-    return pixmap
+
+def _image(width: int, height: int, color: str = "#3366cc") -> QImage:
+    image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QColor(color))
+    return image
 
 
 def _make_runtime(qt_app, generation: int):
@@ -60,55 +60,67 @@ def test_quick_image_accounting_deduplicates_detached_records() -> None:
     assert snapshot["total_tracked_bytes"] == 96
 
 
-@pytest.mark.qt
-def test_capture_processed_pixmap_produces_packed_presentation_image(qt_app) -> None:
-    pixmap = _pixmap(6, 4)
-    image = presentation_image_from_processed_pixmap(pixmap, image_path="C:/img/a.jpg")
-    assert image.pixel_size == (6, 4)
-    assert image.source_path == "C:/img/a.jpg"
-    assert "a.jpg@6x4" in image.identity
-    # Tightly packed RGBA deep copy.
-    assert image.row_stride == 6 * 4
-    assert image.byte_count == 6 * 4 * 4
+def test_runtime_image_route_has_no_generic_qpixmap_escape_hatch() -> None:
+    route = (ROOT / "rendering" / "quick" / "display_image_route.py").read_text(
+        encoding="utf-8"
+    )
+    unit = (ROOT / "rendering" / "quick" / "display_unit.py").read_text(
+        encoding="utf-8"
+    )
+    boundary = (ROOT / "rendering" / "quick" / "image_boundary.py").read_text(
+        encoding="utf-8"
+    )
+    for source in (route, unit, boundary):
+        assert "QPixmap" not in source
+        assert "capture_qpixmap" not in source
+        assert "present_processed_pixmap" not in source
+    assert "presentation_image_from_processed_qimage" in route
 
 
 @pytest.mark.qt
-def test_processed_qimage_capture_matches_legacy_qpixmap_semantics(qt_app) -> None:
+def test_processed_qimage_produces_packed_presentation_image(qt_app) -> None:
+    image = _image(6, 4)
+    detached = presentation_image_from_processed_qimage(
+        image,
+        image_path="C:/img/a.jpg",
+    )
+    assert detached.pixel_size == (6, 4)
+    assert detached.source_path == "C:/img/a.jpg"
+    assert "a.jpg@6x4" in detached.identity
+    assert detached.row_stride == 6 * 4
+    assert detached.byte_count == 6 * 4 * 4
+
+
+@pytest.mark.qt
+def test_processed_qimage_preserves_rgba_semantics(qt_app) -> None:
     image = QImage(5, 3, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(QColor(0, 0, 0, 0))
     image.setPixelColor(0, 0, QColor(255, 0, 0, 255))
     image.setPixelColor(1, 0, QColor(0, 255, 0, 128))
     image.setPixelColor(2, 1, QColor(0, 0, 255, 64))
 
-    direct = presentation_image_from_processed_qimage(
+    detached = presentation_image_from_processed_qimage(
         image,
         image_path="C:/img/semantic.png",
     )
-    legacy = presentation_image_from_processed_pixmap(
-        QPixmap.fromImage(image),
-        image_path="C:/img/semantic.png",
-    )
-
-    assert direct.identity == legacy.identity
-    assert direct.source_path == legacy.source_path
-    assert direct.logical_size == legacy.logical_size
-    assert direct.device_pixel_ratio == legacy.device_pixel_ratio
-    assert direct.pixel_size == legacy.pixel_size
-    assert direct.row_stride == legacy.row_stride
-    assert direct.rgba8 == legacy.rgba8
+    assert detached.source_path == "C:/img/semantic.png"
+    assert detached.pixel_size == (5, 3)
+    assert detached.row_stride == 20
+    assert len(detached.rgba8) == 5 * 3 * 4
 
 
 @pytest.mark.qt
-def test_present_processed_pixmap_publishes_into_runtime(qt_app) -> None:
+def test_detached_image_publishes_into_runtime_without_qpixmap(qt_app) -> None:
     runtime, factory = _make_runtime(qt_app, 94)
     try:
-        pixmap = _pixmap(8, 5)
-        image = present_processed_pixmap(runtime, pixmap, image_path="p.png")
-        # The runtime's scene now owns exactly that immutable base image.
-        assert runtime.scene_controller.presentation_image == image
+        detached = presentation_image_from_processed_qimage(
+            _image(8, 5),
+            image_path="p.png",
+        )
+        runtime.set_presentation_image(detached)
+        assert runtime.scene_controller.presentation_image == detached
         assert runtime.scene_controller.presentation_image.pixel_size == (8, 5)
 
-        # Clear drops the base image while keeping the generation live.
         runtime.clear()
         assert runtime.scene_controller.presentation_image is None
     finally:

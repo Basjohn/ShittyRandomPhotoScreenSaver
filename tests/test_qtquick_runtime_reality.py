@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QPointF, Qt
-from PySide6.QtGui import QMouseEvent, QPixmap
+from PySide6.QtGui import QColor, QImage, QMouseEvent
 from PySide6.QtQuick import QQuickItem
 
 from core.settings.visualizer_mode_registry import (
@@ -28,9 +28,7 @@ from core.settings.visualizer_mode_registry import (
 )
 from engine.display_manager import DisplayManager
 from rendering.quick.context_menu import build_quick_context_menu_entries
-from rendering.quick.display_image_route import (
-    presentation_image_from_processed_pixmap,
-)
+from rendering.quick.display_image_route import presentation_image_from_processed_qimage
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
@@ -55,6 +53,13 @@ from widgets.spotify_visualizer.runtime_controller import (
     VisualizerRuntimeController,
 )
 
+
+
+
+def _presentation_image(width: int, height: int, path: str):
+    image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QColor("#224466"))
+    return presentation_image_from_processed_qimage(image, image_path=path)
 
 def _logical_frame(
     *,
@@ -218,19 +223,10 @@ def test_active_transition_admission_is_transactional_and_rejects_a_newer_image(
         def __init__(self, manager: DisplayManager) -> None:
             self.manager = manager
             self.screen_index = 0
-            self._current = presentation_image_from_processed_pixmap(
-                QPixmap(4, 3),
-                image_path="a.jpg",
-            )
+            self._current = _presentation_image(4, 3, "a.jpg")
             self.active_request = None
             self.history = []
             self.cancel_reasons = []
-
-        def capture_image(self, pixmap, *, image_path: str = ""):
-            return presentation_image_from_processed_pixmap(
-                pixmap,
-                image_path=image_path,
-            )
 
         def current_image(self):
             return self._current
@@ -280,10 +276,9 @@ def test_active_transition_admission_is_transactional_and_rejects_a_newer_image(
     unit = _Unit(manager)
     manager.displays = [unit]
     try:
-        manager.present_processed_image(
+        manager.present_processed_presentation_image(
             0,
-            QPixmap(8, 6),
-            QPixmap(),
+            _presentation_image(8, 6, "b.jpg"),
             "b.jpg",
         )
         assert unit.active_request is not None
@@ -294,10 +289,9 @@ def test_active_transition_admission_is_transactional_and_rejects_a_newer_image(
         # Reaching publication while A->B still runs is an invariant failure:
         # the newer C request is rejected loudly, never cancel/snapped in.
         with pytest.raises(RuntimeError, match="active Quick transition"):
-            manager.present_processed_image(
+            manager.present_processed_presentation_image(
                 0,
-                QPixmap(10, 7),
-                QPixmap(),
+                _presentation_image(10, 7, "c.jpg"),
                 "c.jpg",
             )
 
@@ -313,10 +307,7 @@ def test_active_transition_admission_is_transactional_and_rejects_a_newer_image(
 
         # Normal async image rotation now reaches DisplayManager already detached;
         # it must reuse the same transition/accounting contract without recapture.
-        detached = presentation_image_from_processed_pixmap(
-            QPixmap(6, 4),
-            image_path="detached.jpg",
-        )
+        detached = _presentation_image(6, 4, "detached.jpg")
         manager.present_processed_presentation_image(0, detached, "detached.jpg")
         assert unit.active_request is not None
         assert unit.active_request.destination_image is detached

@@ -295,7 +295,7 @@ def test_timeout_releases_barrier_ownership_without_continuing(
     exits = []
     completed = []
     monkeypatch.setattr(
-        runtime_destruction.QApplication,
+        runtime_destruction.QCoreApplication,
         "exit",
         staticmethod(lambda code: exits.append(int(code))),
     )

@@ -2,14 +2,13 @@
 LRU (Least Recently Used) cache for images.
 
 Caches decoded images to avoid redundant disk I/O and decoding.
-Supports immutable QImage entries and legacy GUI-owned QPixmap entries with exact logical-byte eviction.
+Stores immutable QImage entries only; GUI-owned QPixmap is forbidden in runtime cache authority.
 """
 from collections import OrderedDict
-import math
 import threading
 from types import MappingProxyType
-from typing import Optional, Union
-from PySide6.QtGui import QPixmap, QImage
+from typing import Optional
+from PySide6.QtGui import QImage
 from core.logging.logger import (
     get_logger,
     is_cache_logging_enabled,
@@ -42,7 +41,7 @@ def _cache_trace(message: str, *args: object) -> None:
 
 class ImageCache:
     """
-    LRU cache for immutable QImage and legacy GUI-owned QPixmap objects.
+    LRU cache for immutable QImage objects only.
     
     Features:
     - Automatic size management (evicts oldest entries when full)
@@ -72,7 +71,7 @@ class ImageCache:
         self.max_items = max(1, int(max_items))
         self.max_memory_bytes = max(1, int(float(max_memory_mb) * 1024 * 1024))
         
-        self._cache: OrderedDict[str, Union[QImage, QPixmap]] = OrderedDict()
+        self._cache: OrderedDict[str, QImage] = OrderedDict()
         self._current_memory = 0
         self._tracked_bytes_by_key: dict[str, int] = {}
         self._resource_metadata_by_key: dict[str, MappingProxyType] = {}
@@ -96,7 +95,7 @@ class ImageCache:
         logger.info(f"ImageCache initialized: max_items={max_items}, "
                    f"max_memory={max_memory_mb}MB")
     
-    def get(self, key: str) -> Optional[Union[QImage, QPixmap]]:
+    def get(self, key: str) -> Optional[QImage]:
         """
         Get an image from cache.
         
@@ -104,7 +103,7 @@ class ImageCache:
             key: Cache key (usually file path)
         
         Returns:
-            Cached QImage/QPixmap if found, otherwise None
+            Cached QImage if found, otherwise None
         """
         with self._lock:
             if key in self._cache:
@@ -118,7 +117,7 @@ class ImageCache:
             _cache_trace("Cache miss: %s", key)
             return None
     
-    def put(self, key: str, image: Union[QImage, QPixmap]) -> None:
+    def put(self, key: str, image: QImage) -> None:
         """
         Add an image to cache.
         
@@ -126,8 +125,13 @@ class ImageCache:
         
         Args:
             key: Cache key (usually file path)
-            image: immutable QImage or GUI-owned QPixmap to cache
+            image: immutable QImage to cache
         """
+        if not isinstance(image, QImage):
+            raise TypeError("ImageCache accepts QImage only; QPixmap runtime cache entries are forbidden")
+        if image.isNull():
+            raise ValueError("ImageCache cannot retain a null QImage")
+
         # Remove if already exists (to update order)
         with self._lock:
             if key in self._cache:
@@ -264,8 +268,8 @@ class ImageCache:
         """Return an immutable, detached snapshot of logical cache resources."""
         with self._lock:
             # All Qt-derived metadata is captured by put() on the caller's
-            # owning thread. Snapshot readers therefore never touch QPixmap
-            # or QImage objects from the background usage sampler.
+            # owning thread. Snapshot readers therefore never touch QImage
+            # objects from the background usage sampler.
             resources = [
                 self._resource_metadata_by_key[key]
                 for key in self._cache
@@ -361,42 +365,17 @@ class ImageCache:
         """Classify source versus display-ready derivative keys for bounded summaries."""
         return "scaled" if "|scaled:" in str(key) else "raw"
     
-    def _estimate_size(self, image: Union[QImage, QPixmap]) -> int:
-        """
-        Return the legacy RGBA estimate retained only for compatibility.
-        
-        Args:
-            pixmap: QPixmap to estimate
-        
-        Returns:
-            Estimated size in bytes
-        """
-        # Handle null/invalid images
-        if (isinstance(image, QPixmap) and image.isNull()) or (isinstance(image, QImage) and image.isNull()):
-            return 0
-        
-        # Estimate: width * height * bytes_per_pixel
-        # Assume 4 bytes per pixel (RGBA)
-        width = image.width()
-        height = image.height()
-        return width * height * 4
-
     @staticmethod
-    def _tracked_size(image: Union[QImage, QPixmap]) -> int:
-        """Return exact logical bytes for the supported Qt image type."""
+    def _tracked_size(image: QImage) -> int:
+        """Return exact logical bytes for the QImage cache authority."""
         if image.isNull():
             return 0
-        if isinstance(image, QImage):
-            return int(image.sizeInBytes())
-        bytes_per_pixel = math.ceil(max(0, int(image.depth())) / 8)
-        return int(image.width()) * int(image.height()) * bytes_per_pixel
+        return int(image.sizeInBytes())
 
     @staticmethod
-    def _image_format(image: Union[QImage, QPixmap]) -> str:
-        if isinstance(image, QImage):
-            image_format = image.format()
-            return getattr(image_format, "name", str(image_format))
-        return f"QPixmap(depth={int(image.depth())})"
+    def _image_format(image: QImage) -> str:
+        image_format = image.format()
+        return getattr(image_format, "name", str(image_format))
     
     def __len__(self) -> int:
         """Get number of cached images."""

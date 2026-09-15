@@ -83,7 +83,7 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
             return True
 
     monkeypatch.setattr(engine_handlers, "AnimationManager", _Animations)
-    monkeypatch.setattr(engine_handlers, "SettingsDialog", _Dialog)
+    monkeypatch.setattr(engine_handlers, "_settings_dialog_class", lambda: _Dialog)
     monkeypatch.setattr(
         engine_handlers,
         "log_lifecycle_resource_snapshot",
@@ -175,7 +175,7 @@ def test_settings_handler_observes_delete_on_close_before_exec_and_never_retouch
 
     engine = _Engine()
     monkeypatch.setattr(engine_handlers, "AnimationManager", _Animations)
-    monkeypatch.setattr(engine_handlers, "SettingsDialog", _Dialog)
+    monkeypatch.setattr(engine_handlers, "_settings_dialog_class", lambda: _Dialog)
     monkeypatch.setattr(
         runtime_destruction,
         "RuntimeDestructionBarrier",
@@ -274,7 +274,7 @@ def test_settings_handler_terminal_close_cancels_barrier_without_replacement(
         ),
     )
     monkeypatch.setattr(engine_handlers, "AnimationManager", _Animations)
-    monkeypatch.setattr(engine_handlers, "SettingsDialog", _Dialog)
+    monkeypatch.setattr(engine_handlers, "_settings_dialog_class", lambda: _Dialog)
     monkeypatch.setattr(
         engine_handlers,
         "_restart_after_settings_dialog_destroyed",
@@ -473,14 +473,14 @@ def test_settings_teardown_failure_exits_cleanly_without_opening_dialog(monkeypa
         stop=lambda exit_app=False, reason=None: (_ for _ in ()).throw(RuntimeError("GL deletion failed")),
     )
     monkeypatch.setattr(
-        engine_handlers.QApplication,
+        engine_handlers.QCoreApplication,
         "exit",
         staticmethod(lambda code: events.append(("exit", int(code)))),
     )
     monkeypatch.setattr(
         engine_handlers,
-        "SettingsDialog",
-        lambda *_args, **_kwargs: events.append(("dialog", True)),
+        "_settings_dialog_class",
+        lambda: (_ for _ in ()).throw(AssertionError("settings dialog must not resolve")),
     )
 
     engine_handlers.on_settings_requested(engine)
@@ -495,12 +495,13 @@ def test_settings_teardown_failure_exits_cleanly_without_opening_dialog(monkeypa
 
 def test_terminal_stop_from_stopped_state_is_not_ignored(monkeypatch):
     from engine.screensaver_engine import EngineState
+    from engine import engine_lifecycle
 
     engine = ScreensaverEngine()
     engine._state = EngineState.STOPPED
     exits = []
     monkeypatch.setattr(
-        QApplication,
+        engine_lifecycle.QCoreApplication,
         "quit",
         staticmethod(lambda: exits.append("quit")),
     )

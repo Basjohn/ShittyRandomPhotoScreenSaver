@@ -12,7 +12,7 @@ from core.threading.background_tasks import BackgroundTaskScheduler
 def test_background_scheduler_is_lazy_and_serial(monkeypatch):
     monkeypatch.setattr(
         background_tasks,
-        "_apply_background_thread_priority",
+        "apply_best_effort_thread_priority",
         lambda: (True, "test_below_normal", -1),
     )
     scheduler = BackgroundTaskScheduler(max_pending=1)
@@ -59,7 +59,7 @@ def test_background_scheduler_is_lazy_and_serial(monkeypatch):
 def test_background_scheduler_bounds_pending_work(monkeypatch):
     monkeypatch.setattr(
         background_tasks,
-        "_apply_background_thread_priority",
+        "apply_best_effort_thread_priority",
         lambda: (True, "test_below_normal", -1),
     )
     scheduler = BackgroundTaskScheduler(max_pending=1)
@@ -111,7 +111,7 @@ def test_background_scheduler_bounds_pending_work(monkeypatch):
 def test_background_scheduler_failure_still_completes_callback(monkeypatch):
     monkeypatch.setattr(
         background_tasks,
-        "_apply_background_thread_priority",
+        "apply_best_effort_thread_priority",
         lambda: (True, "test_below_normal", -1),
     )
     scheduler = BackgroundTaskScheduler()

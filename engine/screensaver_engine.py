@@ -26,8 +26,8 @@ import random
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-from PySide6.QtCore import QObject, Signal, QTimer
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtCore import QCoreApplication, QObject, Signal, QTimer
+from PySide6.QtGui import QImage
 
 from core.events import EventSystem
 from core.resources import ResourceManager
@@ -931,7 +931,8 @@ class ScreensaverEngine(QObject):
             return
         self._pending_monitor_replay_image = None
         logger.info("[DISPLAY] Display generation ready; replaying current image generation=%s", generation)
-        self._load_and_display_image(image)
+        if not self._load_and_display_image_async(image):
+            logger.error("[DISPLAY] Current-image replay async submission was rejected")
 
     def _on_authoritative_first_frames_ready(
         self,
@@ -1131,10 +1132,10 @@ class ScreensaverEngine(QObject):
         # IMAGE_PREFETCH factory is retained as reusable infrastructure/tests, but
         # production startup does not admit that persistent helper process.
         worker_configs = [
-            (WorkerType.IMAGE, 'workers.image.enabled', "ImageWorker", "ThreadManager fallback"),
+            (WorkerType.IMAGE, 'workers.image.enabled', "ImageWorker", "image publication unavailable"),
         ]
         
-        for worker_type, setting_key, name, fallback_msg in worker_configs:
+        for worker_type, setting_key, name, failure_msg in worker_configs:
             if workers_started >= max_workers:
                 logger.debug(f"{name} skipped - max_workers limit reached ({max_workers})")
                 continue
@@ -1144,7 +1145,7 @@ class ScreensaverEngine(QObject):
                     logger.info(f"{name} started successfully")
                     workers_started += 1
                 else:
-                    logger.warning(f"[LIFECYCLE][FALLBACK] {name} failed to start - using {fallback_msg}")
+                    logger.warning(f"[LIFECYCLE] {name} failed to start - {failure_msg}")
                     workers_failed += 1
         
         logger.info(f"Worker startup complete: {workers_started} started, {workers_failed} failed")
@@ -1294,6 +1295,20 @@ class ScreensaverEngine(QObject):
                 )
                 return False
 
+            # The Quick image path has no parent-process decode/scale fallback.
+            # Refuse a known worker outage before mutating queue/history truth;
+            # image_pipeline repeats this preflight to close the admission race.
+            from engine.image_pipeline import image_processing_authority_available
+
+            if not image_processing_authority_available(self):
+                logger.error(
+                    "[IMAGE] Foreground ImageWorker unavailable before queue selection; "
+                    "leaving image queue/history unchanged"
+                )
+                self._clear_unaccepted_image_change_work()
+                perf_trace.finish("worker_authority_unavailable_preflight")
+                return False
+
             # Queue selection is deliberately measured on the caller/UI thread.
             # Natural rotations have shown visible disturbance before worker
             # admission, so this boundary must not be hidden inside one broad
@@ -1322,24 +1337,24 @@ class ScreensaverEngine(QObject):
 
             self._current_image = image_meta
 
-            # Heavy decode/scale work stays off the UI thread.
-            if self.thread_manager:
-                accepted = bool(
-                    self._load_and_display_image_async(
-                        image_meta,
-                        perf_trace=perf_trace,
-                    )
+            # Quick runtime has one image authority: asynchronous QImage ->
+            # detached PresentationImage. A missing ThreadManager is an invalid
+            # runtime state, never permission to revive the legacy QPixmap path.
+            if not self.thread_manager:
+                logger.error("[IMAGE] ThreadManager unavailable; refusing legacy sync fallback")
+                self._clear_unaccepted_image_change_work()
+                perf_trace.finish("thread_manager_missing")
+                return False
+            accepted = bool(
+                self._load_and_display_image_async(
+                    image_meta,
+                    perf_trace=perf_trace,
                 )
-                if not accepted:
-                    self._clear_unaccepted_image_change_work()
-                    perf_trace.finish("submission_rejected")
-                return accepted
-
-            # Fallback path is retained and traced explicitly.
-            return self._load_and_display_image(
-                image_meta,
-                perf_trace=perf_trace,
             )
+            if not accepted:
+                self._clear_unaccepted_image_change_work()
+                perf_trace.finish("submission_rejected")
+            return accepted
 
         except Exception as e:
             perf_trace.finish("exception", error=type(e).__name__)
@@ -1392,11 +1407,6 @@ class ScreensaverEngine(QObject):
 
         _retry._srpss_runtime_generation = runtime_generation
         ThreadManager.single_shot(delay_ms, _retry)
-    def _load_image_task(self, image_meta: ImageMetadata, preferred_size: Optional[tuple] = None) -> Optional[QPixmap]:
-        """Delegates to engine.image_pipeline."""
-        from engine.image_pipeline import load_image_task
-        return load_image_task(self, image_meta, preferred_size=preferred_size)
-
     def _load_and_display_image_async(
         self,
         image_meta: ImageMetadata,
@@ -1415,21 +1425,6 @@ class ScreensaverEngine(QObject):
             )
         )
 
-
-    def _load_and_display_image(
-        self,
-        image_meta: ImageMetadata,
-        retry_count: int = 0,
-        *,
-        perf_trace: ImageChangePerfTrace | None = None,
-    ) -> bool:
-        from engine.image_pipeline import load_and_display_image
-        return load_and_display_image(
-            self,
-            image_meta,
-            retry_count,
-            perf_trace=perf_trace,
-        )
 
     def _on_rotation_timer(self) -> None:
         """Handle rotation timer timeout."""
@@ -1795,9 +1790,10 @@ class ScreensaverEngine(QObject):
         if not current:
             return False
 
-        if self.thread_manager:
-            return bool(self._load_and_display_image_async(current))
-        return self._load_and_display_image(current)
+        if not self.thread_manager:
+            logger.error("[IMAGE] Current-image replay requires ThreadManager")
+            return False
+        return bool(self._load_and_display_image_async(current))
 
     def _show_images_for_displays(self, image_metas: "List[ImageMetadata]") -> bool:
         """Display specific images on each display (used by previous-image).
@@ -1810,11 +1806,11 @@ class ScreensaverEngine(QObject):
         if not image_metas:
             return self._show_current_image()
 
-        primary = image_metas[0]
-        if self.thread_manager:
-            from engine.image_pipeline import load_and_display_image_async_with_metas
-            return bool(load_and_display_image_async_with_metas(self, image_metas))
-        return bool(self._load_and_display_image(primary))
+        if not self.thread_manager:
+            logger.error("[IMAGE] Previous-image replay requires ThreadManager")
+            return False
+        from engine.image_pipeline import load_and_display_image_async_with_metas
+        return bool(load_and_display_image_async_with_metas(self, image_metas))
     
     def _on_settings_changed(self, event) -> None:
         """Handle settings changed event."""
@@ -1835,8 +1831,6 @@ class ScreensaverEngine(QObject):
     
     def _on_monitors_changed(self, new_count: int) -> None:
         """Handle monitor configuration change."""
-        from PySide6.QtWidgets import QApplication
-
         logger.info(f"Monitor configuration changed: {new_count} monitors")
 
         if not self.display_manager:
@@ -1855,7 +1849,7 @@ class ScreensaverEngine(QObject):
                 "[LIFECYCLE] Monitor rebuild aborted because full teardown failed",
                 exc_info=True,
             )
-            QApplication.exit(1)
+            QCoreApplication.exit(1)
             return
 
         self._pending_monitor_replay_image = replay_image
@@ -1881,7 +1875,7 @@ class ScreensaverEngine(QObject):
             had_replay = self._pending_monitor_replay_image is not None
             if not self._initialize_display():
                 self._pending_monitor_replay_image = None
-                QApplication.quit()
+                QCoreApplication.quit()
                 return
             log_lifecycle_resource_snapshot(
                 self,
@@ -1890,7 +1884,7 @@ class ScreensaverEngine(QObject):
             )
             self._setup_rotation_timer()
             if not self.start(show_first_image=not had_replay):
-                QApplication.quit()
+                QCoreApplication.quit()
                 return
             log_lifecycle_resource_snapshot(
                 self,

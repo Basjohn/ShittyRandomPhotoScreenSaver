@@ -9,7 +9,8 @@ import threading
 import pytest
 from PySide6.QtGui import QColor, QImage, QPixmap
 
-from rendering.quick.image_boundary import capture_qimage, capture_qpixmap
+from rendering.quick.image_boundary import capture_qimage
+from rendering.quick.startup_desktop_capture import capture_startup_desktop_pixmap
 from rendering.quick.image_state import PresentationImage
 from rendering.quick.render import BackgroundRenderItem
 
@@ -90,37 +91,32 @@ def test_presentation_image_rejects_ambiguous_or_invalid_state(changes, message)
         PresentationImage(**values)
 
 
-def test_capture_rejects_null_qt_images(qt_app):
+def test_capture_rejects_null_qimage(qt_app):
     with pytest.raises(ValueError, match="non-null QImage"):
         capture_qimage(QImage(), identity="null")
-    with pytest.raises(ValueError, match="non-null QPixmap"):
-        capture_qpixmap(QPixmap(), identity="null")
 
 
-def test_gui_thread_qpixmap_capture_detaches_the_legacy_pipeline_object(qt_app):
+def test_startup_desktop_qpixmap_is_immediately_detached(qt_app):
     pixmap = QPixmap.fromImage(_two_pixel_image())
     expected = capture_qimage(pixmap.toImage(), identity="expected-pixmap-storage")
 
-    captured = capture_qpixmap(
-        pixmap,
-        identity="legacy-processed-frame",
-        source_path="C:/images/legacy.png",
-    )
+    captured = capture_startup_desktop_pixmap(pixmap, screen_index=3)
     pixmap.fill(QColor(255, 255, 255, 255))
 
     assert captured.pixel_size == (2, 1)
     assert captured.logical_size == (1.0, 0.5)
     assert captured.device_pixel_ratio == 2.0
     assert captured.rgba8 == expected.rgba8
+    assert captured.source_path == "__startup_desktop_screen_3__"
 
 
-def test_qpixmap_capture_is_explicitly_gui_thread_only(qt_app):
+def test_startup_desktop_qpixmap_capture_is_gui_thread_only(qt_app):
     pixmap = QPixmap.fromImage(_two_pixel_image())
     errors: list[BaseException] = []
 
     def capture_off_thread() -> None:
         try:
-            capture_qpixmap(pixmap, identity="off-thread")
+            capture_startup_desktop_pixmap(pixmap, screen_index=3)
         except BaseException as exc:
             errors.append(exc)
 
@@ -132,6 +128,15 @@ def test_qpixmap_capture_is_explicitly_gui_thread_only(qt_app):
     assert len(errors) == 1
     assert isinstance(errors[0], RuntimeError)
     assert "GUI thread" in str(errors[0])
+
+
+def test_generic_image_boundary_has_no_qpixmap_api():
+    source = (ROOT / "rendering" / "quick" / "image_boundary.py").read_text(encoding="utf-8")
+    assert "QPixmap" not in source
+    assert "capture_qpixmap" not in source
+    startup = (ROOT / "rendering" / "quick" / "startup_desktop_capture.py").read_text(encoding="utf-8")
+    assert "QPixmap" in startup
+    assert "grabWindow" in startup
 
 
 def test_render_thread_modules_do_not_import_live_qt_image_or_widget_state():

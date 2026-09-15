@@ -103,3 +103,16 @@ R-87 remains **[x] COMPLETELY FUCKED** until an installed build demonstrates all
 7. Settings/Edit/topology lifecycle fixes remain clean; no resurrection of R-80 through R-86 correctness defects.
 
 If this lane does not materially help installed pressure behavior, stop changing image topology. The next cut is Qt Quick publication/sync/presentation scheduling itself, ideally behind a dedicated opt-in sidecar. Do not add more normal-runtime telemetry and do not reduce visualizer fidelity/cadence to manufacture prettier metrics.
+
+## 2026-09-15 single-display D1 load ladder — R-87 background lane did not close the bug
+
+Operator-visible evidence from the R-87 one-display/60 Hz MC run must survive even if the raw logs disappear:
+
+- Around **10:52**: definite degradation during medium/light workstation load.
+- Around **10:54**: at least two additional visible degradation episodes.
+- Around **10:57**: workstation load was reduced, but not yet to light.
+- Around **10:59**: light load only (primarily browsers). Motion improved relative to the marked degraded periods.
+- Around **11:06**: began loading a heavy UE5 game; crawl/hitch pressure returned/worsened.
+
+During this run the R-87 background CPU lane reported its intended one-worker, Windows below-normal/no-boost policy. Bubble logical cadence remained around its authored ~90 revisions/s. Therefore R-87's scheduler-demoted speculative scaling lane is retained as a sane background-work policy but **did not solve the crawl**. Stop cycling speculative-image execution topology as the primary fix. The next active cut is publication/sync/draw observability (`--frame-trace`), Qt Quick-native event-driven presentation demand, and removal of runtime legacy QPixmap/synchronous presentation escape hatches.
+

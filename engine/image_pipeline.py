@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 import time
 
 from PySide6.QtCore import QSize
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtGui import QImage
 
 from core.logging.logger import (
     get_logger,
@@ -32,7 +32,6 @@ from rendering.display_modes import DisplayMode
 from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.quick.display_image_route import presentation_image_from_processed_qimage
 from rendering.quick.image_state import PresentationImage
-from rendering.image_processor_async import AsyncImageProcessor
 from sources.base_provider import ImageMetadata
 
 if TYPE_CHECKING:
@@ -40,6 +39,31 @@ if TYPE_CHECKING:
     from engine.screensaver_engine import ScreensaverEngine
 
 logger = get_logger(__name__)
+
+
+class ImageProcessingAbortError(RuntimeError):
+    """Non-media failure that must abort this image-change transaction.
+
+    Candidate decode/prescale rejection remains ordinary ``None`` so bounded
+    replacement can continue. Subclasses represent reasons that must *not* mark
+    the candidate bad or advance the retry queue.
+    """
+
+
+class ImageProcessingInfrastructureError(ImageProcessingAbortError):
+    """Required async image-processing authority/transport contract failed."""
+
+
+class ImageProcessingStaleRuntimeError(ImageProcessingAbortError):
+    """The submitting display/runtime generation retired before completion."""
+
+
+def image_processing_authority_available(engine: "ScreensaverEngine") -> bool:
+    """Return whether the required foreground ImageWorker is currently live."""
+
+    supervisor = getattr(engine, "_process_supervisor", None)
+    return bool(supervisor and supervisor.is_running(WorkerType.IMAGE))
+
 
 
 def _capture_runtime_identity(engine: "ScreensaverEngine") -> tuple[int, object | None]:
@@ -335,7 +359,7 @@ def _probe_cache(
     cache_key: str,
     *,
     bucket: str,
-) -> Optional[QPixmap | QImage]:
+) -> Optional[QImage]:
     cache = getattr(engine, "_image_cache", None)
     if cache is None or not cache_key:
         return None
@@ -575,53 +599,6 @@ def _build_immediate_prefetch_protected_keys(
     return keys
 
 
-def _derive_scaled_pixmap_from_raw_cache(
-    engine: ScreensaverEngine,
-    image_path: str,
-    source_image: Optional[QImage],
-    target_size: QSize,
-    display_mode: DisplayMode,
-    use_lanczos: bool,
-    sharpen: bool,
-) -> Optional[QPixmap]:
-    if source_image is None or source_image.isNull():
-        return None
-    scaled_qimage = AsyncImageProcessor.process_qimage(
-        source_image,
-        target_size,
-        display_mode,
-        use_lanczos=use_lanczos,
-        sharpen=sharpen,
-    )
-    if scaled_qimage.isNull():
-        return None
-    scaled_pixmap = QPixmap.fromImage(scaled_qimage)
-    if scaled_pixmap.isNull():
-        return None
-    cache = getattr(engine, "_image_cache", None)
-    if cache is not None:
-        scaled_key = _build_scaled_cache_key(
-            image_path,
-            target_size.width(),
-            target_size.height(),
-            display_mode,
-            use_lanczos,
-            sharpen,
-        )
-        cache.put(scaled_key, scaled_pixmap)
-    _bump_cache_runtime_stat(engine, "scaled_derivations")
-    _cache_trace(
-        "Derived scaled variant from raw cache path=%s target=%dx%d mode=%s lanczos=%s sharpen=%s",
-        image_path,
-        target_size.width(),
-        target_size.height(),
-        display_mode.value,
-        int(use_lanczos),
-        int(sharpen),
-    )
-    return scaled_pixmap
-
-
 def _describe_prefetcher_state(engine: ScreensaverEngine) -> str:
     prefetcher = getattr(engine, "_prefetcher", None)
     snapshot = None
@@ -643,84 +620,6 @@ def _describe_prefetcher_state(engine: ScreensaverEngine) -> str:
     )
 
 
-def _get_cached_pixmap_variants(
-    engine: ScreensaverEngine,
-    image_path: str,
-    target_width: int,
-    target_height: int,
-    display_mode: DisplayMode,
-    use_lanczos: bool,
-    sharpen: bool,
-) -> tuple[Optional[QPixmap], Optional[QPixmap]]:
-    """Return cached processed/original pixmaps when available.
-
-    The async display path historically ignored the pre-scaled cache variants and
-    always paid ImageWorker prescale cost on image change. This helper keeps one
-    cache contract for both the sync and async paths:
-    - prefer the display-ready scaled cache key for the processed pixmap
-    - fall back to the raw-path cached image for the original pixmap
-    """
-    cache = getattr(engine, "_image_cache", None)
-    if cache is None or not image_path:
-        return None, None
-
-    processed_pixmap: Optional[QPixmap] = None
-    original_pixmap: Optional[QPixmap] = None
-    scaled_key = _build_scaled_cache_key(
-        image_path,
-        target_width,
-        target_height,
-        display_mode,
-        use_lanczos,
-        sharpen,
-    )
-
-    def _coerce_cached_pixmap(cache_key: str) -> Optional[QPixmap]:
-        bucket = "scaled" if cache_key == scaled_key else "raw"
-        cached = _probe_cache(engine, cache_key, bucket=bucket)
-        if isinstance(cached, QPixmap) and not cached.isNull():
-            return cached
-        if isinstance(cached, QImage) and not cached.isNull():
-            try:
-                pm = QPixmap.fromImage(cached)
-                if not pm.isNull():
-                    if cache_key == scaled_key:
-                        cache.put(cache_key, pm)
-                    return pm
-            except Exception as e:
-                logger.debug("[ASYNC] Failed to convert cached QImage for %s: %s", cache_key, e)
-        return None
-
-    processed_pixmap = _coerce_cached_pixmap(scaled_key)
-    original_pixmap = _coerce_cached_pixmap(image_path)
-
-    if processed_pixmap is not None:
-        _cache_trace(
-            "Scaled cache hit path=%s target=%dx%d mode=%s lanczos=%s sharpen=%s",
-            image_path,
-            target_width,
-            target_height,
-            display_mode.value,
-            int(use_lanczos),
-            int(sharpen),
-        )
-    else:
-        _cache_trace(
-            "Scaled cache miss path=%s target=%dx%d mode=%s lanczos=%s sharpen=%s",
-            image_path,
-            target_width,
-            target_height,
-            display_mode.value,
-            int(use_lanczos),
-            int(sharpen),
-        )
-
-    if processed_pixmap is not None and original_pixmap is None:
-        original_pixmap = processed_pixmap
-
-    return processed_pixmap, original_pixmap
-
-
 # ------------------------------------------------------------------
 # ImageWorker-based loading
 # ------------------------------------------------------------------
@@ -739,8 +638,11 @@ def load_image_via_worker(
     """
     Load and prescale image using ImageWorker process.
 
-    Uses the ImageWorker for decode/prescale in a separate process,
-    avoiding GIL contention. Falls back to None if worker unavailable.
+    Uses the ImageWorker for decode/prescale in a separate process, avoiding
+    GIL contention. ``None`` means the worker authoritatively rejected this
+    image candidate (for example decode/prescale failure). Worker/transport/
+    contract failure raises ``ImageProcessingInfrastructureError`` so callers
+    stop replacement retries without ever decoding/scaling in the parent.
 
     Args:
         engine: ScreensaverEngine instance
@@ -752,11 +654,17 @@ def load_image_via_worker(
         timeout_ms: Timeout for worker response
 
     Returns:
-        QImage if successful, None if worker unavailable or failed
+        QImage if successful, ``None`` for an unusable image candidate.
+
+    Raises:
+        ImageProcessingInfrastructureError: if the required worker authority,
+            transport, or response contract fails.
     """
     supervisor = engine._process_supervisor
     if not supervisor or not supervisor.is_running(WorkerType.IMAGE):
-        return None
+        raise ImageProcessingInfrastructureError(
+            "Foreground ImageWorker is not running"
+        )
 
     runtime_generation, runtime_display_manager = _capture_runtime_identity(engine)
     response = None
@@ -776,8 +684,9 @@ def load_image_via_worker(
         )
 
         if not response:
-            logger.warning(f"{TAG_WORKER} ImageWorker timeout after %dms", timeout_ms)
-            return None
+            message = f"ImageWorker timeout after {timeout_ms}ms"
+            logger.error("%s %s", TAG_WORKER, message)
+            raise ImageProcessingInfrastructureError(message)
 
         if not _runtime_identity_is_current(
             engine,
@@ -789,21 +698,31 @@ def load_image_via_worker(
                 response,
                 reason="runtime_generation_rejected",
             )
-            return None
+            raise ImageProcessingStaleRuntimeError(
+                "ImageWorker response belongs to a retired runtime generation"
+            )
 
         if not response.success:
             error = response.error or "Unknown error"
-            logger.warning(f"{TAG_WORKER} ImageWorker failed: %s", error)
             supervisor.dispose_response(response, reason="worker_error")
-            return None
+            if response.msg_type == MessageType.IMAGE_RESULT:
+                # The worker itself is alive and authoritatively classified this
+                # candidate as unusable. Preserve bounded queue replacement, but
+                # never perform parent-process decode/scale.
+                logger.warning("%s ImageWorker rejected candidate: %s", TAG_WORKER, error)
+                return None
+            message = f"ImageWorker contract failure: {error}"
+            logger.error("%s %s", TAG_WORKER, message)
+            raise ImageProcessingInfrastructureError(message)
 
         payload = response.payload
         width = int(payload.get("width", 0) or 0)
         height = int(payload.get("height", 0) or 0)
         if width <= 0 or height <= 0:
-            logger.warning(f"{TAG_WORKER} ImageWorker returned invalid dimensions")
             supervisor.dispose_response(response, reason="invalid_dimensions")
-            return None
+            raise ImageProcessingInfrastructureError(
+                "ImageWorker success response contained invalid dimensions"
+            )
 
         expected_size = width * height * 4
         shm_name = payload.get("shared_memory_name")
@@ -826,7 +745,9 @@ def load_image_via_worker(
                     response,
                     reason="invalid_payload_size",
                 )
-                return None
+                raise ImageProcessingInfrastructureError(
+                    "ImageWorker shared-memory payload size violated the response contract"
+                )
 
             def _copy_shared_rgba(
                 rgba_view: memoryview,
@@ -867,8 +788,9 @@ def load_image_via_worker(
         else:
             rgba_data = payload.get("rgba_data")
             if not rgba_data or len(rgba_data) != expected_size:
-                logger.warning(f"{TAG_WORKER} ImageWorker returned invalid RGBA data")
-                return None
+                raise ImageProcessingInfrastructureError(
+                    "ImageWorker returned invalid inline RGBA payload"
+                )
             source_qimage = QImage(
                 rgba_data,
                 width,
@@ -876,8 +798,18 @@ def load_image_via_worker(
                 width * 4,
                 QImage.Format.Format_RGBA8888,
             )
-            qimage = source_qimage.copy()
-            del source_qimage
+            try:
+                if source_qimage.isNull():
+                    raise ImageProcessingInfrastructureError(
+                        "QImage rejected ImageWorker inline RGBA payload"
+                    )
+                qimage = source_qimage.copy()
+                if qimage.isNull():
+                    raise ImageProcessingInfrastructureError(
+                        "QImage failed to detach ImageWorker inline RGBA payload"
+                    )
+            finally:
+                del source_qimage
 
         if is_perf_metrics_enabled():
             proc_time = response.processing_time_ms or 0
@@ -889,115 +821,20 @@ def load_image_via_worker(
             )
         return qimage
 
+    except ImageProcessingAbortError:
+        # Preserve the reason the admitted operation was aborted. In particular,
+        # a retired-runtime cancellation must not be relabelled as worker
+        # infrastructure failure by this transport boundary.
+        raise
     except Exception as e:
         if response is not None:
             supervisor.dispose_response(
                 response,
                 reason="parent_consumer_exception",
             )
-        logger.warning(f"{TAG_WORKER} ImageWorker error: %s", e)
-        return None
-
-
-# ------------------------------------------------------------------
-# Image task loading (IO thread)
-# ------------------------------------------------------------------
-
-def load_image_task(
-    engine: ScreensaverEngine,
-    image_meta: ImageMetadata,
-    preferred_size: Optional[tuple] = None,
-) -> Optional[QPixmap]:
-    """
-    Load image task (runs in thread pool).
-
-    Args:
-        engine: ScreensaverEngine instance
-        image_meta: Image metadata
-        preferred_size: Optional (width, height) tuple for preferred display size
-
-    Returns:
-        Loaded QPixmap or None if failed
-    """
-    try:
-        # Determine path
-        if image_meta.local_path:
-            image_path = str(image_meta.local_path)
-        elif image_meta.url:
-            logger.debug(f"Loading from URL: {image_meta.url}")
-            if not image_meta.local_path:
-                logger.warning("[CACHE][FALLBACK] No local path for URL image")
-                return None
-            image_path = str(image_meta.local_path)
-        else:
-            logger.warning("[CACHE][FALLBACK] No path or URL for image")
-            return None
-
-        # Use cache if available (QImage decoded on IO thread)
-        pixmap: Optional[QPixmap] = None
-        if engine._prefetcher and engine._image_cache:
-            # Prefer a pre-scaled variant for this display if present
-            try:
-                size = preferred_size or engine._get_primary_display_size()
-                use_lanczos, sharpen = _get_display_quality_settings(engine)
-                display_mode = _normalize_display_mode(
-                    engine.settings_manager.get("display.mode")
-                    if engine.settings_manager
-                    else DisplayMode.FILL
-                )
-                if size:
-                    w, h = size
-                    scaled_key = _build_scaled_cache_key(
-                        image_path,
-                        w,
-                        h,
-                        display_mode,
-                        use_lanczos,
-                        sharpen,
-                    )
-                    scaled_cached = engine._image_cache.get(scaled_key)
-                    if isinstance(scaled_cached, QPixmap):
-                        pixmap = scaled_cached
-                    elif isinstance(scaled_cached, QImage) and not scaled_cached.isNull() and engine.thread_manager:
-                        pm = QPixmap.fromImage(scaled_cached)
-                        if not pm.isNull():
-                            engine._image_cache.put(scaled_key, pm)
-                            pixmap = pm
-                            # Clear QImage reference to free memory (Section 1.1 fix)
-                            scaled_cached = None
-            except Exception as _e:
-                logger.debug("[ENGINE] Exception suppressed: %s", _e)
-                pixmap = None
-
-            if pixmap is None or pixmap.isNull():
-                cached = engine._image_cache.get(image_path)
-                if isinstance(cached, QPixmap):
-                    pixmap = cached
-                elif isinstance(cached, QImage) and not cached.isNull():
-                    try:
-                        pm = QPixmap.fromImage(cached)
-                        if not pm.isNull():
-                            pixmap = pm
-                            # Clear QImage reference to free memory (Section 1.1 fix)
-                            cached = None
-                    except Exception as e:
-                        logger.debug("[ENGINE] Exception suppressed: %s", e)
-                        pixmap = None
-                if pixmap is None:
-                    pixmap = QPixmap(image_path)
-        else:
-            pixmap = QPixmap(image_path)
-
-        if pixmap.isNull():
-            logger.warning("Image load failed for: %s", image_path)
-            return None
-
-        logger.debug(f"Image loaded: {image_path} ({pixmap.width()}x{pixmap.height()})")
-        return pixmap
-
-    except Exception as e:
-        logger.exception(f"Image load task failed: {e}")
-        return None
+        message = f"ImageWorker transport/consume failure: {e}"
+        logger.error("%s %s", TAG_WORKER, message)
+        raise ImageProcessingInfrastructureError(message) from e
 
 
 # ------------------------------------------------------------------
@@ -1093,7 +930,6 @@ def _process_display_image_candidate(
     height = int(target_size.height())
 
     cache = getattr(engine, "_image_cache", None)
-    qimage: Optional[QImage] = None
     processed_qimage: Optional[QImage] = None
     scaled_cache_hit = False
     process_source = "unknown"
@@ -1124,84 +960,47 @@ def _process_display_image_candidate(
         else:
             _bump_cache_runtime_stat(engine, "scaled_misses")
 
-        if processed_qimage is None:
-            cached_raw = cache.get(img_path)
-            if isinstance(cached_raw, QImage) and not cached_raw.isNull():
-                qimage = cached_raw
-                process_source = "raw_cache"
-                _bump_cache_runtime_stat(engine, "raw_hits")
-            else:
-                _bump_cache_runtime_stat(engine, "raw_misses")
-
-    worker_available = bool(
-        getattr(engine, "_process_supervisor", None)
-        and engine._process_supervisor.is_running(WorkerType.IMAGE)
-    )
-    if (
-        processed_qimage is None
-        and (qimage is None or qimage.isNull())
-        and not Path(img_path).exists()
-    ):
-        logger.warning("%s Image file not found: %s", TAG_ASYNC, img_path)
-        return None
-
+    worker_available = image_processing_authority_available(engine)
     if processed_qimage is None:
-        if worker_available:
-            _bump_cache_runtime_stat(engine, "worker_requests")
+        if not worker_available:
+            _bump_cache_runtime_stat(engine, "worker_fallbacks")
+            message = (
+                f"Foreground ImageWorker unavailable for display={display_index}; "
+                f"parent-process decode/scale fallback is forbidden path={img_path}"
+            )
+            logger.error("%s %s", TAG_ASYNC, message)
+            raise ImageProcessingInfrastructureError(message)
+        if not Path(img_path).exists():
+            logger.warning("%s Image file not found: %s", TAG_ASYNC, img_path)
+            return None
+        _bump_cache_runtime_stat(engine, "worker_requests")
+        try:
             worker_qimage = load_image_via_worker(
-                engine,
-                img_path,
-                width,
-                height,
+                engine, img_path, width, height,
                 display_mode=display_mode_str,
                 use_lanczos=use_lanczos,
                 sharpen=sharpen,
                 timeout_ms=3000,
             )
-            if worker_qimage is not None and not worker_qimage.isNull():
-                processed_qimage = worker_qimage
-                process_source = "image_worker"
-            else:
-                _bump_cache_runtime_stat(engine, "worker_fallbacks")
-                raw_state = (
-                    "raw_hit"
-                    if qimage is not None and not qimage.isNull()
-                    else "raw_missing"
-                )
-                logger.warning(
-                    "[CACHE] [FALLBACK] Worker fallback display=%d "
-                    "reason=worker_rejected raw_state=%s %s "
-                    "path=%s target=%dx%d mode=%s",
-                    display_index,
-                    raw_state,
-                    _describe_prefetcher_state(engine),
-                    img_path,
-                    width,
-                    height,
-                    display_mode_str,
-                )
-
-        if processed_qimage is None:
-            # The child prescale is authoritative when available. Decode a raw
-            # parent representation only on the real fallback path; eagerly
-            # doing both decoded the same source twice and retained the unused
-            # full image beside its display-ready derivative.
-            if qimage is None or qimage.isNull():
-                loaded = QImage(img_path)
-                if not loaded.isNull():
-                    qimage = loaded
-                    if cache is not None:
-                        cache.put(img_path, qimage)
-            if qimage is None or qimage.isNull():
-                return None
-            process_source = "cpu_fallback"
-            processed_qimage = AsyncImageProcessor.process_qimage(
-                qimage,
-                target_size,
-                display_mode,
-                use_lanczos=use_lanczos,
-                sharpen=sharpen,
+        except ImageProcessingInfrastructureError:
+            # Preserve the historical metric name as a count of occasions where
+            # the retired parent fallback *would* have been entered. The fallback
+            # itself remains forbidden. Stale-runtime cancellation is separate.
+            _bump_cache_runtime_stat(engine, "worker_fallbacks")
+            raise
+        if worker_qimage is None or worker_qimage.isNull():
+            # The live worker rejected this particular media candidate. That is
+            # not permission to decode/scale in the parent, but it *is* ordinary
+            # bounded replacement input rather than an infrastructure outage.
+            logger.warning(
+                "%s ImageWorker rejected display candidate display=%d path=%s",
+                TAG_ASYNC,
+                display_index,
+                img_path,
             )
+            return None
+        processed_qimage = worker_qimage
+        process_source = "image_worker"
 
     if processed_qimage is None or processed_qimage.isNull():
         return None
@@ -1434,7 +1233,7 @@ def load_and_display_image_async(
     to eliminate frame timing spikes during image changes. The flow is:
     1. Load QImage on IO thread (or from cache)
     2. Process/scale QImage on COMPUTE thread
-    3. Convert to QPixmap and display on UI thread
+    3. Publish detached PresentationImage state through the Quick GUI admission edge
 
     For "different images on each monitor" mode, this loads separate images for
     each display from the queue.
@@ -1445,21 +1244,25 @@ def load_and_display_image_async(
         retry_count: Number of retries attempted (max 10)
     """
     if not engine.thread_manager or not engine.display_manager:
-        # Fall back to sync path if no thread manager
-        return bool(
-            load_and_display_image(
-                engine, image_meta, retry_count, perf_trace=perf_trace
-            )
+        logger.error(
+            "[ASYNC] Quick image publication requires ThreadManager + DisplayManager; "
+            "legacy synchronous fallback is forbidden"
         )
+        return False
 
     runtime_generation, display_manager = _capture_runtime_identity(engine)
     processing_targets = _snapshot_display_processing_targets(display_manager)
     if not processing_targets:
-        return bool(
-            load_and_display_image(
-                engine, image_meta, retry_count, perf_trace=perf_trace
-            )
+        logger.error("[ASYNC] Quick image publication has no processing targets")
+        return False
+    if not image_processing_authority_available(engine):
+        logger.error(
+            "[ASYNC] Foreground ImageWorker unavailable before queue fan-out; "
+            "refusing image admission without parent-process fallback"
         )
+        if perf_trace is not None:
+            perf_trace.mark("worker_authority_preflight_failed")
+        return False
 
     # Check same_image setting to determine how many images to load
     same_image = engine.settings_manager.get_bool('display.same_image_all_monitors')
@@ -1576,6 +1379,15 @@ def load_and_display_image_async(
                 "processed": processed_images,
                 "same_image": same_image,
             }
+        except ImageProcessingAbortError as exc:
+            if perf_trace is not None:
+                perf_trace.mark("worker_processing_aborted", error=type(exc).__name__)
+            logger.error(
+                "[ASYNC] Image processing aborted without invalidating queue candidates type=%s: %s",
+                type(exc).__name__,
+                exc,
+            )
+            raise
         except Exception as exc:
             if perf_trace is not None:
                 perf_trace.mark("worker_failed", error=type(exc).__name__)
@@ -1594,6 +1406,34 @@ def load_and_display_image_async(
         try:
             if perf_trace is not None:
                 perf_trace.mark("ui_callback_started")
+            authority_error = (
+                getattr(result, "error", None)
+                if result is not None and not bool(getattr(result, "success", False))
+                else None
+            )
+            if isinstance(authority_error, ImageProcessingAbortError):
+                if perf_trace is not None:
+                    perf_trace.finish(
+                        "worker_processing_aborted",
+                        error=type(authority_error).__name__,
+                    )
+                logger.error(
+                    "[ASYNC] Image processing aborted after admission; preserving "
+                    "media validity and ending this image-change attempt type=%s: %s",
+                    type(authority_error).__name__,
+                    authority_error,
+                )
+                engine._loading_in_progress = False
+                try:
+                    pending = getattr(display_manager, "set_transition_work_pending", None)
+                    if callable(pending):
+                        pending(False)
+                except Exception:
+                    logger.debug(
+                        "[ASYNC] Failed to clear transition pending state after worker outage",
+                        exc_info=True,
+                    )
+                return
             data = result.result if result and result.success else None
             if data is None:
                 if perf_trace is not None:
@@ -1732,18 +1572,12 @@ def load_and_display_image_async(
             perf_trace.mark("worker_submitted")
         return True
     except Exception as e:
-        logger.warning(f"[ASYNC] Failed to submit task, falling back to sync: {e}")
-        if _runtime_identity_is_current(
-            engine,
-            runtime_generation,
-            display_manager,
-            label="image_submit_fallback",
-        ):
-            return bool(
-                load_and_display_image(
-                    engine, image_meta, retry_count, perf_trace=perf_trace
-                )
-            )
+        logger.error(
+            "[ASYNC] Failed to submit image task; synchronous/QPixmap fallback is forbidden: %s",
+            e,
+        )
+        if perf_trace is not None:
+            perf_trace.mark("worker_submit_failed", error=type(e).__name__)
         return False
 
 
@@ -1783,13 +1617,19 @@ def load_and_display_image_async_with_metas(
     load_and_display_image_async but skips queue advancement.
     """
     if not engine.thread_manager or not engine.display_manager:
-        # Sync fallback — show first image on all displays
-        if image_metas:
-            return bool(load_and_display_image(engine, image_metas[0]))
+        logger.error(
+            "[ASYNC-PREV] Quick previous-image publication requires ThreadManager + "
+            "DisplayManager; synchronous fallback is forbidden"
+        )
         return False
 
     runtime_generation, display_manager = _capture_runtime_identity(engine)
     processing_targets = _snapshot_display_processing_targets(display_manager)
+    if not image_processing_authority_available(engine):
+        logger.error(
+            "[ASYNC-PREV] Foreground ImageWorker unavailable; preserving previous-image history"
+        )
+        return False
     # Pad metas to match display count
     while len(image_metas) < len(processing_targets):
         image_metas.append(image_metas[-1] if image_metas else None)
@@ -1812,6 +1652,13 @@ def load_and_display_image_async_with_metas(
                 sharpen,
             )
             return {"processed": processed_images} if processed_images else None
+        except ImageProcessingAbortError as exc:
+            logger.error(
+                "[ASYNC-PREV] Image processing aborted; previous-image history remains valid type=%s: %s",
+                type(exc).__name__,
+                exc,
+            )
+            raise
         except Exception as exc:
             logger.exception("[ASYNC-PREV] Background processing failed: %s", exc)
             return None
@@ -1824,6 +1671,29 @@ def load_and_display_image_async_with_metas(
         ):
             return
         try:
+            authority_error = (
+                getattr(result, "error", None)
+                if result is not None and not bool(getattr(result, "success", False))
+                else None
+            )
+            if isinstance(authority_error, ImageProcessingAbortError):
+                logger.error(
+                    "[ASYNC-PREV] Image processing aborted after admission; preserving "
+                    "previous-image history type=%s: %s",
+                    type(authority_error).__name__,
+                    authority_error,
+                )
+                engine._loading_in_progress = False
+                try:
+                    pending = getattr(display_manager, "set_transition_work_pending", None)
+                    if callable(pending):
+                        pending(False)
+                except Exception:
+                    logger.debug(
+                        "[ASYNC-PREV] Failed to clear transition pending state after worker outage",
+                        exc_info=True,
+                    )
+                return
             data = result.result if result and result.success else None
             if data is None:
                 engine._loading_in_progress = False
@@ -1908,128 +1778,10 @@ def load_and_display_image_async_with_metas(
         )
         return True
     except Exception as e:
-        logger.warning("[ASYNC-PREV] Failed to submit task: %s", e)
-        if image_metas and _runtime_identity_is_current(
-            engine,
-            runtime_generation,
-            display_manager,
-            label="previous_image_submit_fallback",
-        ):
-            return bool(load_and_display_image(engine, image_metas[0]))
-        return False
-
-
-# ------------------------------------------------------------------
-# Sync image loading and display (legacy fallback)
-# ------------------------------------------------------------------
-
-def load_and_display_image(
-    engine: ScreensaverEngine,
-    image_meta: ImageMetadata,
-    retry_count: int = 0,
-    *,
-    perf_trace: "ImageChangePerfTrace | None" = None,
-) -> bool:
-    """
-    Load and display image synchronously. Auto-retries with next image on failure.
-
-    NOTE: This is the legacy sync path. For better performance, use
-    load_and_display_image_async() which processes images off the UI thread.
-
-    Args:
-        engine: ScreensaverEngine instance
-        image_meta: Image metadata
-        retry_count: Number of retries attempted (max 10)
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        if perf_trace is not None:
-            perf_trace.mark("sync_load_started")
-        pixmap = load_image_task(engine, image_meta)
-
-        if not pixmap:
-            logger.warning(f"[CACHE][FALLBACK] Image load failed, attempting next image (retry {retry_count + 1}/10)")
-            engine._loading_in_progress = False
-            try:
-                pending = getattr(engine.display_manager, "set_transition_work_pending", None)
-                if callable(pending):
-                    pending(False)
-            except Exception:
-                logger.warning("[CACHE][FALLBACK] Failed to clear transition pending state", exc_info=True)
-
-            if retry_count < 10 and engine.image_queue:
-                next_image = engine.image_queue.next()
-                if next_image:
-                    return load_and_display_image(
-                        engine,
-                        next_image,
-                        retry_count + 1,
-                        perf_trace=perf_trace,
-                    )
-
-            logger.error("[CACHE][FALLBACK] Failed to load any images after 10 attempts")
-            engine.display_manager.show_error("No valid images available")
-            return False
-
-        image_path = str(image_meta.local_path) if image_meta.local_path else image_meta.url or "unknown"
-
-        same_image = engine.settings_manager.get_bool('display.same_image_all_monitors')
-        logger.debug("Same image on all monitors setting: %s", same_image)
-
-        if same_image:
-            engine.display_manager.show_image(pixmap, image_path)
-            logger.info(f"Image displayed: {image_path}")
-        else:
-            targets = engine.display_manager.snapshot_processing_descriptors()
-            display_count = len(targets)
-            for i in range(display_count):
-                screen_index = targets[i].screen_index
-                if i == 0:
-                    engine.display_manager.show_image_on_screen(
-                        screen_index, pixmap, image_path
-                    )
-                else:
-                    next_meta = engine.image_queue.next() if engine.image_queue else None
-                    if next_meta:
-                        try:
-                            logical_size = targets[i].logical_size
-                            size = (logical_size.width(), logical_size.height())
-                        except Exception as e:
-                            logger.debug("[ENGINE] Exception suppressed: %s", e)
-                            size = None
-                        next_pixmap = load_image_task(engine, next_meta, preferred_size=size)
-                        if next_pixmap:
-                            next_path = str(next_meta.local_path) if next_meta.local_path else next_meta.url or "unknown"
-                            engine.display_manager.show_image_on_screen(
-                                screen_index, next_pixmap, next_path
-                            )
-            logger.info(f"Different images displayed on {display_count} displays")
-
-        engine.image_changed.emit(image_path)
-        schedule_prefetch(engine)
-
-        engine._loading_in_progress = False
-        try:
-            pending = getattr(engine.display_manager, "set_transition_work_pending", None)
-            if callable(pending):
-                pending(False)
-        except Exception:
-            logger.warning("[CACHE][FALLBACK] Failed to reconcile transition pending state", exc_info=True)
-        if perf_trace is not None:
-            perf_trace.finish("published_sync")
-        return True
-
-    except Exception as e:
-        logger.exception(f"Load and display failed: {e}")
-        engine._loading_in_progress = False
-        try:
-            pending = getattr(engine.display_manager, "set_transition_work_pending", None)
-            if callable(pending):
-                pending(False)
-        except Exception:
-            logger.warning("[CACHE][FALLBACK] Failed to clear transition pending state", exc_info=True)
+        logger.error(
+            "[ASYNC-PREV] Failed to submit task; synchronous/QPixmap fallback is forbidden: %s",
+            e,
+        )
         return False
 
 

@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import inspect
 import logging
+
+import pytest
 from types import SimpleNamespace
 
-from PySide6.QtGui import QColor, QImage, QPixmap
+from PySide6.QtGui import QColor, QImage
 from PySide6.QtCore import QSize
 
 from engine.image_pipeline import (
     _build_scaled_cache_key,
     _cache_trace,
     _describe_prefetcher_state,
-    _get_cached_pixmap_variants,
+    ImageProcessingInfrastructureError,
     _process_display_image_candidate,
     _process_display_with_replacements,
     _process_previous_images_with_exact_reuse,
@@ -290,71 +292,49 @@ def test_previous_image_keeps_different_source_or_dpr_processing_separate(monkey
 
 
 def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
-    path = r"C:\wall\same-pixels-different-dpr.jpg"
-    raw = _solid_qimage(8, 8, QColor("navy"))
-    store = {path: raw}
+    path = r"C:\\wall\\same-pixels-different-dpr.jpg"
+    key_1x = _build_scaled_cache_key(
+        path, 4, 4, DisplayMode.FILL, False, False, 1.0
+    )
+    key_2x = _build_scaled_cache_key(
+        path, 4, 4, DisplayMode.FILL, False, False, 2.0
+    )
+    assert key_1x != key_2x
+
+    image_1x = _solid_qimage(4, 4, QColor("navy"))
+    image_2x = _solid_qimage(4, 4, QColor("blue"))
+    store = {key_1x: image_1x, key_2x: image_2x}
     cache = SimpleNamespace(
         get=lambda key: store.get(key),
         put=lambda key, value: store.__setitem__(key, value),
     )
-    engine = SimpleNamespace(
-        _image_cache=cache,
-        _process_supervisor=None,
-    )
+    engine = SimpleNamespace(_image_cache=cache, _process_supervisor=None)
     meta = SimpleNamespace(local_path=path, url=None)
-    target_1x = SimpleNamespace(
-        get_target_size=lambda: QSize(4, 4),
-        display_mode=DisplayMode.FILL,
-        device_pixel_ratio=1.0,
-    )
-    target_2x = SimpleNamespace(
-        get_target_size=lambda: QSize(4, 4),
-        display_mode=DisplayMode.FILL,
-        device_pixel_ratio=2.0,
-    )
 
     first = _process_display_image_candidate(
         engine,
-        target_1x,
-        0,
-        meta,
-        False,
-        False,
+        SimpleNamespace(
+            get_target_size=lambda: QSize(4, 4),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=1.0,
+        ),
+        0, meta, False, False,
     )
     second = _process_display_image_candidate(
         engine,
-        target_2x,
-        1,
-        meta,
-        False,
-        False,
+        SimpleNamespace(
+            get_target_size=lambda: QSize(4, 4),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=2.0,
+        ),
+        1, meta, False, False,
     )
 
-    assert first is not None
-    assert second is not None
-    assert first.presentation_image is not second.presentation_image
-    key_1x = _build_scaled_cache_key(
-        path,
-        4,
-        4,
-        DisplayMode.FILL,
-        False,
-        False,
-        1.0,
-    )
-    key_2x = _build_scaled_cache_key(
-        path,
-        4,
-        4,
-        DisplayMode.FILL,
-        False,
-        False,
-        2.0,
-    )
-    assert key_1x != key_2x
-    assert store[key_1x] is not store[key_2x]
-    assert store[key_1x].size() == QSize(4, 4)
-    assert store[key_2x].size() == QSize(4, 4)
+    assert first is not None and second is not None
+    assert first.presentation_image.pixel_size == (4, 4)
+    assert second.presentation_image.pixel_size == (4, 4)
+    assert store[key_1x] is image_1x
+    assert store[key_2x] is image_2x
 
 
 def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
@@ -400,7 +380,6 @@ def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
 
     assert result is not None
     assert result.presentation_image.pixel_size == (4, 4)
-    assert store[scaled_key] is scaled
     assert gets == [scaled_key]
     assert puts == []
     assert engine._cache_runtime_stats["scaled_reuses_without_put"] == 1
@@ -461,12 +440,11 @@ def test_worker_success_does_not_decode_or_cache_redundant_raw(
     assert engine._cache_runtime_stats["worker_fallbacks"] == 0
 
 
-def test_worker_failure_preserves_parent_raw_decode_fallback(
+def test_worker_failure_is_classified_and_never_runs_parent_fallback(
     tmp_path,
     monkeypatch,
-    caplog,
 ):
-    path = tmp_path / "worker-fallback.png"
+    path = tmp_path / "worker-authority-failure.png"
     source = _solid_qimage(8, 8, QColor("purple"))
     assert source.save(str(path))
     store = {}
@@ -478,9 +456,18 @@ def test_worker_failure_preserves_parent_raw_decode_fallback(
         _image_cache=cache,
         _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
     )
+    def _worker_outage(*_args, **_kwargs):
+        raise ImageProcessingInfrastructureError("worker transport unavailable")
+
     monkeypatch.setattr(
         "engine.image_pipeline.load_image_via_worker",
-        lambda *_args, **_kwargs: None,
+        _worker_outage,
+    )
+    monkeypatch.setattr(
+        "engine.image_pipeline.AsyncImageProcessor.process_qimage",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("parent fallback must not run")
+        ),
     )
     display = SimpleNamespace(
         get_target_size=lambda: QSize(4, 4),
@@ -488,22 +475,60 @@ def test_worker_failure_preserves_parent_raw_decode_fallback(
         device_pixel_ratio=1.0,
     )
 
-    result = _process_display_image_candidate(
+    with pytest.raises(ImageProcessingInfrastructureError):
+        _process_display_image_candidate(
+            engine,
+            display,
+            0,
+            SimpleNamespace(local_path=str(path), url=None),
+            False,
+            False,
+        )
+
+    assert store == {}
+    assert engine._cache_runtime_stats["worker_requests"] == 1
+    # Keep the historical counter name for log-schema continuity. It now means
+    # a forbidden fallback condition was observed, not that fallback executed.
+    assert engine._cache_runtime_stats["worker_fallbacks"] == 1
+
+
+def test_worker_candidate_rejection_remains_retryable_without_parent_fallback(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "worker-candidate-rejection.png"
+    source = _solid_qimage(8, 8, QColor("orange"))
+    assert source.save(str(path))
+    engine = SimpleNamespace(
+        _image_cache=SimpleNamespace(get=lambda _key: None, put=lambda *_args: None),
+        _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
+    )
+    monkeypatch.setattr(
+        "engine.image_pipeline.load_image_via_worker",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "engine.image_pipeline.AsyncImageProcessor.process_qimage",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("parent fallback must not run")
+        ),
+    )
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(4, 4),
+        display_mode=DisplayMode.FILL,
+        device_pixel_ratio=1.0,
+    )
+
+    assert _process_display_image_candidate(
         engine,
         display,
         0,
         SimpleNamespace(local_path=str(path), url=None),
         False,
         False,
-    )
-
-    assert result is not None
-    assert str(path) in store
-    assert any("|scaled:" in key for key in store)
+    ) is None
     assert engine._cache_runtime_stats["worker_requests"] == 1
-    assert engine._cache_runtime_stats["worker_fallbacks"] == 1
-    assert "[CACHE] [FALLBACK] Worker fallback display=0" in caplog.text
-    assert "reason=worker_rejected raw_state=raw_missing" in caplog.text
+    assert engine._cache_runtime_stats["worker_fallbacks"] == 0
 
 
 def test_previous_async_reports_rejection_when_submit_and_fallback_fail(
@@ -525,18 +550,69 @@ def test_previous_async_reports_rejection_when_submit_and_fallback_fail(
     engine = SimpleNamespace(
         thread_manager=_RejectingThreads(),
         display_manager=display_manager,
+        _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
         _runtime_generation=1,
         _shutting_down=False,
     )
-    monkeypatch.setattr(
-        "engine.image_pipeline.load_and_display_image",
-        lambda *_args, **_kwargs: False,
-    )
-
     assert load_and_display_image_async_with_metas(
         engine,
         [SimpleNamespace(local_path=r"C:\wall\previous.jpg", url=None)],
     ) is False
+
+
+def test_normal_async_worker_authority_failure_does_not_advance_retry_queue(monkeypatch):
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(4, 4),
+        display_mode=DisplayMode.FILL,
+        _device_pixel_ratio=1.0,
+    )
+    pending_calls = []
+    display_manager = SimpleNamespace(
+        snapshot_processing_descriptors=lambda: _processing_targets(display),
+        set_transition_work_pending=lambda value: pending_calls.append(value),
+    )
+
+    class _Threads:
+        def submit_compute_task(self, task, *, callback, category):
+            assert category == "image.load_and_process"
+            try:
+                value = task()
+            except Exception as exc:
+                result = SimpleNamespace(success=False, result=None, error=exc)
+            else:
+                result = SimpleNamespace(success=True, result=value, error=None)
+            callback(result)
+
+        def run_on_ui_thread(self, callback):
+            callback()
+
+    queue_calls = []
+    engine = SimpleNamespace(
+        thread_manager=_Threads(),
+        display_manager=display_manager,
+        settings_manager=SimpleNamespace(
+            get_bool=lambda key: True if key == "display.same_image_all_monitors" else False,
+        ),
+        image_queue=SimpleNamespace(next=lambda: queue_calls.append(True)),
+        _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
+        _runtime_generation=1,
+        _shutting_down=False,
+        _loading_in_progress=True,
+    )
+    initial_meta = SimpleNamespace(local_path=r"C:\wall\valid.jpg", url=None)
+
+    def _authority_failure(*_args, **_kwargs):
+        raise ImageProcessingInfrastructureError("ImageWorker unavailable")
+
+    monkeypatch.setattr(
+        "engine.image_pipeline._process_same_image_with_replacements",
+        _authority_failure,
+    )
+
+    assert load_and_display_image_async(engine, initial_meta) is True
+    assert queue_calls == []
+    assert engine._loading_in_progress is False
+    assert pending_calls == [False]
 
 
 def test_normal_async_retry_retains_existing_image_change_owner():
@@ -568,13 +644,12 @@ def test_normal_async_retry_retains_existing_image_change_owner():
         thread_manager=threads,
         display_manager=display_manager,
         settings_manager=SimpleNamespace(
-            get=lambda key, default=None: (
-                True if key == "display.same_image_all_monitors" else default
-            )
+            get_bool=lambda key: True if key == "display.same_image_all_monitors" else False
         ),
         image_queue=SimpleNamespace(
             next=lambda: queued.pop(0) if queued else None,
         ),
+        _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
         _runtime_generation=1,
         _shutting_down=False,
         _loading_in_progress=True,
@@ -626,73 +701,13 @@ def test_cache_fallback_diagnostics_include_prefetcher_state():
     )
 
 
-def test_cached_pixmap_variants_prefer_scaled_variant(qt_app):
-    raw_key = r"C:\wall\one.jpg"
-    scaled_key = _build_scaled_cache_key(raw_key, 2560, 1440, DisplayMode.FILL, True, False)
-    cache = SimpleNamespace()
-    store = {
-        scaled_key: _solid_qimage(2560, 1440, QColor("red")),
-        raw_key: _solid_qimage(3840, 2160, QColor("blue")),
-    }
+def test_legacy_cached_pixmap_variant_api_is_absent() -> None:
+    import engine.image_pipeline as image_pipeline_module
 
-    def _get(key):
-        return store.get(key)
-
-    def _put(key, value):
-        store[key] = value
-
-    cache.get = _get
-    cache.put = _put
-
-    engine = SimpleNamespace(_image_cache=cache)
-    processed, original = _get_cached_pixmap_variants(
-        engine,
-        raw_key,
-        2560,
-        1440,
-        DisplayMode.FILL,
-        True,
-        False,
-    )
-
-    assert isinstance(processed, QPixmap)
-    assert not processed.isNull()
-    assert processed.width() == 2560
-    assert processed.height() == 1440
-    assert isinstance(original, QPixmap)
-    assert not original.isNull()
-    assert original.width() == 3840
-    assert original.height() == 2160
-    assert isinstance(store[scaled_key], QPixmap)
-    assert isinstance(store[raw_key], QImage)
-
-
-def test_cached_pixmap_variants_fall_back_to_processed_when_raw_missing(qt_app):
-    raw_key = r"C:\wall\two.jpg"
-    scaled_key = _build_scaled_cache_key(raw_key, 1707, 959, DisplayMode.FILL, True, False)
-    cache = SimpleNamespace()
-    store = {
-        scaled_key: QPixmap.fromImage(_solid_qimage(1707, 959, QColor("green"))),
-    }
-
-    cache.get = lambda key: store.get(key)
-    cache.put = lambda key, value: store.__setitem__(key, value)
-
-    engine = SimpleNamespace(_image_cache=cache)
-    processed, original = _get_cached_pixmap_variants(
-        engine,
-        raw_key,
-        1707,
-        959,
-        DisplayMode.FILL,
-        True,
-        False,
-    )
-
-    assert isinstance(processed, QPixmap)
-    assert not processed.isNull()
-    assert isinstance(original, QPixmap)
-    assert original.cacheKey() == processed.cacheKey()
+    assert not hasattr(image_pipeline_module, "_get_cached_pixmap_variants")
+    source = inspect.getsource(image_pipeline_module)
+    assert "QPixmap.fromImage" not in source
+    assert "def load_and_display_image(" not in source
 
 
 def test_schedule_prefetch_uses_preview_upcoming_and_registers_scaled_requests():
