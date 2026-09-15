@@ -176,6 +176,19 @@ class VisualizerRenderNode(QSGRenderNode):
         """Draw the latest admitted state without advancing logical state."""
 
         try:
+            snapshot = self._snapshot
+            if snapshot is not None and min(self._logical_size) > 0.0:
+                trace = self._frame_trace
+                if trace is not None:
+                    trace.record(
+                        FrameTraceEvent.RENDER_BEGIN,
+                        screen_index=self._screen_index,
+                        revision=snapshot.logical_revision,
+                        logical_timestamp_ns=logical_timestamp_ns(
+                            snapshot.logical.logical_timestamp
+                        ),
+                        auxiliary=int(snapshot.logical.runtime_generation),
+                    )
             scissor_enabled = bool(state.scissorEnabled())
             stencil_enabled = bool(state.stencilEnabled())
             self._telemetry.note_render(
@@ -188,7 +201,6 @@ class VisualizerRenderNode(QSGRenderNode):
                     int(state.stencilValue()) if stencil_enabled else None
                 ),
             )
-            snapshot = self._snapshot
             if snapshot is None or min(self._logical_size) <= 0.0:
                 return
             # The QML root's inherited opacity (the generation startup-reveal gate

@@ -63,6 +63,14 @@ class VisualizerRenderNodeTelemetry:
         self._drawn_mode_id: str | None = None
         self._last_logical_revision = 0
         self._last_logical_timestamp = 0.0
+        # Dedicated render-thread trace latch. ``note_draw()`` and the direct
+        # QQuickWindow.frameSwapped trace hook both execute on Qt Quick's render
+        # thread. Keep this sequence/identity outside the snapshot lock so
+        # explicit --frame-trace can never wait behind a GUI diagnostics reader.
+        # The sequence is published last and therefore acts as the commit token.
+        self._trace_draw_sequence = 0
+        self._trace_last_logical_revision = 0
+        self._trace_last_logical_timestamp = 0.0
         self._error: str | None = None
 
     def snapshot(self) -> VisualizerRenderNodeSnapshot:
@@ -86,20 +94,22 @@ class VisualizerRenderNodeTelemetry:
                 error=self._error,
             )
 
-    def trace_last_draw(self) -> tuple[int, float] | None:
-        """Try to read last-draw identity without blocking the render thread.
+    def trace_last_draw(self) -> tuple[int, int, float]:
+        """Return the render-thread draw commit token and logical identity.
 
-        Explicit frame tracing is an observer, never presentation authority. If
-        another diagnostics reader momentarily owns the telemetry lock, sacrifice
-        this trace sample instead of delaying ``frameSwapped``.
+        This is intentionally lock-free. ``note_draw()`` and the direct
+        ``QQuickWindow.frameSwapped`` trace hook are ordered on Qt Quick's render
+        thread, while ordinary cross-thread diagnostics continue to use
+        :meth:`snapshot` and its lock. Publishing ``_trace_draw_sequence`` last
+        means a reader never observes a new sequence with a partially updated
+        logical identity.
         """
 
-        if not self._lock.acquire(blocking=False):
-            return None
-        try:
-            return self._last_logical_revision, self._last_logical_timestamp
-        finally:
-            self._lock.release()
+        return (
+            self._trace_draw_sequence,
+            self._trace_last_logical_revision,
+            self._trace_last_logical_timestamp,
+        )
 
     def note_sync(self) -> None:
         with self._lock:
@@ -133,11 +143,17 @@ class VisualizerRenderNodeTelemetry:
         logical_revision: int = 0,
         logical_timestamp: float = 0.0,
     ) -> None:
+        revision = max(0, int(logical_revision))
+        timestamp = max(0.0, float(logical_timestamp))
         with self._lock:
             self._draw_count += 1
             self._drawn_mode_id = str(mode_id)
-            self._last_logical_revision = max(0, int(logical_revision))
-            self._last_logical_timestamp = max(0.0, float(logical_timestamp))
+            self._last_logical_revision = revision
+            self._last_logical_timestamp = timestamp
+        # Render-thread-only trace publication. Identity first, sequence last.
+        self._trace_last_logical_revision = revision
+        self._trace_last_logical_timestamp = timestamp
+        self._trace_draw_sequence += 1
 
     def note_admission_rejected(self) -> None:
         with self._lock:

@@ -416,6 +416,11 @@ class QuickSceneController(QObject):
         # counters here and update two tiny text labels twice per second.
         self._perf_hud_enabled = bool(is_perf_metrics_enabled())
         self._frame_trace = current_frame_trace()
+        # FRAME_SWAP is visualizer evidence only when this scene has completed a
+        # *new* visualizer draw since the previous swap. Scene swaps caused by a
+        # wallpaper transition, QML animation, or a post-transfer scene must not
+        # inherit the last visualizer revision forever.
+        self._frame_trace_last_swapped_draw_sequence = 0
         self._perf_pacer_state_provider: Callable[[], Mapping[str, object]] | None = None
         perf_now_ns = time.perf_counter_ns()
         self._perf_window_started_ns = perf_now_ns
@@ -1937,17 +1942,28 @@ class QuickSceneController(QObject):
         self._perf_window_dt_max_ms = 0.0
 
     def _trace_frame_swapped(self) -> None:
-        """Record the real scene-graph swap edge for explicit ``--frame-trace``."""
+        """Record a swap only for a visualizer draw completed in this frame.
+
+        ``frameSwapped`` is a whole-window boundary. Wallpaper transitions and
+        other retained Quick content can swap many frames without invoking the
+        visualizer render node. Reusing the last-ever visualizer identity on
+        those swaps fabricates enormous publication->swap latency after display
+        transfer or visualizer inactivity, so a monotonically increasing draw
+        sequence gates this correlation.
+        """
 
         trace = self._frame_trace
         if trace is None:
             return
-        draw_identity = self._visualizer_telemetry.trace_last_draw()
-        if draw_identity is None:
-            # Diagnostics contention is never allowed to hold the render/swap
-            # boundary. Sacrifice this observer sample rather than waiting.
+        draw_sequence, revision, logical_timestamp = (
+            self._visualizer_telemetry.trace_last_draw()
+        )
+        if draw_sequence <= self._frame_trace_last_swapped_draw_sequence:
             return
-        revision, logical_timestamp = draw_identity
+        # Consume the draw before touching the bounded trace ring. If the ring
+        # drops this diagnostic record, a later unrelated scene swap must not
+        # resurrect the stale visualizer draw and misattribute its presentation.
+        self._frame_trace_last_swapped_draw_sequence = draw_sequence
         trace.record(
             FrameTraceEvent.FRAME_SWAP,
             screen_index=int(self._window.screen_index),

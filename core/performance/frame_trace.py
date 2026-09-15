@@ -27,6 +27,8 @@ class FrameTraceEvent(IntEnum):
     QUICK_SYNC_CONSUME = 4
     RENDER_DRAW = 5
     FRAME_SWAP = 6
+    QUICK_SYNC_READY = 7
+    RENDER_BEGIN = 8
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"
@@ -183,43 +185,72 @@ class FrameTraceSink:
         return data
 
     def _writer_loop(self) -> None:
-        applied, mode, native_priority = apply_best_effort_thread_priority()
-        with self._lock:
-            self._priority_applied = bool(applied)
-            self._priority_mode = str(mode)
-            self._native_priority = native_priority
-        # Unlike speculative CPU work, tracing may execute on non-Windows test
-        # hosts.  On Windows a failed demotion disables writes rather than letting
-        # a diagnostic writer compete at normal interactive priority.
-        if os.name == "nt" and not applied:
+        try:
+            applied, mode, native_priority = apply_best_effort_thread_priority()
             with self._lock:
-                self._write_errors += 1
-                self._closed = True
-            return
+                self._priority_applied = bool(applied)
+                self._priority_mode = str(mode)
+                self._native_priority = native_priority
+            # Unlike speculative CPU work, tracing may execute on non-Windows test
+            # hosts. On Windows a failed demotion disables writes rather than letting
+            # a diagnostic writer compete at normal interactive priority.
+            if os.name == "nt" and not applied:
+                with self._lock:
+                    self._write_errors += 1
+                    self._closed = True
+                return
 
-        while True:
-            self._wake.wait()
-            self._wake.clear()
             while True:
-                data = self._take_batch()
-                if not data:
-                    break
-                try:
-                    self._file.write(data)
-                    with self._lock:
-                        self._written += len(data) // _RECORD.size
-                except Exception:
-                    with self._lock:
-                        self._write_errors += 1
-                        self._closed = True
-                    return
-            with self._lock:
-                if self._closed and self._count == 0:
+                self._wake.wait()
+                self._wake.clear()
+                wrote_any = False
+                while True:
+                    data = self._take_batch()
+                    if not data:
+                        break
+                    try:
+                        self._file.write(data)
+                        wrote_any = True
+                        with self._lock:
+                            self._written += len(data) // _RECORD.size
+                    except Exception:
+                        with self._lock:
+                            self._write_errors += 1
+                            self._closed = True
+                        return
+
+                # The trace exists to survive a bad/hung run. Flush each bounded
+                # writer drain into the OS cache so an abnormal process exit loses
+                # at most the not-yet-drained ring tail rather than Python's large
+                # userspace file buffer as well. This work is confined to the
+                # explicit, demoted diagnostic writer and never runs on producers.
+                if wrote_any:
                     try:
                         self._file.flush()
                     except Exception:
+                        with self._lock:
+                            self._write_errors += 1
+                            self._closed = True
+                        return
+
+                with self._lock:
+                    if self._closed and self._count == 0:
+                        return
+        finally:
+            # Writer owns its file-handle lifetime too. close() still joins with a
+            # bounded timeout, but once this thread exits there is no orphaned file
+            # handle even after writer-side priority/I/O failure.
+            if not self._file.closed:
+                try:
+                    self._file.flush()
+                except Exception:
+                    with self._lock:
                         self._write_errors += 1
-                    return
+                try:
+                    self._file.close()
+                except Exception:
+                    with self._lock:
+                        self._write_errors += 1
 
 
 _active_sink: FrameTraceSink | None = None

@@ -167,8 +167,10 @@ def test_startup_desktop_crossfade_is_one_shot_signal_driven_and_precedes_reveal
 
 
 
-def test_replacement_runtime_does_not_recapture_desktop(qt_app) -> None:
+def test_replacement_runtime_does_not_recapture_desktop() -> None:
     from engine.display_manager import DisplayManager
+
+    app = _app()
 
     class _MustNotBeTouched:
         @property
@@ -186,7 +188,7 @@ def test_replacement_runtime_does_not_recapture_desktop(qt_app) -> None:
     finally:
         manager.disconnect_monitor_detection()
         manager.deleteLater()
-        qt_app.processEvents()
+        app.processEvents()
 
 def test_seeded_first_image_uses_fixed_crossfade_without_settings_transition(qt_app) -> None:
     from types import SimpleNamespace
@@ -257,4 +259,4 @@ def test_seeded_first_image_uses_fixed_crossfade_without_settings_transition(qt_
         manager.displays = []
         manager.disconnect_monitor_detection()
         manager.deleteLater()
-        qt_app.processEvents()
+        app.processEvents()

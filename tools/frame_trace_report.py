@@ -18,6 +18,8 @@ EVENT_NAMES = {
     4: "quick_sync_consume",
     5: "render_draw",
     6: "frame_swap",
+    7: "quick_sync_ready",
+    8: "render_begin",
 }
 
 
@@ -31,6 +33,15 @@ def _pct(values: list[float], q: float) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("trace", type=Path)
+    parser.add_argument(
+        "--timeline-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "emit fixed relative-time freshness windows (for example 15) "
+            "without changing runtime tracing"
+        ),
+    )
     args = parser.parse_args()
     raw = args.trace.read_bytes()
     if len(raw) < HEADER.size:
@@ -54,7 +65,13 @@ def main() -> int:
     unique_swap_revisions: dict[int, set[tuple[int, int]]] = defaultdict(set)
     draw_timestamps_by_screen: dict[int, list[int]] = defaultdict(list)
     swap_timestamps_by_screen: dict[int, list[int]] = defaultdict(list)
-    records = (len(raw) - HEADER.size) // RECORD.size
+    payload_bytes = len(raw) - HEADER.size
+    records, trailing_bytes = divmod(payload_bytes, RECORD.size)
+    if trailing_bytes:
+        print(
+            f"warning: trailing_bytes={trailing_bytes}; "
+            "incomplete final record ignored"
+        )
     for index in range(records):
         offset = HEADER.size + index * RECORD.size
         ts_ns, event, screen, revision, logical_ns, aux = RECORD.unpack_from(raw, offset)
@@ -148,9 +165,17 @@ def main() -> int:
             (2, "publish->gui_wake"),
             (3, "publish->gui_snapshot"),
             (4, "publish->quick_sync"),
+            (7, "publish->quick_sync_ready"),
+            (8, "publish->render_begin"),
             (5, "publish->draw"),
             (6, "publish->frame_swap"),
         ):
+            if counts.get(end_event, 0) <= 0:
+                print(
+                    f"screen={screen} {label}_correlation "
+                    "unavailable=event_not_present"
+                )
+                continue
             latencies = []
             matched_occurrences = 0
             unmatched_downstream = 0
@@ -197,6 +222,145 @@ def main() -> int:
                     f"p95={_pct(latencies, .95):.3f} "
                     f"p99={_pct(latencies, .99):.3f} max={max(latencies):.3f}"
                 )
+
+        # Fine-grained stage deltas answer the remaining R-87 question without
+        # another logger/timer: is post-sync age spent inside SRPSS's Python/GL
+        # render work, or waiting between Qt Quick synchronization and rendering?
+        # Pair equal-index occurrences for repeatable stages (render begin/draw)
+        # and otherwise use the first ordered occurrence for one-per-publication
+        # stages. Missing stages are surfaced by the publication correlations above.
+        for start_event, end_event, label in (
+            (2, 3, "gui_wake->gui_snapshot"),
+            (3, 4, "gui_snapshot->quick_sync"),
+            (4, 7, "quick_sync->quick_sync_ready"),
+            (7, 8, "quick_sync_ready->render_begin"),
+            (8, 5, "render_begin->draw"),
+        ):
+            deltas: list[float] = []
+            for (event_screen, _generation, _revision), stage_events in by_window_revision.items():
+                if event_screen != screen:
+                    continue
+                starts = stage_events.get(start_event, ())
+                ends = stage_events.get(end_event, ())
+                if not starts or not ends:
+                    continue
+                if start_event == 8 and end_event == 5:
+                    pairs = zip(starts, ends)
+                else:
+                    pairs = ((starts[0], ends[0]),)
+                for start, end in pairs:
+                    if end >= start:
+                        deltas.append((end - start) / 1_000_000.0)
+            if deltas:
+                print(
+                    f"screen={screen} {label}_ms n={len(deltas)} "
+                    f"median={statistics.median(deltas):.3f} "
+                    f"p95={_pct(deltas, .95):.3f} "
+                    f"p99={_pct(deltas, .99):.3f} max={max(deltas):.3f}"
+                )
+
+    timeline_seconds = max(0.0, float(args.timeline_seconds))
+    if timeline_seconds > 0.0:
+        window_ns = max(1, int(timeline_seconds * 1_000_000_000.0))
+        print(f"timeline_window_seconds={timeline_seconds:g}")
+        for screen in screens:
+            screen_publications = sorted(
+                (
+                    (generation, revision, ts_ns)
+                    for (event_screen, generation, revision), ts_ns
+                    in publish_by_window_revision.items()
+                    if event_screen == screen
+                ),
+                key=lambda row: row[2],
+            )
+            if not screen_publications:
+                continue
+            origin_ns = screen_publications[0][2]
+            last_ns = max(
+                [screen_publications[-1][2]]
+                + draw_timestamps_by_screen.get(screen, [])
+                + swap_timestamps_by_screen.get(screen, [])
+            )
+            bucket_count = max(1, ((last_ns - origin_ns) // window_ns) + 1)
+            for bucket in range(int(bucket_count)):
+                start_ns = origin_ns + bucket * window_ns
+                end_ns = start_ns + window_ns
+                keys = [
+                    (generation, revision)
+                    for generation, revision, ts_ns in screen_publications
+                    if start_ns <= ts_ns < end_ns
+                ]
+                if not keys:
+                    continue
+                publish_draw: list[float] = []
+                publish_sync: list[float] = []
+                sync_ready_to_render: list[float] = []
+                render_cost: list[float] = []
+                reached_draw = 0
+                draw_occurrences = 0
+                for generation, revision in keys:
+                    identity = (screen, generation, revision)
+                    publish_ts = publish_by_window_revision[identity]
+                    stage_events = by_window_revision.get(identity, {})
+                    syncs = stage_events.get(4, ())
+                    if syncs:
+                        publish_sync.extend(
+                            (ts - publish_ts) / 1_000_000.0
+                            for ts in syncs
+                            if ts >= publish_ts
+                        )
+                    draws = stage_events.get(5, ())
+                    if draws:
+                        reached_draw += 1
+                        draw_occurrences += len(draws)
+                        publish_draw.extend(
+                            (ts - publish_ts) / 1_000_000.0
+                            for ts in draws
+                            if ts >= publish_ts
+                        )
+                    sync_ready = stage_events.get(7, ())
+                    render_begin = stage_events.get(8, ())
+                    if sync_ready and render_begin and render_begin[0] >= sync_ready[0]:
+                        sync_ready_to_render.append(
+                            (render_begin[0] - sync_ready[0]) / 1_000_000.0
+                        )
+                    if render_begin and draws:
+                        render_cost.extend(
+                            (draw - begin) / 1_000_000.0
+                            for begin, draw in zip(render_begin, draws)
+                            if draw >= begin
+                        )
+                missing_draw = len(keys) - reached_draw
+                repeat_draws = max(0, draw_occurrences - reached_draw)
+                fields = [
+                    f"screen={screen}",
+                    "timeline",
+                    f"t={bucket * timeline_seconds:.0f}-{(bucket + 1) * timeline_seconds:.0f}s",
+                    f"publications={len(keys)}",
+                    f"draw_occurrences={draw_occurrences}",
+                    f"repeat_draws={repeat_draws}",
+                    f"missing_draw_publications={missing_draw}",
+                ]
+                if publish_draw:
+                    fields.extend(
+                        (
+                            f"publish_draw_median_ms={statistics.median(publish_draw):.3f}",
+                            f"publish_draw_p95_ms={_pct(publish_draw, .95):.3f}",
+                            f"publish_draw_p99_ms={_pct(publish_draw, .99):.3f}",
+                        )
+                    )
+                if publish_sync:
+                    fields.append(f"publish_sync_p95_ms={_pct(publish_sync, .95):.3f}")
+                if sync_ready_to_render:
+                    fields.append(
+                        "sync_ready_render_begin_p95_ms="
+                        f"{_pct(sync_ready_to_render, .95):.3f}"
+                    )
+                if render_cost:
+                    fields.append(
+                        f"render_begin_draw_p95_ms={_pct(render_cost, .95):.3f}"
+                    )
+                print(" ".join(fields))
     return 0
 
 

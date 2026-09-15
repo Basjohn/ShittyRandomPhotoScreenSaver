@@ -7,7 +7,7 @@ from pathlib import Path
 import threading
 
 import pytest
-from PySide6.QtGui import QColor, QImage, QPixmap
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPixmap
 
 from rendering.quick.image_boundary import capture_qimage
 from rendering.quick.startup_desktop_capture import capture_startup_desktop_pixmap
@@ -16,6 +16,13 @@ from rendering.quick.render import BackgroundRenderItem
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _gui_app() -> QGuiApplication:
+    app = QGuiApplication.instance()
+    if app is None:
+        app = QGuiApplication([])
+    return app
 
 
 def _two_pixel_image() -> QImage:
@@ -91,12 +98,14 @@ def test_presentation_image_rejects_ambiguous_or_invalid_state(changes, message)
         PresentationImage(**values)
 
 
-def test_capture_rejects_null_qimage(qt_app):
+def test_capture_rejects_null_qimage():
+    _gui_app()
     with pytest.raises(ValueError, match="non-null QImage"):
         capture_qimage(QImage(), identity="null")
 
 
-def test_startup_desktop_qpixmap_is_immediately_detached(qt_app):
+def test_startup_desktop_qpixmap_is_immediately_detached():
+    _gui_app()
     pixmap = QPixmap.fromImage(_two_pixel_image())
     expected = capture_qimage(pixmap.toImage(), identity="expected-pixmap-storage")
 
@@ -110,7 +119,8 @@ def test_startup_desktop_qpixmap_is_immediately_detached(qt_app):
     assert captured.source_path == "__startup_desktop_screen_3__"
 
 
-def test_startup_desktop_qpixmap_capture_is_gui_thread_only(qt_app):
+def test_startup_desktop_qpixmap_capture_is_gui_thread_only():
+    _gui_app()
     pixmap = QPixmap.fromImage(_two_pixel_image())
     errors: list[BaseException] = []
 
@@ -154,7 +164,8 @@ def test_render_thread_modules_do_not_import_live_qt_image_or_widget_state():
     assert "image.rgba8" in source
 
 
-def test_item_rejects_changed_content_reusing_an_existing_identity(qt_app):
+def test_item_rejects_changed_content_reusing_an_existing_identity():
+    _gui_app()
     item = BackgroundRenderItem()
     first = capture_qimage(_two_pixel_image(), identity="processed-frame")
     changed_source = _two_pixel_image()

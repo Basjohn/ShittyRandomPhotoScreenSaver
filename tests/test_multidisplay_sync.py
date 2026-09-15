@@ -6,16 +6,16 @@ transitions across multiple displays.
 """
 import pytest
 import time
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QGuiApplication
 from engine.display_manager import DisplayManager
 
 
 @pytest.fixture
 def qapp():
-    """Create QApplication instance for tests."""
-    app = QApplication.instance()
+    """Create the QtGui application lifetime required by DisplayManager."""
+    app = QGuiApplication.instance()
     if app is None:
-        app = QApplication([])
+        app = QGuiApplication([])
     yield app
 
 
@@ -143,11 +143,8 @@ class TestSPSCQueueSync:
 class TestSynchronizedTransition:
     """Test synchronized image transitions."""
     
-    # Removed test_show_image_synchronized_falls_back_when_disabled: it drove the
-    # retired QWidget display contract (a plain object exposing set_image). The
-    # current show_image path presents through a Quick display-unit
-    # image/transition contract, covered by the Quick presentation/runtime
-    # suites. The lock-free SPSC transition-sync queue coverage below is current.
+    # Image publication itself is owned by the retained Quick presentation
+    # contract. This suite covers only cross-display transition readiness.
 
     def test_transition_sync_queue_can_be_cleared_for_new_quick_transition(self, qapp):
         """Synchronized show should clear queue before starting."""
@@ -159,8 +156,8 @@ class TestSynchronizedTransition:
         dm._on_display_transition_ready(0)
         dm._on_display_transition_ready(1)
         
-        # The retired QPixmap/show_image_synchronized API is intentionally gone.
-        # Current transition sync owns readiness coordination only.
+        # Transition sync owns readiness coordination only; image publication is
+        # covered by the retained Quick presentation suites.
         assert dm._transition_ready_queue is not None
         while dm._transition_ready_queue.try_pop()[0]:
             pass

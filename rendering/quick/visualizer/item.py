@@ -494,6 +494,16 @@ class VisualizerRenderItem(QQuickItem):
             clear_snapshot=clear_snapshot,
             screen_index=screen_index,
         )
+        if snapshot is not None and self._frame_trace is not None:
+            self._frame_trace.record(
+                FrameTraceEvent.QUICK_SYNC_READY,
+                screen_index=screen_index,
+                revision=snapshot.logical_revision,
+                logical_timestamp_ns=logical_timestamp_ns(
+                    snapshot.logical.logical_timestamp
+                ),
+                auxiliary=int(snapshot.logical.runtime_generation),
+            )
         self._retirement.set_node(
             node,
             active_mode_id=(None if clear_snapshot or identity is None else identity.mode_id),
