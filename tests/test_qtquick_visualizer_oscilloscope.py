@@ -45,6 +45,7 @@ def _resolve(
     waveform_count: int | None = None,
     source_generation: int = 5,
     source_activation_id: int = 7,
+    source_timestamp: float | None = None,
     line_speed: float = 1.0,
     ghosting_enabled: bool = True,
     ghost_decay: float = 0.4,
@@ -65,6 +66,7 @@ def _resolve(
         activation_id=_IDENTITY["activation_id"],
         source_generation=source_generation,
         source_activation_id=source_activation_id,
+        source_timestamp=(now_ts if playing and source_timestamp is None else source_timestamp),
         playing=playing,
         line_speed=line_speed,
         ghosting_enabled=ghosting_enabled,
@@ -88,6 +90,35 @@ def test_paused_idle_waveform_is_current_without_authoritative_timestamp() -> No
     assert resolved.waveform == pytest.approx(idle)
     assert resolved.waveform_count == len(idle)
     assert resolved.previous_waveform == ()
+
+
+def test_playing_waveform_identity_without_authoritative_frame_is_not_ready() -> None:
+    runtime = OscilloscopeFrameRuntime()
+
+    unresolved = runtime.resolve(
+        (0.8,) * 64,
+        waveform_count=64,
+        now_ts=1.0,
+        runtime_generation=_IDENTITY["runtime_generation"],
+        engine_generation=_IDENTITY["engine_generation"],
+        activation_id=_IDENTITY["activation_id"],
+        source_generation=_IDENTITY["source_generation"],
+        source_activation_id=_IDENTITY["source_activation_id"],
+        source_timestamp=None,
+        playing=True,
+        line_speed=1.0,
+        ghosting_enabled=False,
+        ghost_decay=0.4,
+        energy=VisualizerEnergyState(bass=0.9, overall=0.9),
+        kick_event=1.0,
+        snare_event=1.0,
+        transient_width_mix=0.35,
+        base_sensitivity=3.0,
+        animation_enabled=False,
+    )
+
+    assert unresolved.reactive_source_ready is False
+    assert unresolved.energy == VisualizerEnergyState()
 
 
 def test_stale_source_cannot_replace_current_oscilloscope_state() -> None:

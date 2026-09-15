@@ -163,6 +163,7 @@ def _drive_runtime(
             transient_width_mix=0.35,
             base_sensitivity=3.0,
             animation_enabled=False,
+            source_timestamp=(now_ts if playing else None),
             **identity,
         )
     if mode_id == "sine_wave":
@@ -182,6 +183,7 @@ def _drive_runtime(
             base_sensitivity=1.0,
             base_heartbeat=0.0,
             heartbeat_slider=0.0,
+            source_timestamp=(now_ts if playing else None),
             **identity,
         )
     if mode_id == "bubble":

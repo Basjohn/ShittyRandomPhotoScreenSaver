@@ -428,6 +428,7 @@ class QuickSceneController(QObject):
         self._perf_window_swaps = 0
         self._perf_window_dt_max_ms = 0.0
         self._perf_last_pacer_requested = 0
+        self._perf_last_pacer_issued = 0
         self._perf_last_pacer_skipped = 0
         self._perf_last_visualizer_draw_count = 0
         self._perf_last_visualizer_revision = 0
@@ -509,6 +510,8 @@ class QuickSceneController(QObject):
         )
         self._background_item.setObjectName("backgroundRenderItem")
         self._background_item.setZ(0.0)
+        if not root.setProperty("transitionRenderItem", self._background_item):
+            raise RuntimeError("DisplayScene.qml rejected transition render-item binding")
 
         content.widthChanged.connect(self._sync_root_width)
         content.heightChanged.connect(self._sync_root_height)
@@ -1233,6 +1236,50 @@ class QuickSceneController(QObject):
             raise TypeError("perf pacer state provider must be callable")
         self._perf_pacer_state_provider = provider
 
+    def set_transition_frame_driver_state(
+        self,
+        active: bool,
+        target_hz: float,
+    ) -> None:
+        """Publish transition frame demand into the QML animation driver.
+
+        This is a lifecycle/control edge only. FrameAnimation and the inherited
+        C++ QQuickItem.update() slot own every per-frame operation.
+        """
+
+        root = self._scene_root
+        if root is None or not _qobject_is_alive(root):
+            if active:
+                raise RuntimeError("Quick scene root is unavailable for transition pacing")
+            # Retirement may observe the QML root disappearing before the final
+            # idempotent inactive publication. There is nothing left to stop.
+            return
+        rate = float(target_hz)
+        if not math.isfinite(rate) or rate <= 0.0:
+            raise ValueError("transition frame target_hz must be finite and positive")
+        if not root.setProperty("transitionFrameTargetHz", rate):
+            raise RuntimeError("DisplayScene.qml rejected transition target Hz")
+        if not root.setProperty("transitionFrameDriverActive", bool(active)):
+            raise RuntimeError("DisplayScene.qml rejected transition frame demand")
+
+    def describe_transition_frame_driver(self) -> dict[str, object]:
+        """Sample native QML driver counters for low-rate PERF diagnostics."""
+
+        root = self._scene_root
+        if root is None or not _qobject_is_alive(root):
+            return {
+                "animation_running": False,
+                "target_hz": 0.0,
+                "animation_ticks": 0,
+                "update_requests": 0,
+            }
+        return {
+            "animation_running": bool(root.property("transitionFrameDriverActive")),
+            "target_hz": float(root.property("transitionFrameTargetHz") or 0.0),
+            "animation_ticks": int(root.property("transitionFrameAnimationTicks") or 0),
+            "update_requests": int(root.property("transitionFrameUpdateRequests") or 0),
+        }
+
     def set_transition_run(self, run: TransitionRun | None) -> bool:
         """Publish the current generation-fenced run into the Quick sync path."""
 
@@ -1855,12 +1902,19 @@ class QuickSceneController(QObject):
             except Exception:
                 logger.debug("[PERF_HUD] pacer state unavailable", exc_info=True)
         requested = int(pacer.get("requested_opportunities", 0) or 0)
-        skipped = int(pacer.get("skipped_deadlines", 0) or 0)
+        issued = int(pacer.get("issued_update_requests", 0) or 0)
         requested_delta = max(0, requested - self._perf_last_pacer_requested)
-        skipped_delta = max(0, skipped - self._perf_last_pacer_skipped)
-        skip_pct = (100.0 * skipped_delta / requested_delta) if requested_delta else 0.0
+        issued_delta = max(0, issued - self._perf_last_pacer_issued)
         self._perf_last_pacer_requested = requested
-        self._perf_last_pacer_skipped = skipped
+        self._perf_last_pacer_issued = issued
+        # Legacy schema only. CHK10 removed the Python deadline pacer, so there
+        # is no meaningful deadline-skip percentage to report. Emit -1 rather
+        # than a permanently reassuring 0.0% and expose the native Qt animation
+        # opportunity/update-request rates explicitly below.
+        skip_pct = -1.0
+        self._perf_last_pacer_skipped = 0
+        native_tick_hz = requested_delta / elapsed_s
+        native_update_request_hz = issued_delta / elapsed_s
         target_hz = float(pacer.get("target_hz", 0.0) or 0.0)
 
         transition = None if self._background_item is None else self._background_item.transition_run
@@ -1890,7 +1944,9 @@ class QuickSceneController(QObject):
                 "perfHudText",
                 f"D{self._window.screen_index} scene {scene_fps:5.1f} fps "
                 f"dtmax {self._perf_window_dt_max_ms:5.1f}ms\n"
-                f"pacer {target_hz:5.1f}Hz skip {skip_pct:4.1f}% | {transition_text}",
+                f"pacer {target_hz:5.1f}Hz native "
+                f"{native_update_request_hz:5.1f}/{native_tick_hz:5.1f}Hz | "
+                f"{transition_text}",
             )
 
         visualizer = self._visualizer_telemetry.snapshot()
@@ -1921,14 +1977,17 @@ class QuickSceneController(QObject):
 
         logger.info(
             "[PERF] [PERF_HUD] screen=%d scene_fps=%.2f dt_max_ms=%.2f "
-            "pacer_target_hz=%.3f pacer_skip_pct=%.2f transition=%s "
-            "viz_mode=%s viz_draw_fps=%.2f viz_revision_hz=%.2f "
+            "pacer_target_hz=%.3f pacer_skip_pct=%.2f "
+            "pacer_native_tick_hz=%.2f pacer_update_request_hz=%.2f "
+            "transition=%s viz_mode=%s viz_draw_fps=%.2f viz_revision_hz=%.2f "
             "viz_age_ms=%.2f viz_geometry_mismatches=%d",
             self._window.screen_index,
             scene_fps,
             self._perf_window_dt_max_ms,
             target_hz,
             skip_pct,
+            native_tick_hz,
+            native_update_request_hz,
             transition_text.replace(" ", "_"),
             visualizer.drawn_mode_id or "none",
             draw_fps,

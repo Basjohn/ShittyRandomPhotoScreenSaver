@@ -431,6 +431,7 @@ def _capture_oscilloscope(
         activation_id=context.activation_id,
         source_generation=context.source_generation,
         source_activation_id=context.source_activation_id,
+        source_timestamp=context.source_timestamp,
         playing=context.playing,
         line_speed=float(extra["line_speed"]),
         ghosting_enabled=bool(
@@ -527,6 +528,7 @@ def _capture_sine(
         activation_id=context.activation_id,
         source_generation=context.source_generation,
         source_activation_id=context.source_activation_id,
+        source_timestamp=context.source_timestamp,
         playing=context.playing,
         energy=raw_energy,
         kick_event=raw_kick,

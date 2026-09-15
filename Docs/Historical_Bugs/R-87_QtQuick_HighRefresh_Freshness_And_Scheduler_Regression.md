@@ -53,7 +53,7 @@ The operator then ran **Checkpoint 5** in the opposite direction, heavy load -> 
 
 This is **not a dynamic 90 Hz presentation cap**. Checkpoint-5 source has an authored logical visualizer cadence of `_DEFAULT_MAX_FPS = 90.0`; that cadence produces fresh immutable visualizer revisions. In steady state, the new event-driven architecture requests the retained visualizer item only when a fresh publication arrives, so visualizer draw rate naturally converges toward the ~90 Hz producer instead of redrawing unchanged state at panel refresh. A 165 Hz display can still look materially smoother because fresh state can reach the next presentation opportunity with lower quantization/scheduling delay even when state itself changes ~90 times/s.
 
-Wallpaper transition demand is independent. While a wall-time transition is active, `QuickFramePacer` requests successive whole-window frames through `frameSwapped -> QWindow.requestUpdate()`. The visualizer render node is therefore visited on those scene frames too, even when no newer logical visualizer revision exists. The HUD intentionally reports these as separate quantities: `viz_draw_fps` counts render-node draw invocations; `viz_revision_hz` counts fresh logical revision advance. They must not be conflated. Checkpoint-3 HUD data already demonstrates the same effect at smaller scale: light median draw/revision **90.06 / 89.98 Hz**; settled-heavy **90.05 / 89.96 Hz**; and within settled-heavy, transition-active median draw/revision **99.84 / 89.94 Hz** versus transition-idle **90.00 / 89.96 Hz**, with nearly unchanged median state age (**18.65 vs 17.81 ms**).
+At Checkpoint 5, wallpaper transition demand was still independent and used the now-retired `frameSwapped -> QWindow.requestUpdate()` feedback loop. That historical mechanism caused the visualizer render node to be revisited on transition scene frames even when no newer logical visualizer revision existed. The HUD correctly separated `viz_draw_fps` (render-node invocations) from `viz_revision_hz` (fresh logical revisions). CHK5 raw dual-display evidence later proved the feedback loop over-drove D0 and CHK10 replaced it with the native `FrameAnimation` + per-display gate; **do not read this historical paragraph as current architecture**. Checkpoint-3 HUD data demonstrates the draw/revision distinction at smaller scale: light median draw/revision **90.06 / 89.98 Hz**; settled-heavy **90.05 / 89.96 Hz**; and within settled-heavy, transition-active median draw/revision **99.84 / 89.94 Hz** versus transition-idle **90.00 / 89.96 Hz**, with nearly unchanged median state age (**18.65 vs 17.81 ms**).
 
 Qt documentation says `frameSwapped` means a frame has been **queued for presenting**, and only promises at-most-one-per-vsync behavior when vertical synchronization is enabled. Qt also documents that `swapInterval=0` makes the threaded render loop stop relying on vsync to drive animations, while window updates still flow through `QWindow.requestUpdate()`. Independent KDAB scene-graph material likewise separates synchronization, render-thread execution and swap. These sources explain why a diagnostic can report 250/120 queued/rendered scene frames on 165/60 Hz panels, but they do **not** prove physical presentation rate or SRPSS smoothness. Installed traces and operator-visible motion remain authoritative.
 
@@ -61,7 +61,7 @@ Qt documentation says `frameSwapped` means a frame has been **queued for present
 
 1. **Keep the event-driven latest-wins visualizer admission.** It has both quantified Checkpoint-3 and operator-observed Checkpoint-5 support. Do not restore the display-refresh Python QTimer and do not raise Bubble logical cadence merely to chase panel Hz.
 2. **Keep the runtime-purity work.** No QWidget/QPixmap/synchronous foreground fallback should return; none of the new evidence points back at image topology as the steady-heavy root.
-3. **Do not optimize transition-time duplicate visualizer draws pre-emptively.** Checkpoint-3 settled-heavy age was essentially the same with transition active vs idle. If future trace shows meaningful contention from these draws, optimize with evidence.
+3. **Historical pre-ingestion conclusion, superseded by CHK5 raw dual-display evidence:** Checkpoint-3 alone did not implicate transition draws, but CHK5 later proved a D0/high-refresh transition overdrive. CHK10 has already replaced that feedback loop. Do not repeat the optimization or restore it.
 4. **Use the already-added fine trace boundaries next:** `QUICK_SYNC_CONSUME -> QUICK_SYNC_READY -> RENDER_BEGIN -> RENDER_DRAW -> FRAME_SWAP`. The main unresolved settled-heavy question is whether time is spent in sync work, waiting to begin rendering, or inside Python/OpenGL rendering.
 5. **Keep C++/QRhi conditional.** `RENDER_BEGIN -> RENDER_DRAW` dominance would support a small render bridge spike; `QUICK_SYNC_READY -> RENDER_BEGIN` dominance would argue for render-loop/scheduling work instead. Do not begin a broad visualizer rewrite.
 6. **Do not demand more two-display runs casually.** The Checkpoint-5 dual-display run is rare evidence. New marker validation can be D1-only unless a later result specifically requires a cross-display answer.
@@ -192,3 +192,137 @@ Operator-visible evidence from the R-87 one-display/60 Hz MC run must survive ev
 
 During this run the R-87 background CPU lane reported its intended one-worker, Windows below-normal/no-boost policy. Bubble logical cadence remained around its authored ~90 revisions/s. Therefore R-87's scheduler-demoted speculative scaling lane is retained as a sane background-work policy but **did not solve the crawl**. Stop cycling speculative-image execution topology as the primary fix. The next active cut is publication/sync/draw observability (`--frame-trace`), Qt Quick-native event-driven presentation demand, and removal of runtime legacy QPixmap/synchronous presentation escape hatches.
 
+
+
+
+## Checkpoint-5 D1-only light -> heavy control — second installed validation
+
+A second CHK5 D1-only run was supplied after the rare dual-display run. It is an important control because it separates the high-refresh D0 transition problem from the D1 residual crawl.
+
+Trace health:
+- **220,402 records**
+- **0 dropped**
+- **0 writer errors**
+- writer priority successfully applied as **Windows below-normal / no priority boost**
+
+Using the usage sampler's system-load rise as coarse phase boundaries:
+- **light:** publication->draw **8.36 ms median / 14.50 ms p95**;
+- **active heavy loading:** **13.24 / 24.50 ms**, p99 **47.66 ms**;
+- **settled heavy:** **14.06 / 19.61 ms**, p99 **28.26 ms**.
+
+Bubble remains essentially fixed at the authored ~90 logical publications/s. This independently confirms the main CHK3 finding: the new publication-driven admission path is not starving the producer or GUI; the remaining settled-heavy freshness loss persists downstream of admission.
+
+The transition split is the important correction to avoid overgeneralizing the dual-display diagnosis:
+- settled-heavy **idle** publication->draw: **14.34 ms median / 22.98 ms p95**;
+- settled-heavy **transition-active**: **12.92 / 15.37 ms**;
+- HUD heavy transition-active draw rate is only ~**92/s median**, compared with ~**90/s idle**.
+
+So the uncapped `frameSwapped -> requestUpdate()` transition loop is a **real D0/high-refresh overdrive problem**, proven by the dual-display binary, but it is **not the primary D1 settled-heavy cause**. The transition-driver repair should be judged as a D0 waste/tail fix and an architectural correctness improvement. Do not claim it closes R-87 if D1 still carries ~14–20 ms heavy-load publication->draw age.
+
+The existing fine-grained markers remain required for the D1 residual:
+`QUICK_SYNC_CONSUME -> QUICK_SYNC_READY -> RENDER_BEGIN -> RENDER_DRAW`.
+
+Decision rule remains unchanged:
+- render-body delta dominant -> bounded C++/QRhi hot-seam spike may be justified;
+- sync-ready->render-begin dominant -> investigate Qt/render-loop scheduling instead;
+- no broad visualizer rewrite without trace evidence.
+
+
+## 2026-09-15 CHK10 transition-driver repair — Qt-owned tick, per-display render gate
+
+The rare CHK5 dual-display binary established a separate high-refresh defect on top of the remaining D1 heavy-load residual: D0 transition-active visualizer draws rose to ~286.9/s while fresh logical revisions remained ~89.9/s, and D0 heavy transition-active publish->draw rose to 24.15 ms median versus 6.94 ms idle. The later D1-only CHK5 control prevented overgeneralizing that result: settled-heavy D1 transition-active was 12.92/15.37 ms median/p95 versus 14.34/22.98 ms idle, so the transition feedback loop is a D0/high-refresh overdrive bug, not the primary D1 residual.
+
+Research was deliberately multi-source before changing production:
+- Qt `FrameAnimation` public documentation describes it as synchronized with Qt animation updates and explicitly recommends it over short-interval `Timer` for custom per-frame animation.
+- Qt `QQuickFrameAnimation` source shows an infinite `QAbstractAnimationJob`, so it participates directly in Qt's animation driver rather than introducing an SRPSS clock.
+- Qt threaded render-loop source explicitly switches to a system animation timer when any exposed window has `swapInterval == 0` (and in multiple-window/bad-vsync cases), rather than using buffer swap as the animation clock.
+- Qt animation-driver source derives that fallback interval from the primary screen refresh rate.
+- Independent KDAB scene-graph material confirms the separation among GUI sync, render-thread rendering, and `frameSwapped`; it was used as corroboration only.
+
+That research rejected two tempting but wrong shapes:
+1. **Do not restore a Python display-refresh timer.** That is the architecture the migration is removing.
+2. **Do not use a bare global FrameAnimation as the whole answer.** On mixed refresh, Qt's fallback animation driver can tick from the primary-screen interval, so a bare job could overdrive a 60 Hz secondary or underdrive a faster secondary.
+
+Current post-CHK9 implementation:
+- `QuickFramePacer` keeps its historical diagnostics name but is now only a transition demand/lifecycle coordinator. It has no `QTimer`, no `frameSwapped` connection, no `QWindow.requestUpdate()` continuation loop, and no per-frame Python callback.
+- `DisplayScene.qml` owns a `FrameAnimation`. Python publishes only transition active/inactive plus the bound display's nominal refresh Hz on lifecycle/display edges.
+- On each native animation tick, QML advances a per-display due-time gate. If the display interval is due, it invokes `BackgroundRenderItem.update()`, the inherited C++ `QQuickItem` slot. At most one update is requested per native tick. Missed intervals are skipped, not repaid as a burst.
+- `BackgroundRenderNode` still samples `TransitionRun` from monotonic time. Authored transition duration/progress and transition rendering semantics are unchanged; the change is only who supplies frame opportunities.
+- Hide/pause/resume/retarget/retirement still gate demand explicitly. Starting native demand without a live QML root fails loudly; an idempotent inactive publication after root destruction is tolerated for clean teardown.
+
+Source/static validation at this boundary: **29/29 directly executable architecture contracts green; all 896 Python files compile.** PySide/Windows rendering remains unexecuted in this container.
+
+Acceptance for this repair is intentionally narrow and evidence-led:
+- D0/high-refresh transition-active draw rate should fall from the CHK5 ~287/s overdrive toward the display's actual opportunity while transition duration and visible smoothness remain healthy.
+- Bubble fresh logical cadence remains ~90/s; do not raise it to panel Hz.
+- D1 heavy-load age is **not** expected to disappear from this change. Use the already-added `QUICK_SYNC_READY -> RENDER_BEGIN -> RENDER_DRAW` markers to decide whether the remaining D1 delta is sync work, render scheduling wait, or Python/OpenGL render-body time.
+- Do not request another dual-display run merely to validate this repair; a D0-only high-refresh run can validate overdrive removal, and a routine D1-only run can validate the fine markers.
+
+Known Qt public-API limitation to preserve in future handoffs: under `swapInterval=0`, Qt's fallback animation driver is based on the primary-screen interval. A high-refresh secondary may therefore not receive transition opportunities faster than that global driver. Do not silently add a second timer/clock to compensate. Measure first.
+
+
+## 2026-09-15 CHK11 candidate — native-driver restart/retarget hardening
+
+A post-CHK10 source audit found no surviving production frame-driving `frameSwapped` feedback; remaining uses are observation/trace or bounded smoke-tool frame boundaries. Three lifecycle details were tightened before installed validation:
+
+- `DisplayScene.qml` now explicitly calls `FrameAnimation.reset()` when native transition demand starts, making the elapsed-time restart contract explicit rather than relying only on implicit animation-job restart state.
+- `transitionFrameTargetHz` changes clear the per-display next-due deadline, so a live 60<->165 Hz retarget cannot carry one deadline computed from the previous display cadence.
+- `QuickFramePacer.stop()` no longer clears its visibility pause flag. Demand and visibility suspension are separate owners; stopping demand while hidden cannot make a subsequent transition active until visibility explicitly resumes the pacer.
+
+The gate still permits at most one `BackgroundRenderItem.update()` request per native animation tick and repays no missed intervals. Qt/PySide documentation independently confirms that `FrameAnimation.reset()` resets frame/elapsed values without changing running state and that `QQuickItem.update()` is the supported public slot for scheduling `updatePaintNode()` on `ItemHasContents` items. Those sources support the shape; they do not replace installed evidence.
+
+Source-only preservation remains **29/29 GREEN** and all **896 Python files compile**. This environment has neither PySide6 nor `qmllint`, so QML load/render remains an installed checkpoint gate.
+
+
+## 2026-09-15 CHK10 installed side-regression: hot mode change can reveal a dead live source
+
+This is **not evidence against the successful publication-driven Quick pacing direction**. It is a separate visualizer activation/source-ownership regression exposed while attempting a D0 light -> heavy CHK10 validation.
+
+At approximately **17:38:23**, the installed log shows `spectrum -> oscilloscope`:
+
+- logical runtime stop/join succeeds;
+- BeatEngine activation commits **generation=4 activation=4**;
+- logical runtime restarts at the authored ~90 Hz cadence;
+- authored technical config changes audio block size **128 -> 256**;
+- the running PyAudioWPatch backend is restarted and logs `negotiated_block=256`;
+- Oscilloscope then becomes `ready=True source=4/4`, yet repeated diagnostics show all-zero live energy and `source_age_ms=-1.0` while playback remains true.
+
+The visualizer is therefore not blank because Quick failed to instantiate/draw the selected mode. The control identity and logical runtime survive, but the target is revealed with no authoritative live audio behind it.
+
+The current line-mode source-ready contract is implicated: Oscilloscope/Sine use `get_latest_generation_with_waveform()` for source generation. The BeatEngine marks waveform generation as soon as raw samples are consumed, while `source_timestamp` comes from the authoritative analysis-frame commit. A raw zero/empty callback after restart can consequently make generation identity look fresh before authoritative live analysis exists. That is sufficient to explain `ready=True` + `source_age_ms=-1.0` + blank/idle-only visual behavior.
+
+The same switch also exposes a second ownership risk: changing per-mode capture block size restarts the *live* WASAPI stream. Earlier 128<->256 restarts in the same run happened to recover, but the Oscilloscope restart reported success and did not restore useful live source state. Backend start success is therefore not proof of post-restart capture authority.
+
+**Required repair, without architectural rollback:** strengthen playing line-mode reveal to require post-activation authoritative live-source evidence, and remove or properly transact live capture restarts caused by mode-specific block-size changes. Do not restore the old display-refresh QTimer pacer, QWidget/QPixmap presentation fallbacks, or synchronous image/runtime escape paths; CHK3/CHK5 installed evidence independently proves those removals improved freshness substantially.
+
+
+## 2026-09-15 CHK12 hotswap root cause — orphaned FFT slot ownership
+
+The CHK10 `Spectrum -> Oscilloscope` blank-card/idle-only failure is now pinned below Quick presentation. The installed log showed Oscilloscope activation identity advancing to 4/4 and at least one raw waveform callback arriving, while the serial analysis lane froze permanently at **8456 accepted / 8456 completed / 8455 published** and the logical runtime continued at ~90 Hz. That combination rules out “Quick failed to instantiate the new mode” and is stronger than the earlier preliminary suspicion of a dead WASAPI restart.
+
+The actual ownership race was in `cancel_pending_compute_tasks()` + result completion. During hotswap the logical runtime is stopped, configuration changes invalidate the compute gate, but the public activation id intentionally remains old until the transaction commits. If the final old FFT callback returned in that interval, the old same-activation heuristic could interpret the newer gate as proof that a successor already owned the slot and leave `_compute_task_active=True`. With the logical producer stopped, no successor necessarily existed. After commit, every new audio frame was therefore held behind a phantom in-flight FFT forever.
+
+Repair:
+- every admitted FFT submission has a unique slot token;
+- a completion may release only its own token;
+- a stale callback cannot clear a genuinely newer token;
+- a busy `lane.submit()` rejection cannot steal ownership because the rejected token rolls back to the previous real owner;
+- stopping the lane clears active token, active flag and one newest pending source because stopped compute lanes intentionally suppress callback delivery;
+- Oscilloscope/Sine playing-state readiness now also requires a matching authoritative analysis timestamp. Matching raw-waveform generation alone cannot reveal a supposedly-live target. Paused authored idle is preserved.
+
+Direct real-engine regression execution proves the installed race shape, inverse newer-owner safety, busy-rejection safety and stop cleanup. The broader source boundary remains **29/29 GREEN** and all **896 Python files compile**. Audio block-size 128/256 capture behavior is deliberately unchanged in this checkpoint: PortAudio/WASAPI restart semantics remain a separate resilience question, not part of the proven root-cause repair.
+
+This regression does **not** invalidate the performance architecture. Do not restore Python display-refresh pacing, generic QWidget/QPixmap publication, or synchronous fallback paths. The immediate performance queue after installed hotswap validation remains D0 native transition-driver validation followed by D1 fine-marker localization.
+
+
+## 2026-09-15 — CHK14 diagnostic localization: split the Python/OpenGL render body before another run
+
+No rendering policy is changed in this slice. CHK3/CHK5 already prove that the publication-driven Quick architecture is substantially better; CHK10/13 preserve the Qt-owned transition driver and honest native-rate diagnostics. The next unresolved D1 question is where the settled-heavy post-sync time actually goes.
+
+The explicit `--frame-trace` now keeps the same binary format/version while adding nested render-only events: `RENDER_PREP_READY`, `RENDER_HOST_BEGIN`, `RENDER_GL_STATE_READY`, `RENDER_MODE_BEGIN`, `RENDER_MODE_READY`, `RENDER_HOST_READY`. This splits the old `RENDER_BEGIN -> RENDER_DRAW` bucket into node preparation, clip setup, render-host/OpenGL-state work, actual selected-mode drawing, state restoration and post-host bookkeeping. The reporter emits both full-run distributions and timeline-window summaries. Old traces remain readable because the new event IDs are optional.
+
+Static audit found `_InheritedGlState.capture()`/restore on every visualizer draw, including multiple `glGet*`/`glIsEnabled` queries. Qt 6 documentation says `QSGRenderNode` must assume arbitrary incoming state, while `QQuickWindow` also says external-command handling is implicit for render nodes and Qt 6 limits useful `changedStates()` reporting to viewport/scissor. Therefore the current state fence is a **candidate overhead**, not something to remove from documentation alone. Installed sub-stage timings decide.
+
+The same evidence rule applies to the bounded C++/QRhi spike: PySide/Shiboken necessarily routes the C++ virtual render callback into the Python override, but no source consulted here quantifies SRPSS's GIL cost. C++ becomes active only if installed trace shows the render-host/mode-render portion is the heavy-load delta. If `QUICK_SYNC_READY -> RENDER_BEGIN` dominates instead, C++ rendering is the wrong fix.
+
+Source preservation: **51/51** directly runnable contracts green; **896/896** Python files compile.

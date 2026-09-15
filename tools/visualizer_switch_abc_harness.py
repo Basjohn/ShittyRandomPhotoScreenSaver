@@ -12,6 +12,10 @@ parts that can be automated and kept identical between runs:
   the driver's named steady windows (``steady_A`` / ``steady_B`` /
   ``steady_C_pre`` / ``steady_C_post``), validates freshness/reactivity, and
   fails a run closed when evidence is missing;
+* the historical ``pacer_skip_pct`` field is parsed only as legacy/informational
+  telemetry. CHK10 moved transition frame ownership into QML/Qt's animation
+  driver, so the old Python deadline-skip percentage no longer exists and must
+  never drive a causal verdict;
 * a **classifier** (``classify``) applying the preserved regression threshold,
   persistence requirement and metric-matched recovery rule to three matched
   A/B/C repetitions; and
@@ -80,7 +84,6 @@ BUCKET_SECONDS = 20.0            # persistence bucket granularity
 PERSIST_SECONDS = 60.0           # a regression must persist at least this long
 P99_ABS_MS = 2.0                 # event-loop p99 absolute worsening floor
 P99_REL = 0.35                   # event-loop p99 relative worsening floor
-SKIP_PP = 5.0                    # frame-pacer skip percentage-point worsening floor
 RECOVERY_FRACTION = 0.70         # C must remove this fraction of the introduced delta
 REVISION_HZ_FLOOR = 45.0         # below this, logical/source starvation is suspected
 SOURCE_AGE_CEILING_MS = 120.0    # above this mean age, freshness is unhealthy
@@ -181,6 +184,8 @@ _EVENTLOOP_PERIOD_RE = re.compile(
 # reactivity/freshness plane (revision Hz, source age) in one record.
 _PERF_HUD_RE = re.compile(
     r"pacer_target_hz=(?P<target_hz>[-\d.]+) pacer_skip_pct=(?P<skip>[-\d.]+) "
+    r"(?:pacer_native_tick_hz=(?P<native_tick_hz>[-\d.]+) "
+    r"pacer_update_request_hz=(?P<update_request_hz>[-\d.]+) )?"
     r"transition=(?P<transition>\S+) viz_mode=(?P<viz_mode>\S+) "
     r"viz_draw_fps=(?P<draw_fps>[-\d.]+) viz_revision_hz=(?P<rev_hz>[-\d.]+) "
     r"viz_age_ms=(?P<age_ms>[-\d.]+) viz_geometry_mismatches=(?P<geo>\d+)"
@@ -496,7 +501,13 @@ def _persistent_period_seconds_above(series: list, threshold: float) -> float:
 
 
 def _regression(window: dict, baseline: dict) -> dict[str, object]:
-    """Metric-matched, persistence-checked regression of a window vs its baseline A."""
+    """Persistence-checked event-loop regression vs baseline A.
+
+    ``pacer_skip_pct`` remains in scored JSON only so old logs/tools stay
+    readable.  CHK10 removed the Python deadline pacer; current runtime reports
+    no meaningful skip counter, so treating that legacy field as a causal metric
+    would create a permanently-zero false oracle.
+    """
     a_p99, w_p99 = _mean(baseline, "eventloop_p99_ms"), _mean(window, "eventloop_p99_ms")
     a_skip, w_skip = _mean(baseline, "pacer_skip_pct"), _mean(window, "pacer_skip_pct")
 
@@ -513,30 +524,27 @@ def _regression(window: dict, baseline: dict) -> dict[str, object]:
             and p99_persist_s >= PERSIST_SECONDS
         )
 
-    skip_worse = False
-    skip_persist_s = 0.0
-    if a_skip is not None and w_skip is not None:
-        threshold = a_skip + SKIP_PP
-        skip_persist_s = _persistent_seconds_above(window.get("skip_series", []), threshold)
-        skip_worse = (w_skip - a_skip) >= SKIP_PP and skip_persist_s >= PERSIST_SECONDS
-
-    triggered = [m for m, worse in (("p99", p99_worse), ("skip", skip_worse)) if worse]
+    triggered = ["p99"] if p99_worse else []
     return {
         "regressed": bool(triggered),
         "triggered": triggered,
         "p99_worse": p99_worse,
-        "skip_worse": skip_worse,
+        # Kept for backward-compatible JSON shape only. Never causal now.
+        "skip_worse": False,
         "a_p99_ms": a_p99,
         "w_p99_ms": w_p99,
         "p99_persist_s": p99_persist_s,
         "a_skip_pct": a_skip,
         "w_skip_pct": w_skip,
-        "skip_persist_s": skip_persist_s,
+        "skip_persist_s": 0.0,
+        "legacy_skip_metric_informational_only": True,
     }
 
 
 def _recovery_fraction(cpre: dict, cpost: dict, baseline: dict, metric: str) -> float | None:
-    key = "eventloop_p99_ms" if metric == "p99" else "pacer_skip_pct"
+    if metric != "p99":
+        return None
+    key = "eventloop_p99_ms"
     a = _mean(baseline, key)
     pre = _mean(cpre, key)
     post = _mean(cpost, key)
@@ -646,7 +654,8 @@ def classify(a_reps: list[dict], b_reps: list[dict], c_reps: list[dict]) -> dict
             "Investigation thresholds, not product SLAs. Preserve raw logs so the "
             "thresholds can be challenged. Freshness/reactivity health is enforced "
             "at scoring time: a run whose revision Hz/source age could explain the "
-            "tail is INVALID and excluded here, never counted as evidence."
+            "tail is INVALID and excluded here, never counted as evidence. Historical "
+            "pacer_skip_pct is informational only after CHK10 and cannot trigger a verdict."
         ),
     )
     return base

@@ -1,20 +1,24 @@
-"""Qt-Quick-owned continuous-frame demand for retained scene animations.
+"""Qt-Quick-owned continuous-frame demand for wall-time transitions.
 
 Visualizer presentation is intentionally *not* paced here. Fresh visualizer
 publications wake their retained QQuickItem directly with latest-wins/coalesced
-semantics. This owner exists only for scene content whose pixels continue to
-change as a function of wall time after state admission (wallpaper transitions
-only).
+semantics. Ordinary QML animations are owned by Qt Quick's animation driver.
 
-The driver is chained from ``QQuickWindow.frameSwapped`` instead of a Python
-``QTimer``. One initial ``QWindow.requestUpdate()`` enters Qt's coalesced update path;
-each completed swap requests at most one successor while continuous-frame demand
-remains active. There is no second display-refresh clock, deadline debt,
-or timer polling layer competing with Qt Quick's animation/render scheduling.
+The remaining custom continuous-frame consumer is the wallpaper transition
+render node, whose progress is sampled from monotonic wall time.  This owner is
+therefore only a *demand/lifecycle coordinator*: it publishes transition-active
+and per-display target-Hz state into DisplayScene.qml.  A QML ``FrameAnimation``
+uses Qt Quick's native animation driver as the tick source and asks the retained
+background ``QQuickItem`` to update no more often than that display's refresh
+interval.
+
+There is deliberately no Python refresh timer, no ``frameSwapped`` feedback
+loop, and no Python per-frame callback.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import IntFlag, auto
 import math
@@ -24,7 +28,7 @@ from PySide6.QtQuick import QQuickWindow
 
 
 class QuickFrameDemand(IntFlag):
-    """Independent reasons that require continuously changing scene frames."""
+    """Independent reasons that require custom continuously changing frames."""
 
     NONE = 0
     TRANSITION = auto()
@@ -32,18 +36,9 @@ class QuickFrameDemand(IntFlag):
 
 @dataclass
 class QuickPacerState:
-    """Diagnostics for one Qt-Quick-owned continuous frame chain.
-
-    ``target_hz`` is the bound screen's nominal refresh and remains useful in
-    PERF output. It is *not* a Python pacing clock. ``skipped_deadlines`` stays
-    at zero for log/schema compatibility because this driver owns no deadlines.
-    """
+    """Static per-display metadata for the Qt Quick transition frame driver."""
 
     target_hz: float
-    requested_opportunities: int = 0
-    paced_requests: int = 0
-    skipped_deadlines: int = 0
-    frame_swaps: int = 0
 
     def __post_init__(self) -> None:
         rate = float(self.target_hz)
@@ -54,31 +49,37 @@ class QuickPacerState:
 
 
 class QuickFramePacer(QObject):
-    """Drive continuous retained-scene animation from Qt Quick frame completion.
+    """Coordinate transition frame demand without owning a frame clock.
 
-    This class deliberately does not know about the visualizer. Visualizer
-    logical state is event-driven and calls ``QQuickItem.update()`` only when a
-    fresh latest-wins publication exists.
+    The historical name is retained for the existing PERF/runtime schema, but
+    pacing is now wholly Qt Quick/QML-owned. ``driver_state_setter`` is invoked
+    only when demand, visibility, target display, or lifecycle state changes.
+    ``driver_state_provider`` is sampled only by diagnostics (normally ~1 Hz).
     """
 
-    def __init__(self, window: QQuickWindow, target_hz: float) -> None:
+    def __init__(
+        self,
+        window: QQuickWindow,
+        target_hz: float,
+        *,
+        driver_state_setter: Callable[[bool, float], None],
+        driver_state_provider: Callable[[], Mapping[str, object]] | None = None,
+    ) -> None:
         super().__init__(window)
+        if not callable(driver_state_setter):
+            raise TypeError("transition frame driver state setter must be callable")
+        if driver_state_provider is not None and not callable(driver_state_provider):
+            raise TypeError("transition frame driver state provider must be callable")
         self._window = window
         self._state = QuickPacerState(float(target_hz))
+        self._driver_state_setter = driver_state_setter
+        self._driver_state_provider = driver_state_provider
         self._demands = QuickFrameDemand.NONE
         # Runtime windows are normally constructed hidden and bound before first
-        # show. Do not admit a continuous request until the window is actually
-        # visible: hidden/non-renderable Quick windows may accept an update edge
-        # without ever returning frameSwapped, which would strand our one-pending
-        # admission bit before first reveal. Runtime visibility changes continue
-        # to own pause()/resume() after construction.
+        # show. Do not start a native animation job until the window is visible.
         self._paused = not bool(window.isVisible())
-        # A hidden/retired window may discard an already queued update without
-        # emitting frameSwapped.  Never carry that stale admission across a
-        # later reuse of this runtime.
-        self._update_pending = False
         self._closed = False
-        window.frameSwapped.connect(self._on_frame_swapped)
+        self._control_publications = 0
 
     @property
     def target_hz(self) -> float:
@@ -92,7 +93,7 @@ class QuickFramePacer(QObject):
         return bool(self._demands) and not self._paused and not self._closed
 
     def set_demand(self, reason: QuickFrameDemand, active: bool) -> None:
-        """Add/remove one continuous-frame reason and seed Qt Quick once."""
+        """Add/remove one custom-frame reason and publish native driver state."""
 
         if self._closed:
             raise RuntimeError("Quick frame pacer is closed")
@@ -109,15 +110,13 @@ class QuickFramePacer(QObject):
             self._demands &= ~reason
         if self._demands == previous:
             return
-
-        if previous == QuickFrameDemand.NONE and self.is_active():
-            self._request_next_frame()
+        self._publish_driver_state()
 
     def set_transition_active(self, active: bool) -> None:
         self.set_demand(QuickFrameDemand.TRANSITION, active)
 
     def set_target_hz(self, target_hz: float) -> None:
-        """Update nominal display refresh metadata after QScreen retargeting."""
+        """Retarget the native per-display frame gate after QScreen changes."""
 
         if self._closed:
             raise RuntimeError("Quick frame pacer is closed")
@@ -129,62 +128,68 @@ class QuickFramePacer(QObject):
             abs_tol=0.001,
         ):
             return
-        replacement.requested_opportunities = self._state.requested_opportunities
-        replacement.paced_requests = self._state.paced_requests
-        replacement.frame_swaps = self._state.frame_swaps
         self._state = replacement
+        self._publish_driver_state()
 
     def stop(self) -> None:
-        """Clear all continuous demand; an already queued frame may finish once."""
+        """Clear custom demand without changing visibility suspension."""
+
+        if self._closed:
+            return
+        if self._demands == QuickFrameDemand.NONE:
+            return
+        self._demands = QuickFrameDemand.NONE
+        # ``_paused`` is owned by window visibility/lifecycle. Clearing demand
+        # must not make a hidden runtime eligible to start a later transition.
+        self._publish_driver_state()
+
+    def pause(self) -> bool:
+        """Suspend native frame demand while preserving active reasons."""
+
+        if self._closed or self._paused:
+            return False
+        self._paused = True
+        self._publish_driver_state()
+        return True
+
+    def resume(self) -> bool:
+        """Resume native frame demand from current wall-time transition state."""
+
+        if self._closed or not self._paused:
+            return False
+        self._paused = False
+        self._publish_driver_state()
+        return True
+
+    def close(self) -> None:
+        """Permanently stop native frame demand before scene retirement."""
 
         if self._closed:
             return
         self._demands = QuickFrameDemand.NONE
         self._paused = False
-        # A queued update can be discarded when a transition/animation owner is
-        # retired. Do not let that stale admission suppress a later demand.
-        self._update_pending = False
-
-    def pause(self) -> bool:
-        """Suspend continuation while preserving active reasons."""
-
-        if self._closed or self._paused:
-            return False
-        self._paused = True
-        # Visibility changes can discard a queued QQuickWindow update without a
-        # frameSwapped acknowledgement.  Clear only our admission bit; Qt owns
-        # whatever work was already accepted.  resume() will seed one fresh
-        # update from the current demand set.
-        self._update_pending = False
-        return True
-
-    def resume(self) -> bool:
-        """Resume from now with one Qt Quick update; there is no hidden debt."""
-
-        if self._closed or not self._paused:
-            return False
-        self._paused = False
-        if self._demands:
-            self._request_next_frame()
-        return True
-
-    def close(self) -> None:
-        """Permanently close demand admission for display-runtime teardown."""
-
-        if self._closed:
-            return
-        self.stop()
-        try:
-            self._window.frameSwapped.disconnect(self._on_frame_swapped)
-        except (RuntimeError, TypeError):
-            pass
+        # Publish the inactive state while the QML scene still exists; runtime
+        # teardown orders this before scene retirement.
+        self._publish_driver_state()
         self._closed = True
-        self._update_pending = False
 
     def describe(self) -> dict[str, object]:
+        native: Mapping[str, object] = {}
+        provider = self._driver_state_provider
+        if provider is not None:
+            try:
+                native = provider()
+            except (RuntimeError, TypeError):
+                native = {}
+
+        animation_ticks = int(native.get("animation_ticks", 0) or 0)
+        update_requests = int(native.get("update_requests", 0) or 0)
+        animation_running = bool(native.get("animation_running", False))
+        native_target_hz = float(native.get("target_hz", self._state.target_hz) or 0.0)
         return {
-            "driver": "qt_frame_swapped",
+            "driver": "qml_frame_animation",
             "target_hz": self._state.target_hz,
+            "native_target_hz": native_target_hz,
             "interval_ns": self._state.interval_ns,
             "active": self.is_active(),
             "paused": self._paused,
@@ -194,33 +199,18 @@ class QuickFramePacer(QObject):
                 for demand in (QuickFrameDemand.TRANSITION,)
                 if self._demands & demand
             ],
-            # Keep the existing PERF schema stable. These now mean Qt-owned
-            # continuation opportunities/requests, not Python timer deadlines.
-            "requested_opportunities": self._state.requested_opportunities,
-            "issued_update_requests": self._state.paced_requests,
-            "skipped_deadlines": 0,
-            "frame_swaps": self._state.frame_swaps,
-            "update_pending": self._update_pending,
+            # Preserve the existing PERF schema. These are now native QML
+            # animation opportunities and actual BackgroundRenderItem.update()
+            # requests, sampled without a Python per-frame callback.
+            "requested_opportunities": animation_ticks,
+            "issued_update_requests": update_requests,
+            "animation_running": animation_running,
+            "control_publications": self._control_publications,
         }
 
-    def _request_next_frame(self) -> bool:
-        if not self.is_active() or self._update_pending:
-            return False
-        self._update_pending = True
-        self._state.requested_opportunities += 1
-        self._state.paced_requests += 1
-        self._window.requestUpdate()
-        return True
-
-    def _on_frame_swapped(self) -> None:
-        """Continue only after Qt Quick confirms the previous frame boundary."""
-
-        if self._closed:
-            return
-        self._state.frame_swaps += 1
-        self._update_pending = False
-        if self.is_active():
-            self._request_next_frame()
+    def _publish_driver_state(self) -> None:
+        self._control_publications += 1
+        self._driver_state_setter(self.is_active(), self._state.target_hz)
 
 
 __all__ = [

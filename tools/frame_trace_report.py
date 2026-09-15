@@ -20,6 +20,12 @@ EVENT_NAMES = {
     6: "frame_swap",
     7: "quick_sync_ready",
     8: "render_begin",
+    9: "render_prep_ready",
+    10: "render_host_begin",
+    11: "render_gl_state_ready",
+    12: "render_mode_begin",
+    13: "render_mode_ready",
+    14: "render_host_ready",
 }
 
 
@@ -167,6 +173,12 @@ def main() -> int:
             (4, "publish->quick_sync"),
             (7, "publish->quick_sync_ready"),
             (8, "publish->render_begin"),
+            (9, "publish->render_prep_ready"),
+            (10, "publish->render_host_begin"),
+            (11, "publish->render_gl_state_ready"),
+            (12, "publish->render_mode_begin"),
+            (13, "publish->render_mode_ready"),
+            (14, "publish->render_host_ready"),
             (5, "publish->draw"),
             (6, "publish->frame_swap"),
         ):
@@ -234,6 +246,13 @@ def main() -> int:
             (3, 4, "gui_snapshot->quick_sync"),
             (4, 7, "quick_sync->quick_sync_ready"),
             (7, 8, "quick_sync_ready->render_begin"),
+            (8, 9, "render_begin->render_prep_ready"),
+            (9, 10, "render_prep_ready->render_host_begin"),
+            (10, 11, "render_host_begin->render_gl_state_ready"),
+            (11, 12, "render_gl_state_ready->render_mode_begin"),
+            (12, 13, "render_mode_begin->render_mode_ready"),
+            (13, 14, "render_mode_ready->render_host_ready"),
+            (14, 5, "render_host_ready->draw"),
             (8, 5, "render_begin->draw"),
         ):
             deltas: list[float] = []
@@ -244,7 +263,7 @@ def main() -> int:
                 ends = stage_events.get(end_event, ())
                 if not starts or not ends:
                     continue
-                if start_event == 8 and end_event == 5:
+                if start_event >= 8 or end_event >= 8:
                     pairs = zip(starts, ends)
                 else:
                     pairs = ((starts[0], ends[0]),)
@@ -294,8 +313,13 @@ def main() -> int:
                     continue
                 publish_draw: list[float] = []
                 publish_sync: list[float] = []
+                sync_work: list[float] = []
                 sync_ready_to_render: list[float] = []
                 render_cost: list[float] = []
+                render_prep: list[float] = []
+                render_host: list[float] = []
+                render_mode: list[float] = []
+                render_post: list[float] = []
                 reached_draw = 0
                 draw_occurrences = 0
                 for generation, revision in keys:
@@ -320,6 +344,15 @@ def main() -> int:
                         )
                     sync_ready = stage_events.get(7, ())
                     render_begin = stage_events.get(8, ())
+                    render_prep_ready = stage_events.get(9, ())
+                    render_host_begin = stage_events.get(10, ())
+                    render_mode_begin = stage_events.get(12, ())
+                    render_mode_ready = stage_events.get(13, ())
+                    render_host_ready = stage_events.get(14, ())
+                    if syncs and sync_ready and sync_ready[0] >= syncs[0]:
+                        sync_work.append(
+                            (sync_ready[0] - syncs[0]) / 1_000_000.0
+                        )
                     if sync_ready and render_begin and render_begin[0] >= sync_ready[0]:
                         sync_ready_to_render.append(
                             (render_begin[0] - sync_ready[0]) / 1_000_000.0
@@ -329,6 +362,30 @@ def main() -> int:
                             (draw - begin) / 1_000_000.0
                             for begin, draw in zip(render_begin, draws)
                             if draw >= begin
+                        )
+                    if render_begin and render_prep_ready:
+                        render_prep.extend(
+                            (ready - begin) / 1_000_000.0
+                            for begin, ready in zip(render_begin, render_prep_ready)
+                            if ready >= begin
+                        )
+                    if render_host_begin and render_host_ready:
+                        render_host.extend(
+                            (ready - begin) / 1_000_000.0
+                            for begin, ready in zip(render_host_begin, render_host_ready)
+                            if ready >= begin
+                        )
+                    if render_mode_begin and render_mode_ready:
+                        render_mode.extend(
+                            (ready - begin) / 1_000_000.0
+                            for begin, ready in zip(render_mode_begin, render_mode_ready)
+                            if ready >= begin
+                        )
+                    if render_host_ready and draws:
+                        render_post.extend(
+                            (draw - ready) / 1_000_000.0
+                            for ready, draw in zip(render_host_ready, draws)
+                            if draw >= ready
                         )
                 missing_draw = len(keys) - reached_draw
                 repeat_draws = max(0, draw_occurrences - reached_draw)
@@ -351,15 +408,46 @@ def main() -> int:
                     )
                 if publish_sync:
                     fields.append(f"publish_sync_p95_ms={_pct(publish_sync, .95):.3f}")
+                if sync_work:
+                    fields.extend(
+                        (
+                            f"sync_work_n={len(sync_work)}",
+                            f"sync_work_median_ms={statistics.median(sync_work):.3f}",
+                            f"sync_work_p95_ms={_pct(sync_work, .95):.3f}",
+                        )
+                    )
                 if sync_ready_to_render:
-                    fields.append(
-                        "sync_ready_render_begin_p95_ms="
-                        f"{_pct(sync_ready_to_render, .95):.3f}"
+                    fields.extend(
+                        (
+                            f"sync_ready_render_begin_n={len(sync_ready_to_render)}",
+                            "sync_ready_render_begin_median_ms="
+                            f"{statistics.median(sync_ready_to_render):.3f}",
+                            "sync_ready_render_begin_p95_ms="
+                            f"{_pct(sync_ready_to_render, .95):.3f}",
+                        )
                     )
                 if render_cost:
-                    fields.append(
-                        f"render_begin_draw_p95_ms={_pct(render_cost, .95):.3f}"
+                    fields.extend(
+                        (
+                            f"render_begin_draw_n={len(render_cost)}",
+                            f"render_begin_draw_median_ms={statistics.median(render_cost):.3f}",
+                            f"render_begin_draw_p95_ms={_pct(render_cost, .95):.3f}",
+                        )
                     )
+                for metric_name, values in (
+                    ("render_prep", render_prep),
+                    ("render_host", render_host),
+                    ("render_mode", render_mode),
+                    ("render_post", render_post),
+                ):
+                    if values:
+                        fields.extend(
+                            (
+                                f"{metric_name}_n={len(values)}",
+                                f"{metric_name}_median_ms={statistics.median(values):.3f}",
+                                f"{metric_name}_p95_ms={_pct(values, .95):.3f}",
+                            )
+                        )
                 print(" ".join(fields))
     return 0
 

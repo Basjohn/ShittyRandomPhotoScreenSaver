@@ -45,6 +45,7 @@ class _AnalysisRequest:
     capture_ts: float
     gate_token: int
     activation_id: int
+    slot_token: int
     previous_bars: tuple[float, ...]
     last_smooth_ts: float
     smoothing_tau: float
@@ -137,6 +138,12 @@ class _SpotifyBeatEngine(QObject):
         self._audio_worker = SpotifyVisualizerAudioWorker(self._bar_count, self._audio_buffer, parent=self)
         self._bars_result_buffer: TripleBuffer[List[float]] = TripleBuffer()
         self._compute_task_active: bool = False
+        # Explicit ownership for the one admitted analysis slot.  The older
+        # boolean-only contract could not distinguish an old callback still
+        # owning the slot from a newer packet admitted while that callback was
+        # publishing.  A hotswap could therefore strand the bool True forever.
+        self._compute_slot_seq: int = 0
+        self._compute_active_slot_token: int | None = None
         self._compute_gate_token: int = 0
         # Latest-state freshness under a one-in-flight compute contract.
         #
@@ -263,7 +270,15 @@ class _SpotifyBeatEngine(QObject):
     def _stop_analysis_lane(self) -> None:
         lane = self._analysis_lane
         self._analysis_lane = None
+        # A stopped ComputeLane deliberately suppresses delivery of an active
+        # packet's callback.  Therefore the engine must retire its own serial
+        # slot/pending-source ownership here; waiting for a callback after
+        # ``lane.stop()`` can strand _compute_task_active forever.
+        self._compute_gate_token += 1
         self._invalidate_analysis_compute_state()
+        self._compute_active_slot_token = None
+        self._compute_task_active = False
+        self._discard_pending_analysis_frame()
         if lane is None:
             return
         try:
@@ -458,7 +473,7 @@ class _SpotifyBeatEngine(QObject):
         # replaces the engine's one pending source instead of racing a second
         # submission into the lane during the cancellation boundary.
         if lane is None or cancelled_pending > 0:
-            self._compute_task_active = False
+            self._release_analysis_slot_if_owned(self._compute_active_slot_token)
         # A pending source frame belongs to the activation that consumed it.
         self._discard_pending_analysis_frame()
 
@@ -667,8 +682,20 @@ class _SpotifyBeatEngine(QObject):
     def has_pending_analysis_frame(self) -> bool:
         return self._pending_analysis_samples is not None
 
+    def _release_analysis_slot_if_owned(self, slot_token: int | None) -> bool:
+        """Release the single compute slot only for its actual owner."""
+
+        if slot_token is None or self._compute_active_slot_token != int(slot_token):
+            return False
+        self._compute_active_slot_token = None
+        self._compute_task_active = False
+        return True
+
     def _launch_pending_analysis_frame(
-        self, *, releasing_active_slot: bool = False
+        self,
+        *,
+        releasing_active_slot: bool = False,
+        releasing_slot_token: int | None = None,
     ) -> None:
         """Start the single newest still-valid pending frame, if any.
 
@@ -683,7 +710,7 @@ class _SpotifyBeatEngine(QObject):
         samples = self._pending_analysis_samples
         if samples is None:
             if releasing_active_slot:
-                self._compute_task_active = False
+                self._release_analysis_slot_if_owned(releasing_slot_token)
             return
         activation = self._pending_analysis_activation
         capture_ts = self._pending_analysis_capture_ts
@@ -695,7 +722,7 @@ class _SpotifyBeatEngine(QObject):
                 self._activation_id,
             )
             if releasing_active_slot:
-                self._compute_task_active = False
+                self._release_analysis_slot_if_owned(releasing_slot_token)
             return
         if self._compute_task_active and not releasing_active_slot:
             # Something already claimed the single in-flight slot; put the
@@ -704,7 +731,7 @@ class _SpotifyBeatEngine(QObject):
             return
         if self._thread_manager is None:
             if releasing_active_slot:
-                self._compute_task_active = False
+                self._release_analysis_slot_if_owned(releasing_slot_token)
             return
         self._schedule_compute_bars_task(samples, capture_ts=capture_ts)
 
@@ -821,19 +848,18 @@ class _SpotifyBeatEngine(QObject):
             # handoff below atomically transfers that logical slot to the next
             # newest source (or releases it when none exists).
             #
-            # R-71 fencing exception: when a same-activation cancellation
-            # boundary bumped the gate token, a newer same-activation owner may
-            # already hold the single in-flight slot. This stale callback must
-            # then NOT release it, or a second concurrent FFT could be scheduled.
-            # An activation replacement (mode switch/reset) is different: the old
-            # activation is genuinely done, so its callback still releases its own
-            # slot and the fresh activation schedules from scratch.
-            superseded_same_activation = (
-                payload.activation_id == self._activation_id
-                and payload.gate_token != self._compute_gate_token
-            )
-            if not superseded_same_activation:
-                self._launch_pending_analysis_frame(releasing_active_slot=True)
+            # The completion may release only the submission slot it actually
+            # owns.  If a same-activation config boundary admitted a successor
+            # while this callback was publishing, that successor has a different
+            # token and remains asserted.  Conversely, during a stopped-runtime
+            # activation transaction there may be NO successor; the old callback
+            # then still owns the token and must release it or hotswap deadlocks
+            # analysis forever.
+            if self._compute_active_slot_token == payload.slot_token:
+                self._launch_pending_analysis_frame(
+                    releasing_active_slot=True,
+                    releasing_slot_token=payload.slot_token,
+                )
 
     def _schedule_compute_bars_task(
         self, samples: object, *, capture_ts: float = 0.0
@@ -844,11 +870,14 @@ class _SpotifyBeatEngine(QObject):
         if lane is None:
             return
 
+        self._compute_slot_seq += 1
+        slot_token = int(self._compute_slot_seq)
         request = _AnalysisRequest(
             samples=samples,
             capture_ts=float(capture_ts or 0.0),
             gate_token=self._compute_gate_token,
             activation_id=self._activation_id,
+            slot_token=slot_token,
             # The UI/silence path can decay _smoothed_bars in place.  Analysis
             # must smooth against a stable previous-frame vector rather than a
             # list that can move concurrently while the serial lane is working.
@@ -859,11 +888,22 @@ class _SpotifyBeatEngine(QObject):
             segment_hysteresis=self._segment_hysteresis,
             min_change_threshold=self._min_change_threshold,
         )
+        # Claim optimistically so test/deterministic lanes that deliver the
+        # callback synchronously from submit() still see the correct owner.
+        # If the lane rejects the packet as busy, restore the *previous* owner
+        # instead of letting the rejected token steal the serial slot.  That
+        # rejected-token theft is another way to manufacture the same phantom
+        # active slot seen in the CHK10 Spectrum -> Oscilloscope regression.
+        previous_slot_token = self._compute_active_slot_token
+        previous_task_active = bool(self._compute_task_active)
         self._compute_task_active = True
+        self._compute_active_slot_token = slot_token
         try:
             accepted = bool(lane.submit(request))
         except Exception:
-            self._compute_task_active = False
+            if self._compute_active_slot_token == slot_token:
+                self._compute_active_slot_token = previous_slot_token
+                self._compute_task_active = previous_task_active
             logger.error(
                 "[SPOTIFY_VIS] Audio-analysis compute lane submission failed",
                 exc_info=True,
@@ -872,12 +912,25 @@ class _SpotifyBeatEngine(QObject):
         if accepted:
             return
 
+        # No callback owns a rejected token. Restore the packet that really
+        # owned the engine slot before submit() was attempted. A concurrent or
+        # synchronous callback may already have changed ownership, in which case
+        # do not overwrite its newer truth.
+        if self._compute_active_slot_token == slot_token:
+            self._compute_active_slot_token = previous_slot_token
+            self._compute_task_active = previous_task_active
+
         # A cancellation boundary can leave the previous generation executing
         # for a moment. Keep only this newest current-generation source and let
         # that old callback release the serial lane; never fall back to the
         # Future/task path or run two FFTs concurrently.
         if bool(getattr(lane, "is_stopped", False)):
+            # A stopped lane suppresses callback delivery, so no retained engine
+            # slot may depend on it.  The owner-stop path normally clears this
+            # state first; keep the submit boundary safe if stop races admission.
+            self._compute_active_slot_token = None
             self._compute_task_active = False
+            self._discard_pending_analysis_frame()
             logger.error("[SPOTIFY_VIS] Audio-analysis compute lane is stopped")
             return
         self._replace_pending_analysis_frame(

@@ -41,6 +41,7 @@ def _resolve(
     playing: bool = True,
     source_generation: int = 5,
     source_activation_id: int = 7,
+    source_timestamp: float | None = None,
     energy: VisualizerEnergyState = VisualizerEnergyState(),
     kick_event: float = 0.0,
     snare_event: float = 0.0,
@@ -63,6 +64,7 @@ def _resolve(
         activation_id=_IDENTITY["activation_id"],
         source_generation=source_generation,
         source_activation_id=source_activation_id,
+        source_timestamp=(now_ts if playing and source_timestamp is None else source_timestamp),
         playing=playing,
         energy=energy,
         kick_event=kick_event,
@@ -79,6 +81,38 @@ def _resolve(
         base_heartbeat=base_heartbeat,
         heartbeat_slider=heartbeat_slider,
     )
+
+
+def test_playing_sine_identity_without_authoritative_frame_is_not_ready() -> None:
+    runtime = SineFrameRuntime()
+
+    unresolved = runtime.resolve(
+        now_ts=1.0,
+        runtime_generation=_IDENTITY["runtime_generation"],
+        engine_generation=_IDENTITY["engine_generation"],
+        activation_id=_IDENTITY["activation_id"],
+        source_generation=_IDENTITY["source_generation"],
+        source_activation_id=_IDENTITY["source_activation_id"],
+        source_timestamp=None,
+        playing=True,
+        energy=VisualizerEnergyState(bass=0.9, overall=0.9),
+        kick_event=1.0,
+        snare_event=1.0,
+        ghosting_enabled=False,
+        ghost_decay=0.3,
+        line_count=3,
+        line_speed=0.18,
+        travels=(0,) * 6,
+        line_shifts=(0.0,) * 6,
+        transient_width_mix=0.4,
+        base_width_reaction=0.0,
+        base_sensitivity=1.0,
+        base_heartbeat=1.0,
+        heartbeat_slider=1.0,
+    )
+
+    assert unresolved.reactive_source_ready is False
+    assert unresolved.energy == VisualizerEnergyState()
 
 
 def test_paused_sine_keeps_authored_idle_motion_without_a_source() -> None:
@@ -245,6 +279,7 @@ def test_sine_activation_change_resets_animation_and_idle_state() -> None:
         activation_id=11,
         source_generation=-1,
         source_activation_id=-1,
+        source_timestamp=None,
         playing=False,
         energy=VisualizerEnergyState(),
         kick_event=0.0,

@@ -133,6 +133,8 @@ class QuickDisplayRuntime(QObject):
         self._pacer: QuickFramePacer | None = QuickFramePacer(
             self._window,
             refresh_rate,
+            driver_state_setter=self._scene.set_transition_frame_driver_state,
+            driver_state_provider=self._scene.describe_transition_frame_driver,
         )
         self._transition: QuickTransitionController | None = (
             QuickTransitionController(

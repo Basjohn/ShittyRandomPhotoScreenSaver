@@ -316,7 +316,7 @@ Current test/oracle contract:
 
 - `tests/test_event_loop_recorder.py` protects independent `period_*` report slices and scored-window history reset without restarting the timer/deadline chain;
 - `tests/test_visualizer_switch_abc_driver.py` protects one event-loop scoring reset at each named `steady_A`, `steady_B`, `steady_C_pre` and `steady_C_post` boundary;
-- `tests/test_visualizer_switch_abc_harness.py` proves causal scoring uses only matching window-local period summaries, rejects old rolling-only logs, preserves named C windows/freshness gates, applies persistence to represented non-overlapping periods, and preserves native Windows `--run-cmd` executable paths (including quoted paths with spaces).
+- `tests/test_visualizer_switch_abc_harness.py` proves causal scoring uses only matching window-local period summaries, rejects old rolling-only logs, preserves named C windows/freshness gates, applies persistence to represented non-overlapping periods, preserves native Windows `--run-cmd` executable paths (including quoted paths with spaces), and proves the retired Python-pacer `pacer_skip_pct` field cannot manufacture a current causal verdict.
 
 Validation:
 
@@ -939,3 +939,10 @@ A test-affecting slice is complete only when:
 - defaults/generated artifacts are checked when settings changed;
 - maintained-profile membership is valid;
 - installed/Qt/GL evidence is requested where static/headless proof cannot close the claim.
+
+
+## 0.13 2026-09-15 R-87 fine render-body trace boundary
+
+- `tests/test_frame_trace.py` now proves the version-1 binary reporter understands optional nested render events without breaking older traces, preserves event ordering around the real Quick node/render-host callsites, and reports node-prep / host / selected-mode / post-host timing. Direct source execution: **13/13 PASS**.
+- `tests/test_qtquick_runtime_purity_source.py` permanently rejects the retired Quick pacer live-state ghosts `skipped_deadlines`, `frame_swaps`, and `update_pending`. Historical log parsing remains tool-level only. Direct source execution: **12/12 PASS**.
+- Current directly runnable authority set: **51/51 PASS** (12 purity + 13 frame trace + 6 service/scheduler + 20 retained A/B/C harness). PySide/QML runtime tests remain installed-only in this container.

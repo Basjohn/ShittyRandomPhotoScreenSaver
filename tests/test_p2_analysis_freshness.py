@@ -344,15 +344,112 @@ class TestFailureAndFencing:
         _publish(engine, np_module, 0.4)
         engine.tick()
 
-        # A generation boundary between submit and result.
+        # A generation boundary between submit and result. Model the R-71
+        # publishing overlap explicitly: a newer admitted submission owns the
+        # engine slot before the stale callback returns. Ownership is a token,
+        # not the old ambiguous boolean.
+        old_payload = manager.jobs[0]
         engine.cancel_pending_compute_tasks()
-        engine._compute_task_active = True  # the new owner holds the slot
+        engine._compute_task_active = True
+        engine._compute_active_slot_token = old_payload.slot_token + 1000
 
         manager.complete_next()
 
         assert engine._compute_task_active is True, (
             "a stale callback released a slot it no longer owned"
         )
+        assert engine._compute_active_slot_token != old_payload.slot_token
+
+    def test_busy_lane_rejection_cannot_steal_the_real_slot_owner(
+        self, engine, manager, np_module
+    ):
+        """A rejected successor must not orphan the admitted FFT token.
+
+        This exercises the defensive submit boundary directly. Production tick
+        normally parks the newest source before reaching submit while a compute
+        is active, but a cancellation/publication race can make the lane itself
+        the final authority on whether a successor is accepted.
+        """
+
+        _publish(engine, np_module, 0.1)
+        engine.tick()
+        old_token = engine._compute_active_slot_token
+        assert old_token is not None
+
+        newest = np_module.ones(1024, dtype="float32") * 0.7
+        engine._schedule_compute_bars_task(newest, capture_ts=1000.7)
+
+        assert manager.submits == 1, "busy lane unexpectedly accepted two FFTs"
+        assert engine._compute_task_active is True
+        assert engine._compute_active_slot_token == old_token, (
+            "rejected successor stole ownership from the admitted FFT"
+        )
+        assert _pending_level(engine, np_module) == pytest.approx(0.7)
+
+        manager.complete_next()
+        assert manager.submits == 2, (
+            "real owner completion did not hand off to the newest pending source"
+        )
+        assert engine._compute_task_active is True
+        assert engine._compute_active_slot_token != old_token
+
+    def test_stopping_lane_clears_engine_slot_and_pending_source(
+        self, engine, manager, np_module
+    ):
+        """A stopped lane cannot leave engine ownership waiting on a callback."""
+
+        _publish(engine, np_module, 0.1)
+        engine.tick()
+        _publish(engine, np_module, 0.6)
+        engine.tick()
+        assert engine._compute_task_active is True
+        assert engine._compute_active_slot_token is not None
+        assert engine.has_pending_analysis_frame() is True
+
+        engine._stop_analysis_lane()
+
+        assert engine._compute_task_active is False
+        assert engine._compute_active_slot_token is None
+        assert engine.has_pending_analysis_frame() is False
+        assert manager.lane is not None and manager.lane.is_stopped is True
+
+    def test_stopped_runtime_activation_callback_releases_its_own_slot(
+        self, engine, manager, np_module
+    ):
+        """Regression: Spectrum -> Oscilloscope must not orphan the FFT lane.
+
+        The installed CHK10 hotswap stopped the logical runtime, bumped the
+        compute gate during the activation transaction, and then let the final
+        old FFT callback publish before activation id advanced.  The old
+        same-activation heuristic treated that callback as if a successor must
+        already own the slot, leaving ``_compute_task_active`` true forever.
+        No successor can exist while the logical runtime is stopped.
+        """
+
+        _publish(engine, np_module, 0.1)
+        engine.tick()
+        assert engine._compute_task_active is True
+        old_payload = manager.jobs[0]
+
+        engine.begin_activation_transaction()
+        engine.reset_smoothing_state()
+        assert engine.get_activation_id() == old_payload.activation_id
+
+        # The old callback completes while the transaction deliberately still
+        # exposes the old activation id. It remains the actual slot owner and
+        # therefore MUST release the slot.
+        manager.complete_next()
+        assert engine._compute_task_active is False
+        assert engine._compute_active_slot_token is None
+
+        engine.end_activation_transaction(reason="test_hotswap")
+        assert engine.get_activation_id() != old_payload.activation_id
+
+        _publish(engine, np_module, 0.6)
+        engine.tick()
+        assert manager.submits == 2, "fresh activation could not admit a new FFT"
+        assert engine._compute_task_active is True
+        assert engine._compute_active_slot_token is not None
 
     def test_pending_is_returned_when_the_slot_is_already_claimed(
         self, engine, manager, np_module

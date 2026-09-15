@@ -189,8 +189,8 @@ def test_event_driven_quick_lifecycle_keeps_pause_resume_and_retirement_edges() 
     assert "self.frame_pacer.resume()" in visibility
     assert visibility.count("self.frame_pacer.pause()") >= 2
 
-    # Runtime retirement closes demand before scene/window teardown so no
-    # frameSwapped continuation can target a retiring scene.
+    # Runtime retirement closes native transition demand before scene/window
+    # teardown so the QML animation job cannot target a retiring render item.
     close_runtime = runtime.split("def close_runtime", 1)[1].split(
         "def describe_runtime_state", 1
     )[0]
@@ -204,21 +204,22 @@ def test_event_driven_quick_lifecycle_keeps_pause_resume_and_retirement_edges() 
         "self.window.queue_close()"
     )
 
-    # The continuous owner is a one-request-at-a-time Qt frameSwapped chain.
-    # New hidden QQuickWindows start paused so a pre-show animation cannot strand
-    # the one-pending bit on a request that never reaches frameSwapped.
+    # The custom transition owner is now a lifecycle-only coordinator. QML
+    # FrameAnimation supplies Qt's native animation tick and gates the retained
+    # background item at the bound display refresh. No Python frame clock or
+    # frameSwapped feedback loop may return.
     assert "self._paused = not bool(window.isVisible())" in pacer
-    assert "window.frameSwapped.connect(self._on_frame_swapped)" in pacer
-    assert "self._window.frameSwapped.disconnect(self._on_frame_swapped)" in pacer
-    request_next = pacer.split("def _request_next_frame", 1)[1].split(
-        "def _on_frame_swapped", 1
-    )[0]
-    assert "self._update_pending" in request_next
-    assert "self._window.requestUpdate()" in request_next
-    assert "self._window.update()" not in request_next
-    swapped = pacer.split("def _on_frame_swapped", 1)[1]
-    assert "self._update_pending = False" in swapped
-    assert "if self.is_active():" in swapped
+    assert "frameSwapped.connect" not in pacer
+    assert "requestUpdate()" not in pacer
+    assert "QTimer" not in pacer
+    assert "driver_state_setter" in pacer
+    qml = _text("rendering/quick/qml/DisplayScene.qml")
+    assert "FrameAnimation {" in qml
+    assert "transitionFrameTargetHz" in qml
+    assert "transitionRenderItem.update()" in qml
+    assert "intervalsPassed" in qml
+    assert "onTransitionFrameTargetHzChanged" in qml
+    assert "if (running)" in qml and "reset()" in qml
 
     # The visualizer's separate publication edge follows presentation transfer
     # and is detached before retirement. It must not sneak back into the pacer.
@@ -312,3 +313,13 @@ def test_startup_desktop_qpixmap_exception_has_one_production_callsite() -> None
     assert "capture_startup_desktop_pixmap(" in prime
     assert "display.present_captured_image(seed)" in prime
     assert "self._startup_desktop_seed_screens.clear()" in prime
+
+
+def test_qtquick_pacer_state_has_no_retired_deadline_or_swap_fields() -> None:
+    pacer = _text("rendering/quick/frame_pacer.py")
+    # CHK10 moved continuous transition opportunities into the native QML
+    # animation driver. Do not preserve permanent-zero ghosts of the old Python
+    # deadline/swap-feedback pacer in the live pacer state contract.
+    assert '"skipped_deadlines"' not in pacer
+    assert '"frame_swaps"' not in pacer
+    assert '"update_pending"' not in pacer
