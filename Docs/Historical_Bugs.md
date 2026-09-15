@@ -13,7 +13,7 @@ not automatic current architecture instructions.
 
 ## Open / Watchlist Records
 
-- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **[x] COMPLETELY FUCKED / OPEN**. High-refresh pressure resilience and drawn-state freshness remain materially worse than the smooth Qt Quick control despite healthy ~90 Hz logical production; current scheduler repair is awaiting installed proof.
+- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **[~] OPEN / SIGNIFICANTLY IMPROVED, NOT SOLVED**. Checkpoint-3 frame trace physically validates event-driven Quick admission as a major win; operator-observed Checkpoint-5 dual-display behavior is better again, but settled-heavy residual crawl remains and the post-sync render path still needs fine-grained trace proof. — CHK5 dual-display binary confirms ~90 Hz is logical cadence, D0 is much fresher in steady state, and the remaining `frameSwapped -> requestUpdate()` transition feedback can overdrive D0 to ~287 draws/s and sharply worsen freshness; swap-trace attribution also needs correction.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)

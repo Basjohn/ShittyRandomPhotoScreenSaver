@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtGui import QColor, QGuiApplication, QImage
 
 from rendering.quick.display_image_route import presentation_image_from_processed_qimage
 from rendering.quick.image_accounting import aggregate_presentation_image_accounting
@@ -21,14 +21,22 @@ from rendering.quick.state import QuickWindowPolicy
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _gui_app() -> QGuiApplication:
+    app = QGuiApplication.instance()
+    if app is None:
+        app = QGuiApplication([])
+    return app
+
+
 def _image(width: int, height: int, color: str = "#3366cc") -> QImage:
     image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(QColor(color))
     return image
 
 
-def _make_runtime(qt_app, generation: int):
-    screen = qt_app.primaryScreen()
+def _make_runtime(generation: int):
+    app = _gui_app()
+    screen = app.primaryScreen()
     assert screen is not None
     factory = QuickSceneFactory()
     runtime = QuickDisplayRuntime(
@@ -78,7 +86,7 @@ def test_runtime_image_route_has_no_generic_qpixmap_escape_hatch() -> None:
 
 
 @pytest.mark.qt
-def test_processed_qimage_produces_packed_presentation_image(qt_app) -> None:
+def test_processed_qimage_produces_packed_presentation_image() -> None:
     image = _image(6, 4)
     detached = presentation_image_from_processed_qimage(
         image,
@@ -92,7 +100,7 @@ def test_processed_qimage_produces_packed_presentation_image(qt_app) -> None:
 
 
 @pytest.mark.qt
-def test_processed_qimage_preserves_rgba_semantics(qt_app) -> None:
+def test_processed_qimage_preserves_rgba_semantics() -> None:
     image = QImage(5, 3, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(QColor(0, 0, 0, 0))
     image.setPixelColor(0, 0, QColor(255, 0, 0, 255))
@@ -110,8 +118,9 @@ def test_processed_qimage_preserves_rgba_semantics(qt_app) -> None:
 
 
 @pytest.mark.qt
-def test_detached_image_publishes_into_runtime_without_qpixmap(qt_app) -> None:
-    runtime, factory = _make_runtime(qt_app, 94)
+def test_detached_image_publishes_into_runtime_without_qpixmap() -> None:
+    app = _gui_app()
+    runtime, factory = _make_runtime(94)
     try:
         detached = presentation_image_from_processed_qimage(
             _image(8, 5),
@@ -126,12 +135,13 @@ def test_detached_image_publishes_into_runtime_without_qpixmap(qt_app) -> None:
     finally:
         runtime.close_runtime()
         factory.deleteLater()
-        qt_app.processEvents()
+        app.processEvents()
 
 
 @pytest.mark.qt
-def test_runtime_target_size_is_identity_pixels(qt_app) -> None:
-    runtime, factory = _make_runtime(qt_app, 95)
+def test_runtime_target_size_is_identity_pixels() -> None:
+    app = _gui_app()
+    runtime, factory = _make_runtime(95)
     try:
         identity = runtime.display_identity
         _x, _y, width, height = identity.geometry
@@ -142,4 +152,4 @@ def test_runtime_target_size_is_identity_pixels(qt_app) -> None:
     finally:
         runtime.close_runtime()
         factory.deleteLater()
-        qt_app.processEvents()
+        app.processEvents()
