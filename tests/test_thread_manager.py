@@ -674,6 +674,33 @@ class TestThreadManagerConvenience:
         assert "compute" in results
         manager.shutdown()
 
+    def test_submit_background_task_is_lazy_and_owned(self):
+        """Best-effort CPU work starts one lazy serial lane owned by ThreadManager."""
+        manager = ThreadManager()
+        assert manager.get_diagnostic_snapshot()["background_cpu"]["worker_threads"] == 0
+        completed = threading.Event()
+        results = []
+
+        def task():
+            return "background"
+
+        def done(result):
+            results.append(result)
+            completed.set()
+
+        manager.submit_background_task(
+            task,
+            callback=done,
+            category="image.prefetch_scaled",
+        )
+        assert completed.wait(2.0)
+        assert results[0].success is True
+        assert results[0].result == "background"
+        snapshot = manager.get_diagnostic_snapshot()["background_cpu"]
+        assert snapshot["worker_threads"] == 1
+        assert snapshot["tasks_completed"] == 1
+        assert manager.shutdown(wait=True, timeout=2.0) is True
+
 
 class TestThreadManagerConcurrency:
     """Concurrency and thread safety tests."""

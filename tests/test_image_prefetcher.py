@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pytest
 from PySide6.QtGui import QColor, QImage
 
-from core.process.types import MessageType, WorkerType
 from rendering.display_modes import DisplayMode
 from utils.image_prefetcher import ImagePrefetcher
 
@@ -55,120 +54,21 @@ class _FakeThreads:
     def __init__(self):
         self.compute_callbacks = []
         self.io_callbacks = []
-        # Speculative worker completion must not consume a generic IO task.
-        self.wait_callbacks = []
 
     def submit_compute_task(self, func, *args, **kwargs):
-        # Scaled prefetch must never use this path anymore. Keep the recorder so
-        # tests can prove a future fallback was not silently reintroduced.
+        raise AssertionError("scaled speculation must not use the normal COMPUTE pool")
+
+    def submit_background_task(self, func, *args, **kwargs):
         callback = kwargs.get("callback")
         self.compute_callbacks.append((func, callback))
-        return "compute-task"
+        return "background-task"
 
     def submit_task(self, *args, **kwargs):
         func = args[1] if len(args) > 1 else None
         path = args[2] if len(args) > 2 else None
         callback = kwargs.get("callback")
-        category = kwargs.get("category")
-        if category == "image.prefetch_scaled_wait":
-            self.wait_callbacks.append((func, callback))
-        else:
-            self.io_callbacks.append((func, path, callback))
+        self.io_callbacks.append((func, path, callback))
         return "io-task"
-
-
-class _FakeSpeculativeSupervisor:
-    def __init__(self, *, running: bool = True, accept_sends: bool = True):
-        self.running = running
-        self.accept_sends = accept_sends
-        self.sent = []
-        self.responses = {}
-        self.callbacks = {}
-        self.abandoned = []
-        self.disposed = []
-
-    def is_running(self, worker_type):
-        assert worker_type == WorkerType.IMAGE_PREFETCH
-        return self.running
-
-    def send_message(self, worker_type, msg_type, payload, correlation_id=None):
-        assert worker_type == WorkerType.IMAGE_PREFETCH
-        assert msg_type == MessageType.IMAGE_PRESCALE
-        if not self.accept_sends:
-            return None
-        corr = correlation_id or f"prefetch-corr-{len(self.sent)}"
-        self.sent.append(
-            {
-                "worker_type": worker_type,
-                "msg_type": msg_type,
-                "payload": dict(payload),
-                "correlation_id": corr,
-            }
-        )
-        return corr
-
-    def register_response_callback(self, worker_type, correlation_id, callback):
-        assert worker_type == WorkerType.IMAGE_PREFETCH
-        if correlation_id in self.callbacks:
-            raise ValueError("duplicate response callback")
-        self.callbacks[correlation_id] = callback
-        if correlation_id in self.responses:
-            self.deliver(correlation_id)
-        return True
-
-    def queue_rgba_response(
-        self,
-        correlation_id: str,
-        *,
-        width: int = 8,
-        height: int = 4,
-        success: bool = True,
-        error: str | None = None,
-    ) -> None:
-        payload = {}
-        if success:
-            payload = {
-                "width": width,
-                "height": height,
-                "format": "RGBA",
-                "rgba_data": bytes((16, 32, 64, 255)) * (width * height),
-            }
-        self.responses[correlation_id] = SimpleNamespace(
-            success=success,
-            payload=payload,
-            error=error,
-            processing_time_ms=12.5,
-            correlation_id=correlation_id,
-        )
-
-    def deliver(self, correlation_id: str) -> None:
-        response = self.responses.pop(correlation_id, None)
-        callback = self.callbacks.pop(correlation_id, None)
-        if callback is not None:
-            callback(response)
-        elif response is not None and any(
-            abandoned_id == correlation_id for abandoned_id, _reason in self.abandoned
-        ):
-            self.disposed.append((response, "late_abandoned"))
-
-    def abandon_response(self, worker_type, correlation_id, *, reason):
-        assert worker_type == WorkerType.IMAGE_PREFETCH
-        self.callbacks.pop(correlation_id, None)
-        self.abandoned.append((correlation_id, reason))
-
-    def dispose_response(self, response, *, reason):
-        self.disposed.append((response, reason))
-
-
-def _make_prefetcher(threads: _FakeThreads, cache: _FakeCache, **kwargs) -> ImagePrefetcher:
-    supervisor = kwargs.pop("process_supervisor", None) or _FakeSpeculativeSupervisor()
-    prefetcher = ImagePrefetcher(
-        threads,
-        cache,
-        process_supervisor=supervisor,
-        **kwargs,
-    )
-    return prefetcher
 
 
 def _scaled_request(path: str, cache_key: str, *, width: int = 16, height: int = 9):
@@ -184,109 +84,96 @@ def _scaled_request(path: str, cache_key: str, *, width: int = 16, height: int =
     }
 
 
-def _block_scaled_slot(prefetcher: ImagePrefetcher) -> None:
-    prefetcher._scaled_inflight.add("busy")
+def _block_scaled_slots(prefetcher: ImagePrefetcher, count: int) -> None:
+    prefetcher._scaled_inflight.update(f"busy-{idx}" for idx in range(count))
 
 
-def _release_scaled_slot(prefetcher: ImagePrefetcher) -> None:
-    prefetcher._scaled_inflight.discard("busy")
+def _release_scaled_slots(prefetcher: ImagePrefetcher) -> None:
+    prefetcher._scaled_inflight.clear()
 
 
-def _submitted_scaled_keys(prefetcher: ImagePrefetcher) -> list[str]:
-    return [entry["payload"]["cache_key"] for entry in prefetcher._process_supervisor.sent]
+def _submitted_scaled_keys(threads: _FakeThreads) -> list[str]:
+    keys: list[str] = []
+    for compute, _callback in threads.compute_callbacks:
+        closure = dict(zip(compute.__code__.co_freevars, (cell.cell_contents for cell in compute.__closure__ or ())))
+        keys.append(str(closure.get("cache_key")))
+    return keys
 
 
-def _complete_scaled(
-    prefetcher: ImagePrefetcher,
-    threads: _FakeThreads,
-    send_index: int,
-    *,
-    wait_index: int | None = None,
-    success: bool = True,
-) -> None:
-    supervisor = prefetcher._process_supervisor
-    corr = supervisor.sent[send_index]["correlation_id"]
-    supervisor.queue_rgba_response(corr, success=success, error=None if success else "failed")
-    supervisor.deliver(corr)
+def _complete_scaled_compute(threads: _FakeThreads, index: int) -> None:
+    compute, callback = threads.compute_callbacks[index]
+    payload = compute()
+    callback(SimpleNamespace(success=True, result=payload))
 
 
-def test_scaled_prefetch_dispatches_preferred_request_first(qt_app):
+def test_scaled_prefetch_dispatches_later_preferred_before_earlier_ready_request(qt_app):
     general_path = r"C:\wall\general.jpg"
     preferred_path = r"C:\wall\preferred.jpg"
-    cache = _FakeCache(
-        {
-            general_path: _solid_qimage(32, 18, "blue"),
-            preferred_path: _solid_qimage(32, 18, "green"),
-        }
-    )
+    cache = _FakeCache({
+        general_path: _solid_qimage(32, 18, "blue"),
+        preferred_path: _solid_qimage(32, 18, "green"),
+    })
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=4)
-    _block_scaled_slot(prefetcher)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=4)
+    _block_scaled_slots(prefetcher, 1)
 
-    assert prefetcher.register_scaled_requests(
-        [
-            _scaled_request(general_path, "general-scaled"),
-            _scaled_request(preferred_path, "preferred-scaled"),
-        ]
-    ) == 2
+    assert prefetcher.register_scaled_requests([
+        _scaled_request(general_path, "general-scaled"),
+        _scaled_request(preferred_path, "preferred-scaled"),
+    ]) == 2
 
-    _release_scaled_slot(prefetcher)
+    _release_scaled_slots(prefetcher)
     prefetcher._pump_scaled_prefetch(preferred_path=preferred_path)
 
-    assert _submitted_scaled_keys(prefetcher) == ["preferred-scaled"]
-    assert prefetcher.snapshot_budget_state()["scaled_pending"] == 1
-    assert prefetcher._scaled_inflight == {"preferred-scaled"}
+    assert _submitted_scaled_keys(threads) == ["preferred-scaled"]
+    assert prefetcher.snapshot_state()["scaled_inflight"] == 1
+    assert prefetcher.snapshot_state()["scaled_pending"] == 1
 
-    _complete_scaled(prefetcher, threads, 0)
-    assert _submitted_scaled_keys(prefetcher) == ["preferred-scaled", "general-scaled"]
+    _complete_scaled_compute(threads, 0)
+    assert _submitted_scaled_keys(threads) == ["preferred-scaled", "general-scaled"]
 
 
 @pytest.mark.parametrize("preferred_index", [0, 1, 2])
 def test_scaled_prefetch_preserves_priority_at_every_queue_position(qt_app, preferred_index):
     paths = [fr"C:\wall\position-{idx}.jpg" for idx in range(3)]
-    cache = _FakeCache(
-        {path: _solid_qimage(32, 18, color) for path, color in zip(paths, ("red", "green", "blue"))}
-    )
+    cache = _FakeCache({path: _solid_qimage(32, 18, "blue") for path in paths})
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=4)
-    _block_scaled_slot(prefetcher)
-    requests = [_scaled_request(path, f"position-scaled-{idx}") for idx, path in enumerate(paths)]
-    prefetcher.register_scaled_requests(requests)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=4)
+    _block_scaled_slots(prefetcher, 1)
+    prefetcher.register_scaled_requests([
+        _scaled_request(path, f"position-scaled-{idx}")
+        for idx, path in enumerate(paths)
+    ])
 
-    _release_scaled_slot(prefetcher)
+    _release_scaled_slots(prefetcher)
     prefetcher._pump_scaled_prefetch(preferred_path=paths[preferred_index])
 
-    assert _submitted_scaled_keys(prefetcher) == [f"position-scaled-{preferred_index}"]
+    assert _submitted_scaled_keys(threads) == [f"position-scaled-{preferred_index}"]
     assert prefetcher.snapshot_state()["scaled_inflight"] == 1
     assert prefetcher.snapshot_state()["scaled_pending"] == 2
 
 
 @pytest.mark.parametrize("configured_concurrency", [1, 2, 4])
 def test_scaled_prefetch_is_single_flight_regardless_raw_prefetch_concurrency(
-    qt_app,
-    configured_concurrency,
+    qt_app, configured_concurrency
 ):
     paths = [fr"C:\wall\slots-{idx}.jpg" for idx in range(4)]
     cache = _FakeCache({path: _solid_qimage(32, 18, "blue") for path in paths})
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(
+    prefetcher = ImagePrefetcher(
         threads,
         cache,
         max_concurrent=configured_concurrency,
         max_pending_requests=8,
     )
 
-    assert prefetcher.register_scaled_requests(
-        [_scaled_request(path, f"slots-scaled-{idx}") for idx, path in enumerate(paths)]
-    ) == 4
-
-    assert len(prefetcher._process_supervisor.sent) == 1
-    assert threads.wait_callbacks == []
-    assert len(prefetcher._process_supervisor.callbacks) == 1
-    assert threads.compute_callbacks == []
+    assert prefetcher.register_scaled_requests([
+        _scaled_request(path, f"slots-scaled-{idx}")
+        for idx, path in enumerate(paths)
+    ]) == 4
+    assert len(threads.compute_callbacks) == 1
     assert prefetcher.snapshot_state()["scaled_inflight"] == 1
     assert prefetcher.snapshot_state()["scaled_pending"] == 3
-
 
 
 def test_scaled_prefetch_keeps_not_ready_request_while_dispatching_ready_preferred(qt_app):
@@ -300,9 +187,9 @@ def test_scaled_prefetch_keeps_not_ready_request_while_dispatching_ready_preferr
         }
     )
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=2)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
     prefetcher._inflight.add(waiting_path)
-    _block_scaled_slot(prefetcher)
+    _block_scaled_slots(prefetcher, 2)
     prefetcher.register_scaled_requests(
         [
             _scaled_request(waiting_path, "waiting-scaled"),
@@ -311,24 +198,13 @@ def test_scaled_prefetch_keeps_not_ready_request_while_dispatching_ready_preferr
         ]
     )
 
-    _release_scaled_slot(prefetcher)
+    _release_scaled_slots(prefetcher)
     prefetcher._pump_scaled_prefetch(preferred_path=preferred_path)
 
-    assert _submitted_scaled_keys(prefetcher) == ["preferred-ready-scaled"]
-    assert [request["cache_key"] for request in prefetcher._pending_scaled_requests] == [
-        "waiting-scaled",
-        "other-ready-scaled",
-    ]
-
-    _complete_scaled(prefetcher, threads, 0)
-    assert _submitted_scaled_keys(prefetcher) == [
-        "preferred-ready-scaled",
-        "other-ready-scaled",
-    ]
-    assert [request["cache_key"] for request in prefetcher._pending_scaled_requests] == [
-        "waiting-scaled"
-    ]
-
+    assert _submitted_scaled_keys(threads) == ["preferred-ready-scaled", "other-ready-scaled"]
+    assert [request["cache_key"] for request in prefetcher._pending_scaled_requests] == ["waiting-scaled"]
+    assert prefetcher._pending_scaled_keys == {"waiting-scaled"}
+    assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 16 * 9 * 4
 
 
 def test_scaled_prefetch_reclaims_derivative_when_completed_raw_parent_self_evicts(qt_app):
@@ -339,7 +215,7 @@ def test_scaled_prefetch_reclaims_derivative_when_completed_raw_parent_self_evic
     request_bytes = 2048 * 2048 * 4
     cache = _EvictingCache(evict_on_put={first_path})
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(
+    prefetcher = ImagePrefetcher(
         threads,
         cache,
         max_concurrent=1,
@@ -353,27 +229,30 @@ def test_scaled_prefetch_reclaims_derivative_when_completed_raw_parent_self_evic
     raw_done = threads.io_callbacks[0][2]
     raw_done(SimpleNamespace(success=True, result=_solid_qimage(64, 64, "blue")))
 
+    # Hard-cache insertion may legitimately self-evict. Once producer ownership
+    # is gone, its derivative is impossible and must surrender *all* queue budget.
     assert first_path not in cache.store
     budget = prefetcher.snapshot_budget_state()
     assert budget["scaled_pending"] == 0
     assert budget["scaled_pending_bytes"] == 0
     assert prefetcher._pending_scaled_keys == set()
-    assert prefetcher._process_supervisor.sent == []
     assert threads.compute_callbacks == []
 
+    # The reclaimed bytes must be immediately reusable by later valid work.
     cache.store[second_path] = _solid_qimage(64, 64, "green")
     assert prefetcher.register_scaled_requests(
         [_scaled_request(second_path, "replacement-scaled", width=2048, height=2048)]
     ) == 1
-    assert _submitted_scaled_keys(prefetcher) == ["replacement-scaled"]
-
+    assert _submitted_scaled_keys(threads) == ["replacement-scaled"]
 
 
 def test_scaled_prefetch_orphan_reclamation_does_not_accumulate_across_cycles(qt_app):
+    """Repeated raw self-eviction must return pending keys/bytes to baseline every cycle."""
+
     paths = [fr"C:\wall\self-evict-{idx}.jpg" for idx in range(6)]
     cache = _EvictingCache(evict_on_put=set(paths))
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(
+    prefetcher = ImagePrefetcher(
         threads,
         cache,
         max_concurrent=1,
@@ -394,17 +273,17 @@ def test_scaled_prefetch_orphan_reclamation_does_not_accumulate_across_cycles(qt
         assert prefetcher._pending_scaled_keys == set()
         assert prefetcher.snapshot_state()["raw_inflight"] == 0
 
-    assert prefetcher._process_supervisor.sent == []
     assert threads.compute_callbacks == []
 
 
-
 def test_scaled_prefetch_keeps_derivative_while_raw_parent_is_pending(qt_app):
+    """Orphan cleanup must not steal work from a raw producer still queued for dispatch."""
+
     active_path = r"C:\wall\active-parent.jpg"
     pending_path = r"C:\wall\pending-parent.jpg"
     cache = _FakeCache()
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=1)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
 
     prefetcher.prefetch_paths([active_path, pending_path])
     assert active_path in prefetcher._inflight
@@ -413,14 +292,13 @@ def test_scaled_prefetch_keeps_derivative_while_raw_parent_is_pending(qt_app):
         [_scaled_request(pending_path, "pending-parent-scaled")]
     ) == 1
 
+    # Pumping while the parent is only pending must preserve derivative ownership.
     prefetcher._pump_scaled_prefetch()
     assert [request["cache_key"] for request in prefetcher._pending_scaled_requests] == [
         "pending-parent-scaled"
     ]
     assert prefetcher._pending_scaled_keys == {"pending-parent-scaled"}
     assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 16 * 9 * 4
-    assert prefetcher._process_supervisor.sent == []
-
 
 
 def test_scaled_prefetch_rejects_stale_selected_generation_with_exact_accounting(qt_app):
@@ -433,8 +311,8 @@ def test_scaled_prefetch_rejects_stale_selected_generation_with_exact_accounting
         }
     )
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=2)
-    _block_scaled_slot(prefetcher)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
+    _block_scaled_slots(prefetcher, 2)
     prefetcher.register_scaled_requests(
         [
             _scaled_request(stale_path, "stale-selected-scaled"),
@@ -443,103 +321,146 @@ def test_scaled_prefetch_rejects_stale_selected_generation_with_exact_accounting
     )
     prefetcher._pending_scaled_requests[0]["_prefetch_generation"] -= 1
 
-    _release_scaled_slot(prefetcher)
+    _release_scaled_slots(prefetcher)
     prefetcher._pump_scaled_prefetch(preferred_path=stale_path)
 
-    assert _submitted_scaled_keys(prefetcher) == ["current-selected-scaled"]
+    assert _submitted_scaled_keys(threads) == ["current-selected-scaled"]
     assert prefetcher.snapshot_budget_state()["scaled_pending"] == 0
     assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 0
     assert prefetcher._pending_scaled_keys == set()
     assert prefetcher._scaled_inflight == {"current-selected-scaled"}
 
 
-
-def test_scaled_prefetch_process_completion_advances_single_flight_queue(qt_app):
+def test_scaled_prefetch_requests_use_bounded_parallelism(qt_app):
     raw_path = r"C:\wall\one.jpg"
     cache = _FakeCache({raw_path: _solid_qimage(3840, 2160, "blue")})
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache)
+    prefetcher = ImagePrefetcher(threads, cache)
     stats = {}
 
-    req1 = _scaled_request(raw_path, "one-scaled", width=2560, height=1440)
-    req1["stats"] = stats
-    req2 = _scaled_request(raw_path, "two-scaled", width=1920, height=1080)
-    req2["stats"] = stats
-    req2["display_mode"] = DisplayMode.FIT
+    req1 = {
+        "stats": stats,
+        "path": raw_path,
+        "cache_key": "one-scaled",
+        "width": 2560,
+        "height": 1440,
+        "display_mode": DisplayMode.FILL,
+        "use_lanczos": False,
+        "sharpen": False,
+    }
+    req2 = {
+        "stats": stats,
+        "path": raw_path,
+        "cache_key": "two-scaled",
+        "width": 1920,
+        "height": 1080,
+        "display_mode": DisplayMode.FIT,
+        "use_lanczos": False,
+        "sharpen": False,
+    }
 
     prefetcher.register_scaled_requests([req1, req2])
 
-    assert _submitted_scaled_keys(prefetcher) == ["one-scaled"]
-    assert threads.compute_callbacks == []
-    _complete_scaled(prefetcher, threads, 0)
+    assert len(threads.compute_callbacks) == 1
+
+    _complete_scaled_compute(threads, 0)
+    assert len(threads.compute_callbacks) == 2
 
     assert "one-scaled" in cache.store
     assert raw_path in cache.store
     assert cache.removed == []
     assert stats["scaled_prefetch_completed"] == 1
     assert stats.get("raw_released_after_scaled", 0) == 0
-    assert _submitted_scaled_keys(prefetcher) == ["one-scaled", "two-scaled"]
-
 
 
 def test_scaled_prefetch_retains_raw_until_every_planned_derivative_finishes(qt_app):
     raw_path = r"C:\wall\multi-target.jpg"
     cache = _FakeCache({raw_path: _solid_qimage(640, 360, "blue")})
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=2)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
     stats = {}
-    requests = []
-    for idx, (width, height) in enumerate(((320, 180), (160, 90))):
-        request = _scaled_request(raw_path, f"multi-scaled-{idx}", width=width, height=height)
-        request["stats"] = stats
-        requests.append(request)
+    requests = [
+        {
+            "stats": stats,
+            "path": raw_path,
+            "cache_key": f"multi-scaled-{idx}",
+            "width": width,
+            "height": height,
+            "display_mode": DisplayMode.FILL,
+            "use_lanczos": False,
+            "sharpen": False,
+        }
+        for idx, (width, height) in enumerate(((320, 180), (160, 90)))
+    ]
 
     prefetcher.register_scaled_requests(requests)
-    _complete_scaled(prefetcher, threads, 0)
+    assert len(threads.compute_callbacks) == 1
+
+    _complete_scaled_compute(threads, 0)
+    assert len(threads.compute_callbacks) == 2
     assert raw_path in cache.store
     assert cache.removed == []
 
-    _complete_scaled(prefetcher, threads, 1)
+    _complete_scaled_compute(threads, 1)
     assert raw_path not in cache.store
     assert cache.removed == [raw_path]
     assert stats["raw_released_after_scaled"] == 1
 
 
-
-def test_scaled_prefetch_requests_queue_beyond_single_flight_limit(qt_app):
+def test_scaled_prefetch_requests_queue_beyond_parallel_limit(qt_app):
     raw_path = r"C:\wall\one.jpg"
     cache = _FakeCache({raw_path: _solid_qimage(3840, 2160, "blue")})
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache)
+    prefetcher = ImagePrefetcher(threads, cache)
 
-    requests = [
-        _scaled_request(raw_path, f"scaled-{idx}", width=size[0], height=size[1])
-        for idx, size in enumerate(((2560, 1440), (1920, 1080), (1707, 959)), start=1)
-    ]
+    requests = []
+    for idx, size in enumerate([(2560, 1440), (1920, 1080), (1707, 959)], start=1):
+        requests.append(
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": f"scaled-{idx}",
+                "width": size[0],
+                "height": size[1],
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+        )
+
     prefetcher.register_scaled_requests(requests)
 
-    assert len(prefetcher._process_supervisor.sent) == 1
-    assert prefetcher.snapshot_state()["scaled_pending"] == 2
+    assert len(threads.compute_callbacks) == 1
 
-    _complete_scaled(prefetcher, threads, 0)
-    assert len(prefetcher._process_supervisor.sent) == 2
-    assert prefetcher.snapshot_state()["scaled_pending"] == 1
+    _complete_scaled_compute(threads, 0)
 
+    assert len(threads.compute_callbacks) == 2
 
 
 def test_scaled_prefetch_requests_refuse_paths_without_raw_producers(qt_app):
     cache = _FakeCache()
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=2)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
     raw_paths = [fr"C:\wall\{idx}.jpg" for idx in range(5)]
 
     queued = prefetcher.register_scaled_requests(
-        [_scaled_request(raw_path, f"scaled-{idx}") for idx, raw_path in enumerate(raw_paths)]
+        [
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": f"scaled-{idx}",
+                "width": 2560,
+                "height": 1440,
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+            for idx, raw_path in enumerate(raw_paths)
+        ]
     )
 
     assert queued == 0
     assert len(threads.io_callbacks) == 0
-    assert prefetcher._process_supervisor.sent == []
     assert prefetcher.snapshot_state() == {
         "raw_inflight": 0,
         "raw_pending": 0,
@@ -548,16 +469,27 @@ def test_scaled_prefetch_requests_refuse_paths_without_raw_producers(qt_app):
     }
 
 
-
 def test_prefetch_keeps_raw_backlog_for_full_preview_window(qt_app):
     cache = _FakeCache()
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=2)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
     raw_paths = [fr"C:\wall\{idx}.jpg" for idx in range(5)]
 
     prefetcher.prefetch_paths(raw_paths)
     queued = prefetcher.register_scaled_requests(
-        [_scaled_request(raw_path, f"scaled-{idx}") for idx, raw_path in enumerate(raw_paths)]
+        [
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": f"scaled-{idx}",
+                "width": 2560,
+                "height": 1440,
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+            for idx, raw_path in enumerate(raw_paths)
+        ]
     )
 
     assert queued == 5
@@ -574,9 +506,7 @@ def test_prefetch_keeps_raw_backlog_for_full_preview_window(qt_app):
 
     assert raw_paths[0] in cache.store
     assert len(threads.io_callbacks) == 3
-    assert _submitted_scaled_keys(prefetcher) == ["scaled-0"]
-    assert threads.wait_callbacks == []
-    assert len(prefetcher._process_supervisor.callbacks) == 1
+    assert len(threads.compute_callbacks) == 1
     assert prefetcher.snapshot_state() == {
         "raw_inflight": 2,
         "raw_pending": 2,
@@ -585,12 +515,11 @@ def test_prefetch_keeps_raw_backlog_for_full_preview_window(qt_app):
     }
 
 
-
 def test_cleared_raw_prefetch_cannot_repopulate_cache_or_release_new_owner(qt_app):
     raw_path = r"C:\wall\stale-raw.jpg"
     cache = _FakeCache()
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=1)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
 
     prefetcher.prefetch_paths([raw_path])
     stale_callback = threads.io_callbacks[0][2]
@@ -599,7 +528,12 @@ def test_cleared_raw_prefetch_cannot_repopulate_cache_or_release_new_owner(qt_ap
     prefetcher.prefetch_paths([raw_path])
     current_callback = threads.io_callbacks[1][2]
 
-    stale_callback(SimpleNamespace(success=True, result=_solid_qimage(320, 180, "red")))
+    stale_callback(
+        SimpleNamespace(
+            success=True,
+            result=_solid_qimage(320, 180, "red"),
+        )
+    )
 
     assert raw_path not in cache.store
     assert prefetcher.snapshot_state()["raw_inflight"] == 1
@@ -611,64 +545,92 @@ def test_cleared_raw_prefetch_cannot_repopulate_cache_or_release_new_owner(qt_ap
     assert prefetcher.snapshot_state()["raw_inflight"] == 0
 
 
-
-def test_cleared_scaled_prefetch_abandons_old_correlation_and_preserves_new_owner(qt_app):
+def test_cleared_scaled_prefetch_cannot_repopulate_cache_or_release_new_owner(qt_app):
     raw_path = r"C:\wall\stale-scaled.jpg"
     scaled_key = "stale-scaled-result"
     cache = _FakeCache({raw_path: _solid_qimage(640, 360, "black")})
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=1)
-    request = _scaled_request(raw_path, scaled_key, width=320, height=180)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
+    request = {
+        "stats": {},
+        "path": raw_path,
+        "cache_key": scaled_key,
+        "width": 320,
+        "height": 180,
+        "display_mode": DisplayMode.FILL,
+        "use_lanczos": False,
+        "sharpen": False,
+    }
 
     prefetcher.register_scaled_requests([request])
-    supervisor = prefetcher._process_supervisor
-    stale_corr = supervisor.sent[0]["correlation_id"]
-    supervisor.queue_rgba_response(stale_corr)
+    stale_callback = threads.compute_callbacks[0][1]
 
     prefetcher.clear_inflight()
-    assert supervisor.abandoned == [(stale_corr, "prefetch_generation_cancelled")]
-    assert stale_corr not in supervisor.callbacks
-
     prefetcher.register_scaled_requests([request])
-    current_corr = supervisor.sent[1]["correlation_id"]
-    supervisor.queue_rgba_response(current_corr)
+    current_callback = threads.compute_callbacks[1][1]
 
-    supervisor.deliver(stale_corr)
+    stale_callback(
+        SimpleNamespace(
+            success=True,
+            result=(scaled_key, _solid_qimage(320, 180, "red")),
+        )
+    )
+
     assert scaled_key not in cache.store
     assert prefetcher.snapshot_state()["scaled_inflight"] == 1
 
-    supervisor.deliver(current_corr)
-    assert isinstance(cache.store[scaled_key], QImage)
+    current_image = _solid_qimage(320, 180, "blue")
+    current_callback(
+        SimpleNamespace(
+            success=True,
+            result=(scaled_key, current_image),
+        )
+    )
+
+    assert cache.store[scaled_key] is current_image
     assert prefetcher.snapshot_state()["scaled_inflight"] == 0
 
 
-
-def test_scaled_prefetch_cooldown_delays_dispatch_without_losing_intent(qt_app):
+def test_scaled_prefetch_registration_skips_during_transition_cooldown(qt_app):
     raw_path = r"C:\wall\one.jpg"
-    cache = _FakeCache({raw_path: _solid_qimage(64, 36, "blue")})
+    cache = _FakeCache()
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(
+    prefetcher = ImagePrefetcher(
         threads,
         cache,
         post_transition_delay_ms=10_000,
     )
     prefetcher.notify_transition_complete()
 
-    queued = prefetcher.register_scaled_requests([_scaled_request(raw_path, "one-scaled")])
+    prefetcher.register_scaled_requests(
+        [
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": "one-scaled",
+                "width": 2560,
+                "height": 1440,
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+        ]
+    )
 
-    assert queued == 1
-    assert prefetcher.snapshot_state()["scaled_inflight"] == 0
-    assert prefetcher.snapshot_state()["scaled_pending"] == 1
-    assert prefetcher._process_supervisor.sent == []
+    assert prefetcher.snapshot_state() == {
+        "raw_inflight": 0,
+        "raw_pending": 0,
+        "scaled_inflight": 0,
+        "scaled_pending": 0,
+    }
     assert threads.compute_callbacks == []
-
 
 
 def test_prefetch_registration_survives_transition_cooldown(qt_app):
     raw_path = r"C:\wall\one.jpg"
     cache = _FakeCache()
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(
+    prefetcher = ImagePrefetcher(
         threads,
         cache,
         post_transition_delay_ms=10_000,
@@ -676,7 +638,20 @@ def test_prefetch_registration_survives_transition_cooldown(qt_app):
     prefetcher.notify_transition_complete()
 
     prefetcher.prefetch_paths([raw_path])
-    queued = prefetcher.register_scaled_requests([_scaled_request(raw_path, "one-scaled")])
+    queued = prefetcher.register_scaled_requests(
+        [
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": "one-scaled",
+                "width": 2560,
+                "height": 1440,
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+        ]
+    )
 
     assert queued == 1
     assert prefetcher.snapshot_state() == {
@@ -686,15 +661,13 @@ def test_prefetch_registration_survives_transition_cooldown(qt_app):
         "scaled_pending": 1,
     }
     assert threads.io_callbacks == []
-    assert threads.wait_callbacks == []
     assert threads.compute_callbacks == []
-
 
 
 def test_prefetch_backlogs_are_count_and_byte_bounded(qt_app):
     cache = _FakeCache()
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(
+    prefetcher = ImagePrefetcher(
         threads,
         cache,
         max_concurrent=2,
@@ -711,16 +684,26 @@ def test_prefetch_backlogs_are_count_and_byte_bounded(qt_app):
 
     raw_path = raw_paths[0]
     cache.store[raw_path] = _solid_qimage(3840, 2160, "blue")
-    bounded = _make_prefetcher(
-        _FakeThreads(),
+    prefetcher._scaled_inflight.add("busy")
+    bounded = ImagePrefetcher(
+        threads,
         cache,
         max_concurrent=1,
         max_pending_requests=10,
         max_pending_scaled_bytes=20 * 1024 * 1024,
     )
-    _block_scaled_slot(bounded)
+    bounded._scaled_inflight.add("busy")
     requests = [
-        _scaled_request(raw_path, f"bounded-{idx}", width=2560, height=1440)
+        {
+            "stats": {},
+            "path": raw_path,
+            "cache_key": f"bounded-{idx}",
+            "width": 2560,
+            "height": 1440,
+            "display_mode": DisplayMode.FILL,
+            "use_lanczos": False,
+            "sharpen": False,
+        }
         for idx in range(4)
     ]
 
@@ -731,57 +714,60 @@ def test_prefetch_backlogs_are_count_and_byte_bounded(qt_app):
     assert budget["scaled_pending_bytes"] <= budget["max_pending_scaled_bytes"]
 
 
-
-def test_scaled_prefetch_worker_unavailable_never_falls_back_to_compute_pool(qt_app):
-    raw_path = r"C:\wall\worker-unavailable.jpg"
-    cache = _FakeCache({raw_path: _solid_qimage(320, 180, "blue")})
-    threads = _FakeThreads()
-    supervisor = _FakeSpeculativeSupervisor(running=False)
-    prefetcher = _make_prefetcher(
-        threads,
-        cache,
-        max_concurrent=1,
-        process_supervisor=supervisor,
-    )
-
-    assert prefetcher.register_scaled_requests(
-        [_scaled_request(raw_path, "worker-unavailable-scaled")]
-    ) == 0
-    assert supervisor.sent == []
-    assert threads.compute_callbacks == []
-    assert threads.wait_callbacks == []
-    assert prefetcher.snapshot_state()["scaled_pending"] == 0
-
-
-
-def test_scaled_prefetch_send_rejection_releases_single_flight_owner(qt_app):
-    raw_path = r"C:\wall\queue-reject.jpg"
-    cache = _FakeCache({raw_path: _solid_qimage(320, 180, "blue")})
-    threads = _FakeThreads()
-    supervisor = _FakeSpeculativeSupervisor(accept_sends=False)
-    prefetcher = _make_prefetcher(threads, cache, process_supervisor=supervisor)
-
-    assert prefetcher.register_scaled_requests(
-        [_scaled_request(raw_path, "queue-reject-scaled")]
-    ) == 1
-    assert prefetcher.snapshot_state()["scaled_inflight"] == 0
-    assert threads.compute_callbacks == []
-    assert threads.wait_callbacks == []
-
-
-
-def test_scaled_prefetch_process_response_becomes_detached_qimage(qt_app):
+def test_scaled_prefetch_compute_returns_qimage_not_qpixmap(qt_app):
     raw_path = r"C:\wall\worker-safe.jpg"
     cache = _FakeCache({raw_path: _solid_qimage(320, 180, "blue")})
     threads = _FakeThreads()
-    prefetcher = _make_prefetcher(threads, cache, max_concurrent=1)
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
 
     prefetcher.register_scaled_requests(
-        [_scaled_request(raw_path, "worker-safe-scaled", width=160, height=90)]
+        [
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": "worker-safe-scaled",
+                "width": 160,
+                "height": 90,
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+        ]
     )
-    _complete_scaled(prefetcher, threads, 0)
 
-    image = cache.store["worker-safe-scaled"]
+    compute, _callback = threads.compute_callbacks[0]
+    key, image = compute()
+    assert key == "worker-safe-scaled"
     assert isinstance(image, QImage)
-    assert not image.isNull()
+
+
+def test_scaled_prefetch_lanczos_stays_foreground_owned(qt_app):
+    raw_path = r"C:\wall\lanczos.jpg"
+    cache = _FakeCache({raw_path: _solid_qimage(320, 180, "blue")})
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
+    request = _scaled_request(raw_path, "lanczos-scaled", width=160, height=90)
+    request["use_lanczos"] = True
+    request["sharpen"] = True
+
+    assert prefetcher.register_scaled_requests([request]) == 1
     assert threads.compute_callbacks == []
+    assert prefetcher.snapshot_state()["scaled_inflight"] == 0
+    assert prefetcher.snapshot_state()["scaled_pending"] == 0
+    assert "lanczos-scaled" not in cache.store
+
+
+def test_scaled_prefetch_sharpen_only_stays_foreground_owned(qt_app):
+    raw_path = r"C:\wall\sharpen.jpg"
+    cache = _FakeCache({raw_path: _solid_qimage(320, 180, "blue")})
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
+    request = _scaled_request(raw_path, "sharpen-scaled", width=160, height=90)
+    request["use_lanczos"] = False
+    request["sharpen"] = True
+
+    assert prefetcher.register_scaled_requests([request]) == 1
+    assert threads.compute_callbacks == []
+    assert prefetcher.snapshot_state()["scaled_inflight"] == 0
+    assert prefetcher.snapshot_state()["scaled_pending"] == 0
+    assert "sharpen-scaled" not in cache.store

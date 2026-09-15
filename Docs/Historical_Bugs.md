@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -13,6 +13,7 @@ not automatic current architecture instructions.
 
 ## Open / Watchlist Records
 
+- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **[x] COMPLETELY FUCKED / OPEN**. High-refresh pressure resilience and drawn-state freshness remain materially worse than the smooth Qt Quick control despite healthy ~90 Hz logical production; current scheduler repair is awaiting installed proof.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
@@ -36,6 +37,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md)
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md)
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md)
 - [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md)

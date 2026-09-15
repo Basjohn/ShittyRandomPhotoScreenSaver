@@ -120,7 +120,8 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --verbose, -v - Enable full verbose log stream
     - --perf - Enable performance logging
     - --gpu-timing - Enable sampled owner-context GL timer queries (implies --perf)
-    - --usage - Enable low-cadence CPU/GPU/memory/thread/handle-attribution logging
+    - --usage - Enable low-cadence CPU/GPU/memory/thread logging
+    - --handle-attribution - Add explicit Windows handle-type sidecar (implies --usage)
     - --viz - Enable visualizer logging and diagnostics
     - --geo - Enable geometry/z-order/edit-layout diagnostics
     - --set - Enable settings mutation/import/schema diagnostics
@@ -138,7 +139,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing", "--diag-pair-warm-finish", "--diag-p4-stages", "--diag-p4-no-perf-hud", "--usage", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing", "--diag-pair-warm-finish", "--diag-p4-stages", "--diag-p4-no-perf-hud", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
         "--noupdates",
         "--viz-diagnostics", "--viz-diag",
         "--fresh", "--devcurve", "--devsteam", "--devstats",
@@ -411,13 +412,19 @@ def _run_missing_sources_onboarding(app: QApplication, settings: SettingsManager
     return configured
 
 
-def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
+def run_screensaver(
+    app: QApplication,
+    *,
+    usage_enabled: bool = False,
+    handle_attribution_enabled: bool = False,
+) -> int:
     """
     Run the screensaver.
     
     Args:
         app: Qt application instance
         usage_enabled: Start opt-in low-cadence resource telemetry.
+        handle_attribution_enabled: Admit the heavyweight Windows handle sidecar.
     
     Returns:
         Exit code
@@ -565,7 +572,7 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
                 from core.performance.resource_metrics import collect_resource_accounting
 
                 handle_sidecar = None
-                if os.name == "nt":
+                if handle_attribution_enabled and os.name == "nt":
                     from core.performance.windows_handle_attribution import (
                         WindowsHandleAttributionSidecar,
                     )
@@ -728,6 +735,7 @@ def main(*, entrypoint: str = "main"):
     verbose_mode = logging_profile.verbose
     perf_mode = logging_profile.perf
     usage_mode = logging_profile.usage
+    handle_attribution_mode = logging_profile.handle_attribution
     setup_logging(
         debug=debug_mode,
         verbose=verbose_mode,
@@ -936,7 +944,11 @@ def main(*, entrypoint: str = "main"):
 
                 profiler = cProfile.Profile()
                 profiler.enable()
-                exit_code = run_screensaver(app, usage_enabled=usage_mode)
+                exit_code = run_screensaver(
+                    app,
+                    usage_enabled=usage_mode,
+                    handle_attribution_enabled=handle_attribution_mode,
+                )
                 profiler.disable()
                 try:
                     profile_path = get_log_dir() / "screensaver_run.pstats"
@@ -945,7 +957,11 @@ def main(*, entrypoint: str = "main"):
                 except Exception:
                     logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
             else:
-                exit_code = run_screensaver(app, usage_enabled=usage_mode)
+                exit_code = run_screensaver(
+                    app,
+                    usage_enabled=usage_mode,
+                    handle_attribution_enabled=handle_attribution_mode,
+                )
             
         elif mode == ScreensaverMode.CONFIG:
             logger.info("Starting configuration dialog")

@@ -725,6 +725,7 @@ class LoggingBootstrapProfile:
     perf: bool = False
     gpu_timing: bool = False
     usage: bool = False
+    handle_attribution: bool = False
     viz: bool = False
     viz_diag: bool = False
     geo: bool = False
@@ -749,6 +750,9 @@ def resolve_logging_bootstrap_profile(
             perf=True,
             gpu_timing=True,
             usage=True,
+            # Deep Windows handle-type attribution is intentionally not part of
+            # diagnostic-all; it owns a helper process and must be explicit.
+            handle_attribution=False,
             viz=True,
             viz_diag=True,
             geo=True,
@@ -759,12 +763,16 @@ def resolve_logging_bootstrap_profile(
         )
     viz = "--viz" in args
     gpu_timing = "--gpu-timing" in args
+    handle_attribution = "--handle-attribution" in args
     return LoggingBootstrapProfile(
         debug="--debug" in args or "-d" in args,
         verbose="--verbose" in args or "-v" in args,
         perf="--perf" in args or gpu_timing,
         gpu_timing=gpu_timing,
-        usage="--usage" in args,
+        # Explicit handle attribution needs the sampler that owns/publishes its
+        # low-cadence snapshots, but ordinary --usage must not imply the helper.
+        usage="--usage" in args or handle_attribution,
+        handle_attribution=handle_attribution,
         viz=viz,
         viz_diag=viz or "--viz-diagnostics" in args or "--viz-diag" in args,
         geo="--geo" in args,
@@ -3073,7 +3081,7 @@ def setup_logging(
         _STEAM_LOGGING_ENABLED,
     )
     root_logger.info(
-        "Specific logs available: always-on Qt/QML=screensaver_qml.log, debug/verbose native faults=native_faults.log, --perf=screensaver_perf.log, --gpu-timing=sampled GL timer queries + screensaver_perf.log, --usage=screensaver_usage.log+screensaver_handles.log (Windows attribution), --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
+        "Specific logs available: always-on Qt/QML=screensaver_qml.log, debug/verbose native faults=native_faults.log, --perf=screensaver_perf.log, --gpu-timing=sampled GL timer queries + screensaver_perf.log, --usage=screensaver_usage.log, --handle-attribution=screensaver_usage.log+screensaver_handles.log (Windows attribution), --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
     )
     active_specific_logs: list[str] = []
     if _PERF_METRICS_ENABLED:

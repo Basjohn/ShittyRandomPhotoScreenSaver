@@ -74,6 +74,7 @@ Existing sidecars remain the first destinations for their domains:
 - `--perf` → `screensaver_perf.log`, `perf_widgets.log`
 - `--gpu-timing` → sampled owner-context GL timing in `screensaver_perf.log` and implies `--perf`
 - `--usage` → `screensaver_usage.log`
+- `--handle-attribution` → `screensaver_usage.log` + `screensaver_handles.log` (Windows helper process; implies `--usage`)
 - `--viz` → `screensaver_spotify_vis.log`, `screensaver_spotify_vol.log`
 - `--geo` → `screensaver_geometry.log`
 - `--set` → `screensaver_settings.log`

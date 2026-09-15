@@ -943,7 +943,6 @@ def on_sources_changed(engine: ScreensaverEngine) -> None:
                         thread_manager=engine.thread_manager,
                         cache=engine._image_cache,
                         max_concurrent=2,
-                        process_supervisor=engine._process_supervisor,
                     )
                     logger.info("Prefetcher restarted with updated queue")
                 except Exception as e:

@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -20,6 +20,7 @@ Rehome surviving regression coverage before deleting an old owner.
 
 ## Current Open / Watchlist
 
+- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **[x] COMPLETELY FUCKED / OPEN**. Smooth-control/current comparisons show healthy ~90 Hz Bubble production can still reach Qt Quick one or more presentation opportunities late under pressure; current best-effort scheduler experiment is awaiting installed proof.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
@@ -27,7 +28,7 @@ Rehome surviving regression coverage before deleting an old owner.
 
 ## Active / Pending Acceptance
 
-- [R-86 — Forced VSync hypothesis for Qt Quick pacing](R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) — **SOURCE REPAIR AUTHORED / AWAITING WINDOWS VALIDATION**.
+- [R-86 — Forced VSync hypothesis for Qt Quick pacing](R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) — **REJECTED / ROLLED BACK**. Installed interval-1 validation was materially worse; production remains on the release-era interval-0 policy.
 - [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **SOLVED**. 58-minute Windows soak preserved scaled-prefetch liveness under sustained eviction pressure.
 - [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **SOLVED**. 58-minute Windows soak showed no zero-delay recursive re-arm storm or request multiplication.
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md) — **CORRECTNESS PRESERVED / AWAITING VALIDATION**.
@@ -41,6 +42,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
+- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md)
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md)
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md)
 - [R-84 — Main-Process Handle Growth Survived PDH Cardinality Attribution](R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md)

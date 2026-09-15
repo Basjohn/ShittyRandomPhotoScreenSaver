@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 
 ## Architecture decision
 
@@ -100,7 +100,7 @@ Do not infer a Qt Quick surface/pacing policy from documentation or pre-Quick hi
 
 Likewise, do not tune a GUI ``QTimer`` as a bandage. Qt Quick frame-pacing work must distinguish **logical work cadence**, **scene invalidation/update demand**, and **physical presentation**, and must be A/B tested against the known-good 5.0.0/5.0.1 Quick baseline. Never reduce Visualizer logical freshness/reactivity to make a display-pacing graph look cleaner. Any future removal/replacement of ``QuickFramePacer`` is a separate architecture change and stays ``[~] AWAITING VALIDATION`` until installed evidence proves equivalent transition/widget-animation liveness and improved frame spacing across single- and mixed-refresh multi-display cases.
 
-Qt Quick hot paths are scarce budget: never add dormant per-frame Python/logging/telemetry on ``frameSwapped``/sync/render edges, hidden ``Repeater`` delegate forests, or always-live effect/layer work without measured need. Keep deep render-loop timing behind an explicit diagnostic sidecar with zero normal-runtime cost. Judge smoothness by frame-spacing tails as well as average FPS; CUSTOM Edit FPS is a different demand regime, not a steady-runtime target.
+Qt Quick hot paths are scarce budget: never add dormant per-frame Python/logging/telemetry on ``frameSwapped``/sync/render edges, hidden ``Repeater`` delegate forests, or always-live effect/layer work without measured need. Keep deep render-loop timing behind an explicit diagnostic sidecar with zero normal-runtime cost. Judge smoothness by frame-spacing tails **and fresh-state age**, not average FPS alone; CUSTOM Edit FPS is a different demand regime, not a steady-runtime target. `ThreadManager` ``TaskPriority`` is currently metadata on a FIFO ``ThreadPoolExecutor``; never treat ``LOW`` as Qt/Windows scheduling priority. Best-effort CPU speculation must not use a heavyweight helper process or normal-priority shared COMPUTE lane by assumption: use the ThreadManager background lane only when semantics tolerate delay, keep it one-thread/bounded/QImage-only, and fail closed on Windows if native demotion is unavailable.
 
 ## Visualizer preset / technical-settings authority guardrail
 
