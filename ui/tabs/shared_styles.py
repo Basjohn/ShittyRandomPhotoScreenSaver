@@ -15,7 +15,7 @@ except Exception:  # pragma: no cover - PySide test/import fallback
     Shiboken = None  # type: ignore[assignment]
 
 from PySide6.QtCore import QSignalBlocker, Signal, Qt
-from PySide6.QtGui import QFontDatabase, QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -36,24 +36,7 @@ from ui.settings_theme_runtime import (
 from ui.settings_theme_spec import SettingsThemeSpec
 from ui.settings_theme_qss import render_qss_color, render_qss_rgba255
 
-# Ensure UI resources (e.g., circle checkbox SVGs) are registered even when
-# shared_styles is imported before ui/__init__.py. Safe no-op if already loaded.
-try:  # pragma: no cover - defensive import
-    from ui.resources import assets_rc  # noqa: F401
-except Exception:  # pragma: no cover - fallback when resources unavailable
-    assets_rc = None  # type: ignore
-
-
-_JOST_FONT_PATHS = (
-    ":/ui/assets/fonts/Jost-Regular.ttf",
-    ":/ui/assets/fonts/Jost-SemiBold.ttf",
-    ":/ui/assets/fonts/Jost-Bold.ttf",
-)
-_INTER_FONT_PATHS = (
-    ":/ui/assets/fonts/Inter-VariableFont_opsz,wght.ttf",
-    ":/ui/assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf",
-)
-_FONTS_REGISTERED = False
+from ui.font_registration import ensure_custom_fonts
 
 _LIVE_GROUP_BOXES: weakref.WeakSet = weakref.WeakSet()
 _LIVE_RECOMMENDED_SLIDERS: weakref.WeakSet = weakref.WeakSet()
@@ -156,21 +139,6 @@ def _theme_qss(template: str) -> str:
     return resolved
 
 
-def _ensure_fonts_registered() -> None:
-    global _FONTS_REGISTERED
-    if _FONTS_REGISTERED:
-        return
-    if QApplication.instance() is None:
-        return
-    for path in _JOST_FONT_PATHS:
-        QFontDatabase.addApplicationFont(path)
-    for path in _INTER_FONT_PATHS:
-        QFontDatabase.addApplicationFont(path)
-    _FONTS_REGISTERED = True
-
-
-def ensure_custom_fonts() -> None:
-    _ensure_fonts_registered()
 
 
 FORM_LABEL_HEIGHT = 34

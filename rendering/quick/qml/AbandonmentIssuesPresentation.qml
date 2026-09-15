@@ -158,12 +158,7 @@ OverlayWidget {
             SequentialAnimation {
                 id: archiveTransition
 
-                // Drive continuous frames while only changing values fade. The
                 // archive shell itself never disappears during a game rotation.
-                onRunningChanged: {
-                    if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
-                        widgetFrameDemand.setAnimationActive(archiveTransition, running)
-                }
 
                 NumberAnimation {
                     target: abandonmentRoot

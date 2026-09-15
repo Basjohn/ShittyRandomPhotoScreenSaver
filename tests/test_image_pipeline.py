@@ -437,7 +437,7 @@ def test_worker_success_does_not_decode_or_cache_redundant_raw(
     assert len(puts) == 1
     assert "|scaled:" in puts[0]
     assert engine._cache_runtime_stats["worker_requests"] == 1
-    assert engine._cache_runtime_stats["worker_fallbacks"] == 0
+    assert engine._cache_runtime_stats["worker_authority_failures"] == 0
 
 
 def test_worker_failure_is_classified_and_never_runs_parent_fallback(
@@ -487,9 +487,7 @@ def test_worker_failure_is_classified_and_never_runs_parent_fallback(
 
     assert store == {}
     assert engine._cache_runtime_stats["worker_requests"] == 1
-    # Keep the historical counter name for log-schema continuity. It now means
-    # a forbidden fallback condition was observed, not that fallback executed.
-    assert engine._cache_runtime_stats["worker_fallbacks"] == 1
+    assert engine._cache_runtime_stats["worker_authority_failures"] == 1
 
 
 def test_worker_candidate_rejection_remains_retryable_without_parent_fallback(
@@ -528,7 +526,7 @@ def test_worker_candidate_rejection_remains_retryable_without_parent_fallback(
         False,
     ) is None
     assert engine._cache_runtime_stats["worker_requests"] == 1
-    assert engine._cache_runtime_stats["worker_fallbacks"] == 0
+    assert engine._cache_runtime_stats["worker_authority_failures"] == 0
 
 
 def test_previous_async_reports_rejection_when_submit_and_fallback_fail(

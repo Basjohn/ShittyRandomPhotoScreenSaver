@@ -52,10 +52,7 @@ from core.weather_preparation import (
 import weather.open_meteo_provider as open_meteo_provider_module
 from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
-from widgets.service_widget_runtime import (
-    get_automatic_startup_refresh_decision,
-    stop_overlay_timer_pair,
-)
+from widgets.service_widget_runtime import get_automatic_startup_refresh_decision
 
 logger = get_logger(__name__)
 
@@ -84,7 +81,6 @@ class WeatherRuntimeService:
         self._retry_token = 0
         self._retry_pending = False
 
-        self._update_timer = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
 
         self._running = False
@@ -363,12 +359,10 @@ class WeatherRuntimeService:
     # ------------------------------------------------------------------ #
     def _stop_refresh_timers(self, *, delete_qtimers: bool) -> None:
         self._startup_refresh_token += 1
-        stop_overlay_timer_pair(
-            self,
-            handle_attr="_update_timer_handle",
-            qtimer_attr="_update_timer",
-            delete_qtimers=delete_qtimers,
-        )
+        handle = self._update_timer_handle
+        if handle is not None:
+            handle.stop()
+            self._update_timer_handle = None
 
     def _stop_runtime_timers(self, *, delete_qtimers: bool) -> None:
         self._stop_refresh_timers(delete_qtimers=delete_qtimers)
@@ -442,11 +436,6 @@ class WeatherRuntimeService:
             description="Weather runtime refresh",
         )
         self._update_timer_handle = handle
-        try:
-            self._update_timer = getattr(handle, "_timer", None)
-        except Exception as e:
-            logger.debug("[WEATHER] Exception suppressed: %s", e)
-            self._update_timer = None
 
     def _on_periodic_refresh_timeout(self) -> None:
         if self._retired or not self._running:

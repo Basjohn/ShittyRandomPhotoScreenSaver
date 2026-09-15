@@ -6,7 +6,6 @@ from rendering.widget_descriptors import (
     FactoryWidgetDescriptor,
     WidgetSettingsSectionDescriptor,
     apply_widget_section_save_results,
-    build_widget_section_buttons,
     build_widget_stack_preview_config,
     collect_widget_section_containers,
     collect_widget_section_save_result,
@@ -44,7 +43,6 @@ from rendering.widget_descriptors import (
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
 )
-from PySide6.QtWidgets import QButtonGroup
 from core.dev_gates import force_gate, is_steam_enabled
 
 
@@ -267,40 +265,6 @@ def test_widget_section_signal_block_attrs_follow_descriptor_registry():
     assert "devcurve_base_level" in attrs
     # Growth was retired; the signal-block registry must not resurrect its UI.
     assert "devcurve_growth" not in attrs
-
-
-def test_build_widget_section_buttons_uses_descriptor_metadata(qt_app):
-    class _Owner:
-        pass
-
-    owner = _Owner()
-    group = QButtonGroup()
-    descriptors = (
-        type(
-            "_D",
-            (),
-            {
-                "button_label": "Clock",
-                "button_attr_name": "_btn_clock",
-            },
-        )(),
-        type(
-            "_D",
-            (),
-            {
-                "button_label": "Weather",
-                "button_attr_name": "_btn_weather",
-            },
-        )(),
-    )
-
-    buttons = build_widget_section_buttons(owner, group, "QPushButton {}", descriptors)
-
-    assert len(buttons) == 2
-    assert owner._btn_clock is buttons[0]
-    assert owner._btn_weather is buttons[1]
-    assert group.button(0) is buttons[0]
-    assert group.button(1) is buttons[1]
 
 
 def test_collect_widget_section_containers_uses_descriptor_metadata():

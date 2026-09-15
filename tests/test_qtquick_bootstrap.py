@@ -111,8 +111,8 @@ def test_quick_bootstrap_keeps_installed_release_era_uncapped_policy():
     assert "QUICK_SWAP_INTERVAL = 0" in source
     assert "surface_format.setSwapInterval(QUICK_SWAP_INTERVAL)" in source
     # Installed mixed-refresh validation rejected forcing interval 1. Quick and
-    # the generic helper currently agree on interval 0; future presentation
-    # changes require a new installed A/B rather than a documentation-only swap.
+    # the generic helper currently agree on interval 0; any future presentation
+    # change requires installed frame-pacing/freshness evidence, not docs alone.
     assert "swap_interval = 0" in generic
 
 

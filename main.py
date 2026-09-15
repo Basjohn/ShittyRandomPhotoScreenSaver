@@ -19,7 +19,7 @@ from rendering.quick.bootstrap import (
 # The render loop and QML import root must be fixed before importing Qt.
 configure_quick_environment()
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImageReader, QIcon
 from core.logging.logger import (
@@ -46,11 +46,33 @@ from core.settings.persistence import (
 )
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
-from ui.settings_dialog import SettingsDialog
-from ui.system_tray import ScreensaverTrayIcon
 from versioning import APP_VERSION, APP_EXE_NAME
 
 logger = get_logger(__name__)
+
+
+def _settings_dialog_class():
+    """Resolve QWidget Settings only on an explicit Settings path."""
+
+    from ui.settings_dialog import SettingsDialog
+
+    return SettingsDialog
+
+
+def _message_box_class():
+    """Resolve QMessageBox only on an explicit dialog/error path."""
+
+    from PySide6.QtWidgets import QMessageBox
+
+    return QMessageBox
+
+
+def _screensaver_tray_icon_class():
+    """Resolve the optional QWidget system-tray helper only when enabled."""
+
+    from ui.system_tray import ScreensaverTrayIcon
+
+    return ScreensaverTrayIcon
 
 # Windows timer resolution management for smoother animations.
 # Default Windows timer resolution is ~15.6ms which causes timer coalescing
@@ -385,11 +407,11 @@ def _run_missing_sources_onboarding(app: QApplication, settings: SettingsManager
     app.setQuitOnLastWindowClosed(False)
 
     try:
-        dialog = SettingsDialog(settings, animations)
+        dialog = _settings_dialog_class()(settings, animations)
         dialog.exec()
     except Exception as exc:
         logger.exception("Failed to open source onboarding Settings: %s", exc)
-        QMessageBox.critical(
+        _message_box_class().critical(
             None,
             "Configuration Error",
             f"Failed to open settings:\n{exc}",
@@ -441,8 +463,9 @@ def run_screensaver(
     
     if not folders and not rss_feeds:
         logger.warning("No image sources configured - opening settings dialog")
-        msg = QMessageBox(
-            QMessageBox.Icon.Information,
+        MessageBox = _message_box_class()
+        msg = MessageBox(
+            MessageBox.Icon.Information,
             "No Sources Configured",
             "No image sources have been configured.\n\n"
             "Please add folders or RSS feeds in the settings dialog.\n\n"
@@ -478,8 +501,9 @@ def run_screensaver(
         if not engine.initialize():
             logger.error("Failed to initialize screensaver engine")
             logger.warning("Opening settings dialog to configure sources")
-            msg2 = QMessageBox(
-                QMessageBox.Icon.Warning,
+            MessageBox = _message_box_class()
+            msg2 = MessageBox(
+                MessageBox.Icon.Warning,
                 "Configuration Required",
                 "Failed to initialize screensaver.\n\n"
                 "Please configure image sources in the settings dialog.\n\n"
@@ -496,8 +520,9 @@ def run_screensaver(
         if not engine.start():
             logger.error("Failed to start screensaver engine")
             logger.warning("Opening settings dialog")
-            msg3 = QMessageBox(
-                QMessageBox.Icon.Warning,
+            MessageBox = _message_box_class()
+            msg3 = MessageBox(
+                MessageBox.Icon.Warning,
                 "Startup Failed",
                 "Failed to start screensaver.\n\n"
                 "Please check your configuration.\n\n"
@@ -609,7 +634,7 @@ def run_screensaver(
         tray_icon = None
         if interaction_mode_enabled:
             try:
-                tray_icon = ScreensaverTrayIcon(app, app.windowIcon())
+                tray_icon = _screensaver_tray_icon_class()(app, app.windowIcon())
             except Exception:
                 logger.debug("Failed to create system tray icon", exc_info=True)
 
@@ -670,7 +695,7 @@ def run_screensaver(
         
     except Exception as e:
         logger.exception(f"Failed to start screensaver engine: {e}")
-        QMessageBox.critical(
+        _message_box_class().critical(
             None,
             "Screensaver Error",
             f"Failed to start screensaver:\n{e}"
@@ -698,7 +723,7 @@ def run_config(app: QApplication) -> int:
     
     # Create and show settings dialog
     try:
-        dialog = SettingsDialog(settings, animations)
+        dialog = _settings_dialog_class()(settings, animations)
         dialog.show()
         
         logger.info("Configuration dialog opened - entering event loop")
@@ -706,7 +731,7 @@ def run_config(app: QApplication) -> int:
         
     except Exception as e:
         logger.exception(f"Failed to open configuration dialog: {e}")
-        QMessageBox.critical(
+        _message_box_class().critical(
             None,
             "Configuration Error",
             f"Failed to open settings:\n{e}"
@@ -928,7 +953,7 @@ def main(*, entrypoint: str = "main"):
     logger.debug("High DPI scaling enabled")
 
     # Register bundled custom fonts before any widgets are created
-    from ui.tabs.shared_styles import ensure_custom_fonts
+    from ui.font_registration import ensure_custom_fonts
     ensure_custom_fonts()
     logger.debug("Custom fonts registered")
 

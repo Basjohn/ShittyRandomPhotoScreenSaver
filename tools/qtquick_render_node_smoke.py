@@ -1580,7 +1580,7 @@ class _SmokeRunner(QObject):
             for probe in self._probes:
                 # Keep a real continuous Quick demand active across the
                 # hide/show stress without inventing a visualizer polling owner.
-                probe.runtime.frame_pacer.set_widget_animation_active(True)
+                probe.runtime.frame_pacer.set_transition_active(True)
                 before = probe.telemetry.snapshot()
                 geometry = probe.window.geometry()
                 self._active_hide_records[id(probe)] = {
@@ -1842,7 +1842,7 @@ class _SmokeRunner(QObject):
             fallback_screen = self._current_screen_by_index[1]
             # Keep a real continuous Quick demand active during displacement;
             # visualizer presentation itself is publication-driven.
-            displaced.runtime.frame_pacer.set_widget_animation_active(True)
+            displaced.runtime.frame_pacer.set_transition_active(True)
             self._topology_displacement = {
                 "generation": self._generation,
                 "displaced_screen_index": displaced.index,
@@ -1895,7 +1895,7 @@ class _SmokeRunner(QObject):
             and displaced.runtime.phase.value == "paused"
             and pacer_state.get("paused")
             and not pacer_state.get("active")
-            and pacer_state.get("demands") == ["widget_animation"]
+            and pacer_state.get("demands") == ["transition"]
             and not input_state.get("admission_open")
             and scene_state.get("scene_graph_invalidated")
             and displaced.window.screen() is fallback_screen
@@ -2735,7 +2735,7 @@ class _SmokeRunner(QObject):
             if (
                 not hidden_pacer.get("paused")
                 or hidden_pacer.get("active")
-                or hidden_pacer.get("demands") != ["widget_animation"]
+                or hidden_pacer.get("demands") != ["transition"]
             ):
                 errors.append(f"{cycle_prefix} did not preserve paused frame demand")
             if not cycle.get("qml_root_preserved_while_hidden"):
@@ -2757,7 +2757,7 @@ class _SmokeRunner(QObject):
             if (
                 resumed_pacer.get("paused")
                 or not resumed_pacer.get("active")
-                or resumed_pacer.get("demands") != ["widget_animation"]
+                or resumed_pacer.get("demands") != ["transition"]
             ):
                 errors.append(f"{cycle_prefix} did not resume frame demand")
             if not cycle.get("qml_root_preserved_after_resume"):

@@ -647,10 +647,6 @@ OverlayWidget {
 
                 SequentialAnimation {
                     id: systemMuteFeedback
-                    onRunningChanged: {
-                        if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
-                            widgetFrameDemand.setAnimationActive(systemMuteFeedback, running)
-                    }
                     NumberAnimation {
                         target: systemMuteButton
                         property: "feedbackOpacity"

@@ -17,9 +17,13 @@ ROOT = Path(__file__).resolve().parents[1]
 class _Window(QObject):
     frameSwapped = Signal()
 
-    def __init__(self) -> None:
+    def __init__(self, *, visible: bool = True) -> None:
         super().__init__()
         self.update_request_count = 0
+        self._visible = bool(visible)
+
+    def isVisible(self) -> bool:  # noqa: N802 - mirrors QWindow API
+        return self._visible
 
     def requestUpdate(self) -> None:  # noqa: N802 - mirrors QWindow API
         self.update_request_count += 1
@@ -55,6 +59,21 @@ def test_pacer_has_no_python_timer_or_visualizer_demand() -> None:
         assert forbidden not in source
     assert not hasattr(QuickFrameDemand, "VISUALIZER")
 
+
+
+def test_hidden_window_starts_paused_and_resume_seeds_first_real_update() -> None:
+    window = _Window(visible=False)
+    pacer = QuickFramePacer(window, 60.0)
+    pacer.set_transition_active(True)
+
+    assert pacer.describe()["paused"] is True
+    assert pacer.describe()["update_pending"] is False
+    assert window.update_request_count == 0
+
+    window._visible = True
+    assert pacer.resume() is True
+    assert window.update_request_count == 1
+    assert pacer.describe()["update_pending"] is True
 
 def test_first_continuous_demand_seeds_one_coalesced_qt_update_and_is_idempotent() -> None:
     pacer, window = _pacer(165.0)
@@ -96,17 +115,6 @@ def test_removing_last_demand_stops_chain_after_any_already_queued_frame() -> No
     assert pacer.describe()["update_pending"] is False
 
 
-def test_transition_and_widget_animation_demands_are_independent() -> None:
-    pacer, window = _pacer()
-    pacer.set_transition_active(True)
-    pacer.set_widget_animation_active(True)
-    pacer.set_transition_active(False)
-    assert pacer.demands == QuickFrameDemand.WIDGET_ANIMATION
-    assert window.update_request_count == 1
-    pacer.set_widget_animation_active(False)
-    assert pacer.demands == QuickFrameDemand.NONE
-
-
 def test_pause_clears_pending_admission_and_resume_seeds_fresh_update() -> None:
     pacer, window = _pacer(60.0)
     pacer.set_transition_active(True)
@@ -132,7 +140,7 @@ def test_stop_clears_pending_admission_and_allows_reuse() -> None:
     pacer.stop()
     assert pacer.is_active() is False
     assert pacer.describe()["update_pending"] is False
-    pacer.set_widget_animation_active(True)
+    pacer.set_transition_active(True)
     assert window.update_request_count == 2
 
 
@@ -167,5 +175,4 @@ def test_only_supported_nonzero_demand_bits_are_accepted() -> None:
 def test_describe_names_only_actual_continuous_quick_demands() -> None:
     pacer, _window = _pacer()
     pacer.set_transition_active(True)
-    pacer.set_widget_animation_active(True)
-    assert pacer.describe()["demands"] == ["transition", "widget_animation"]
+    assert pacer.describe()["demands"] == ["transition"]

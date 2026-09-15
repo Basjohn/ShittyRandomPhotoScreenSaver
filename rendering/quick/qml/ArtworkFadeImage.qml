@@ -126,15 +126,6 @@ Item {
         _displayedSource = ""
     }
 
-    // Raise a continuous-frame pacer demand while a fade runs, event-driven, so
-    // the threaded scene renders the crossfade instead of only its first/last
-    // frame. `typeof` guard keeps smoke hosts/tests that lack the context object
-    // working. See rendering/quick/widget_frame_demand.py.
-    function _demandFrames(anim, on) {
-        if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
-            widgetFrameDemand.setAnimationActive(anim, on)
-    }
-
     function _requestSource(value) {
         const requested = String(value || "")
         if (!_componentReady) {
@@ -241,7 +232,6 @@ Item {
         duration: fadeImage.fadeInDuration
         easing.type: Easing.InOutSine
         onFinished: fadeImage._commitIncoming()
-        onRunningChanged: fadeImage._demandFrames(fadeIn, running)
     }
 
     NumberAnimation {
@@ -250,6 +240,5 @@ Item {
         duration: fadeImage.fadeOutDuration
         easing.type: Easing.InOutSine
         onFinished: fadeImage._clearDisplayed()
-        onRunningChanged: fadeImage._demandFrames(fadeOut, running)
     }
 }

@@ -343,7 +343,7 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
             if isinstance(cache_flow, dict):
                 logger.info(
                     "[PERF] [CACHE] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
-                    "scaled_misses=%d worker_requests=%d worker_fallbacks=%d "
+                    "scaled_misses=%d worker_requests=%d worker_authority_failures=%d "
                     "scaled_prefetch_requests=%d "
                     "scaled_prefetch_completed=%d scaled_derivations=%d "
                     "raw_released_after_scaled=%d raw_prefetch_paths=%d "
@@ -355,7 +355,7 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
                     int(cache_flow.get("scaled_hits", 0)),
                     int(cache_flow.get("scaled_misses", 0)),
                     int(cache_flow.get("worker_requests", 0)),
-                    int(cache_flow.get("worker_fallbacks", 0)),
+                    int(cache_flow.get("worker_authority_failures", 0)),
                     int(cache_flow.get("scaled_prefetch_requests", 0)),
                     int(cache_flow.get("scaled_prefetch_completed", 0)),
                     int(cache_flow.get("scaled_derivations", 0)),
