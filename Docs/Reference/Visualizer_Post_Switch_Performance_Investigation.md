@@ -30,6 +30,7 @@ Do **not** turn the rapid 25-switch burst into a backlog item merely because it 
 Retain only tooling that is useful later without burdening ordinary runtime:
 
 - `tools/visualizer_switch_abc_harness.py` and the opt-in in-app ABC driver remain as explicit operator diagnostics;
+- the historical `pacer_skip_pct` field is **legacy/informational only after CHK10**. The Python deadline pacer no longer exists; the harness must never use that permanently-unavailable metric as a causal regression oracle. Current `--perf` instead exposes native QML animation-tick Hz and actual background update-request Hz for transition-driver validation;
 - `--viz-switch-telemetry` retains boundary-only render-host lifecycle/ownership telemetry, allocated only when explicitly admitted;
 - R-80 window-local event-loop scoring remains under `--perf`/ABC diagnostics so future causal windows cannot reuse stale rolling history;
 - repeated-switch lifecycle tests remain because they prove bounded ownership/retirement invariants.

@@ -211,15 +211,43 @@ def test_render_trace_splits_sync_wait_from_python_gl_work() -> None:
     node = (root / "rendering" / "quick" / "visualizer" / "node.py").read_text(
         encoding="utf-8"
     )
+    host = (root / "rendering" / "quick" / "visualizer" / "render_host.py").read_text(
+        encoding="utf-8"
+    )
     sync_tail = item.split("node.synchronize(", 1)[1].split("self._retirement.set_node", 1)[0]
     assert "FrameTraceEvent.QUICK_SYNC_READY" in sync_tail
     render_body = node.split("def render(", 1)[1].split("def releaseResources", 1)[0]
     assert "FrameTraceEvent.RENDER_BEGIN" in render_body
     assert render_body.index("FrameTraceEvent.RENDER_BEGIN") < render_body.index(
+        "FrameTraceEvent.RENDER_PREP_READY"
+    )
+    assert render_body.index("FrameTraceEvent.RENDER_PREP_READY") < render_body.index(
+        "FrameTraceEvent.RENDER_HOST_BEGIN"
+    )
+    assert render_body.index("FrameTraceEvent.RENDER_HOST_BEGIN") < render_body.index(
         "self._render_host.render("
     )
     assert render_body.index("self._render_host.render(") < render_body.index(
+        "FrameTraceEvent.RENDER_HOST_READY"
+    )
+    assert render_body.index("FrameTraceEvent.RENDER_HOST_READY") < render_body.index(
         "FrameTraceEvent.RENDER_DRAW"
+    )
+
+    host_body = host.split("def render(", 1)[1].split(
+        "def release_inactive_implementations", 1
+    )[0]
+    assert host_body.index("_InheritedGlState.capture()") < host_body.index(
+        "FrameTraceEvent.RENDER_GL_STATE_READY"
+    )
+    assert host_body.index("FrameTraceEvent.RENDER_GL_STATE_READY") < host_body.index(
+        "FrameTraceEvent.RENDER_MODE_BEGIN"
+    )
+    assert host_body.index("FrameTraceEvent.RENDER_MODE_BEGIN") < host_body.index(
+        "implementation.render(frame)"
+    )
+    assert host_body.index("implementation.render(frame)") < host_body.index(
+        "FrameTraceEvent.RENDER_MODE_READY"
     )
 
 
@@ -261,10 +289,71 @@ def test_report_timeline_exposes_load_windows_without_runtime_overhead(tmp_path:
     assert "timeline_window_seconds=1" in out
     assert "screen=0 timeline t=0-1s publications=1" in out
     assert "screen=0 timeline t=1-2s publications=1" in out
-    assert "sync_ready_render_begin_p95_ms=2.000" in out
-    assert "render_begin_draw_p95_ms=2.000" in out
-    assert "sync_ready_render_begin_p95_ms=18.000" in out
-    assert "render_begin_draw_p95_ms=20.000" in out
+    assert "sync_work_n=1 sync_work_median_ms=1.000 sync_work_p95_ms=1.000" in out
+    assert (
+        "sync_ready_render_begin_n=1 sync_ready_render_begin_median_ms=2.000 "
+        "sync_ready_render_begin_p95_ms=2.000"
+    ) in out
+    assert (
+        "render_begin_draw_n=1 render_begin_draw_median_ms=2.000 "
+        "render_begin_draw_p95_ms=2.000"
+    ) in out
+    assert "sync_work_n=1 sync_work_median_ms=2.000 sync_work_p95_ms=2.000" in out
+    assert (
+        "sync_ready_render_begin_n=1 sync_ready_render_begin_median_ms=18.000 "
+        "sync_ready_render_begin_p95_ms=18.000"
+    ) in out
+    assert (
+        "render_begin_draw_n=1 render_begin_draw_median_ms=20.000 "
+        "render_begin_draw_p95_ms=20.000"
+    ) in out
+
+
+def test_report_splits_render_body_subphases(tmp_path: Path) -> None:
+    trace_path = tmp_path / "trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    rows = [
+        (1_000_000_000, 1, 0, 1, 900_000_000, 1),
+        (1_001_000_000, 8, 0, 1, 900_000_000, 1),
+        (1_002_000_000, 9, 0, 1, 900_000_000, 1),
+        (1_003_000_000, 10, 0, 1, 900_000_000, 1),
+        (1_005_000_000, 11, 0, 1, 900_000_000, 1),
+        (1_006_000_000, 12, 0, 1, 900_000_000, 1),
+        (1_010_000_000, 13, 0, 1, 900_000_000, 1),
+        (1_012_000_000, 14, 0, 1, 900_000_000, 1),
+        (1_013_000_000, 5, 0, 1, 900_000_000, 1),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "tools/frame_trace_report.py",
+            str(trace_path),
+            "--timeline-seconds",
+            "1",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "render_begin->render_prep_ready_ms n=1 median=1.000" in out
+    assert "render_prep_ready->render_host_begin_ms n=1 median=1.000" in out
+    assert "render_host_begin->render_gl_state_ready_ms n=1 median=2.000" in out
+    assert "render_gl_state_ready->render_mode_begin_ms n=1 median=1.000" in out
+    assert "render_mode_begin->render_mode_ready_ms n=1 median=4.000" in out
+    assert "render_mode_ready->render_host_ready_ms n=1 median=2.000" in out
+    assert "render_host_ready->draw_ms n=1 median=1.000" in out
+    assert "render_prep_n=1 render_prep_median_ms=1.000 render_prep_p95_ms=1.000" in out
+    assert "render_host_n=1 render_host_median_ms=9.000 render_host_p95_ms=9.000" in out
+    assert "render_mode_n=1 render_mode_median_ms=4.000 render_mode_p95_ms=4.000" in out
+    assert "render_post_n=1 render_post_median_ms=1.000 render_post_p95_ms=1.000" in out
 
 
 def test_report_surfaces_missing_and_unmatched_stage_records(tmp_path: Path) -> None:

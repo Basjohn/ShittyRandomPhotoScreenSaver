@@ -103,6 +103,7 @@ class SineFrameRuntime(RetirableFrameRuntime):
         activation_id: int,
         source_generation: int,
         source_activation_id: int,
+        source_timestamp: float | None,
         playing: bool,
         energy: VisualizerEnergyState,
         kick_event: float,
@@ -129,11 +130,21 @@ class SineFrameRuntime(RetirableFrameRuntime):
             self.reset()
             self._activation_identity = activation_identity
 
+        # While playing, identity alone is insufficient.  Oscilloscope/Sine
+        # waveform generation can advance from a raw capture packet before the
+        # authoritative FFT/energy frame commits.  Treat that packet as live
+        # source only once the matching authoritative timestamp exists.  Paused
+        # idle presentation intentionally remains allowed without live audio.
+        authoritative_live = (
+            not bool(playing)
+            or (source_timestamp is not None and float(source_timestamp) > 0.0)
+        )
         source_ready = bool(
             int(source_generation) >= 0
             and int(source_activation_id) >= 0
             and int(source_generation) == int(engine_generation)
             and int(source_activation_id) == int(activation_id)
+            and authoritative_live
         )
         previous_energy = self._smoothed_energy
         previous_ghost = self._ghost_energy

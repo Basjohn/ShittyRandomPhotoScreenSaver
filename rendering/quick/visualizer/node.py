@@ -243,27 +243,81 @@ class VisualizerRenderNode(QSGRenderNode):
                 matrix_values=matrix_values,
                 viewport=viewport,
             )
+            if trace is not None:
+                trace.record(
+                    FrameTraceEvent.RENDER_PREP_READY,
+                    screen_index=self._screen_index,
+                    revision=snapshot.logical_revision,
+                    logical_timestamp_ns=logical_timestamp_ns(
+                        snapshot.logical.logical_timestamp
+                    ),
+                    auxiliary=int(snapshot.logical.runtime_generation),
+                )
             overflow = mode_capabilities.requests_unclipped_renderer_overflow(snapshot)
             if overflow:
                 # Descriptor-gated experimental overflow bypasses only this
                 # render-node-local stencil. Qt/inherited scene state is still
                 # fenced/restored by QuickVisualizerRenderHost, and every
                 # accepted mode stays on the legacy clipped branch.
+                if trace is not None:
+                    trace.record(
+                        FrameTraceEvent.RENDER_HOST_BEGIN,
+                        screen_index=self._screen_index,
+                        revision=snapshot.logical_revision,
+                        logical_timestamp_ns=logical_timestamp_ns(
+                            snapshot.logical.logical_timestamp
+                        ),
+                        auxiliary=int(snapshot.logical.runtime_generation),
+                    )
                 mode_id = self._render_host.render(
                     snapshot=snapshot,
                     viewport=viewport,
                     logical_size=self._logical_size,
                     matrix_values=matrix_values,
+                    frame_trace=trace,
+                    screen_index=self._screen_index,
                 )
+                if trace is not None:
+                    trace.record(
+                        FrameTraceEvent.RENDER_HOST_READY,
+                        screen_index=self._screen_index,
+                        revision=snapshot.logical_revision,
+                        logical_timestamp_ns=logical_timestamp_ns(
+                            snapshot.logical.logical_timestamp
+                        ),
+                        auxiliary=int(snapshot.logical.runtime_generation),
+                    )
             else:
                 clip_run = self._clip_host.begin(clip_frame, state)
                 try:
+                    if trace is not None:
+                        trace.record(
+                            FrameTraceEvent.RENDER_HOST_BEGIN,
+                            screen_index=self._screen_index,
+                            revision=snapshot.logical_revision,
+                            logical_timestamp_ns=logical_timestamp_ns(
+                                snapshot.logical.logical_timestamp
+                            ),
+                            auxiliary=int(snapshot.logical.runtime_generation),
+                        )
                     mode_id = self._render_host.render(
                         snapshot=snapshot,
                         viewport=viewport,
                         logical_size=self._logical_size,
                         matrix_values=matrix_values,
+                        frame_trace=trace,
+                        screen_index=self._screen_index,
                     )
+                    if trace is not None:
+                        trace.record(
+                            FrameTraceEvent.RENDER_HOST_READY,
+                            screen_index=self._screen_index,
+                            revision=snapshot.logical_revision,
+                            logical_timestamp_ns=logical_timestamp_ns(
+                                snapshot.logical.logical_timestamp
+                            ),
+                            auxiliary=int(snapshot.logical.runtime_generation),
+                        )
                 finally:
                     self._clip_host.end(clip_run)
             self._telemetry.note_draw(

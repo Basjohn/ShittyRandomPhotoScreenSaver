@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
+
+from core.performance.frame_trace import FrameTraceEvent, logical_timestamp_ns
 
 from .implementation_registry import resolve_quick_visualizer_renderer
 from .render_contract import QuickVisualizerRenderFrame, QuickVisualizerRenderer
@@ -14,6 +17,9 @@ from .telemetry import (
     VisualizerRenderHostLifecycleSnapshot,
     VisualizerRenderHostLifecycleTelemetry,
 )
+
+if TYPE_CHECKING:
+    from core.performance.frame_trace import FrameTraceSink
 
 
 def create_lifecycle_telemetry_if_admitted() -> (
@@ -197,6 +203,8 @@ class QuickVisualizerRenderHost:
         viewport: tuple[int, int, int, int],
         logical_size: tuple[float, float],
         matrix_values: tuple[float, ...],
+        frame_trace: "FrameTraceSink | None" = None,
+        screen_index: int = -1,
     ) -> str:
         mode_id = snapshot.logical.mode_id
         # A mode switch is observed on the render thread, where the GL context
@@ -232,6 +240,16 @@ class QuickVisualizerRenderHost:
             quad_vao=self._quad_vao,
         )
         inherited = _InheritedGlState.capture()
+        if frame_trace is not None:
+            frame_trace.record(
+                FrameTraceEvent.RENDER_GL_STATE_READY,
+                screen_index=int(screen_index),
+                revision=snapshot.logical_revision,
+                logical_timestamp_ns=logical_timestamp_ns(
+                    snapshot.logical.logical_timestamp
+                ),
+                auxiliary=int(snapshot.logical.runtime_generation),
+            )
         try:
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendEquationSeparate(gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
@@ -245,7 +263,27 @@ class QuickVisualizerRenderHost:
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDepthMask(gl.GL_FALSE)
             gl.glViewport(*viewport)
+            if frame_trace is not None:
+                frame_trace.record(
+                    FrameTraceEvent.RENDER_MODE_BEGIN,
+                    screen_index=int(screen_index),
+                    revision=snapshot.logical_revision,
+                    logical_timestamp_ns=logical_timestamp_ns(
+                        snapshot.logical.logical_timestamp
+                    ),
+                    auxiliary=int(snapshot.logical.runtime_generation),
+                )
             implementation.render(frame)
+            if frame_trace is not None:
+                frame_trace.record(
+                    FrameTraceEvent.RENDER_MODE_READY,
+                    screen_index=int(screen_index),
+                    revision=snapshot.logical_revision,
+                    logical_timestamp_ns=logical_timestamp_ns(
+                        snapshot.logical.logical_timestamp
+                    ),
+                    auxiliary=int(snapshot.logical.runtime_generation),
+                )
         finally:
             inherited.restore()
         self._last_render_mode_id = mode_id

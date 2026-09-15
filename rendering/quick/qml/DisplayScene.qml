@@ -39,6 +39,60 @@ Item {
     property bool perfHudEnabled: false
     property string perfHudText: ""
 
+    // Wall-time wallpaper transitions are rendered by BackgroundRenderItem,
+    // not by an animating QML property. FrameAnimation supplies Qt Quick's
+    // native animation-driver tick; this per-display gate requests the custom
+    // render item only when this display's own refresh interval is due.
+    // No Python timer/callback and no frameSwapped feedback loop participates.
+    property bool transitionFrameDriverActive: false
+    property real transitionFrameTargetHz: 60.0
+    property var transitionRenderItem: null
+    property real transitionFrameNextDueS: 0.0
+    property real transitionFrameAnimationTicks: 0
+    property real transitionFrameUpdateRequests: 0
+
+    onTransitionFrameTargetHzChanged: {
+        // A display retarget changes the cadence contract immediately. Discard
+        // any deadline derived from the previous screen instead of carrying one
+        // stale 60/165 Hz interval across the hop.
+        transitionFrameNextDueS = 0.0
+    }
+
+    FrameAnimation {
+        id: transitionFrameAnimation
+        running: displayScene.transitionFrameDriverActive
+            && displayScene.transitionRenderItem !== null
+
+        onRunningChanged: {
+            displayScene.transitionFrameNextDueS = 0.0
+            if (running)
+                reset()
+        }
+
+        onTriggered: {
+            displayScene.transitionFrameAnimationTicks += 1
+            const targetHz = Math.max(1.0, displayScene.transitionFrameTargetHz)
+            const intervalS = 1.0 / targetHz
+            var nextDueS = displayScene.transitionFrameNextDueS
+            if (nextDueS <= 0.0)
+                nextDueS = elapsedTime
+            if (elapsedTime + 0.0000005 < nextDueS) {
+                displayScene.transitionFrameNextDueS = nextDueS
+                return
+            }
+
+            // Never repay missed intervals as a burst. One native animation
+            // tick may request at most one scene update; wall-time progress is
+            // sampled by TransitionRun, so skipping late opportunities is safe.
+            const behindS = Math.max(0.0, elapsedTime - nextDueS)
+            const intervalsPassed = Math.floor(behindS / intervalS) + 1
+            displayScene.transitionFrameNextDueS =
+                nextDueS + intervalsPassed * intervalS
+            displayScene.transitionFrameUpdateRequests += 1
+            displayScene.transitionRenderItem.update()
+        }
+    }
+
     // Restored healthy background topology: BackgroundRenderItem is parented
     // directly to this scene root by Python. No texture layer/capture/material
     // owner sits between the transition renderer and the window.

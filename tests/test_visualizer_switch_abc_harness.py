@@ -21,6 +21,22 @@ import visualizer_switch_abc_harness as h  # noqa: E402
 _BASE = 1_700_000_000  # fixed epoch base for deterministic timestamps
 
 
+def test_perf_hud_parser_accepts_native_transition_driver_rates():
+    line = (
+        "pacer_target_hz=165.000 pacer_skip_pct=-1.00 "
+        "pacer_native_tick_hz=164.80 pacer_update_request_hz=164.10 "
+        "transition=T_crossfade_250/400ms viz_mode=bubble "
+        "viz_draw_fps=90.10 viz_revision_hz=89.95 "
+        "viz_age_ms=7.20 viz_geometry_mismatches=0"
+    )
+    match = h._PERF_HUD_RE.search(line)
+    assert match is not None
+    assert float(match.group("skip")) == -1.0
+    assert float(match.group("native_tick_hz")) == 164.8
+    assert float(match.group("update_request_hz")) == 164.1
+    assert float(match.group("rev_hz")) == 89.95
+
+
 def test_line_epoch_parses_seconds_and_millis_formats():
     # The app's file handlers emit seconds precision; the harness must parse both
     # that and the comma-millis form. A None here would zero every window's samples.
@@ -332,18 +348,22 @@ def test_classify_b_regressed_c_did_not_clear(tmp_path):
     assert result["verdict"] == "b_regressed_c_did_not_clear"
 
 
-def test_recovery_is_metric_matched_to_the_trigger(tmp_path):
-    # B regresses ONLY on skip; recovery must be computed on skip, not p99.
+def test_legacy_pacer_skip_metric_cannot_drive_a_causal_verdict(tmp_path):
+    # CHK10 removed the Python deadline pacer.  The old field remains parseable
+    # for historical logs, but even an absurd value must not manufacture a
+    # current regression when event-loop/freshness evidence is healthy.
     a, b, c = _triples(
         tmp_path,
-        b_kwargs={"p99": 1.1, "skip": 6.0},
-        c_kwargs={"pre_p99": 1.1, "post_p99": 1.05, "pre_skip": 6.0, "post_skip": 0.6},
+        b_kwargs={"p99": 1.1, "skip": 99.0},
+        c_kwargs={"pre_p99": 1.1, "post_p99": 1.05, "pre_skip": 99.0, "post_skip": 0.0},
     )
     result = h.classify(a, b, c)
     pair = result["pairs"][0]
-    assert pair["b_vs_a"]["triggered"] == ["skip"]
-    assert set(pair["c_recovery_fraction_by_metric"]) == {"skip"}
-    assert result["verdict"] == "swap_sensitive"
+    assert pair["b_vs_a"]["triggered"] == []
+    assert pair["b_vs_a"]["skip_worse"] is False
+    assert pair["b_vs_a"]["legacy_skip_metric_informational_only"] is True
+    assert pair["c_recovery_fraction_by_metric"] == {}
+    assert result["verdict"] == "not_reproduced"
 
 
 def test_persistence_required_spike_does_not_count(tmp_path):
