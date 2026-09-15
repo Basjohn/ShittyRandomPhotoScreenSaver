@@ -334,7 +334,7 @@ def _ensure_cache_runtime_stats(engine: ScreensaverEngine) -> Dict[str, int]:
         "scaled_hits": 0,
         "scaled_misses": 0,
         "worker_requests": 0,
-        "worker_fallbacks": 0,
+        "worker_authority_failures": 0,
         "prefetch_resume_scheduled": 0,
         "prefetch_resume_runs": 0,
         "scaled_prefetch_requests": 0,
@@ -963,7 +963,7 @@ def _process_display_image_candidate(
     worker_available = image_processing_authority_available(engine)
     if processed_qimage is None:
         if not worker_available:
-            _bump_cache_runtime_stat(engine, "worker_fallbacks")
+            _bump_cache_runtime_stat(engine, "worker_authority_failures")
             message = (
                 f"Foreground ImageWorker unavailable for display={display_index}; "
                 f"parent-process decode/scale fallback is forbidden path={img_path}"
@@ -983,10 +983,9 @@ def _process_display_image_candidate(
                 timeout_ms=3000,
             )
         except ImageProcessingInfrastructureError:
-            # Preserve the historical metric name as a count of occasions where
-            # the retired parent fallback *would* have been entered. The fallback
-            # itself remains forbidden. Stale-runtime cancellation is separate.
-            _bump_cache_runtime_stat(engine, "worker_fallbacks")
+            # Count authoritative worker/transport failures separately from
+            # ordinary candidate rejection. No parent fallback exists.
+            _bump_cache_runtime_stat(engine, "worker_authority_failures")
             raise
         if worker_qimage is None or worker_qimage.isNull():
             # The live worker rejected this particular media candidate. That is

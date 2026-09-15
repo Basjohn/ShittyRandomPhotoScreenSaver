@@ -10,12 +10,9 @@ from dataclasses import dataclass
 from functools import lru_cache
 from importlib import import_module
 import os
-from typing import Any, Callable, Dict, Mapping, TYPE_CHECKING
+from typing import Any, Callable, Dict, Mapping
 
 from core.dev_gates import gate_signature, is_named_gate_enabled
-
-if TYPE_CHECKING:
-    from PySide6.QtWidgets import QButtonGroup, QPushButton
 
 from core.settings.defaults import get_default_settings
 from core.settings.widget_family_catalog import (
@@ -766,35 +763,6 @@ def _get_active_widget_custom_position_option_descriptors(
         for descriptor in WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS
         if descriptor.widget_id in active_widget_ids
     )
-
-
-def build_widget_section_buttons(
-    owner: Any,
-    button_group: QButtonGroup,
-    button_style: str,
-    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
-) -> tuple[QPushButton, ...]:
-    """Create descriptor-owned WidgetsTab section buttons."""
-
-    # Settings GUI only.  Keep QtWidgets out of the production runtime import
-    # graph; the screensaver consumes this module's neutral descriptors.
-    from PySide6.QtWidgets import QPushButton
-
-    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
-    buttons: list[QPushButton] = []
-    for idx, descriptor in enumerate(descriptor_iter):
-        button = QPushButton(descriptor.button_label)
-        button.setCheckable(True)
-        button.setStyleSheet(button_style)
-        # FlowLayout asks for the button's size hint before final placement.
-        # Reserve the full text + authored 18 px horizontal padding on both
-        # sides so longer labels such as System Stats cannot be clipped.
-        label_width = button.fontMetrics().horizontalAdvance(descriptor.button_label)
-        button.setMinimumWidth(max(70, label_width + 40))
-        setattr(owner, descriptor.button_attr_name, button)
-        button_group.addButton(button, idx)
-        buttons.append(button)
-    return tuple(buttons)
 
 
 def get_widget_section_index_map(

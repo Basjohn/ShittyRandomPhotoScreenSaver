@@ -495,10 +495,6 @@ OverlayWidget {
 
                 SequentialAnimation {
                     id: pulseAnimation
-                    onRunningChanged: {
-                        if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
-                            widgetFrameDemand.setAnimationActive(pulseAnimation, running)
-                    }
                     NumberAnimation {
                         target: progressPulse
                         property: "pulseLevel"

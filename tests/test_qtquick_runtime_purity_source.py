@@ -205,6 +205,9 @@ def test_event_driven_quick_lifecycle_keeps_pause_resume_and_retirement_edges() 
     )
 
     # The continuous owner is a one-request-at-a-time Qt frameSwapped chain.
+    # New hidden QQuickWindows start paused so a pre-show animation cannot strand
+    # the one-pending bit on a request that never reaches frameSwapped.
+    assert "self._paused = not bool(window.isVisible())" in pacer
     assert "window.frameSwapped.connect(self._on_frame_swapped)" in pacer
     assert "self._window.frameSwapped.disconnect(self._on_frame_swapped)" in pacer
     request_next = pacer.split("def _request_next_frame", 1)[1].split(
@@ -230,9 +233,82 @@ def test_event_driven_quick_lifecycle_keeps_pause_resume_and_retirement_edges() 
     )
     assert "wake.close()" in retire
 
-    # The physical smoke harness exercises hide/show with a real continuous QML
-    # demand, not a resurrected fake visualizer demand.
-    assert "set_widget_animation_active(True)" in smoke
-    assert 'demands") != ["widget_animation"]' in smoke
+    # The physical smoke harness exercises hide/show with the only custom
+    # continuous demand: wall-time transition rendering. Ordinary QML animations
+    # remain owned by Qt Quick's animation driver.
+    assert "set_transition_active(True)" in smoke
+    assert 'demands") != ["transition"]' in smoke
     assert "set_visualizer_active" not in smoke
     assert "set_visualizer_sync" not in smoke
+    assert "set_widget_animation_active" not in pacer
+    assert "WIDGET_ANIMATION" not in pacer
+    assert "widgetFrameDemand" not in _text("rendering/quick/scene_controller.py")
+    assert not (ROOT / "rendering" / "quick" / "widget_frame_demand.py").exists()
+    for qml_path in (ROOT / "rendering" / "quick" / "qml").glob("*.qml"):
+        assert "widgetFrameDemand" not in qml_path.read_text(encoding="utf-8"), qml_path
+
+
+def test_runtime_neutral_descriptor_and_scheduler_authority_have_no_legacy_fallbacks() -> None:
+    descriptors = _text("rendering/widget_descriptors.py")
+    service = _text("widgets/service_widget_runtime.py")
+    weather = _text("widgets/weather_runtime.py")
+    media = _text("widgets/media_runtime.py")
+    pipeline = _text("engine/image_pipeline.py")
+
+    assert "PySide6.QtWidgets" not in descriptors
+    assert "QPushButton" not in descriptors
+    assert "QButtonGroup" not in descriptors
+    assert "PySide6" not in service
+    assert "ensure_single_shot_timer" not in service
+    assert "stop_overlay_timer_pair" not in service
+    assert "_update_timer =" not in weather
+    assert "_reconcile_timer =" not in media
+    assert "worker_fallbacks" not in pipeline
+    assert "worker_authority_failures" in pipeline
+
+
+def test_main_keeps_widget_ui_lazy_and_runtime_font_registration_qtgui_only() -> None:
+    main = _text("main.py")
+    tree = ast.parse(main)
+    eager_ui_imports: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and str(node.module or "").startswith("ui."):
+            eager_ui_imports.append(str(node.module))
+        elif isinstance(node, ast.Import):
+            eager_ui_imports.extend(
+                alias.name for alias in node.names if alias.name.startswith("ui.")
+            )
+    assert eager_ui_imports == []
+    assert "from ui.settings_dialog import SettingsDialog" in main
+    assert "from ui.system_tray import ScreensaverTrayIcon" in main
+    assert "from ui.font_registration import ensure_custom_fonts" in main
+    assert "from ui.tabs.shared_styles import ensure_custom_fonts" not in main
+
+    fonts = _text("ui/font_registration.py")
+    assert "PySide6.QtWidgets" not in fonts
+    assert "QGuiApplication" in fonts
+    assert "QFontDatabase" in fonts
+
+
+def test_startup_desktop_qpixmap_exception_has_one_production_callsite() -> None:
+    occurrences: dict[str, int] = {}
+    for path in ROOT.rglob("*.py"):
+        if "tests" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        count = text.count("capture_startup_desktop_pixmap")
+        if count:
+            occurrences[path.relative_to(ROOT).as_posix()] = count
+    assert set(occurrences) == {
+        "engine/display_manager.py",
+        "rendering/quick/startup_desktop_capture.py",
+    }
+
+    manager = _text("engine/display_manager.py")
+    prime = manager.split("def _prime_quick_startup_desktop_sources", 1)[1].split(
+        "def _startup_desktop_crossfade_spec", 1
+    )[0]
+    assert "screen.grabWindow(0)" in prime
+    assert "capture_startup_desktop_pixmap(" in prime
+    assert "display.present_captured_image(seed)" in prime
+    assert "self._startup_desktop_seed_screens.clear()" in prime

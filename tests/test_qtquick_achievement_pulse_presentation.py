@@ -691,7 +691,9 @@ def test_qml_is_presentation_only_and_keeps_family_authored_capsule_shadow() -> 
     assert "duration: 2000" in qml
     assert "duration: 3000" in qml
     assert 'fragmentShader: "shaders/widget_glow.frag.qsb"' in qml
-    assert "widgetFrameDemand.setAnimationActive(pulseAnimation, running)" in qml
+    assert "widgetFrameDemand" not in qml
+    assert "SequentialAnimation" in qml
+    assert "NumberAnimation" in qml
     assert 'objectName: "achievementShelf_" + capsule.fieldId' in capsule_qml
     assert "capsule.shelfSeparatorColor" in capsule_qml
     assert "RectangularShadow" in capsule_qml

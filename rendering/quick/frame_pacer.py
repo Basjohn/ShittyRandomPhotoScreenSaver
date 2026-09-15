@@ -4,7 +4,7 @@ Visualizer presentation is intentionally *not* paced here. Fresh visualizer
 publications wake their retained QQuickItem directly with latest-wins/coalesced
 semantics. This owner exists only for scene content whose pixels continue to
 change as a function of wall time after state admission (wallpaper transitions
-and admitted QML widget animations).
+only).
 
 The driver is chained from ``QQuickWindow.frameSwapped`` instead of a Python
 ``QTimer``. One initial ``QWindow.requestUpdate()`` enters Qt's coalesced update path;
@@ -28,7 +28,6 @@ class QuickFrameDemand(IntFlag):
 
     NONE = 0
     TRANSITION = auto()
-    WIDGET_ANIMATION = auto()
 
 
 @dataclass
@@ -67,7 +66,13 @@ class QuickFramePacer(QObject):
         self._window = window
         self._state = QuickPacerState(float(target_hz))
         self._demands = QuickFrameDemand.NONE
-        self._paused = False
+        # Runtime windows are normally constructed hidden and bound before first
+        # show. Do not admit a continuous request until the window is actually
+        # visible: hidden/non-renderable Quick windows may accept an update edge
+        # without ever returning frameSwapped, which would strand our one-pending
+        # admission bit before first reveal. Runtime visibility changes continue
+        # to own pause()/resume() after construction.
+        self._paused = not bool(window.isVisible())
         # A hidden/retired window may discard an already queued update without
         # emitting frameSwapped.  Never carry that stale admission across a
         # later reuse of this runtime.
@@ -91,7 +96,7 @@ class QuickFramePacer(QObject):
 
         if self._closed:
             raise RuntimeError("Quick frame pacer is closed")
-        allowed = int(QuickFrameDemand.TRANSITION | QuickFrameDemand.WIDGET_ANIMATION)
+        allowed = int(QuickFrameDemand.TRANSITION)
         reason_value = int(reason)
         if reason_value == 0 or reason_value & ~allowed:
             raise ValueError(f"unsupported Quick frame demand: {reason!r}")
@@ -110,9 +115,6 @@ class QuickFramePacer(QObject):
 
     def set_transition_active(self, active: bool) -> None:
         self.set_demand(QuickFrameDemand.TRANSITION, active)
-
-    def set_widget_animation_active(self, active: bool) -> None:
-        self.set_demand(QuickFrameDemand.WIDGET_ANIMATION, active)
 
     def set_target_hz(self, target_hz: float) -> None:
         """Update nominal display refresh metadata after QScreen retargeting."""
@@ -189,10 +191,7 @@ class QuickFramePacer(QObject):
             "closed": self._closed,
             "demands": [
                 demand.name.lower()
-                for demand in (
-                    QuickFrameDemand.TRANSITION,
-                    QuickFrameDemand.WIDGET_ANIMATION,
-                )
+                for demand in (QuickFrameDemand.TRANSITION,)
                 if self._demands & demand
             ],
             # Keep the existing PERF schema stable. These now mean Qt-owned

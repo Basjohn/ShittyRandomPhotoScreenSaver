@@ -57,7 +57,6 @@ from widgets.media.runtime_state import (
     should_probe_provider_failover,
 )
 from widgets.overlay_timers import OverlayTimerHandle, create_overlay_timer
-from widgets.service_widget_runtime import stop_overlay_timer_pair
 
 logger = get_logger(__name__)
 
@@ -312,7 +311,6 @@ class _SharedMediaRuntimeOwner:
         # retired 1000/2000/2500 ms active poll cadence: normal truth arrives via
         # native GSMTC events, so this single timer only reconciles/detects dropped
         # events. There is no per-display fan-out and no second cadence owner.
-        self._reconcile_timer = None
         self._reconcile_timer_handle: OverlayTimerHandle | None = None
 
         # Native event observation state.
@@ -496,7 +494,10 @@ class _SharedMediaRuntimeOwner:
             self._running = True
             self._activation_time = time.monotonic()
             self._ensure_reconcile_timer()
-            if self._reconcile_timer_handle is None or self._reconcile_timer is None:
+            if (
+                self._reconcile_timer_handle is None
+                or not self._reconcile_timer_handle.is_active()
+            ):
                 raise RuntimeError("Media reconcile heartbeat was not created")
             self._start_event_observation()
             trace_media_native_stage(
@@ -702,13 +703,8 @@ class _SharedMediaRuntimeOwner:
         if self._retired or not self._running:
             return
         handle = self._reconcile_timer_handle
-        timer = self._reconcile_timer
-        if handle is not None and timer is not None:
-            try:
-                if timer.isActive():
-                    return
-            except Exception:
-                pass
+        if handle is not None and handle.is_active():
+            return
         handle = create_overlay_timer(
             self,
             self._RECONCILE_INTERVAL_MS,
@@ -716,15 +712,12 @@ class _SharedMediaRuntimeOwner:
             description="Media reconcile heartbeat",
         )
         self._reconcile_timer_handle = handle
-        self._reconcile_timer = getattr(handle, "_timer", None)
 
     def _stop_reconcile_timer(self) -> None:
-        stop_overlay_timer_pair(
-            self,
-            handle_attr="_reconcile_timer_handle",
-            qtimer_attr="_reconcile_timer",
-            delete_qtimers=True,
-        )
+        handle = self._reconcile_timer_handle
+        if handle is not None:
+            handle.stop()
+            self._reconcile_timer_handle = None
 
     def _start_event_observation(self) -> None:
         """Best-effort: subscribe native dirty edges; loud/degraded on failure."""

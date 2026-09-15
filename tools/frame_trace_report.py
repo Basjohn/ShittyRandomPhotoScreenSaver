@@ -134,8 +134,16 @@ def main() -> int:
                     f"p99={_pct(intervals, .99):.3f} max={max(intervals):.3f}"
                 )
 
-    screens = sorted({key[0] for key in by_window_revision})
+    screens = sorted(
+        {key[0] for key in publish_by_window_revision}
+        | {key[0] for key in by_window_revision}
+    )
     for screen in screens:
+        published = {
+            (generation, revision)
+            for event_screen, generation, revision in publish_by_window_revision
+            if event_screen == screen
+        }
         for end_event, label in (
             (2, "publish->gui_wake"),
             (3, "publish->gui_snapshot"),
@@ -144,22 +152,44 @@ def main() -> int:
             (6, "publish->frame_swap"),
         ):
             latencies = []
+            matched_occurrences = 0
+            unmatched_downstream = 0
+            reached_publications: set[tuple[int, int]] = set()
             for (event_screen, generation, revision), events in by_window_revision.items():
                 if event_screen != screen:
                     continue
+                ends = events.get(end_event, ())
+                if not ends:
+                    continue
+                identity = (generation, revision)
                 start = publish_by_window_revision.get(
                     (event_screen, generation, revision)
                 )
-                ends = events.get(end_event, ())
                 if start is None:
+                    unmatched_downstream += len(ends)
                     continue
+                reached_publications.add(identity)
                 # Repeated draws/swaps of one logical revision are exactly the
                 # stale-presentation evidence this trace exists to expose. Keep
                 # every occurrence in the age distribution rather than only the
                 # first timestamp for that revision.
                 for end in ends:
                     if end >= start:
+                        matched_occurrences += 1
                         latencies.append((end - start) / 1_000_000.0)
+                    else:
+                        # A downstream timestamp before its publication cannot be
+                        # correlated honestly. Surface it rather than fabricating
+                        # a negative/zero latency sample.
+                        unmatched_downstream += 1
+            missing_publications = len(published - reached_publications)
+            print(
+                f"screen={screen} {label}_correlation "
+                f"publications={len(published)} "
+                f"matched_occurrences={matched_occurrences} "
+                f"unmatched_downstream={unmatched_downstream} "
+                f"missing_publications={missing_publications}"
+            )
             if latencies:
                 print(
                     f"screen={screen} {label}_ms n={len(latencies)} "

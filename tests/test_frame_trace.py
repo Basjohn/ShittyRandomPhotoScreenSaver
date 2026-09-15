@@ -147,3 +147,32 @@ def test_report_keeps_latency_per_screen_and_counts_repeat_draws(tmp_path: Path)
     assert "screen=1 draws=1 unique_revisions=1 repeat_draws=0" in out
     assert "screen=0 publish->draw_ms n=2 median=2.500" in out
     assert "screen=1 publish->draw_ms n=1 median=8.000" in out
+
+
+def test_report_surfaces_missing_and_unmatched_stage_records(tmp_path: Path) -> None:
+    trace_path = tmp_path / "trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    rows = [
+        (1_000_000, 1, 0, 10, 900_000, 4),  # publication reaches draw
+        (3_000_000, 5, 0, 10, 900_000, 4),
+        (4_000_000, 1, 0, 11, 900_000, 4),  # publication missing draw
+        (5_000_000, 5, 0, 99, 900_000, 4),  # draw missing publication
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert (
+        "screen=0 publish->draw_correlation publications=2 "
+        "matched_occurrences=1 unmatched_downstream=1 missing_publications=1"
+    ) in out

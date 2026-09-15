@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QGuiApplication
 
 from rendering.quick.startup_reveal import (
     QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS,
@@ -13,10 +13,9 @@ from rendering.quick.startup_reveal import (
 
 
 def _app() -> QCoreApplication:
-    # A GUI QApplication (offscreen in tests), matching every other DisplayManager
-    # test: DisplayManager connects QGuiApplication screen-hotplug signals and a
-    # bare QCoreApplication both lacks them and crashes PySide teardown here.
-    return QApplication.instance() or QApplication([])
+    # Quick startup needs a GUI application for QScreen/screen-hotplug ownership,
+    # not a QWidget QApplication. Keep this runtime-shaped test on QtGui.
+    return QGuiApplication.instance() or QGuiApplication([])
 
 
 def test_startup_reveal_primes_zero_then_completes_at_one_once() -> None:

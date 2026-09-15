@@ -315,10 +315,6 @@ OverlayWidget {
 
             SequentialAnimation {
                 id: rowEventGlowAnimation
-                onRunningChanged: {
-                    if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
-                        widgetFrameDemand.setAnimationActive(rowEventGlowAnimation, running)
-                }
                 NumberAnimation {
                     target: activityRow
                     property: "eventGlowLevel"
@@ -539,10 +535,6 @@ OverlayWidget {
 
                 SequentialAnimation {
                     id: gridEventGlowAnimation
-                    onRunningChanged: {
-                        if (typeof widgetFrameDemand !== 'undefined' && widgetFrameDemand)
-                            widgetFrameDemand.setAnimationActive(gridEventGlowAnimation, running)
-                    }
                     NumberAnimation {
                         target: gridTile
                         property: "eventGlowLevel"

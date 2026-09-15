@@ -30,7 +30,6 @@ from core.settings.defaults import get_default_settings
 from rendering.widget_descriptors import (
     CUSTOM_POSITION_OPTION_LABEL,
     apply_widget_section_save_results,
-    build_widget_section_buttons,
     build_widget_stack_preview_config,
     collect_widget_section_containers,
     collect_widget_section_save_results,
@@ -89,6 +88,29 @@ from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
 from widgets.timezone_utils import get_local_timezone, get_common_timezones
 
 logger = get_logger(__name__)
+
+
+def _build_widget_section_buttons(
+    owner: Any,
+    button_group: QButtonGroup,
+    button_style: str,
+    descriptors,
+) -> tuple[QPushButton, ...]:
+    """Create Widgets-tab section buttons from neutral descriptor metadata."""
+
+    buttons: list[QPushButton] = []
+    for idx, descriptor in enumerate(descriptors):
+        button = QPushButton(descriptor.button_label)
+        button.setCheckable(True)
+        button.setStyleSheet(button_style)
+        # FlowLayout asks for the size hint before final placement. Reserve the
+        # full text plus authored horizontal padding so long labels do not clip.
+        label_width = button.fontMetrics().horizontalAdvance(descriptor.button_label)
+        button.setMinimumWidth(max(70, label_width + 40))
+        setattr(owner, descriptor.button_attr_name, button)
+        button_group.addButton(button, idx)
+        buttons.append(button)
+    return tuple(buttons)
 
 
 
@@ -766,7 +788,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         button_style = shared_styles.WIDGET_NAV_PILL_STYLE
 
 
-        buttons = build_widget_section_buttons(
+        buttons = _build_widget_section_buttons(
             self,
             self._subtab_group,
             button_style,
