@@ -287,6 +287,25 @@ class BackgroundRenderNode(QSGRenderNode):
             self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
             logger.exception("[QUICK] Background render node failed: %s", exc)
 
+    def release_presentation_textures(self) -> None:
+        """Release transition/base image textures while preserving warm GL programs."""
+
+        if not self._image_textures.has_resources:
+            return
+        context = QOpenGLContext.currentContext()
+        if context is None:
+            error = "Quick background textures released without a current GL context"
+            self._telemetry.note_error(error)
+            logger.error("[QUICK] %s", error)
+            return
+        try:
+            self._image_textures.release()
+        except Exception as exc:
+            self._telemetry.note_error(
+                f"texture release failed: {type(exc).__name__}: {exc}"
+            )
+            logger.exception("[QUICK] Background texture release failed: %s", exc)
+
     def releaseResources(self) -> None:
         """Delete node-owned GL names on Qt Quick's legal render/context owner."""
 

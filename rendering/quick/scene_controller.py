@@ -80,8 +80,12 @@ def _qobject_is_alive(value: object) -> bool:
 def _render_snapshot_has_intentional_base_frame(snapshot: object) -> bool:
     """Return whether one swapped frame contains a real product background."""
 
-    return bool(
+    rendered_background = bool(
         int(getattr(snapshot, "render_count", 0) or 0) > 0
+        or getattr(snapshot, "native_background_active", False)
+    )
+    return bool(
+        rendered_background
         and getattr(snapshot, "active_image_identity", None) is not None
         and getattr(snapshot, "error", None) is None
     )
@@ -2044,7 +2048,11 @@ class QuickSceneController(QObject):
         )
         self._publish_readiness(
             background_renderer_ready=(
-                snapshot.initialize_count > 0 and snapshot.error is None
+                (
+                    snapshot.initialize_count > 0
+                    or snapshot.native_background_active
+                )
+                and snapshot.error is None
             ),
             intentional_base_frame_ready=intentional_image_ready,
             error=snapshot.error,

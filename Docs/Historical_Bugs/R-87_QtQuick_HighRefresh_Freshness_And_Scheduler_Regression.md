@@ -491,5 +491,19 @@ CHK20 adds explicit-`--frame-trace`-only markers around the predecessor full-scr
 
 Measure before changing GL state fences. The background steady path contains OpenGL state queries/restoration and the visualizer clip/stencil path still has a repeatable p95 tail, but neither is authorized for deletion merely because it looks suspicious or because documentation permits fewer declared states. Correctness and CHK15 visible behavior remain binding.
 
-No dedicated CHK20 A/B is required. Let the new predecessor markers ride on the **next otherwise-useful ordinary D1 `--frame-trace` run**. C++/QRhi remains conditional and is still not justified by current evidence.
+CHK20 was subsequently run immediately and physically answered this fork; see the following CHK20/CHK21 section. The earlier idea to wait for an unrelated future run was superseded by installed evidence. C++/QRhi remains conditional and is still not justified by current evidence.
 
+
+## 2026-09-15 — CHK20 physical predecessor result / CHK21 retained-background candidate
+
+The operator ran CHK20 immediately rather than waiting for an unrelated future trace. The D1-heavy binary trace is healthy enough to use: **221,756 written records, 7 dropped, 0 write errors**. Whole-run publication->draw is **15.311 / 19.080 ms median/p95**, but this run is used for attribution rather than promotion over CHK15 because formal workload/subjective equivalence was not established.
+
+The new predecessor markers answer the outstanding render-entry fork. `BackgroundRenderNode` rendered 10,160 times and consumed **0.487 / 5.742 ms median/p95**. More importantly, its steady/non-transition frames already cost **0.460 / 5.672 ms**, while transition frames cost **0.802 / 6.633 ms**. The dominant stage is the Python/OpenGL draw body (`BACKGROUND_DRAW_BEGIN -> BACKGROUND_DRAW_READY`): **0.314 / 5.498 ms steady** and **0.650 / 6.470 ms transition**. The background overlaps **100%** of measured `QUICK_SYNC_READY -> RENDER_BEGIN` intervals and occupies **24.91% of all interval duration / 43.59% of the p95-tail duration**. Transition-owned background time is only **2.46% / 5.37%** of those intervals. This is therefore a **steady retained-content ownership cost**, not evidence to weaken transitions.
+
+This closes another false lead: do not return to Windows priority, global GIL switching, audio smoothing/cadence, or transition simplification. The measured avoidable work is that an unchanged wallpaper is redrawn through a Python/PyOpenGL `QSGRenderNode` whenever any scene content (notably the ~90 Hz visualizer) causes a frame.
+
+CHK21 therefore makes a bounded architectural optimization: steady unchanged wallpaper uses a Qt-native retained `QSGImageNode` while the existing custom `BackgroundRenderNode` remains alive behind a sibling zero-opacity subtree and is activated only for authored transitions, explicit proof rendering and pixel-oracle harnesses. The native branch is blocked during custom rendering and the custom branch is blocked during steady rendering. Transition GL programs/VAO are retained across runs; returning to steady presentation releases only duplicated custom presentation textures. The same immutable `PresentationImage` bytes remain authoritative. Existing frame-swapped reveal/readiness, transition timing, visualizer cadence/reactivity, mixed-refresh gating and zero-fallback policies remain unchanged.
+
+Do **not** use this change as permission to remove `_InheritedGlState` or other GL state fences from the custom transition/visualizer paths. CHK21 removes the measured steady callback instead of gambling with correctness inside the remaining direct-GL paths.
+
+CHK21 is an installed-validation candidate, not a new baseline. The required routine lane is D1 heavy with `--frame-trace`, one image transition and one Settings teardown/rebuild. Acceptance requires steady `BACKGROUND_*` records to disappear while visualizer tracing continues, transition-only background records to remain healthy, no black flash/stale image/resource/lifecycle regressions, and operator smoothness/freshness neutral-or-better. CHK15 / `0abc479c52` remains golden until that proof exists.

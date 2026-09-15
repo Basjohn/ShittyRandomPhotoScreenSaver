@@ -27,6 +27,7 @@ class RenderNodeSnapshot:
     sampled_sync_count: int = 0
     sample_colors: tuple[str, ...] = ()
     active_image_identity: str | None = None
+    native_background_active: bool = False
     image_upload_thread_id: int | None = None
     image_release_thread_id: int | None = None
     image_upload_count: int = 0
@@ -84,6 +85,12 @@ class RenderNodeTelemetry:
                 threading.get_ident() if gui_thread_id is None else int(gui_thread_id)
             )
         )
+
+    @property
+    def capture_pixels_enabled(self) -> bool:
+        """Whether this diagnostic owner requires the custom GL proof path."""
+
+        return self._capture_pixels
 
     def snapshot(self) -> RenderNodeSnapshot:
         with self._lock:
@@ -144,6 +151,83 @@ class RenderNodeTelemetry:
                 pixel_sample_count=self._snapshot.pixel_sample_count + 1,
                 sampled_sync_count=self._snapshot.sync_count,
                 sample_colors=tuple(str(color) for color in colors),
+            )
+
+
+    def note_native_background_admitted(
+        self,
+        *,
+        identity: str,
+        byte_count: int,
+    ) -> None:
+        """Record one retained Qt scenegraph background texture admission."""
+
+        with self._lock:
+            self._snapshot = replace(
+                self._snapshot,
+                render_thread_id=threading.get_ident(),
+                active_image_identity=str(identity),
+                native_background_active=True,
+                image_upload_thread_id=threading.get_ident(),
+                image_upload_count=self._snapshot.image_upload_count + 1,
+                image_upload_bytes=(
+                    self._snapshot.image_upload_bytes + int(byte_count)
+                ),
+                pending_image_release_count=0,
+            )
+
+    def note_native_background_released(
+        self,
+        *,
+        identity: str,
+        byte_count: int,
+    ) -> None:
+        """Record logical retirement of a scenegraph-owned retained texture."""
+
+        with self._lock:
+            active_identity = self._snapshot.active_image_identity
+            self._snapshot = replace(
+                self._snapshot,
+                active_image_identity=(
+                    None if active_identity == str(identity) else active_identity
+                ),
+                native_background_active=False,
+                image_release_thread_id=threading.get_ident(),
+                image_release_count=self._snapshot.image_release_count + 1,
+                image_release_bytes=(
+                    self._snapshot.image_release_bytes + int(byte_count)
+                ),
+                pending_image_release_count=0,
+            )
+
+    def note_native_background_visibility(
+        self,
+        *,
+        identity: str | None,
+        visible: bool,
+    ) -> None:
+        """Track whether the retained native branch is currently render-visible."""
+
+        with self._lock:
+            self._snapshot = replace(
+                self._snapshot,
+                active_image_identity=(
+                    str(identity)
+                    if visible and identity is not None
+                    else self._snapshot.active_image_identity
+                ),
+                native_background_active=bool(visible and identity is not None),
+            )
+
+    def note_custom_background_active(self) -> None:
+        """Clear the retained-image readiness bit before custom rendering."""
+
+        with self._lock:
+            if not self._snapshot.native_background_active:
+                return
+            self._snapshot = replace(
+                self._snapshot,
+                native_background_active=False,
             )
 
     def note_image_uploaded(

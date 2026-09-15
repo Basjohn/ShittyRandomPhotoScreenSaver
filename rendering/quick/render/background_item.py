@@ -1,4 +1,4 @@
-"""Quick item that synchronizes background presentation into a render node."""
+"""Quick item that synchronizes retained background and transition presentation."""
 
 from __future__ import annotations
 
@@ -9,36 +9,44 @@ from PySide6.QtQuick import QQuickItem, QSGNode
 
 from ..image_state import PresentationImage
 from ..transitions.state import TransitionRun
+from .background_image_node import RetainedBackgroundSceneNode
 from .background_node import BackgroundRenderNode, SlideProofState
 from .telemetry import RenderNodeTelemetry
 from core.performance.frame_trace import current_frame_trace
 
 
 class _RenderNodeRetirement:
-    """Render-thread invalidation owner for the item's current GL node."""
+    """Render-thread invalidation owner for the current background subtree."""
 
     def __init__(self, telemetry: RenderNodeTelemetry) -> None:
         self._telemetry = telemetry
         self._lock = threading.Lock()
-        self._node: BackgroundRenderNode | None = None
+        self._node: RetainedBackgroundSceneNode | BackgroundRenderNode | None = None
 
-    def set_node(self, node: BackgroundRenderNode) -> None:
+    def set_node(
+        self,
+        node: RetainedBackgroundSceneNode | BackgroundRenderNode | None,
+    ) -> None:
         with self._lock:
             self._node = node
 
     def invalidate(self) -> None:
-        """Run from sceneGraphInvalidated with the Quick GL context current."""
+        """Run from sceneGraphInvalidated on Qt Quick's render owner."""
 
         self._telemetry.note_scene_graph_invalidated()
         with self._lock:
             node = self._node
             self._node = None
-        if node is not None:
+        if isinstance(node, RetainedBackgroundSceneNode):
+            node.release_resources()
+        elif isinstance(node, BackgroundRenderNode):
+            # Compatibility retirement for a pre-CHK21 node surviving a live
+            # source reload or test scaffold.
             node.releaseResources()
 
 
 class BackgroundRenderItem(QQuickItem):
-    """Full-scene custom content item backed by one inline QSGRenderNode."""
+    """Full-scene background with retained steady content and custom transitions."""
 
     proofProgressChanged = Signal()
 
@@ -153,6 +161,22 @@ class BackgroundRenderItem(QQuickItem):
                 Qt.ConnectionType.DirectConnection,
             )
 
+    @staticmethod
+    def _retire_replaced_node(node: QSGNode | None) -> None:
+        """Release owned resources before Qt deletes a replaced subtree."""
+
+        if isinstance(node, RetainedBackgroundSceneNode):
+            node.release_resources()
+        elif isinstance(node, BackgroundRenderNode):
+            node.releaseResources()
+
+    def _custom_rendering_required(self) -> bool:
+        return bool(
+            self._transition_run is not None
+            or self._proof_enabled
+            or self._telemetry.capture_pixels_enabled
+        )
+
     def updatePaintNode(
         self,
         old_node: QSGNode | None,
@@ -168,27 +192,35 @@ class BackgroundRenderItem(QQuickItem):
             and self._transition_run is None
             and not self._proof_enabled
         ):
+            self._retire_replaced_node(old_node)
+            self._retirement.set_node(None)
             return None
 
-        node = (
-            old_node
-            if isinstance(old_node, BackgroundRenderNode)
-            else BackgroundRenderNode(
-                self._telemetry,
+        window = self.window()
+        custom_required = self._custom_rendering_required()
+        if window is None and self._presentation_image is not None and not custom_required:
+            raise RuntimeError("retained Quick background image has no window")
+
+        if isinstance(old_node, RetainedBackgroundSceneNode):
+            node = old_node
+        else:
+            self._retire_replaced_node(old_node)
+            node = RetainedBackgroundSceneNode(
+                window=window,
+                telemetry=self._telemetry,
                 screen_index=self._screen_index,
                 frame_trace=self._frame_trace,
             )
-        )
-        window = self.window()
-        device_pixel_ratio = (
-            float(window.effectiveDevicePixelRatio()) if window is not None else 1.0
-        )
+
         node.synchronize(
             logical_size=(float(self.width()), float(self.height())),
-            device_pixel_ratio=device_pixel_ratio,
+            device_pixel_ratio=(
+                float(window.effectiveDevicePixelRatio()) if window is not None else 1.0
+            ),
             state=self._proof_state,
             presentation_image=self._presentation_image,
             transition_run=self._transition_run,
+            custom_required=custom_required,
         )
         self._retirement.set_node(node)
         return node
