@@ -38,7 +38,7 @@ Immediate priorities now in-tree:
 
 **2026-09-15 two-run assessment lock — preserve before more implementation.** The Checkpoint-3 binary plus the operator-observed Checkpoint-5 dual-display heavy -> light run now establish the working direction strongly enough that this investigation must not drift back to raw-FPS tuning or speculative image-topology shuffling. Checkpoint 3 quantified the remaining steady-heavy delay downstream of Quick sync; Checkpoint 5 is reported substantially smoother on both displays, including D0/165 Hz, despite the visualizer's authored logical producer remaining ~90 revisions/s. That is expected under the new ownership model, not evidence of a new 90 Hz display cap: `_DEFAULT_MAX_FPS = 90` is the logical simulation cadence, while idle visualizer presentation is now publication-driven and therefore normally draws only when a fresh revision exists. Wallpaper transitions own an independent whole-window continuous-demand chain, so they may cause the visualizer render node to execute far above 90 draws/s while `viz_revision_hz` remains ~90. With `swapInterval=0`, `scene_fps` / `frameSwapped` / `viz_draw_fps` are render/queued-frame diagnostics and may exceed physical panel refresh; they are not measurements of photons displayed. The Checkpoint-3 HUD confirms the distinction: light median draw/revision were **90.06 / 89.98 Hz** with **10.54 ms** median age; settled-heavy **90.05 / 89.96 Hz** with **17.86 ms** median age. During settled-heavy transition-active seconds, median visualizer draw rose to **99.84/s** while revisions stayed **89.94/s** and median age was **18.65 ms**, versus **90.00/s / 89.96/s / 17.81 ms** while transition-idle. Extra scene draws therefore are not themselves the steady-heavy freshness repair target.
 
-**Evidence discipline for the next step:** preserve the rare two-display Checkpoint-5 run; do not ask the operator to repeat dual-display testing merely to exercise the new fine-grained trace markers. The raw Checkpoint-5 archive became visible only after this assessment was written. **Checkpoint 6 intentionally preserves the pre-ingestion assessment first**; the archive must be ingested immediately after CHK6 and the quantified findings reconciled into this section rather than guessed. The next routine physical trace can be D1-only and should use current `QUICK_SYNC_READY` + `RENDER_BEGIN` events to split the already-localized Checkpoint-3 `QUICK_SYNC_CONSUME -> RENDER_DRAW` delta into (a) SRPSS sync work, (b) Qt post-sync/render-thread scheduling wait, and (c) Python/OpenGL render-body time. A C++/QRhi bridge remains conditional: only pursue it if `RENDER_BEGIN -> RENDER_DRAW` is the dominant heavy-load delta; if `QUICK_SYNC_READY -> RENDER_BEGIN` dominates, optimize the scheduling/render-loop boundary instead. Heavy-application startup crawl is secondary unless evidence shows SRPSS amplifies it; settled-heavy behavior remains the primary acceptance target.
+**Evidence discipline for the next step:** preserve the rare two-display Checkpoint-5 run; do not ask the operator to repeat dual-display testing merely to exercise the new fine-grained trace markers. The raw Checkpoint-5 archive became visible only after this assessment was written. **Checkpoint 6 intentionally preserves the pre-ingestion assessment first**; the archive must be ingested immediately after CHK6 and the quantified findings reconciled into this section rather than guessed. The next routine physical trace can be D1-only and should use current `QUICK_SYNC_READY` + `RENDER_BEGIN` events to split the already-localized Checkpoint-3 `QUICK_SYNC_CONSUME -> RENDER_DRAW` delta into (a) SRPSS sync work, (b) post-sync/pre-render-callback render-entry time (not a pure scheduler wait), and (c) Python/OpenGL render-body time. A C++/QRhi bridge remains conditional: only pursue it if `RENDER_BEGIN -> RENDER_DRAW` is the dominant heavy-load delta; if `QUICK_SYNC_READY -> RENDER_BEGIN` dominates, optimize the scheduling/render-loop boundary instead. Heavy-application startup crawl is secondary unless evidence shows SRPSS amplifies it; settled-heavy behavior remains the primary acceptance target.
 
 **Checkpoint-5 dual-display binary ingestion (2026-09-15): RAW TRACE NOW QUANTIFIED; PLAN UPDATED.** The archive `59ea94b8-0a66-403e-8998-b098b0132466.zip` is healthy: **301,730 frame-trace records, 0 dropped, 0 write errors**, with screen-scoped generations surviving visualizer transfers/settings generations. System CPU sat roughly **44.5-50.8%** for the heavy interval until the post-Settings light tail. Clean heavy D1 (16:19:54-16:22:10) stays at ~89.9 logical publications/s with publish->draw **13.18 ms median / 16.72 p95** and HUD age **17.23 ms median**. After the visualizer moves to D0, clean heavy D0 (16:22:30-16:25:30) remains ~89.9 publications/s but is much fresher at **7.32 ms median** publish->draw / **10.58 ms median HUD age**, while retaining a fat **26.32 ms p95** tail. That exactly matches the operator's “tremendously smoother, occasional crawl” report. The tail is strongly transition-dependent on D0: heavy D0 transition-idle publish->draw is **6.94 ms median** versus **24.15 ms transition-active**; publish->GUI wake rises **0.35 -> 4.09 ms**, publish->Quick-sync **2.14 -> 13.91 ms**, and sync->draw **4.78 -> 9.95 ms**. Under light load the same effect becomes visually obvious: D0 transition-active HUD draw rate is **~286.9/s median** while revisions remain **~89.9/s**, with publish->draw **12.40 ms** versus **4.13 ms idle**. The current `frameSwapped -> requestUpdate()` transition continuation is therefore not a benign “Qt-native cap”: with `swapInterval=0` it behaves as an **as-fast-as-the-window-can-render feedback loop**, especially on the cheaper 2560x1440 D0 path, generating duplicate visualizer draws and measurable freshness pressure. D1 is much less sensitive: heavy transition active vs idle publish->draw is **14.62 vs 12.89 ms**, and light **7.81 vs 7.34 ms**. Keep Bubble's ~90 Hz logical cadence; the next production architecture task is to move wall-time transition frame opportunity ownership onto Qt's animation driver / another properly paced Qt Quick retained mechanism, not a Python refresh timer and not an uncapped swap feedback chain. Research this against Qt source/docs plus independent Qt material before implementation; installed logs remain final authority.
 
@@ -650,9 +650,209 @@ exact current source + current reconciled test tree
 **Continuation checkpoint 12 candidate (2026-09-15):** the CHK10 Oscilloscope blank-card regression is now rooted in the serial FFT lane rather than Quick presentation or WASAPI restart success. Installed evidence showed raw waveform identity reaching activation 4/4 while `[AUDIO_LANE]` counters froze at 8456 accepted / 8456 completed / 8455 published and the logical visualizer kept ticking ~90 Hz. The prior boolean/same-activation release heuristic could orphan `_compute_task_active=True` when the final old FFT completed inside a stopped-runtime activation transaction after the compute gate changed but before the activation id committed. Analysis submissions now carry unique slot tokens; callbacks may release only the token they actually own. Busy `lane.submit()` rejection restores the previous real owner instead of letting a rejected token steal it, and stopping a lane clears token + active + pending-source state because stopped lanes suppress callback delivery. Oscilloscope/Sine while playing now require a matching authoritative analysis timestamp as well as generation identity; paused authored idle remains allowed. Direct real-engine race checks prove both sides of ownership (old callback cannot release a newer token; old owner can release itself and hand off to a fresh activation), busy-rejection ownership, and stop cleanup. Runtime-purity/frame-trace/service authority remain **29/29 GREEN** and all **896 Python files compile**. This repair deliberately leaves audio block-size/capture semantics unchanged so it does not mix a proven compute-owner fix with a speculative capture rewrite. After CHK12 packaging, return immediately to performance validation: D0 native transition-driver validation, then D1 `QUICK_SYNC_READY -> RENDER_BEGIN -> RENDER_DRAW` localization.
 
 
-**Continuation checkpoint 13 packaged (2026-09-15):** after CHK12 isolated the hotswap/FFT-slot repair, performance-tooling work resumed without changing renderer behavior. `tools/frame_trace_report.py` now reports per-window **n + median + p95** for `QUICK_SYNC_CONSUME -> QUICK_SYNC_READY` (sync work), `QUICK_SYNC_READY -> RENDER_BEGIN` (Qt/render scheduling wait), and `RENDER_BEGIN -> RENDER_DRAW` (Python/OpenGL render body), so the next routine D1 trace can decide the C++/QRhi question from evidence instead of averages. The closed visualizer-switch A/B/C harness no longer treats `pacer_skip_pct` as causal: CHK10 deleted the Python deadline pacer, so that legacy field is informational only and cannot trigger a verdict; 20 direct harness tests pass. `--perf` now emits legacy `pacer_skip_pct=-1` plus `pacer_native_tick_hz` and `pacer_update_request_hz` sampled once per HUD window from the QML driver counters, giving D0 installed validation a direct measure of native tick opportunities versus actual transition update requests with no Python per-frame callback. Historical R-87 wording has been corrected so the old `frameSwapped -> requestUpdate()` loop is unmistakably historical/superseded.
+**Continuation checkpoint 13 packaged (2026-09-15):** after CHK12 isolated the hotswap/FFT-slot repair, performance-tooling work resumed without changing renderer behavior. `tools/frame_trace_report.py` now reports per-window **n + median + p95** for `QUICK_SYNC_CONSUME -> QUICK_SYNC_READY` (sync work), `QUICK_SYNC_READY -> RENDER_BEGIN` (post-sync/pre-render-callback render-entry interval; not a pure scheduler wait), and `RENDER_BEGIN -> RENDER_DRAW` (Python/OpenGL render body), so the next routine D1 trace can decide the C++/QRhi question from evidence instead of averages. The closed visualizer-switch A/B/C harness no longer treats `pacer_skip_pct` as causal: CHK10 deleted the Python deadline pacer, so that legacy field is informational only and cannot trigger a verdict; 20 direct harness tests pass. `--perf` now emits legacy `pacer_skip_pct=-1` plus `pacer_native_tick_hz` and `pacer_update_request_hz` sampled once per HUD window from the QML driver counters, giving D0 installed validation a direct measure of native tick opportunities versus actual transition update requests with no Python per-frame callback. Historical R-87 wording has been corrected so the old `frameSwapped -> requestUpdate()` loop is unmistakably historical/superseded.
 
 
 **Continuation checkpoint 14 packaged (2026-09-15): render-body localization before another installed run.** CHK13 is the current safe packaged authority. No renderer/pacing behavior has been optimized in this slice. The live `QuickFramePacer.describe()` contract no longer carries permanent-zero ghosts from the deleted Python deadline/swap pacer (`skipped_deadlines`, `frame_swaps`, `update_pending`); historical PERF log parsing remains backward-compatible through `pacer_skip_pct=-1`. `--frame-trace` keeps binary format/version 1 but adds optional render-only events: `RENDER_PREP_READY`, `RENDER_HOST_BEGIN`, `RENDER_GL_STATE_READY`, `RENDER_MODE_BEGIN`, `RENDER_MODE_READY`, `RENDER_HOST_READY`. With tracing absent these create no worker/file/cadence and no trace records. With tracing enabled, one ordinary D1 light -> heavy run can now split the existing `RENDER_BEGIN -> RENDER_DRAW` interval into node preparation, clip admission, render-host/state capture, GL state setup, actual mode renderer, state restore, and post-host bookkeeping. The offline reporter prints full-run sub-stage distributions and timeline n/median/p95 for render preparation, host total, mode draw, and post-host work. Direct source validation is **51/51 GREEN** (12 runtime purity + 13 frame trace + 6 scheduler/service + 20 retained A/B/C harness); all **896 Python files compile**.
 
+**Continuation checkpoint 15 assessment (2026-09-15): the CHK14 installed D1 torture run is analyzed/frozen as the CHK15 evidence checkpoint; CHK15 itself adds no new runtime trace or production optimization.** Evidence archive: `cfdabe39-1d4c-4682-8335-56e5f1964c7d.zip` (runtime source head `22dd8d4d4c5290e5a82f6bcea9f6555e9fd8ae78`). The operator intentionally withheld subjective smoothness while this assessment was formed. Trace health is excellent: **1,710,531 records, 0 dropped, 0 write errors**. System-load telemetry gives a clean light control before ~18:54:44 and sustained heavy external CPU pressure near ~40% afterward. Clean Bubble light settled (`18:46:50–18:54:20`) is **8.64 ms median / 13.25 ms p95 publication→draw**; clean heavy settled after the torture (`19:02:45–19:06:50`) is **13.28 / 17.02 ms**. Crucially, the heavy delta is not dominated by Python sync or the visualizer renderer: `QUICK_SYNC_CONSUME→READY` is only **0.030→0.065 ms median**, while `GUI_SNAPSHOT→QUICK_SYNC` p95 grows **5.86→8.08 ms** and `QUICK_SYNC_READY→RENDER_BEGIN` p95 grows **1.53→7.09 ms**. `RENDER_BEGIN→DRAW` is **2.39/5.51 ms light vs 1.66/6.78 ms heavy** (median/p95); actual mode draw is secondary (**0.31/2.53 vs 0.25/4.31 ms**), and inherited GL-state capture is specifically **not** implicated (**0.21/0.43 vs 0.13/0.29 ms**). Therefore the bounded C++/QRhi seam and GL-state-fence removal are **shelved, not next actions**. The primary R-87 target is now Qt/render-thread scheduling/admission under external CPU contention, especially snapshot→sync and sync-ready→render-begin tails. The GUI wake remains comparatively small (**0.10/0.66 ms light vs 0.43/2.49 ms heavy**).
+
+Installed torture validation also materially closes two side questions. CHK12 hotswap ownership survived **24 mode activations / four complete Bubble→DevCurve→Sphere→Spectrum→Oscilloscope→Sine→Bubble cycles**, including Settings reconstruction; all eight Oscilloscope/Sine activations acquired finite live source age (~8–10 ms), fresh authoritative frames continued, and the audio analysis lane advanced continuously with zero busy/stopped/cancelled submissions. CHK10's mixed-refresh transition gate is physically healthy on D1: during transition-active samples the Qt animation driver ticks near the primary-screen ~166 Hz, but the D1 retained-background update-request rate stays near **60 Hz**, Bubble revisions remain ~90/s, and visualizer draw rate rises only ~90→93/s instead of reproducing the old unbounded feedback loop. D0 high-refresh overdrive removal still requires a D0-only installed confirmation; do not request another dual-display run.
+
+The torture itself leaves **no persistent degradation signature**: heavy pre-torture publication→draw was **13.72/16.90 ms**, heavy settled after the mode/shape/Settings churn is **13.28/17.02 ms**, and after the second Settings teardown/rebuild it is **13.97/16.91 ms**. All runtime destruction barriers complete, QML capture records zero messages/warnings/errors, native-fault capture is empty, frame trace loses zero records, and the async log writer reports zero dropped records/write errors. Treat Settings/widget/mode churn as validated lifecycle stress for this run, while retaining normal caution that logs cannot certify every visual detail.
+
+**CHK15 next-order lock:** (1) package this evidence-only checkpoint before production work; (2) research/attribute Qt render-thread scheduling under CPU contention using the existing render-thread identity and low-rate Windows telemetry—do not add another hot-path logger; (3) prefer native scheduler evidence (Ready/Waiting/Running, context-switch/readied-by and priority evidence) before changing scheduling policy; (4) keep C++/QRhi and GL-state-fence changes inactive unless a future trace reverses this run's stage attribution; (5) D0-only eventually confirms native transition update-request rate on the 165 Hz display; (6) the **first scheduler-attribution capture may be D1 pure-heavy only** because CHK14 already provides the light control; use light again when validating a production candidate, not merely to rediscover the baseline; (7) subjective operator feel may be collected only after this blind assessment is preserved.**
+
 Research lock for this candidate: Qt 6 `QSGRenderNode` documentation says render nodes must assume arbitrary incoming native graphics state, `QQuickWindow` says external-command boundary handling is implicit for `QSGRenderNode`, and Qt 6 says `changedStates()` is effectively relevant only for viewport/scissor under the QRhi renderer. SRPSS currently performs a full `_InheritedGlState.capture()`/restore with multiple `glGet*` calls on every visualizer draw. That is now a **measured candidate, not an attribution**. Do not delete the fence merely because documentation makes it look redundant; the next trace must show whether render-host/state work actually dominates. Likewise, a bounded C++/QRhi seam remains conditional: activate it only if installed evidence shows render-host/mode-render cost is the heavy-load delta, not merely because Python virtual rendering crosses the PySide/Shiboken boundary.
+
+**Secondary CHK15 anomaly — rotation-timer gap oracle:** `screensaver_perf.log` reports two very large `_on_rotation_timer` gaps (~172,987 ms around 18:55:22 and ~152,734 ms around 19:05:29), classified as `unknown_ui_thread_stall`. These occur amid manual/image-transition/reset activity and are not mirrored by the visualizer freshness/lifecycle evidence, so **do not attribute them to R-87 or call them real UI stalls yet**. Audit the rotation-timer gap oracle/reset semantics separately after the scheduling investigation; determine whether manual rotation / timer re-arm legitimately invalidates its expected-period baseline. Preserve as a secondary diagnostic smell, not a reason to alter the working Quick architecture.
+
+## 19. CHK15 golden performance baseline lock — scheduling headroom only
+
+**Baseline decision (operator-confirmed 2026-09-15): CHK15 is now the performance baseline to defend.**
+The blind telemetry assessment was completed before subjective feedback. Afterward the operator reported that the mixed-refresh
+heavy run felt **great on both displays at all times**, with **no noticed crawl**, and that slide transitions — historically the
+strongest heavy-load canary — were **almost perfectly smooth**. D0 also remained visually smooth even though Bubble's fresh logical
+cadence correctly stayed near its authored ~90 Hz on the 164.835 Hz panel.
+
+This changes the remaining R-87 work from "rescue visible smoothness" to **increase scheduling headroom without sacrificing any
+of the performance/freshness already achieved**.
+
+### 19.1 Neutral-or-better admission rule — binding
+Any scheduling-starvation experiment must be **neutral or better** against CHK15 on both objective and operator-visible behavior.
+A patch is rejected if it improves one internal metric while worsening freshness, latency, visual smoothness, hotswap/lifecycle
+stability, transition smoothness, or mixed-refresh behavior.
+
+Golden installed evidence to preserve on like-for-like runs:
+- D1 single-display heavy settled Bubble: publication→draw roughly **13.3 ms median / 17.1 ms p95**;
+- D1 mixed-refresh heavy Bubble: roughly **12.6 / 16.9 ms**;
+- D0 mixed-refresh heavy Bubble: roughly **7.5 ms median / 25.4 ms p95** — low median with bursty scheduling tails, but **no
+  operator-visible crawl in the accepted CHK15 run**;
+- Bubble logical cadence remains authored at roughly **90 revisions/s**; do not raise or lower it to game presentation metrics;
+- D1 transition update requests stay near its physical opportunity (~60 Hz) despite the global Qt animation driver ticking near
+  the high-refresh display; D0 must not regress toward the historical ~287 draw/request runaway;
+- trace/log writers remain lossless in acceptance evidence (**CHK14 D1 torture trace adopted/frozen by CHK15:** 1,710,531 trace records, 0 dropped, 0 write errors);
+- CHK12 slot-token hotswap ownership remains intact: repeated mode swaps, Oscilloscope/Sine live readiness, Settings teardown/
+  rebuild, widget disable/re-enable and shape changes must not strand the audio/visualizer runtime;
+- **slides/transitions and ordinary visualizer motion must remain at least as smooth as CHK15 to the operator.** A statistically
+  cleaner trace that looks worse is a regression.
+
+### 19.2 Primary remaining target — render-entry ownership/GIL headroom
+The one-off CHK16 Windows scheduler-attribution run has now answered the first fork. **Ordinary Windows runnable starvation is not
+the primary residual in the captured D1-heavy condition.** The CHK15 golden baseline remains healthy; this is headroom attribution,
+not rescue work.
+
+Installed scheduler evidence from the 60.101 s D1-heavy capture (render TID `14044`):
+- render thread **Waiting 63.920% / Running 35.050% / Ready 1.004%** of wall time;
+- Ready->Running latency **0.0026 ms median / 0.0049 ms p95 / 0.0732 ms p99**;
+- `QUICK_SYNC_READY -> RENDER_BEGIN` **1.9918 / 5.5349 ms median/p95** in that capture;
+- in that render-entry interval, all samples were ~**76.9% Running / 22.3% Waiting / 0.7% Ready**; the p95 tail was
+  ~**42.8% Running / 55.3% Waiting / 1.9% Ready**.
+
+Therefore:
+1. **Retire blind render-thread-priority escalation.** The thread is almost never sitting runnable and denied CPU long enough for
+   priority to explain these tails. Do not spend an A/B on priority unless later evidence materially reverses this result.
+2. Stop calling `QUICK_SYNC_READY -> RENDER_BEGIN` a pure "scheduler wait". It spans Qt scenegraph work after the Python sync
+   callback plus the eventual Qt->Python `QSGRenderNode.render()` callback entry. Running and Waiting time inside it can therefore
+   reflect Qt work, resource/event waits, and Python callback/GIL admission.
+3. The wait-ending threads during that interval are mostly SRPSS threads sharing a **CPython-created thread bootstrap** with a
+   known worker (~86.7% of Waiting time overall; ~81.1% in the p95 tail). This is a concrete Python/GIL-contention hypothesis,
+   **not proof of a specific pool**: a shared Windows start routine does not identify `io_pool`, audio analysis, or another worker.
+4. The next smallest diagnostic seam is frame-trace-only: correlate render-entry tails against the existing visualizer analysis
+   compute lane and, separately, its pure-Python smoothing section. No WPR/ETL repeat is planned.
+5. C++/QRhi remains shelved. This trace does not make `QSGRenderNode.render()` body cost dominant and does not justify moving the
+   renderer merely because Python participates in the callback.
+
+### 19.2A CHK16 scheduler-attribution lane — CLOSED after one physical run
+CHK16 added the external WPR lane and it has served its purpose. The one expensive raw ETL was successfully reduced locally;
+**do not request another raw ETL upload or include one in a GODZIP.** `tools/scheduler_trace_reduce.py` emits the small
+`scheduler_attribution.json/.txt` handoff evidence. `tools/scheduler_trace_capture.py` now treats a raw ETL as local-only,
+automatically reduces it when SRPSS logs are supplied, and deletes it after successful reduction unless `--keep-etl` is explicitly
+requested for local WPA/deep-dive work.
+
+The reducer independently reproduced the installed attribution above and classified ordinary OS runnable starvation as
+`not_supported_by_trace`. The old priority-boost decision branch is therefore closed for this evidence set.
+
+### 19.2B CHK17 trace-only render-entry/Python-overlap seam
+CHK17 adds four **explicit-`--frame-trace`-only** events; ordinary runtime still receives `current_frame_trace() is None` and gains
+no timer, thread, pacer or polling authority:
+- `AUDIO_ANALYSIS_BEGIN/READY` brackets `compute_bars_from_samples(...)`;
+- `AUDIO_SMOOTH_BEGIN/READY` brackets `_smooth_analysis_bars(...)`, the deliberately useful pure-Python section.
+
+`tools/frame_trace_report.py` reports both durations and overlap with `QUICK_SYNC_READY -> RENDER_BEGIN`, for all gaps and the
+p95 tail. The CHK17 physical D1-heavy run has now been completed, so this seam is **evidence, not pending work**:
+- trace health: **299,893 records / 3 dropped / 0 write errors**; no WPR/ETL was involved;
+- this run was under materially stronger external CPU pressure than the CHK14 golden-heavy window (system CPU roughly **55%** for
+  much of the settled run versus roughly **40%** in CHK14), so its absolute freshness numbers are not a like-for-like baseline
+  replacement;
+- settled CHK17 render-entry remained around **5.32 / 8.89 ms median/p95**, while `RENDER_BEGIN -> RENDER_DRAW` remained secondary
+  at roughly **1.94 / 7.40 ms**; the full-run reporter gives render-entry **5.310 / 8.934 ms**;
+- `_smooth_analysis_bars(...)` is effectively exonerated: **0.036 / 0.067 ms median/p95** and only **0.26% of all render-entry gap
+  time / 0.42% of p95-tail gap time**;
+- whole analysis is associated with longer gaps but cannot explain most of them: analysis itself is **1.899 / 3.264 ms**, overlaps
+  **12.77% of all gap time / 21.49% of p95-tail gap time**, and analysis-overlapping gaps are **6.664 ms median** versus **2.875 ms**
+  when no analysis interval overlaps;
+- render entry does **not** cluster immediately after analysis/smoothing completion strongly enough to claim that either measured
+  function directly gates the callback.
+
+Therefore do **not** optimize smoothing, lower analysis cadence, lower Bubble cadence/reactivity, or alter authored visual behavior.
+The useful new clue is the stable ~**5.3 ms** render-entry median under the stronger load, close to CPython's ordinary ~5 ms thread
+switch interval and consistent with the pre-existing GIL-contention harness/history. That is correlation, not proof, so CHK18 uses
+one bounded, reversible installed A/B rather than making an interpreter-policy change permanent.
+
+### 19.2C CHK18 bounded CPython-timeslice A/B — PHYSICAL RESULT: REJECTED
+The requested D1-heavy B run completed with `--gil-switch-1ms`, and startup confirmed the process changed from **5.000 ms -> 1.000 ms**.
+This experiment is **rejected** and the flag is removed again in CHK19; it must not become interpreter policy.
+
+Targeted comparison against CHK17:
+- render-entry `QUICK_SYNC_READY -> RENDER_BEGIN`: **5.310 / 8.934 ms** default versus **5.592 / 8.905 ms** at 1 ms — median
+  slightly worse, p95 effectively unchanged; the ~5 ms plateau did **not** collapse;
+- audio analysis: **1.899 / 3.264 ms** -> **3.724 / 5.519 ms**, materially worse; smoothing stayed ~**0.036 / 0.066 ms**;
+- audio-lane telemetry near the end of the runs shows the mechanism: handoff mean improved ~**3.30 -> 1.40 ms**, while execution
+  mean worsened ~**2.07 -> 3.78 ms**. The shorter global switch interval mostly redistributes wait into more frequent Python execution
+  preemption rather than producing headroom;
+- publication->draw median moved only **15.331 -> 15.086 ms**, while p95 worsened **18.902 -> 22.771 ms**; this cannot qualify
+  as a neutral-or-better optimization;
+- trace loss rose from **3 -> 95 dropped records** (still a tiny fraction, but directionally negative);
+- Bubble logical cadence remained near authored ~90 Hz.
+
+Conclusion: the stable ~5 ms render-entry floor is **not explained by CPython's global switch quantum alone**. Do not reduce Bubble/analysis
+cadence, do not optimize smoothing, and do not revisit a permanent `sys.setswitchinterval()` policy.
+
+The detailed result is frozen at `.godzip/CHK18_GIL_SWITCH_AB_RESULT.md`.
+
+### 19.2D CHK19 native Qt timing — PHYSICAL RESULT / observer retired
+The requested CHK19 D1-heavy run completed. The operator also ran one manual **Burn** transition; it is cleanly identifiable from
+**22:38:27 -> 22:38:36** (~8.535 s) and is kept separate from steady-state attribution rather than averaged into it.
+
+Qt's native threaded-render-loop output reports, across the full capture, roughly **10 / 17 ms median/p95 total**, split into
+**0 / 4 ms sync**, **9 / 14 ms render**, and **0 / 4 ms swap**. Component-time share is approximately **88.3% render**,
+**5.3% sync**, **6.4% swap**. The transition behaves like a genuine render stressor rather than changing scheduling ownership:
+- steady pre-transition native render: ~**7.96 ms mean / 13 ms p95**;
+- Burn transition: ~**9.77 ms mean / 17 ms p95**;
+- steady post-transition: ~**7.83 ms mean / 12 ms p95**;
+- native sync/swap barely move across those slices.
+
+This does **not** authorize treating the absolute Qt numbers as a new baseline. `QSG_RENDER_TIMING` emitted **26,791** high-rate
+`qt.scenegraph.time.*` DEBUG records during the run (roughly five messages per rendered frame). SRPSS's Qt-message capture writes/flushes
+those records synchronously and CHK19 also echoed them to the terminal. The observer therefore perturbed the very render threads being
+measured. CHK20 retires the in-app `--qsg-render-timing` admission; the old token remains parser-filtered as a compatibility no-op,
+`tools/qsg_render_timing_report.py` remains only to preserve/reduce the historical CHK19 evidence, and externally enabled scenegraph-time
+DEBUG chatter is no longer echoed to the terminal. Do **not** request another CHK19-style run.
+
+The phase attribution is still useful because it is qualitative and agrees with the prior ETW evidence: the residual is in Qt's native
+**render phase**, not ordinary Windows Ready starvation and not predominantly native sync/swap. More importantly, this corrects the old
+label on `QUICK_SYNC_READY -> RENDER_BEGIN`: that interval begins after the visualizer item's `updatePaintNode()` finishes, but
+`VisualizerRenderNode.render()` is reached only later while Qt is already traversing/rendering the scene. It therefore contains native
+scene rendering **before the visualizer node**, not a pure scheduler/callback wait.
+
+The internal visualizer trace remains broadly CHK17-shaped despite the noisy Qt observer: CHK17 vs CHK19
+`RENDER_PREP_READY -> RENDER_HOST_BEGIN` is ~**0.657 / 5.798 ms** vs **0.549 / 5.638 ms**, and actual mode draw is
+~**0.298 / 3.162 ms** vs **0.318 / 3.911 ms** median/p95. Bubble itself did not suddenly become an ~8 ms renderer.
+
+### 19.2E CHK20 predecessor-render attribution — trace-only, no dedicated A/B required
+The next attribution is folded into the already explicit binary `--frame-trace`; it is **not** another timing logger and does not require
+a dedicated physical run immediately. Five events bracket the earlier full-screen `BackgroundRenderNode`, which is z=0 and therefore
+renders before the visualizer presentation subtree:
+- `BACKGROUND_RENDER_BEGIN`;
+- `BACKGROUND_TEXTURE_READY`;
+- `BACKGROUND_DRAW_BEGIN`;
+- `BACKGROUND_DRAW_READY`;
+- `BACKGROUND_RENDER_READY`.
+
+The markers use a node-local render sequence for pairing and put the transition run id in `auxiliary` (`0` = steady background).
+`tools/frame_trace_report.py` reports background total/texture/setup/draw/post stages, splits steady versus transition frames, and measures
+how much of `QUICK_SYNC_READY -> RENDER_BEGIN` overlaps predecessor background rendering. They exist only when `--frame-trace` was
+explicitly admitted; ordinary runtime retains no sink and no per-frame record calls.
+
+This is the first target because scene ordering proves the background node precedes the visualizer and its steady base path performs
+Python/OpenGL work, including inherited GL-state queries/restoration. **Do not optimize/remove those state fences merely because they
+look expensive or because Qt documentation permits fewer declared states.** Measure first; correctness of retained Quick/GL state remains
+a golden constraint. The visualizer clip/stencil setup also retains a reproducible p95 tail and remains a secondary measured seam after
+predecessor attribution.
+
+No new operator run is required solely for CHK20. Collect these markers on the **next otherwise-useful ordinary D1 `--frame-trace` run**.
+If/when that evidence exists: substantial background overlap localizes the pre-visualizer render cost; little overlap means continue to
+other predecessor QML/widget scene content rather than returning to scheduler/GIL knobs.
+
+CHK15 / `0abc479c52` remains the golden rollback/bisect baseline.
+
+### 19.3 Regression gates before any scheduling change can become the new baseline
+For every candidate change:
+- compare settled light/heavy windows against CHK15, not whole-run averages;
+- compare publication→wake, snapshot→sync, sync-ready→render-begin, render-body, publication→draw, revision cadence, source age,
+  transition request rate and event-loop tails;
+- exercise at least one mode hotswap and one Settings teardown/rebuild; broader torture is optional unless the change touches
+  lifetime/ownership;
+- reject if trace freshness improves by compressing/removing authored visualizer reaction, lowering Bubble cadence, increasing
+  stale/repeated frames, or changing presets/geometry semantics;
+- reject if the operator reports new crawl/choppiness even when numerical percentiles look better;
+- do not require another dual-display run for every iteration. D1 is the routine scheduling lane; D0-only is enough for
+  high-refresh transition checks. Use the already-collected mixed-refresh CHK15 evidence as the expensive reference.
+
+### 19.4 Baseline commit rule
+The repository CHK15 baseline commit **`0abc479c52`** (marked `BASELINE`) and the CHK15 GODZIP should be treated as the **known-good performance/freshness baseline**. Future work may
+supersede it only with a clearly documented installed comparison demonstrating neutral-or-better visible behavior and no
+architectural rollback. Keep the CHK15 checkpoint/handoff available even after later checkpoints so regressions can be bisected
+against a known-good state.
+

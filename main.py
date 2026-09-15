@@ -145,6 +145,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --usage - Enable low-cadence CPU/GPU/memory/thread logging
     - --handle-attribution - Add explicit Windows handle-type sidecar (implies --usage)
     - --frame-trace - Explicit binary publication->Quick->draw trace (not diagnostic-all)
+    - --qsg-render-timing - Retired R-87 compatibility no-op (native timing observer was too intrusive)
     - --viz - Enable visualizer logging and diagnostics
     - --geo - Enable geometry/z-order/edit-layout diagnostics
     - --set - Enable settings mutation/import/schema diagnostics
@@ -163,7 +164,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     # Filter out debug/viz/dev-gate flags
     _filtered = {
         "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing", "--diag-pair-warm-finish", "--diag-p4-stages", "--diag-p4-no-perf-hud", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
-        "--noupdates", "--frame-trace",
+        "--noupdates", "--frame-trace", "--qsg-render-timing",
         "--viz-diagnostics", "--viz-diag",
         "--fresh", "--devcurve", "--devsteam", "--devstats",
     }

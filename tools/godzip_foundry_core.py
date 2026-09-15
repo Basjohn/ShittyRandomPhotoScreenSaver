@@ -73,6 +73,7 @@ RUN_FOUNDRY_HIDDEN_FLAGS = frozenset(
         "--viz-diagnostics",   # legacy subset; --viz already enables viz diagnostics
         "--diag-pair-warm-finish",  # parser-only historical diagnostic token
         "--diag-p4-stages",    # parser-only historical diagnostic token
+        "--qsg-render-timing", # retired R-87 observer; compatibility no-op only
     }
 )
 RUN_FLAG_ALIASES = {

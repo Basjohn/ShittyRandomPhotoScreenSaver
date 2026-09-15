@@ -7,7 +7,7 @@ Visualizer_Post_Switch_Performance_Investigation.md``). They are **not** product
 ``--viz-switch-telemetry`` are experiment/debug admissions rather than shippable
 capabilities.
 
-Two admissions:
+Admissions:
 
 * ``--viz-switch-telemetry`` — admit boundary-only render-host switch/resource
   ownership telemetry. Without it, Standard/MC runtime allocates no lifecycle

@@ -29,6 +29,7 @@ from core.logging.logger import (
 )
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
+from core.performance.frame_trace import FrameTraceEvent, current_frame_trace
 from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker, _AudioFrame
 from widgets.spotify_visualizer.energy_bands import EnergyBands, extract_energy_bands
@@ -773,7 +774,22 @@ class _SpotifyBeatEngine(QObject):
 
         from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
 
-        raw_bars = compute_bars_from_samples(worker_state, request.samples)
+        frame_trace = current_frame_trace()
+        if frame_trace is not None:
+            frame_trace.record(
+                FrameTraceEvent.AUDIO_ANALYSIS_BEGIN,
+                revision=request.slot_token,
+                auxiliary=request.activation_id,
+            )
+        try:
+            raw_bars = compute_bars_from_samples(worker_state, request.samples)
+        finally:
+            if frame_trace is not None:
+                frame_trace.record(
+                    FrameTraceEvent.AUDIO_ANALYSIS_READY,
+                    revision=request.slot_token,
+                    auxiliary=request.activation_id,
+                )
         if not isinstance(raw_bars, list):
             return None
         # A config/reset boundary can also land while FFT/bar computation is
@@ -787,16 +803,30 @@ class _SpotifyBeatEngine(QObject):
             return None
 
         now_ts = time.time()
-        smoothed, reset, energy = _smooth_analysis_bars(
-            raw_bars,
-            request.previous_bars,
-            request.last_smooth_ts,
-            now_ts,
-            bar_count=request.bar_count,
-            smoothing_tau=request.smoothing_tau,
-            segment_hysteresis=request.segment_hysteresis,
-            min_change_threshold=request.min_change_threshold,
-        )
+        if frame_trace is not None:
+            frame_trace.record(
+                FrameTraceEvent.AUDIO_SMOOTH_BEGIN,
+                revision=request.slot_token,
+                auxiliary=request.activation_id,
+            )
+        try:
+            smoothed, reset, energy = _smooth_analysis_bars(
+                raw_bars,
+                request.previous_bars,
+                request.last_smooth_ts,
+                now_ts,
+                bar_count=request.bar_count,
+                smoothing_tau=request.smoothing_tau,
+                segment_hysteresis=request.segment_hysteresis,
+                min_change_threshold=request.min_change_threshold,
+            )
+        finally:
+            if frame_trace is not None:
+                frame_trace.record(
+                    FrameTraceEvent.AUDIO_SMOOTH_READY,
+                    revision=request.slot_token,
+                    auxiliary=request.activation_id,
+                )
         if (
             request.gate_token != self._compute_gate_token
             or request.activation_id != self._activation_id
