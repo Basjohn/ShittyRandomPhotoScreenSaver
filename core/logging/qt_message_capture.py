@@ -183,6 +183,23 @@ def _echo_to_prior_route(mode: object, context: object, message: str, text: str)
         pass
 
 
+def _should_echo_to_prior_route(level: int, category: str) -> bool:
+    """Suppress only known high-rate Qt frame-timing DEBUG chatter.
+
+    The capture normally preserves Qt's console route.  ``QSG_RENDER_TIMING`` is
+    different: Qt can emit several DEBUG messages per rendered frame and echoing
+    them synchronously to a terminal materially perturbs the workload being
+    measured.  The R-87 in-app admission is retired, but keep this narrow guard
+    for developers who enable Qt's environment diagnostic externally. Warnings
+    and errors are never suppressed.
+    """
+
+    return not (
+        level == logging.DEBUG
+        and category.startswith("qt.scenegraph.time.")
+    )
+
+
 def _log_qt_message(
     mode: object,
     *,
@@ -224,7 +241,7 @@ def _log_qt_message(
         # A Qt message callback may never raise into Qt.
         pass
 
-    if echo:
+    if echo and _should_echo_to_prior_route(level, normalized_category):
         _echo_to_prior_route(mode, context, str(message), payload)
 
     # ERROR/FATAL remains visible in the ordinary log as a high-level spine when

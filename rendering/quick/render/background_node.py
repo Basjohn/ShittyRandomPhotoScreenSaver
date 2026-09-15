@@ -13,6 +13,7 @@ from PySide6.QtGui import QOpenGLContext
 from PySide6.QtQuick import QSGRenderNode
 
 from core.logging.logger import get_logger
+from core.performance.frame_trace import FrameTraceEvent, FrameTraceSink
 from ..image_state import PresentationImage
 from ..transitions.render_contract import QuickTransitionRenderFrame
 from ..transitions.render_host import QuickTransitionRenderHost
@@ -162,9 +163,18 @@ def _pixel_hex(value: object) -> str:
 class BackgroundRenderNode(QSGRenderNode):
     """Render-thread GL resource owner for the full-screen background item."""
 
-    def __init__(self, telemetry: RenderNodeTelemetry | None = None) -> None:
+    def __init__(
+        self,
+        telemetry: RenderNodeTelemetry | None = None,
+        *,
+        screen_index: int = -1,
+        frame_trace: FrameTraceSink | None = None,
+    ) -> None:
         super().__init__()
         self._telemetry = telemetry or RenderNodeTelemetry()
+        self._screen_index = int(screen_index)
+        self._frame_trace = frame_trace
+        self._trace_render_sequence = 0
         self._logical_size = (0.0, 0.0)
         self._device_pixel_ratio = 1.0
         self._state = SlideProofState()
@@ -236,9 +246,22 @@ class BackgroundRenderNode(QSGRenderNode):
         try:
             if self._logical_size[0] <= 0.0 or self._logical_size[1] <= 0.0:
                 return
+            trace = self._frame_trace
+            run = self._transition_run
+            trace_sequence = 0
+            transition_run_id = 0
+            if trace is not None:
+                self._trace_render_sequence += 1
+                trace_sequence = self._trace_render_sequence
+                transition_run_id = int(run.run_id) if run is not None else 0
+                trace.record(
+                    FrameTraceEvent.BACKGROUND_RENDER_BEGIN,
+                    screen_index=self._screen_index,
+                    revision=trace_sequence,
+                    auxiliary=transition_run_id,
+                )
             if not self._program:
                 self._initialize_gl()
-            run = self._transition_run
             sample = None
             if run is not None:
                 sample = run.sample(time.monotonic_ns())
@@ -246,7 +269,20 @@ class BackgroundRenderNode(QSGRenderNode):
                     run=run,
                     sample=sample,
                 )
-            self._draw(run=run, sample=sample)
+            self._draw(
+                run=run,
+                sample=sample,
+                trace=trace,
+                trace_sequence=trace_sequence,
+                transition_run_id=transition_run_id,
+            )
+            if trace is not None:
+                trace.record(
+                    FrameTraceEvent.BACKGROUND_RENDER_READY,
+                    screen_index=self._screen_index,
+                    revision=trace_sequence,
+                    auxiliary=transition_run_id,
+                )
         except Exception as exc:
             self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
             logger.exception("[QUICK] Background render node failed: %s", exc)
@@ -362,11 +398,21 @@ class BackgroundRenderNode(QSGRenderNode):
         *,
         run: TransitionRun | None,
         sample: TransitionSample | None,
+        trace: FrameTraceSink | None,
+        trace_sequence: int,
+        transition_run_id: int,
     ) -> None:
         textures = self._image_textures.synchronize(
             self._presentation_image,
             run,
         )
+        if trace is not None:
+            trace.record(
+                FrameTraceEvent.BACKGROUND_TEXTURE_READY,
+                screen_index=self._screen_index,
+                revision=trace_sequence,
+                auxiliary=transition_run_id,
+            )
         render_target = self.renderTarget()
         if render_target is None:
             raise RuntimeError("Quick render node has no active render target")
@@ -379,6 +425,14 @@ class BackgroundRenderNode(QSGRenderNode):
         viewport = (0, 0, *render_target_size)
         matrix = self.projectionMatrix() * self.matrix()
         matrix_values = tuple(float(value) for value in matrix.data())
+
+        if trace is not None:
+            trace.record(
+                FrameTraceEvent.BACKGROUND_DRAW_BEGIN,
+                screen_index=self._screen_index,
+                revision=trace_sequence,
+                auxiliary=transition_run_id,
+            )
 
         if run is not None:
             if sample is None or not textures.has_transition_pair:
@@ -401,6 +455,14 @@ class BackgroundRenderNode(QSGRenderNode):
                 texture_id=textures.base_texture_id,
                 viewport=viewport,
                 matrix_values=matrix_values,
+            )
+
+        if trace is not None:
+            trace.record(
+                FrameTraceEvent.BACKGROUND_DRAW_READY,
+                screen_index=self._screen_index,
+                revision=trace_sequence,
+                auxiliary=transition_run_id,
             )
 
         self._sample_pixels(viewport, sample=sample)

@@ -11,6 +11,7 @@ from ..image_state import PresentationImage
 from ..transitions.state import TransitionRun
 from .background_node import BackgroundRenderNode, SlideProofState
 from .telemetry import RenderNodeTelemetry
+from core.performance.frame_trace import current_frame_trace
 
 
 class _RenderNodeRetirement:
@@ -46,6 +47,7 @@ class BackgroundRenderItem(QQuickItem):
         parent: QQuickItem | None = None,
         *,
         telemetry: RenderNodeTelemetry | None = None,
+        screen_index: int = -1,
     ) -> None:
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
@@ -58,6 +60,11 @@ class BackgroundRenderItem(QQuickItem):
         self._telemetry = telemetry or RenderNodeTelemetry(
             gui_thread_id=threading.get_ident()
         )
+        self._screen_index = int(screen_index)
+        # Explicit --frame-trace only. Ordinary runtime retains no trace sink and
+        # executes no per-frame trace calls. Capture the admitted sink once at
+        # item construction rather than resolving global state from render().
+        self._frame_trace = current_frame_trace()
         self._retirement = _RenderNodeRetirement(self._telemetry)
         self._bound_window = None
         self.windowChanged.connect(self._bind_window_invalidation)
@@ -166,7 +173,11 @@ class BackgroundRenderItem(QQuickItem):
         node = (
             old_node
             if isinstance(old_node, BackgroundRenderNode)
-            else BackgroundRenderNode(self._telemetry)
+            else BackgroundRenderNode(
+                self._telemetry,
+                screen_index=self._screen_index,
+                frame_trace=self._frame_trace,
+            )
         )
         window = self.window()
         device_pixel_ratio = (

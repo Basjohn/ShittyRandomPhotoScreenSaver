@@ -507,6 +507,7 @@ class QuickSceneController(QObject):
         self._background_item = BackgroundRenderItem(
             root,
             telemetry=self._telemetry,
+            screen_index=self._window.screen_index,
         )
         self._background_item.setObjectName("backgroundRenderItem")
         self._background_item.setZ(0.0)

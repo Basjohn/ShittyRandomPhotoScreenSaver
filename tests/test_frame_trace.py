@@ -405,3 +405,135 @@ def test_report_warns_and_keeps_complete_records_with_truncated_tail(tmp_path: P
     assert "warning: trailing_bytes=3; incomplete final record ignored" in out
     assert "records=1 capacity=512" in out
     assert "logical_publish: 1" in out
+
+
+def test_audio_analysis_trace_can_be_correlated_with_render_entry_gap(tmp_path: Path) -> None:
+    trace_path = tmp_path / "audio_overlap.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    rows = [
+        # One ordinary visualizer revision on screen 0.
+        (1_000_000, 1, 0, 1, 0, 0),
+        (2_000_000, 7, 0, 1, 0, 0),
+        # One analysis slot is deliberately unscoped from a display.
+        (3_000_000, 15, -1, 101, 0, 1),
+        (4_000_000, 17, -1, 101, 0, 1),
+        (5_000_000, 18, -1, 101, 0, 1),
+        (6_000_000, 16, -1, 101, 0, 1),
+        (7_000_000, 8, 0, 1, 0, 0),
+        (8_000_000, 5, 0, 1, 0, 0),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "audio_analysis_ms n=1 median=3.000" in out
+    assert "audio_smooth_ms n=1 median=1.000" in out
+    assert (
+        "screen=0 sync_ready_render_begin_audio_analysis_overlap "
+        "scope=all gaps=1 overlap_gaps=1 overlap_gap_pct=100.00 "
+        "overlap_time_pct=60.00"
+    ) in out
+    assert (
+        "screen=0 sync_ready_render_begin_audio_smooth_overlap "
+        "scope=all gaps=1 overlap_gaps=1 overlap_gap_pct=100.00 "
+        "overlap_time_pct=20.00"
+    ) in out
+
+
+def test_audio_analysis_trace_brackets_compute_and_python_smoothing() -> None:
+    root = Path(__file__).resolve().parents[1]
+    beat_engine = (
+        root / "widgets" / "spotify_visualizer" / "beat_engine.py"
+    ).read_text(encoding="utf-8")
+    body = beat_engine.split("def _run_analysis_request", 1)[1].split(
+        "def _accept_analysis_lane_result", 1
+    )[0]
+    assert body.index("FrameTraceEvent.AUDIO_ANALYSIS_BEGIN") < body.index(
+        "compute_bars_from_samples(worker_state, request.samples)"
+    )
+    assert body.index("compute_bars_from_samples(worker_state, request.samples)") < body.index(
+        "FrameTraceEvent.AUDIO_ANALYSIS_READY"
+    )
+    assert body.index("FrameTraceEvent.AUDIO_SMOOTH_BEGIN") < body.index(
+        "_smooth_analysis_bars("
+    )
+    assert body.index("_smooth_analysis_bars(") < body.index(
+        "FrameTraceEvent.AUDIO_SMOOTH_READY"
+    )
+
+
+def test_background_render_trace_is_explicit_and_pre_visualizer_attribution_ready() -> None:
+    root = Path(__file__).resolve().parents[1]
+    item = (root / "rendering" / "quick" / "render" / "background_item.py").read_text(
+        encoding="utf-8"
+    )
+    node = (root / "rendering" / "quick" / "render" / "background_node.py").read_text(
+        encoding="utf-8"
+    )
+    scene = (root / "rendering" / "quick" / "scene_controller.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "self._frame_trace = current_frame_trace()" in item
+    assert "screen_index=self._window.screen_index" in scene
+    render_body = node.split("def render(", 1)[1].split("def releaseResources", 1)[0]
+    assert "if trace is not None:" in render_body
+    assert "FrameTraceEvent.BACKGROUND_RENDER_BEGIN" in render_body
+    assert "FrameTraceEvent.BACKGROUND_RENDER_READY" in render_body
+    draw_body = node.split("def _draw(", 1)[1].split("def _draw_base", 1)[0]
+    assert "FrameTraceEvent.BACKGROUND_TEXTURE_READY" in draw_body
+    assert "FrameTraceEvent.BACKGROUND_DRAW_BEGIN" in draw_body
+    assert "FrameTraceEvent.BACKGROUND_DRAW_READY" in draw_body
+
+
+def test_report_splits_background_idle_transition_and_render_entry_overlap(tmp_path: Path) -> None:
+    trace_path = tmp_path / "trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    rows = [
+        # Visualizer render-entry gap 1: 1 -> 10 ms.
+        (1_000_000, 7, 1, 100, 0, 0),
+        # Steady background render occupies 2 -> 7 ms inside that gap.
+        (2_000_000, 19, 1, 1, 0, 0),
+        (3_000_000, 20, 1, 1, 0, 0),
+        (4_000_000, 21, 1, 1, 0, 0),
+        (6_000_000, 22, 1, 1, 0, 0),
+        (7_000_000, 23, 1, 1, 0, 0),
+        (10_000_000, 8, 1, 100, 0, 0),
+        # Visualizer gap 2: 11 -> 21 ms; transition run 7 occupies 12 -> 18 ms.
+        (11_000_000, 7, 1, 101, 0, 0),
+        (12_000_000, 19, 1, 2, 0, 7),
+        (13_000_000, 20, 1, 2, 0, 7),
+        (14_000_000, 21, 1, 2, 0, 7),
+        (17_000_000, 22, 1, 2, 0, 7),
+        (18_000_000, 23, 1, 2, 0, 7),
+        (21_000_000, 8, 1, 101, 0, 0),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "background_render_begin: 2" in out
+    assert "screen=1 background_render_begin->render_ready_ms n=2 median=5.500" in out
+    assert "idle_n=1 idle_median=5.000" in out
+    assert "transition_n=1 transition_median=6.000" in out
+    assert "sync_ready_render_begin_background_render_overlap scope=all gaps=2 overlap_gaps=2" in out

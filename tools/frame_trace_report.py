@@ -26,6 +26,15 @@ EVENT_NAMES = {
     12: "render_mode_begin",
     13: "render_mode_ready",
     14: "render_host_ready",
+    15: "audio_analysis_begin",
+    16: "audio_analysis_ready",
+    17: "audio_smooth_begin",
+    18: "audio_smooth_ready",
+    19: "background_render_begin",
+    20: "background_texture_ready",
+    21: "background_draw_begin",
+    22: "background_draw_ready",
+    23: "background_render_ready",
 }
 
 
@@ -34,6 +43,96 @@ def _pct(values: list[float], q: float) -> float:
         return 0.0
     values = sorted(values)
     return values[min(len(values) - 1, int(round((len(values) - 1) * q)))]
+
+
+def _paired_worker_intervals(
+    worker_events: dict[tuple[int, int], dict[int, list[int]]],
+    start_event: int,
+    end_event: int,
+) -> list[tuple[int, int]]:
+    intervals: list[tuple[int, int]] = []
+    for events in worker_events.values():
+        starts = events.get(start_event, ())
+        ends = events.get(end_event, ())
+        for start, end in zip(starts, ends):
+            if end >= start:
+                intervals.append((start, end))
+    intervals.sort()
+    return intervals
+
+
+def _interval_overlap_ns(
+    start_ns: int,
+    end_ns: int,
+    intervals: list[tuple[int, int]],
+) -> int:
+    if end_ns <= start_ns or not intervals:
+        return 0
+    total = 0
+    for left, right in intervals:
+        if right <= start_ns:
+            continue
+        if left >= end_ns:
+            break
+        total += max(0, min(end_ns, right) - max(start_ns, left))
+    return total
+
+
+def _print_render_gap_overlap(
+    *,
+    screen: int,
+    gaps: list[tuple[int, int]],
+    label: str,
+    intervals: list[tuple[int, int]],
+) -> None:
+    if not gaps or not intervals:
+        return
+    durations_ms = [(end - start) / 1_000_000.0 for start, end in gaps]
+    threshold_ms = _pct(durations_ms, .95)
+    for scope, scoped in (
+        ("all", gaps),
+        (
+            "p95_tail",
+            [
+                (start, end)
+                for start, end in gaps
+                if (end - start) / 1_000_000.0 >= threshold_ms
+            ],
+        ),
+    ):
+        overlap_ns = [
+            _interval_overlap_ns(start, end, intervals)
+            for start, end in scoped
+        ]
+        overlapping = sum(1 for value in overlap_ns if value > 0)
+        total_gap_ns = sum(end - start for start, end in scoped)
+        total_overlap_ns = sum(overlap_ns)
+        overlapping_gap_ms = [
+            (end - start) / 1_000_000.0
+            for (start, end), value in zip(scoped, overlap_ns)
+            if value > 0
+        ]
+        nonoverlapping_gap_ms = [
+            (end - start) / 1_000_000.0
+            for (start, end), value in zip(scoped, overlap_ns)
+            if value == 0
+        ]
+        conditional = ""
+        if overlapping_gap_ms:
+            conditional += (
+                f" overlap_gap_median_ms={statistics.median(overlapping_gap_ms):.3f}"
+            )
+        if nonoverlapping_gap_ms:
+            conditional += (
+                f" nonoverlap_gap_median_ms={statistics.median(nonoverlapping_gap_ms):.3f}"
+            )
+        print(
+            f"screen={screen} sync_ready_render_begin_{label}_overlap "
+            f"scope={scope} gaps={len(scoped)} overlap_gaps={overlapping} "
+            f"overlap_gap_pct={(100.0 * overlapping / len(scoped)) if scoped else 0.0:.2f} "
+            f"overlap_time_pct={(100.0 * total_overlap_ns / total_gap_ns) if total_gap_ns else 0.0:.2f}"
+            f"{conditional}"
+        )
 
 
 def main() -> int:
@@ -65,6 +164,16 @@ def main() -> int:
     by_window_revision: dict[tuple[int, int, int], dict[int, list[int]]] = defaultdict(
         lambda: defaultdict(list)
     )
+    worker_events: dict[tuple[int, int], dict[int, list[int]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    # Background QSGRenderNode events are independent of visualizer logical
+    # revisions. Their revision field is a node-local render sequence and aux is
+    # the active transition run id (0 for steady background rendering).
+    background_events: dict[tuple[int, int], dict[int, list[int]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    background_transition_by_key: dict[tuple[int, int], int] = {}
     draws_by_screen = Counter()
     swaps_by_screen = Counter()
     unique_draw_revisions: dict[int, set[tuple[int, int]]] = defaultdict(set)
@@ -82,7 +191,13 @@ def main() -> int:
         offset = HEADER.size + index * RECORD.size
         ts_ns, event, screen, revision, logical_ns, aux = RECORD.unpack_from(raw, offset)
         counts[event] += 1
-        if revision >= 0:
+        if event in (15, 16, 17, 18) and revision >= 0:
+            worker_events[(int(aux), int(revision))][event].append(ts_ns)
+        if event in (19, 20, 21, 22, 23) and screen >= 0 and revision >= 0:
+            key = (int(screen), int(revision))
+            background_events[key][event].append(ts_ns)
+            background_transition_by_key[key] = int(aux)
+        elif revision >= 0:
             identity = (int(aux), int(revision))
             if event == 1:
                 if screen >= 0:
@@ -157,9 +272,93 @@ def main() -> int:
                     f"p99={_pct(intervals, .99):.3f} max={max(intervals):.3f}"
                 )
 
+    audio_analysis_intervals = _paired_worker_intervals(worker_events, 15, 16)
+    audio_smooth_intervals = _paired_worker_intervals(worker_events, 17, 18)
+    if audio_analysis_intervals:
+        durations = [
+            (end - start) / 1_000_000.0
+            for start, end in audio_analysis_intervals
+        ]
+        print(
+            "audio_analysis_ms "
+            f"n={len(durations)} median={statistics.median(durations):.3f} "
+            f"p95={_pct(durations, .95):.3f} p99={_pct(durations, .99):.3f} "
+            f"max={max(durations):.3f}"
+        )
+    if audio_smooth_intervals:
+        durations = [
+            (end - start) / 1_000_000.0
+            for start, end in audio_smooth_intervals
+        ]
+        print(
+            "audio_smooth_ms "
+            f"n={len(durations)} median={statistics.median(durations):.3f} "
+            f"p95={_pct(durations, .95):.3f} p99={_pct(durations, .99):.3f} "
+            f"max={max(durations):.3f}"
+        )
+
+    background_intervals_by_screen: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    background_idle_intervals_by_screen: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    background_transition_intervals_by_screen: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    if background_events:
+        for screen in sorted({key[0] for key in background_events}):
+            screen_keys = sorted(
+                (key for key in background_events if key[0] == screen),
+                key=lambda key: key[1],
+            )
+            for start_event, end_event, label in (
+                (19, 20, "background_begin->texture_ready"),
+                (20, 21, "background_texture_ready->draw_begin"),
+                (21, 22, "background_draw_begin->draw_ready"),
+                (22, 23, "background_draw_ready->render_ready"),
+                (19, 23, "background_render_begin->render_ready"),
+            ):
+                values: list[float] = []
+                idle_values: list[float] = []
+                transition_values: list[float] = []
+                for key in screen_keys:
+                    events = background_events[key]
+                    starts = events.get(start_event, ())
+                    ends = events.get(end_event, ())
+                    if not starts or not ends:
+                        continue
+                    start, end = starts[0], ends[0]
+                    if end < start:
+                        continue
+                    value = (end - start) / 1_000_000.0
+                    values.append(value)
+                    if background_transition_by_key.get(key, 0) > 0:
+                        transition_values.append(value)
+                    else:
+                        idle_values.append(value)
+                    if start_event == 19 and end_event == 23:
+                        interval = (start, end)
+                        background_intervals_by_screen[screen].append(interval)
+                        if background_transition_by_key.get(key, 0) > 0:
+                            background_transition_intervals_by_screen[screen].append(interval)
+                        else:
+                            background_idle_intervals_by_screen[screen].append(interval)
+                if values:
+                    print(
+                        f"screen={screen} {label}_ms n={len(values)} "
+                        f"median={statistics.median(values):.3f} "
+                        f"p95={_pct(values, .95):.3f} "
+                        f"p99={_pct(values, .99):.3f} max={max(values):.3f}"
+                    )
+                if idle_values and transition_values:
+                    print(
+                        f"screen={screen} {label}_split "
+                        f"idle_n={len(idle_values)} idle_median={statistics.median(idle_values):.3f} "
+                        f"idle_p95={_pct(idle_values, .95):.3f} "
+                        f"transition_n={len(transition_values)} "
+                        f"transition_median={statistics.median(transition_values):.3f} "
+                        f"transition_p95={_pct(transition_values, .95):.3f}"
+                    )
+
     screens = sorted(
         {key[0] for key in publish_by_window_revision}
         | {key[0] for key in by_window_revision}
+        | {key[0] for key in background_events}
     )
     for screen in screens:
         published = {
@@ -277,6 +476,41 @@ def main() -> int:
                     f"p95={_pct(deltas, .95):.3f} "
                     f"p99={_pct(deltas, .99):.3f} max={max(deltas):.3f}"
                 )
+
+        render_entry_gaps: list[tuple[int, int]] = []
+        for (event_screen, _generation, _revision), stage_events in by_window_revision.items():
+            if event_screen != screen:
+                continue
+            starts = stage_events.get(7, ())
+            ends = stage_events.get(8, ())
+            for start, end in zip(starts, ends):
+                if end >= start:
+                    render_entry_gaps.append((start, end))
+        render_entry_gaps.sort()
+        _print_render_gap_overlap(
+            screen=screen,
+            gaps=render_entry_gaps,
+            label="audio_analysis",
+            intervals=audio_analysis_intervals,
+        )
+        _print_render_gap_overlap(
+            screen=screen,
+            gaps=render_entry_gaps,
+            label="audio_smooth",
+            intervals=audio_smooth_intervals,
+        )
+        _print_render_gap_overlap(
+            screen=screen,
+            gaps=render_entry_gaps,
+            label="background_render",
+            intervals=background_intervals_by_screen.get(screen, []),
+        )
+        _print_render_gap_overlap(
+            screen=screen,
+            gaps=render_entry_gaps,
+            label="background_transition",
+            intervals=background_transition_intervals_by_screen.get(screen, []),
+        )
 
     timeline_seconds = max(0.0, float(args.timeline_seconds))
     if timeline_seconds > 0.0:

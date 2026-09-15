@@ -135,3 +135,33 @@ def test_install_can_relocate_sink_without_replacing_qt_callback(tmp_path, monke
     assert "event=sink_relocated" in Path(second).read_text(encoding="utf-8")
 
     capture.uninstall_qt_message_capture()
+
+
+def test_scenegraph_timing_debug_is_captured_without_console_echo(tmp_path, monkeypatch):
+    import io
+
+    state = _install_fake_pyside(monkeypatch)
+    import core.logging.qt_message_capture as capture
+    capture = importlib.reload(capture)
+
+    class Mode:
+        name = "QtDebugMsg"
+
+    context = types.SimpleNamespace(
+        category="qt.scenegraph.time.renderloop",
+        file=None,
+        line=0,
+        function=None,
+    )
+    stderr = io.StringIO()
+    monkeypatch.setattr(sys, "__stderr__", stderr)
+
+    path = capture.install_qt_message_capture(tmp_path)
+    callback = state["handler"]
+    callback(Mode(), context, "syncAndRender: frame rendered in 9ms")
+    assert capture.flush_qt_message_capture()
+
+    text = Path(path).read_text(encoding="utf-8")
+    assert "syncAndRender: frame rendered in 9ms" in text
+    assert stderr.getvalue() == ""
+    capture.uninstall_qt_message_capture()
