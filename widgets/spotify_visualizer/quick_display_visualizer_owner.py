@@ -81,6 +81,9 @@ class QuickDisplayVisualizerOwner:
             initial_mode=str(initial_mode),
             engine_factory=engine_factory,
         )
+        self._controller.logical_mailbox.set_trace_screen_index(
+            int(runtime.screen_index)
+        )
         self._presentation_resolver = presentation_resolver
         required_card_fields = {
             "background_color",
@@ -119,6 +122,7 @@ class QuickDisplayVisualizerOwner:
         self._activation_fade_started_at: float | None = None
         self._pending_mode_activation: dict[str, Any] | None = None
         self._sync: Any = None
+        self._publication_wake: Any = None
         self._configured = False
         self._started = False
         self._bound = False
@@ -303,6 +307,7 @@ class QuickDisplayVisualizerOwner:
         )
         from widgets.spotify_visualizer.quick_presentation_sync import (
             QuickVisualizerPresentationSync,
+            QuickVisualizerPublicationWake,
         )
 
         self._sync = QuickVisualizerPresentationSync(
@@ -310,6 +315,11 @@ class QuickDisplayVisualizerOwner:
             resolve_presentation=self._resolve_current_presentation,
             commit_presentation=self._apply_resolved_presentation,
             request_present=self._request_retained_present,
+            resolve_screen_index=lambda: int(self._presentation_runtime.screen_index),
+        )
+        self._publication_wake = QuickVisualizerPublicationWake(self.sync_present)
+        self._controller.logical_mailbox.set_wake_callback(
+            self._publication_wake.request
         )
         self._bound = True
         return self._render_identity
@@ -426,14 +436,6 @@ class QuickDisplayVisualizerOwner:
 
         old_presentation_runtime = self._presentation_runtime
         old_runtime = self._runtime
-        old_pacer = getattr(old_runtime, "frame_pacer", None)
-        new_pacer = getattr(runtime, "frame_pacer", None)
-        if self._started and (old_pacer is None or new_pacer is None):
-            raise RuntimeError("visualizer display transfer requires both frame pacers")
-
-        if self._started:
-            old_pacer.set_visualizer_active(False)
-            old_pacer.set_visualizer_sync(None)
         old_presentation_runtime.scene_controller.set_visualizer_viewport_config_sink(None)
         try:
             self._presentation_runtime = runtime
@@ -441,9 +443,17 @@ class QuickDisplayVisualizerOwner:
             runtime.bind_visualizer_viewport_config(
                 self._controller.set_custom_viewport_override
             )
-            if self._started:
-                new_pacer.set_visualizer_sync(self.sync_present)
-                new_pacer.set_visualizer_active(True)
+            self._controller.logical_mailbox.set_trace_screen_index(
+                int(runtime.screen_index)
+            )
+            # Visualizer presentation is publication-driven, not display-pacer
+            # driven. The one logical mailbox wake stays bound to this owner and
+            # therefore follows whichever retained scene ``_presentation_runtime``
+            # currently names without moving a timer/cadence owner.
+            if self._started and self._controller.logical_mailbox.peek() is not None:
+                wake = self._publication_wake
+                if wake is not None:
+                    wake.request()
         except Exception:
             # Transfer is one event-bound transaction. Restore the old display
             # edge rather than leave the logical owner attached to half a scene.
@@ -453,22 +463,14 @@ class QuickDisplayVisualizerOwner:
                 logger.exception(
                     "[SPOTIFY_VIS] Failed clearing partial target viewport route"
                 )
-            if self._started and new_pacer is not None:
-                try:
-                    new_pacer.set_visualizer_active(False)
-                    new_pacer.set_visualizer_sync(None)
-                except Exception:
-                    logger.exception(
-                        "[SPOTIFY_VIS] Failed clearing partial target pacer route"
-                    )
             self._presentation_runtime = old_presentation_runtime
             self._runtime = old_runtime
+            self._controller.logical_mailbox.set_trace_screen_index(
+                int(old_presentation_runtime.screen_index)
+            )
             old_presentation_runtime.bind_visualizer_viewport_config(
                 self._controller.set_custom_viewport_override
             )
-            if self._started:
-                old_pacer.set_visualizer_sync(self.sync_present)
-                old_pacer.set_visualizer_active(True)
             raise
         return True
 
@@ -996,39 +998,38 @@ class QuickDisplayVisualizerOwner:
         if callable(set_generation):
             set_generation(controller.runtime_generation)
         acquire = getattr(engine, "acquire", None)
-        pacer = self._runtime.frame_pacer
         try:
             if callable(acquire):
                 acquire()
                 self._engine_acquired = True
             self.set_playing(controller.playing)
-            self._start_logical_runtime(interval_s=interval_s)
-            # Arm the authored scene fade before the pacer can publish the first
-            # frame so the visualizer eases up from zero instead of snapping in.
+            # Arm the authored scene fade before the logical producer can publish
+            # the first frame. Mailbox empty->populated publication wakes Qt's GUI
+            # thread directly; there is no display-refresh polling pacer here.
             self._activation_fade_started_at = float(self._transition_clock())
-            pacer.set_visualizer_sync(self.sync_present)
-            pacer.set_visualizer_active(True)
             self._started = True
+            self._start_logical_runtime(interval_s=interval_s)
         except Exception:
-            try:
-                pacer.set_visualizer_active(False)
-                pacer.set_visualizer_sync(None)
-            finally:
-                controller.stop_logical_runtime()
-                if self._engine_acquired:
-                    release = getattr(engine, "release", None)
-                    if callable(release):
-                        release()
-                    self._engine_acquired = False
+            self._started = False
+            controller.stop_logical_runtime()
+            if self._engine_acquired:
+                release = getattr(engine, "release", None)
+                if callable(release):
+                    release()
+                self._engine_acquired = False
             raise
 
     def retire(self) -> bool:
         if self._retired:
             return False
+        # The mailbox wake is installed during bind(), before start(). A failed
+        # start must not leave a logical-thread callback targeting a retired Qt
+        # object, so detach this edge regardless of whether logical cadence ran.
+        self._controller.logical_mailbox.set_wake_callback(None)
+        wake = self._publication_wake
+        if wake is not None:
+            wake.close()
         if self._started:
-            pacer = self._runtime.frame_pacer
-            pacer.set_visualizer_active(False)
-            pacer.set_visualizer_sync(None)
             self._runtime.scene_controller.set_visualizer_double_click_admission(None)
             self._runtime.scene_controller.set_visualizer_middle_click_admission(None)
         if self._bound:
@@ -1047,6 +1048,7 @@ class QuickDisplayVisualizerOwner:
         self._retired = True
         self._controller.close_render_admission()
         self._sync = None
+        self._publication_wake = None
         self._pending_mode_activation = None
         self._presentation_resolver = None
         self._card_shadow_kwargs.clear()

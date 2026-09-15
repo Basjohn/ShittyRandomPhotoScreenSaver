@@ -12,8 +12,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 import time
 
-from PySide6.QtCore import QObject, Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QCoreApplication, QObject, Qt
 from shiboken6 import isValid as _is_valid_qobject
 
 from core.logging.logger import get_logger
@@ -32,12 +31,19 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state,
 )
 from rendering.runtime_input import suppress_runtime_pointer_input
-from ui.settings_dialog import SettingsDialog
 
 if TYPE_CHECKING:
     from engine.screensaver_engine import ScreensaverEngine
 
 logger = get_logger(__name__)
+
+
+def _settings_dialog_class():
+    """Resolve the QWidget Settings type only after the Quick runtime is gone."""
+
+    from ui.settings_dialog import SettingsDialog
+
+    return SettingsDialog
 
 
 def _record_diagnostic_stage(stage: str, **fields: object) -> None:
@@ -350,7 +356,7 @@ def on_settings_requested(
             "[LIFECYCLE] Settings admission aborted because runtime teardown failed",
             exc_info=True,
         )
-        QApplication.exit(1)
+        QCoreApplication.exit(1)
         return
     log_lifecycle_resource_snapshot(
         engine,
@@ -392,7 +398,7 @@ def _open_settings_after_runtime_destroyed(
 
     from engine.runtime_destruction import qt_replacement_may_run
 
-    app = QApplication.instance()
+    app = QCoreApplication.instance()
     if app is None or not qt_replacement_may_run(engine):
         engine._settings_dialog_active = False
         return
@@ -404,6 +410,11 @@ def _open_settings_after_runtime_destroyed(
 
     dialog_barrier = None
     try:
+        # Settings remains QWidget-based by design, but it is not part of the
+        # steady-state screensaver runtime import graph. Resolve it only after the
+        # retired Quick display generation has crossed its destruction barrier.
+        SettingsDialog = _settings_dialog_class()
+
         dialog_generation = (
             f"settings-dialog:{getattr(engine, '_runtime_generation', 'unknown')}:"
             f"{time.monotonic_ns()}"
@@ -565,7 +576,7 @@ def _open_settings_after_runtime_destroyed(
                 dialog_barrier.cancel_for_terminal_shutdown()
             engine._active_settings_dialog = None
             engine._settings_dialog_active = False
-            QApplication.exit(1)
+            QCoreApplication.exit(1)
             return
 
         engine._active_settings_dialog = None
@@ -591,7 +602,7 @@ def _open_settings_after_runtime_destroyed(
         engine._active_settings_dialog = None
         engine._settings_dialog_active = False
         logger.exception("Failed to open settings dialog: %s", e)
-        QApplication.quit()
+        QCoreApplication.quit()
 
 
 def _restart_after_settings_dialog_destroyed(
@@ -670,7 +681,7 @@ def _construct_and_start_replacement_runtime(
         )
         if not engine._initialize_display():
             logger.error("Failed to initialize replacement display runtime; quitting")
-            QApplication.quit()
+            QCoreApplication.quit()
             return False
         log_lifecycle_resource_snapshot(
             engine,
@@ -680,7 +691,7 @@ def _construct_and_start_replacement_runtime(
         engine._setup_rotation_timer()
         if not engine.start():
             logger.error("Failed to start replacement display runtime; quitting")
-            QApplication.quit()
+            QCoreApplication.quit()
             return False
         log_lifecycle_resource_snapshot(
             engine,
@@ -837,7 +848,7 @@ def _admit_custom_layout_reload(
             e,
             exc_info=True,
         )
-        QApplication.exit(1)
+        QCoreApplication.exit(1)
 
 
 def _restart_after_custom_runtime_destroyed(engine: ScreensaverEngine) -> None:

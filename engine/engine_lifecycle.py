@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtCore import QCoreApplication, QTimer, QMetaObject, Qt, QThread
-from PySide6.QtWidgets import QApplication
 
 from core.logging.logger import (
     get_logger,
@@ -98,7 +97,7 @@ def teardown_display_runtime(
         ):
             # Terminal exit arms a terminal-purpose barrier so the same Quick/
             # QObject/Python/resource drain that replacement already proves is
-            # observed before QApplication.quit(); it never admits a replacement
+            # observed before QCoreApplication.quit(); it never admits a replacement
             # continuation. engine_cleanup runs on the final teardown path where
             # the loop may already be gone, so it stays barrier-free.
             purpose = "terminal" if reason == "application_exit" else "replacement"
@@ -390,7 +389,7 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
 
     # Only exit the Qt event loop if requested
     if exit_app:
-        QApplication.quit()
+        QCoreApplication.quit()
 
 
 def stop(
@@ -533,7 +532,7 @@ def stop(
             barrier = getattr(engine, "_pending_runtime_destruction_barrier", None)
             if isinstance(barrier, RuntimeDestructionBarrier) and not barrier.is_complete:
                 # Terminal exit must observe the asynchronous Quick retirement to
-                # completion before worker/process shutdown and QApplication.quit();
+                # completion before worker/process shutdown and QCoreApplication.quit();
                 # ending the event loop earlier destroyed still-live Quick roots at
                 # GC (BackgroundRenderItem slot error / access violation, Clock
                 # null-model storm). The terminal-purpose barrier runs the
@@ -554,7 +553,7 @@ def stop(
         logger.exception("Engine stop failed: %s", e)
         if exit_app:
             try:
-                QApplication.quit()
+                QCoreApplication.quit()
             except Exception as quit_error:
                 logger.error("Failed to quit application: %s", quit_error)
         raise

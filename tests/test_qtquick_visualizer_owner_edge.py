@@ -19,6 +19,9 @@ from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer.quick_display_visualizer_owner import (
     QuickDisplayVisualizerOwner,
 )
+from widgets.spotify_visualizer.quick_presentation_sync import (
+    QuickVisualizerPublicationWake,
+)
 
 # Construct owners the way the display owner does (card kwargs + technical cache).
 from tests._visualizer_presentation import make_visualizer_owner as _make_owner
@@ -167,6 +170,51 @@ def test_edge_constructs_configures_binds_starts_and_retires(qt_app, monkeypatch
         qt_app.processEvents()
 
 
+
+
+@pytest.mark.qt
+def test_publication_wake_coalesces_duplicate_qt_events(qt_app) -> None:
+    deliveries: list[int] = []
+    wake = QuickVisualizerPublicationWake(lambda: deliveries.append(1) or True)
+    try:
+        wake.request()
+        wake.request()
+        wake.request()
+        assert wake.pending is True
+        qt_app.processEvents()
+        assert deliveries == [1]
+        assert wake.pending is False
+
+        wake.request()
+        qt_app.processEvents()
+        assert deliveries == [1, 1]
+    finally:
+        wake.close()
+
+
+@pytest.mark.qt
+def test_bound_but_never_started_owner_retires_publication_wake(qt_app) -> None:
+    runtime, factory = _make_runtime(qt_app, 43)
+    try:
+        owner = _make_owner(
+            runtime, bar_count=32, initial_mode="bubble",
+            engine_factory=lambda _bc: _Engine(),
+        )
+        owner.configure(logical_kwargs=_BUBBLE_CONFIG, playing=True)
+        owner.bind(engine_generation=7, activation_id=11)
+        wake = owner._publication_wake
+        assert wake is not None
+        assert owner.controller.logical_mailbox._wake_callback.__self__ is wake
+
+        assert owner.retire() is True
+        assert owner.controller.logical_mailbox._wake_callback is None
+        assert wake._closed is True
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
 @pytest.mark.qt
 def test_generation_replacement_builds_fresh_owner_no_duplicate(qt_app, monkeypatch) -> None:
     _quiet_tick(monkeypatch)
@@ -211,18 +259,7 @@ def test_generation_replacement_builds_fresh_owner_no_duplicate(qt_app, monkeypa
         qt_app.processEvents()
 
 
-def test_display_transfer_moves_pacer_and_retirement_edge_without_recreating_controller() -> None:
-    class _Pacer:
-        def __init__(self) -> None:
-            self.active_calls = []
-            self.sync_calls = []
-
-        def set_visualizer_active(self, value):
-            self.active_calls.append(bool(value))
-
-        def set_visualizer_sync(self, callback):
-            self.sync_calls.append(callback)
-
+def test_display_transfer_moves_publication_edge_without_recreating_controller() -> None:
     class _Scene:
         def __init__(self) -> None:
             self.sinks = []
@@ -242,7 +279,6 @@ def test_display_transfer_moves_pacer_and_retirement_edge_without_recreating_con
         scene = _Scene()
         runtime = SimpleNamespace(
             runtime_generation=17,
-            frame_pacer=_Pacer(),
             scene_controller=scene,
         )
         runtime.bind_visualizer_viewport_config = scene.set_visualizer_viewport_config_sink
@@ -251,25 +287,41 @@ def test_display_transfer_moves_pacer_and_retirement_edge_without_recreating_con
     source, target = _runtime(), _runtime()
     owner = _make_owner(source, bar_count=8, initial_mode="bubble")
     controller = owner.controller
+
+    class _Wake:
+        def __init__(self) -> None:
+            self.requests = 0
+            self.closed = False
+
+        def request(self) -> None:
+            self.requests += 1
+
+        def close(self) -> None:
+            self.closed = True
+
+    wake = _Wake()
+    owner._publication_wake = wake
     owner._bound = True
     owner._started = True
+    # Simulate a logical publication already waiting while CUSTOM moves the
+    # retained visualizer item. Transfer must wake the *same* single owner on
+    # the target presentation edge rather than recreate a pacer/controller.
+    controller.logical_mailbox.publish(
+        SimpleNamespace(), generation=17, activation_id=1
+    )
 
     assert owner.set_presentation_runtime(target) is True
     assert owner.controller is controller
     assert owner.presentation_runtime is target
     assert owner._runtime is target
-    assert source.frame_pacer.active_calls[-1] is False
-    assert source.frame_pacer.sync_calls[-1] is None
-    assert target.frame_pacer.sync_calls[-1] == owner.sync_present
-    assert target.frame_pacer.active_calls[-1] is True
+    assert wake.requests == 1
     assert source.scene_controller.sinks[-1] is None
     assert target.scene_controller.sinks[-1] == controller.set_custom_viewport_override
 
     assert owner.retire() is True
-    assert target.frame_pacer.active_calls[-1] is False
-    assert target.frame_pacer.sync_calls[-1] is None
+    assert wake.closed is True
+    assert controller.logical_mailbox._wake_callback is None
     assert target.scene_controller.sinks[-1] is None
-
 
 def test_fresh_visualizer_sync_requires_a_retained_item_update_request() -> None:
     class _Scene:
@@ -288,12 +340,12 @@ def test_fresh_visualizer_sync_requires_a_retained_item_update_request() -> None
         owner._request_retained_present()
 
 
-def test_frame_pacer_coalesces_visualizer_item_update_with_window_request() -> None:
+def test_visualizer_presentation_is_not_owned_by_the_continuous_frame_pacer() -> None:
     from pathlib import Path
 
-    source = (Path(__file__).resolve().parents[1] / "rendering" / "quick" / "frame_pacer.py").read_text(
-        encoding="utf-8"
-    )
-    assert "visualizer_requested_present = bool(synchronize())" in source
-    assert "if not visualizer_requested_present:" in source
-    assert "self._window.update()" in source
+    source = (Path(__file__).resolve().parents[1] / "rendering" / "quick" / "frame_pacer.py").read_text(encoding="utf-8")
+    owner_source = (Path(__file__).resolve().parents[1] / "widgets" / "spotify_visualizer" / "quick_display_visualizer_owner.py").read_text(encoding="utf-8")
+    assert "set_visualizer_active" not in source
+    assert "set_visualizer_sync" not in source
+    assert "logical_mailbox.set_wake_callback" in owner_source
+    assert "request_visualizer_present" in owner_source

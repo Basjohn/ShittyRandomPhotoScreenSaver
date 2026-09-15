@@ -1,49 +1,50 @@
-"""Display-local presentation pacing for dynamic Quick render-node content."""
+"""Qt-Quick-owned continuous-frame demand for retained scene animations.
+
+Visualizer presentation is intentionally *not* paced here. Fresh visualizer
+publications wake their retained QQuickItem directly with latest-wins/coalesced
+semantics. This owner exists only for scene content whose pixels continue to
+change as a function of wall time after state admission (wallpaper transitions
+and admitted QML widget animations).
+
+The driver is chained from ``QQuickWindow.frameSwapped`` instead of a Python
+``QTimer``. One initial ``QWindow.requestUpdate()`` enters Qt's coalesced update path;
+each completed swap requests at most one successor while continuous-frame demand
+remains active. There is no second display-refresh clock, deadline debt,
+or timer polling layer competing with Qt Quick's animation/render scheduling.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntFlag, auto
 import math
-import time
-from typing import Callable
 
-from PySide6.QtCore import QObject, Qt, QTimer
+from PySide6.QtCore import QObject
 from PySide6.QtQuick import QQuickWindow
-
-from core.logging.logger import get_logger
-
-logger = get_logger(__name__)
 
 
 class QuickFrameDemand(IntFlag):
-    """Independent reasons that require continuous custom-node presentation."""
+    """Independent reasons that require continuously changing scene frames."""
 
     NONE = 0
     TRANSITION = auto()
-    VISUALIZER = auto()
-    # A widget QML opacity/crossfade animation is running. Without this the
-    # threaded scene is only driven while a wallpaper transition or the
-    # visualizer demands frames, so a track-change/rotation fade with neither
-    # active renders only its first/last frame and reads as a hard flash.
     WIDGET_ANIMATION = auto()
-
-
-@dataclass(frozen=True)
-class QuickPacingDecision:
-    due_opportunities: int
-    next_delay_ms: int
 
 
 @dataclass
 class QuickPacerState:
-    """Monotonic latest-opportunity pacing with no catch-up request burst."""
+    """Diagnostics for one Qt-Quick-owned continuous frame chain.
+
+    ``target_hz`` is the bound screen's nominal refresh and remains useful in
+    PERF output. It is *not* a Python pacing clock. ``skipped_deadlines`` stays
+    at zero for log/schema compatibility because this driver owns no deadlines.
+    """
 
     target_hz: float
     requested_opportunities: int = 0
     paced_requests: int = 0
     skipped_deadlines: int = 0
-    next_deadline_ns: int | None = None
+    frame_swaps: int = 0
 
     def __post_init__(self) -> None:
         rate = float(self.target_hz)
@@ -52,62 +53,27 @@ class QuickPacerState:
         self.target_hz = rate
         self.interval_ns = max(1, int(round(1_000_000_000.0 / rate)))
 
-    def start(self, now_ns: int) -> None:
-        self.next_deadline_ns = int(now_ns)
-
-    def stop(self) -> None:
-        self.next_deadline_ns = None
-
-    def consume(self, now_ns: int) -> QuickPacingDecision:
-        now_ns = int(now_ns)
-        if self.next_deadline_ns is None:
-            self.start(now_ns)
-
-        deadline = int(self.next_deadline_ns)
-        if now_ns < deadline:
-            return QuickPacingDecision(
-                due_opportunities=0,
-                next_delay_ms=max(
-                    1,
-                    math.ceil((deadline - now_ns) / 1_000_000.0),
-                ),
-            )
-
-        due = 1 + ((now_ns - deadline) // self.interval_ns)
-        self.requested_opportunities += int(due)
-        self.paced_requests += 1
-        self.skipped_deadlines += max(0, int(due) - 1)
-        self.next_deadline_ns = deadline + int(due) * self.interval_ns
-        delay_ns = max(0, int(self.next_deadline_ns) - now_ns)
-        return QuickPacingDecision(
-            due_opportunities=int(due),
-            next_delay_ms=max(1, math.ceil(delay_ns / 1_000_000.0)),
-        )
-
 
 class QuickFramePacer(QObject):
-    """One demand-driven target pacer for one standalone Quick window."""
+    """Drive continuous retained-scene animation from Qt Quick frame completion.
 
-    def __init__(
-        self,
-        window: QQuickWindow,
-        target_hz: float,
-        *,
-        clock_ns: Callable[[], int] = time.perf_counter_ns,
-        timer: QTimer | None = None,
-    ) -> None:
+    This class deliberately does not know about the visualizer. Visualizer
+    logical state is event-driven and calls ``QQuickItem.update()`` only when a
+    fresh latest-wins publication exists.
+    """
+
+    def __init__(self, window: QQuickWindow, target_hz: float) -> None:
         super().__init__(window)
         self._window = window
-        self._clock_ns = clock_ns
-        self._timer = timer or QTimer(self)
-        self._timer.setSingleShot(True)
-        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
-        self._timer.timeout.connect(self._service_deadline)
         self._state = QuickPacerState(float(target_hz))
         self._demands = QuickFrameDemand.NONE
-        self._visualizer_sync: Callable[[], bool] | None = None
         self._paused = False
+        # A hidden/retired window may discard an already queued update without
+        # emitting frameSwapped.  Never carry that stale admission across a
+        # later reuse of this runtime.
+        self._update_pending = False
         self._closed = False
+        window.frameSwapped.connect(self._on_frame_swapped)
 
     @property
     def target_hz(self) -> float:
@@ -121,20 +87,11 @@ class QuickFramePacer(QObject):
         return bool(self._demands) and not self._paused and not self._closed
 
     def set_demand(self, reason: QuickFrameDemand, active: bool) -> None:
-        """Add or remove one continuous-frame reason.
-
-        Adding the first reason starts with one immediate opportunity. Removing
-        the last reason stops the timer and discards its old deadline so an
-        eventual resume cannot replay idle-time debt.
-        """
+        """Add/remove one continuous-frame reason and seed Qt Quick once."""
 
         if self._closed:
             raise RuntimeError("Quick frame pacer is closed")
-        allowed = int(
-            QuickFrameDemand.TRANSITION
-            | QuickFrameDemand.VISUALIZER
-            | QuickFrameDemand.WIDGET_ANIMATION
-        )
+        allowed = int(QuickFrameDemand.TRANSITION | QuickFrameDemand.WIDGET_ANIMATION)
         reason_value = int(reason)
         if reason_value == 0 or reason_value & ~allowed:
             raise ValueError(f"unsupported Quick frame demand: {reason!r}")
@@ -148,41 +105,17 @@ class QuickFramePacer(QObject):
         if self._demands == previous:
             return
 
-        if previous == QuickFrameDemand.NONE and self._demands and not self._paused:
-            self._state.start(self._clock_ns())
-            self._service_deadline()
-        elif previous and self._demands == QuickFrameDemand.NONE:
-            self._timer.stop()
-            self._state.stop()
+        if previous == QuickFrameDemand.NONE and self.is_active():
+            self._request_next_frame()
 
     def set_transition_active(self, active: bool) -> None:
         self.set_demand(QuickFrameDemand.TRANSITION, active)
 
-    def set_visualizer_active(self, active: bool) -> None:
-        self.set_demand(QuickFrameDemand.VISUALIZER, active)
-
     def set_widget_animation_active(self, active: bool) -> None:
         self.set_demand(QuickFrameDemand.WIDGET_ANIMATION, active)
 
-    def set_visualizer_sync(
-        self,
-        synchronize: Callable[[], bool] | None,
-    ) -> None:
-        """Bind the one GUI-side visualizer publication edge.
-
-        The visualizer's logical owner owns authored evolution. This callback
-        only drains its latest immutable state on the existing display-local
-        presentation opportunity; it never introduces another timer or clock.
-        """
-
-        if self._closed:
-            raise RuntimeError("Quick frame pacer is closed")
-        if synchronize is not None and not callable(synchronize):
-            raise TypeError("visualizer synchronization edge must be callable")
-        self._visualizer_sync = synchronize
-
     def set_target_hz(self, target_hz: float) -> None:
-        """Retarget this display after its bound QScreen refresh changes."""
+        """Update nominal display refresh metadata after QScreen retargeting."""
 
         if self._closed:
             raise RuntimeError("Quick frame pacer is closed")
@@ -194,46 +127,43 @@ class QuickFramePacer(QObject):
             abs_tol=0.001,
         ):
             return
-
         replacement.requested_opportunities = self._state.requested_opportunities
         replacement.paced_requests = self._state.paced_requests
-        replacement.skipped_deadlines = self._state.skipped_deadlines
-        was_active = self.is_active()
-        self._timer.stop()
+        replacement.frame_swaps = self._state.frame_swaps
         self._state = replacement
-        if was_active:
-            self._state.start(self._clock_ns())
-            self._service_deadline()
 
     def stop(self) -> None:
-        """Stop current presentation demand without permanently closing."""
+        """Clear all continuous demand; an already queued frame may finish once."""
 
         if self._closed:
             return
         self._demands = QuickFrameDemand.NONE
         self._paused = False
-        self._timer.stop()
-        self._state.stop()
+        # A queued update can be discarded when a transition/animation owner is
+        # retired. Do not let that stale admission suppress a later demand.
+        self._update_pending = False
 
     def pause(self) -> bool:
-        """Suspend delivery while preserving active presentation reasons."""
+        """Suspend continuation while preserving active reasons."""
 
         if self._closed or self._paused:
             return False
         self._paused = True
-        self._timer.stop()
-        self._state.stop()
+        # Visibility changes can discard a queued QQuickWindow update without a
+        # frameSwapped acknowledgement.  Clear only our admission bit; Qt owns
+        # whatever work was already accepted.  resume() will seed one fresh
+        # update from the current demand set.
+        self._update_pending = False
         return True
 
     def resume(self) -> bool:
-        """Resume preserved demand from now without replaying hidden-time debt."""
+        """Resume from now with one Qt Quick update; there is no hidden debt."""
 
         if self._closed or not self._paused:
             return False
         self._paused = False
         if self._demands:
-            self._state.start(self._clock_ns())
-            self._service_deadline()
+            self._request_next_frame()
         return True
 
     def close(self) -> None:
@@ -242,11 +172,16 @@ class QuickFramePacer(QObject):
         if self._closed:
             return
         self.stop()
-        self._visualizer_sync = None
+        try:
+            self._window.frameSwapped.disconnect(self._on_frame_swapped)
+        except (RuntimeError, TypeError):
+            pass
         self._closed = True
+        self._update_pending = False
 
     def describe(self) -> dict[str, object]:
         return {
+            "driver": "qt_frame_swapped",
             "target_hz": self._state.target_hz,
             "interval_ns": self._state.interval_ns,
             "active": self.is_active(),
@@ -256,50 +191,41 @@ class QuickFramePacer(QObject):
                 demand.name.lower()
                 for demand in (
                     QuickFrameDemand.TRANSITION,
-                    QuickFrameDemand.VISUALIZER,
                     QuickFrameDemand.WIDGET_ANIMATION,
                 )
                 if self._demands & demand
             ],
+            # Keep the existing PERF schema stable. These now mean Qt-owned
+            # continuation opportunities/requests, not Python timer deadlines.
             "requested_opportunities": self._state.requested_opportunities,
             "issued_update_requests": self._state.paced_requests,
-            "skipped_deadlines": self._state.skipped_deadlines,
-            "next_deadline_ns": self._state.next_deadline_ns,
+            "skipped_deadlines": 0,
+            "frame_swaps": self._state.frame_swaps,
+            "update_pending": self._update_pending,
         }
 
-    def _service_deadline(self) -> None:
-        if not self.is_active():
+    def _request_next_frame(self) -> bool:
+        if not self.is_active() or self._update_pending:
+            return False
+        self._update_pending = True
+        self._state.requested_opportunities += 1
+        self._state.paced_requests += 1
+        self._window.requestUpdate()
+        return True
+
+    def _on_frame_swapped(self) -> None:
+        """Continue only after Qt Quick confirms the previous frame boundary."""
+
+        if self._closed:
             return
-        decision = self._state.consume(self._clock_ns())
-        if decision.due_opportunities:
-            visualizer_requested_present = False
-            if self._demands & QuickFrameDemand.VISUALIZER:
-                synchronize = self._visualizer_sync
-                if synchronize is None:
-                    raise RuntimeError(
-                        "visualizer frame demand has no presentation synchronization owner"
-                    )
-                try:
-                    # A successful visualizer sync is contractually complete only
-                    # after VisualizerRenderItem.update() accepted the retained
-                    # presentation request. That is already a scene
-                    # presentation request. Issuing QQuickWindow.update() as well
-                    # produced two swaps from the same pacer opportunity (observed
-                    # ~120 fps on a 60 Hz display and ~250 on 165 Hz) without a
-                    # second authored revision. Preserve the item update and only
-                    # request the window when no fresh visualizer publication did.
-                    visualizer_requested_present = bool(synchronize())
-                except Exception:
-                    logger.error(
-                        "[QUICK_PACER] Visualizer presentation synchronization failed",
-                        exc_info=True,
-                    )
-                    raise
-            # Qt may coalesce update requests. One service callback issues at
-            # most one presentation request for all deadlines already missed. A
-            # visualizer item update also services transition/widget animation
-            # state because the complete Quick window renders that opportunity.
-            if not visualizer_requested_present:
-                self._window.update()
+        self._state.frame_swaps += 1
+        self._update_pending = False
         if self.is_active():
-            self._timer.start(decision.next_delay_ms)
+            self._request_next_frame()
+
+
+__all__ = [
+    "QuickFrameDemand",
+    "QuickFramePacer",
+    "QuickPacerState",
+]

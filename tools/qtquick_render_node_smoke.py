@@ -1578,12 +1578,9 @@ class _SmokeRunner(QObject):
         self._active_hide_records = {}
         try:
             for probe in self._probes:
-                # This harness deliberately simulates a visualizer pacing
-                # consumer without constructing the product visualizer owner.
-                # Install the corresponding inert GUI-sync edge explicitly;
-                # production visualizer demand remains callback-required.
-                probe.runtime.frame_pacer.set_visualizer_sync(lambda: False)
-                probe.runtime.frame_pacer.set_visualizer_active(True)
+                # Keep a real continuous Quick demand active across the
+                # hide/show stress without inventing a visualizer polling owner.
+                probe.runtime.frame_pacer.set_widget_animation_active(True)
                 before = probe.telemetry.snapshot()
                 geometry = probe.window.geometry()
                 self._active_hide_records[id(probe)] = {
@@ -1843,10 +1840,9 @@ class _SmokeRunner(QObject):
             displaced = next(probe for probe in self._probes if probe.index == 0)
             fallback = next(probe for probe in self._probes if probe.index == 1)
             fallback_screen = self._current_screen_by_index[1]
-            # Topology smoke simulates a presentation consumer only; it does
-            # not construct the product visualizer owner.
-            displaced.runtime.frame_pacer.set_visualizer_sync(lambda: False)
-            displaced.runtime.frame_pacer.set_visualizer_active(True)
+            # Keep a real continuous Quick demand active during displacement;
+            # visualizer presentation itself is publication-driven.
+            displaced.runtime.frame_pacer.set_widget_animation_active(True)
             self._topology_displacement = {
                 "generation": self._generation,
                 "displaced_screen_index": displaced.index,
@@ -1899,7 +1895,7 @@ class _SmokeRunner(QObject):
             and displaced.runtime.phase.value == "paused"
             and pacer_state.get("paused")
             and not pacer_state.get("active")
-            and pacer_state.get("demands") == ["visualizer"]
+            and pacer_state.get("demands") == ["widget_animation"]
             and not input_state.get("admission_open")
             and scene_state.get("scene_graph_invalidated")
             and displaced.window.screen() is fallback_screen
@@ -2739,7 +2735,7 @@ class _SmokeRunner(QObject):
             if (
                 not hidden_pacer.get("paused")
                 or hidden_pacer.get("active")
-                or hidden_pacer.get("demands") != ["visualizer"]
+                or hidden_pacer.get("demands") != ["widget_animation"]
             ):
                 errors.append(f"{cycle_prefix} did not preserve paused frame demand")
             if not cycle.get("qml_root_preserved_while_hidden"):
@@ -2761,7 +2757,7 @@ class _SmokeRunner(QObject):
             if (
                 resumed_pacer.get("paused")
                 or not resumed_pacer.get("active")
-                or resumed_pacer.get("demands") != ["visualizer"]
+                or resumed_pacer.get("demands") != ["widget_animation"]
             ):
                 errors.append(f"{cycle_prefix} did not resume frame demand")
             if not cycle.get("qml_root_preserved_after_resume"):

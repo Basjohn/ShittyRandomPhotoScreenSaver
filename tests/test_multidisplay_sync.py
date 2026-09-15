@@ -7,8 +7,6 @@ transitions across multiple displays.
 import pytest
 import time
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt
 from engine.display_manager import DisplayManager
 
 
@@ -19,14 +17,6 @@ def qapp():
     if app is None:
         app = QApplication([])
     yield app
-
-
-@pytest.fixture
-def dummy_pixmap():
-    """Create a small test pixmap."""
-    pm = QPixmap(10, 10)
-    pm.fill(Qt.GlobalColor.black)
-    return pm
 
 
 class TestDisplayManagerSync:
@@ -159,7 +149,7 @@ class TestSynchronizedTransition:
     # image/transition contract, covered by the Quick presentation/runtime
     # suites. The lock-free SPSC transition-sync queue coverage below is current.
 
-    def test_show_image_synchronized_clears_queue(self, qapp, dummy_pixmap):
+    def test_transition_sync_queue_can_be_cleared_for_new_quick_transition(self, qapp):
         """Synchronized show should clear queue before starting."""
         dm = DisplayManager()
         dm.displays = [None, None]
@@ -169,9 +159,12 @@ class TestSynchronizedTransition:
         dm._on_display_transition_ready(0)
         dm._on_display_transition_ready(1)
         
-        # Start new synchronized transition (would clear queue)
-        # Note: Can't fully test without real DisplayWidgets
+        # The retired QPixmap/show_image_synchronized API is intentionally gone.
+        # Current transition sync owns readiness coordination only.
         assert dm._transition_ready_queue is not None
+        while dm._transition_ready_queue.try_pop()[0]:
+            pass
+        assert dm._transition_ready_queue.try_pop()[0] is False
 
 
 class TestQueueOverflow:

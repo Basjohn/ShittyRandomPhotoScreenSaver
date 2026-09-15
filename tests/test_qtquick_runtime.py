@@ -154,8 +154,11 @@ def test_threaded_runtime_teardown_recreates_generation_zero_to_one():
         assert cycle["hidden_runtime_state"]["phase"] == "paused"
         assert cycle["hidden_runtime_state"]["window"]["visible"] is False
         assert cycle["hidden_runtime_state"]["frame_pacer"]["paused"] is True
+        # The smoke harness holds a genuine continuous widget-animation demand
+        # across hide/show. Visualizer presentation is publication-driven and
+        # must never reappear as a frame-pacer reason.
         assert cycle["hidden_runtime_state"]["frame_pacer"]["demands"] == [
-            "visualizer"
+            "widget_animation"
         ]
         assert cycle["hidden_runtime_state"]["scene_readiness"][
             "qml_objects_retired"
@@ -434,7 +437,7 @@ def test_threaded_runtime_recreates_removed_and_added_physical_topology(qt_app):
     )
     assert displacement["pacer_after_loss"]["paused"] is True
     assert displacement["pacer_after_loss"]["active"] is False
-    assert displacement["pacer_after_loss"]["demands"] == ["visualizer"]
+    assert displacement["pacer_after_loss"]["demands"] == ["widget_animation"]
     assert displacement["runtime_state_after_loss"]["phase"] == "paused"
     assert displacement["runtime_state_after_loss"]["window"]["visible"] is False
     assert displacement["runtime_state_after_loss"]["binding_loss"] == displacement[

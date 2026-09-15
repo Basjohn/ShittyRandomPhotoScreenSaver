@@ -373,7 +373,7 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
         start=lambda: calls.append("start") or True,
     )
 
-    monkeypatch.setattr(engine_handlers, "SettingsDialog", _FakeDialog)
+    monkeypatch.setattr(engine_handlers, "_settings_dialog_class", lambda: _FakeDialog)
     monkeypatch.setattr(engine_handlers, "AnimationManager", lambda **kwargs: object())
     guard_calls: list[tuple[int, str]] = []
     monkeypatch.setattr(
@@ -513,7 +513,7 @@ def test_engine_stop_quiesces_clears_and_fully_cleans_displays():
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr("engine.screensaver_engine.EngineState", _State)
-    monkeypatch.setattr(engine_lifecycle, "QApplication", SimpleNamespace(quit=lambda: None))
+    monkeypatch.setattr(engine_lifecycle, "QCoreApplication", SimpleNamespace(quit=lambda: None))
     try:
         engine_lifecycle.stop(engine, exit_app=False)
     finally:

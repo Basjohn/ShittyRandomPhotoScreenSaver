@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 import math
 
-from PySide6.QtCore import QThread
-from PySide6.QtGui import QGuiApplication, QImage, QPixmap
+from PySide6.QtGui import QImage
 
 from .image_state import LogicalSize, PresentationImage
 
@@ -101,35 +100,4 @@ def capture_qimage(
         source_path=source_path,
         logical_size=logical_size,
         device_pixel_ratio=device_pixel_ratio,
-    )
-
-
-def capture_qpixmap(
-    pixmap: QPixmap,
-    *,
-    identity: str,
-    source_path: str = "",
-    logical_size: Sequence[float] | None = None,
-    device_pixel_ratio: float | None = None,
-) -> PresentationImage:
-    """Capture a legacy pipeline QPixmap while running on Qt's GUI thread."""
-
-    application = QGuiApplication.instance()
-    if application is None:
-        raise RuntimeError("QPixmap capture requires a QGuiApplication")
-    if QThread.currentThread() is not application.thread():
-        raise RuntimeError("QPixmap capture must run on the Qt GUI thread")
-    if not isinstance(pixmap, QPixmap) or pixmap.isNull():
-        raise ValueError("a non-null QPixmap is required")
-    resolved_dpr = (
-        float(pixmap.devicePixelRatio())
-        if device_pixel_ratio is None
-        else float(device_pixel_ratio)
-    )
-    return _capture_qimage(
-        pixmap.toImage(),
-        identity=identity,
-        source_path=source_path,
-        logical_size=logical_size,
-        device_pixel_ratio=resolved_dpr,
     )

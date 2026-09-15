@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-import ctypes
 import os
 import threading
 import time
@@ -52,61 +51,7 @@ class _QueuedTask:
     queued_perf_ts: float
 
 
-def _apply_background_thread_priority() -> tuple[bool, str, int | None]:
-    """Install the Windows best-effort scheduling contract on the current thread.
-
-    Returns ``(applied, mode, native_priority)``.  Non-Windows platforms return
-    an explicit unsupported mode but are allowed to execute for portability and
-    testability; SRPSS production is Windows and must not infer a demotion there.
-    """
-
-    if os.name != "nt":
-        return False, "unsupported_non_windows", None
-
-    try:
-        from ctypes import wintypes
-
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        get_current_thread = kernel32.GetCurrentThread
-        get_current_thread.argtypes = []
-        get_current_thread.restype = wintypes.HANDLE
-
-        set_thread_priority = kernel32.SetThreadPriority
-        set_thread_priority.argtypes = [wintypes.HANDLE, ctypes.c_int]
-        set_thread_priority.restype = wintypes.BOOL
-
-        set_thread_priority_boost = kernel32.SetThreadPriorityBoost
-        set_thread_priority_boost.argtypes = [wintypes.HANDLE, wintypes.BOOL]
-        set_thread_priority_boost.restype = wintypes.BOOL
-
-        get_thread_priority = kernel32.GetThreadPriority
-        get_thread_priority.argtypes = [wintypes.HANDLE]
-        get_thread_priority.restype = ctypes.c_int
-
-        # NORMAL_PRIORITY_CLASS + THREAD_PRIORITY_BELOW_NORMAL => base 7 rather
-        # than the ordinary base 8.  This is deliberately conservative: the
-        # derivative is useful but may take longer under pressure.
-        THREAD_PRIORITY_BELOW_NORMAL = -1
-        handle = get_current_thread()
-        if not set_thread_priority(handle, THREAD_PRIORITY_BELOW_NORMAL):
-            error_code = int(ctypes.get_last_error())
-            return False, f"set_priority_failed:{error_code}", None
-
-        # Windows normally boosts a thread when a condition wait is satisfied.
-        # That is desirable for interactive work but defeats a best-effort CPU
-        # lane precisely when it wakes.  Keep this one lane at its base priority.
-        if not set_thread_priority_boost(handle, True):
-            error_code = int(ctypes.get_last_error())
-            return False, f"disable_boost_failed:{error_code}", None
-
-        current_priority = int(get_thread_priority(handle))
-        return (
-            current_priority == THREAD_PRIORITY_BELOW_NORMAL,
-            "windows_below_normal_no_boost",
-            current_priority,
-        )
-    except Exception as exc:  # pragma: no cover - Windows API failure path
-        return False, f"priority_exception:{type(exc).__name__}", None
+from core.windows.thread_priority import apply_best_effort_thread_priority
 
 
 class BackgroundTaskScheduler:
@@ -198,7 +143,7 @@ class BackgroundTaskScheduler:
         thread.start()
 
     def _worker_loop(self) -> None:
-        applied, mode, native_priority = _apply_background_thread_priority()
+        applied, mode, native_priority = apply_best_effort_thread_priority()
         with self._condition:
             self._priority_applied = bool(applied)
             self._priority_mode = str(mode)

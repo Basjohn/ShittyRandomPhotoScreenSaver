@@ -122,6 +122,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --gpu-timing - Enable sampled owner-context GL timer queries (implies --perf)
     - --usage - Enable low-cadence CPU/GPU/memory/thread logging
     - --handle-attribution - Add explicit Windows handle-type sidecar (implies --usage)
+    - --frame-trace - Explicit binary publication->Quick->draw trace (not diagnostic-all)
     - --viz - Enable visualizer logging and diagnostics
     - --geo - Enable geometry/z-order/edit-layout diagnostics
     - --set - Enable settings mutation/import/schema diagnostics
@@ -140,7 +141,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     # Filter out debug/viz/dev-gate flags
     _filtered = {
         "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing", "--diag-pair-warm-finish", "--diag-p4-stages", "--diag-p4-no-perf-hud", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
-        "--noupdates",
+        "--noupdates", "--frame-trace",
         "--viz-diagnostics", "--viz-diag",
         "--fresh", "--devcurve", "--devsteam", "--devstats",
     }
@@ -751,6 +752,14 @@ def main(*, entrypoint: str = "main"):
         steam_trace=logging_profile.steam_trace,
         diagnostic_build=diagnostic_build,
     )
+    # Deep publication->Quick->draw timing is intentionally separate from the
+    # normal logging bootstrap. Only the explicit CLI flag creates its binary
+    # ring/writer; diagnostic-all must never admit it implicitly.
+    from core.performance.frame_trace import start_frame_trace
+
+    frame_trace = start_frame_trace(get_log_dir(), sys.argv[1:])
+    if frame_trace is not None:
+        logger.info("[FRAME_TRACE] explicit binary trace active path=%s", frame_trace.path)
     # Route Qt/QML engine messages (binding TypeErrors, missing properties,
     # shader/component errors) into a bounded, rotating screensaver_qml.log.
     # These emit through Qt's own stderr channel, invisible to the Python log
@@ -998,6 +1007,14 @@ def main(*, entrypoint: str = "main"):
             _restore_windows_timer_resolution(1)
             logger.debug("Windows timer resolution restored to default")
     
+    # Stop the independent binary frame tracer before ordinary logger teardown.
+    # It owns no logger handler and therefore has its own explicit durability edge.
+    if frame_trace is not None:
+        from core.performance.frame_trace import close_frame_trace
+
+        frame_trace_metrics = close_frame_trace() or {}
+        logger.info("[FRAME_TRACE] closed metrics=%r", frame_trace_metrics)
+
     settings_persistence = flush_and_close_settings_persistence(timeout=5.0)
     logger.info(
         "[SETTINGS_PERSIST] enqueued=%d coalesced=%d writes=%d failed=%d "

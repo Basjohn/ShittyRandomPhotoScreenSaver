@@ -259,7 +259,7 @@ def test_diagnostic_timeout_fail_closes_before_tracing_all_survivors(
         ),
     )
     monkeypatch.setattr(
-        runtime_destruction.QApplication,
+        runtime_destruction.QCoreApplication,
         "exit",
         lambda code: events.append(("exit", code)),
     )

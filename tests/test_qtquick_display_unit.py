@@ -10,21 +10,22 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QObject
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QImage
 from shiboken6 import isValid as is_valid_qobject
 
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.display_unit import create_quick_display_unit
+from rendering.quick.display_image_route import presentation_image_from_processed_qimage
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickRuntimePhase, QuickWindowPolicy
 from rendering.quick.widgets.family_binder import ClockFamilyAdapter
 from rendering.display_modes import DisplayMode
 
 
-def _pixmap(w: int, h: int) -> QPixmap:
-    pixmap = QPixmap(w, h)
-    pixmap.fill(QColor("#224466"))
-    return pixmap
+def _presentation(w: int, h: int):
+    image = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QColor("#224466"))
+    return presentation_image_from_processed_qimage(image, image_path="x.jpg")
 
 
 def _make_unit(qt_app, generation: int, ctrl_coordinator):
@@ -73,8 +74,8 @@ def test_unit_assembles_chain_and_binds_families(qt_app) -> None:
         # The family was placed by Python from its declared preferred size.
         assert unit.presenter.geometry_for("clock") is not None
 
-        # Base image routes through the runtime's explicit API.
-        unit.present_image(_pixmap(8, 6), image_path="x.jpg")
+        # Base image routes through detached PresentationImage state only.
+        unit.present_captured_image(_presentation(8, 6))
         assert unit.runtime.scene_controller.presentation_image.pixel_size == (8, 6)
         unit.clear()
         assert unit.runtime.scene_controller.presentation_image is None

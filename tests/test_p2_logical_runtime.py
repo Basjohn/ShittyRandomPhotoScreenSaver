@@ -151,6 +151,37 @@ class TestMailbox:
 
         assert mailbox.take() is None
 
+    def test_publication_wake_coalesces_until_slot_is_consumed(self):
+        mailbox = LatestStateMailbox()
+        wakes = []
+        mailbox.set_wake_callback(lambda: wakes.append(mailbox.revision))
+
+        mailbox.publish("a", generation=1)
+        mailbox.publish("b", generation=1)
+        mailbox.publish("c", generation=1)
+
+        assert wakes == [1]
+        assert mailbox.take().state == "c"
+        mailbox.publish("d", generation=1)
+        assert wakes == [1, 4]
+
+    def test_installing_wake_callback_with_pending_latest_wakes_once(self):
+        mailbox = LatestStateMailbox()
+        mailbox.publish("pending", generation=1)
+        wakes = []
+
+        mailbox.set_wake_callback(lambda: wakes.append(True))
+
+        assert wakes == [True]
+
+    def test_clearing_wake_callback_stops_future_wakes(self):
+        mailbox = LatestStateMailbox()
+        wakes = []
+        mailbox.set_wake_callback(lambda: wakes.append(True))
+        mailbox.set_wake_callback(None)
+        mailbox.publish("quiet", generation=1)
+        assert wakes == []
+
     def test_concurrent_publishing_keeps_one_slot(self):
         mailbox = LatestStateMailbox()
 

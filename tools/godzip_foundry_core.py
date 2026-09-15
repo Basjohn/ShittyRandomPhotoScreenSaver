@@ -87,6 +87,7 @@ RUN_FLAG_DESCRIPTIONS = {
     "--gpu-timing": "Sampled owner-context GPU timing (implies --perf)",
     "--usage": "CPU/GPU/memory/thread usage",
     "--handle-attribution": "Windows handle-type sidecar (implies --usage)",
+    "--frame-trace": "Explicit binary publication→Quick→draw trace (not diagnostic-all)",
     "--viz": "Visualizer diagnostics",
     "--geo": "Geometry/z-order/edit-layout diagnostics",
     "--set": "Settings mutation/import/schema diagnostics",

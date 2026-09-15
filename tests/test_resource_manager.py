@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from PySide6.QtCore import QObject
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage
 
 from core.resources import manager as resource_manager_module
 from core.resources.manager import ResourceManager
@@ -65,10 +65,10 @@ class TestResourceManagerInit:
         assert isinstance(manager._resources, dict)
 
     def test_init_creates_pools(self):
-        """Test that object pools are created."""
+        """Test that the remaining QImage object pool is created."""
         manager = ResourceManager()
-        assert isinstance(manager._pixmap_pool, dict)
         assert isinstance(manager._image_pool, dict)
+        assert not hasattr(manager, "_pixmap_pool")
 
     def test_init_not_shutdown(self):
         """Test that manager is not shutdown on init."""
@@ -276,8 +276,6 @@ class TestObjectPooling:
     def test_pool_stats_initialized(self):
         """Test that pool stats are initialized."""
         manager = ResourceManager()
-        assert "pixmap_hits" in manager._pool_stats
-        assert "pixmap_misses" in manager._pool_stats
         assert "image_hits" in manager._pool_stats
         assert "image_misses" in manager._pool_stats
 
@@ -285,10 +283,6 @@ class TestObjectPooling:
         """Test that pool has its own lock."""
         manager = ResourceManager()
         assert hasattr(manager, '_pool_lock')
-
-    def test_pixmap_pool_max_size(self):
-        """Test pixmap pool max size constant."""
-        assert ResourceManager.PIXMAP_POOL_MAX_SIZE == 8
 
     def test_image_pool_max_size(self):
         """Test image pool max size constant."""
@@ -476,48 +470,6 @@ class TestResourceStats:
         assert "by_group" in stats
 
 
-class TestPixmapPooling:
-    """QPixmap pooling behaviour."""
-
-    def test_acquire_returns_none_when_empty(self, qt_resource_manager):
-        result = qt_resource_manager.acquire_pixmap(100, 100)
-        assert result is None
-
-    def test_release_and_acquire(self, qt_resource_manager):
-        pixmap = QPixmap(100, 100)
-        assert qt_resource_manager.release_pixmap(pixmap) is True
-
-        acquired = qt_resource_manager.acquire_pixmap(100, 100)
-        assert acquired is not None
-        assert acquired.width() == 100
-        assert acquired.height() == 100
-
-    def test_pool_size_limit(self, qt_resource_manager):
-        for _ in range(qt_resource_manager.PIXMAP_POOL_MAX_SIZE + 5):
-            qt_resource_manager.release_pixmap(QPixmap(50, 50))
-
-        stats = qt_resource_manager.get_pool_stats()
-        assert stats["pixmap_pool_size"] <= qt_resource_manager.PIXMAP_POOL_MAX_SIZE
-
-    def test_pool_stats_tracking(self, qt_resource_manager):
-        qt_resource_manager.acquire_pixmap(100, 100)
-
-        pixmap = QPixmap(100, 100)
-        qt_resource_manager.release_pixmap(pixmap)
-        qt_resource_manager.acquire_pixmap(100, 100)
-
-        stats = qt_resource_manager.get_pool_stats()
-        assert stats["pixmap_misses"] >= 1
-        assert stats["pixmap_hits"] >= 1
-
-    def test_different_sizes_use_separate_buckets(self, qt_resource_manager):
-        qt_resource_manager.release_pixmap(QPixmap(100, 100))
-        qt_resource_manager.release_pixmap(QPixmap(200, 200))
-
-        stats = qt_resource_manager.get_pool_stats()
-        assert stats["pixmap_buckets"] == 2
-
-
 class TestImagePooling:
     """QImage pooling behaviour."""
 
@@ -539,20 +491,18 @@ class TestPoolCleanup:
     """Pool cleanup behaviour."""
 
     def test_clear_pools(self, qt_resource_manager):
-        qt_resource_manager.release_pixmap(QPixmap(100, 100))
         qt_resource_manager.release_image(QImage(100, 100, QImage.Format.Format_ARGB32))
 
         qt_resource_manager.clear_pools()
         stats = qt_resource_manager.get_pool_stats()
 
-        assert stats["pixmap_pool_size"] == 0
         assert stats["image_pool_size"] == 0
 
-    def test_shutdown_clears_pixmap_pool(self, qt_resource_manager):
-        qt_resource_manager.release_pixmap(QPixmap(100, 100))
+    def test_shutdown_clears_image_pool(self, qt_resource_manager):
+        qt_resource_manager.release_image(QImage(100, 100, QImage.Format.Format_ARGB32))
         qt_resource_manager.shutdown()
         stats = qt_resource_manager.get_pool_stats()
-        assert stats["pixmap_pool_size"] == 0
+        assert stats["image_pool_size"] == 0
 
 
 class TestResourceAccountingSnapshot:

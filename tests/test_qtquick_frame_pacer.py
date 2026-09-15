@@ -1,108 +1,33 @@
-"""Phase A3 contracts for display-local Qt Quick presentation pacing."""
+"""Contracts for Qt-owned retained-scene continuous frame demand."""
 
 from __future__ import annotations
 
+import ast
 import math
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, Signal
 
-from rendering.quick.frame_pacer import (
-    QuickFrameDemand,
-    QuickFramePacer,
-    QuickPacerState,
-)
-
+from rendering.quick.frame_pacer import QuickFrameDemand, QuickFramePacer, QuickPacerState
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class _Signal:
-    def __init__(self) -> None:
-        self.callback = None
-
-    def connect(self, callback) -> None:
-        self.callback = callback
-
-    def emit(self) -> None:
-        assert self.callback is not None
-        self.callback()
-
-
-class _Timer:
-    def __init__(self) -> None:
-        self.timeout = _Signal()
-        self.single_shot = False
-        self.timer_type = None
-        self.active = False
-        self.started_delays: list[int] = []
-        self.stop_count = 0
-
-    def setSingleShot(self, value: bool) -> None:
-        self.single_shot = bool(value)
-
-    def setTimerType(self, value) -> None:
-        self.timer_type = value
-
-    def start(self, delay_ms: int) -> None:
-        self.active = True
-        self.started_delays.append(int(delay_ms))
-
-    def stop(self) -> None:
-        self.active = False
-        self.stop_count += 1
-
-    def fire(self) -> None:
-        self.active = False
-        self.timeout.emit()
-
-
 class _Window(QObject):
+    frameSwapped = Signal()
+
     def __init__(self) -> None:
         super().__init__()
-        self.update_count = 0
+        self.update_request_count = 0
 
-    def update(self) -> None:
-        self.update_count += 1
-
-
-class _Clock:
-    def __init__(self, now_ns: int = 0) -> None:
-        self.now_ns = int(now_ns)
-
-    def __call__(self) -> int:
-        return self.now_ns
+    def requestUpdate(self) -> None:  # noqa: N802 - mirrors QWindow API
+        self.update_request_count += 1
 
 
 def _pacer(target_hz: float = 100.0):
     window = _Window()
-    timer = _Timer()
-    clock = _Clock()
-    pacer = QuickFramePacer(
-        window,
-        target_hz,
-        clock_ns=clock,
-        timer=timer,
-    )
-    pacer.set_visualizer_sync(lambda: True)
-    return pacer, window, timer, clock
-
-
-def test_visualizer_sync_runs_on_existing_presentation_opportunity_before_update():
-    pacer, window, _timer, _clock = _pacer()
-    events: list[tuple[str, int]] = []
-    pacer.set_visualizer_sync(
-        lambda: events.append(("sync", window.update_count)) or True
-    )
-
-    pacer.set_visualizer_active(True)
-
-    assert events == [("sync", 0)]
-    # A successful visualizer sync already requested a scene present via the
-    # render item, so the pacer suppresses the redundant QQuickWindow.update()
-    # to avoid two swaps from one opportunity.
-    assert window.update_count == 0
+    return QuickFramePacer(window, target_hz), window
 
 
 @pytest.mark.parametrize("rate", (0.0, -1.0, math.inf, -math.inf, math.nan))
@@ -111,190 +36,136 @@ def test_target_rate_must_be_finite_and_positive(rate):
         QuickPacerState(rate)
 
 
-def test_deadline_state_skips_missed_opportunities_without_catch_up_burst():
-    state = QuickPacerState(100.0)
-    state.start(0)
-
-    first = state.consume(0)
-    delayed = state.consume(45_000_000)
-
-    assert first.due_opportunities == 1
-    assert delayed.due_opportunities == 4
-    assert state.requested_opportunities == 5
-    assert state.paced_requests == 2
-    assert state.skipped_deadlines == 3
-    assert delayed.next_delay_ms == 5
-
-
-def test_early_callback_waits_without_creating_an_opportunity():
-    state = QuickPacerState(60.0)
-    state.start(10_000_000)
-
-    decision = state.consume(9_000_000)
-
-    assert decision.due_opportunities == 0
-    assert decision.next_delay_ms == 1
-    assert state.requested_opportunities == 0
-    assert state.paced_requests == 0
+def test_pacer_has_no_python_timer_or_visualizer_demand() -> None:
+    source = (ROOT / "rendering" / "quick" / "frame_pacer.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    imported_names: set[str] = set()
+    referenced_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            imported_names.update(alias.asname or alias.name for alias in node.names)
+        elif isinstance(node, ast.Import):
+            imported_names.update(alias.asname or alias.name.split(".", 1)[0] for alias in node.names)
+        elif isinstance(node, ast.Name):
+            referenced_names.add(node.id)
+    assert "QTimer" not in imported_names
+    assert "QTimer" not in referenced_names
+    assert "PreciseTimer" not in referenced_names
+    for forbidden in ("set_visualizer_active", "set_visualizer_sync"):
+        assert forbidden not in source
+    assert not hasattr(QuickFrameDemand, "VISUALIZER")
 
 
-def test_timer_is_precise_single_shot_and_idle_until_first_demand():
-    pacer, window, timer, _clock = _pacer(165.0)
-
-    assert timer.single_shot is True
-    assert timer.timer_type == Qt.TimerType.PreciseTimer
+def test_first_continuous_demand_seeds_one_coalesced_qt_update_and_is_idempotent() -> None:
+    pacer, window = _pacer(165.0)
     assert pacer.is_active() is False
-    assert timer.started_delays == []
-    assert window.update_count == 0
-
     pacer.set_transition_active(True)
-
+    pacer.set_transition_active(True)
     assert pacer.is_active() is True
-    assert window.update_count == 1
-    assert timer.started_delays == [7]
+    assert window.update_request_count == 1
+    assert pacer.describe()["update_pending"] is True
 
 
-def test_transition_and_visualizer_demands_are_independent_and_idempotent():
-    pacer, window, timer, _clock = _pacer()
-
+def test_frame_swap_chains_exactly_one_successor_while_demand_is_active() -> None:
+    pacer, window = _pacer()
     pacer.set_transition_active(True)
-    pacer.set_transition_active(True)
-    pacer.set_visualizer_active(True)
-    pacer.set_transition_active(False)
+    assert window.update_request_count == 1
 
-    assert pacer.demands == QuickFrameDemand.VISUALIZER
-    assert pacer.is_active() is True
-    assert window.update_count == 1
-    assert timer.stop_count == 0
+    window.frameSwapped.emit()
+    assert window.update_request_count == 2
+    window.frameSwapped.emit()
+    assert window.update_request_count == 3
 
-    pacer.set_visualizer_active(False)
-
-    assert pacer.demands == QuickFrameDemand.NONE
-    assert pacer.is_active() is False
-    assert timer.stop_count == 1
-
-
-def test_describe_reports_widget_animation_demand() -> None:
-    pacer, _window, _timer, _clock = _pacer()
-
-    pacer.set_widget_animation_active(True)
-
-    assert pacer.describe()["demands"] == ["widget_animation"]
-
-
-def test_late_timer_callback_issues_one_fresh_update_and_counts_skips():
-    pacer, window, timer, clock = _pacer(100.0)
-    pacer.set_visualizer_active(True)
-
-    clock.now_ns = 45_000_000
-    timer.fire()
-
-    # Both serviced opportunities requested a present through the visualizer
-    # item, so no separate window updates were issued (double-swap suppression);
-    # the pacer still counts them as issued present requests below.
-    assert window.update_count == 0
-    assert timer.started_delays == [10, 5]
     described = pacer.describe()
-    assert described["requested_opportunities"] == 5
-    assert described["issued_update_requests"] == 2
-    assert described["skipped_deadlines"] == 3
+    assert described["driver"] == "qt_frame_swapped"
+    assert described["frame_swaps"] == 2
+    assert described["requested_opportunities"] == 3
+    assert described["issued_update_requests"] == 3
+    assert described["skipped_deadlines"] == 0
 
 
-def test_resume_after_idle_starts_now_without_replaying_idle_debt():
-    pacer, window, timer, clock = _pacer(60.0)
+def test_removing_last_demand_stops_chain_after_any_already_queued_frame() -> None:
+    pacer, window = _pacer()
     pacer.set_transition_active(True)
     pacer.set_transition_active(False)
-    skipped_before = pacer.describe()["skipped_deadlines"]
+    assert pacer.is_active() is False
+    assert window.update_request_count == 1
 
-    clock.now_ns = 5_000_000_000
-    pacer.set_visualizer_active(True)
-
-    # Only the transition opportunity issued a window update; the resumed
-    # visualizer opportunity requested its present through the render item, so
-    # its redundant window update is suppressed.
-    assert window.update_count == 1
-    assert pacer.describe()["skipped_deadlines"] == skipped_before
-    assert timer.started_delays[-1] == 17
+    window.frameSwapped.emit()
+    assert window.update_request_count == 1
+    assert pacer.describe()["update_pending"] is False
 
 
-def test_stop_allows_reuse_but_close_rejects_stale_runtime_admission():
-    pacer, _window, timer, _clock = _pacer()
+def test_transition_and_widget_animation_demands_are_independent() -> None:
+    pacer, window = _pacer()
     pacer.set_transition_active(True)
+    pacer.set_widget_animation_active(True)
+    pacer.set_transition_active(False)
+    assert pacer.demands == QuickFrameDemand.WIDGET_ANIMATION
+    assert window.update_request_count == 1
+    pacer.set_widget_animation_active(False)
+    assert pacer.demands == QuickFrameDemand.NONE
 
+
+def test_pause_clears_pending_admission_and_resume_seeds_fresh_update() -> None:
+    pacer, window = _pacer(60.0)
+    pacer.set_transition_active(True)
+    assert window.update_request_count == 1
+    assert pacer.pause() is True
+    assert pacer.pause() is False
+    assert pacer.describe()["update_pending"] is False
+    assert pacer.demands == QuickFrameDemand.TRANSITION
+
+    # A frameSwapped arriving while paused cannot restart the chain.
+    window.frameSwapped.emit()
+    assert window.update_request_count == 1
+
+    assert pacer.resume() is True
+    assert pacer.resume() is False
+    assert window.update_request_count == 2
+    assert pacer.describe()["update_pending"] is True
+
+
+def test_stop_clears_pending_admission_and_allows_reuse() -> None:
+    pacer, window = _pacer()
+    pacer.set_transition_active(True)
     pacer.stop()
     assert pacer.is_active() is False
-    assert timer.stop_count == 1
+    assert pacer.describe()["update_pending"] is False
+    pacer.set_widget_animation_active(True)
+    assert window.update_request_count == 2
 
-    pacer.set_visualizer_active(True)
-    assert pacer.is_active() is True
+
+def test_target_retarget_is_diagnostic_metadata_not_a_pacing_clock() -> None:
+    pacer, window = _pacer(60.0)
+    pacer.set_transition_active(True)
+    pacer.set_target_hz(120.0)
+    assert pacer.target_hz == 120.0
+    assert window.update_request_count == 1
+    assert pacer.describe()["interval_ns"] == pytest.approx(round(1_000_000_000 / 120), abs=1)
+
+
+def test_close_disconnects_chain_and_rejects_new_admission() -> None:
+    pacer, window = _pacer()
+    pacer.set_transition_active(True)
     pacer.close()
+    window.frameSwapped.emit()
+    assert window.update_request_count == 1
     assert pacer.describe()["closed"] is True
-
     with pytest.raises(RuntimeError, match="closed"):
         pacer.set_transition_active(True)
 
 
-def test_visibility_pause_preserves_demands_and_resumes_without_hidden_debt():
-    pacer, window, timer, clock = _pacer(60.0)
-    pacer.set_transition_active(True)
-
-    assert pacer.pause() is True
-    assert pacer.pause() is False
-    assert pacer.demands == QuickFrameDemand.TRANSITION
-    assert pacer.is_active() is False
-    assert pacer.describe()["paused"] is True
-    updates_before_resume = window.update_count
-    skipped_before_resume = pacer.describe()["skipped_deadlines"]
-
-    clock.now_ns = 5_000_000_000
-    pacer.set_visualizer_active(True)
-    assert window.update_count == updates_before_resume
-    assert pacer.resume() is True
-    assert pacer.resume() is False
-
-    assert pacer.is_active() is True
-    assert pacer.demands == (
-        QuickFrameDemand.TRANSITION | QuickFrameDemand.VISUALIZER
-    )
-    # The resumed opportunity requested its present through the visualizer item,
-    # so no separate window update is issued (double-swap suppression).
-    assert window.update_count == updates_before_resume
-    assert pacer.describe()["skipped_deadlines"] == skipped_before_resume
-    assert timer.started_delays[-1] == 17
-
-
-def test_refresh_retarget_starts_fresh_without_replaying_old_deadlines():
-    pacer, window, _timer, clock = _pacer(60.0)
-    pacer.set_transition_active(True)
-    clock.now_ns = 4_000_000
-
-    pacer.set_target_hz(120.0)
-
-    assert pacer.target_hz == 120.0
-    assert window.update_count == 2
-    assert pacer.describe()["skipped_deadlines"] == 0
-
-
-def test_only_supported_nonzero_demand_bits_are_accepted():
-    pacer, _window, _timer, _clock = _pacer()
-
+def test_only_supported_nonzero_demand_bits_are_accepted() -> None:
+    pacer, _window = _pacer()
     with pytest.raises(ValueError, match="unsupported"):
         pacer.set_demand(QuickFrameDemand.NONE, True)
     with pytest.raises(ValueError, match="unsupported"):
         pacer.set_demand(QuickFrameDemand(8), True)
 
 
-def test_source_has_no_render_completion_loop_or_logical_cadence_owner():
-    source = (ROOT / "rendering" / "quick" / "frame_pacer.py").read_text(
-        encoding="utf-8"
-    )
-    for forbidden in (
-        "afterRendering",
-        "afterFrameEnd",
-        "frameSwapped",
-        "paint acknowledgement",
-        "VisualizerLogicalRuntime",
-        "sleep(",
-        "processEvents",
-    ):
-        assert forbidden not in source
+def test_describe_names_only_actual_continuous_quick_demands() -> None:
+    pacer, _window = _pacer()
+    pacer.set_transition_active(True)
+    pacer.set_widget_animation_active(True)
+    assert pacer.describe()["demands"] == ["transition", "widget_animation"]

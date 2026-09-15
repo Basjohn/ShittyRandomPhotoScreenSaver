@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QObject, QPoint, QRect, QSize
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QColor, QImage
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from core.settings.settings_manager import SettingsManager
@@ -31,7 +31,7 @@ from rendering.custom_layout_session import (
 from rendering.quick.runtime import QuickDisplayRuntime
 from rendering.quick.display_unit import QuickDisplayUnit
 from rendering.quick.display_image_route import (
-    presentation_image_from_processed_pixmap,
+    presentation_image_from_processed_qimage,
 )
 from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.display_modes import DisplayMode
@@ -45,6 +45,12 @@ from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
 from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
+
+
+def _presentation_image(width: int, height: int, path: str):
+    image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QColor("#224466"))
+    return presentation_image_from_processed_qimage(image, image_path=path)
 
 
 class _ManagerVisualizerEngine:
@@ -437,7 +443,8 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
             "drop_speed",
         ]
         assert owner.is_started is True
-        assert chosen.runtime.frame_pacer.demands & QuickFrameDemand.VISUALIZER
+        assert owner._publication_wake is not None
+        assert not hasattr(QuickFrameDemand, "VISUALIZER")
         ownership = manager.describe_resource_ownership()["by_generation"]["702"]
         assert ownership["display_units"] == len(qt_app.screens())
         assert ownership["visualizer_owners"] == 1
@@ -514,7 +521,9 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         assert settings.custom_presets["bubble"]["bubble_big_count"] == 7
         assert settings.widgets["media"] == media_before
         assert settings.save_calls == 1
-        assert chosen.runtime.frame_pacer._visualizer_sync.__self__ is owner
+        wake_callback = owner.controller.logical_mailbox._wake_callback
+        assert wake_callback is not None
+        assert wake_callback.__self__ is owner._publication_wake
         assert [
             unit._visualizer_owner is not None for unit in manager.displays
         ].count(True) == 1
@@ -895,12 +904,6 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
                 device_pixel_ratio=self._dpr,
             )
 
-        def capture_image(self, pixmap, *, image_path: str = ""):
-            return presentation_image_from_processed_pixmap(
-                pixmap,
-                image_path=image_path,
-            )
-
         def current_image(self):
             return self.runtime.scene_controller.presentation_image
 
@@ -967,7 +970,6 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
     ]
     for _unit in manager.displays:
         _unit.manager = manager
-    pixmap = QPixmap(8, 6)
     try:
         descriptors = manager.snapshot_processing_descriptors()
         assert [item.screen_index for item in descriptors] == [2, 5]
@@ -1000,8 +1002,12 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
 
         # First image on each screen has no prior source, so it is published
         # directly and becomes that screen's authoritative image.
-        manager.present_processed_image(5, pixmap, pixmap, "five.jpg")
-        manager.show_image_on_screen(2, pixmap, "two.jpg")
+        manager.present_processed_presentation_image(
+            5, _presentation_image(8, 6, "five.jpg"), "five.jpg"
+        )
+        manager.present_processed_presentation_image(
+            2, _presentation_image(8, 6, "two.jpg"), "two.jpg"
+        )
         assert published == [
             (5, QSize(8, 6), "five.jpg"),
             (2, QSize(8, 6), "two.jpg"),
@@ -1011,7 +1017,13 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
         # A newer broadcast image now has a source on each screen, so it routes a
         # per-screen transition (R7) rather than snapping in; nothing new is
         # direct-published.
-        manager.show_image(pixmap, "all.jpg")
+        manager._begin_quick_transition_batch({2, 5})
+        manager.present_processed_presentation_image(
+            2, _presentation_image(8, 6, "all.jpg"), "all.jpg"
+        )
+        manager.present_processed_presentation_image(
+            5, _presentation_image(8, 6, "all.jpg"), "all.jpg"
+        )
         assert published == [
             (5, QSize(8, 6), "five.jpg"),
             (2, QSize(8, 6), "two.jpg"),
@@ -1046,7 +1058,9 @@ def test_display_manager_routes_descriptors_and_images_by_screen_identity(qt_app
         manager.displays[1].runtime.scene_controller.presentation_image = object()
         assert manager.has_presented_image() is True
         with pytest.raises(IndexError):
-            manager.present_processed_image(1, pixmap, pixmap, "missing.jpg")
+            manager.present_processed_presentation_image(
+                1, _presentation_image(8, 6, "missing.jpg"), "missing.jpg"
+            )
     finally:
         manager.displays = []
         manager.disconnect_monitor_detection()
@@ -1074,18 +1088,9 @@ def test_display_manager_resolves_one_transition_spec_and_commits_on_finalize(
     class _Unit:
         def __init__(self, screen_index: int, source_path: str) -> None:
             self.screen_index = screen_index
-            self._current = presentation_image_from_processed_pixmap(
-                QPixmap(4, 3),
-                image_path=source_path,
-            )
+            self._current = _presentation_image(4, 3, source_path)
             self.request = None
             self.active = False
-
-        def capture_image(self, pixmap, *, image_path: str = ""):
-            return presentation_image_from_processed_pixmap(
-                pixmap,
-                image_path=image_path,
-            )
 
         def current_image(self):
             return self._current
@@ -1123,8 +1128,12 @@ def test_display_manager_resolves_one_transition_spec_and_commits_on_finalize(
     manager.transition_completed.connect(completed.append)
     try:
         manager.set_transition_work_pending(True)
-        manager.present_processed_image(2, QPixmap(8, 6), QPixmap(), "two.jpg")
-        manager.present_processed_image(5, QPixmap(10, 7), QPixmap(), "five.jpg")
+        manager.present_processed_presentation_image(
+            2, _presentation_image(8, 6, "two.jpg"), "two.jpg"
+        )
+        manager.present_processed_presentation_image(
+            5, _presentation_image(10, 7, "five.jpg"), "five.jpg"
+        )
 
         assert first.request is not None
         assert second.request is not None

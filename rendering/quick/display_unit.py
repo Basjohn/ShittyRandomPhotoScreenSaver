@@ -24,17 +24,13 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 from PySide6.QtCore import QObject, QSize
-from PySide6.QtGui import QPixmap, QScreen
+from PySide6.QtGui import QScreen
 
 from core.logging.logger import get_logger
 from rendering.display_modes import DisplayMode
 
 from .ctrl_coordinator import SharedCtrlCoordinator
 from .context_menu import QuickContextMenuEntry
-from .display_image_route import (
-    present_processed_pixmap,
-    presentation_image_from_processed_pixmap,
-)
 from .display_processing import DisplayProcessingDescriptor
 from .display_presenter import QuickDisplayPresenter
 from .image_state import PresentationImage
@@ -163,24 +159,6 @@ class QuickDisplayUnit:
         self._presenter.set_display_bounds(self.display_bounds())
 
     # -- base image / transition (runtime's own explicit APIs) -------------- #
-    def present_image(self, processed_pixmap: QPixmap, *, image_path: str = "") -> None:
-        """Publish one processed pipeline pixmap as the base image."""
-
-        present_processed_pixmap(self._runtime, processed_pixmap, image_path=image_path)
-
-    def capture_image(
-        self,
-        processed_pixmap: QPixmap,
-        *,
-        image_path: str = "",
-    ) -> PresentationImage:
-        """Capture one processed pixmap into detached destination state."""
-
-        return presentation_image_from_processed_pixmap(
-            processed_pixmap,
-            image_path=image_path,
-        )
-
     def current_image(self) -> PresentationImage | None:
         """Return this unit's immutable current base-image value."""
 

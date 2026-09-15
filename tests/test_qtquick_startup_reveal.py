@@ -144,6 +144,8 @@ def test_startup_desktop_crossfade_is_one_shot_signal_driven_and_precedes_reveal
 
     assert QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS == 1300
     assert "screen.grabWindow(0)" in manager
+    assert "capture_startup_desktop_pixmap" in manager
+    assert "display.capture_image(" not in manager
     assert 'transition_id="crossfade"' in manager
     assert "_startup_desktop_seed_screens" in manager
     assert manager.index("_prime_quick_startup_desktop_sources(pending_displays)") < manager.index(
@@ -190,27 +192,26 @@ def test_replacement_runtime_does_not_recapture_desktop(qt_app) -> None:
 def test_seeded_first_image_uses_fixed_crossfade_without_settings_transition(qt_app) -> None:
     from types import SimpleNamespace
 
-    from PySide6.QtGui import QPixmap
+    from PySide6.QtGui import QColor, QImage
 
     from engine.display_manager import DisplayManager
-    from rendering.quick.display_image_route import presentation_image_from_processed_pixmap
+    from rendering.quick.display_image_route import presentation_image_from_processed_qimage
+
+    def _presentation(width: int, height: int, path: str):
+        image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(QColor("#223344"))
+        return presentation_image_from_processed_qimage(image, image_path=path)
 
     class _Unit:
         def __init__(self) -> None:
             self.screen_index = 0
-            self._current = presentation_image_from_processed_pixmap(
-                QPixmap(6, 4),
-                image_path="__startup_desktop_screen_0__",
+            self._current = _presentation(
+                6, 4, "__startup_desktop_screen_0__"
             )
             self.request = None
             self.is_retired = False
             self.runtime = SimpleNamespace(
                 scene_controller=SimpleNamespace(presentation_image=self._current)
-            )
-
-        def capture_image(self, pixmap, *, image_path=""):
-            return presentation_image_from_processed_pixmap(
-                pixmap, image_path=image_path
             )
 
         def current_image(self):
@@ -230,12 +231,12 @@ def test_seeded_first_image_uses_fixed_crossfade_without_settings_transition(qt_
     unit = _Unit()
     manager.displays = [unit]
     manager._startup_desktop_seed_screens = {0}
-    destination = QPixmap(8, 5)
+    destination = _presentation(8, 5, "first-wallpaper.jpg")
     try:
         # A presentation-only desktop seed is deliberately NOT image/history
         # authority, so engine admission still treats this as the first image.
         assert manager.has_presented_image() is False
-        result = manager._present_quick_image(
+        result = manager._present_quick_captured_image(
             unit,
             destination,
             "first-wallpaper.jpg",

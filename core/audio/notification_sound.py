@@ -6,7 +6,7 @@ instances so playback is not cut off when a widget is destroyed (e.g. on
 screensaver exit).
 
 Design:
-- Singleton parented to ``QApplication.instance()``.
+- Singleton parented to ``QCoreApplication.instance()``.
 - Volume is a 0-100 integer (matches UI sliders); converted to 0.0-1.0 for Qt.
 - ``play()`` is a no-op if disabled / file missing.
 - A *single* failure to load the file disables sound for the session and logs
@@ -18,9 +18,8 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QObject, QUrl, Qt
+from PySide6.QtCore import QCoreApplication, QObject, QUrl, Qt
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PySide6.QtWidgets import QApplication
 
 from core.logging.logger import get_logger
 from core.audio.sound_paths import resolve_notification_sound_path
@@ -39,7 +38,7 @@ class NotificationSoundPlayer(QObject):
         """Return the process-wide singleton, creating it on first call."""
         with cls._instance_lock:
             if cls._instance is None:
-                parent = QApplication.instance()
+                parent = QCoreApplication.instance()
                 cls._instance = cls(parent=parent)
             return cls._instance
 

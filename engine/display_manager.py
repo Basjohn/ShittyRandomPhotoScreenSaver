@@ -12,7 +12,7 @@ from dataclasses import asdict
 from types import MappingProxyType, SimpleNamespace
 from typing import Any, Callable, List, Dict, Optional, Set, Mapping
 from PySide6.QtCore import QObject, Signal, QUrl, Qt
-from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
+from PySide6.QtGui import QGuiApplication, QScreen, QDesktopServices
 
 from core.logging.logger import (
     get_logger,
@@ -48,6 +48,7 @@ from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
 from rendering.quick.display_unit import QuickDisplayUnit, create_quick_display_unit
 from rendering.quick.display_processing import DisplayProcessingDescriptor
 from rendering.quick.image_state import PresentationImage
+from rendering.quick.startup_desktop_capture import capture_startup_desktop_pixmap
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.startup_reveal import (
     QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS,
@@ -3594,27 +3595,6 @@ class DisplayManager(QObject):
             )
             return False
 
-    def _present_quick_image(
-        self,
-        display: object,
-        pixmap: QPixmap,
-        image_path: str,
-        *,
-        implicit_expected_screens: Set[int] | None = None,
-    ) -> str:
-        """Legacy/startup QPixmap route into the detached Quick contract."""
-
-        capture = getattr(display, "capture_image", None)
-        if not callable(capture):
-            raise TypeError("display unit has no Quick image capture contract")
-        destination = capture(pixmap, image_path=image_path)
-        return self._present_quick_captured_image(
-            display,
-            destination,
-            image_path,
-            implicit_expected_screens=implicit_expected_screens,
-        )
-
     def _present_quick_captured_image(
         self,
         display: object,
@@ -3815,9 +3795,9 @@ class DisplayManager(QObject):
                     display.screen_index,
                 )
                 continue
-            seed = display.capture_image(
+            seed = capture_startup_desktop_pixmap(
                 desktop,
-                image_path=f"__startup_desktop_screen_{display.screen_index}__",
+                screen_index=int(display.screen_index),
             )
             display.present_captured_image(seed)
             self._startup_desktop_seed_screens.add(int(display.screen_index))
@@ -3973,77 +3953,13 @@ class DisplayManager(QObject):
         if owner is not None:
             owner.controller.process_supervisor = supervisor
     
-    def show_image(self, pixmap: QPixmap, image_path: str = "", 
-                   screen_index: Optional[int] = None) -> None:
-        """
-        Show image on display(s).
-        
-        Args:
-            pixmap: Image to display
-            image_path: Path to image (for logging)
-            screen_index: Specific screen index, or None for all screens (same_image_mode)
-        """
-        if not self.displays:
-            logger.warning("[FALLBACK] No displays available")
-            return
-        
-        if screen_index is not None:
-            # Show on specific screen
-            display = self._display_for_screen_index(screen_index)
-            if display is None:
-                logger.warning(f"[FALLBACK] Invalid screen index: {screen_index}")
-            else:
-                self._present_quick_image(
-                    display,
-                    pixmap,
-                    image_path,
-                    implicit_expected_screens={int(screen_index)},
-                )
-        else:
-            # Show on all screens (same image mode)
-            if self.same_image_mode:
-                quick_screens = self._selected_destination_screen_indices()
-                if quick_screens and not self._transition_work_pending:
-                    self._begin_quick_transition_batch(quick_screens)
-                for display in self.displays:
-                    self._present_quick_image(
-                        display,
-                        pixmap,
-                        image_path,
-                        implicit_expected_screens=quick_screens,
-                    )
-                logger.debug(f"Image shown on all {len(self.displays)} displays")
-    
-    def show_image_on_screen(self, screen_index: int, pixmap: QPixmap, image_path: str = "") -> None:
-        """
-        Show image on specific screen.
-        
-        Args:
-            screen_index: Screen index
-            pixmap: Image to display
-            image_path: Path to image
-        """
-        self.show_image(pixmap, image_path, screen_index)
-
     def _display_for_screen_index(self, screen_index: int) -> object | None:
+        """Return the selected Quick display bound to ``screen_index``."""
+
         for position, display in enumerate(self.displays):
             if int(getattr(display, "screen_index", position)) == int(screen_index):
                 return display
         return None
-
-    def present_processed_image(
-        self,
-        screen_index: int,
-        processed_pixmap: QPixmap,
-        original_pixmap: QPixmap,
-        image_path: str,
-    ) -> str:
-        """Legacy/startup publication contract for a GUI-materialized QPixmap."""
-
-        display = self._display_for_screen_index(screen_index)
-        if display is None:
-            raise IndexError(f"no selected display for screen index {screen_index}")
-        return self._present_quick_image(display, processed_pixmap, image_path)
 
     def present_processed_presentation_image(
         self,
@@ -4491,52 +4407,6 @@ class DisplayManager(QObject):
         elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"[SYNC] All {expected_count} displays ready in {elapsed_ms:.1f}ms")
         return True
-    
-    def show_image_synchronized(self, pixmap: QPixmap, image_path: str = "") -> None:
-        """
-        Show image on all displays with synchronized transitions.
-        
-        If sync is enabled, waits for all displays to signal transition ready
-        before starting animations. Uses lock-free SPSC queue.
-        
-        Args:
-            pixmap: Image to display
-            image_path: Path to image file
-        """
-        if not self.displays:
-            logger.warning("[FALLBACK] No displays available")
-            return
-        
-        # If sync disabled or single display, use standard method
-        if not self._sync_enabled or len(self.displays) <= 1:
-            self.show_image(pixmap, image_path)
-            return
-        
-        # Clear ready queue before starting
-        if self._transition_ready_queue:
-            while self._transition_ready_queue.try_pop()[0]:
-                pass
-        
-        # Start transitions on all displays
-        logger.debug(f"[SYNC] Starting synchronized transition on {len(self.displays)} displays")
-        quick_screens = self._selected_destination_screen_indices()
-        if quick_screens and not self._transition_work_pending:
-            self._begin_quick_transition_batch(quick_screens)
-        for display in self.displays:
-            self._present_quick_image(
-                display,
-                pixmap,
-                image_path,
-                implicit_expected_screens=quick_screens,
-            )
-        
-        # Wait for all to be ready (with timeout)
-        all_ready = self.wait_for_all_displays_ready(timeout_sec=1.0)
-        
-        if not all_ready:
-            logger.warning("[SYNC] Not all displays ready, transitions may desync")
-        else:
-            logger.debug("[SYNC] Synchronized transition started successfully")
     
     def cleanup(self) -> None:
         """Retire every display generation through its authoritative owner."""
