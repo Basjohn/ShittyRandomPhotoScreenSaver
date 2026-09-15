@@ -68,7 +68,7 @@ cardinality fields so future handle trends can be attributed without weakening s
   The §0.19 fake-PDH regression still protects close-before-open query replacement while retaining the 300 s dynamic GPU/VRAM
   rediscovery, and each usage line keeps query generation plus engine/dedicated/shared/total PDH cardinality. The 58-minute
   Windows soak held that denominator constant at 17 yet retained roughly +16 handles/hour after the final Settings rebuild, so
-  the next gate is kernel-object-class attribution rather than more cardinality guessing. Windows `--usage` now starts a 60 s
+  the next gate is kernel-object-class attribution rather than more cardinality guessing. Explicit `--handle-attribution` now starts a 60 s
   out-of-process `screensaver_handles.log` sidecar and excludes its PID from app aggregates; the two-minute topology/thread
   refresh now prefers one Toolhelp snapshot instead of the proven GIL-held psutil path. `tests/test_usage_sampler.py` pins the
   provider seam, sidecar exclusion, topology log fields, handle grouping, and PDH ownership. This remains evidence gathering,

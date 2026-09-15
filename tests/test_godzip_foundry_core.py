@@ -438,7 +438,7 @@ def test_godzip_diff_uses_archived_dirty_bytes_and_finds_later_git_and_worktree_
 def _add_runtime_surface(repo: Path, *, windows_venv: bool = False) -> None:
     flags = [
         "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing",
-        "--usage", "--viz", "--geo", "--set", "--life", "--cache",
+        "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache",
         "--steam", "--noupdates", "--viz-diagnostics", "--viz-diag",
         "--fresh", "--devcurve", "--devsteam", "--diag-pair-warm-finish",
         "--diag-p4-stages", "--diag-p4-no-perf-hud",

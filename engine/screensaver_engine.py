@@ -757,7 +757,6 @@ class ScreensaverEngine(QObject):
                     self.thread_manager,
                     self._image_cache,
                     max_concurrent=max_conc,
-                    process_supervisor=self._process_supervisor,
                 )
             logger.info(f"Image prefetcher initialized (ahead={self._prefetch_ahead}, max_concurrent={max_conc})")
         except Exception as e:
@@ -1094,11 +1093,11 @@ class ScreensaverEngine(QObject):
     
     def _start_workers(self) -> None:
         """Start multiprocessing workers based on settings.
-        
-        Workers are optional. Foreground image processing retains its existing
-        fallback, while speculative scaled prefetch deliberately has no in-process
-        compute fallback: if its isolated worker is unavailable, that warmup is
-        skipped.
+
+        Foreground image processing keeps its dedicated process. Speculative
+        scaled warmup deliberately does not start a second persistent image
+        process: the current A/B restores the smoother control's bounded shared
+        COMPUTE path while preserving foreground-worker isolation.
 
         Respects max_workers setting: 'auto' = half CPU cores, or explicit 1-8.
         """
@@ -1128,19 +1127,11 @@ class ScreensaverEngine(QObject):
         workers_started = 0
         workers_failed = 0
         
-        # Foreground ImageWorker always gets the first slot. The speculative
-        # derivative worker is a distinct second process so it can never head-of-
-        # line block a requested image. With an explicit one-worker cap, scaled
-        # prefetch simply remains disabled rather than falling back into the main
-        # process compute pool.
+        # Foreground ImageWorker owns the multiprocessing slot. The registered
+        # IMAGE_PREFETCH factory is retained as reusable infrastructure/tests, but
+        # production startup does not admit that persistent helper process.
         worker_configs = [
             (WorkerType.IMAGE, 'workers.image.enabled', "ImageWorker", "ThreadManager fallback"),
-            (
-                WorkerType.IMAGE_PREFETCH,
-                'workers.image.enabled',
-                "SpeculativeImageWorker",
-                "scaled speculative warmup disabled",
-            ),
         ]
         
         for worker_type, setting_key, name, fallback_msg in worker_configs:

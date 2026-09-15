@@ -583,6 +583,8 @@ class ThreadManager:
         self._compute_lane_scheduler = None
         self._affinity_lane_lock = threading.RLock()
         self._affinity_lane_scheduler = None
+        self._background_task_lock = threading.RLock()
+        self._background_task_scheduler = None
         
         # Initialize pools
         self._initialize_pools()
@@ -797,6 +799,48 @@ class ThreadManager:
         """
         return self.submit_task(ThreadPoolType.COMPUTE, func, *args, **kwargs)
 
+    def submit_background_task(
+        self,
+        func: Callable,
+        *args,
+        task_id: str | None = None,
+        callback: Callable[[Any], None] | None = None,
+        category: str = "background",
+        **kwargs,
+    ) -> str:
+        """Submit best-effort CPU work to one lazy OS-demoted serial lane.
+
+        This is intentionally *not* another generic executor.  On Windows the
+        lane installs a below-normal native thread priority and disables
+        dynamic priority boosts before running work.  It exists for speculative
+        work that may be delayed without changing product semantics.
+        """
+        if self._shutdown:
+            raise RuntimeError("Thread manager is shut down")
+
+        def _invoke():
+            return func(*args, **kwargs)
+
+        _owner, owner_class, owner_id, generation = _callable_runtime_identity(func)
+        del _owner
+        with self._background_task_lock:
+            scheduler = self._background_task_scheduler
+            if scheduler is None:
+                from core.threading.background_tasks import BackgroundTaskScheduler
+
+                scheduler = BackgroundTaskScheduler(max_pending=1)
+                self._background_task_scheduler = scheduler
+        resolved_task_id = task_id or f"background_{id(func)}_{time.time_ns()}"
+        return scheduler.submit(
+            _invoke,
+            callback=callback,
+            task_id=resolved_task_id,
+            category=category,
+            runtime_generation=generation,
+            owner_class=owner_class,
+            owner_id=owner_id,
+        )
+
     def create_compute_lane(
         self,
         worker: Callable[[Any], Any],
@@ -974,6 +1018,18 @@ class ThreadManager:
                     "tasks_completed": 0,
                 }
             ),
+            "background_cpu": (
+                self._background_task_scheduler.diagnostic_snapshot()
+                if self._background_task_scheduler is not None
+                else {
+                    "worker_threads": 0,
+                    "worker_active": 0,
+                    "queue_depth": 0,
+                    "tasks_completed": 0,
+                    "priority_applied": False,
+                    "priority_mode": "not_started",
+                }
+            ),
         }
 
     def get_frame_delivery_snapshot(self) -> Dict[str, Any]:
@@ -1089,6 +1145,9 @@ class ThreadManager:
         affinity_scheduler = self._affinity_lane_scheduler
         if affinity_scheduler is not None:
             tasks = tasks + affinity_scheduler.lifecycle_work_snapshot()
+        background_scheduler = self._background_task_scheduler
+        if background_scheduler is not None:
+            tasks = tasks + background_scheduler.lifecycle_work_snapshot()
         with _ui_diagnostic_lock:
             ui = {
                 "queue_depth": int(_ui_diagnostics["queue_depth"]),
@@ -1130,6 +1189,14 @@ class ThreadManager:
                 complete = complete and affinity_complete
                 if affinity_complete:
                     self._affinity_lane_scheduler = None
+            background_scheduler = self._background_task_scheduler
+            if background_scheduler is not None:
+                background_complete = bool(
+                    background_scheduler.shutdown(wait=wait, timeout=timeout)
+                )
+                complete = complete and background_complete
+                if background_complete:
+                    self._background_task_scheduler = None
             return complete
         self._shutdown = True
         try:
@@ -1167,6 +1234,19 @@ class ThreadManager:
                 affinity_shutdown_complete = False
             if affinity_shutdown_complete:
                 self._affinity_lane_scheduler = None
+
+        background_shutdown_complete = True
+        background_scheduler = self._background_task_scheduler
+        if background_scheduler is not None:
+            try:
+                background_shutdown_complete = bool(
+                    background_scheduler.shutdown(wait=wait, timeout=timeout)
+                )
+            except Exception:
+                logger.exception("Background task scheduler shutdown failed")
+                background_shutdown_complete = False
+            if background_shutdown_complete:
+                self._background_task_scheduler = None
         
         # Cancel active tasks
         with self._active_tasks_lock:
@@ -1225,13 +1305,18 @@ class ThreadManager:
         with self._active_tasks_lock:
             self._active_tasks.clear()
         
-        if not lane_shutdown_complete or not affinity_shutdown_complete:
+        if (
+            not lane_shutdown_complete
+            or not affinity_shutdown_complete
+            or not background_shutdown_complete
+        ):
             logger.critical(
                 "Thread manager shutdown retained live lane workers "
-                "(compute_complete=%s affinity_complete=%s); lifecycle accounting "
-                "remains armed until they exit",
+                "(compute_complete=%s affinity_complete=%s background_complete=%s); "
+                "lifecycle accounting remains armed until they exit",
                 lane_shutdown_complete,
                 affinity_shutdown_complete,
+                background_shutdown_complete,
             )
             return False
         logger.info("Thread manager shut down complete")

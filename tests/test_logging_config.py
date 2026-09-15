@@ -417,8 +417,36 @@ def test_logging_bootstrap_profile_keeps_normal_collectors_off_without_flags():
     diagnostic = logger_mod.resolve_logging_bootstrap_profile((), diagnostic_build=True)
 
     assert not any(vars(normal).values())
-    assert all(vars(diagnostic).values())
+    diagnostic_values = vars(diagnostic)
+    assert diagnostic_values["handle_attribution"] is False
+    assert all(
+        value
+        for key, value in diagnostic_values.items()
+        if key != "handle_attribution"
+    )
 
+
+
+def test_handle_attribution_is_explicit_and_implies_usage_without_diagnostic_all():
+    usage = logger_mod.resolve_logging_bootstrap_profile(
+        ("--usage",),
+        diagnostic_build=False,
+    )
+    handles = logger_mod.resolve_logging_bootstrap_profile(
+        ("--handle-attribution",),
+        diagnostic_build=False,
+    )
+    diagnostic = logger_mod.resolve_logging_bootstrap_profile(
+        (),
+        diagnostic_build=True,
+    )
+
+    assert usage.usage is True
+    assert usage.handle_attribution is False
+    assert handles.usage is True
+    assert handles.handle_attribution is True
+    assert diagnostic.usage is True
+    assert diagnostic.handle_attribution is False
 
 def test_gpu_timing_is_explicit_and_implies_perf_logging():
     ordinary_perf = logger_mod.resolve_logging_bootstrap_profile(

@@ -1,4 +1,4 @@
-"""Out-of-process Windows handle-type attribution for ``--usage`` diagnostics.
+"""Out-of-process Windows handle-type attribution for explicit ``--handle-attribution`` diagnostics.
 
 R-84 needs to distinguish a real main-process handle leak from observer-owned
 PDH churn. Querying every live handle from inside SRPSS would itself perturb the
@@ -365,7 +365,7 @@ def run_handle_attribution_sidecar(
 
 
 class WindowsHandleAttributionSidecar:
-    """Own the R-84 helper process for one ``--usage`` session."""
+    """Own the R-84 helper process for one explicit handle-attribution session."""
 
     def __init__(self, log_dir: Path, *, interval_s: float = _DEFAULT_SAMPLE_INTERVAL_S) -> None:
         self._log_path = Path(log_dir) / "screensaver_handles.log"
@@ -388,7 +388,7 @@ class WindowsHandleAttributionSidecar:
         if process is not None and process.is_alive():
             return process.pid
         # Normal diagnostic fresh-start handling clears the log directory, but
-        # direct/manual --usage launches are allowed too. Start a new attribution
+        # direct/manual handle-attribution launches are allowed too. Start a new attribution
         # session with a fresh file so an old run cannot masquerade as current
         # handle growth. Failure to truncate is non-fatal; session_start still
         # provides a hard analysis boundary in an append-only fallback.
