@@ -831,11 +831,21 @@ look expensive or because Qt documentation permits fewer declared states.** Meas
 a golden constraint. The visualizer clip/stencil setup also retains a reproducible p95 tail and remains a secondary measured seam after
 predecessor attribution.
 
-No new operator run is required solely for CHK20. Collect these markers on the **next otherwise-useful ordinary D1 `--frame-trace` run**.
-If/when that evidence exists: substantial background overlap localizes the pre-visualizer render cost; little overlap means continue to
-other predecessor QML/widget scene content rather than returning to scheduler/GIL knobs.
+The operator **did run CHK20 immediately**, so the predecessor fork is now answered. The D1-heavy trace contains **221,756 records / 7 drops / 0 write errors**. Steady background rendering is **0.460 / 5.672 ms median/p95**; transition background rendering is **0.802 / 6.633 ms**. Background rendering overlaps **100%** of measured `QUICK_SYNC_READY -> RENDER_BEGIN` intervals and consumes **24.91% of all interval time / 43.59% of p95-tail interval time**. Transition-owned background work accounts for only **2.46% / 5.37%** of those durations, so the large predecessor tail exists in ordinary steady frames and must not be "fixed" by weakening transitions. The dominant background stage is its Python/OpenGL draw path (**0.314 / 5.498 ms steady**). Detailed evidence is frozen at `.godzip/CHK20_BACKGROUND_PREDECESSOR_RESULT.md`.
 
-CHK15 / `0abc479c52` remains the golden rollback/bisect baseline.
+### 19.2F CHK21 retained-background candidate — remove avoidable steady Python redraw
+CHK20 justifies a production candidate rather than another micro-instrumentation A/B. An unchanged wallpaper is retained content, yet the old steady path re-entered Python/PyOpenGL through `BackgroundRenderNode.render()` on every visualizer-driven scene render. CHK21 changes **only steady background ownership**:
+- steady presentation uses a Qt-native retained `QSGImageNode` created/synchronized on the render thread from the same immutable `PresentationImage` authority;
+- a persistent custom `BackgroundRenderNode` remains in a sibling `QSGOpacityNode` branch for authored transitions, proof rendering and pixel-oracle harnesses;
+- opacity 0 blocks the inactive subtree, so steady frames do not invoke the custom Python render callback while transition frames preserve the old renderer exactly;
+- the custom node is not destroyed at every transition edge; its programs/VAO stay warm and only duplicated custom presentation textures are released when returning to steady native presentation;
+- reveal/readiness still becomes eligible only through the existing frame-swapped readiness path; native texture admission alone does not add a show/update feedback loop.
+
+This candidate does **not** alter Bubble cadence/reactivity, visualizer rendering, transition duration/progress, per-display transition gating, `_InheritedGlState`, QWidget/QPixmap fallback policy, or image-processing authority. It is specifically the removal of measured avoidable steady predecessor work. Qt documents `updatePaintNode()`/QSG ownership as render-thread scenegraph work, `QSGImageNode` as the native textured-content primitive, and zero accumulated opacity as a blocked subtree that is not rendered.
+
+**Installed acceptance run is now the active next action, not optional idle work.** Use routine D1 heavy + `--frame-trace`, include at least one ordinary image change/transition and one Settings teardown/rebuild in the same run. Expected proof: steady frames have no `BACKGROUND_*` custom render records while visualizer records continue; `BACKGROUND_*` appears only while the transition/proof branch is active; there are no black flashes, transition regressions, lifecycle/resource errors or stale images; publication/freshness is neutral-or-better; and operator smoothness is neutral-or-better. A numerical improvement that feels worse is rejected.
+
+CHK15 / `0abc479c52` remains the golden rollback/bisect baseline until that installed validation passes.
 
 ### 19.3 Regression gates before any scheduling change can become the new baseline
 For every candidate change:

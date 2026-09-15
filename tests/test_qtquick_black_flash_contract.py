@@ -18,7 +18,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtGui import QGuiApplication
 
 from rendering.quick.render.background_item import BackgroundRenderItem
-from rendering.quick.render.background_node import BackgroundRenderNode
+from rendering.quick.render.background_image_node import RetainedBackgroundSceneNode
 from rendering.quick.scene_controller import _render_snapshot_has_intentional_base_frame
 
 
@@ -41,7 +41,8 @@ def test_migration_proof_background_is_opt_in(gui_app):
     item.setProofProgress(0.5)
     node = item.updatePaintNode(None, None)
     assert item._proof_enabled is True
-    assert isinstance(node, BackgroundRenderNode)
+    assert isinstance(node, RetainedBackgroundSceneNode)
+    assert node.custom_active is True
 
 
 def test_empty_or_proof_render_is_not_product_first_frame():
