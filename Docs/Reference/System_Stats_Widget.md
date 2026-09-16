@@ -34,8 +34,8 @@ uses the scale-aware 1.25 px baseline so it visually joins the authored 5 px acc
 
 The card uses semantic Widget Theme roles, ordinary stacking/global-CUSTOM normalization and an original packaged
 monochrome gear/spanner header asset. The Widgets-page family pill sizes to its actual label instead of clipping `System
-Stats`. The temporary `--devstats` feature gate is retired, with one-time profile compatibility admission for the formerly
-hidden family without enabling its member; the old CLI token is only an inert mode-parser compatibility no-op. Installed
+Stats`. The temporary `--devstats` feature gate and parser token are retired, with one-time profile compatibility admission for the formerly
+hidden family without enabling its member. Installed
 soak/visual debt lives only in `Current_Plan.md`.
 
 ## 1. Product goal

@@ -9,7 +9,6 @@ import threading
 
 from core.gmail.gmail_client import EmailMetadata
 from core.gmail.gmail_preparation import (
-    deserialize_email_cache,
     load_gmail_startup_snapshot,
     reserve_gmail_cache_write,
     serialize_email_cache,
@@ -86,8 +85,8 @@ def test_gmail_concurrent_cache_writes_leave_one_complete_atomic_payload(tmp_pat
     first.join()
     second.join()
 
-    persisted = deserialize_email_cache(cache_path.read_text(encoding="utf-8"))
-    assert [email.id for email in persisted] in (["first"], ["second"])
+    persisted = load_gmail_startup_snapshot(cache_path, max_age_hours=24)
+    assert [email.id for email in persisted.emails] in (["first"], ["second"])
     assert list(tmp_path.glob("*.tmp")) == []
 
 
@@ -107,5 +106,5 @@ def test_gmail_reserved_write_identity_rejects_out_of_order_completion(tmp_path)
         write_id=older_id,
     ) is False
 
-    persisted = deserialize_email_cache(cache_path.read_text(encoding="utf-8"))
-    assert [email.id for email in persisted] == ["newer"]
+    persisted = load_gmail_startup_snapshot(cache_path, max_age_hours=24)
+    assert [email.id for email in persisted.emails] == ["newer"]

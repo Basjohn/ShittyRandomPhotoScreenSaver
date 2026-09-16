@@ -591,11 +591,9 @@ class TestResourceAccountingSnapshot:
         assert lock_owned_during_cleanup == [False]
 
     def test_gl_handle_kind_is_retained_for_aggregate_classification(self, resource_manager):
-        cleanup = MagicMock()
         resource_id = resource_manager.register_gl_handle(
             42,
             "texture",
-            cleanup,
             owner="compositor:1",
             generation=3,
             dimensions=(4, 4),
@@ -611,21 +609,17 @@ class TestResourceAccountingSnapshot:
         assert resource["gl_handle_type"] == "texture"
         assert resource["tracked_bytes"] == 64
         assert resource_manager.release_tracking(resource_id) is True
-        cleanup.assert_not_called()
 
-    def test_gl_registry_cleanup_is_passive_and_never_deletes_handles(self, resource_manager):
-        cleanup = MagicMock()
+    def test_gl_registry_cleanup_is_passive_accounting_only(self, resource_manager):
         resource_manager.register_gl_handle(
             43,
             "program",
-            cleanup,
             owner="compositor:1",
             generation=3,
         )
 
         resource_manager.cleanup_all()
 
-        cleanup.assert_not_called()
         assert resource_manager.get_accounting_snapshot()["total_resources"] == 0
 
     def test_gl_stats_include_timer_queries(self, resource_manager):

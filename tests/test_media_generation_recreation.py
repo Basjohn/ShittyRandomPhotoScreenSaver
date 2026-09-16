@@ -117,9 +117,6 @@ class _MediaController:
     def get_current_track_from_io_worker(self, fallback_providers=()):
         return None, None
 
-    def is_app_process_running(self) -> bool:
-        return False
-
 
 class _MediaControllerFactory:
     def __init__(self) -> None:

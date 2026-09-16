@@ -228,13 +228,3 @@ def install_emergency_logging(*, verbose: bool = False) -> Path | None:
         f" at {emergency_path}" if emergency_path else "",
     )
     return emergency_path
-
-
-def install_null_logging(*, verbose: bool = False) -> None:
-    """Compatibility name still imported by the current worker.
-
-    This intentionally does *not* install a NullHandler: it delegates to
-    fail-visible emergency logging. Rename/removal is tracked in
-    ``Future_Cleanup.md`` and must preserve that behaviour.
-    """
-    install_emergency_logging(verbose=verbose)

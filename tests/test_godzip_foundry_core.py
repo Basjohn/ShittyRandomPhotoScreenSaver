@@ -440,8 +440,7 @@ def _add_runtime_surface(repo: Path, *, windows_venv: bool = False) -> None:
         "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing",
         "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache",
         "--steam", "--noupdates", "--viz-diagnostics", "--viz-diag",
-        "--fresh", "--devcurve", "--devsteam", "--diag-pair-warm-finish",
-        "--diag-p4-stages", "--diag-p4-no-perf-hud",
+        "--fresh", "--devsteam",
     ]
     (repo / "main.py").write_text(
         "def parse_screensaver_args():\n"

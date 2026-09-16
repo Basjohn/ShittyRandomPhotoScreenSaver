@@ -145,7 +145,6 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --usage - Enable low-cadence CPU/GPU/memory/thread logging
     - --handle-attribution - Add explicit Windows handle-type sidecar (implies --usage)
     - --frame-trace - Explicit binary publication->Quick->draw trace (not diagnostic-all)
-    - --qsg-render-timing - Retired R-87 compatibility no-op (native timing observer was too intrusive)
     - --viz - Enable visualizer logging and diagnostics
     - --geo - Enable geometry/z-order/edit-layout diagnostics
     - --set - Enable settings mutation/import/schema diagnostics
@@ -154,19 +153,17 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --steam - Enable Steam widget family diagnostics
     - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
     - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
-    - --devcurve - Legacy no-op flag kept for compatibility
     - --devsteam - Show the unfinished Steam Journey scaffold
-    - --devstats - Legacy no-op; System Stats is a normal product family
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing", "--diag-pair-warm-finish", "--diag-p4-stages", "--diag-p4-no-perf-hud", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
-        "--noupdates", "--frame-trace", "--qsg-render-timing",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
+        "--noupdates", "--frame-trace",
         "--viz-diagnostics", "--viz-diag",
-        "--fresh", "--devcurve", "--devsteam", "--devstats",
+        "--fresh", "--devsteam",
     }
     # Diagnostic experiment admissions (--abc-drive[=|space]<A|B|C>,
     # --viz-switch-telemetry) are owned by the diagnostics resolver, not by mode

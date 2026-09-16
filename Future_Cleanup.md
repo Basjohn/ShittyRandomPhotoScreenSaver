@@ -189,66 +189,17 @@ Current helper startup ownership is the canonical scheduled task. Runtime still 
 - [ ] Remove legacy task names and HKCU Run cleanup only after that installed-base horizon closes.
 - [ ] Do not remove the current task owner or reintroduce helper polling/startup duplication.
 
-## READY — caller-dead Windows URL-launcher stubs
+## AUDIT — Visualizer diagnostic subset CLI aliases
 
-`core/windows/url_launcher.py` is a gutted compatibility module: `should_use_session_launcher()` and `launch_url_via_user_desktop()` have no current production caller. Current URL ownership is ProgramData queue/user-session watcher for SCR and `QDesktopServices.openUrl()` for MC.
+`--viz-diagnostics` / `--viz-diag` still have live meaning: they enable the visualizer diagnostic subset without the full `--viz` bundle. They are therefore **not** parser fossils. The proven no-op/parser-only tokens (`--devcurve`, `--devstats`, `--diag-pair-warm-finish`, `--diag-p4-stages`, `--diag-p4-no-perf-hud`, `--qsg-render-timing`) have been retired.
 
-- [ ] Final exact caller/import search, then delete the module/stubs and any stale tests/docs.
-- [ ] Do not resurrect token/process launching, `rundll32`, hidden process creation or user-token manipulation.
-
-## READY — deprecated `ResourceManager.register_gl_handle(cleanup_func=...)` argument
-
-The GL registry is passive accounting only; context-bound owners delete GL objects. Current source has no production caller passing `cleanup_func`.
-
-- [ ] Final external/tool caller proof, then remove the unused parameter/doc wording.
-- [ ] Do not turn ResourceManager into a cross-context GL deleter while removing the compatibility argument.
-
-## READY — Gmail list-returning cache-deserializer wrapper
-
-`deserialize_email_cache()` is a compatibility wrapper around the current prepared startup decoder; current non-test source does not call it.
-
-- [ ] Rehome/delete tests that only exist for the wrapper, then remove the wrapper/export if exact caller proof remains clean.
-- [ ] Preserve the current cache decode/validation path used by startup preparation.
-
-## AUDIT — Reddit helper `install_null_logging` compatibility name
-
-The function no longer installs null logging; it delegates to emergency logging. Unlike several dead shims, the **current helper worker still imports this old name**, so it is not caller-dead yet.
-
-- [ ] Decide whether to rename the worker call to `install_emergency_logging` and then remove the compatibility alias in one bounded change.
-- [ ] Preserve fail-visible helper startup logging; never restore silent `NullHandler` behavior.
-
-## READY — retired CLI compatibility tokens
-
-`main.parse_screensaver_args()` and GODZIP Foundry still know several parser-only/no-op aliases such as `--devcurve`, `--devstats`, `--viz-diagnostics`/`--viz-diag` and `--diag-pair-warm-finish`.
-
-- [ ] Classify each token as current diagnostic, alias with real external/script callers, or true no-op/parser fossil.
-- [ ] Remove true no-ops from parser/help/Foundry in one synchronized slice after script/shortcut caller proof.
-- [ ] Keep useful `--frame-trace`, PERF/usage/lifecycle and other current diagnostic authority; this cleanup is not permission to shrink observability indiscriminately.
+- [ ] Decide whether the subset aliases still have an external operator/script use worth preserving.
+- [ ] If retired later, remove both aliases from logging bootstrap + Foundry together and update any Historical Bug runbook that still recommends them.
+- Keep `--viz` and `--frame-trace`; this is not permission to reduce current diagnostic authority.
 
 ## AUDIT — GPU timing CLI versus Quick ownership
 
 - [ ] Reconcile `main.py`/logging's advertised `--gpu-timing` owner-context query capability with current Quick production: exact search finds no Quick GL timer-query consumer. Preserve useful PERF logging; remove stale claims or deliberately implement measured, bounded owner-context diagnostics when a real attribution task needs them. Do not restore the retired compositor to make this switch truthful.
-
-## READY — temporary `h-destination` profile alias
-
-Current repo search shows `h-destination` has no live automation/script caller outside its own `tests/run_chunked.py` compatibility declaration; remaining occurrences are historical prose.
-
-- [ ] Remove the alias and current TestSuite wording after one final exact caller search. `destination` remains canonical.
-
-## READY — pre-Quick `GCController` compatibility facade
-
-`core/performance/frame_budget.py` still defines/exports `GCController` and `get_gc_controller()`, but current non-document caller search finds only the facade/export itself. `RuntimeGCPolicy` is the RUN-lifetime GC owner.
-
-- [ ] Remove the dead facade/global/export after one final import/caller proof.
-- [ ] Do **not** combine this deletion with collector retuning. The accepted `gc.freeze()` policy and any future measured GC work remain separate.
-
-## READY — Media idle process-probe residue
-
-Event-driven GSMTC ownership retired the old idle process-running probe. Current source search finds no production caller of the old `is_app_process_running()` interface/Windows override. Its Toolhelp helpers are used only by that probe.
-
-- [ ] Remove `BaseMediaController.is_app_process_running()`, the Windows override, `_win_process_exists()` and `_win_any_process_exists()` after stale tests/fakes are rehomed or deleted.
-- **KEEP `get_provider_process_exe_names()`.** It has durable value in exact Core Audio/app-volume target resolution (`spotify_volume.py` and source-identity mapping). Update its stale idle-poll-oriented docstring when the cleanup lands.
-- Never restore process polling or a fast Media fallback.
 
 ## AUDIT — non-Windows DPAPI plaintext fallback
 

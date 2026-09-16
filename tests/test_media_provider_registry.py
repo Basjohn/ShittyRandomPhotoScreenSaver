@@ -451,25 +451,3 @@ def test_session_selection_rejects_unrelated_and_false_positive_sources() -> Non
 
     assert controller._select_media_session(_Manager([unrelated, near_match], unrelated)) is None
 
-
-def test_browser_process_detection_checks_registered_host_identities(monkeypatch) -> None:
-    controller = _controller("spotify_browser")
-    checked: list[tuple[str, ...]] = []
-
-    def _exists(exe_names) -> bool:
-        checked.append(tuple(exe_names))
-        return "msedge.exe" in exe_names
-
-    monkeypatch.setattr("core.media.media_controller._win_any_process_exists", _exists)
-
-    assert controller.is_app_process_running() is True
-    assert checked == [
-        (
-            "brave.exe",
-            "chrome.exe",
-            "firefox.exe",
-            "msedge.exe",
-            "opera.exe",
-            "vivaldi.exe",
-        )
-    ]

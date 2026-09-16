@@ -48,9 +48,8 @@ def test_qsg_timing_runtime_admission_is_retired_but_reporter_is_preserved():
     flags_source = (root / "core" / "diagnostics" / "experiment_flags.py").read_text(encoding="utf-8")
     assert "apply_qsg_render_timing_environment" not in main_source
     assert "apply_qsg_render_timing_environment" not in flags_source
-    assert '"--qsg-render-timing", # retired R-87 observer' in foundry_source
-    # Keep the old token mode-filtered so an old shortcut cannot break /s parsing.
-    assert '"--noupdates", "--frame-trace", "--qsg-render-timing"' in main_source
+    assert "--qsg-render-timing" not in main_source
+    assert "--qsg-render-timing" not in foundry_source
 
 
 def test_rejected_gil_switch_flag_is_not_runtime_cli_or_foundry_surface():

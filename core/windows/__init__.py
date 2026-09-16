@@ -1,7 +1,7 @@
 """
 Windows-specific helpers for SRPSS.
 
-This package exposes the session-aware Reddit URL launcher plus the helper
+This package exposes the secure/session-aware URL owner plus the Reddit helper
 bridge/installer utilities that coordinate the ProgramData queue.
 """
 
@@ -9,7 +9,6 @@ from importlib import import_module
 from typing import Any
 
 __all__ = [
-    "url_launcher",
     "reddit_helper_bridge",
     "reddit_helper_installer",
     "reddit_helper_runtime",

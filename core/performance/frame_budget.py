@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import Dict, Optional
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
-from core.performance.gc_policy import RuntimeGCPolicy
 
 logger = get_logger(__name__)
 
@@ -277,37 +276,9 @@ class FrameBudget:
         )
 
 
-class GCController(RuntimeGCPolicy):
-    """Deprecated compatibility surface for the pre-Qt-Quick GC controller.
-
-    The old implementation disabled/enabled global GC around a Python-owned
-    frame and forced generation-0 collections during guessed idle windows.
-    Qt Quick no longer has such a Python frame boundary.  Construction is now
-    side-effect free; the RUN lifetime explicitly starts ``RuntimeGCPolicy``.
-    """
-
-    def __init__(self, idle_threshold_ms: float = 100.0):
-        del idle_threshold_ms
-        super().__init__()
-
-    def disable_gc(self) -> None:
-        logger.debug("[GC_POLICY] legacy disable_gc ignored under Qt Quick")
-
-    def enable_gc(self) -> None:
-        logger.debug("[GC_POLICY] legacy enable_gc ignored under Qt Quick")
-
-    def run_idle_gc(self, idle_time_ms: float) -> bool:
-        del idle_time_ms
-        # Manual collection is intentionally not part of the retained policy.
-        return False
-
-    def restore_defaults(self) -> None:
-        self.stop()
-
 
 # Global instances
 _frame_budget: Optional[FrameBudget] = None
-_gc_controller: Optional[GCController] = None
 
 
 def get_frame_budget() -> FrameBudget:
@@ -316,11 +287,3 @@ def get_frame_budget() -> FrameBudget:
     if _frame_budget is None:
         _frame_budget = FrameBudget()
     return _frame_budget
-
-
-def get_gc_controller() -> GCController:
-    """Get the global GCController instance."""
-    global _gc_controller
-    if _gc_controller is None:
-        _gc_controller = GCController()
-    return _gc_controller
