@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+import time
 
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
 from PySide6.QtQuick import QSGRenderNode
 
+from core.performance.frame_trace import FrameTraceEvent, FrameTraceSink
 from rendering.quick.render.gl_resources import compile_program
+from .gl_state import InheritedGlState
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 
 
@@ -113,6 +116,58 @@ class VisualizerClipFrame:
         )
 
 
+class VisualizerClipTraceContext:
+    """Deferred clip-stage timestamps for one explicit frame-trace draw.
+
+    Stage boundaries are sampled inside the clip host with ``perf_counter_ns``
+    but are written to the binary sink only after the parent ``RENDER_DRAW``
+    marker. That keeps all clip-stage sink writes out of the very intervals this
+    diagnostic exists to attribute. Ordinary runtime never constructs this
+    object.
+    """
+
+    __slots__ = (
+        "sink",
+        "screen_index",
+        "revision",
+        "logical_timestamp_ns",
+        "auxiliary",
+        "_samples",
+    )
+
+    def __init__(
+        self,
+        sink: FrameTraceSink,
+        *,
+        screen_index: int,
+        revision: int,
+        logical_timestamp_ns: int,
+        auxiliary: int,
+    ) -> None:
+        self.sink = sink
+        self.screen_index = int(screen_index)
+        self.revision = int(revision)
+        self.logical_timestamp_ns = int(logical_timestamp_ns)
+        self.auxiliary = int(auxiliary)
+        self._samples: list[tuple[FrameTraceEvent, int]] = []
+
+    def mark(self, event: FrameTraceEvent) -> None:
+        self._samples.append((event, time.perf_counter_ns()))
+
+    def flush(self) -> None:
+        samples = self._samples
+        self._samples = []
+        for event, timestamp_ns in samples:
+            self.sink.record(
+                event,
+                screen_index=self.screen_index,
+                revision=self.revision,
+                logical_timestamp_ns=self.logical_timestamp_ns,
+                auxiliary=self.auxiliary,
+                timestamp_ns=timestamp_ns,
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class _InheritedClipState:
     scissor_enabled: bool
@@ -134,31 +189,65 @@ class _InheritedClipState:
     stencil_back_depth_pass: int
 
     @classmethod
-    def capture(cls) -> "_InheritedClipState":
+    def capture(
+        cls,
+        *,
+        trace_context: VisualizerClipTraceContext | None = None,
+    ) -> "_InheritedClipState":
+        # Preserve the established GL query ordering. CHK25 only samples
+        # boundaries when explicit --frame-trace supplied a context; ordinary
+        # runtime executes the same state reads with no new timestamp calls.
+        scissor_enabled = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
+        scissor_box = tuple(
+            int(value) for value in gl.glGetIntegerv(gl.GL_SCISSOR_BOX)
+        )
+        if trace_context is not None:
+            trace_context.mark(
+                FrameTraceEvent.CLIP_BEGIN_INHERITED_SCISSOR_READY
+            )
+
+        stencil_enabled = bool(gl.glIsEnabled(gl.GL_STENCIL_TEST))
+        stencil_func = _int_state(gl.GL_STENCIL_FUNC)
+        stencil_ref = _int_state(gl.GL_STENCIL_REF)
+        stencil_value_mask = _int_state(gl.GL_STENCIL_VALUE_MASK)
+        stencil_write_mask = _int_state(gl.GL_STENCIL_WRITEMASK)
+        stencil_fail = _int_state(gl.GL_STENCIL_FAIL)
+        stencil_depth_fail = _int_state(gl.GL_STENCIL_PASS_DEPTH_FAIL)
+        stencil_depth_pass = _int_state(gl.GL_STENCIL_PASS_DEPTH_PASS)
+        if trace_context is not None:
+            trace_context.mark(
+                FrameTraceEvent.CLIP_BEGIN_INHERITED_FRONT_READY
+            )
+
+        stencil_back_func = _int_state(gl.GL_STENCIL_BACK_FUNC)
+        stencil_back_ref = _int_state(gl.GL_STENCIL_BACK_REF)
+        stencil_back_value_mask = _int_state(gl.GL_STENCIL_BACK_VALUE_MASK)
+        stencil_back_write_mask = _int_state(gl.GL_STENCIL_BACK_WRITEMASK)
+        stencil_back_fail = _int_state(gl.GL_STENCIL_BACK_FAIL)
+        stencil_back_depth_fail = _int_state(
+            gl.GL_STENCIL_BACK_PASS_DEPTH_FAIL
+        )
+        stencil_back_depth_pass = _int_state(
+            gl.GL_STENCIL_BACK_PASS_DEPTH_PASS
+        )
         return cls(
-            scissor_enabled=bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST)),
-            scissor_box=tuple(
-                int(value) for value in gl.glGetIntegerv(gl.GL_SCISSOR_BOX)
-            ),
-            stencil_enabled=bool(gl.glIsEnabled(gl.GL_STENCIL_TEST)),
-            stencil_func=_int_state(gl.GL_STENCIL_FUNC),
-            stencil_ref=_int_state(gl.GL_STENCIL_REF),
-            stencil_value_mask=_int_state(gl.GL_STENCIL_VALUE_MASK),
-            stencil_write_mask=_int_state(gl.GL_STENCIL_WRITEMASK),
-            stencil_fail=_int_state(gl.GL_STENCIL_FAIL),
-            stencil_depth_fail=_int_state(gl.GL_STENCIL_PASS_DEPTH_FAIL),
-            stencil_depth_pass=_int_state(gl.GL_STENCIL_PASS_DEPTH_PASS),
-            stencil_back_func=_int_state(gl.GL_STENCIL_BACK_FUNC),
-            stencil_back_ref=_int_state(gl.GL_STENCIL_BACK_REF),
-            stencil_back_value_mask=_int_state(gl.GL_STENCIL_BACK_VALUE_MASK),
-            stencil_back_write_mask=_int_state(gl.GL_STENCIL_BACK_WRITEMASK),
-            stencil_back_fail=_int_state(gl.GL_STENCIL_BACK_FAIL),
-            stencil_back_depth_fail=_int_state(
-                gl.GL_STENCIL_BACK_PASS_DEPTH_FAIL
-            ),
-            stencil_back_depth_pass=_int_state(
-                gl.GL_STENCIL_BACK_PASS_DEPTH_PASS
-            ),
+            scissor_enabled=scissor_enabled,
+            scissor_box=scissor_box,
+            stencil_enabled=stencil_enabled,
+            stencil_func=stencil_func,
+            stencil_ref=stencil_ref,
+            stencil_value_mask=stencil_value_mask,
+            stencil_write_mask=stencil_write_mask,
+            stencil_fail=stencil_fail,
+            stencil_depth_fail=stencil_depth_fail,
+            stencil_depth_pass=stencil_depth_pass,
+            stencil_back_func=stencil_back_func,
+            stencil_back_ref=stencil_back_ref,
+            stencil_back_value_mask=stencil_back_value_mask,
+            stencil_back_write_mask=stencil_back_write_mask,
+            stencil_back_fail=stencil_back_fail,
+            stencil_back_depth_fail=stencil_back_depth_fail,
+            stencil_back_depth_pass=stencil_back_depth_pass,
         )
 
     def restore(self) -> None:
@@ -193,7 +282,7 @@ class _InheritedClipState:
         _set_enabled(gl.GL_STENCIL_TEST, self.stencil_enabled)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class VisualizerClipRun:
     frame: VisualizerClipFrame
     inherited: _InheritedClipState
@@ -201,6 +290,7 @@ class VisualizerClipRun:
     local_stencil_value: int
     stencil_mask: int
     incoming_scissor: tuple[int, int, int, int] | None
+    inherited_gl_state: InheritedGlState | None = None
 
 
 class VisualizerClipHost:
@@ -224,11 +314,21 @@ class VisualizerClipHost:
         self,
         frame: VisualizerClipFrame,
         render_state: QSGRenderNode.RenderState,
+        *,
+        trace_context: VisualizerClipTraceContext | None = None,
     ) -> VisualizerClipRun:
         if self._active_run is not None:
             raise RuntimeError("visualizer clip host is already active")
         self._ensure_resources()
-        inherited = _InheritedClipState.capture()
+        if trace_context is not None:
+            trace_context.mark(FrameTraceEvent.CLIP_BEGIN_RESOURCES_READY)
+        if trace_context is None:
+            inherited = _InheritedClipState.capture()
+        else:
+            inherited = _InheritedClipState.capture(
+                trace_context=trace_context
+            )
+            trace_context.mark(FrameTraceEvent.CLIP_BEGIN_INHERITED_READY)
         run: VisualizerClipRun | None = None
         try:
             incoming_scissor = self._apply_incoming_scissor(render_state)
@@ -261,7 +361,27 @@ class VisualizerClipHost:
             gl.glStencilMask(stencil_mask)
             gl.glStencilFunc(gl.GL_EQUAL, base_value, stencil_mask)
             gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_INCR)
-            self._draw_mask(frame)
+            if trace_context is not None:
+                trace_context.mark(FrameTraceEvent.CLIP_BEGIN_SETUP_READY)
+            # CHK26: the mask and mode host need the same surrounding non-stencil
+            # Quick GL state. Capture that union once at the first mask boundary
+            # and carry it through begin -> mode -> end instead of issuing two
+            # further synchronous glGet* batches later in the same render call.
+            run.inherited_gl_state = InheritedGlState.capture_clipped_shared(
+                mark=(trace_context.mark if trace_context is not None else None)
+            )
+            if trace_context is not None:
+                self._draw_mask(
+                    frame,
+                    inherited_gl_state=run.inherited_gl_state,
+                    trace_context=trace_context,
+                    trace_phase="begin",
+                )
+            else:
+                self._draw_mask(
+                    frame,
+                    inherited_gl_state=run.inherited_gl_state,
+                )
 
             gl.glStencilMask(0x00)
             gl.glStencilFunc(gl.GL_EQUAL, local_value, stencil_mask)
@@ -272,7 +392,7 @@ class VisualizerClipHost:
                 inherited.restore()
             else:
                 try:
-                    self.end(run)
+                    self.end(run, trace_context=trace_context)
                 except Exception as cleanup_exc:
                     raise RuntimeError(
                         "visualizer clip setup and stencil rollback both failed: "
@@ -280,7 +400,12 @@ class VisualizerClipHost:
                     ) from exc
             raise
 
-    def end(self, run: VisualizerClipRun) -> None:
+    def end(
+        self,
+        run: VisualizerClipRun,
+        *,
+        trace_context: VisualizerClipTraceContext | None = None,
+    ) -> None:
         if run is not self._active_run:
             raise RuntimeError("visualizer clip run is not current")
         try:
@@ -293,10 +418,24 @@ class VisualizerClipHost:
                 run.stencil_mask,
             )
             gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_DECR)
-            self._draw_mask(run.frame)
+            if trace_context is not None:
+                trace_context.mark(FrameTraceEvent.CLIP_END_SETUP_READY)
+                self._draw_mask(
+                    run.frame,
+                    inherited_gl_state=run.inherited_gl_state,
+                    trace_context=trace_context,
+                    trace_phase="end",
+                )
+            else:
+                self._draw_mask(
+                    run.frame,
+                    inherited_gl_state=run.inherited_gl_state,
+                )
         finally:
             self._active_run = None
             run.inherited.restore()
+            if trace_context is not None:
+                trace_context.mark(FrameTraceEvent.CLIP_END_INHERITED_READY)
 
     def release_resources(self) -> None:
         if not self.has_resources:
@@ -425,20 +564,60 @@ class VisualizerClipHost:
             gl.glBindVertexArray(prior_vao)
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER, prior_array_buffer)
 
-    def _draw_mask(self, frame: VisualizerClipFrame) -> None:
-        prior_viewport = tuple(
-            int(value) for value in gl.glGetIntegerv(gl.GL_VIEWPORT)
-        )
-        prior_program = _int_state(gl.GL_CURRENT_PROGRAM)
-        prior_vao = _int_state(gl.GL_VERTEX_ARRAY_BINDING)
-        prior_array_buffer = _int_state(gl.GL_ARRAY_BUFFER_BINDING)
-        prior_blend = bool(gl.glIsEnabled(gl.GL_BLEND))
-        prior_cull = bool(gl.glIsEnabled(gl.GL_CULL_FACE))
-        prior_depth = bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
-        prior_depth_mask = _bool_state(gl.GL_DEPTH_WRITEMASK)
-        prior_color_mask = tuple(
-            bool(value) for value in gl.glGetBooleanv(gl.GL_COLOR_WRITEMASK)
-        )
+    def _draw_mask(
+        self,
+        frame: VisualizerClipFrame,
+        *,
+        inherited_gl_state: InheritedGlState | None = None,
+        trace_context: VisualizerClipTraceContext | None = None,
+        trace_phase: str | None = None,
+    ) -> None:
+        if inherited_gl_state is None:
+            # Exceptional/fallback-only path: retain the old self-contained fence
+            # so rollback remains correct even if shared-state capture itself fails.
+            prior_viewport = tuple(
+                int(value) for value in gl.glGetIntegerv(gl.GL_VIEWPORT)
+            )
+            prior_program = _int_state(gl.GL_CURRENT_PROGRAM)
+            prior_vao = _int_state(gl.GL_VERTEX_ARRAY_BINDING)
+            prior_array_buffer = _int_state(gl.GL_ARRAY_BUFFER_BINDING)
+            if trace_context is not None:
+                trace_context.mark(
+                    FrameTraceEvent.CLIP_BEGIN_MASK_BINDINGS_READY
+                    if trace_phase == "begin"
+                    else FrameTraceEvent.CLIP_END_MASK_BINDINGS_READY
+                )
+            prior_blend = bool(gl.glIsEnabled(gl.GL_BLEND))
+            prior_cull = bool(gl.glIsEnabled(gl.GL_CULL_FACE))
+            prior_depth = bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
+            prior_depth_mask = _bool_state(gl.GL_DEPTH_WRITEMASK)
+            prior_color_mask = tuple(
+                bool(value) for value in gl.glGetBooleanv(gl.GL_COLOR_WRITEMASK)
+            )
+            if trace_context is not None:
+                trace_context.mark(
+                    FrameTraceEvent.CLIP_BEGIN_MASK_STATE_READY
+                    if trace_phase == "begin"
+                    else FrameTraceEvent.CLIP_END_MASK_STATE_READY
+                )
+        else:
+            prior_viewport = inherited_gl_state.viewport
+            prior_program = inherited_gl_state.program
+            prior_vao = inherited_gl_state.vao
+            prior_array_buffer = inherited_gl_state.array_buffer
+            prior_blend = inherited_gl_state.blend
+            prior_cull = inherited_gl_state.cull
+            prior_depth = inherited_gl_state.depth
+            prior_depth_mask = inherited_gl_state.depth_write
+            if inherited_gl_state.color_mask is None:
+                raise RuntimeError("shared visualizer clip state has no color mask")
+            prior_color_mask = inherited_gl_state.color_mask
+            if trace_context is not None and trace_phase == "end":
+                # CHK25 end markers remain present; near-zero deltas now prove the
+                # state is being carried rather than re-queried. Begin markers
+                # were emitted by capture_clipped_shared() around the real reads.
+                trace_context.mark(FrameTraceEvent.CLIP_END_MASK_BINDINGS_READY)
+                trace_context.mark(FrameTraceEvent.CLIP_END_MASK_STATE_READY)
         try:
             gl.glDisable(gl.GL_BLEND)
             gl.glDisable(gl.GL_CULL_FACE)
@@ -448,6 +627,12 @@ class VisualizerClipHost:
             gl.glViewport(*frame.viewport)
             gl.glUseProgram(self._program)
             gl.glBindVertexArray(self._vao)
+            if trace_context is not None:
+                trace_context.mark(
+                    FrameTraceEvent.CLIP_BEGIN_MASK_GL_STATE_APPLIED
+                    if trace_phase == "begin"
+                    else FrameTraceEvent.CLIP_END_MASK_GL_STATE_APPLIED
+                )
             gl.glUniformMatrix4fv(
                 self._matrix_location,
                 1,
@@ -457,7 +642,19 @@ class VisualizerClipHost:
             gl.glUniform2f(self._item_size_location, *frame.logical_size)
             gl.glUniform4f(self._clip_rect_location, *frame.local_content_rect)
             gl.glUniform1f(self._radius_location, frame.inner_corner_radius)
+            if trace_context is not None:
+                trace_context.mark(
+                    FrameTraceEvent.CLIP_BEGIN_MASK_UNIFORMS_READY
+                    if trace_phase == "begin"
+                    else FrameTraceEvent.CLIP_END_MASK_UNIFORMS_READY
+                )
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            if trace_context is not None:
+                trace_context.mark(
+                    FrameTraceEvent.CLIP_BEGIN_MASK_DRAW_READY
+                    if trace_phase == "begin"
+                    else FrameTraceEvent.CLIP_END_MASK_DRAW_READY
+                )
         finally:
             gl.glViewport(*prior_viewport)
             gl.glBindVertexArray(prior_vao)
@@ -468,10 +665,17 @@ class VisualizerClipHost:
             _set_enabled(gl.GL_BLEND, prior_blend)
             _set_enabled(gl.GL_CULL_FACE, prior_cull)
             _set_enabled(gl.GL_DEPTH_TEST, prior_depth)
+            if trace_context is not None:
+                trace_context.mark(
+                    FrameTraceEvent.CLIP_BEGIN_MASK_RESTORE_READY
+                    if trace_phase == "begin"
+                    else FrameTraceEvent.CLIP_END_MASK_RESTORE_READY
+                )
 
 
 __all__ = [
     "VisualizerClipFrame",
     "VisualizerClipHost",
     "VisualizerClipRun",
+    "VisualizerClipTraceContext",
 ]
