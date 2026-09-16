@@ -3,18 +3,18 @@ from __future__ import annotations
 
 
 def test_smart_title_case() -> None:
-    """Verify _smart_title_case() function capitalizes words correctly."""
-    from widgets.gmail_components import _smart_title_case, smart_title_case_subject
+    """Verify current Gmail subject title casing."""
+    from widgets.gmail_components import smart_title_case_subject
 
-    assert _smart_title_case("hello world") == "Hello World"
-    assert _smart_title_case("") == ""
-    assert _smart_title_case("test") == "Test"
-    assert _smart_title_case("multiple words here") == "Multiple Words Here"
-    assert _smart_title_case("you've been invited") == "You've Been Invited"
+    assert smart_title_case_subject("hello world") == "Hello World"
+    assert smart_title_case_subject("") == ""
+    assert smart_title_case_subject("test") == "Test"
+    assert smart_title_case_subject("multiple words here") == "Multiple Words Here"
+    assert smart_title_case_subject("you've been invited") == "You've Been Invited"
     assert smart_title_case_subject("you'll need 2FA for AI") == "You'll Need 2FA For AI"
     # Preserves ALL CAPS (acronyms)
-    assert _smart_title_case("GMAIL") == "GMAIL"
-    assert _smart_title_case("NASA") == "NASA"
+    assert smart_title_case_subject("GMAIL") == "GMAIL"
+    assert smart_title_case_subject("NASA") == "NASA"
 
 
 def test_gmail_sender_cleanup() -> None:

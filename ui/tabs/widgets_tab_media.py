@@ -288,12 +288,6 @@ def _update_media_provider_controls(tab) -> None:
             )
 
 
-def _update_musicbee_plugin_visibility(tab) -> None:
-    """Compatibility wrapper for the consolidated provider conditional owner."""
-
-    _update_media_provider_controls(tab)
-
-
 def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """Build the Media widget UI section.
 

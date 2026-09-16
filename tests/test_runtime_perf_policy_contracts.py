@@ -387,7 +387,7 @@ def test_image_change_admission_is_transactional_and_never_snaps_active_transiti
     assert "if not self.has_presented_image():" in manager
     assert "return self._resolve_quick_transition_batch_spec() is not None" in manager
 
-    present_start = manager.index("    def _present_quick_image")
+    present_start = manager.index("    def _present_quick_captured_image")
     present_end = manager.index("    def _on_quick_transition_finalized", present_start)
     present = manager[present_start:present_end]
     assert 'cancel(reason="image-replacement")' not in present

@@ -184,10 +184,9 @@ def test_client_initialization_with_fake_token() -> None:
     mock_oauth.credentials = MagicMock()
     mock_oauth.credentials.access_token = "fake_access_token"
 
-    _ = GmailClient(oauth_manager=mock_oauth)
+    client = GmailClient(oauth_manager=mock_oauth)
 
-    # If we get here without exception, client was created successfully
-    assert True
+    assert client._oauth is mock_oauth
 
 
 def test_lock_usage_in_client() -> None:

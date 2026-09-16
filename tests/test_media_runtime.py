@@ -10,6 +10,7 @@ import time
 from typing import Any
 
 import pytest
+from PySide6.QtCore import QThread
 from PySide6.QtGui import QImage
 
 from core.media.media_controller import (
@@ -67,6 +68,12 @@ class _Timer:
 
     def isActive(self) -> bool:
         return self.active
+
+    def thread(self):
+        # OverlayTimerHandle expects the ThreadManager timer surface to expose
+        # Qt ownership. Keep the fake on the current test thread so stop() is
+        # immediate rather than queued through QMetaObject.
+        return QThread.currentThread()
 
     def setInterval(self, interval: int) -> None:
         self.interval = int(interval)

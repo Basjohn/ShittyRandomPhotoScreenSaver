@@ -29,7 +29,6 @@ from core.settings.structured_roots import (
 )
 from core.settings.structured_input_compat import promote_legacy_structured_store_shape
 from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
-from core.settings.widget_input_compat import promote_legacy_clock_separator
 from core.settings.visualizer_settings_snapshot import (
     migrate_legacy_visualizer_mode_activation_schema,
     normalize_visualizer_section_mapping,
@@ -67,7 +66,6 @@ class SettingsManager(QObject):
     _WIDGET_CAPABILITY_SCHEMA_VERSION = 1
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
     _VISUALIZER_SCHEMA_VERSION = 9
-    _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.0
     _MANUAL_FLOOR_MAX = 1.0
@@ -139,13 +137,6 @@ class SettingsManager(QObject):
         except Exception:
             logger.debug("Legacy settings alias migration failed", exc_info=True)
 
-        # Promote bounded retired Widget keys before current defaults can fill
-        # their replacements and mask the user's old persisted value.
-        try:
-            self._migrate_legacy_clock_separator_before_defaults()
-        except Exception:
-            logger.debug("Legacy Clock separator migration failed", exc_info=True)
-
         # Upgrade the retired Visualizer enabled-id list *before* current defaults
         # are merged. Otherwise mode_activation defaults would mask the old user
         # selection before the one compatibility seam can preserve it.
@@ -190,11 +181,6 @@ class SettingsManager(QObject):
             self.validate_and_repair()
         except Exception:
             logger.debug("Settings validation failed", exc_info=True)
-
-        try:
-            self.cleanup_legacy_global_preset_state()
-        except Exception:
-            logger.debug("Legacy global preset cleanup failed", exc_info=True)
 
         # Startup is the first explicit durability boundary.  Runtime changes
         # are admitted to the ordered writer without holding the GUI thread;
@@ -368,24 +354,6 @@ class SettingsManager(QObject):
         if migrated:
             logger.info("Migrated legacy setting aliases: %s", migrated)
 
-    def _migrate_legacy_clock_separator_before_defaults(self) -> None:
-        """Promote the retired Clock separator key before defaults mask it."""
-
-        with self._lock:
-            raw_widgets = self._settings.value("widgets", None)
-            if not isinstance(raw_widgets, Mapping):
-                return
-            migrated, changed = promote_legacy_clock_separator(raw_widgets)
-            if not changed:
-                return
-            self._settings.setValue("widgets", migrated)
-            self._settings.sync()
-            self._clear_cache_locked()
-
-        logger.info(
-            "Migrated legacy Clock separator setting to widgets.clock.show_separator"
-        )
-
     def _migrate_legacy_visualizer_mode_activation_before_defaults(self) -> None:
         """Preserve old per-mode dormancy before current defaults can mask it.
 
@@ -424,9 +392,6 @@ class SettingsManager(QObject):
         canonical_store = get_flat_defaults(self._application)
 
         for key, value in canonical_store.items():
-            if key in self._LEGACY_GLOBAL_PRESET_KEYS:
-                continue
-
             if key == 'widgets' and isinstance(value, Mapping):
                 # Widget merging has additional visualizer migration rules.
                 self._ensure_widgets_defaults(dict(value))
@@ -482,7 +447,7 @@ class SettingsManager(QObject):
     def _normalize_widgets_mapping(value: Any) -> Any:
         if not isinstance(value, Mapping):
             return value
-        widgets, _ = promote_legacy_clock_separator(value)
+        widgets = dict(value)
         vis_section = widgets.get("spotify_visualizer")
         if isinstance(vis_section, Mapping):
             widgets["spotify_visualizer"] = normalize_visualizer_section_mapping(
@@ -964,20 +929,6 @@ class SettingsManager(QObject):
             return deepcopy(canonical)
 
         return self._to_plain_value(value)
-
-    def cleanup_legacy_global_preset_state(self) -> List[str]:
-        """Remove retired global preset schema keys from persisted settings."""
-        removed: List[str] = []
-        with self._lock:
-            for key in self._LEGACY_GLOBAL_PRESET_KEYS:
-                if self._settings.contains(key):
-                    self._settings.remove(key)
-                    removed.append(key)
-            if removed:
-                self._clear_cache_locked()
-                self._settings.sync()
-                logger.info("Removed legacy global preset keys: %s", removed)
-        return removed
 
     def set(self, key: str, value: Any) -> None:
         """

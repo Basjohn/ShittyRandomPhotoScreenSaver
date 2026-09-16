@@ -752,23 +752,28 @@ def test_disable_only_ordinary_presence_change_can_live_commit_without_reload() 
             source_monitor_route="ALL",
         )
 
-    ordinary = SimpleNamespace(
-        _session=SimpleNamespace(items=lambda: [_item("system_stats", current_enabled=False)])
+    ordinary = object.__new__(QuickCustomLayoutOwner)
+    ordinary._session = SimpleNamespace(
+        items=lambda: [_item("system_stats", current_enabled=False)]
     )
+    ordinary._visualizer_presence_commit = None
     assert QuickCustomLayoutOwner._ordinary_disable_only_live_commit_is_coherent(ordinary) is True
     assert QuickCustomLayoutOwner._live_commit_topology_reason(ordinary) is None
 
-    visualizer = SimpleNamespace(
-        _session=SimpleNamespace(items=lambda: [_item("spotify_visualizer", current_enabled=False)]),
-        _visualizer_presence_commit=lambda enabled: not enabled,
+    visualizer = object.__new__(QuickCustomLayoutOwner)
+    visualizer._session = SimpleNamespace(
+        items=lambda: [_item("spotify_visualizer", current_enabled=False)]
     )
+    visualizer._visualizer_presence_commit = lambda enabled: not enabled
     assert QuickCustomLayoutOwner._ordinary_disable_only_live_commit_is_coherent(visualizer) is False
     assert QuickCustomLayoutOwner._presence_change_live_commit_is_coherent(visualizer) is True
     assert QuickCustomLayoutOwner._live_commit_topology_reason(visualizer) is None
 
     moved = _item("system_stats", current_enabled=False)
     moved.current_display_identity = "display:b"
-    routed = SimpleNamespace(_session=SimpleNamespace(items=lambda: [moved]))
+    routed = object.__new__(QuickCustomLayoutOwner)
+    routed._session = SimpleNamespace(items=lambda: [moved])
+    routed._visualizer_presence_commit = None
     assert QuickCustomLayoutOwner._ordinary_disable_only_live_commit_is_coherent(routed) is False
     assert QuickCustomLayoutOwner._live_commit_topology_reason(routed) == "family_presence_changed"
 
@@ -794,10 +799,9 @@ def test_disable_ordinary_plus_unrelated_visualizer_transfer_keeps_live_commit_p
         current_monitor_route="1",
         source_monitor_route="0",
     )
-    owner = SimpleNamespace(
-        _session=SimpleNamespace(items=lambda: [ordinary, visualizer]),
-        _visualizer_presence_commit=lambda enabled: True,
-    )
+    owner = object.__new__(QuickCustomLayoutOwner)
+    owner._session = SimpleNamespace(items=lambda: [ordinary, visualizer])
+    owner._visualizer_presence_commit = lambda enabled: True
 
     # Presence coherence belongs only to the family whose admission changed.
     # The Visualizer transfer is validated independently by the normal transfer

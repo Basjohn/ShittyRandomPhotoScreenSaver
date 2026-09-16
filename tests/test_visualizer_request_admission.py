@@ -91,6 +91,7 @@ def test_request_absent_activation_follows_canonical_mode_defaults(monkeypatch):
     )
 
     enabled = set(resolve_effective_enabled_modes(None))
+    assert enabled, "canonical mode defaults must admit at least one visualizer mode"
     for mode in VISUALIZER_MODE_IDS:
         if mode in enabled:
             with pytest.raises(_ReachedActivation):

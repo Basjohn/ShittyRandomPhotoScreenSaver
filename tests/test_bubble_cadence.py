@@ -187,6 +187,29 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
         def get_latest_authoritative_frame(self):
             return clock.now, 5, 7
 
+        def set_floor_config(self, *_args):
+            return None
+
+        def set_sensitivity_config(self, *_args):
+            return None
+
+        def set_energy_boost(self, *_args):
+            return None
+
+        def set_agc_strength(self, *_args):
+            return None
+
+        def set_input_gain(self, *_args):
+            return None
+
+        def set_transient_lane_config(self, *_args):
+            return None
+
+        def reconfigure_bar_count(self, *_args):
+            return None
+
+        _audio_worker = SimpleNamespace(set_audio_block_size=lambda *_args, **_kwargs: None)
+
     class _EdgeSimulation:
         count = 1
 
@@ -232,6 +255,19 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
     controller.enabled = True
     controller.playing = True
     controller.engine = _Engine()
+    from core.settings.default_contract import get_raw_default_settings
+    from core.settings.models import SpotifyVisualizerSettings
+    from widgets.spotify_visualizer.quick_technical_config import (
+        apply_controller_technical_config,
+    )
+    from widgets.spotify_visualizer.technical_config import build_technical_cache
+
+    model = SpotifyVisualizerSettings.from_mapping(
+        dict(get_raw_default_settings()["widgets"]["spotify_visualizer"])
+    )
+    technical = dict(build_technical_cache(None, model)["bubble"])
+    technical["bar_count"] = 4
+    apply_controller_technical_config(controller, technical, reason="test_current_contract")
     bubble_runtime = BubbleFrameRuntime(simulation_factory=_EdgeSimulation)
     assert controller.resolve_logical_mode_state(
         "bubble",

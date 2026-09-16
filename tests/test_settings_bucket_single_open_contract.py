@@ -58,9 +58,9 @@ def test_runtime_store_default_projection_omits_sparse_bucket_maps() -> None:
             assert state_map_name not in runtime_ui
 
 
-def test_legacy_bucket_profile_fixture_projects_to_current_sparse_state_idempotently() -> None:
+def test_full_map_bucket_profile_projects_to_current_sparse_state_idempotently() -> None:
     fixture = json.loads(
-        (ROOT / "tests" / "fixtures" / "settings_bucket_state_legacy_profile.json").read_text(
+        (ROOT / "tests" / "fixtures" / "settings_bucket_state_full_map_profile.json").read_text(
             encoding="utf-8"
         )
     )
@@ -77,9 +77,8 @@ def test_legacy_bucket_profile_fixture_projects_to_current_sparse_state_idempote
     widget_keys = tuple(DEFAULT_SETTINGS["ui"]["widget_bucket_states"])
     widgets = normalize_widget_bucket_states(widget_keys, ui["widget_bucket_states"])
     widget_sparse = sparse_open_bucket_states(widgets)
-    # A current identity wins over its retired alias even when the alias occurs
-    # earlier in persisted insertion order. Other retired Reddit identities are
-    # translated only at this input boundary.
+    # Current identities in one Reddit accordion scope collapse deterministically
+    # to the last persisted true member. Unknown identities are dropped.
     assert "reddit:reddit1" not in widget_sparse
     assert "reddit:interaction" not in widget_sparse
     assert widget_sparse["reddit:shared_layout"] is True
@@ -88,18 +87,8 @@ def test_legacy_bucket_profile_fixture_projects_to_current_sparse_state_idempote
     assert widget_sparse["steam:achievement_pulse_appearance"] is True
     assert "retired:ghost" not in widget_sparse
 
-    alias_cases = {
-        "reddit:primary": "reddit:reddit1",
-        "reddit:feed": "reddit:interaction",
-        "reddit:layout": "reddit:shared_layout",
-        "reddit:appearance": "reddit:shared_appearance",
-    }
-    for retired_key, canonical_key in alias_cases.items():
-        migrated = normalize_widget_bucket_states(widget_keys, {retired_key: True})
-        assert sparse_open_bucket_states(migrated) == {canonical_key: True}
-
     # Current sparse output is a fixed point. A second load cannot resurrect
-    # aliases, false members, stale keys, or a second open bucket in one scope.
+    # false members, stale keys, or a second open bucket in one scope.
     widgets_second = normalize_widget_bucket_states(widget_keys, widget_sparse)
     assert sparse_open_bucket_states(widgets_second) == widget_sparse
 

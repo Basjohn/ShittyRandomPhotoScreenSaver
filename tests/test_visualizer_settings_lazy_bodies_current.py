@@ -114,7 +114,9 @@ def test_custom_accessories_live_inside_custom_and_evacuate_before_retirement(
     qt_app, settings_manager, monkeypatch
 ):
     _install_counters(monkeypatch)
-    tab = _make_tab(settings_manager, "spectrum")
+    settings_manager.set("widgets", _vis_settings("spectrum"))
+    settings_manager.set("widgets.spotify_visualizer.preset_spectrum", 0)
+    tab = VisualizersTab(settings_manager)
     try:
         # Stable controls start parked on the mode page: they are not SETUP UI and
         # opening Settings still constructs no mode merely to own them.
@@ -338,7 +340,7 @@ def test_spectrum_body_uses_authored_bucket_order_and_render_mode_buttons(
     tab = _make_tab(settings_manager, "spectrum")
     try:
         tab._select_mode_page("spectrum")
-        assert _bucket_titles(tab._spectrum_normal) == ["Appearance", "Shape"]
+        assert _bucket_titles(tab._spectrum_normal) == ["Appearance", "Shape", "Rainbow"]
         assert _bucket_titles(tab._spectrum_advanced) == ["Render", "Audio", "Ghost"]
         assert set(tab.spectrum_render_mode_buttons.keys()) == {"segment", "bars"}
         assert tab.spectrum_render_mode_buttons["bars"].text() == "BAR"

@@ -189,6 +189,17 @@ def test_run_job_rejects_zero_exit_without_expected_artifact(monkeypatch, tmp_pa
     assert "expected artifact is missing" in result.detail.lower()
 
 
+
+def test_parse_args_uses_only_canonical_mode_spelling() -> None:
+    assert build_runner.parse_args(["--mode", "venv"]).mode == "venv"
+
+    try:
+        build_runner.parse_args(["--venv"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("retired --venv alias unexpectedly remains accepted")
+
 def test_smoke_payload_uses_only_tools_runner_owner():
     payload = build_runner.smoke_payload("venv")
 

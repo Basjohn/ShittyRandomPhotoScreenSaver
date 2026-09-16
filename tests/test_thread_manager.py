@@ -778,11 +778,13 @@ class TestThreadManagerShutdown:
         assert manager._shutdown is True
 
     def test_double_shutdown_safe(self):
-        """Test calling shutdown twice is safe."""
+        """Test calling shutdown twice preserves the shutdown state."""
         manager = ThreadManager()
         manager.shutdown()
-        # Should not raise
+        assert manager._shutdown is True
+
         manager.shutdown()
+        assert manager._shutdown is True
 
     def test_shutdown_waits_for_active_tasks_without_ui_drain(self):
         """Shutdown should see in-flight tasks without requiring a queued registry update."""
@@ -813,9 +815,9 @@ class TestThreadManagerStats:
     """Statistics tracking tests."""
 
     def test_stats_initialized(self):
-        """Test stats are initialized for each pool."""
+        """Stats are initialized for every current pool enum member."""
         manager = ThreadManager()
-        assert ThreadPoolType.IO.value in [k.value for k in manager._stats.keys()] or 'io' in str(manager._stats)
+        assert set(manager._stats) == set(ThreadPoolType)
         manager.shutdown()
 
     def test_stats_dict_structure(self):

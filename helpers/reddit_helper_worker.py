@@ -41,7 +41,6 @@ from core.windows.browser_window_routing import try_bring_browser_window_to_fron
 from core.windows.reddit_helper_runtime import (
     HEARTBEAT_FILE_NAME,
     SESSION_HELPER_SHUTDOWN_PREFIX,
-    remove_helper_run_entry,
 )
 from core.windows.reddit_helper_storage import (
     HELPER_LOG_MAX_BYTES,
@@ -961,13 +960,6 @@ def main() -> int:
         )
     if any(recovery.values()):
         logging.info("Queue startup reconciliation: %s", recovery)
-
-    if args.watch and not args.persistent and args.owner_pid <= 0:
-        try:
-            if remove_helper_run_entry(source="legacy_startup_watcher"):
-                logging.info("Removed legacy login-start helper registration")
-        except Exception:
-            logging.debug("Legacy HKCU Run cleanup failed inside helper", exc_info=True)
 
     signal_dir = args.signal_dir
     try:

@@ -82,7 +82,7 @@ Current ImageWorker shared-memory lifecycle proof:
 python tools\image_worker_shm_lifecycle_harness.py --cycles 50 --width 3840 --height 2160
 ```
 
-`tools/run_tests.py` is convenience only and delegates to `tests/run_chunked.py`.
+`tests/run_chunked.py` is the sole maintained test-runner entrypoint; the former `tools/run_tests.py` convenience facade is retired.
 
 ### Retained Visualizer causal/lifecycle diagnostics — no active investigation
 

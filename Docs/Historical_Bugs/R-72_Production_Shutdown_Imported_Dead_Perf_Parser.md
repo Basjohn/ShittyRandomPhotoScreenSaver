@@ -23,7 +23,7 @@ Migration tooling and production diagnostics had never been given a hard ownersh
 
 Production shutdown now only flushes/closes telemetry. Analysis consumes logs **after process exit** and out of process.
 
-`tools/run_tests.py` likewise delegates to the canonical `tests/run_chunked.py` authority instead of retaining an independent suite manifest.
+The former `tools/run_tests.py` later delegated to the canonical `tests/run_chunked.py` authority and has since been retired entirely; `tests/run_chunked.py` is the sole current runner.
 
 `tests/test_tooling_ownership.py` permanently rejects production imports from `tools`/`scripts` analysis modules.
 

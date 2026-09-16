@@ -178,8 +178,9 @@ class TestResourceCleanup:
         manager = ResourceManager()
         obj = MagicMock()
         manager.register(obj, ResourceType.UNKNOWN, "test")
+        assert len(manager.get_all_resources()) == 1
         manager.cleanup_all()
-        # Resources should be cleared or marked for cleanup
+        assert manager.get_all_resources() == []
 
     def test_cleanup_handler_called(self):
         """Test that custom cleanup handler is called."""
@@ -196,16 +197,16 @@ class TestResourceCleanup:
         
         manager.register(obj, ResourceType.UNKNOWN, "test", cleanup_handler=cleanup)
         manager.cleanup_all()
-        
-        # Cleanup should have been attempted
-        # Note: weak refs may have been collected
+
+        assert cleanup_called == [True]
 
     def test_cleanup_all_idempotent(self):
         """Test that cleanup_all can be called multiple times."""
         manager = ResourceManager()
         manager.cleanup_all()
-        # Should not raise
         manager.cleanup_all()
+        assert manager._shutdown is True
+        assert manager.get_all_resources() == []
 
     def test_app_shared_manager_registration_roundtrip(self):
         manager = ResourceManager()
@@ -293,9 +294,9 @@ class TestRegisterQt:
     """Qt-specific registration tests."""
 
     def test_register_qt_method_exists(self):
-        """Test that register_qt method exists."""
+        """The current Qt registration API must exist directly."""
         manager = ResourceManager()
-        assert hasattr(manager, 'register_qt') or hasattr(manager, 'register')
+        assert callable(manager.register_qt)
 
     def test_register_with_gui_component_type(self):
         """Test registering with GUI_COMPONENT type."""

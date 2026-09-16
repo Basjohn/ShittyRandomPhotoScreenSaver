@@ -49,7 +49,7 @@ Maintain a small fixture corpus covering the actual surviving input families bel
 - [ ] old user-authored Visualizer preset payloads, especially Sphere finish/control aliases and sparse preset numbering;
 - [ ] old **SST** flat/nested snapshots and older `settings_version` input;
 - [ ] **layout-slot v1** payload -> current v2 semantics without inheriting newer per-display Clock overrides;
-- [x] legacy Settings bucket full-boolean/multi-open maps + retired Reddit bucket identities -> current sparse one-open-per-scope form (fixture landed; alias retirement horizon still open);
+- [x] legacy Settings bucket full-boolean/multi-open maps -> current sparse one-open-per-scope form (current normalization fixture retained; retired Reddit identity rewrites are now removed);
 - [x] Settings Theme **schema v5 -> v6** user theme fixture/proof + explicit input-boundary owner (support horizon remains open);
 - [ ] Widget Theme **schema v1/v2 -> v3** / abandoned material-field state;
 - [ ] old Clock separator key and old ordinary-family colour persistence;
@@ -98,7 +98,7 @@ Surviving compatibility includes:
 - Bubble gradient direction semantics migration;
 - Spectrum legacy notch layout promotion;
 - Sphere finish/control/material key migration;
-- old snapshot wrappers / global preset remnants accepted only at import/preset boundaries.
+- old snapshot wrappers / global preset remnants accepted only at explicit import/preset boundaries; SettingsManager no longer carries root-level startup sanitation for them.
 
 - [ ] Build one fixture matrix that proves **profile migration and user-authored preset migration separately**. They have different ownership and must not be conflated.
 - [ ] Preserve arbitrary/sparse authored preset files and Custom state exactly; never use shipped manifests/defaults to overwrite authored data.
@@ -135,15 +135,6 @@ Bucket state is canonically sparse true-only on disk, fully enumerated/fail-loud
 
 A persisted legacy full-map fixture now proves old input -> exact sparse current projection -> second-load fixed point. Fresh runtime-store projection, Reset, and SST replace-import no longer materialize the all-false maps, so current writers do not immediately depend on the compatibility reader. Startup still performs no rewrite of an existing old profile; its in-memory projection is canonical and the next real interaction writes the sparse form through the canonical setter.
 
-## MIGRATION HORIZON — retired Settings Widget bucket identities
-
-The bounded one-time bucket bridge is the old Reddit Widget-bucket identity set: `reddit:primary`, `reddit:feed`, `reddit:layout`, and `reddit:appearance`. Current defaults/UI/writers emit only `reddit:reddit1`, `reddit:interaction`, `reddit:shared_layout`, and `reddit:shared_appearance`. The bridge is now isolated beside the canonical bucket persistence normalizer instead of living in `WidgetsTab`.
-
-- [x] Fixture exact old names, canonical-name precedence, multi-open collapse, unknown-key drop, sparse output and second-load idempotence.
-- [ ] Define the old-profile support horizon before deleting these four persisted-key rewrites.
-- [ ] When that horizon closes, remove only the alias table/rewrite; keep canonical sparse/full in-memory normalization, schema enumeration, fail-loud getters and scope rules.
-- [ ] No startup write loop/poller is needed merely to normalize bucket state.
-
 ## MIGRATION HORIZON — Settings Theme schema v5 -> v6
 
 Current Settings Theme runtime/authoring is schema v6 only. User-authored schema-v5 `.srtheme` files are admitted only through `ui.settings_theme_input_compat.promote_legacy_settings_theme_payload()`, which requires the exact historical v5 colour-role set, seeds `about.art.liquid` from `chrome.outer_border` RGB at full alpha, and hands a v6 payload to the strict current parser.
@@ -161,15 +152,6 @@ Current Widget Theme selection/runtime/file I/O is colour-only schema v3 and has
 - [x] Remove material-key/schema-migration knowledge from current `ui.widget_theme_selection`; rehome the old no-material test expectation to the explicit persisted-input compatibility owner.
 - [ ] Remove `widget_theme_input_compat.py` and its old-input fixture assertions only after supported old profiles/QSettings/SSTs can no longer contain those schemas.
 - [ ] Never reintroduce card-material runtime ownership to make the old state meaningful.
-
-## MIGRATION HORIZON — Clock separator persisted-key promotion
-
-Current ownership is `widgets.clock.show_separator` + `widgets.clock.separator_thickness`. The retired `widgets.clock.show_digital_separator` name is now admitted only at persisted-input boundaries: startup promotes it **before** current defaults can mask an old `False` value, and SST import applies the same promotion. Current UI and Quick presentation consume `show_separator` only.
-
-- [x] Fixture a real distinguishing old value (`show_digital_separator=False` while the current canonical default is `True`), prove exact promotion, current-key precedence, legacy-key removal and second-pass idempotence.
-- [x] Remove duplicate legacy reads from Clock Settings loading and Quick presentation after promotion became the canonical input seam.
-- [x] Retire the old presentation-layer compatibility test; it targeted the wrong owner and its positive case accidentally matched the canonical default, so it did not prove the legacy path. Rehome the proof to the persistence/import boundary.
-- [ ] Define the old-profile/SST support horizon. When it closes, remove `promote_legacy_clock_separator`, the startup pre-default hook, the SST promotion and the legacy fixture assertions together; keep current `show_separator` UI/presentation/default tests.
 
 ## DELETE AFTER HORIZON — ordinary Widget family colour bridge
 
@@ -200,6 +182,52 @@ The shared DPAPI helper uses a `plain::` fallback on non-Windows, while Steam cr
 ## TEST-REPORT INTAKE — broad-suite stale-owner reconciliation
 
 A separate full-suite agent/report owns the immediate red-suite archaeology. Feed only **classified cleanup conclusions** back here; do not paste hundreds of failing test names into this ledger.
+
+### Static pre-suite stale/oracle audit — CHK53 evidence
+
+Before the next full intended-environment run, the test tree itself was audited so known false greens and retired-owner expectations do not contaminate that signal. This pass changes **tests/docs only**; risky persisted-state production bridges remain frozen pending the full-suite result.
+
+- **Gmail flat-root false greens — removed.** Three tests in `test_gmail_settings_roundtrip.py` inspected the retired top-level `gmail.*` shape. Canonical authority is `DEFAULT_SETTINGS["widgets"]["gmail"]`; the loops therefore exercised no current keys and could pass vacuously. Current nested Gmail round-trip/default tests remain.
+- **Reddit retired-owner false greens — removed.** `test_reddit_exit_logic.py` contained local boolean tautologies, an unconditional `assert True` design check, and a permanently skipped empty `DisplayWidget` integration shell. Current queue-flow and click-through suppression tests remain.
+- **Visualizer cutover-era test ownership — rehomed, not weakened.** `test_qtquick_visualizer_pre_cutover_audit.py`, `test_qtquick_visualizer_true_f_gate.py`, and `test_qtquick_postcutover_wiring.py` were phase/checkpoint-named despite owning current retained-Quick contracts. They are now current-contract modules. A temporary source-text `render_snapshot` caller assertion was removed because its own contract said it was a bridge until behavioural synchronization coverage existed; `test_qtquick_visualizer_technical_sync_contract.py` now directly proves same-presentation retained-item synchronization. No Visualizer production semantics changed.
+- **False-green behavioural oracles — strengthened.** Scheduler onset must now actually enqueue an event; ResourceManager cleanup must actually empty resources and call handlers; Visualizer default-admission must prove at least one admitted mode; missing-energy Bubble tick must leave a valid snapshot; multi-display queue overflow must emit the warning it claims to test; SettingsManager missing-key repair now deletes `display.hw_accel` and proves exact repair; double ThreadManager shutdown proves the shutdown state remains set; missing-widget binding proves no widget is invented.
+- **Profile-separation stale assertions — corrected.** Tests now prove distinct canonical JSON paths and actual cross-profile isolation. The test for nonexistent/currently-unused `mc.display` was removed because exact production search found no reader/writer; MC `always_on_top` now asserts the real canonical profile default instead of merely asserting that `get_bool()` returned some boolean. SST export now asserts exact `application` metadata instead of an `A or B` substring condition.
+- **Compatibility fallback assertions inside current APIs — narrowed.** ResourceManager Qt registration now requires the current `register_qt` API directly rather than accepting unrelated `register` as a fallback; ThreadManager stats now require exact current enum ownership rather than string-matching an `io` token.
+- **Negative retirement guards intentionally remain.** Tests that assert retired presenters/flags/imports are absent are current anti-regression fences, not museum tests. Do not delete them merely because they name `DisplayWidget`, old compositor owners, retired CLI flags, or other fossils.
+- **Risky migration tests intentionally remain pending the green-suite gate.** QSettings, structured Settings input, SST old versions, layout v1, Settings/Widget Theme old schemas, credential migration, and old Visualizer profile/preset fixtures still describe live compatibility code. Do not delete those tests or the production bridges until the full intended-environment suite is green and the matching retirement horizon is then approved.
+
+**Gate:** after CHK53, run the full intended Windows/PySide/OpenGL suite and classify every RED. Do not resume risky persisted-state/schema retirement until that suite is green or every remaining non-green result is explicitly classified as environment-only/stale and corrected without restoring retired architecture.
+
+### First intended-environment RED repair - CHK54 candidate
+
+The first full-tree run after CHK53 produced **326 passing files, 45 failing files, 2 collection errors and 0 hangs**. CHK54 is a repair checkpoint, not permission to resume risky migration retirement.
+
+High-confidence stale/current-owner repairs made before the next full-suite run:
+
+- Quick Visualizer owner fakes now satisfy current `screen_index` trace identity instead of forcing production fallback behavior.
+- GL-state tests patch the current shared `InheritedGlState` owner instead of the CHK26-retired private `render_host._InheritedGlState`.
+- Logical-tick tests install canonical technical configuration before evaluating transient pulse behavior; no shadow runtime default was added.
+- Reddit helper worker no longer imports or calls the already-retired `remove_helper_run_entry` startup-cleanup API. Collection tests must protect that retirement rather than resurrect it.
+- Current source-contract assertions follow current owners for System Stats sizing, Settings lazy state, diagnostic-only `afterRendering`, font registration and Visualizer accordion/control construction.
+- Image-pipeline tests now implement the current Settings/prefetch fake interface and patch the actual async processor owner; recent prefetch behavior remains subject to the next intended-environment run rather than being forced back to an older ordering.
+- Generated-default parity normalizes only the four documented sparse Settings bucket maps before exact comparison; every other default remains exact.
+- Transition tests now declare current activation state and use current asynchronous presentation admission instead of retired synchronous-loader assumptions.
+- Tests that demanded current APIs to survive missing required state/fallback owners were removed or rewritten where exact current contracts prove those fallbacks are not supported.
+
+Genuine current production corrections found during this test triage:
+
+- MC Display Settings could load stale persisted `input.interaction_mode=False` over the MC profile invariant. The UI load seam now forces the canonical MC `True` state.
+- Reddit helper worker retained a live import/call of CHK43-retired login-start cleanup. That orphan dependency is removed rather than reviving compatibility.
+
+**Do not auto-green these remaining families:**
+
+- **Bubble:** treat reaction/replay/viewport failures as real signal first. Bubble migration retained reactivity but intentionally added extreme-viewport speed/population cap behavior, and replay goldens moved to floor semantics. Reconcile fixtures/current viewport classes and floor authority before changing assertions. Bubble's Golden reaction contract still wins.
+- **3D Blockflip:** current product behavior is worth protecting. Investigate rendering/pixel-contract failures rather than deleting them as stale. **Block Puzzle Flip** is lower-value and may be retired-test debris if exact current-product ownership proves it gone.
+- **Image prefetch:** it was intentionally improved/reworked recently. Classify remaining ordering failures against current planner/cache semantics; do not regress the pipeline to satisfy old call-order expectations.
+- **Credential/SST/export privacy:** treat stripping/encryption/privacy REDs as high-priority correctness failures. Never remove these assertions merely to reach green.
+- **Custom layout retained-runtime corruption, Visualizer replay/reactivity floors, preset transfer and other behavior-quality tests:** investigate before expectation changes.
+
+**Gate remains closed:** run the full intended suite on CHK54. Risky QSettings/SST/layout/theme/credential/Visualizer-persistence retirement resumes only after the resulting RED set is green or explicitly classified and repaired.
 
 Typical cleanup class remains caller/test residue naming retired owners such as `DisplayWidget`, `GLCompositorWidget`, `spotify_bars_gl_overlay` and `SpotifyVisualizerWidget`, plus expectation drift in current Media, Weather/Achievement, Widget Theme, Visualizer-doc-reference and tooling-ownership tests.
 

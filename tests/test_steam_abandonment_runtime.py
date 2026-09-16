@@ -414,10 +414,7 @@ def test_registry_reuse_validator_rejects_missing_edge_and_stopped_active_owner(
 
 
 def test_retired_abandonment_and_unconverted_steam_qwidget_pixels_have_no_callers() -> None:
-    from rendering.widget_descriptors import (
-        FACTORY_WIDGET_DESCRIPTORS,
-        WIDGET_RUNTIME_DESCRIPTORS,
-    )
+    from rendering.widget_descriptors import FACTORY_WIDGET_DESCRIPTORS
 
     retired_paths = (
         Path("widgets/abandonment_issues_widget.py"),
@@ -431,15 +428,9 @@ def test_retired_abandonment_and_unconverted_steam_qwidget_pixels_have_no_caller
         not in {"steam_progress", "abandonment_issues", "friend_pulse"}
         for descriptor in FACTORY_WIDGET_DESCRIPTORS
     )
-    assert all(
-        descriptor.widget_id not in {"steam_progress", "friend_pulse"}
-        for descriptor in WIDGET_RUNTIME_DESCRIPTORS
-    )
-
     production_sources = "\n".join(
         Path(path).read_text(encoding="utf-8")
         for path in (
-            "rendering/display_input.py",
             "rendering/widget_factories.py",
             "rendering/widget_descriptors.py",
         )

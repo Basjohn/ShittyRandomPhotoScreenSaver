@@ -208,11 +208,6 @@ class SpotifyVolumeController:
         )
         return bool(self._process_targets)
 
-    def set_process_filter(self, provider: str) -> None:
-        """Compatibility wrapper for desktop-provider runtime switches."""
-
-        self.configure_volume_target(provider)
-
     def _search_sessions_for_spotify(self, sessions) -> tuple[Optional[Any], Optional[str]]:
         """Search a list of audio sessions for the configured provider.
         

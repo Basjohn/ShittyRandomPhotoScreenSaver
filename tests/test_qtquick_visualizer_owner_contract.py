@@ -1,24 +1,12 @@
-"""Pre-cutover visualizer audit bars for H.
+"""Current Quick visualizer owner contracts.
 
-These tests encode source-backed gaps found at the b2a8cd85 pre-cutover audit.
-They intentionally avoid choosing the final orchestration implementation where
-the durable contract does not require one.
-
-Expected on the audited checkpoint:
-- retirement/join-barrier tests: RED;
-- all-mode neutral logical configuration: RED for non-Bubble modes;
-- presentation-only negative configuration bar: GREEN;
-- production render-snapshot caller bar: RED.
-
-Once the destination edge is corrected, these should all be GREEN before the
-atomic DisplayManager cutover begins.
+These tests protect terminal owner retirement and presentation-neutral logical
+configuration for every permanent visualizer mode. They are post-cutover
+product contracts, not migration gates.
 """
 
 from __future__ import annotations
 
-import ast
-import os
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -38,8 +26,6 @@ from widgets.spotify_visualizer.runtime_controller import (
     VisualizerRuntimeController,
 )
 
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def _logical_state(mode: str):
@@ -85,7 +71,7 @@ def test_visualizer_owner_join_timeout_is_not_reported_as_retired() -> None:
     retirement, because generation/window teardown must remain blocked.
     """
 
-    runtime = SimpleNamespace(runtime_generation=91)
+    runtime = SimpleNamespace(runtime_generation=91, screen_index=0)
     owner = _make_owner(
         runtime,
         bar_count=32,
@@ -118,7 +104,7 @@ def test_visualizer_owner_join_timeout_is_not_reported_as_retired() -> None:
 def test_visualizer_owner_stop_exception_is_not_swallowed() -> None:
     """A stop/join exception is a teardown failure, not successful retirement."""
 
-    runtime = SimpleNamespace(runtime_generation=92)
+    runtime = SimpleNamespace(runtime_generation=92, screen_index=0)
     owner = _make_owner(
         runtime,
         bar_count=32,
@@ -138,8 +124,8 @@ def test_visualizer_owner_stop_exception_is_not_swallowed() -> None:
 # Representative settings below are not selected because they "sound logical".
 # Each is consumed by an authored logical/mode runtime on the current source path:
 # SpectrumFrameRuntime, OscilloscopeFrameRuntime, SineFrameRuntime or
-# DevCurveFrameRuntime.  They therefore require presentation-neutral ownership
-# before SpotifyVisualizerWidget can be deleted.
+# DevCurveFrameRuntime. They therefore belong to the presentation-neutral current
+# logical owner rather than any presentation widget.
 _LOGICAL_CONFIG_CASES = (
     (
         "spectrum",
@@ -278,49 +264,3 @@ def test_neutral_logical_config_does_not_absorb_presentation_only_style() -> Non
     assert not hasattr(state, "_bar_fill_color")
     assert not hasattr(state, "_bar_border_color")
     assert not hasattr(state, "_osc_glow_color")
-
-
-def _production_render_snapshot_callers() -> list[tuple[Path, int]]:
-    """Locate destination production calls to controller.publish_render_snapshot.
-
-    This is deliberately a temporary source-level architecture bar.  Before the
-    audit there was no behavioral synchronization entry point to drive: the
-    controller method existed but no production caller composed logical +
-    presentation state into the bound render bridge.  Once a behavioral
-    destination synchronization test exists, it should be the stronger proof.
-    """
-
-    callers: list[tuple[Path, int]] = []
-    roots = (
-        ROOT / "rendering" / "quick",
-        ROOT / "widgets" / "spotify_visualizer",
-    )
-    for source_root in roots:
-        for directory, dirnames, filenames in os.walk(source_root, topdown=True):
-            dirnames[:] = [name for name in dirnames if name != "__pycache__"]
-            for filename in filenames:
-                if not filename.endswith(".py"):
-                    continue
-                path = Path(directory) / filename
-                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-                for node in ast.walk(tree):
-                    if (
-                        isinstance(node, ast.Call)
-                        and isinstance(node.func, ast.Attribute)
-                        and node.func.attr == "publish_render_snapshot"
-                    ):
-                        callers.append((path.relative_to(ROOT), int(node.lineno)))
-    return callers
-
-
-def test_destination_has_production_render_snapshot_publication_caller() -> None:
-    """Binding an empty bridge is not a complete Quick visualizer edge."""
-
-    callers = _production_render_snapshot_callers()
-    assert callers, (
-        "No destination production code calls VisualizerRuntimeController."
-        "publish_render_snapshot(). The logical mailbox and Quick render bridge "
-        "therefore remain disconnected. Add the GUI/Quick synchronization owner "
-        "that drains current logical state, resolves presentation state and "
-        "publishes the complete immutable render snapshot before cutover."
-    )

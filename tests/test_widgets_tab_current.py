@@ -1259,14 +1259,16 @@ class TestWidgetsTab:
 
 
 
-def test_visualizer_bucket_toggles_use_standard_circle_checkbox_spacing():
+def test_visualizer_technical_buckets_use_shared_single_open_accordion_owner():
     source_path = Path(__file__).resolve().parents[1] / "ui" / "tabs" / "media" / "technical_controls.py"
     src = source_path.read_text(encoding="utf-8")
     toggle_block_start = src.index("def _build_visibility_toggle(")
     toggle_block_end = src.index("def _aligned_row_widget(", toggle_block_start)
     toggle_block = src[toggle_block_start:toggle_block_end]
-    assert 'toggle.setProperty("circleIndicator", True)' in toggle_block
-    assert 'toggle.setProperty("tightSpacing", True)' not in toggle_block
+    assert "shared_styles.build_bucket_toggle(" in toggle_block
+    assert "accordion_owner=tab" in toggle_block
+    assert 'accordion_scope=("visualizer", str(mode_key).strip().lower())' in toggle_block
+    assert "set_visualizer_tech_bucket_state" in toggle_block
 
 
 

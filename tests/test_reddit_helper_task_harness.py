@@ -70,19 +70,18 @@ def test_storage_recovery_harness_exercises_bounded_failure_path():
     assert sum(result["log_sizes"].values()) <= result["log_limit_bytes"]
 
 
-def test_installer_reconciles_protected_and_writable_programdata_acls():
+def test_installer_declares_minimal_programdata_permissions_without_acl_reconciler():
     installer = (REPO_ROOT / "scripts" / "SRPSS_Installer.iss").read_text(encoding="utf-8")
 
-    assert "ReconcileRedditHelperStorageAcls" in installer
-    assert 'ApplyRedditHelperAcl(BaseDir + \'\\helper\', CurrentUserId, \'RX\')' in installer
-    assert 'ApplyRedditHelperAcl(BaseDir + \'\\presets\', CurrentUserId, \'RX\')' in installer
-    assert 'ApplyRedditHelperAcl(BaseDir + \'\\sounds\', CurrentUserId, \'RX\')' in installer
-    assert 'ApplyRedditHelperAcl(BaseDir + \'\\url_queue\', CurrentUserId, \'M\')' in installer
-    assert 'ApplyRedditHelperAcl(BaseDir + \'\\logs\', CurrentUserId, \'M\')' in installer
-    assert 'ApplyRedditHelperAcl(BaseDir + \'\\helper_signals\', CurrentUserId, \'M\')' in installer
-    assert '"*S-1-5-32-545"' in installer
-    assert '"*S-1-5-11"' in installer
-    assert '"*S-1-1-0"' in installer
+    assert 'Name: "{commonappdata}\\SRPSS\\helper"; Permissions: users-readexec' in installer
+    assert 'Name: "{commonappdata}\\SRPSS\\url_queue"; Permissions: users-modify' in installer
+    assert 'Name: "{commonappdata}\\SRPSS\\logs"; Permissions: users-modify' in installer
+    assert 'Name: "{commonappdata}\\SRPSS\\helper_signals"; Permissions: users-modify' in installer
+    assert 'Name: "{commonappdata}\\SRPSS\\presets"' in installer
+    assert 'Name: "{commonappdata}\\SRPSS\\themes"' in installer
+    assert 'Name: "{commonappdata}\\SRPSS\\sounds"' in installer
+    assert "ReconcileRedditHelperStorageAcls" not in installer
+    assert "ApplyRedditHelperAcl" not in installer
     assert "/C /Q" not in installer
 
 
@@ -93,7 +92,7 @@ def test_helper_packaging_is_installer_laid_ondir_not_self_extracting_onefile():
     assert '"--onedir"' in build_script
     assert '"--onefile"' not in build_script
     assert r"release\reddit_helper\*" in installer
-    assert "no one-file runtime extraction" in installer
+    assert "recursesubdirs createallsubdirs" in installer
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only scheduled task smoke test")

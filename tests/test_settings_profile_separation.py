@@ -6,6 +6,7 @@ Tests cover:
 - Settings isolation between profiles
 - Profile-specific defaults
 """
+import json
 import pytest
 
 
@@ -60,70 +61,43 @@ class TestProfileIsolation:
     """Tests for settings isolation between profiles."""
     
     def test_different_settings_files(self, tmp_path):
-        """Test that different profiles use different settings files."""
+        """Canonical Screensaver and MC profiles must use different JSON stores."""
         from core.settings.settings_manager import SettingsManager
-        
-        # Create two managers with different application names
+
         settings1 = SettingsManager(application="Screensaver", storage_base_dir=tmp_path)
         settings2 = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path)
-        
-        # They should have different application names
-        # (actual isolation depends on how tests are run)
-        _ = settings1.get_application_name()  # Verify it works
-        name2 = settings2.get_application_name()
-        
-        # At minimum, the explicit MC one should be MC
-        assert "MC" in name2 or name2 == "Screensaver_MC"
+
+        assert settings1.get_application_name() == "Screensaver"
+        assert settings2.get_application_name() == "Screensaver_MC"
+        assert settings1.get_storage_path() != settings2.get_storage_path()
+        assert settings1.get_storage_path().name == "settings_v2.json"
+        assert settings2.get_storage_path().name == "settings_v2.json"
     
     def test_settings_not_shared(self, tmp_path):
-        """Test that settings changes don't leak between profiles."""
+        """A write to one isolated profile must be absent from another profile."""
         from core.settings.settings_manager import SettingsManager
-        
-        # Create two managers
+
         settings1 = SettingsManager(application="TestProfile1", storage_base_dir=tmp_path)
         settings2 = SettingsManager(application="TestProfile2", storage_base_dir=tmp_path)
-        
-        # Set a unique value in one
+
         test_key = "test.profile_isolation_check"
-        test_value = "profile1_value"
-        
-        settings1.set(test_key, test_value)
-        
-        # The other should not have this value (or have default)
-        value2 = settings2.get(test_key, "default")
-        
-        # Clean up
-        settings1.set(test_key, None)
-        
-        # Value should either be default or different
-        # (depends on whether QSettings shares storage)
-        assert value2 == "default" or value2 != test_value
+        settings1.set(test_key, "profile1_value")
+
+        assert settings1.get(test_key) == "profile1_value"
+        assert settings2.get(test_key, "default") == "default"
+        assert settings1.get_storage_path() != settings2.get_storage_path()
 
 
 class TestMCDefaults:
     """Tests for MC-specific default values."""
     
-    def test_mc_always_on_top_setting(self, tmp_path):
-        """Test that MC always_on_top setting can be retrieved."""
+    def test_mc_always_on_top_default_is_current_profile_contract(self, tmp_path):
+        """The MC profile owns the canonical always-on-top default."""
         from core.settings.settings_manager import SettingsManager
-        
+
         settings = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path)
-        
-        # MC always_on_top should be retrievable (defaults to True in DisplayWidget)
-        # Use get_bool to handle string/bool conversion
-        always_on_top = settings.get_bool('mc.always_on_top', True)
-        assert always_on_top in (True, False)  # Valid boolean
-    
-    def test_mc_display_setting(self, tmp_path):
-        """Test MC display setting can be retrieved."""
-        from core.settings.settings_manager import SettingsManager
-        
-        settings = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path)
-        
-        # MC display should be retrievable
-        mc_display = settings.get('mc.display', 2)
-        assert isinstance(mc_display, int)
-        assert mc_display >= 1  # Should be valid display number
+
+        assert settings.get_bool("mc.always_on_top", False) is True
 
 
 class TestExportImportIsolation:
@@ -144,12 +118,10 @@ class TestExportImportIsolation:
         try:
             settings.export_to_sst(temp_path)
             
-            # Read and verify
             with open(temp_path, 'r') as f:
-                content = f.read()
-            
-            # Should contain application name
-            assert 'application' in content or 'TestExport' in content
+                exported = json.load(f)
+
+            assert exported["application"] == "TestExport"
         finally:
             Path(temp_path).unlink(missing_ok=True)
 

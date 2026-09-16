@@ -29,8 +29,8 @@ def mock_settings():
 class TestSaveDebounce:
     def test_debounce_flag_set_on_first_call(self, mock_settings):
         """First _save_settings call sets the pending flag."""
-        with patch("PySide6.QtCore.QTimer.singleShot") as mock_timer:
-            from ui.tabs.widgets_tab import WidgetsTab
+        from ui.tabs.widgets_tab import WidgetsTab
+        with patch.object(WidgetsTab, "_schedule_owned_single_shot") as mock_timer:
             with patch.object(WidgetsTab, "__init__", lambda self, *a, **kw: None):
                 tab = WidgetsTab.__new__(WidgetsTab)
                 tab._loading = False
@@ -45,8 +45,8 @@ class TestSaveDebounce:
 
     def test_second_call_does_not_schedule_extra_timer(self, mock_settings):
         """Rapid calls schedule fresh tokenized timers while leaving one effective save path."""
-        with patch("PySide6.QtCore.QTimer.singleShot") as mock_timer:
-            from ui.tabs.widgets_tab import WidgetsTab
+        from ui.tabs.widgets_tab import WidgetsTab
+        with patch.object(WidgetsTab, "_schedule_owned_single_shot") as mock_timer:
             with patch.object(WidgetsTab, "__init__", lambda self, *a, **kw: None):
                 tab = WidgetsTab.__new__(WidgetsTab)
                 tab._loading = False
@@ -64,8 +64,8 @@ class TestSaveDebounce:
 
     def test_loading_flag_prevents_save(self, mock_settings):
         """_save_settings is a no-op when _loading is True."""
-        with patch("PySide6.QtCore.QTimer.singleShot") as mock_timer:
-            from ui.tabs.widgets_tab import WidgetsTab
+        from ui.tabs.widgets_tab import WidgetsTab
+        with patch.object(WidgetsTab, "_schedule_owned_single_shot") as mock_timer:
             with patch.object(WidgetsTab, "__init__", lambda self, *a, **kw: None):
                 tab = WidgetsTab.__new__(WidgetsTab)
                 tab._loading = True

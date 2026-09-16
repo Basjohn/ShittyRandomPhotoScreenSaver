@@ -260,9 +260,9 @@ class TestBusIntegration:
 
         # The scheduler should have received the onset
         evt = sched.consume_next("kick", max_age_s=1.0)
-        if evt is not None:
-            assert evt.event_type == "kick"
-            assert evt.strength > 0.0
+        assert evt is not None, "bass onset was not fed into the scheduler"
+        assert evt.event_type == "kick"
+        assert evt.strength > 0.0
 
     def test_bus_reset_clears_scheduler(self):
         bus = TransientBus()
@@ -277,7 +277,7 @@ class TestBusIntegration:
         bus = TransientBus()
         bus.update(0.0, 0.0, 0.0)
         bus.update(0.8, 0.1, 0.05)
-        # No crash, scheduler was never initialized
+        assert bus._scheduler is None
 
 
 # ---------------------------------------------------------------------------

@@ -36,6 +36,9 @@ class _FakeSettingsManager:
             current = current[part]
         return current
 
+    def get_bool(self, key: str) -> bool:
+        return bool(self.get(key, False))
+
     def set(self, key: str, value) -> None:
         if key.startswith("transitions."):
             current = self._transitions
@@ -109,6 +112,7 @@ def test_random_transition_distribution_is_approximately_uniform_for_enabled_poo
             "Particle": True,
             "Burn": True,
         },
+        "activation": {name: True for name in get_transition_setting_names()},
     }
     settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
 
@@ -162,7 +166,10 @@ def test_deactivated_transition_is_excluded_from_random_pool() -> None:
             "Blinds", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble",
             "Particle", "Burn",
         )},
-        "activation": {"Burn": False},
+        "activation": {
+            **{name: True for name in get_transition_setting_names()},
+            "Burn": False,
+        },
     }
     settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
 
@@ -179,26 +186,29 @@ def test_deactivated_transition_is_excluded_from_random_pool() -> None:
     assert "Particle" in choices
 
 
-def test_empty_effective_pool_resolves_to_activated_transition() -> None:
-    # The only pooled transition (Burn) is deactivated -> empty effective pool.
-    # The engine must resolve to an activated transition, never the deactivated
-    # Burn, rather than silently running it.
+def test_empty_effective_pool_normalizes_to_manual_activated_transition() -> None:
+    # A saved Random pool with no activated members is canonicalized out of
+    # Random mode before selection. Saved membership remains intact, while the
+    # manual type becomes one activated transition rather than silently running
+    # the deactivated pooled member.
+    pool = {name: False for name in get_transition_setting_names()}
+    pool["Burn"] = True
+    activation = {name: True for name in get_transition_setting_names()}
+    activation["Burn"] = False
     transitions = {
         "type": "Random",
         "random_always": True,
-        "pool": {"Burn": True},
-        "activation": {"Burn": False},
+        "pool": pool,
+        "activation": activation,
     }
     settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
 
-    rng_state = random.getstate()
-    random.seed(4242)
-    try:
-        for _ in range(50):
-            choice = _run_random_transition_prepare(settings)
-            assert choice != "Burn"
-    finally:
-        random.setstate(rng_state)
+    choice = _run_random_transition_prepare(settings)
+
+    assert choice != "Burn"
+    assert settings.get("transitions.random_always") is False
+    assert settings.get("transitions.pool.Burn") is True
+    assert settings.get(f"transitions.activation.{choice}") is True
 
 
 def test_engine_random_fails_closed_when_pool_hw_unavailable() -> None:
@@ -454,8 +464,9 @@ def test_empty_queue_result_releases_opened_batch_and_shows_nothing() -> None:
         _loading_lock=lock,
         _loading_in_progress=False,
         _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
-        _load_and_display_image=lambda _image_meta, *, perf_trace=None: calls.__setitem__("load", calls["load"] + 1) or True,
-        thread_manager=None,
+        _load_and_display_image_async=lambda _image_meta, *, perf_trace=None: calls.__setitem__("load", calls["load"] + 1) or True,
+        thread_manager=object(),
+        _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
         _current_image=None,
     )
     # Exercise the real image-change admission gate (it marks the batch pending
@@ -494,8 +505,9 @@ def test_show_next_image_prepares_random_choice_once_for_accepted_image_batch() 
         _loading_lock=lock,
         _loading_in_progress=False,
         _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
-        _load_and_display_image=lambda _image_meta, *, perf_trace=None: calls.__setitem__("load", calls["load"] + 1) or True,
-        thread_manager=None,
+        _load_and_display_image_async=lambda _image_meta, *, perf_trace=None: calls.__setitem__("load", calls["load"] + 1) or True,
+        thread_manager=object(),
+        _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
         _current_image=None,
     )
     # Exercise the real image-change admission gate (it marks the batch pending

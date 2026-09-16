@@ -61,6 +61,19 @@ def _processing_targets(*displays) -> tuple[DisplayProcessingDescriptor, ...]:
     return tuple(targets)
 
 
+def _prefetch_settings(**overrides):
+    values = {
+        "display.use_lanczos": True,
+        "display.sharpen_downscale": False,
+        "display.same_image_all_monitors": False,
+    }
+    values.update(overrides)
+    return SimpleNamespace(
+        get_application_name=lambda: "Screensaver",
+        get_bool=lambda key: bool(values[key]),
+    )
+
+
 def test_rejected_display_candidate_uses_bounded_queue_replacement(monkeypatch):
     bad = SimpleNamespace(local_path=r"C:\wall\decompression-bomb.jpg", url=None)
     good = SimpleNamespace(local_path=r"C:\wall\replacement.jpg", url=None)
@@ -410,7 +423,7 @@ def test_worker_success_does_not_decode_or_cache_redundant_raw(
         lambda *_args, **_kwargs: worker_image,
     )
     monkeypatch.setattr(
-        "engine.image_pipeline.AsyncImageProcessor.process_qimage",
+        "rendering.image_processor_async.AsyncImageProcessor.process_qimage",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("parent fallback must not run")
         ),
@@ -464,7 +477,7 @@ def test_worker_failure_is_classified_and_never_runs_parent_fallback(
         _worker_outage,
     )
     monkeypatch.setattr(
-        "engine.image_pipeline.AsyncImageProcessor.process_qimage",
+        "rendering.image_processor_async.AsyncImageProcessor.process_qimage",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("parent fallback must not run")
         ),
@@ -506,7 +519,7 @@ def test_worker_candidate_rejection_remains_retryable_without_parent_fallback(
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "engine.image_pipeline.AsyncImageProcessor.process_qimage",
+        "rendering.image_processor_async.AsyncImageProcessor.process_qimage",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("parent fallback must not run")
         ),
@@ -741,12 +754,7 @@ def test_schedule_prefetch_uses_preview_upcoming_and_registers_scaled_requests()
         get_target_size=lambda: QSize(3840, 2160),
         display_mode=DisplayMode.FIT,
     )
-    settings_manager = SimpleNamespace(
-        get=lambda key, default=None: {
-            "display.use_lanczos": True,
-            "display.sharpen_downscale": False,
-        }.get(key, default)
-    )
+    settings_manager = _prefetch_settings()
     engine = SimpleNamespace(
         image_queue=_FakeQueue(),
         _prefetcher=fake_prefetcher,
@@ -817,13 +825,7 @@ def test_schedule_prefetch_does_not_decode_raw_for_display_ready_preview():
         get_target_size=lambda: QSize(3840, 2160),
         display_mode=DisplayMode.FILL,
     )
-    settings_manager = SimpleNamespace(
-        get=lambda key, default=None: {
-            "display.use_lanczos": True,
-            "display.sharpen_downscale": False,
-            "display.same_image_all_monitors": False,
-        }.get(key, default)
-    )
+    settings_manager = _prefetch_settings()
     engine = SimpleNamespace(
         image_queue=_FakeQueue(),
         _prefetcher=prefetcher,
@@ -899,13 +901,7 @@ def test_schedule_prefetch_with_all_display_ready_variants_creates_no_work():
             snapshot_processing_descriptors=lambda: _processing_targets(display),
         ),
         _image_cache=_FakeCache(),
-        settings_manager=SimpleNamespace(
-            get=lambda key, default=None: {
-                "display.use_lanczos": True,
-                "display.sharpen_downscale": False,
-                "display.same_image_all_monitors": False,
-            }.get(key, default)
-        ),
+        settings_manager=_prefetch_settings(),
         _cache_runtime_stats={},
     )
 
@@ -949,13 +945,7 @@ def test_schedule_prefetch_different_images_aligns_requests_to_display_order():
 
     display_a = SimpleNamespace(get_target_size=lambda: QSize(1920, 1080), display_mode=DisplayMode.FILL)
     display_b = SimpleNamespace(get_target_size=lambda: QSize(1280, 720), display_mode=DisplayMode.FIT)
-    settings_manager = SimpleNamespace(
-        get=lambda key, default=None: {
-            "display.use_lanczos": True,
-            "display.sharpen_downscale": False,
-            "display.same_image_all_monitors": False,
-        }.get(key, default)
-    )
+    settings_manager = _prefetch_settings()
     fake_prefetcher = _FakePrefetcher()
     engine = SimpleNamespace(
         image_queue=_FakeQueue(),
@@ -1014,13 +1004,7 @@ def test_schedule_prefetch_same_image_prioritizes_first_preview_for_all_display_
 
     display_a = SimpleNamespace(get_target_size=lambda: QSize(1920, 1080), display_mode=DisplayMode.FILL)
     display_b = SimpleNamespace(get_target_size=lambda: QSize(1280, 720), display_mode=DisplayMode.FIT)
-    settings_manager = SimpleNamespace(
-        get=lambda key, default=None: {
-            "display.use_lanczos": True,
-            "display.sharpen_downscale": False,
-            "display.same_image_all_monitors": True,
-        }.get(key, default)
-    )
+    settings_manager = _prefetch_settings(**{"display.same_image_all_monitors": True})
     fake_prefetcher = _FakePrefetcher()
     engine = SimpleNamespace(
         image_queue=_FakeQueue(),

@@ -46,11 +46,6 @@ def get_missing_preset_fallback_index(mode: str) -> int:
     return max(0, min(custom_idx - 1, canonical))
 
 
-def get_default_preset_index(mode: str) -> int:
-    """Compatibility alias for canonical missing-preset repair."""
-    return get_missing_preset_fallback_index(mode)
-
-
 def resolve_preset_index_from_mapping(
     mode: str,
     data: Mapping[str, Any] | None,

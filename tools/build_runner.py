@@ -2175,19 +2175,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unified SRPSS Build Foundry")
     parser.add_argument("--mode", choices=("normal", "venv"))
     parser.add_argument(
-        "--venv",
-        action="store_true",
-        help="Compatibility alias for --mode venv",
-    )
-    parser.add_argument(
         "--smoke-test",
         action="store_true",
         help="Validate mode/job/fingerprint routing without opening the GUI or running builds",
     )
-    args = parser.parse_args(argv)
-    if args.venv:
-        args.mode = "venv"
-    return args
+    return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
