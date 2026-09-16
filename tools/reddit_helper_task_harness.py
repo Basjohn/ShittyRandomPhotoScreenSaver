@@ -259,15 +259,12 @@ def storage_recovery_test() -> dict:
             bridge._QUEUE_DIR,
             bridge._SIGNAL_DIR,
             bridge._SPOOL_READY,
-            bridge._SPOOL_LAST_PROBE,
         )
         try:
             bridge._BASE_DIR = root
             bridge._QUEUE_DIR = queue
             bridge._SIGNAL_DIR = signals
             bridge._SPOOL_READY = False
-            bridge._SPOOL_LAST_PROBE = 0.0
-            (queue / ".bridge_ready").mkdir()
             marker_independent = bridge.enqueue_url(
                 "https://www.reddit.com/r/srpss_recovery/?diagnostic=discard",
                 source="runtime_harness",
@@ -278,7 +275,6 @@ def storage_recovery_test() -> dict:
                 bridge._QUEUE_DIR,
                 bridge._SIGNAL_DIR,
                 bridge._SPOOL_READY,
-                bridge._SPOOL_LAST_PROBE,
             ) = old_bridge_state
 
         pending_tmp = queue / "interrupted.tmp"

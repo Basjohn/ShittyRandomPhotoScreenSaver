@@ -23,14 +23,15 @@ def _reset_bridge(monkeypatch, root: Path) -> Path:
     monkeypatch.setattr(bridge, "_QUEUE_DIR", queue)
     monkeypatch.setattr(bridge, "_SIGNAL_DIR", root / "helper_signals")
     monkeypatch.setattr(bridge, "_SPOOL_READY", False)
-    monkeypatch.setattr(bridge, "_SPOOL_LAST_PROBE", 0.0)
     return queue
 
 
-def test_bridge_uses_unique_probe_when_diagnostic_marker_is_unwritable(monkeypatch, tmp_path):
+def test_bridge_enqueues_clean_entry_without_probe_debris(monkeypatch, tmp_path):
+    # The current bridge performs plain mkdir readiness with no ACL probing or
+    # retry machinery, so a ready queue directory enqueues exactly one schema-v1
+    # entry and never leaves diagnostic probe files behind.
     queue = _reset_bridge(monkeypatch, tmp_path)
     queue.mkdir()
-    (queue / ".bridge_ready").mkdir()
 
     assert bridge.is_bridge_available() is True
     assert bridge.enqueue_url("https://www.reddit.com/r/test/?secret=discarded") is True
@@ -42,7 +43,7 @@ def test_bridge_uses_unique_probe_when_diagnostic_marker_is_unwritable(monkeypat
     assert not list(queue.glob(".bridge_probe_*"))
 
 
-def test_bridge_rejects_oversized_entry_and_invalidates_cached_probe(monkeypatch, tmp_path):
+def test_bridge_rejects_oversized_entry_and_invalidates_spool_ready(monkeypatch, tmp_path):
     queue = _reset_bridge(monkeypatch, tmp_path)
 
     assert bridge.enqueue_url("https://example.invalid/" + ("x" * QUEUE_ENTRY_MAX_BYTES)) is False
