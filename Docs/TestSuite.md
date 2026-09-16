@@ -977,3 +977,15 @@ A test-affecting slice is complete only when:
 - Current directly runnable authority set: **60/60 PASS** (12 runtime purity + 22 frame trace/ownership + 6 service/scheduler + 20 retained A/B/C harness).
 - The full tree now contains **903 Python files; 903/903 compile**.
 - Installed PySide/Qt/OpenGL acceptance is **NEEDS RUN**. The required physical lane is D1-heavy with explicit `--frame-trace`: obtain a long settled Bubble window, then briefly exercise rounded-clip geometry and one mode hotswap, perform Settings teardown/rebuild, and return to settled Bubble. The candidate is rejected for clip bleed/stencil corruption/state leakage, lifecycle failure, Bubble/reactivity change, worse subjective smoothness, or degraded freshness even if duplicate-query trace stages collapse.
+
+
+---
+
+## 2026-09-16 R-87 CHK27 GUI snapshot -> Quick sync attribution
+
+- The corrected CHK26 physical run validates the shared inherited-state candidate objectively: duplicated render-host/end-mask query stages collapse and the whole render body improves modestly without QML/native/lifecycle errors. Further clip micro-optimization is no longer the preferred performance lane.
+- `tests/test_frame_trace.py` now contains **27** source-executable contracts. CHK27 adds explicit contracts that the four new GUI/Quick markers are trace-only, preserve the legacy `GUI_SNAPSHOT_PUBLISH -> QUICK_SYNC_CONSUME` authority, timestamp `updatePaintNode()` entry only when a trace sink exists, and report a deterministic five-part split of the old aggregate seam.
+- Current directly runnable authority set: **67/67 PASS** (12 runtime purity + 27 frame trace/ownership/retention/attribution + 8 scheduler-trace tooling + 20 retained A/B/C harness).
+- Full tree remains **903 Python files; 903/903 compile**.
+- Reporter backward compatibility is re-proven: CHK25 and CHK26 installed binary traces produce byte-for-byte identical output under the CHK26 and CHK27 reporters when CHK27 events are absent.
+- Installed PySide/Qt execution is **NEEDS RUN** only for the new attribution markers. One 60–90 s settled D1-heavy `--frame-trace` run is sufficient; CHK27 changes no pixels, GL ownership, hotswap/lifecycle behavior, display routing, transition scheduling or pacing policy.

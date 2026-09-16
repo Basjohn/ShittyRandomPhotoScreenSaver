@@ -887,3 +887,211 @@ def test_render_host_retains_lazy_quad_integer_state_helper() -> None:
     ensure_quad = source.split("def _ensure_quad(self)", 1)[1]
     assert "_int_state(gl.GL_VERTEX_ARRAY_BINDING)" in ensure_quad
     assert "_int_state(gl.GL_ARRAY_BUFFER_BINDING)" in ensure_quad
+
+
+def test_chk27_sync_attribution_is_explicit_trace_only_and_preserves_legacy_markers() -> None:
+    root = Path(__file__).resolve().parents[1]
+    frame_trace_source = (root / "core" / "performance" / "frame_trace.py").read_text(
+        encoding="utf-8"
+    )
+    publication_sync = (
+        root / "widgets" / "spotify_visualizer" / "quick_presentation_sync.py"
+    ).read_text(encoding="utf-8")
+    item = (root / "rendering" / "quick" / "visualizer" / "item.py").read_text(
+        encoding="utf-8"
+    )
+    reporter = (root / "tools" / "frame_trace_report.py").read_text(encoding="utf-8")
+
+    for event_name in (
+        "GUI_PRESENTATION_COMMIT_READY",
+        "GUI_PRESENT_REQUEST_READY",
+        "QUICK_SYNC_ITEM_ENTRY",
+        "QUICK_SYNC_SNAPSHOT_ACQUIRED",
+    ):
+        assert event_name in frame_trace_source
+        assert event_name in publication_sync + item
+
+    # Existing authority markers remain intact so CHK23-26 traces and reports
+    # retain the same aggregate publication -> Quick synchronization seam.
+    assert "FrameTraceEvent.GUI_SNAPSHOT_PUBLISH" in publication_sync
+    assert "FrameTraceEvent.QUICK_SYNC_CONSUME" in item
+    assert '(3, 4, "gui_snapshot->quick_sync")' in reporter
+
+    # No untraced timestamping: updatePaintNode only asks perf_counter for the
+    # entry timestamp when an explicit --frame-trace sink has been injected.
+    update_body = item.split("def updatePaintNode(", 1)[1].split("__all__", 1)[0]
+    assert "time.perf_counter_ns() if trace is not None else None" in update_body
+    assert update_body.index("QUICK_SYNC_ITEM_ENTRY") < update_body.index(
+        "QUICK_SYNC_CONSUME"
+    )
+    assert update_body.index("QUICK_SYNC_SNAPSHOT_ACQUIRED") < update_body.index(
+        "QUICK_SYNC_CONSUME"
+    )
+
+    sync_body = publication_sync.split("def sync_latest(self)", 1)[1].split(
+        "__all__", 1
+    )[0]
+    assert sync_body.index("GUI_SNAPSHOT_PUBLISH") < sync_body.index(
+        "GUI_PRESENTATION_COMMIT_READY"
+    )
+    assert sync_body.index("GUI_PRESENTATION_COMMIT_READY") < sync_body.index(
+        "GUI_PRESENT_REQUEST_READY"
+    )
+
+
+def test_report_splits_chk27_gui_snapshot_to_quick_sync_attribution(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "chk27_sync_trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    rows = [
+        (1_000_000, 3, 1, 7, 900_000, 3),
+        (1_200_000, 44, 1, 7, 900_000, 3),
+        (1_400_000, 45, 1, 7, 900_000, 3),
+        (5_400_000, 46, 1, 7, 900_000, 3),
+        (5_600_000, 47, 1, 7, 900_000, 3),
+        (6_000_000, 4, 1, 7, 900_000, 3),
+        (6_500_000, 7, 1, 7, 900_000, 3),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "gui_presentation_commit_ready: 1" in out
+    assert "gui_present_request_ready: 1" in out
+    assert "quick_sync_item_entry: 1" in out
+    assert "quick_sync_snapshot_acquired: 1" in out
+    assert "screen=1 gui_snapshot->quick_sync_ms n=1 median=5.000" in out
+    assert "screen=1 gui_snapshot->presentation_commit_ready_ms n=1 median=0.200" in out
+    assert "screen=1 presentation_commit_ready->present_request_ready_ms n=1 median=0.200" in out
+    assert "screen=1 present_request_ready->quick_sync_item_entry_ms n=1 median=4.000" in out
+    assert "screen=1 quick_sync_item_entry->snapshot_acquired_ms n=1 median=0.200" in out
+    assert "screen=1 quick_sync_snapshot_acquired->quick_sync_consume_ms n=1 median=0.400" in out
+
+
+def test_chk28_qquickwindow_phase_trace_is_explicit_sidecar_only() -> None:
+    root = Path(__file__).resolve().parents[1]
+    frame_trace_source = (root / "core" / "performance" / "frame_trace.py").read_text(
+        encoding="utf-8"
+    )
+    scene_controller = (root / "rendering" / "quick" / "scene_controller.py").read_text(
+        encoding="utf-8"
+    )
+    reporter = (root / "tools" / "frame_trace_report.py").read_text(
+        encoding="utf-8"
+    )
+
+    events = (
+        "QUICK_BEFORE_FRAME_BEGIN",
+        "QUICK_BEFORE_SYNCHRONIZING",
+        "QUICK_AFTER_SYNCHRONIZING",
+        "QUICK_BEFORE_RENDERING",
+        "QUICK_BEFORE_RENDER_PASS_RECORDING",
+        "QUICK_AFTER_RENDER_PASS_RECORDING",
+        "QUICK_AFTER_RENDERING",
+    )
+    for event_name in events:
+        assert event_name in frame_trace_source
+        assert event_name in scene_controller
+
+    # All native render-loop hooks are installed only behind the existing
+    # explicit --frame-trace sink and use direct render-thread connections.
+    connection_block = scene_controller.split("if self._frame_trace is not None:", 1)[1].split(
+        "window.frameSwapped.connect(\n            self._on_frame_swapped", 1
+    )[0]
+    for signal_name in (
+        "beforeFrameBegin",
+        "beforeSynchronizing",
+        "afterSynchronizing",
+        "beforeRendering",
+        "beforeRenderPassRecording",
+        "afterRenderPassRecording",
+        "afterRendering",
+    ):
+        assert f"window.{signal_name}.connect(" in connection_block
+    assert connection_block.count("Qt.ConnectionType.DirectConnection") >= 8
+    assert "RENDER_CYCLE_EVENT_IDS = frozenset(range(48, 55))" in reporter
+
+
+def test_report_splits_chk28_qt_native_admission_and_render_phases(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "chk28_qt_phase_trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    # Visualizer revision 7 (aux/runtime generation 3) is admitted into Qt render
+    # cycle 101. Render-cycle revisions live in a separate reporter namespace.
+    rows = [
+        (1_000_000, 3, 1, 7, 900_000, 3),
+        (1_200_000, 44, 1, 7, 900_000, 3),
+        (1_400_000, 45, 1, 7, 900_000, 3),
+        (3_000_000, 48, 1, 101, 0, 3),
+        (5_000_000, 49, 1, 101, 0, 3),
+        (5_400_000, 46, 1, 7, 900_000, 3),
+        (5_600_000, 47, 1, 7, 900_000, 3),
+        (6_000_000, 4, 1, 7, 900_000, 3),
+        (6_500_000, 7, 1, 7, 900_000, 3),
+        (6_700_000, 50, 1, 101, 0, 3),
+        (7_000_000, 51, 1, 101, 0, 3),
+        (7_400_000, 52, 1, 101, 0, 3),
+        (9_000_000, 8, 1, 7, 900_000, 3),
+        (10_000_000, 53, 1, 101, 0, 3),
+        (10_200_000, 54, 1, 101, 0, 3),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "quick_before_frame_begin: 1" in out
+    assert "screen=1 quick_render_cycles=1" in out
+    assert (
+        "screen=1 quick_phase=before_frame_begin->before_synchronizing n=1 "
+        "median_ms=2.000"
+    ) in out
+    assert (
+        "screen=1 quick_phase=before_synchronizing->after_synchronizing n=1 "
+        "median_ms=1.700"
+    ) in out
+    assert (
+        "screen=1 quick_admission_stage=present_request->before_frame_begin n=1 "
+        "median_ms=1.600"
+    ) in out
+    assert (
+        "screen=1 quick_admission_stage=before_synchronizing->item_entry n=1 "
+        "median_ms=0.400"
+    ) in out
+    assert (
+        "screen=1 quick_post_sync_stage=sync_ready->after_synchronizing n=1 "
+        "median_ms=0.200"
+    ) in out
+    assert (
+        "screen=1 quick_post_sync_stage=after_synchronizing->before_rendering n=1 "
+        "median_ms=0.300"
+    ) in out
+    assert (
+        "screen=1 quick_post_sync_stage=before_rendering->before_render_pass n=1 "
+        "median_ms=0.400"
+    ) in out
+    assert (
+        "screen=1 quick_post_sync_stage=before_render_pass->visualizer_render_begin n=1 "
+        "median_ms=1.600"
+    ) in out

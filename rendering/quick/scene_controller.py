@@ -420,6 +420,11 @@ class QuickSceneController(QObject):
         # counters here and update two tiny text labels twice per second.
         self._perf_hud_enabled = bool(is_perf_metrics_enabled())
         self._frame_trace = current_frame_trace()
+        # Explicit --frame-trace-only Qt render-cycle sequence. QQuickWindow's
+        # direct scenegraph signals all execute on the render thread; keeping the
+        # sequence here lets the offline reporter reconstruct native frame phases
+        # without making them pretend to be visualizer logical revisions.
+        self._frame_trace_render_cycle_sequence = 0
         # FRAME_SWAP is visualizer evidence only when this scene has completed a
         # *new* visualizer draw since the previous swap. Scene swaps caused by a
         # wallpaper transition, QML animation, or a post-transfer scene must not
@@ -533,6 +538,34 @@ class QuickSceneController(QObject):
         # diagnostics-only and records fixed integers; product-side readiness and
         # PERF work remain on the ordinary queued GUI handler below.
         if self._frame_trace is not None:
+            window.beforeFrameBegin.connect(
+                self._trace_before_frame_begin,
+                Qt.ConnectionType.DirectConnection,
+            )
+            window.beforeSynchronizing.connect(
+                self._trace_before_synchronizing,
+                Qt.ConnectionType.DirectConnection,
+            )
+            window.afterSynchronizing.connect(
+                self._trace_after_synchronizing,
+                Qt.ConnectionType.DirectConnection,
+            )
+            window.beforeRendering.connect(
+                self._trace_before_rendering,
+                Qt.ConnectionType.DirectConnection,
+            )
+            window.beforeRenderPassRecording.connect(
+                self._trace_before_render_pass_recording,
+                Qt.ConnectionType.DirectConnection,
+            )
+            window.afterRenderPassRecording.connect(
+                self._trace_after_render_pass_recording,
+                Qt.ConnectionType.DirectConnection,
+            )
+            window.afterRendering.connect(
+                self._trace_after_rendering,
+                Qt.ConnectionType.DirectConnection,
+            )
             window.frameSwapped.connect(
                 self._trace_frame_swapped,
                 Qt.ConnectionType.DirectConnection,
@@ -2004,6 +2037,67 @@ class QuickSceneController(QObject):
         self._perf_window_started_ns = now_ns
         self._perf_window_swaps = 0
         self._perf_window_dt_max_ms = 0.0
+
+    def _trace_render_cycle_boundary(
+        self,
+        event: FrameTraceEvent,
+        *,
+        advance_cycle: bool = False,
+    ) -> None:
+        """Record one Qt-native scenegraph phase for explicit frame tracing.
+
+        These callbacks are connected with ``Qt.DirectConnection`` and execute on
+        Qt Quick's render thread. They are observers only: no logging, no locks,
+        no scheduling requests and no product state mutation beyond the local
+        diagnostic cycle counter.
+        """
+
+        trace = self._frame_trace
+        if trace is None:
+            return
+        if advance_cycle:
+            self._frame_trace_render_cycle_sequence += 1
+        cycle = self._frame_trace_render_cycle_sequence
+        if cycle <= 0:
+            # Defensive only: Qt documents beforeFrameBegin as the earliest frame
+            # signal, but never merge an unexpected early phase into cycle zero.
+            self._frame_trace_render_cycle_sequence = 1
+            cycle = 1
+        trace.record(
+            event,
+            screen_index=int(self._window.screen_index),
+            revision=int(cycle),
+            logical_timestamp_ns=0,
+            auxiliary=int(self._window.runtime_generation),
+        )
+
+    def _trace_before_frame_begin(self) -> None:
+        self._trace_render_cycle_boundary(
+            FrameTraceEvent.QUICK_BEFORE_FRAME_BEGIN,
+            advance_cycle=True,
+        )
+
+    def _trace_before_synchronizing(self) -> None:
+        self._trace_render_cycle_boundary(FrameTraceEvent.QUICK_BEFORE_SYNCHRONIZING)
+
+    def _trace_after_synchronizing(self) -> None:
+        self._trace_render_cycle_boundary(FrameTraceEvent.QUICK_AFTER_SYNCHRONIZING)
+
+    def _trace_before_rendering(self) -> None:
+        self._trace_render_cycle_boundary(FrameTraceEvent.QUICK_BEFORE_RENDERING)
+
+    def _trace_before_render_pass_recording(self) -> None:
+        self._trace_render_cycle_boundary(
+            FrameTraceEvent.QUICK_BEFORE_RENDER_PASS_RECORDING
+        )
+
+    def _trace_after_render_pass_recording(self) -> None:
+        self._trace_render_cycle_boundary(
+            FrameTraceEvent.QUICK_AFTER_RENDER_PASS_RECORDING
+        )
+
+    def _trace_after_rendering(self) -> None:
+        self._trace_render_cycle_boundary(FrameTraceEvent.QUICK_AFTER_RENDERING)
 
     def _trace_frame_swapped(self) -> None:
         """Record a swap only for a visualizer draw completed in this frame.

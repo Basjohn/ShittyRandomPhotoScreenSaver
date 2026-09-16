@@ -71,6 +71,23 @@ class FrameTraceEvent(IntEnum):
     # CHK26 clipped-path state reuse: marks the extra render-host blend state
     # captured once at the first mask boundary and carried through begin/mode/end.
     CLIP_BEGIN_SHARED_GL_STATE_READY = 43
+    # CHK27 GUI publication -> Qt Quick synchronization attribution. These are
+    # explicit --frame-trace-only sidecar markers; ordinary runtime remains free
+    # of timestamping/record work when no trace sink exists.
+    GUI_PRESENTATION_COMMIT_READY = 44
+    GUI_PRESENT_REQUEST_READY = 45
+    QUICK_SYNC_ITEM_ENTRY = 46
+    QUICK_SYNC_SNAPSHOT_ACQUIRED = 47
+    # CHK28 Qt-native scenegraph phase attribution. These direct QQuickWindow
+    # signal markers exist only for explicit --frame-trace and use a per-window
+    # render-cycle sequence rather than visualizer logical revision identity.
+    QUICK_BEFORE_FRAME_BEGIN = 48
+    QUICK_BEFORE_SYNCHRONIZING = 49
+    QUICK_AFTER_SYNCHRONIZING = 50
+    QUICK_BEFORE_RENDERING = 51
+    QUICK_BEFORE_RENDER_PASS_RECORDING = 52
+    QUICK_AFTER_RENDER_PASS_RECORDING = 53
+    QUICK_AFTER_RENDERING = 54
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"
