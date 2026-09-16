@@ -65,9 +65,16 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
                         + (raw_bars[upper] - raw_bars[lower]) * fraction
                     )
                 raw_bars = resampled
+        # Real audio capture timestamps are wall-clock and therefore always > 0.
+        # The fixture's first frame has timestamp_us == 0, which trips the
+        # authoritative-live freshness gate (0abc479c) and spuriously suppresses
+        # the cold-start oscilloscope/sine waveform. Model real capture by keeping
+        # the committed authoritative timestamp strictly positive; frame deltas
+        # (and every logical bar metric) are unchanged.
+        timestamp_s = max(frame.timestamp_us / 1_000_000.0, 1e-3)
         return self.accept_analysis_frame(
             raw_bars,
-            frame.timestamp_us / 1_000_000.0,
+            timestamp_s,
             activation_id=self.get_activation_id(),
             waveform=waveform,
             waveform_count=len(waveform),
