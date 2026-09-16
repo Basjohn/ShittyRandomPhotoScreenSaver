@@ -201,10 +201,18 @@ def test_scaled_prefetch_keeps_not_ready_request_while_dispatching_ready_preferr
     _release_scaled_slots(prefetcher)
     prefetcher._pump_scaled_prefetch(preferred_path=preferred_path)
 
-    assert _submitted_scaled_keys(threads) == ["preferred-ready-scaled", "other-ready-scaled"]
-    assert [request["cache_key"] for request in prefetcher._pending_scaled_requests] == ["waiting-scaled"]
-    assert prefetcher._pending_scaled_keys == {"waiting-scaled"}
-    assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 16 * 9 * 4
+    # Scaled derivative work is strict single-flight (_max_scaled_concurrent == 1):
+    # the lazy serial background lane must not compete at ordinary scheduler
+    # priority with Qt Quick/visualizer work. So one pump dispatches only the ready
+    # preferred request; the not-ready waiting request AND the still-slotless
+    # other-ready request both remain pending.
+    assert _submitted_scaled_keys(threads) == ["preferred-ready-scaled"]
+    assert [request["cache_key"] for request in prefetcher._pending_scaled_requests] == [
+        "waiting-scaled",
+        "other-ready-scaled",
+    ]
+    assert prefetcher._pending_scaled_keys == {"waiting-scaled", "other-ready-scaled"}
+    assert prefetcher.snapshot_budget_state()["scaled_pending_bytes"] == 2 * 16 * 9 * 4
 
 
 def test_scaled_prefetch_reclaims_derivative_when_completed_raw_parent_self_evicts(qt_app):

@@ -603,6 +603,7 @@ def test_normal_async_worker_authority_failure_does_not_advance_retry_queue(monk
         display_manager=display_manager,
         settings_manager=SimpleNamespace(
             get_bool=lambda key: True if key == "display.same_image_all_monitors" else False,
+            get_application_name=lambda: "Screensaver",
         ),
         image_queue=SimpleNamespace(next=lambda: queue_calls.append(True)),
         _process_supervisor=SimpleNamespace(is_running=lambda _worker: True),
@@ -1093,19 +1094,23 @@ def test_notify_transition_complete_rearms_resume_while_other_display_is_pending
 
     notify_transition_complete(engine, screen_index=0)
 
-    assert engine._prefetch_resume_scheduled is True
-    assert scheduler.callbacks and scheduler.callbacks[0][0] == 75
+    # Other-display transition work is still pending: the resume claim is
+    # registered but the pipeline does NOT schedule a periodic recheck. It waits
+    # for the next authoritative transition-complete event rather than polling.
+    assert engine._cache_runtime_stats["prefetch_resume_scheduled"] == 1
+    assert engine._prefetch_resume_claim is not None
+    assert scheduler.callbacks == []
 
-    scheduler.callbacks.pop(0)[1]()
-
-    assert engine._prefetch_resume_scheduled is True
-    assert engine._cache_runtime_stats.get("prefetch_resume_runs", 0) == 0
-    assert scheduler.callbacks and scheduler.callbacks[0][0] == 75
-
+    # The pending display's transition completes and fires the event again; the
+    # standing claim is now scheduled after the post-transition delay.
     pending_state["pending"] = False
+    notify_transition_complete(engine, screen_index=0)
+
+    assert scheduler.callbacks and scheduler.callbacks[0][0] == 75
+
     scheduler.callbacks.pop(0)[1]()
 
-    assert engine._prefetch_resume_scheduled is False
+    assert engine._prefetch_resume_claim is None
     assert engine._cache_runtime_stats["prefetch_resume_runs"] == 1
 
 
@@ -1148,20 +1153,22 @@ def test_notify_transition_complete_rearms_until_prefetcher_cooldown_expires(mon
 
     notify_transition_complete(engine, screen_index=0)
 
-    assert engine._prefetch_resume_scheduled is True
+    assert engine._cache_runtime_stats["prefetch_resume_scheduled"] == 1
     assert scheduler.callbacks and scheduler.callbacks[0][0] == 75
 
     scheduler.callbacks.pop(0)[1]()
 
-    assert engine._prefetch_resume_scheduled is True
+    # Cooldown still active: the claim stays pending and reschedules itself for the
+    # remaining cooldown window (event-driven honoring of the prefetcher delay).
+    assert engine._prefetch_resume_claim is not None
     assert engine._cache_runtime_stats.get("prefetch_resume_runs", 0) == 0
-    assert scheduler.callbacks and scheduler.callbacks[0][0] == 25
+    assert scheduler.callbacks and scheduler.callbacks[0][0] == 17
     assert schedule_calls == []
 
     cooldown_state["active"] = False
     scheduler.callbacks.pop(0)[1]()
 
-    assert engine._prefetch_resume_scheduled is False
+    assert engine._prefetch_resume_claim is None
     assert engine._cache_runtime_stats["prefetch_resume_runs"] == 1
     assert schedule_calls == [engine]
 
