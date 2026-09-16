@@ -63,8 +63,12 @@ class _FakeSettingsManager:
 
 def _run_random_transition_prepare(settings: _FakeSettingsManager) -> str:
     engine = type("EngineStub", (), {"settings_manager": settings})()
-    ScreensaverEngine._prepare_random_transition_if_needed(engine)
-    return settings.get("transitions.random_choice")
+    # The engine consumes the resolved transition through the return value
+    # (screensaver_engine.py). When an empty effective pool normalizes out of
+    # Random, the manual type is returned directly without writing
+    # transitions.random_choice, so the return value is the canonical result
+    # across all paths (random selection, normalized manual type, fail-closed None).
+    return ScreensaverEngine._prepare_random_transition_if_needed(engine)
 
 
 def test_random_transition_pool_can_select_burn_when_hw_accel_enabled() -> None:
