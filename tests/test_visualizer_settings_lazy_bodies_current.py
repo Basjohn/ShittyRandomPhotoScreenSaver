@@ -340,7 +340,12 @@ def test_spectrum_body_uses_authored_bucket_order_and_render_mode_buttons(
     tab = _make_tab(settings_manager, "spectrum")
     try:
         tab._select_mode_page("spectrum")
-        assert _bucket_titles(tab._spectrum_normal) == ["Appearance", "Shape", "Rainbow"]
+        assert _bucket_titles(tab._spectrum_normal) == [
+            "Appearance",
+            "Shape",
+            "Bar Appearance",
+            "Rainbow",
+        ]
         assert _bucket_titles(tab._spectrum_advanced) == ["Render", "Audio", "Ghost"]
         assert set(tab.spectrum_render_mode_buttons.keys()) == {"segment", "bars"}
         assert tab.spectrum_render_mode_buttons["bars"].text() == "BAR"
