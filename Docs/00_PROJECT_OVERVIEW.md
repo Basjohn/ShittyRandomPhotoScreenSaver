@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-09-13
+Last updated: 2026-09-16
 
 SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated transitions, a
 high-fidelity multi-mode visualizer, configurable runtime overlays and durable settings.
@@ -19,20 +19,23 @@ one selected physical display
 Settings, providers, persistence, media/business orchestration and logical runtimes remain Python/QWidget where
 appropriate.
 
-The old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path was removed by H after caller proof. It is not rollback architecture, a supported fallback, or something agents should reconstruct to satisfy stale tests.
+The old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path was removed after caller proof. It is not rollback architecture, a supported fallback, or something agents should reconstruct to satisfy stale tests.
 
-## Current migration position
+## Current project position
 
-Exact sequence and source checkpoint live only in `Current_Plan.md`; this overview deliberately does not carry a commit hash.
+The Qt Quick runtime is operator-accepted and is the sole production presentation authority.
 
-- F/G/H and caller-proven Phase-I cleanup are closed; Quick is the sole production presentation authority.
-- Visualizer CUSTOM/lifecycle closeout and Bubble reference parity are closed evidence.
-- remaining migration-close work is product-readiness/build/install/physical acceptance and any specifically admitted current regression; exact status/sequence lives only in `Current_Plan.md`.
-- surviving cleanup/deletion debt belongs in `Future_Cleanup.md`; deferred product work belongs in `FWPlan.md` / focused Future Work references. Closed migration slices are not re-opened merely because their decompositions remain on disk.
+- Active product/bug work lives only in `Current_Plan.md`.
+- Surviving cleanup, compatibility/schema migration, deprecated shim and caller-dead residue lives in `Future_Cleanup.md`.
+- Deferred product experiments live in `Future_Work.md` / focused future-work documents.
+- Durable failed-method and regression history lives in `Docs/Historical_Bugs/`.
+- Superseded implementation decompositions are source-control history, not live documentation.
+
+Performance/freshness authority is the operator-accepted CHK26 GOLDEN; the generic headroom campaign is closed and future performance work is symptom-driven.
 
 ## Visualizer geometry
 
-Visualizer mode identity now has two useful sets: five established carded technical modes (Spectrum, Oscilloscope, Sine, Bubble, DevCurve) plus the separately registered experimental Sphere. All registered modes use the destination scale/extent ownership model; Sphere is FRAMELESS + VIEWPORT_RECT and dormant by default.
+Visualizer mode identity now has two useful sets: five established carded technical modes (Spectrum, Oscilloscope, Sine, Bubble, DevCurve) plus the separately registered experimental Sphere. All registered modes use the current scale/extent ownership model; Sphere is FRAMELESS + VIEWPORT_RECT and dormant by default.
 
 ```text
 wheel/corners -> uniform scale
@@ -73,8 +76,6 @@ is labelled cached/stale; age alone never makes a coherent cache unusable. Refre
 accepted cached experience until explicit user/account/cache reset, schema rejection/corruption, or a proven identity
 change invalidates it.
 
-## Migration continuity policy
+## Retired-path policy
 
-A fully functioning legacy screensaver between migration slices is not required. Do not rebuild caller-dead QWidget/
-compositor presentation merely for temporary continuity. Destination ownership and focused proof come first; full
-product acceptance is J.
+Do not rebuild caller-dead QWidget/compositor presentation for compatibility or test convenience. The retained Qt Quick scene is production authority; any surviving old-path residue must have an explicit current caller or be cleanup debt. Real persisted-data compatibility is tracked separately in `Future_Cleanup.md` and may remain only as a one-way input migration into current authority.

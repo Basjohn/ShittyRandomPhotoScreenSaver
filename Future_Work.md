@@ -1,6 +1,6 @@
 # Future Work
 
-Last updated: 2026-09-12
+Last updated: 2026-09-16
 
 Long-horizon feature / new-implementation backlog.
 
@@ -66,7 +66,7 @@ unproven abstractions in the decomposition for a later second-consumer decision.
 ### Experimental isolation + Settings single-authority gate
 
 For a genuinely new experimental Visualizer mode, transition identity, widget family, or other independently removable
-feature, **plugin-shaped removability is mandatory until the operator explicitly authorizes architectural migration/promotion**. Product or visual acceptance alone does not end isolation. This is an ownership rule, not a
+feature, **plugin-shaped removability is mandatory until the operator explicitly authorizes architectural promotion**. Product or visual acceptance alone does not end isolation. This is an ownership rule, not a
 second configuration system. Experiments may plug into generic hosts/registries, but they may not become permanent by
 scattering feature-specific branches across shared owners.
 
@@ -133,16 +133,16 @@ enabled / disabled
     = ordinary feature/instance state inside an activated capability
 ```
 
-Do not revive old presenter, disabled-family, or dual-authority terminology just because a future idea
-was originally written before those migration contracts landed.
+Do not revive old presenter, disabled-family, or dual-authority terminology just because an older idea used it.
+Current contracts always outrank the wording that originally described a dormant idea.
 
 All future performance-sensitive features also inherit `Docs/Guardrails/Performance_Optimization_Contract.md`. Feature cost must be measured without weakening current freshness/reactivity or replacing bounded useful caches/resources with latency-heavy churn.
 
 ---
 
-# 1. Post-migration visual-effects architecture
+# 1. Visual-effects extension architecture
 
-Assumed destination:
+Current extension model:
 
 ```text
 cheap canonical catalog metadata
@@ -202,7 +202,7 @@ canonical 3D foundation or template. A future 3D experiment should compare both 
 and extract only the smallest identical low-level seam that the new consumer actually needs. Do not subclass/copy Sphere
 wholesale and then inherit its feature-specific Settings/state/material/deformation assumptions.
 
-The instanced **voxel/block** representation is the accepted experimental Sphere representation. Hard block stepping is authored appearance rather than a failed smooth silhouette, while still exercising projection, depth, one static cube mesh + one instance buffer, context ownership and retirement. The reusable architectural lesson is the experimental **host/isolation seam** (lazy descriptor wiring, dormancy/retirement, private namespace and shared-family opt-outs), not Sphere internals. Keep Sphere implementation local until the operator explicitly authorizes migration; a future independent consumer may separately prove small low-level 3D helpers worth extracting.
+The instanced **voxel/block** representation is the accepted experimental Sphere representation. Hard block stepping is authored appearance rather than a failed smooth silhouette, while still exercising projection, depth, one static cube mesh + one instance buffer, context ownership and retirement. The reusable architectural lesson is the experimental **host/isolation seam** (lazy descriptor wiring, dormancy/retirement, private namespace and shared-family opt-outs), not Sphere internals. Keep Sphere implementation local until the operator explicitly authorizes promotion; a future independent consumer may separately prove small low-level 3D helpers worth extracting.
 
 Prefer shared, dependency-light primitives for the parts the two consumers have actually proven common:
 
@@ -232,7 +232,7 @@ create effect-specific GL resources, and do not run effect-specific timers/worke
 Future transitions/options consume the final monotonic transition run. They may author internal
 deformation/easing/physics deterministically from that sample but do not become another clock.
 
-Permanent post-H safety rules apply to every future visual/transition experiment:
+Permanent safety rules apply to every future visual/transition experiment:
 
 - **R-69 Visualizer reactivity is golden.** Geometry/aspect adaptation may reframe, reflow, project or presentation-smooth, but must not globally compress authored musical response, head/radius amplitude, motion, Ghost/history displacement, transient strength, or source freshness as a viewport becomes wide/tall. State already normalized/projected into renderer-content coordinates is consumed exactly once. If an extreme visual tail is too large, target only that proven tail.
 - **R-63 black=0 outranks exact shared-edge cover.** A bounded one-device-pixel overshoot is preferable to resurrecting black/stale flashes. Any future seam/coverage change must derive native device geometry from actual monitor rectangles/DPR and remain valid across different resolutions, coordinates, monitor ordering and mixed 1.0/1.25/1.5/1.75/2.0 DPR rather than hard-coding the operator's current pair.
@@ -429,8 +429,8 @@ logical steps or turn render refresh into simulation cadence.
 
 **Voxel Sphere golden preservation:** the accepted Voxel Sphere is not future work. Its current
 reactivity/motion/presets are golden and its architecture remains isolated; do not retune or promote it unless the
-operator explicitly requests that work. Detailed preservation/migration evidence remains in
-`Docs/Future_Work/Sphere_Visualizer_Decomposition.md`.
+operator explicitly requests that work. The current preservation/isolation contract lives in
+`Docs/Reference/Sphere_Visualizer.md`.
 
 ## 7.1 Extruded Spectrum - Unique Mode
 
@@ -474,11 +474,65 @@ For a genuinely new transition/visualizer implementation:
 8. inspect visually;
 9. measure frame/GPU cost at representative resolution/refresh;
 10. if it looks poor, modify or delete the isolated implementation without preserving it for sunk cost;
-11. after it is worth keeping, polish its isolated Settings/defaults/docs; **keep isolation** unless the operator separately and explicitly requests promotion/migration;
+11. after it is worth keeping, polish its isolated Settings/defaults/docs; **keep isolation** unless the operator separately and explicitly requests promotion;
 12. commit + push bounded work.
 
 For a future option inside an existing transition such as Slide Perspective Push, extend the single existing
 implementation/descriptor rather than manufacturing a new transition identity.
+
+---
+
+## 8.1 CUSTOM Visualizer quarter-turn orientation — feasibility accepted, dormant
+
+Feature request: while CUSTOM Edit mode is active, eligible Visualizers gain a small turn/flip glyph. Each click advances the
+content orientation by one clockwise quarter-turn: `0° -> 90° -> 180° -> 270° -> 0°`. Example: a tall Spectrum whose bars
+currently travel upward can be turned so the same authored/reactive visualizer behaves as a wide logical viewport rotated into
+the tall physical card, with bars travelling right, then down, then left on successive clicks.
+
+This is feasible, but it is **not** a finished-pixel/QML `rotation` feature. Viewport shape is semantic input to Bubble,
+Spectrum, Sine, Oscilloscope and Dev Curve; rotating only the final pixels/vertices would bypass existing wide/tall shape
+profiles and can break reaction amplitude, density, clipping, line thickness, Bubble tails/specular/gradient behaviour and
+other viewport-derived invariants. The feature therefore belongs at the shared Visualizer presentation/layout seam.
+
+- [ ] **Initial scope: carded accepted modes only.** Admit Spectrum, Oscilloscope, Sine Waves, Bubble and Dev Curve. Exclude
+  frameless modes and specifically Voxel Sphere initially. Sphere has experimental unclipped overflow, 3-D lighting/shadow and
+  its own coordinate semantics; do not make this feature a reason to couple Sphere back into accepted-mode architecture.
+- [ ] Add one CUSTOM-layout-owned quarter-turn token, preferably `content_rotation_quarters` constrained to `{0,1,2,3}`.
+  It is **layout/presentation state, not a Visualizer setting or preset technical setting**. Persist it inside the Visualizer's
+  existing CUSTOM `size_payload`; old entries with no token resolve to `0`. Do not add a second settings authority or mutate
+  authored preset payloads.
+- [ ] Keep the physical saved geometry authoritative and unchanged. The committed `rect`, monitor route, uniform scale and
+  `viewport_extent` remain exactly what the user edited. For `90°/270°`, resolve an **effective logical content viewport** with
+  width/height swapped, run the existing mode shape/reactivity logic against that logical domain, then apply one shared
+  logical-to-physical quarter-turn transform back into the unchanged card/content clip. `0°/180°` keep the logical axes;
+  `180°` changes direction only. This is the critical distinction that lets a tall card behave like a wide visualizer without
+  rewriting its stored geometry.
+- [ ] Implement the transform once in the common Quick Visualizer render/presentation contract, not separately in five mode
+  renderers. Mode-specific code may need only narrowly proven direction-vector adaptation where a shader currently consumes a
+  screen-space direction directly (for example Bubble gradient/specular direction); prefer deriving those vectors through the
+  common orientation transform rather than adding per-mode orientation settings.
+- [ ] Edit UI: add one themed circular turn glyph to `CustomLayoutOverlay.qml`, visible only for the active Visualizer when the
+  current descriptor admits quarter-turn orientation. It must not steal drag/resize/display-hop input zones and must remain
+  scale/header aligned with existing edit chrome. Clicking changes working session state immediately; Cancel restores the
+  admission value, Save commits it, Restore Size must **not** silently reset orientation unless product UX explicitly decides
+  that Restore Size owns orientation too.
+- [ ] Save/load/slot contract: existing layout slots already capture the whole `custom_layout` root, so orientation must round
+  trip through ordinary CUSTOM save/load and slot Save/Load without a parallel slot schema. Cross-display hop must preserve the
+  token. Legacy layouts/slots with no token must load identically to today (`0`). Version-bump only if the normalizer cannot
+  safely treat the optional size-payload field as backward compatible; do not bump merely because a new optional payload key
+  exists.
+- [ ] **Golden behavioural proof before merge:** with orientation `0`, resolved presentation/render state must be semantically
+  identical to pre-feature behaviour for every accepted mode and curated/Custom preset. Prove quarter-turn does not alter
+  audio/reactivity values, preset technical authority, AGC/floor state, authored mode settings, uniform scale or stored extent.
+  Add pure transform tests for four-click identity, `90+270 == 0`, axis swap only on odd quarters, Save/Cancel/slot round trips,
+  cross-display preservation and legacy-no-token replay. Then run the existing visualizer geometry/reactivity suites plus
+  installed eyes-on checks for extreme wide/tall Bubble, Spectrum, Oscilloscope, Sine and Dev Curve. Bubble's current reaction
+  amplitude/freshness contract remains golden: no compensation that reduces reaction is acceptable.
+- [ ] Performance/lifetime: quarter-turn is event-driven only. No timer, polling, alternate cadence, retained duplicate
+  renderer or per-frame settings lookup. Changing orientation may publish/rebuild the normal immutable presentation snapshot,
+  but must not reconstruct the Visualizer runtime or create a second logical state owner.
+
+**Risk decision:** medium/high implementation risk but architecturally bounded. Do not implement opportunistically during unrelated Visualizer work. If the common logical-to-physical transform cannot be made mode-neutral without mode-specific geometry forks, abandon the feature rather than compromising existing viewport/preset/reactivity contracts.
 
 ---
 
@@ -507,7 +561,3 @@ Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a q
 ## 10.1 Settings FlowContainer polish [LOW]
 
 Use FlowContainers in additional Settings sections only where they materially improve alignment and space usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct otherwise lazy bodies.
-
-## 10.2 Shared artwork replacement — landed architecture
-
-`ArtworkFadeImage` is the single current artwork-swap owner. It retains the displayed texture until the incoming texture is ready, fades the incoming image over it through event-driven frame demand, then releases the inactive texture. Do not add a second per-widget crossfade/timer/texture-residency system to “improve” a consumer locally; fix the shared primitive only when a proven defect exists.

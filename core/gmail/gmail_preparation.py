@@ -142,7 +142,7 @@ def _decode_email_cache(data: str) -> tuple[tuple[EmailMetadata, ...], bool]:
 
 
 def deserialize_email_cache(data: str) -> list[EmailMetadata]:
-    """Deserialize a cache payload while preserving the legacy list API."""
+    """Compatibility wrapper returning the old list shape; retirement is tracked in ``Future_Cleanup.md``."""
 
     emails, _valid = _decode_email_cache(data)
     return list(emails)

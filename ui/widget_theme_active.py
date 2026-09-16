@@ -1,9 +1,8 @@
 """Process-local authority for the active retained Widget Theme.
 
-This mirrors ``ui.settings_theme_runtime`` but remains Qt-free.  The current
-migration only needs construction-time reads; subscription exists so the future
-Widget Themes UI can refresh retained presentations without adding polling or a
-second theme authority.
+This mirrors ``ui.settings_theme_runtime`` but remains Qt-free. Construction-time
+reads and subscriptions both use this one process-local authority so retained
+presentations can refresh without polling or a second Widget Theme owner.
 """
 
 from __future__ import annotations

@@ -70,7 +70,7 @@ Do not implement hidden per-property named-theme override inheritance on top of 
 - **Reset All Colours to Theme** — explicit operator action that normalizes ordinary family colour/card-alpha compatibility overrides to canonical Inherit values; never runs at startup and never touches Visualizer-authored colours;
 - **Card Border Width** — global card geometry style, outside Widget Theme schema.
 
-There is **no Surface Style / Theme Default / Normal / Glass / Acrylic runtime control**. Runtime card backdrop materials were physically rejected and removed; see `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md` and the detailed failed-method ledger in `Docs/Fossils/Rejected_Card_Material_Experiments_2026-09-02.md`.
+There is **no Surface Style / Theme Default / Normal / Glass / Acrylic runtime control**. Runtime card backdrop materials were physically rejected and removed; the durable failed-method record is `Docs/Historical_Bugs/Runtime_Card_Backdrop_Materials_Rejected_2026-09-02.md`.
 
 ## Theme-file layout
 
@@ -86,7 +86,7 @@ source/dev:       <repo>\themes\*.srtheme
 
 The Settings/Widget catalogues consume directories injected/resolved by startup/build authority. Do not duplicate path policy inside renderers or merge ProgramData and repository catalogues simultaneously. The repository/bundled tree is the development/bootstrap source; ProgramData is the installed stable root. Installed theme files are read-mostly catalogue assets; automatic Widget `Custom` state lives in Settings persistence.
 
-## Runtime card and shadow destination
+## Runtime card and shadow ownership
 
 Ordinary runtime cards use the retained Qt Quick path only:
 
@@ -118,7 +118,7 @@ No menu-open/per-frame Settings read is allowed. The menu uses the same ordinary
 
 ## Header styling
 
-`header_enabled` gates destination header-shadow semantics where applicable. Branded Media/Gmail/Reddit/Achievement Pulse/Abandonment Issues headers consume `BrandedHeader.qml`; accepted geometry/casing/intrinsic-width behavior, logo/text shadows and extension-shadow treatment are shared J/J+ presentation contracts rather than family-local reinventions.
+`header_enabled` gates current header-shadow semantics where applicable. Branded Media/Gmail/Reddit/Achievement Pulse/Abandonment Issues headers consume `BrandedHeader.qml`; accepted geometry/casing/intrinsic-width behavior, logo/text shadows and extension-shadow treatment are shared presentation contracts rather than family-local reinventions.
 
 Branded Header Fill/Border/Text are shared Widget Theme semantics, not Media/Gmail/Reddit/Steam swatches. `Header Fill` is the one ordinary GUI authoring control in Style Overrides; Header Border/Text normally resolve from `header.border` / `header.text` (and their semantic parents) and may be authored in Widget Theme files/Foundry when a theme genuinely needs them. Old persisted family header fields remain compatibility-read plumbing only until the explicit deletion horizon and must never become invisible permanent precedence.
 
@@ -141,7 +141,7 @@ Sectional pill navigation is renderer/layout structure, not a new theme semantic
 ```text
 identify current product/style contract
 -> reject obsolete/duplicate owners
--> update the retained destination owner
+-> update the retained current owner
 -> focused source tests
 -> physical review where subjective
 -> reconcile docs/test ownership

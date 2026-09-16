@@ -1,630 +1,99 @@
 # Test Suite Guide
 
-Last updated: 2026-09-14
+Last updated: 2026-09-16
 
-## 0.21 2026-09-14 mutable-default golden audit — §0.18 value-drift bucket superseded
+This file is the **current test/acceptance authority** for SRPSS. It describes what deserves trust now, how to classify evidence, and which architecture contracts must stay guarded. It is not a checkpoint diary or migration changelog; source control and `Docs/Historical_Bugs/` preserve chronology.
 
-The §0.18 broad-tree audit correctly refused to force 32 red files green, but its “value-drift goldens” label mixed mutable
-default snapshots, legitimate behavioral fixture inputs, stale migration/policy cells, and genuine behavioral contracts.
-A focused test-architecture audit now separates those categories. No production default/runtime behavior was changed in this
-slice.
+`Current_Plan.md` owns execution order. The exact source tree plus `tests/run_chunked.py` own executable inventory. `Docs/Reference/Harness_Index.md` owns operator-tool/harness lookup.
 
-**Rule:** ordinary product defaults are intentionally mutable policy. Tests must derive expected defaults from canonical
-authority or prove generated-artifact parity. Exact literals remain only when the literal itself is contractual and are
-annotated `EXACT-VALUE INVARIANT:`. Explicit non-default behavioral stimuli/cadences remain literal test inputs and ambiguous
-cases are annotated `TEST INPUT, NOT A DEFAULT GOLDEN`.
+## 1. Current authority and inventory
 
-**Reconciled:** 39 test modules were edited across Settings/defaults/Visualizer/widget/Steam coverage. Major brittle copies
-now follow canonical authority for shadow/glow defaults, input gain/transient defaults, Display defaults, profile/default
-selection, Visualizer mode activation/custom-preset selectors, widget/family activation, Gmail authored width, System Stats
-defaults, Reddit provider defaults and SettingsManager profile expectations. `test_defaults_schema_authority.py` no longer
-acts as a migration-era snapshot of today’s default dictionaries/counts; it protects authority/shape/type/generated-artifact
-and runtime-state boundaries instead.
+The maintained product profile is `destination` in `tests/run_chunked.py`.
 
-**Not default drift:** Steam Abandonment/Achievement cadence cells intentionally choose short fixture cadences and now share
-fixture constants so downstream timer expectations follow the chosen input rather than the current six-minute Steam product
-default. The retired transition-worker latency cell was removed; the policy-compliance test now recognizes the explicitly
-permitted generation-owned Visualizer cadence lifetime; installer reset-policy coverage follows current installer policy
-instead of the retired 5.0.0 migration default. These were stale/misclassified tests, not reasons to freeze product defaults.
-
-**Validation available in this environment:** all 39 edited test modules pass `py_compile`;
-`python tools/check_defaults_authority.py` is GREEN; `python tools/regenerate_defaults_artifacts.py --check` is GREEN; and
-`python tools/regenerate_sst_defaults.py --check` is GREEN. Full pytest execution is **NEEDS RUN on Windows/PySide6** because
-`tests/conftest.py` imports PySide6 unconditionally in this container. No synthetic regex “golden detector” was added: the
-permanent canonical defaults audit plus the explicit test-authority guardrail is preferred over a noisy scanner that would
-misclassify legitimate fixture values.
-
-**Production-smell follow-up:** the Visualizer transient/default duplication has since been traced and repaired at the
-authority boundary without changing resolved preset behavior. Curated presets remain allowed to author technical settings;
-Custom remains pass-through; canonical defaults fill only genuinely absent fields. Tick/FFT consumers no longer carry numeric
-technical fallbacks, while the old shared/global values in `visualizer_settings_contract.py` are explicitly migration signatures
-only. A pre/post resolved-state fingerprint across every shipped curated Bubble/Spectrum/Sine/Oscilloscope/Dev Curve preset plus
-representative Custom technical values is identical. Canonical schema still contains `workers.transition.enabled` despite
-retirement of the supervised transition worker and still needs compatibility/migration ownership tracing before deletion.
-
-The §0.18 list remains historical evidence of the pre-audit state; do not use its “value-drift goldens” subsection as the
-current owner classification. After Windows/PySide6 execution, remaining reds must be classified individually as real
-behavior/integration issues, BTF/real-GL acceptance, documented exact-value invariants, or additional stale tests.
-
-## 0.20 2026-09-14 soak defects — production repair after regression checkpoint
-
-Production repair was permitted only after the §0.19 tests-only checkpoint was frozen. Two behavior owners changed;
-`--usage` sampling/GPU ownership and display-topology behavior remain unchanged, while `--usage` gained passive PDH
-cardinality fields so future handle trends can be attributed without weakening statistics.
-
-- **Image prefetch ownership repaired (`utils/image_prefetcher.py`).** Raw prefetch completion now verifies actual cache
-  residency after `ImageCache.put()` because hard LRU enforcement may self-evict the inserted source. Pending scaled intents
-  are reclaimed when stale/already satisfied or when their raw parent has neither residency nor queued/inflight raw producer
-  ownership. Reclamation runs before new scaled admission and before dispatch even during post-transition compute cooldown;
-  failed raw submission also pumps cleanup. This preserves producer-owned waits and all existing 256 MiB cache / 128 MiB
-  pending / concurrency limits. On the recorded soak state it would reclaim 125,337,600 bytes (119.53 MiB) and restore
-  admission headroom from 8.47 MiB to 128 MiB.
-- **Reddit due scheduling repaired (`widgets/reddit_runtime.py`).** Positive seconds-to-ms conversion uses ceiling/minimum
-  one millisecond, preserved positive monotonic deadlines no longer truncate to zero, and a due-now `_schedule_timer()` edge
-  is deferred through the existing `ThreadManager.single_shot` rather than synchronously calling `_on_periodic_due()`. No
-  new timer/cadence/poller exists. The recorded 721 zero-delay blocked-cooldown arms therefore collapse to one deferred edge
-  per boundary episode, at ~1–2 ms maximum extra boundary latency.
-- **`--usage`: R-84 remains COMPLETELY FUCKED; PDH cardinality was ruled out as the full explanation and the next Windows proof uses out-of-process handle-type attribution plus Toolhelp topology observer-effect validation (`core/performance/usage_sampler.py`).**
-  The §0.19 fake-PDH regression still protects close-before-open query replacement while retaining the 300 s dynamic GPU/VRAM
-  rediscovery, and each usage line keeps query generation plus engine/dedicated/shared/total PDH cardinality. The 58-minute
-  Windows soak held that denominator constant at 17 yet retained roughly +16 handles/hour after the final Settings rebuild, so
-  the next gate is kernel-object-class attribution rather than more cardinality guessing. Explicit `--handle-attribution` now starts a 60 s
-  out-of-process `screensaver_handles.log` sidecar and excludes its PID from app aggregates; the two-minute topology/thread
-  refresh now prefers one Toolhelp snapshot instead of the proven GIL-held psutil path. `tests/test_usage_sampler.py` pins the
-  provider seam, sidecar exclusion, topology log fields, handle grouping, and PDH ownership. This remains evidence gathering,
-  not a leak fix: R-84 stays **COMPLETELY FUCKED** until a lean 30–60 minute Windows run identifies/clears the growing handle
-  class and proves Toolhelp removes the heavy-sample observer hitch. Degrading statistics merely to make `handles_main` flatter
-  remains explicitly rejected.
-- **Monitor wake: no production change.** The two-stage wake regression codifies that two genuinely distinct settled screen
-  signatures require two reconciles; a generic multi-second debounce remains rejected without a reliable wake-specific
-  settling signal.
-
-Validation in this container: all touched production/tests compile. Because PySide6 is unavailable, the intended project
-pytest cells remain **NEEDS RUN on Windows/PySide6**. As an auxiliary state-machine check (not a substitute for that run),
-the exact prefetch self-eviction scenario was A/B executed against the §0.19 tests-only checkpoint and repaired source:
-old production retained `1` pending request / `16 MiB`; repaired production returned `0 / 0`. The Reddit 0.4 ms scenario
-likewise changed from `1 synchronous due / 0 scheduled shots` to `0 synchronous / 1 positive shot`; the new prefetch cells
-pass 3/3, Reddit cells 2/2, and fake-PDH lifecycle cell 1/1 under narrow dependency shims.
-
-## 0.19 2026-09-14 overnight-soak regression ownership — authored before production repair
-
-The 03:34–13:54 soak exposed two deterministic lifetime/scheduling defects and two diagnostic/topology questions. Per the
-project's evidence-first rule, regression ownership was strengthened **before** touching production code. This environment
-does not contain PySide6, and `tests/conftest.py` requires it, so the behavioral cells below are accurately **NEEDS RUN**
-here; all four edited test modules pass Python compilation. Do not substitute source-scrape tests merely to obtain local
-green.
-
-- **Image prefetch lifetime (`tests/test_image_prefetcher.py`) — NEEDS RUN.** Added a hard-cap cache double whose successful
-  `put(raw)` immediately removes that same raw parent, matching the soak's self-eviction evidence. New tests require the
-  now-ownerless scaled derivative to release pending key + logical-byte ownership, prove the reclaimed budget immediately
-  admits later valid derivative work, repeat six self-eviction cycles with zero pending drift, and protect the inverse case
-  where a nonresident derivative must remain queued while its raw parent still has queued/inflight producer ownership. This
-  is the durable owner/lifetime invariant that the previous short scheduling-shape coverage did not exercise. The broader
-  `test_image_pipeline` reds from §0.18 remain separately classified rather than being force-blessed to an internal shape.
-- **Reddit cooldown scheduling (`tests/test_reddit_runtime.py`) — NEEDS RUN.** Added a controlled `0.4 ms` blocked-cooldown
-  path through the real `fetch()`/due/timer seam. It requires one positive (`>=1 ms`) deferred one-shot and zero synchronous
-  `_on_periodic_due()` re-entry. A companion cell pins a preserved positive sub-millisecond monotonic deadline so integer
-  conversion cannot turn “not yet due” into zero delay.
-- **Windows GPU usage ownership (`tests/test_usage_sampler.py`) — NEEDS RUN as part of the project suite.** Added a dynamic
-  fake-PDH lifecycle test with changing GPU Engine / GPU Process Memory instance cardinality. Two real `collect()` rebuilds
-  must close the prior query before opening its replacement, replace rather than append counter ownership, and final
-  `close()` must drain the last query/counter lists. This protects the existing 300 s rediscovery and full GPU/VRAM
-  statistics rather than degrading `--usage` to flatten a handle graph.
-- **Monitor wake policy (`tests/test_qtquick_monitor_wake_reconcile.py`) — NEEDS RUN.** Existing same-burst coalescing and
-  same-signature resume tests are retained; a new two-stage topology test pins that one settled MSI-only signature may
-  reconcile and a later distinct MSI+LG signature must deliberately cause a second reconcile. This prevents a generic
-  multi-second debounce from being introduced as a false optimization.
-
-No production source was changed in this regression-authorship slice. The next gate is to package this tests-only state,
-then repair only the proven prefetch and Reddit defects.
-
-## 0.18 2026-09-14 Fossil-test hygiene + broad-tree reconciliation
-
-Evidence-driven audit of the full `tests/` tree (per-file isolated run) on
-Windows/PySide6. `collect_ignore` is confirmed **empty** (no fossil graveyard),
-broad collection has **0 collection errors**, and the maintained `destination`
-profile remains **132/132 GREEN**. Test-module count **368 → 364**. Broad-tree
-per-file failures **58 → 32 files**. No production behaviour/default/schema was
-changed to make any test pass.
-
-**Whole-file fossils deleted (retired owners, no surviving current invariant):**
-`test_presentation_benchmark_core.py` + `test_qtquick_presentation_spike.py`
-(migration-era Qt Quick presentation spike tooling — caller-proven, deleted with
-the tools); `test_spotify_overlay_repaint_contract.py` (scraped the retired
-`widgets/spotify_bars_gl_overlay.py`); `test_r77_cleanup_quarantine_gui.py`
-(imported the deleted one-off `SRPSS_R77_Cleanup_Quarantine_GUI.py`).
-
-**Fossil cells trimmed / rehomed (kept the current invariant, dropped the dead
-shell):** `test_p4_native_presentation.py` (dropped 8 `gl_compositor_pkg`
-perf-HUD/present-context cells, kept DWM timing); `test_visualizer_mode_isolation.py`
-(rehomed onto `rendering/quick/visualizer/implementations/`);
-`test_osc_sine_glow_contract.py` (dropped redundant renderer-scrape + the
-fully-retired `glow_size` migration); `test_engine_lifecycle.py` (removed retired
-`multi_monitor_coordinator` scaffolding; settings-dialog-active rehomed onto
-`engine._settings_dialog_active`); `test_media_volume_runtime.py` /
-`test_system_mute_runtime.py` (removed retired `widget_setup_all` + WidgetManager
-+ MediaWidget QWidget-anchor cells); `test_multidisplay_sync.py` (removed the
-pre-Quick `set_image` display-contract cell); `test_steam_achievement_runtime.py`
-(removed the WidgetManager fresh-process fossil; retired-path guard tolerates
-absent files); `test_process_supervisor.py` (removed retired
-`WorkerType.TRANSITION` / `MessageType.TRANSITION_PRECOMPUTE` assertions + the
-TransitionPrepWorker contract fossil).
-
-**Stale current-owner tests reconciled** (API/signature/default drift, not
-fossils): jedi SSOT scrape, theme-defaults SSOT scrapes, reddit fixed-sort
-policy, bubble settings/collision signatures (62→1), devcurve runtime/shape-editor/
-settings-binding, sine line4 fields, cache-family list (`settings` family retired),
-qt logger rename, transitions activation-gated nav, SpectrumShapeConfig field,
-image-pipeline `perf_trace`, `_FakeSettingsManager.get_bool`, audio-worker
-block-size guard, and several settings-binding test doubles gaining the current
-canonical-default helpers.
-
-**Remaining broad-tree reds (32 files) are NOT fossils** — they are current-owner
-value/behaviour drift requiring operator judgment or deeper fixture work, and are
-deliberately left rather than force-fixed (test count is not the metric):
-
-- *Bubble reactivity golden (BTF-binding):* one `test_bubble_reactivity`
-  grouped-drift signed-lag-spread oracle — do not retune Bubble to satisfy it.
-- *Value-drift goldens (confirm each is intended before blessing):*
-  `test_custom_layout_contract`, `test_f0_5_shadow_controls`, `test_input_gain`,
-  `test_transient_per_mode_current`, `test_settings_dialog`,
-  `test_default_settings_editor`, `test_display_tab`, `test_transitions_tab_setup`,
-  `test_steam_abandonment_runtime`, `test_steam_credentials`,
-  `test_build_closeout_contract`, `test_installer_v5_reset_policy`,
-  `test_visualizer_settings_lazy_bodies_current`, `test_visualizer_settings_plumbing`,
-  `test_widgets_tab_current` (non-profile cells), `test_widgets_tab_general_current`,
-  `test_worker_latency_tuning`, `tests/unit/test_policy_compliance`.
-- *Deeper behavioural/integration (fixture reconciliation needed):*
-  `test_image_pipeline` (prefetch state shape), `test_image_worker`,
-  `test_image_worker_shared_memory`, `test_save_debounce`,
-  `test_spotify_visualizer_integration` + `test_visualizer_reactivity_quality`
-  (need full resolved technical config to produce FFT output),
-  `test_visualizer_preset_transfer` (fail-closed all-mode-presets contract),
-  `test_reddit_helper_recovery`, `test_reddit_helper_task_harness`,
-  `test_transition_distribution` + `test_visualizer_alignment` (semantic/real-Qt).
-- *Real-GL:* `test_qtquick_render_node`, `test_qtquick_visualizer_clip_smoke`
-  (need real-GL/driver acceptance).
-
-## 0.17 2026-09-14 Windows/PySide6 destination profile — ALL GREEN (132/132)
-
-The full maintained `destination` profile was executed on the intended
-**Windows + PySide6 6.9.1 + OpenGL** environment
-(`python tests/run_chunked.py --profile destination --chunks 4`):
-**132 targets run, 132 passed, 0 failed.** The surviving current reds recorded
-in §0.10 were reconciled at the test boundary and are now green; obsolete Sphere
-coverage was retired separately (see the wording note below) rather than counted
-among those passes. This also discharges the destination-target NEEDS RUN labels
-in §0.15 (Clock slot: `test_layout_slots.py`, `test_qtquick_h_cutover.py`,
-`test_widgets_tab_current.py::test_clock_settings_save_preserves_runtime_display_mode_overrides`)
-and §0.16 (`test_settings_dark_qss_retirement_contract.py`,
-`test_settings_theme_lifetime_contract.py`).
-
-**Wording correction for the §0.10 "nine remaining reds":** that list was never
-nine files that later all "passed". `test_sphere_mode_integration.py` was
-deliberately deleted as a retired smooth/material-Sphere fossil (current Voxel
-Sphere contracts supersede it — see §4.1); the remaining current-owner reds
-(`test_qtquick_h_cutover`, `test_qtquick_custom_layout_overlay`,
-`test_visualizer_viewport_scaling_contracts`, `test_visualizer_glow_footprint`,
-`test_visualizer_line_coverage`, `test_bubble_aspect_pixels`,
-`test_qtquick_achievement_pulse_presentation`, `test_sphere_voxel_audio_contract`)
-were reconciled/repaired against current owners. Do not read §0.10 as "all nine
-passed unchanged."
-
-Every fix was a test-side reconciliation to current production; no production
-owner/default/fallback was changed:
-
-- `test_qtquick_h_cutover.py` no longer hangs. Settings stub gained
-  `get_application_name()`; the minimal-config context-menu test explicitly
-  disables the visualizer family (visualizers now default-on, so the menu
-  legitimately gains Change Visualizer / Edit Widget Layout otherwise); the
-  transient-lane stub gained the third `transient_clamp` arg; `_committed`
-  supplies the neutral card/shadow kwargs the resolver now requires.
-- `test_qtquick_input_controller.py`: `FriendPulsePresentation.qml` added to the
-  double-click fallback-admission owner set.
-- `test_qtquick_custom_layout_owner.py`: wheel-guide case reseated so the uniform
-  enlarge grows toward the peer (880->895) publishing `(900,"peer")` without
-  snapping; presenter stub gained `authored_geometry_for`.
-- `test_qtquick_custom_layout_overlay.py`: cross-display transfer now asserts the
-  deliberate retained-idle-shell design (the source item stays alive to avoid
-  Shiboken wrapper invalidation on a return hop); admission departure is proven
-  by the cleared `render_identity` in both directions.
-- `test_visualizer_viewport_scaling_contracts.py`: collision helper passes the new
-  `bounce_same_only`/`collision_pop_mode` kwargs; impulse-invariance settings
-  dict gained the keys `BubbleSimulation.tick` now requires; devcurve
-  projected-offset bar rehomed onto `value *= layout.normalized_y_scale`; the
-  retired `widgets/.../renderers/spectrum.py` scrape was dropped (Quick
-  implementation is the sole spectrum height-scale owner).
-- `test_qtquick_achievement_pulse_presentation.py`: goldens reconciled to the
-  established Progress-Pulse/Shelf design — `double_capsules` defaults on,
-  `square_artwork_size` defaults to 160 (portrait 160x224), real `QFontMetricsF`
-  capsule sizing; card-height bars now track `model.authoredHeight`.
-
-**Operator-accepted 2026-09-14 (physical acceptance COMPLETE — no longer NEEDS RUN):**
-
-- Achievement Pulse §8 physical visual acceptance (Progress-Pulse/Shelf at
-  0% / one- and two-digit / 100%, with and without Shelf Style) — **ACCEPTED**.
-- Clock analogue/digital slot + face + geometry installed acceptance
-  (per-display double-click face state, slot save/load replay, mixed ALL routing,
-  restart persistence) — **ACCEPTED**.
-- `themes/dark.qss` file-absent visual/lifecycle acceptance across Default Dark,
-  contrasting light/metal themes, live switching, tray, colour picker,
-  tooltips/group boxes/check boxes, first-start, and native Glass/Acrylic —
-  **ACCEPTED**, and `themes/dark.qss` has been **physically deleted** from the
-  repository. Architectural rule retained: no replacement monolithic QSS file
-  and no fallback stylesheet loader may be reintroduced; `SettingsThemeSpec`
-  owns semantic palette/backdrop/shadow and narrow permanent renderers own
-  structure.
-
-**Still owed:** the broad full-tree `pytest tests/` reconciliation diagnostic
-(the maintained profile is the primary product gate and is green; broad-tree work
-is a fossil-reconciliation audit, not a mandate to resurrect retired architecture).
-
-## 0.10 2026-09-12 Windows/PySide validation run — supersedes prior NEEDS RUN
-
-The maintained `destination` profile was executed on the intended **Windows +
-PySide6 6.9.1 + OpenGL** environment (unlike the earlier Linux audit that could
-not import PySide6). This is the actual run the prior "NEEDS RUN"
-labels were waiting for — treat those labels below as discharged for every
-target that now passes.
-
-- Broad collection: **4010 tests, 0 collection errors** — the earlier "206 files
-  errored" was 100% environmental (missing PySide/OpenGL/feedparser).
-- Destination profile before this migration pass: **77/130 pass, 53 fail**. The
-  53 were stale tests predating the Sep-2026 visualizer **card/border/shadow**
-  feature and the **Viz Schema Migration** (per-mode `*_growth` retired,
-  full-materialized custom-cache normalization), plus intentional default
-  changes — **not** architecture breakage. Production was internally coherent at
-  every boundary checked.
-- After this pass: **121/130 pass, 9 fail.** Reusable migration scaffolding lives
-  in `tests/_visualizer_presentation.py` (neutral card resolver wrapper,
-  `make_visualizer_owner`, canonical Bubble settings/pulse builders, model +
-  technical-cache factory).
-
-**One real production bug found and fixed** (not a stale test): Clock `12h`
-format was unreachable via `ClockPresentationConfig.from_mapping`
-(`rendering/quick/widgets/clock.py`) once the canonical default became `24h`;
-`12 Hour` is user-selectable, so this was a functionality defect. Fixed to honour
-either canonical token, falling back to the default only on invalid input.
-
-**s_hotkey native crash fixed**: a cross-test QQuickWindow teardown race (pending
-`deleteLater` destruction corrupting the next test's window teardown under
-pytest-qt's event pump). Fixed by draining `DeferredDelete` in the fixture; not a
-product defect (per-file subprocess isolation normally hides it).
-
-**9 remaining reds (deferred, deeper work):** `test_qtquick_h_cutover` (hangs
-creating real multi-display Quick windows — display-connectivity dependent, needs
-a real installed session); `test_sphere_voxel_audio_contract` +
-`test_sphere_mode_integration` (golden-value pins on operator-authored sphere
-presets that drifted through the voxel work / smooth-sphere fossil — need a
-deliberate golden refresh, not piecemeal guessing); `test_visualizer_glow_footprint`,
-`test_visualizer_line_coverage`, one `test_bubble_aspect_pixels` real-GL assertion
-(hand-built 27-param immutable frames drifted — need rehoming onto the production
-frame-capture path rather than hand-maintained param dicts);
-`test_qtquick_achievement_pulse_presentation` (Progress-Pulse/Shelf layout
-redesign — eyes-on acceptance per §8); one `test_qtquick_custom_layout_overlay`
-cross-display-transfer lifecycle assertion; `test_visualizer_viewport_scaling_contracts`
-(Qt-avoiding module loader + many inline Bubble dicts + stale `renderers/spectrum.py`
-path + DevCurve source scrapes).
-
----
-
-## 0.11 2026-09-12 Visualizer ABC event-loop oracle correction
-
-The original P4 `swap_sensitive` classifier result is **invalid causal evidence** because the event-loop recorder's 2,048-sample rolling percentile retained about 102.4 seconds of pre-window history while the ABC driver excluded only 15 seconds before marking a "steady" window. R-80 owns the failure/history.
-
-Current test/oracle contract:
-
-- `tests/test_event_loop_recorder.py` protects independent `period_*` report slices and scored-window history reset without restarting the timer/deadline chain;
-- `tests/test_visualizer_switch_abc_driver.py` protects one event-loop scoring reset at each named `steady_A`, `steady_B`, `steady_C_pre` and `steady_C_post` boundary;
-- `tests/test_visualizer_switch_abc_harness.py` proves causal scoring uses only matching window-local period summaries, rejects old rolling-only logs, preserves named C windows/freshness gates, applies persistence to represented non-overlapping periods, preserves native Windows `--run-cmd` executable paths (including quoted paths with spaces), and proves the retired Python-pacer `pacer_skip_pct` field cannot manufacture a current causal verdict.
-
-Validation:
-
-- corrected live A/B oracle on Windows: **VALID / persistent post-switch regression NOT REPRODUCED** (A p99 5.87 ms; B p99 6.80 ms; delta +0.93 ms/+15.8%; 3 >25 ms events each; ~89.9 Hz revision and 1.000 Bubble integration both);
-- pure harness scorer/classifier/path-parser + experiment-flag tests executed directly in this Linux workspace: **37/37 PASS**;
-- changed Python source compilation: **PASS**;
-- real PySide recorder/driver pytest collection remains **NOT RUN HERE** because this workspace lacks PySide6. Do not convert that environment limitation into PASS.
-- closed-investigation `core/diagnostics/visualizer_attribution.py` and its dedicated test were removed; retained coverage is the opt-in boundary lifecycle telemetry, repeated-switch retirement tests, corrected event-loop oracle, ABC driver/scorer and Windows command parsing.
-
-The performance investigation is closed: the corrected A/B result rejects the synthetic persistent 25-switch poison claim, and the original long-run observation is not currently reproduced/actionable. Reopen only from future persistent/traceable evidence; do not schedule another probe campaign from this record alone.
-
----
-
-## 0.12 2026-09-13 Friend Pulse and System Stats implementation verification
-
-The F0-F6 Friend Pulse and S0-S6 CPU/RAM System Stats implementation verification is GREEN on Windows/PySide6:
-
-- **281/281 PASS** across Friend source/privacy/cache/request/avatar runtime, System Stats source/shared sampler, both
-  retained QML models/components, Steam/System Settings, binder/runtime-manager/family catalog, defaults authority,
-  one-open buckets, ordinary uniform resize, display stacking/prediction, build assets and focused semantic theme
-  inheritance. The expanded verification also covers private-cache ID confinement, identity-match validation, row-index-only
-  Friend actions, Steam/profile/Store target validation, interactive client fallback, normal secure-helper fail-closed
-  routing, exactly-once saver exit, and Achievement/Abandonment artwork actions;
-- **14/14 PASS** across widget import dormancy, capability-catalog neutrality and Widgets SETUP activation routing;
-- **258/258 PASS** for the public-admission follow-up across ungated Friend/System descriptors, Setup/pill visibility,
-  retained binder admission, one-time existing-profile activation migration, later user-deactivation preservation,
-  member-off dormancy, Steam actions, CLI compatibility, generated defaults and build assets;
-- **160/160 PASS** for the final Friend roster correction across full online-first/offline-fill projection, zero-AppID
-  rejection, visible-only avatar hydration, semantic actions, event-owned glow, virtualized Grid/Rows and stable model
-  attachment;
-- generated default snapshot plus both SST documents: **CURRENT** via `defaults_snapshot_builder --check-all`;
-- production-Quick threaded-OpenGL visual smoke at DPR 1.5: eight-slot and twelve-friend Grid, Activity Rows, retained
-  action menu, finite change glow, rounded avatar/tile corners, Strict, System Stats and both shared 40% floor captures
-  rendered with **zero QML warnings**;
-- source asset contract: Friend/System QML and the original System Stats gear-and-spanner SVG are required build payloads.
-
-This is not the installed acceptance claim. Friend Pulse still needs connected-account privacy/readability,
-installed Steam/chat/profile/Store routing, and two-display retirement/cardinality validation. System Stats still needs
-the installed 10-second off-vs-on Visualizer contention/long-run and two-display resource/cardinality cells. Both are
-public and member-disabled by default; `--devsteam` remains only for unfinished Games You Follow and `--devstats` is retired.
-The parser tolerates the old `--devstats` token as an inert no-op so an existing shortcut cannot change launch mode.
-
-
-## 0.13 2026-09-13 System Stats expansion + frameless interaction-glow gate
-
-- System Stats now keeps one generation-shared, lease-gated fixed-delay sampler and adds **UPTIME** plus aggregate
-  **NETWORK ↓/↑** to the same immutable snapshot; no new cadence owner exists. Canonical sample interval is user-adjustable
-  only upward from a hard/default 10-second floor.
-- The card has four fixed metrics (CPU LOAD, MEMORY, UPTIME, NETWORK), capacity 4 / authored height 430. User-facing
-  implementation/rejection filler text is removed.
-- Widget interaction glow/Jedi admission now requires the live `cardShellEnabled` truth for ordinary widgets and the
-  Visualizer. Frameless presentations cannot load glow pixels, become click targets, retain click selection, or emit Jedi
-  Mode through the glow path. The old shell-less Digital Clock intrinsic-bounds exception is retired.
-- Local workspace lacks PySide6, so real Settings/QML pytest execution remains **NOT RUN HERE**. Local executable gates
-  for this checkpoint are **8/8 PASS** pure System Stats source contracts, **11/11 PASS** shared-sampler state-machine
-  cases under a Qt-free ThreadManager stub, generated-default authority **GREEN**, **15/15 PASS** changed-Python compile,
-  plus static QML/card-shell policy checks.
-
----
-
-## Current authority
-
-The exact current source tree and the maintained `destination` profile in `tests/run_chunked.py` own executable test truth. `Current_Plan.md` owns execution order. Historical bug records and old migration reports are evidence, not permission to keep tests for retired owners alive indefinitely.
-
-The current product is post-Qt-Quick cutover. The five established visualizer modes remain permanent shared modes; Voxel Sphere is an **accepted experimental, architecturally isolated** sixth mode. Tests must preserve that distinction rather than forcing Sphere into permanent-mode assumptions or treating experimental isolation as exemption from shared persistence/normalization contracts.
-
-## 0.14 2026-09-13 geometry-guide + widget visual polish
-
-Focused acceptance owns: wheel resize publishes alignment guides without snapping; authored guides are +1 px while the generic grid stays 1 px; Media artwork consumes non-overlapping right-column vertical space and insets under its frame; all shared dynamic artwork buffers are hard-contained; Friend Pulse local linework is +0.5 px, roster names are title-cased/two-line shrink-to-fit/bold, and BrandedHeader scale-up stroke delta receives the extra 25% boost. Real PySide/QML execution remains user-environment validation when unavailable to the agent.
-
-This file is a maintained routing/status guide. It deliberately does **not** carry a giant hand-maintained inventory of every `test_*.py` file. That became stale faster than the code and obscured obsolete tests. Source discovery plus the maintained profile are the inventory authorities.
-
-## 0.15 2026-09-14 Clock slot face-state persistence
-
-The Clock slot repair has dedicated current-owner regression coverage. Clock analogue/digital face state is independent persisted state and must round-trip separately from the two CUSTOM geometry variants. **All automated coverage is GREEN and installed acceptance is COMPLETE (operator-accepted 2026-09-14; see §0.17).**
-
-- `tests/test_layout_slots.py` protects v2 capture of `display_mode` + `display_mode_overrides`, exact replay including an explicitly empty override map, and v1 fallback that clears newer stale overrides and uses the legacy slot baseline. **GREEN** (2026-09-14 destination run).
-- `tests/test_qtquick_h_cutover.py` carries the state through the real `DisplayManager` fenced save/load boundary. **GREEN** (destination target).
-- `tests/test_widgets_tab_current.py::test_clock_settings_save_preserves_runtime_display_mode_overrides` proves a normal Clock Settings save cannot erase double-click/runtime per-display state. **GREEN** (destination target).
-- Installed acceptance (save a slot with one display Digital and another Analogue, switch live, load the slot, verify the saved face + its own geometry per display, both directions and with an empty override map) — **ACCEPTED 2026-09-14**.
-
-These tests must never collapse face state into geometry authority: `custom_layout` owns the `digital`/`analog` rectangles; the Clock section owns `display_mode` and per-display overrides.
-
-## 0.16 2026-09-14 legacy Settings base-stylesheet retirement — COMPLETE
-
-The production dependency on `themes/dark.qss` is severed with no monolith copied into another owner, and the retirement is now fully accepted: the Windows/PySide file-absent visual/lifecycle matrix passed and **`themes/dark.qss` has been physically deleted from the repository** (operator-accepted 2026-09-14; see §0.17).
-
-- `tests/test_settings_dark_qss_retirement_contract.py`: **GREEN** (destination target). It proves live Settings/tray source has no legacy path reference/loader, the permanent structural base contains no palette literals, the complete Default Dark root renderer resolves with no placeholders/legacy file, generic disabled labels use `text.disabled`, tray `QMenu` geometry is rendered from existing semantic context-menu roles, the color-picker wrapper explicitly owns its old subsettings chrome, and installer/build tooling has no filename-specific dependency on the obsolete stylesheet.
-- `tests/test_settings_theme_lifetime_contract.py` is reconciled to the complete-root renderer (`_build_settings_root_stylesheet`) rather than the retired base-file concatenation seam. **GREEN** (destination target).
-- `tests/test_settings_theme_qobject_lifetime.py`, Settings dialog/theme switching, Theme Foundry, tray, picker, native Glass/Acrylic and first-start behaviour were validated in the file-absent installed matrix — **ACCEPTED 2026-09-14**.
-- Physical removal of `themes/dark.qss` — **DONE**. The application is accepted running without the asset.
-
-Retirement acceptance is zero intended visual/interaction change: semantic `SettingsThemeSpec` remains palette authority; structural QSS belongs to narrow permanent renderers. **Binding architectural rule (retained):** no replacement monolithic QSS file and no fallback stylesheet loader may be reintroduced, even when the asset is absent.
-
----
-
-## 0. 2026-09-11 test-truth / normalization audit
-
-Audit baseline: `GODZIP_AchievementPulse_ProgressPulse_ThemeAccentFix_2026-09-11.zip`.
-
-### 0.1 Achievement Pulse normalization verdict
-
-The new `Progress Pulse` and `Shelf Style` presentation options use the existing widget settings/normalization system rather than a second widget-size or state authority:
-
-- canonical defaults own `widgets.achievement_pulse.progress_pulse = true` and `shelf_style = false`;
-- generated defaults snapshot and both SST defaults remain derived from canonical defaults;
-- the Steam Settings builder loads/saves the same canonical keys;
-- the retained Quick Achievement Pulse presentation config consumes those keys;
-- `Progress Pulse` presents the existing Total/percentage truth rather than creating another progress calculation;
-- the authored Achievement Pulse canvas/natural-size contract remains the same outer normalization authority;
-- percentage text uses fitted presentation inside the pulse and does not resize the widget baseline when the string becomes `100%`.
-
-**Real defect found and corrected during this audit:** the two new Settings controls were initially missing from the Steam section descriptor's `signal_block_attrs`. Lazy Settings hydration could therefore programmatically alter them without the same signal-block protection as peer Steam controls. Both attributes are now part of the canonical hydration block list, and `test_defaults_schema_authority.py` plus `test_steam_phase3_settings_descriptors.py` guard that contract.
-
-That was a Settings-hydration normalization/lifecycle hole, not a runtime geometry-normalization rewrite. Functional work is closed; the Qt resize-normalization oracle remains part of the outstanding Windows/PySide test inventory rather than a separate visual-acceptance blocker.
-
-### 0.2 Headless validation completed here
-
-The following current suites run without PySide/OpenGL/feedparser in this Linux environment and passed after reconciliation:
+Current-tree inventory at this checkpoint:
 
 ```text
-131 passed
-  tests/test_defaults_schema_authority.py
-  tests/test_about_art_theme.py
-  tests/test_visualizer_doc_references.py
-  tests/test_sphere_voxel_audio_contract.py
-  tests/test_visualizer_settings_body_transaction_contract.py
-  tests/test_visualizer_user_authored_preset_catalog.py
-  tests/test_visualizer_technical_profile_contract.py
-  tests/test_sphere_voxel_geometry.py
-
-13 passed
-  tests/test_p4_native_presentation.py   # retained DWM-only portion
-
-4 passed
-  tests/test_spotify_volume.py
-
-TOTAL DIRECTLY EXECUTED HERE: 148 passed
+369 test_*.py modules
+132 maintained destination targets
+0 missing destination target files
 ```
 
-Also passed:
+The destination profile is **target-isolated**: each selected target runs in its own fresh pytest subprocess so queued Qt/QQuick teardown from one target cannot poison another target's result.
 
-```powershell
-python -m core.settings.defaults_snapshot_builder --check-all
-```
+The last complete intended-environment destination run recorded before the R-87 performance campaign was **132/132 GREEN on Windows + PySide6 + OpenGL (2026-09-14)**. Do not misrepresent that historical full-profile run as proof of later source changes. R-87/CHK26 acceptance is instead backed by its focused source/static tests plus installed D1-heavy, mixed-display/lifecycle and operator visual evidence recorded in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` and `Docs/Guardrails/Performance_Optimization_Contract.md`.
 
-Result:
+The current agent/container may lack PySide6/OpenGL. In that environment, a collection failure caused by missing runtime dependencies is **ENVIRONMENT BLOCKED**, not a product RED and not a PASS.
 
-```text
-defaults snapshot OK
-SST defaults documents OK
-```
-
-### 0.3 Environment-limited collection
-
-A full-tree collection attempt after stale-test cleanup produced:
-
-```text
-1218 tests collected
-206 files errored during collection
-```
-
-The errors are environment dependencies in this container, dominated by:
-
-```text
-PySide6    196 missing-module signatures
-OpenGL       9 missing-module signatures
-feedparser   2 missing-module signatures
-```
-
-Do **not** call those product reds. Equally, do not call the affected tests green. They require the intended Windows/PySide/OpenGL environment.
-
-### 0.4 Maintained destination profile
-
-After this audit:
-
-```text
-130 unique destination targets
-0 missing target files
-```
-
-The destination profile remains target-isolated: each profile target runs in its own fresh pytest process so queued QQuick/QObject teardown cannot contaminate unrelated files.
-
----
-
-## 0.5 2026-09-11 small polish contracts
-
-Three new Qt-free/source-level tests cover the narrow Achievement/CUSTOM/Particle slice without editing pre-existing test modules:
-
-```text
-tests/test_achievement_pulse_polish_contract.py
-tests/test_custom_layout_peer_margin_snag_contract.py
-tests/test_particle_transition_swirl_seam_contract.py
-```
-
-Direct execution in the current Linux workspace: **6/6 assertions PASS**. The geometry test executes the actual `_snap_axis_position()` function body in an isolated Qt-free namespace and verifies both the narrow/external-only 30 px peer-gap attraction and the small semantic alignment preference over a nearby grid target; a farther screen-edge approach still resolves to the ordinary grid, guarding against sticky snapping. The Particle contract protects the periodic Center Outward angle term and exact UI-to-shader label ordering. Achievement Pulse coverage protects the 10% text reduction, unchanged 108x108 pulse geometry, 4 px rail raise, and Shelf-only `UNKNOWN`/`UNAVAILABLE` presentation parity.
-
-These focused gates do not replace the outstanding broad Windows/PySide/OpenGL test inventory.
-
-## 0.6 2026-09-11 first-run source-onboarding launch contract
-
-One new Qt-free/source-level test covers the launch-intent seam without editing a pre-existing test module:
-
-```text
-tests/test_startup_source_onboarding_resume.py
-```
-
-Direct execution in the current Linux workspace: **4/4 assertions PASS**. The contract protects normal RUN resumption after missing-source onboarding, preserves `/c`, `-c`, `-s` and `--s` as CONFIG-only invocations, verifies the same Settings manager is reused and `quitOnLastWindowClosed` is restored, and requires startup-dependent Interaction Mode resolution to occur after onboarding. Operator-installed launch validation is accepted as of 2026-09-11; only automated test execution debt remains.
-
-## 0.7 2026-09-11 Visualizer dormancy schema + Weather Settings target
-
-Two new Qt-free/current-owner contract modules cover this misc slice without editing a pre-existing test module:
-
-```text
-tests/test_visualizer_mode_activation_schema_current.py
-tests/test_weather_settings_target_contract.py
-```
-
-Direct execution in the Linux workspace: **8/8 assertions PASS**. Visualizer coverage requires the canonical per-mode dormancy authority to be the explicit `mode_activation` boolean map, treats mapping insertion order as irrelevant while protecting registry-order resolution/the last-mode recovery invariant, verifies the typed model serializes no retired `enabled_modes` key, and proves the one temporary legacy reader converts/removes the old list while emitting warning feedback when relied upon. Weather coverage protects the semantic `weather_location` target, retained family callback injection, generation-checked DisplayManager/engine Settings lifecycle route, Widgets -> Weather lazy navigation and synchronous Location focus without a target-specific timer.
-
-Defaults regeneration and authority checking are required for this schema change. Operator-installed validation is accepted as of 2026-09-11 for real Visualizer enable/disable persistence and the retained Weather missing-location SETTINGS click -> modal Settings -> runtime restart path; only automated test execution debt remains.
-
-## 0.8 2026-09-11 Achievement Pulse post-fit percentage scale
-
-One new Qt-free/source-level contract covers the installed visual follow-up without editing a pre-existing test module:
-
-```text
-tests/test_achievement_pulse_progress_text_visual_scale_contract.py
-```
-
-Direct execution in the Linux workspace: **2/2 assertions PASS**. The contract requires the 0.90 reduction to occur as a final presentation transform after `Text.HorizontalFit`, where it cannot be masked by the fitter's existing point-size choice. It separately protects the existing 108x108 pulse geometry and 4 px lift and verifies that the Total parsing/model and authored-size normalization remain in their existing Python owners. Operator-installed visual confirmation is accepted as of 2026-09-11; only automated test execution debt remains.
-
-## 0.9 2026-09-11 Widget Glow Use Theme button style
-
-One new Qt-free/source-level contract covers the tiny style correction without editing a pre-existing test module:
-
-```text
-tests/test_widget_glow_use_theme_button_style.py
-```
-
-Direct execution in the Linux workspace: **2/2 assertions PASS**. The Display -> Widget Glow `Use Theme` action now consumes the canonical `COMPACT_ACTION_BUTTON_STYLE`/`control.button.*` ThemeSpec semantics instead of the special ghost-action style. Its existing 30 px height, click behavior and `None` = Use Theme settings semantics are unchanged.
-
----
-
-## 1. Status vocabulary
+## 2. Status vocabulary
 
 Use these labels consistently:
 
-- **PASS** — executed against the stated current tree/environment and passed.
-- **NEEDS RUN** — current/recent coverage judged valuable and structurally reconciled, but it could not execute in this environment. Run it on the intended Windows/PySide/OpenGL environment before using it as acceptance evidence. This is the canonical replacement for older `NEEDS RUN VALIDATION` wording.
-- **ENVIRONMENT BLOCKED** — collection/execution cannot begin because a required external runtime package/platform is missing. This is not a product failure.
-- **OBSOLETE** — test targets a retired owner/architecture and no longer expresses a current contract. Delete it or preserve the lesson in Historical Bugs; do not keep it red forever.
-- **REHOME** — only part of a mixed legacy test still has current value. Move that assertion into the current owner/suite and retire the dead integration shell.
-- **RED** — current test executed in an appropriate environment and failed a current contract.
+- **PASS** — executed against the stated tree/environment and passed.
+- **NEEDS RUN** — current coverage is structurally valid but still requires the intended Windows/PySide/OpenGL or installed environment before it can be acceptance evidence.
+- **ENVIRONMENT BLOCKED** — collection/execution cannot begin because a required platform/runtime dependency is absent. This is not a product failure.
+- **RED** — a current test executed in an appropriate environment and failed a current contract.
+- **OBSOLETE** — the test targets a retired owner/architecture and no longer expresses a current contract. Delete it or preserve its lesson in Historical Bugs.
+- **REHOME** — only part of a mixed old test still has value. Move that assertion to the current owner/suite and retire the dead shell.
 
-A green static/source test is not a substitute for a required Qt/QML/real-GL/installed gate.
+A green static/source test is never a substitute for a required Qt/QML, real-GL or installed physical gate.
 
----
+## 3. Standard commands
 
-## 2. Standard commands and evidence levels
-
-### 2.1 Fast maintained product gate
+### 3.1 Maintained product gate
 
 ```powershell
 python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-This is the canonical maintained profile. The old `h-destination` spelling is compatibility only.
+`h-destination` is a compatibility alias only. Do not create a second maintained profile for the same destination architecture.
 
-### 2.2 Broad reconciliation diagnostic
+### 3.2 Broad reconciliation diagnostic
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
 ```
 
-A complete-tree run is useful for discovering stale tests, optional dependency gaps and hidden regressions. It is not permission to resurrect a retired production owner merely to make an old test green.
+A whole-tree run is useful for discovering stale tests, optional-dependency gaps and hidden regressions. It is **not** permission to resurrect retired production architecture merely to make an old test green.
 
-### 2.3 Defaults authority
+### 3.3 Defaults authority
 
 ```powershell
 python -m core.settings.defaults_snapshot_builder --check-all
 ```
 
-Required whenever canonical defaults, generated snapshots/SSTs, Settings normalization or Defaults Foundry-facing keys change.
+Run this whenever canonical defaults, generated snapshots/SSTs, Settings normalization or Defaults-Foundry-facing keys change. Regeneration is owned by `--write-all`; checked-in generated artifacts must remain exact projections of canonical source.
 
-### 2.4 Evidence levels
+### 3.4 Focused tests first
 
-Use the minimum relevant combination:
+Prefer the smallest set capable of falsifying the current change:
 
-1. **Static/schema contract** — ownership, source wiring, canonical defaults, descriptor membership, manifest/reference integrity.
-2. **Deterministic behavioural test** — equations, normalization, response, persistence, migration, lifecycle state.
-3. **Qt/QML runtime-shaped test** — actual objects/signals/bindings/layout, teardown, retained presentation.
+```powershell
+pytest path\to\test_file.py -q --tb=short
+```
+
+Then widen to the maintained profile and installed/physical gates only when the change actually requires them.
+
+## 4. Evidence levels
+
+Use the minimum relevant combination, but never claim a higher level from a lower one:
+
+1. **Static/schema contract** — ownership, imports, canonical defaults, descriptors, manifests, forbidden paths.
+2. **Deterministic behavioural test** — equations, normalization, response, persistence, compatibility normalization, lifecycle state.
+3. **Qt/QML runtime-shaped test** — real objects/signals/bindings/layout/teardown/retained presentation.
 4. **Real GL/platform test** — shader/resource/context/driver behavior where fakes are insufficient.
-5. **Installed physical review** — final visual/timing/interaction acceptance on the real machine.
+5. **Installed physical review** — final visual/timing/input/multi-monitor/lifecycle acceptance on the target machine.
 
 Do not collapse levels 3–5 into “unit tests passed.”
 
----
+## 5. Stale-test and retirement rule
 
-## 3. Stale-test rule
-
-When a test fails because an import/owner no longer exists:
+When a test fails because an import or owner no longer exists:
 
 1. establish whether the production owner was deliberately retired;
-2. identify the behavioural contract the old test was trying to protect;
-3. if that contract still exists, rehome it onto the current owner/path;
-4. if the contract itself retired, delete the test;
-5. preserve important failure lessons in Historical Bugs rather than maintaining fake compatibility architecture.
+2. identify the surviving behavioural contract, if any;
+3. rehome a surviving contract onto the current owner/path;
+4. delete the test if the contract itself retired;
+5. preserve important failure mechanisms in `Docs/Historical_Bugs/`, not fake compatibility architecture.
 
 Do not:
 
@@ -632,161 +101,39 @@ Do not:
 - restore QWidget/old compositor presenters to satisfy stale imports;
 - keep whole-file skips as permanent tombstones;
 - weaken a current assertion merely because an old test encoded obsolete topology;
-- assume an old phase name means the behaviour is obsolete; inspect the actual assertion first.
+- treat an old phase/checkpoint name as current authority;
+- “fix” a test by changing protected product behavior without first establishing that the product contract changed.
 
----
-
-## 4. Obsolete/rehome decisions made in this audit
-
-### 4.1 Whole-file fossils removed
-
-The following 11 files targeted retired owners or were tombstones whose surviving lessons are covered elsewhere:
-
-```text
-test_dimming_and_interaction_fixes.py
-test_flicker_fix_integration.py
-test_gl_profiler.py
-test_gl_texture_streaming.py
-test_integration_full_workflow.py
-test_mc_window_flags.py
-test_prewarm_no_deadlock.py
-test_qtquick_sphere_rendering.py
-test_settings_schema.py
-test_widget_effects.py
-test_widget_performance.py
-```
-
-Important classifications:
-
-- `test_qtquick_sphere_rendering.py` described the retired smooth/material Sphere architecture and imported the nonexistent old Sphere renderer. Current Voxel Sphere authority is covered by the Voxel Sphere audio/geometry/mode-integration/current renderer suites; do not resurrect the old smooth Sphere to satisfy this file.
-- `test_prewarm_no_deadlock.py` and `test_settings_schema.py` were module-level skip tombstones for deleted owners.
-- old QWidget widget-effect/performance and pre-Quick display/compositor integration tests no longer own destination pixels.
-
-### 4.2 Mixed files repaired instead of deleted
-
-`tests/test_p4_native_presentation.py`
-
-- retained: current non-blocking `rendering.dwm_timing` structure/association behavior;
-- removed: retired `rendering.gl_compositor_pkg` present-context and perf-HUD probes;
-- current headless result: **13 PASS**.
-
-`tests/test_media_volume_runtime.py`
-
-- retained: shared volume-owner leases, provider retargeting, generation fencing, optimistic/debounced writes;
-- removed: old `MediaWidget` + deleted `WidgetManager` anchor integration cells;
-- current Quick service injection is covered by current runtime-service/family-binder/media-presentation suites;
-- **NEEDS RUN** after this rehome because `ThreadManager` imports PySide6 in this environment.
-
-`tests/test_system_mute_runtime.py`
-
-- retained: shared owner/backend semantics, generation fencing, coalescing and UI-owner-thread behavior;
-- removed: old `MediaWidget` + deleted `WidgetManager` anchor integration cells;
-- current Quick injection is covered by current service/family-binder/media-presentation suites;
-- **NEEDS RUN** after this rehome because `ThreadManager` imports PySide6 here.
-
-`tests/test_qtquick_crumble_transition.py`
-
-- received the useful Crumble shader assertions formerly embedded in the deleted mixed dimming/interaction file;
-- **NEEDS RUN** because the retained transition package imports PySide6 here.
-
-### 4.3 Stale assertions corrected in maintained tests
-
-The audit also repaired assertions that still encoded superseded contracts:
-
-- old Sphere Rainbow setting names -> current Sphere-local Taste The Rainbow keys;
-- hard-coded Sphere preset count/contiguous-slot assumptions -> user-authored arbitrary/sparse preset contract;
-- old technical-cache direct indexing -> current resolver call shape;
-- stale Custom-cache normalization expectations -> current import/replace/merge semantics;
-- accepted Sphere A/B tests no longer claim those two files are the only legal user presets.
-
-These are test-truth corrections, not permission to change the production contracts they protect.
-
----
-
-## 5. Recent work validation matrix — 2026-09-09 through 2026-09-11
-
-### PASS in this environment
-
-- `test_defaults_schema_authority.py` — canonical defaults, generated-authority/static routes, recent Achievement Pulse hydration contract.
-- `test_about_art_theme.py` — About liquid masks/theme semantic behavior.
-- `test_visualizer_doc_references.py` — current visualizer documentation paths/contracts.
-- `test_sphere_voxel_audio_contract.py` — accepted-experimental Sphere audio/particle/settings contract.
-- `test_sphere_voxel_geometry.py` — current Voxel Sphere geometry contract.
-- `test_visualizer_settings_body_transaction_contract.py` — lazy body build/hydration all-or-nothing contract.
-- `test_visualizer_user_authored_preset_catalog.py` — arbitrary/sparse user preset catalogue semantics.
-- `test_visualizer_technical_profile_contract.py` — technical-profile/isolation contract.
-- `test_p4_native_presentation.py` — retained DWM timing utility only.
-- `test_spotify_volume.py` — exact Spotify/browser volume-session matching.
-- `test_settings_bucket_single_open_contract.py` — 13/13 direct Qt-free assertions passed: all-closed canonical baseline, sparse structured-root merge (including Visualizer Technical leaves), legacy normalization, local-scope replacement, Spectrum accessory bucket schema, synchronous no-timer peer closure, deferred-body finalization ownership, explicit Setup/About/Accessibility exclusions, and parent-disclosure reachability. Normal pytest collection is still globally blocked here by missing PySide6 in `tests/conftest.py`.
-- `test_devcurve_shader_contract_current.py` and `test_retired_runtime_islands_contract.py` are new Qt-free/static replacements for retired-owner assertions; source compilation passed, with normal pytest collection subject to the same global PySide6 blocker.
-- Bucket reachability audit rehomed three mixed tests whose surviving coverage was current but whose bucket expectations were obsolete: `test_widgets_tab.py` -> `test_widgets_tab_current.py`, `test_widgets_tab_general.py` -> `test_widgets_tab_general_current.py`, and `test_visualizer_settings_lazy_bodies.py` -> `test_visualizer_settings_lazy_bodies_current.py`. The old modules are debris; production code is not weakened to retain multi-open/default-open/legacy Technical assertions.
-
-### NEEDS RUN
-
-The following are current/recent and could not collect here because PySide6 is unavailable:
-
-- `test_qtquick_achievement_pulse_presentation.py`
-  - Progress Pulse layout;
-  - numeric-change-only pulse signal;
-  - fitted percentage text including wider values such as `100%`;
-  - Shelf Style/presentation behavior;
-  - QML/runtime lifecycle.
-- `test_qtquick_resize_normalization.py`
-  - Achievement Pulse/Abandonment/Weather stale-payload replay;
-  - repeated reconstruction;
-  - CUSTOM Save/Cancel/slot replay without baseline compounding.
-- `test_steam_phase3_settings_descriptors.py`
-  - Steam section hydration/saver/descriptor integration;
-  - now explicitly checks the two Achievement Pulse signal-block attributes.
-- `test_theme_foundry_model.py`
-  - Settings theme schema-v6/About liquid semantic through Theme Foundry model.
-- `test_default_settings_editor.py`
-  - Defaults Foundry/editor Qt interaction and canonical schema behavior.
-- `test_qtquick_crumble_transition.py`
-  - includes newly rehomed current shader/fall/shadow assertions.
-- `test_media_volume_runtime.py`
-  - retained shared service behavior after obsolete QWidget anchor cells were removed.
-- `test_system_mute_runtime.py`
-  - retained shared service behavior after obsolete QWidget anchor cells were removed.
-- `test_spectrum_shaping_current.py` and `test_transient_per_mode_current.py`
-  - live Spectrum/transient assertions rehomed away from the retired pre-Quick renderer island;
-  - Sine scheduler assist now targets presentation-neutral `sine_reactivity`; Spectrum layout now targets the retained Quick implementation.
-- `test_async_image_processor_current.py`
-  - current QImage-first FILL/FIT/SHRINK/Lanczos/null-image mechanics after retirement of synchronous `ImageProcessor`;
-  - requires the intended PySide environment.
-- `test_widgets_tab_current.py`, `test_widgets_tab_general_current.py`, and `test_visualizer_settings_lazy_bodies_current.py`
-  - current replacements for mixed modules whose surviving assertions were useful but whose bucket expectations were obsolete;
-  - require the intended PySide environment for actual Widget/Visualizer construction and reload behavior.
-Operator-installed Settings bucket interaction is accepted as of 2026-09-11, including Spectrum Custom Bar Appearance/Rainbow rendering, no-flash sibling closure, lazy page/mode restoration, parent-disclosure reachability, and mode-switch/body-reconstruction reachability. Automated PySide coverage for the same paths remains outstanding where listed above.
-
-Do not change environment-blocked automated entries to PASS until they have actually run on the intended environment.
-
----
+Fixtures must follow current architecture. A fixture that manufactures a retired owner can give convincing green results for a product path that no longer exists.
 
 ## 6. Permanent architecture gates
 
-### 6.1 Qt Quick presentation
+### 6.1 Qt Quick presentation and lifecycle
 
 Protect:
 
 - one retained accelerated `QQuickWindow` per admitted display;
-- no `QQuickWidget`/second accelerated widget surface/fallback presenter;
+- no `QQuickWidget`, second accelerated widget surface or generic fallback presenter;
 - current family binders and retained models;
 - generation/activation fencing;
-- resource destruction on legal owners;
+- destruction on legal owners and clean replacement-generation retirement;
 - QML emits semantic actions rather than owning provider/business side effects;
-- ordinary family presentation remains normalized from authored size + one resolved runtime geometry authority.
+- ordinary family presentation remains normalized from authored size plus one resolved runtime geometry authority;
+- event-driven monitor/sleep/wake reconciliation rather than polling.
 
-High-value suites include `test_qtquick_runtime.py`, `test_qtquick_window.py`, `test_qtquick_monitor_wake_reconcile.py`, `test_qtquick_scene_controller.py`, `test_qtquick_family_binder*.py`, `test_qtquick_ordinary_widget_host.py`, lifecycle/terminal-destruction suites and family-specific Quick presentation tests. `test_qtquick_monitor_wake_reconcile.py` permanently pins the event-driven sleep/wake contract: same-count QScreen metric changes reach DisplayManager topology authority, only `ApplicationActive` admits resume repair, metric-first/resume-second bursts preserve that repair intent, unchanged final signatures reapply bound Quick geometry once, primary-screen changes are signature-visible, and retirement disconnects every topology edge. Installed physical dual-display wake validation passed on 2026-09-12 through real `2 -> 1 -> 2 -> 1 -> 2` topology churn; R-79 is closed while the nondeterministic same-signature resume branch remains automation-owned.
+High-value suites include `test_qtquick_runtime.py`, `test_qtquick_window.py`, `test_qtquick_scene_controller.py`, `test_qtquick_monitor_wake_reconcile.py`, `test_qtquick_family_binder*.py`, `test_qtquick_ordinary_widget_host.py`, lifecycle/terminal-destruction suites and family-specific Quick presentation tests.
 
-### 6.2 Widget normalization / CUSTOM
+`test_qtquick_monitor_wake_reconcile.py` permanently protects the event-driven topology contract. Installed dual-display wake/topology validation is already recorded in the relevant Historical Bug; do not reintroduce a debounce/poller merely because a future test fixture is easier that way.
 
-Normalization changes require tests that distinguish:
+### 6.2 Widget normalization and CUSTOM
+
+Tests must distinguish:
 
 ```text
 authored/natural size
 resolved runtime size
 uniform scale
+content extent when admitted
 CUSTOM working geometry
 committed geometry
 serialized stale payload
@@ -798,71 +145,105 @@ Required properties:
 - reconstruction does not compound scaling;
 - Save commits exactly the working geometry;
 - Cancel restores pre-edit committed geometry;
-- slot replay does not mutate authored baseline;
-- dynamic content changes do not redefine natural size unless the product contract explicitly says they do;
-- fitted text is presentation behavior inside the resolved geometry, not another widget-scale authority.
+- layout-slot replay does not mutate authored baseline;
+- dynamic content does not redefine natural size unless the product contract explicitly says it does;
+- fitted text remains presentation inside resolved geometry, not another widget-scale authority;
+- global CUSTOM suppresses ordinary stacking/adjacency authority as specified.
 
-Primary suites: `test_qtquick_resize_normalization.py`, `test_widget_auto_shrink.py`, `test_qtquick_family_size_policy.py`, `test_qtquick_geometry_resolver.py`, `test_qtquick_custom_layout_owner.py`, `test_qtquick_custom_layout_overlay.py`, capture/geometry tests.
+Primary suites include `test_qtquick_resize_normalization.py`, `test_widget_auto_shrink.py`, `test_qtquick_family_size_policy.py`, `test_qtquick_geometry_resolver.py`, `test_qtquick_custom_layout_owner.py`, `test_qtquick_custom_layout_overlay.py` and capture/geometry tests.
 
-### 6.3 Settings/defaults/theme authority
+Clock face state is independent from its digital/analogue geometry variants. `test_layout_slots.py`, the real DisplayManager slot path, and Clock Settings preservation coverage must keep those authorities separate.
+
+### 6.3 Settings, defaults and themes
 
 Protect:
 
 - `core/settings/default_settings.py` as defaults SSOT;
 - generated snapshot/SST parity;
-- no second fallback default authority;
-- lazy Settings hydration blocks programmatic control changes from masquerading as user edits;
+- no second fallback/default authority;
+- lazy Settings hydration cannot masquerade as user edits;
 - descriptor/load/save/default keys remain mutually complete;
-- schema migrations normalize legacy input once and remove retired aliases;
-- Theme Foundry and Defaults Foundry consume canonical schema rather than inventing parallel fields.
-- production Settings/tray styling must not load `themes/dark.qss`; the root renderer and narrow component renderers own structure while `SettingsThemeSpec` owns semantic palette/backdrop/shadow values;
-- `themes/dark.qss` is physically deleted (retirement operator-accepted 2026-09-14); its absence is never permission to reintroduce a fallback loader or a replacement monolithic Settings QSS;
-- collapsible bucket persistence remains sparse and page/local-scope accordion behavior stays centralized; canonical defaults enumerate identities but `SettingsManager` must not materialize absent false members.
+- compatibility normalization happens at explicit input boundaries and retired aliases do not become current output;
+- Theme Foundry and Defaults tooling consume canonical schema rather than inventing parallel fields;
+- collapsible-bucket identities stay canonical while persisted state remains sparse/local-scope;
+- `themes/dark.qss` stays physically absent; narrow structural renderers plus `SettingsThemeSpec` own Settings styling and no fallback monolithic QSS may return;
+- Widget Theme semantics stay separate from Settings HWND material/backdrop ownership.
 
-Primary suites include `test_defaults_schema_authority.py`, settings manager/persistence/binding/default parity, descriptor suites, Theme Foundry and default-settings-editor tests.
+Primary coverage includes `test_defaults_schema_authority.py`, Settings manager/persistence/binding/default parity, descriptor suites, Theme Foundry, default-settings-editor, bucket-state and Settings-theme lifetime tests.
 
 ### 6.4 Visualizers
 
-Read `Docs/Guides/Visualizer_Change_Checklist.md`, `Docs/Guardrails/Visualizer_Presentation.md`, `Docs/Guardrails/Bubble_Temporal_Fidelity.md`, and `Docs/Guides/Visualizer_Reactivity_Authoring.md` as relevant.
+Read these before changing visualizer behavior:
 
-Permanent shared-mode work must protect Bubble/BTF, Spectrum temporal scaling, source freshness, logical cadence and latest-state delivery. Experimental Sphere remains isolated until explicit operator migration approval.
+- `Docs/Guides/Visualizer_Change_Checklist.md`
+- `Docs/Guardrails/Visualizer_Presentation.md`
+- `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
+- `Docs/Guides/Visualizer_Reactivity_Authoring.md`
+- `Docs/Guardrails/Performance_Optimization_Contract.md`
 
-For Sphere specifically:
+Permanent shared-mode work must preserve source freshness, authored logical cadence, latest-state delivery, mode hotswap and viewport/normalization contracts.
 
-- accepted-experimental does not mean permanent/shared promotion;
-- user presets are arbitrary/sparse user-owned state;
-- Settings bodies are transactional;
-- persisted collapsible bucket state is sparse while canonical bucket identities remain schema;
-- current Voxel Sphere tests supersede the retired smooth/material Sphere test family;
-- reactivity/particle changes require the accepted A/B and current signal-contract tests, not a recreated old renderer.
+**Bubble is the strongest protected canary.** Idle traces are insufficient for any production change that touches Bubble cadence, simulation, payload/coalescing, reactive uniforms, event admission, attack/settle, elasticity/breathing, loud-passage expansion, ghost/tail motion or presentation timing. Such a change requires an explicit active-music installed lane plus operator feel. Never retune Bubble merely to satisfy a benchmark or stale golden.
 
-### 6.5 Transitions
+Voxel Sphere is accepted experimental architecture and remains isolated until explicit operator promotion. Its current contract lives in `Docs/Reference/Sphere_Visualizer.md`; current Voxel Sphere tests supersede the retired smooth/material Sphere family.
 
-Quick transition ownership remains current. Do not restore old compositor transition presenters to satisfy stale tests. Preserve transition request/state fencing, authored shader/math, lifecycle and current Quick implementations. Crumble's rehomed shader assertions now belong in the current Quick Crumble suite.
+User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runtime compacts selectable positions without renaming/deleting authored files or treating shipped manifests as catalogue authority.
 
-### 6.6 Media/runtime services
+### 6.5 Visualizer performance/trace authority
 
-Shared service tests should target current service ownership directly. Old `MediaWidget`/`WidgetManager` anchor setup is not a destination integration authority. Current injection/admission belongs to `rendering/widget_runtime_services.py`, Quick family binders and current Media presentation/runtime suites.
+R-87 is closed and **CHK26 / `a0bf70932c` is the accepted performance/freshness GOLDEN**. The frame-trace sidecar remains useful diagnostic authority and must not be removed merely because the investigation closed.
 
----
+High-value permanent guards include:
+
+- `tests/test_qtquick_runtime_purity_source.py` — forbids retired Python pacing/live-state ghosts and other source-level regressions;
+- `tests/test_frame_trace.py` — binary trace format, bounded rolling retention, optional phase/clip/Bubble attribution and backward-compatible reporting;
+- `tests/test_visualizer_switch_abc_harness.py` — causal switch/lifecycle scoring and freshness gates;
+- real-GL visualizer clip/render tests where driver/context behavior matters.
+
+The following are **not** valid “fixes” absent contradictory evidence: Python display-refresh pacing, `frameSwapped -> requestUpdate()` feedback, lower Bubble cadence/reactivity, global GIL switch-interval tuning, high-rate render text logging, or removal of inherited clip/stencil restoration fences. Detailed falsifiers live in R-87.
+
+### 6.6 Transitions
+
+Quick transition ownership is current. Do not restore old compositor transition presenters to satisfy stale tests.
+
+Protect:
+
+- canonical registry/settings/activation parity;
+- authored shader/math and exact endpoints;
+- request/run generation fencing;
+- lazy implementation/resource ownership;
+- transition completion/lifecycle;
+- no transition-driven background scheduler feedback loop.
+
+Real-GL/capture oracles supplement source/uniform tests when visual effect semantics cannot be proved statically. `Docs/Guides/Transition_Change_Checklist.md` owns the change procedure.
+
+### 6.7 Media and runtime services
+
+Shared service tests target current service ownership directly. Old `MediaWidget`/deleted manager anchor setup is not integration authority.
+
+Current injection/admission belongs to `rendering/widget_runtime_services.py`, retained Quick family binders/models and the actual runtime-service implementations. Preserve event-driven media ownership, bounded reconciliation/watchdogs, generation fencing and clean family dormancy/retirement.
+
+### 6.8 Caches, prefetch and long-lived workers
+
+Cache tests protect useful bounded caches, ownership and reclamation, not arbitrary low memory numbers. Do not “fix” a cache test by destroying hot-cache value or turning event-driven work into polling.
+
+Historical Bugs R-82/R-83 and related worker/lifetime records own the mechanisms that justified permanent regressions. The test suite should encode their surviving invariants rather than repeat the incident diary here.
 
 ## 7. Test infrastructure rules
 
 ### Destination profile
 
-- profile entries must resolve to existing files/node ids;
-- each target runs in its own fresh subprocess;
-- do not add an obsolete test merely because it once represented a migration gate;
-- add new durable regression tests when the behavior is current and likely to regress;
-- mark environment-specific tests rather than silently dropping them from documentation.
+- every profile target must resolve to an existing file/node id;
+- each target runs in a fresh subprocess;
+- do not add obsolete coverage merely because it once represented a migration gate;
+- add durable regressions for current behavior likely to recur;
+- keep environment-specific coverage visible rather than silently dropping it.
 
-### Fixtures
+### Goldens and replays
 
-Keep fixtures aligned with current architecture. A fixture that manufactures a retired owner can produce convincing green results for a product path that no longer exists.
+Do not regenerate goldens merely because architecture changed. If an approved product decision changes protected behavior, state the behavioral change explicitly and update the golden deliberately.
 
-### Goldens/replays
-
-Do not regenerate goldens merely because architecture changed. If a deliberate product decision changes protected behavior, state the behavioural change explicitly and update goldens deliberately after approval.
+The retired Visualizer replay executable must not be resurrected. Current temporal/BTF/viewport tests plus retained fixtures/goldens preserve authored evidence; Bubble follows `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
 ### Static source assertions
 
@@ -871,121 +252,73 @@ Static tests are appropriate for:
 - forbidden imports/owners;
 - canonical defaults/manifest/reference paths;
 - no timer/poller/thread additions;
-- isolation boundaries;
-- exact shader/source contract fragments where runtime execution is unavailable.
+- isolation/dormancy boundaries;
+- exact shader/source contract fragments when runtime execution is unavailable.
 
 They are insufficient for proving:
 
 - QML layout actually fits;
 - signal/lifetime ordering under Qt;
 - OpenGL output;
-- visual smoothness;
-- physical input/focus behavior;
+- visual smoothness/reactivity;
+- physical focus/input;
 - installed multi-monitor lifecycle.
 
----
+### Qt/QML sidecar
 
-## 8. Physical/installed acceptance
+Runtime-shaped Quick/QML evidence must inspect both `logs/screensaver.log` and `logs/screensaver_qml.log`. A missing QML sidecar means the Qt/QML evidence plane was unavailable; it cannot prove “zero QML errors.” See `Docs/Guides/Qt_QML_Observability.md`.
 
-Installed eyes-on validation remains mandatory when a change can materially affect pixels, timing, focus/input, multi-monitor ownership or GPU behavior.
+## 8. Installed and physical acceptance
+
+Installed eyes-on validation is mandatory when a change can materially affect pixels, timing, reaction, focus/input, multi-monitor ownership or GPU behavior.
 
 Examples:
 
-- Achievement Pulse Progress Pulse must be viewed at `0%`, one/two-digit values and `100%`, with and without Shelf Style, at normal and CUSTOM sizes;
-- About recolouring must be checked across materially different themes and after live theme switching;
-- legacy Settings stylesheet retirement must be checked with the file physically absent across Default Dark, contrasting light/metal themes, live theme switching, tray menu, color picker, tooltips/group boxes/check boxes, first-start, and native Glass/Acrylic;
-- Voxel Sphere changes require real music, silence, loud-passage and geometry review;
-- visualizer cadence/freshness work requires logs plus eyes-on response, not FPS alone;
-- real-GL shader/resource changes need the intended driver/context environment.
+- visualizer cadence/freshness work requires logs **and** eyes-on response;
+- Bubble-touching work requires active music, not idle-only traces;
+- Voxel Sphere reaction/particle changes require music, silence, loud passages and geometry review;
+- real-GL shader/resource changes require the intended driver/context environment;
+- Settings theme/backdrop changes require contrasting themes, live switching and the relevant native Glass/Acrylic path;
+- widget normalization changes need normal/CUSTOM reconstruction and Save/Cancel/slot replay where applicable;
+- multi-display ownership changes require a physical topology/hop lane when the seam is actually display-sensitive.
 
-A unit/static green does not overrule a reproducible installed visual regression.
+A unit/static green never overrules a reproducible installed visual or interaction regression.
 
----
+## 9. Current accepted physical landmarks
 
-## 9. Maintenance rule
+These are useful current acceptance landmarks, not instructions to rerun unrelated work:
+
+- **Qt Quick runtime cutover:** accepted; no fallback presenter is supported.
+- **Settings base stylesheet retirement:** accepted with `themes/dark.qss` physically absent; no replacement monolith/fallback loader.
+- **Clock face-state + geometry slots:** accepted across live face switching and saved slot replay.
+- **Settings bucket single-open/reachability:** accepted; sparse state and lazy page/mode reconstruction remain guarded.
+- **R-82/R-83 soak repairs:** accepted; orphaned derivative budget and Reddit zero-delay re-entry are closed.
+- **R-87 performance/freshness:** CHK26 / `a0bf70932c` accepted GOLDEN; CHK27-29 mapped the apparent residuals and closed further generic fishing. Sidecar instrumentation remains retained.
+
+Detailed dates, metrics and failed methods belong in Historical Bugs rather than being duplicated here.
+
+## 10. Maintenance and completion rule
 
 When changing tests or this guide:
 
 1. count current `test_*.py` modules from source instead of copying an old inventory;
 2. validate every maintained-profile target exists;
-3. run the broad collection diagnostic when practical and classify dependency blockers separately from product reds;
-4. delete whole-file fossils once their remaining current assertions are rehomed or no longer applicable;
-5. add **NEEDS RUN** immediately for newly added/recent tests that cannot execute in the current environment;
-6. remove that label only after an actual appropriate-environment run;
-7. update this file when architecture/test authority changes materially, not for every small assertion edit.
-
-Current 2026-09-14 inventory after this pass:
-
-```text
-367 test_*.py modules
-132 unique maintained destination targets
-0 missing destination target files
-```
-
-The 2026-09-14 additions place the Clock slot file, the Clock Settings preservation node and the legacy-Settings-stylesheet retirement contract in the maintained destination profile. Environment-gated entries remain **NEEDS RUN** until an intended Windows/PySide execution records their result.
-
-Git and `Docs/Historical_Bugs/` preserve migration history. `Docs/TestSuite.md` should stay current enough to tell an agent **what deserves trust now**.
-
----
-
-## 10. Completion rule
+3. run focused tests first, then the maintained profile when appropriate;
+4. classify dependency blockers separately from product REDs;
+5. delete obsolete whole-file tests once surviving assertions are rehomed;
+6. mark **NEEDS RUN** only for current tests that genuinely require another environment;
+7. remove NEEDS RUN only after an actual intended-environment execution;
+8. update this file when test authority/architecture changes materially, not for every small assertion edit;
+9. put failure archaeology in Historical Bugs, not numbered checkpoint sections here.
 
 A test-affecting slice is complete only when:
 
 - production behavior and test expectation agree on the current owner/contract;
 - directly runnable focused tests are green;
-- environment-blocked current tests are explicitly marked **NEEDS RUN** where appropriate;
-- obsolete tests have been deleted/re-homed rather than converted into permanent skips;
-- defaults/generated artifacts are checked when settings changed;
+- environment-blocked current coverage is described honestly;
+- obsolete tests are deleted/re-homed rather than converted into permanent skips;
+- defaults/generated artifacts are checked when Settings changed;
 - maintained-profile membership is valid;
 - installed/Qt/GL evidence is requested where static/headless proof cannot close the claim.
 
-
-## 0.13 2026-09-15 R-87 fine render-body trace boundary
-
-- `tests/test_frame_trace.py` now proves the version-1 binary reporter understands optional nested render events without breaking older traces, preserves event ordering around the real Quick node/render-host callsites, and reports node-prep / host / selected-mode / post-host timing. Direct source execution: **13/13 PASS**.
-- `tests/test_qtquick_runtime_purity_source.py` permanently rejects the retired Quick pacer live-state ghosts `skipped_deadlines`, `frame_swaps`, and `update_pending`. Historical log parsing remains tool-level only. Direct source execution: **12/12 PASS**.
-- Current directly runnable authority set: **51/51 PASS** (12 purity + 13 frame trace + 6 service/scheduler + 20 retained A/B/C harness). PySide/QML runtime tests remain installed-only in this container.
-
----
-
-## 0.14 2026-09-16 R-87 CHK24 visualizer clip-host attribution boundary
-
-- `tests/test_frame_trace.py` now contains **19** source-executable frame-trace contracts. The CHK24 additions prove clip-stage tracing is explicit/deferred rather than an ordinary-runtime sink path, preserve the untraced `VisualizerClipHost.begin(frame, state)` call, and prove the reporter resolves begin/end clip substages with median/p95/p99 plus parent-interval contribution. Current execution: **19/19 PASS**.
-- The version-1 binary format is unchanged. Re-running the supplied accepted CHK23 D1-heavy `screensaver_frame_trace.bin` through the CHK24 reporter produces byte-for-byte identical report text, proving older golden traces are not silently reinterpreted.
-- Current directly runnable authority set: **57/57 PASS** (12 runtime purity + 19 frame trace + 6 service/scheduler + 20 retained A/B/C harness). The full supplied tree contains **902 Python files; 902/902 compile**.
-- Installed PySide/Qt/OpenGL execution remains **NEEDS RUN** for the new clip markers. The next physical evidence is one D1-heavy run with explicit `--frame-trace`; no dual-display run is required because CHK24 does not touch display routing, retained-background ownership, transition scheduling or CUSTOM geometry ownership.
-
----
-
-## 0.15 2026-09-16 R-87 CHK25 clip-host attribution refinement
-
-- The CHK24 installed D1-heavy trace proved the parent seam is real and the observer is not manufacturing it, but also proved the first `mask_draw` bucket was too broad: it still contained GL state application/binding, four uniform uploads, and the literal `glDrawArrays()` call. CHK25 therefore refines attribution only; it does **not** change clip/stencil production behavior.
-- `tests/test_frame_trace.py` now contains **20** source-executable contracts. The new fixture proves refined CHK25 events resolve inherited scissor/front-stencil/back-stencil capture and mask binding-query / flag-query / state-programming / uniform-upload / literal-draw-call stages while older CHK24 traces retain their aggregate report without invented refined lines. Current execution: **20/20 PASS**.
-- Current directly runnable authority set: **58/58 PASS** (12 runtime purity + 20 frame trace + 6 service/scheduler + 20 retained A/B/C harness).
-- The full supplied tree remains **902 Python files; 902/902 compile**.
-- Reporter backward compatibility is explicitly re-proven: the installed CHK24 binary trace produces byte-for-byte identical default report output under the CHK24 and CHK25 reporters, and the accepted CHK23 trace produces byte-for-byte identical output when rerun with its original 15-second timeline option.
-- Installed PySide/Qt/OpenGL evidence remains **NEEDS RUN** for CHK25's refined markers. One settled D1-heavy `--frame-trace` run is sufficient; edit/resize is no longer required because CHK24 already falsified geometry/stencil-resource churn as the steady clip-tail owner.
-
----
-
-## 0.16 2026-09-16 R-87 CHK26 shared inherited-GL-state candidate
-
-- CHK25 installed evidence proved the literal first-mask `glDrawArrays()` is not the dominant clip-tail owner and exposed a repeated synchronous state-query pattern across begin mask -> render host -> end mask.
-- `tests/test_frame_trace.py` now contains **22** source-executable contracts. The CHK26 additions prove the clipped branch captures one shared non-stencil inherited state snapshot and passes it through the mode host, preserve the legacy standalone capture on the unclipped/overflow path, retain clip-local color-mask ownership, and verify the reporter recognizes the new shared-capture stage without rewriting CHK25 output.
-- The version-1 binary format remains unchanged. Re-running the installed CHK25 binary through the CHK26 reporter produces byte-for-byte identical report text because old traces have no CHK26 event.
-- Current directly runnable authority set: **60/60 PASS** (12 runtime purity + 22 frame trace/ownership + 6 service/scheduler + 20 retained A/B/C harness).
-- The full tree now contains **903 Python files; 903/903 compile**.
-- Installed PySide/Qt/OpenGL acceptance is **NEEDS RUN**. The required physical lane is D1-heavy with explicit `--frame-trace`: obtain a long settled Bubble window, then briefly exercise rounded-clip geometry and one mode hotswap, perform Settings teardown/rebuild, and return to settled Bubble. The candidate is rejected for clip bleed/stencil corruption/state leakage, lifecycle failure, Bubble/reactivity change, worse subjective smoothness, or degraded freshness even if duplicate-query trace stages collapse.
-
-
----
-
-## 2026-09-16 R-87 CHK27 GUI snapshot -> Quick sync attribution
-
-- The corrected CHK26 physical run validates the shared inherited-state candidate objectively: duplicated render-host/end-mask query stages collapse and the whole render body improves modestly without QML/native/lifecycle errors. Further clip micro-optimization is no longer the preferred performance lane.
-- `tests/test_frame_trace.py` now contains **27** source-executable contracts. CHK27 adds explicit contracts that the four new GUI/Quick markers are trace-only, preserve the legacy `GUI_SNAPSHOT_PUBLISH -> QUICK_SYNC_CONSUME` authority, timestamp `updatePaintNode()` entry only when a trace sink exists, and report a deterministic five-part split of the old aggregate seam.
-- Current directly runnable authority set: **67/67 PASS** (12 runtime purity + 27 frame trace/ownership/retention/attribution + 8 scheduler-trace tooling + 20 retained A/B/C harness).
-- Full tree remains **903 Python files; 903/903 compile**.
-- Reporter backward compatibility is re-proven: CHK25 and CHK26 installed binary traces produce byte-for-byte identical output under the CHK26 and CHK27 reporters when CHK27 events are absent.
-- Installed PySide/Qt execution is **NEEDS RUN** only for the new attribution markers. One 60–90 s settled D1-heavy `--frame-trace` run is sufficient; CHK27 changes no pixels, GL ownership, hotswap/lifecycle behavior, display routing, transition scheduling or pacing policy.
+Git and `Docs/Historical_Bugs/` preserve history. `Docs/TestSuite.md` should remain small enough to answer one question quickly: **what deserves trust now?**

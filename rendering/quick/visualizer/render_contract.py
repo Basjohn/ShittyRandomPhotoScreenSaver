@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Protocol
 
+from core.performance.frame_trace import FrameTraceEvent, FrameTraceSink
 from widgets.spotify_visualizer import mode_capabilities
 from widgets.spotify_visualizer.render_state import VisualizerRenderSnapshot
 
@@ -52,6 +54,59 @@ def snapshot_is_render_admissible(snapshot: VisualizerRenderSnapshot) -> bool:
     return True
 
 
+class VisualizerModeTraceContext:
+    """Deferred per-mode timestamps for one explicit frame-trace draw.
+
+    Mode renderers sample boundaries with ``perf_counter_ns`` but never write
+    the binary sink inline.  The owning render node flushes these samples only
+    after the parent ``RENDER_DRAW`` marker, so adding deeper attribution does
+    not contaminate the render interval being measured.  Ordinary runtime never
+    constructs this object because there is no trace sink without explicit
+    ``--frame-trace``.
+    """
+
+    __slots__ = (
+        "sink",
+        "screen_index",
+        "revision",
+        "logical_timestamp_ns",
+        "auxiliary",
+        "_samples",
+    )
+
+    def __init__(
+        self,
+        sink: FrameTraceSink,
+        *,
+        screen_index: int,
+        revision: int,
+        logical_timestamp_ns: int,
+        auxiliary: int,
+    ) -> None:
+        self.sink = sink
+        self.screen_index = int(screen_index)
+        self.revision = int(revision)
+        self.logical_timestamp_ns = int(logical_timestamp_ns)
+        self.auxiliary = int(auxiliary)
+        self._samples: list[tuple[FrameTraceEvent, int]] = []
+
+    def mark(self, event: FrameTraceEvent) -> None:
+        self._samples.append((event, time.perf_counter_ns()))
+
+    def flush(self) -> None:
+        samples = self._samples
+        self._samples = []
+        for event, timestamp_ns in samples:
+            self.sink.record(
+                event,
+                screen_index=self.screen_index,
+                revision=self.revision,
+                logical_timestamp_ns=self.logical_timestamp_ns,
+                auxiliary=self.auxiliary,
+                timestamp_ns=timestamp_ns,
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class QuickVisualizerRenderFrame:
     snapshot: VisualizerRenderSnapshot
@@ -59,6 +114,7 @@ class QuickVisualizerRenderFrame:
     logical_size: tuple[float, float]
     matrix_values: tuple[float, ...]
     quad_vao: int
+    trace_context: VisualizerModeTraceContext | None = None
 
     def __post_init__(self) -> None:
         if len(self.viewport) != 4 or min(self.viewport[2:]) <= 0:
@@ -86,6 +142,7 @@ __all__ = [
     "QUICK_VISUALIZER_VERTEX_SOURCE",
     "QuickVisualizerRenderFrame",
     "QuickVisualizerRenderer",
+    "VisualizerModeTraceContext",
     "snapshot_has_current_reactive_source",
     "snapshot_is_render_admissible",
 ]

@@ -2,7 +2,7 @@
 
 These flags admit *opt-in* Visualizer diagnostic tooling retained after the
 closed post-switch investigation (``Docs/Reference/
-Visualizer_Post_Switch_Performance_Investigation.md``). They are **not** product feature gates:
+R-80_ABC_EventLoop_Rolling_Window_Contamination.md``). They are **not** product feature gates:
 ``core/dev_gates.py`` deliberately does not own them, because ``--abc-drive`` and
 ``--viz-switch-telemetry`` are experiment/debug admissions rather than shippable
 capabilities.

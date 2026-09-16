@@ -435,7 +435,7 @@ simulation authority.
 
 ## 14. Family fidelity rule
 
-Migration preserves working family-specific product behavior unless a deliberate product change is requested.
+Architecture/refactor work preserves working family-specific product behavior unless a deliberate product change is requested.
 Preserve content hierarchy, meaningful layout relationships, interaction/menu/action semantics, family-specific
 geometry, authored animation and independently-authored visual relationships.
 

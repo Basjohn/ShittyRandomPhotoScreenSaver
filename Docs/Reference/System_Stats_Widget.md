@@ -1,7 +1,7 @@
-# System Stats Widget — Low-Burden Product Decomposition
+# System Stats Widget — Current Product Contract
 
 Status: **CPU/MEMORY/UPTIME/NETWORK IMPLEMENTED / PUBLIC — CURRENT ARCHITECTURE REFERENCE**
-Last updated: 2026-09-13
+Last updated: 2026-09-16
 Current sequencing authority: `Current_Plan.md`
 Stable widget/family id: `system_stats`
 
@@ -13,17 +13,13 @@ A small System Stats card is acceptable **only if its own measurement cost is be
 remains completely dormant without an admitted card consumer**. The existing `--usage` telemetry is useful evidence and
 must remain diagnostics-only; it is intentionally much broader than this product needs.
 
-This decomposition began with a sampler admission experiment. CPU/RAM cleared the source-cost gate; the GPU/VRAM candidate
-did not. A later product pass admitted two additional OS-maintained values on the **same** sampler pulse: boot-derived
-system uptime and aggregate network receive/transmit counters. No second cadence or hardware/provider layer was added.
+The admitted source set is intentionally small: CPU/RAM cleared the source-cost gate, while the persistent GPU/VRAM candidate did not. System uptime and aggregate network receive/transmit counters ride the **same** sampler pulse; no second cadence or hardware/provider layer exists.
 
 ### 0.1 Landed implementation state
 
-S0 admitted only whole-system CPU/RAM: direct source observations measured roughly 0.5–1.5 ms across idle and bounded
-CPU-contention runs. The persistent Windows GPU/VRAM candidate returned `query_error`, took about 363 ms on first setup,
-closed all query/counter state and is **not** in the product. No diagnostic or PID-scoped fallback was added.
+Whole-system CPU/RAM source observations measured roughly 0.5–1.5 ms across idle and bounded CPU-contention runs. The persistent Windows GPU/VRAM candidate returned `query_error`, took about 363 ms on first setup, closed all query/counter state and is **not** in the product. No diagnostic or PID-scoped fallback was added.
 
-S1-S6 are implemented as a normal product family. The family is activated by default so Setup and its pill are visible;
+System Stats is implemented as a normal product family. The family is activated by default so Setup and its pill are visible;
 the member remains disabled by default. One
 runtime-generation owner submits a low-priority sample only while at least one real retained-card lease is active;
 additional displays share its immutable snapshot. The cadence is fixed-delay from completion with a canonical 10-second minimum/default (user-adjustable slower); one sample may be in
@@ -38,7 +34,7 @@ uses the scale-aware 1.25 px baseline so it visually joins the authored 5 px acc
 
 The card uses semantic Widget Theme roles, ordinary stacking/global-CUSTOM normalization and an original packaged
 monochrome gear/spanner header asset. The Widgets-page family pill sizes to its actual label instead of clipping `System
-Stats`. The temporary `--devstats` feature gate is retired, with a one-time profile migration admitting the formerly
+Stats`. The temporary `--devstats` feature gate is retired, with one-time profile compatibility admission for the formerly
 hidden family without enabling its member; the old CLI token is only an inert mode-parser compatibility no-op. Installed
 soak/visual debt lives only in `Current_Plan.md`.
 
@@ -78,26 +74,7 @@ Version 1 must not collect or display:
 
 Do not turn product Settings into a telemetry-profiler surface.
 
-## 3. Evidence from the preserved diagnostic run
-
-Durable evidence: `logs/evidence_chest/logsb11575b976.zip`.
-
-The 2026-09-12 `--usage` run demonstrates two things:
-
-1. low-frequency off-thread diagnostics can coexist with the application;
-2. `UsageTelemetryService` / `ProcessUsageCollector` is far too broad to reuse as a 5–10 second live product sampler.
-
-Observed audit summary from that run:
-
-- ordinary/light collections roughly ~24.5 ms median / ~33.9 ms p95;
-- heavy samples roughly ~67 ms median / ~107 ms p95;
-- at least one contention outlier above one second;
-- the diagnostic collector intentionally reads process memory/USS/handles/IO and periodically performs GIL-held
-  process/thread topology work that the product card does not need.
-
-Therefore **do not instantiate, wrap, subclass or silently enable `UsageTelemetryService` for System Stats**.
-
-## 4. Architectural principle — event-owned lifetime, sparse sampled values
+## 3. Architectural principle — event-owned lifetime, sparse sampled values
 
 Activation/dormancy should be event-owned. Usage percentages themselves are rate measurements and require observations
 over time, so a tiny bounded periodic sample while a consumer exists is acceptable and more truthful than pretending
@@ -126,9 +103,9 @@ No QML polling timer. No timer per monitor. No sampler when lease count is zero.
 - Sampling phase does not need wall-clock exactness. Low priority and bounded drift are preferable to competing with
   visual presentation.
 
-## 5. Cheap source candidates
+## 4. Admitted source set
 
-### 5.1 CPU — preferred
+### 4.1 CPU — admitted
 
 Prefer a whole-system OS cumulative-counter source where one cheap read gives total/idle/kernel/user time. Compute usage
 from the delta between the previous accepted sample and the current sample.
@@ -143,7 +120,7 @@ Requirements:
 An existing cheap library helper may be used only if measurement proves it does not invoke the expensive process-tree
 paths used by `--usage`.
 
-### 5.2 RAM — preferred
+### 4.2 RAM — admitted
 
 Read one whole-system memory-status snapshot on the same sampling pulse:
 
@@ -151,26 +128,26 @@ Read one whole-system memory-status snapshot on the same sampling pulse:
 - no USS/private/process memory;
 - no extra cadence.
 
-### 5.3 Uptime — admitted
+### 4.3 Uptime — admitted
 
 Capture boot time once when the admitted source is constructed and derive elapsed system uptime on the existing sample
 pulse. No polling source, history or per-frame clock is required.
 
-### 5.4 Network throughput — admitted
+### 4.4 Network throughput — admitted
 
 Read one aggregate OS network byte-counter snapshot on the existing pulse. The first observation warms a private baseline;
 subsequent receive/transmit rates are deltas divided by actual monotonic elapsed time. This performs no network request,
 per-process enumeration or adapter rediscovery and owns no second cadence.
 
-### 5.5 GPU/VRAM — rejected historical candidate
+### 4.5 GPU/VRAM — rejected candidate
 
 The S0 Windows PDH candidate was too costly/fragile for this product and remains rejected. There is no pending GPU/VRAM
 implementation phase, fallback provider or hardware-driver work in System Stats. Reconsideration requires an explicit new
 operator request rather than this document acting as a dormant invitation.
 
-## 6. Sampler owner
+## 5. Sampler owner
 
-Introduce one small product sampler owner only after S0 proves the source cost.
+One small product sampler owner coordinates the admitted source set.
 
 Recommended ownership:
 
@@ -199,7 +176,7 @@ Do not create one sampler per display/card.
 A future second system-stat card may justify shared infrastructure then. Do not prebuild a generic monitoring framework
 now.
 
-## 7. Dormancy contract
+## 6. Dormancy contract
 
 Implemented admission:
 
@@ -223,7 +200,7 @@ With zero effective consumers:
 
 Dormancy must be tested by counters/owner cardinality, not inferred because the card is invisible.
 
-## 8. Threading / scheduling
+## 7. Threading / scheduling
 
 Sampling must not run on the GUI thread or Visualizer logical-cadence thread.
 
@@ -240,7 +217,7 @@ Prefer:
 
 Do not add a second general scheduler framework for this card.
 
-## 9. Accepted snapshot
+## 8. Accepted snapshot
 
 The landed cross-thread payload is tiny and immutable:
 
@@ -261,7 +238,7 @@ collector.
 Unchanged values may still advance accepted age/revision if needed for freshness, but presentation should not rebuild
 its tree just because another 10-second sample arrived.
 
-## 10. Product UI
+## 9. Product UI
 
 The card is deliberately quiet and readable, with four fixed metric panels:
 
@@ -292,22 +269,13 @@ Exact labels/layout are eyes-on work, but principles are binding:
 - rejected GPU/VRAM is omitted; the admitted metrics do not collapse into a different card architecture when one value is warming
   or unavailable.
 
-## 11. Icon contract
+## 10. Icon contract
 
-No suitable gear/spanner image asset currently exists in the tree; the only SVG assets are Settings-control glyphs.
+System Stats uses the landed **project-owned monochrome gear + spanner icon** through the normal resource/build/package path. Tint/opacity follows existing header/icon semantics. Do not replace it with a fetched web icon, icon-font dependency or family-local loader.
 
-Implementation order:
+The icon is decorative identity only; it owns no animation cadence or accelerated surface.
 
-1. inspect the current branded-header/semantic glyph path and reuse a suitable project/system tools/settings glyph if it
-   can be themed and packaged consistently;
-2. if no suitable canonical glyph exists, create a **small original project-owned monochrome gear + spanner icon** for
-   System Stats;
-3. add it through the normal resource/build/package path and tint/opacity it through existing header/icon semantics;
-4. do not fetch a random web icon, add an icon-font dependency, or create a family-local icon loader.
-
-The icon is decorative identity only; it must not require a new accelerated surface or animation cadence.
-
-## 12. Retained Quick / ordinary normalization
+## 11. Retained Quick / ordinary normalization
 
 System Stats uses the same ordinary retained-card rules as the mature widgets:
 
@@ -326,11 +294,9 @@ System Stats uses the same ordinary retained-card rules as the mature widgets:
 Do not create a custom-GL card merely because the data resembles a performance HUD. QML rectangles/text/bars are
 sufficient.
 
-## 13. Settings contract
+## 12. Settings contract
 
-Only add canonical Settings/default state after sampler S0 admission passes.
-
-Landed settings:
+Canonical Settings/default state is landed and limited to:
 
 - family activation entry;
 - Enabled;
@@ -345,108 +311,7 @@ strategy. The interval control changes the one existing shared fixed-delay owner
 Defaults live only in `core/settings/default_settings.py`; derived snapshot/SST outputs must be regenerated/audit-gated.
 Any new bucket ids participate in canonical UI-state schema with closed-by-default, one-open local scope.
 
-## 14. S0 admission experiment — mandatory before UI
-
-Build a tiny non-product probe against the current tree before adding card code.
-
-Compare:
-
-```text
-A: feature absent / no sampler
-B: CPU + RAM sampler at 10 s
-C: CPU + RAM + candidate GPU/VRAM sampler at 10 s
-D: historical faster-cadence comparison only; not an admitted product setting
-```
-
-Test under:
-
-- idle desktop;
-- normal SRPSS widgets/visualizer;
-- the deliberate contention shape used in the preserved 2026-09-12 evidence (heavy external CPU/build/game load where
-  practical);
-- multi-display presentation.
-
-Capture:
-
-- source collection p50/p95/max;
-- worker execution duration;
-- skipped cadence edges;
-- event-loop p95/p99/max;
-- Visualizer logical revision Hz / snapshot age / tick-dt tail;
-- sampler owner/thread/task/handle cardinality;
-- process CPU delta if discernible.
-
-Admission is based on *no meaningful regression in latency/freshness*, not on a pretty average collection number.
-
-Target expectation for CPU/RAM is low-single-digit milliseconds or better. If a supposedly cheap source routinely takes
-tens of milliseconds, investigate/reject it rather than normalizing that cost because the cadence is only 10 seconds.
-
-## 15. Implementation phases
-
-### S0 — sampler feasibility — CPU/RAM admitted, GPU/VRAM rejected
-
-- prove cheap whole-system CPU/RAM source;
-- probe honest GPU/VRAM candidate separately;
-- A/B the admitted 10 s product floor; historical faster probes do not authorize a faster user setting;
-- no product Settings/UI yet.
-
-### S1 — canonical owner + leases — implemented
-
-- add the minimum sampler service;
-- generation fencing;
-- low-priority managed work;
-- first/last lease start/stop;
-- explicit source handle close.
-
-### S2 — dormancy tests — implemented
-
-- family activated but card disabled -> zero sampler work;
-- card enabled on one display -> one sampler;
-- same card on multiple displays -> still one sampler;
-- last presentation removed -> sampler stops;
-- runtime recreation -> old completion rejected, old handles closed;
-- Settings open/close -> zero runtime sampler side effects.
-
-### S3 — canonical Settings/default descriptor — implemented
-
-Only after S0–S2 are green:
-
-- add family/widget descriptor and defaults;
-- regenerate derived settings artifacts;
-- add lazy Settings builder/body;
-- maintain activation vs ordinary enabled distinction.
-
-### S4 — retained card — implemented
-
-- CPU/RAM card first;
-- stable geometry/model identity;
-- unavailable/warming/error states;
-- no graphs.
-
-### S5 — GPU/VRAM candidate — probed and rejected
-
-The candidate did not pass admission and is not pending work. No product fallback/provider was added.
-
-### S6 — icon / presentation polish — implemented
-
-- reuse canonical glyph if viable;
-- otherwise add original gear+spanner resource;
-- Widget Theme/Style Overrides/glow/stacking/CUSTOM acceptance;
-- finite sample-to-sample visual easing only if it helps readability.
-
-### S7 — retained soak checklist
-
-Implementation is landed. Installed/long-run validation status is owned only by `Current_Plan.md`; this section preserves the durable soak contract.
-
-- off-vs-on contention comparison;
-- 10-second long run;
-- repeated enable/disable;
-- display/runtime recreation;
-- multi-monitor/card cardinality;
-- installed build resource/icon validation;
-- keep the widget public only while it remains beneath a meaningful burden on the rest of SRPSS.
-
-## 16. Failure / fallback policy
+## 13. Failure / fallback policy
 
 If GPU/VRAM is expensive or ambiguous:
 
@@ -466,7 +331,7 @@ Do **not** respond by:
 - using `--usage` diagnostics as a silent fallback;
 - leaving a warm sampler resident while the card is disabled.
 
-## 17. Acceptance summary
+## 14. Acceptance summary
 
 Current implementation contract (installed validation status lives in `Current_Plan.md`):
 

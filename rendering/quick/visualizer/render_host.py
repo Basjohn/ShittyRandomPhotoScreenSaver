@@ -12,7 +12,11 @@ from core.performance.frame_trace import FrameTraceEvent, logical_timestamp_ns
 
 from .gl_state import InheritedGlState
 from .implementation_registry import resolve_quick_visualizer_renderer
-from .render_contract import QuickVisualizerRenderFrame, QuickVisualizerRenderer
+from .render_contract import (
+    QuickVisualizerRenderFrame,
+    QuickVisualizerRenderer,
+    VisualizerModeTraceContext,
+)
 from .telemetry import (
     VisualizerRenderHostLifecycleSnapshot,
     VisualizerRenderHostLifecycleTelemetry,
@@ -141,6 +145,7 @@ class QuickVisualizerRenderHost:
         frame_trace: "FrameTraceSink | None" = None,
         screen_index: int = -1,
         inherited_gl_state: InheritedGlState | None = None,
+        mode_trace_context: VisualizerModeTraceContext | None = None,
     ) -> str:
         mode_id = snapshot.logical.mode_id
         # A mode switch is observed on the render thread, where the GL context
@@ -174,6 +179,7 @@ class QuickVisualizerRenderHost:
             logical_size=logical_size,
             matrix_values=matrix_values,
             quad_vao=self._quad_vao,
+            trace_context=mode_trace_context,
         )
         inherited = (
             inherited_gl_state

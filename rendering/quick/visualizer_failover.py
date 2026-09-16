@@ -1,4 +1,4 @@
-"""Presentation-neutral Visualizer CUSTOM failover state (E2.7).
+"""Presentation-neutral Visualizer CUSTOM failover state.
 
 Process-scoped, runtime-only record of the single Visualizer's CUSTOM
 failover/reclaim lifecycle. This is the durable state authority that must
@@ -15,10 +15,9 @@ and retires nothing itself; ``rendering/quick/visualizer_failover_lifecycle.py``
 owns the policy and drives an injected topology over this state.
 
 Never persisted — a temporary fallback must not become configuration authority;
-the record is cleared on runtime teardown. Recovered/re-homed from the legacy
-``rendering/multi_monitor_coordinator.py`` E2.7 failover authority deleted with
-the physical presentation host; the generation/grace/reclaim contract is
-unchanged.
+the record is cleared on runtime teardown. The retired multi-monitor presentation host once carried this state; current
+ownership lives here so the generation/grace/reclaim contract survives Quick
+runtime rebuilds without reviving that host.
 """
 
 from __future__ import annotations

@@ -1,9 +1,9 @@
 # Future Work implementation plan
 
-Last updated: 2026-09-13
+Last updated: 2026-09-16
 
-The Qt Quick migration is closed and operator-accepted. This file no longer mirrors migration-close gates or keeps
-completed future slices as pseudo-work. `Current_Plan.md` owns active sequencing; `Future_Work.md` owns dormant feature
+The Qt Quick runtime is the accepted architecture. This file does not mirror closed cutover gates or keep
+completed feature slices as pseudo-work. `Current_Plan.md` owns active sequencing; `Future_Work.md` owns dormant feature
 intent. This file is only a compact handoff/router for dormant future implementation.
 
 ## Active/promoted work is not owned here
@@ -25,16 +25,15 @@ Anything promoted into active execution is intentionally omitted from this file.
 ## Golden / landed work is not backlog
 
 - Current accepted Voxel Sphere reactivity/motion/presets are golden and remain isolated. No Sphere implementation work
-  is queued here; future retuning/migration requires an explicit operator request.
+  is queued here; future retuning or promotion requires an explicit operator request.
 - Widget interaction glow is landed and operator-accepted.
 - Shared readiness-gated artwork replacement is landed current architecture (`ArtworkFadeImage`); do not queue a second artwork-transition owner.
 - Slide Linear/Elastic/Wobble/Flex are landed current architecture. Do not recreate their old proposal sections.
-- Live Edit commit and ordinary resize/auto-fit normalization are landed/accepted; their old decomposition documents are
-  historical references only.
+- Live Edit commit and ordinary resize/auto-fit normalization are landed/accepted; their retired decomposition diaries are removed from the live docs tree and remain available through source control.
 
 ## Cleanup interaction
 
-Future implementation does not reopen cleanup/migration fossils. Before coding a selected item, inspect
+Future implementation does not reopen retired cleanup or superseded ownership. Before coding a selected item, inspect
 `Future_Cleanup.md` only for a genuine technical prerequisite. READY cleanup does not become feature scope merely
 because nearby code is touched. Never restore retired QWidget/native-event/compositor/polling owners to satisfy an old
 test.

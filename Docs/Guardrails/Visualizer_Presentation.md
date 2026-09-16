@@ -62,7 +62,7 @@ The canonical resolved technical cache is also split by consumer:
 
 Needing the shared BeatEngine is not a reason to retain a QWidget owner.
 
-Accepted audio-analysis ownership after H is one persistent serial `visualizer.audio_analysis` compute lane: one packet executing, at most one newest pending source replacement, retained detached DSP state across ordinary frames, explicit config/activation/reset epoch invalidation, and stale-result rejection across an epoch boundary. There is no generic per-frame Future/task fallback. Preserve the small stable previous-bars packet snapshot unless a replacement correctness proof removes the live-list mutation race.
+Accepted audio-analysis ownership is one persistent serial `visualizer.audio_analysis` compute lane: one packet executing, at most one newest pending source replacement, retained detached DSP state across ordinary frames, explicit config/activation/reset epoch invalidation, and stale-result rejection across an epoch boundary. There is no generic per-frame Future/task fallback. Preserve the small stable previous-bars packet snapshot unless a replacement correctness proof removes the live-list mutation race.
 
 ## 2. One logical clock
 
@@ -100,8 +100,7 @@ The GUI/Quick boundary must be:
 - safe for Quick scene/render-thread ownership;
 - independent of physical paint completion.
 
-The migration removes obsolete GUI `present_tick`/QRhiWidget ownership as pixels move to Quick rather
-than wrapping it permanently inside another layer.
+Obsolete GUI `present_tick`/QRhiWidget ownership is retired; do not wrap or recreate it around the current Quick bridge.
 
 ### Bridge population is an ownership bar
 
@@ -249,7 +248,7 @@ left/right edge -> viewport width only
 top/bottom edge -> viewport height only
 ```
 
-All six registered modes must remain viewport-resize-capable through their declared policy. The five established carded modes, including Bubble, share this destination operation; Sphere uses its frameless viewport policy. The core capability policy is landed; do not reintroduce a false Bubble gate as a workaround for viewport defects.
+All six registered modes must remain viewport-resize-capable through their declared policy. The five established carded modes, including Bubble, share this current operation; Sphere uses its frameless viewport policy. The core capability policy is landed; do not reintroduce a false Bubble gate as a workaround for viewport defects.
 
 Do not implement wide/tall visualizers by stretching a rendered texture or scaling X and Y independently. Do not use a
 retired per-mode growth value as a hidden viewport-extent alias.
@@ -349,7 +348,7 @@ For frameless modes it fades content without manufacturing invisible card depend
 Do not create competing QWidget and Quick opacity owners for the same visible pixels, and do not add a
 second Quick fade animation/clock for the visualizer content.
 
-During migration, temporary old/new paths must never both present the same visualizer simultaneously.
+Retired and current presentation paths must never both present the same visualizer simultaneously.
 
 ## 12. Source freshness
 
@@ -376,8 +375,7 @@ Ordinary Pause/Play preserves:
 - render identity where practical;
 - no cold-start detour.
 
-The migration may change the pixel owner; it must not reintroduce playback debounce or recreate the
-logical runtime on ordinary Pause/Play.
+Pixel-owner changes must not reintroduce playback debounce or recreate the logical runtime on ordinary Pause/Play.
 
 ## 14. Fidelity
 
@@ -433,9 +431,9 @@ Retired state cannot enter a replacement Quick scene, trigger reveal, or mutate 
 
 ## 16. Native renderer rule
 
-A native/C++ visualizer renderer is not a migration phase.
+A native/C++ visualizer renderer is not a default optimization step.
 
-Only consider localized native code if profiling of the migrated Quick implementation proves a
+Only consider localized native code if profiling of the current Quick implementation proves a
 specific Python render callback materially limits the result.
 
 Keep the same logical contract and the same display `QQuickWindow`.

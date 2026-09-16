@@ -1,30 +1,16 @@
-"""Presentation-neutral runtime capability/lifecycle owner (Phase E1).
+"""Presentation-neutral widget capability, lifecycle and service owner.
 
-``WidgetRuntimeManager`` is the Phase-E destination owner named in
-``Docs/QtQuick_Migration/04_Widget_Runtime_Presentation.md`` (§6.1) and
-``Docs/QtQuick_Migration/07_Settings_Capability_Activation.md`` (§7). It owns
-application-level widget-family capability **admission** (dependency-aware —
-activation + required-family satisfaction, not shared-provider consumer counting)
-and presentation-neutral runtime **lifecycle routing**.
+``WidgetRuntimeManager`` owns application-level widget-family capability
+admission and presentation-neutral runtime service lifetimes. It deliberately
+does **not** create or own QWidget/Quick instances or pixels. The retained
+presentation host supplies the small runtime-widget registry surface; this
+manager admits families, routes lifecycle/capability reactions, and owns
+provider/model service lifetimes on behalf of admitted runtime widgets.
 
-It deliberately does **not** create or own QWidget/Quick instances or runtime
-pixels. The current presenter host supplies a small runtime-widget registry
-contract; this owner *admits* families, *routes* lifecycle/capability reactions, and owns
-presentation-neutral runtime *service* (provider/model) lifetimes on behalf of
-runtime widgets. At module top it imports no QWidget/Quick/provider/renderer
-code — only the neutral capability/catalog authorities and logging; the
-transitional E2.7 failover bridge and the family-specific runtime-service specs
-are imported lazily at their call sites, so this owner never becomes a
-provider/presenter switchboard.
-
-E1 slice 1 established this owner by extracting admission + lifecycle routing out
-of the ``WidgetManager`` god-object (a net reduction there); the host keeps thin
-delegating wrappers so its public API and the E2.7 confirmed-retirement contract
-(``cleanup_widget`` returning an explicit bool) are preserved. E1 slice 2 moved
-the first Reddit provider lifetime here; Phase F5 completes that lease as the
-full per-member provider/cache/cadence/fetch/generation runtime. Family-specific
-construction and injection remain in the neutral
-``rendering.widget_runtime_services`` registry.
+Module-level imports stay presentation-neutral. Family-specific runtime-service
+specs resolve lazily at their call sites so this owner does not become a
+provider/presenter switchboard. Retirement remains explicit and generation-safe.
+Current ownership is summarized in ``Docs/Contracts.md`` and ``Spec.md``.
 """
 from __future__ import annotations
 
@@ -368,7 +354,7 @@ class WidgetRuntimeManager:
     def cleanup_widget(self, name: str) -> bool:
         """Cleanup a widget using the lifecycle system.
 
-        Returns an explicit success bool. The E2.7 confirmed-retirement contract
+        Returns an explicit success bool. The confirmed-retirement contract
         depends on this: a caller may only discard a live-owner record when
         cleanup is confirmed.
         """

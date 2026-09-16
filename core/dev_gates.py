@@ -3,9 +3,10 @@
 The remaining product gate is activated via command line:
     python main.py --debug --devsteam # show the unfinished Steam Journey scaffold
 
-``main.parse_screensaver_args`` also strips retired compatibility tokens such as
-``--devcurve`` and ``--devstats``; neither controls product availability. Tests
-can call ``force_gate()`` to enable the remaining gate without CLI flags.
+``main.parse_screensaver_args`` still strips several retired/no-op CLI tokens;
+that parser compatibility is cleanup debt tracked in ``Future_Cleanup.md`` and
+does not control product availability. Tests can call ``force_gate()`` to enable
+the remaining gate without CLI flags.
 
 Diagnostic experiment admissions (``--abc-drive``, ``--viz-switch-telemetry``) are
 **not** product feature gates and are deliberately owned elsewhere; see

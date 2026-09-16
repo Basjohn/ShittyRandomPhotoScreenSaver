@@ -1,6 +1,6 @@
 # Runtime Efficiency / Change Safety Guardrails
 
-Last updated: 2026-09-01
+Last updated: 2026-09-16
 
 Core principle:
 
@@ -10,7 +10,7 @@ Canonical performance admission/acceptance checklist and reference envelopes: `D
 
 ## 1. Architecture baseline
 
-Accepted destination:
+Accepted runtime:
 
 - one standalone threaded `QQuickWindow` per physical display;
 - one `VisualizerLogicalRuntime` for authored visualizer cadence;
@@ -36,7 +36,7 @@ Short-circuit before:
 
 ## 3. Shared execution resources
 
-After migration, distinguish:
+Under the current architecture, distinguish:
 
 - GUI-thread work;
 - Quick render-thread work;
@@ -50,17 +50,13 @@ Do not infer that moving presentation to a render thread makes GUI or Python con
 Do not infer that any remaining heavy-load hole proves a C++ presenter is required.
 
 
-## 3A. Visualizer performance safety after H
+## 3A. Visualizer performance safety
 
 R-71 is the accepted performance boundary: one persistent serial `visualizer.audio_analysis` lane, one in-flight + newest pending source, retained detached DSP state across ordinary frames, and explicit rebuild/fencing at real config/activation/reset epochs. No generic per-frame Future/task fallback.
 
 R-69 is the performance admission veto. A change is **not** an optimization if it improves GC/FPS/skip counters by weakening visible musical response, shrinking Bubble head/radius deltas with viewport extent, suppressing Ghost/history displacement, lowering authored cadence, increasing source/snapshot age, or coalescing away protected transient edges. Apply the same rule to all Visualizer modes.
 
-Rare deep GC pauses remain late-J evidence debt. `Docs/Guardrails/Performance_Optimization_Contract.md` owns the target order: rare active latency tails and exact allocation/lifetime mechanisms first; raw GC count, average FPS, CPU/GPU and resource counts are secondary. Change GC thresholds/lifetime policy only from a measured mechanism; do not tune collection counters in isolation.
-
-The 2026-09-01 modest-load reference also showed why: perceived quality was excellent with ~89.9 Hz logical Visualizer publication and ~20 ms median snapshot age while the worst gen-2 pause fell to ~67.7 ms. Protect that freshness/latency shape rather than optimizing one counter.
-
-A paired later log comparison strengthens the mechanism: every sampled Gen2 event aligned with a Bubble wall-clock gap of similar duration, including ~41–47 ms Gen2 scans that collected zero objects in the lighter run, while Bubble's own compute/cadence counters stayed healthy. Treat wall-clock inter-tick time + GC callback duration/yield as the attribution seam; internal per-tick work timing alone cannot see a process-wide stop-the-world pause. Non-GC stalls remain a separate J attribution track.
+The generic performance campaign is closed at CHK26 / `a0bf70932c`. Historical GC attribution remains useful only if a future reproduced hitch points back to collection pauses: wall-clock inter-tick time plus GC callback duration/yield is the relevant seam, while raw collection count is not. Do not retune GC thresholds, forced-collection timing or Visualizer cadence without a current mechanism-specific failure. `Docs/Guardrails/Performance_Optimization_Contract.md` owns the reopen gate and accepted evidence.
 
 ## 4. Runtime overlays
 
@@ -131,7 +127,7 @@ If machinery increases and named work does not disappear, it is probably not an 
 
 Native code requires evidence of a specific local bottleneck.
 
-It is not an architectural escape hatch from doing the Quick migration correctly.
+It is not an architectural escape hatch from the accepted Quick ownership model.
 
 Any native renderer remains subordinate to the one-Quick-window-per-display topology.
 

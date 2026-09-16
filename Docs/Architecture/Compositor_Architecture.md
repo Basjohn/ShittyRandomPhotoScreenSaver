@@ -1,6 +1,6 @@
 # Runtime Presentation Architecture
 
-Last updated: 2026-08-30
+Last updated: 2026-09-16
 
 ## 1. Decision
 
@@ -18,14 +18,13 @@ one composed runtime scene
 physical presentation
 ```
 
-The 2026-08-20 P0 experiment materially beat the QWidget/QRhiWidget reference under both light and
-heavy external load.
+The one-surface Quick design was physically compared against the former QWidget/QRhiWidget reference and accepted under both light and heavy external load.
 
 This decision is closed unless new production evidence contradicts it.
 
-## 2. Migration status
+## 2. Retired physical path
 
-H removed the previous physical presenter after the Quick destination became production-authoritative:
+The accepted Quick runtime replaced the former physical presenter after caller proof:
 
 ```text
 DisplayWidget
@@ -33,18 +32,16 @@ DisplayWidget
           └── OpenGL QRhiWidget path
 ```
 
-Those classes are historical topology only; they no longer exist in production source. Caller-dead family/CUSTOM/auxiliary/
-transition/visualizer pixels retired with the inseparable physical-host edge.
+Those classes are historical topology only and are absent from production source. Caller-dead family/CUSTOM/auxiliary/transition/visualizer pixel ownership retired with that physical-host edge.
 
 Do not:
 
-- expand or restore the old presenter for migration continuity;
+- restore the old presenter for compatibility or test convenience;
 - create new QRhiWidget-specific architecture;
 - treat old class names as permanent product contracts;
 - add a production runtime switch between old and Quick presenters.
 
-H made Quick production-authoritative and deleted the remaining physical host. J, not the old presenter, proves the complete
-installed product.
+Installed product acceptance belongs to the current Quick runtime and its maintained tests/physical evidence, not to reconstruction of the retired host.
 
 ## 3. One-surface invariant
 
@@ -73,7 +70,7 @@ its own card fill/frame/shadow; it does not mean a separate window or display-gl
 
 ## 4. Threading model
 
-The destination presenter requires the Qt Quick **threaded** scene-graph render loop on the supported
+The current presenter requires the Qt Quick **threaded** scene-graph render loop on the supported
 Windows path.
 
 The GUI thread remains responsible for GUI/event-loop work and may prepare/publish synchronized state.
@@ -125,8 +122,7 @@ QQuickItem(ItemHasContents)
     -> direct OpenGL inside the owning QQuickWindow scene
 ```
 
-This choice was proved during the Qt Quick foundation and is the current custom-render contract for
-transitions and the visualizer migration.
+This choice is the current custom-render contract for transitions and the visualizer.
 
 Why this is the selected path:
 
@@ -142,7 +138,7 @@ If pinned PySide/compiled-product evidence proves the selected `QSGRenderNode` s
 unusable, stop and deliberately revise the **single** custom-render primitive. Do not keep multiple
 product primitives as compatibility fallbacks.
 
-A localized native/C++ renderer may be considered only if profiling of the migrated implementation
+A localized native/C++ renderer may be considered only if profiling of the current implementation
 proves a specific Python render callback materially limits the result. It must stay inside the same
 QQuickWindow/scene ownership.
 
@@ -213,7 +209,7 @@ Those are precedence levels within one geometry/configuration contract, not comp
 The five established carded modes share one canonical baseline viewport aspect. Mode changes and visualizer
 presets do not change it.
 
-The old per-mode card-height/growth controls are not destination geometry:
+The old per-mode card-height/growth controls are not current geometry:
 
 ```text
 spectrum_growth
@@ -246,7 +242,7 @@ domain changes.
 
 ## 8. Runtime overlays
 
-Providers/models/settings do not migrate merely because pixels migrate.
+Providers/models/settings do not move merely because pixel ownership changes.
 
 Current pattern:
 
@@ -258,7 +254,7 @@ small generation-scoped presentation state
 retained Quick runtime item/layer
 ```
 
-G7 has already landed same-scene dimming/pixel shift and retained context-menu presentation. Cursor Halo is deliberately **outside** the composited scene: `QuickCursorController` supplies one native `QCursor`, so physical pointer motion cannot dirty wallpaper/Visualizer pixels. Avoid reimplementing network/provider/business/settings authority in QML. Any remaining QWidget/top-level auxiliary pixels are migration debris, not a second destination path.
+Same-scene dimming/pixel shift and retained context-menu presentation are current architecture. Cursor Halo is deliberately **outside** the composited scene: `QuickCursorController` supplies one native `QCursor`, so physical pointer motion cannot dirty wallpaper/Visualizer pixels. Avoid reimplementing network/provider/business/settings authority in QML. Any remaining caller-dead QWidget/top-level auxiliary pixels are cleanup residue, not a second presentation path.
 
 The one Quick scene owns runtime pixels that visually coexist over the screensaver.
 
@@ -321,5 +317,5 @@ Physical presentation is judged primarily by:
 
 Internal render callbacks are not physical-display proof.
 
-The P0 result justifies migration. Later evidence is for implementation/cutover quality, not for
+The accepted one-surface result selects the architecture. Later evidence is for implementation quality, not for
 re-litigating Quick versus the old presenter on every step.

@@ -1,4 +1,4 @@
-"""Shared presentation-neutral app-volume ownership for Media (Phase E1).
+"""Shared presentation-neutral app-volume ownership for Media.
 
 ``MediaVolumeRuntimeService`` is a per-display lease.  Production leases in
 one runtime generation join a single owner for the Core Audio controller,

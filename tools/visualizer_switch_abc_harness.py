@@ -1,6 +1,6 @@
 """Retained A/B/C diagnostic harness for Visualizer causal/performance checks.
 
-Authority: ``Docs/Reference/Visualizer_Post_Switch_Performance_Investigation.md``.
+Authority: ``Docs/Historical_Bugs/R-80_ABC_EventLoop_Rolling_Window_Contamination.md``.
 Guardrail: ``Docs/Guardrails/Performance_Optimization_Contract.md``.
 
 The physical slowdown must be measured in the real product path; synthetic GL

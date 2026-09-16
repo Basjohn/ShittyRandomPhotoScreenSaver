@@ -173,7 +173,10 @@ def get_steam_cache_dir(profile: Optional[str] = None, profile_key: str | None =
 
 
 # ---------------------------------------------------------------------------
-# Migration helpers
+# Persisted/cache compatibility migration helpers
+#
+# These are one-way import bridges into canonical storage, not alternate storage
+# authorities. Their retirement horizon is tracked in ``Future_Cleanup.md``.
 # ---------------------------------------------------------------------------
 
 def migrate_file(old_path: Path, new_path: Path) -> bool:
@@ -232,7 +235,7 @@ def migrate_directory(old_dir: Path, new_dir: Path, *, remove_old: bool = False)
 
 
 def run_all_migrations(profile: Optional[str] = None) -> None:
-    """Run all legacy-path migrations.  Safe to call multiple times."""
+    """Run supported legacy-path imports into canonical storage; safe to repeat."""
     tmp = Path(tempfile.gettempdir())
 
     # RSS cache: %TEMP%/screensaver_rss_cache/ -> <app_data>/cache/rss/

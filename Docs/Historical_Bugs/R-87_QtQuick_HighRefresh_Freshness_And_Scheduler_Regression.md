@@ -1,8 +1,8 @@
 # R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression
 
-Status: **[~] OPEN FOR SCHEDULING HEADROOM / CHK15 IS THE OPERATOR-ACCEPTED GOLDEN PERFORMANCE BASELINE**
+Status: **[x] CLOSED — CHK26 / `a0bf70932c` IS THE OPERATOR-ACCEPTED GOLDEN PERFORMANCE/FRESHNESS BASELINE**
 
-The early sections below preserve the historical regression and its former closure gates. They must not be read as saying CHK15 is visibly broken: the CHK14 runtime evidence was frozen into CHK15, and the operator then reported excellent heavy mixed-refresh smoothness on both displays. Remaining R-87 work is resilience/headroom only and is governed by the CHK15 neutral-or-better rule near the end of this document.
+The early sections below preserve the historical regression, the investigation branches that followed, and former closure gates. They are evidence and negative controls, not current work sequencing. R-87 is closed: CHK26 removed the last proven low-risk local waste, later CHK27-CHK29 sidecar attribution showed the large remaining scheduler-shaped intervals are Qt frame/render-phase ownership or small distributed Bubble/driver costs, and the operator accepted CHK26 as neutral-or-better. Performance work is now symptom-driven only.
 
 ## Symptom
 
@@ -619,3 +619,64 @@ CHK27 leaves CHK26 / `a0bf70932c` GOLDEN unchanged. The clean settled publicatio
 The adjacent `QUICK_SYNC_READY -> RENDER_BEGIN` interval remains ~**4.630 / 6.405 ms**. CHK16 already disproved the old interpretation of this as ordinary Windows runnable starvation. CHK28 therefore adds direct, explicit-`--frame-trace` markers for QQuickWindow `beforeFrameBegin`, `beforeSynchronizing`, `afterSynchronizing`, `beforeRendering`, `beforeRenderPassRecording`, `afterRenderPassRecording`, and `afterRendering`. These use a separate render-cycle identity namespace and do not alter scheduling. The reporter can now distinguish next-frame admission, remaining synchronization, Qt render handoff, render-pass preparation and scenegraph work before the visualizer render node. Historical traces are report-compatible because the new events are optional.
 
 Closed false trail added by CHK27: **do not target presentation commit, render-bridge acquisition or local pre-sync diagnostics as the cause of the heavy ~5.4 ms snapshot->sync residual.** They are sub-millisecond and jointly tiny compared with Qt admission.
+
+## 2026-09-16 — CHK28 native Qt phase result; frame-admission and pre-node scheduler false trails closed
+
+CHK28's intentionally long D1-heavy explicit-`--frame-trace` run adds direct QQuickWindow phase boundaries without changing product scheduling. The run lasted roughly 12 minutes, wrote **2,989,907 records / 8 dropped / 0 write errors**, rotated the bounded trace **3** times, ended with **0 QML messages**, clean native-fault capture and clean final teardown. The 4 × 32 MiB / 128 MiB rolling trace therefore remains useful under a substantially longer heavy run and should not be stripped merely because this investigation closes.
+
+Use the clean 15–60 s settled lane. Publication->draw remains healthy at roughly **12.60 / 14.29**, **12.52 / 14.49** and **12.55 / 14.28 ms median/p95** across the three 15 s windows. CHK26 / `a0bf70932c` remains the GOLDEN comparison authority.
+
+The former ~5.1 ms retained-update-request -> `updatePaintNode()` interval is now directly explained by Qt frame admission. In the clean lane, request-return -> `beforeFrameBegin` is ~**5.034 / 5.755 ms**, while `beforeFrameBegin` -> `beforeSynchronizing` is only ~**0.041 / 0.104 ms** and `beforeSynchronizing` -> Visualizer item entry is ~**0.031 / 0.072 ms**. There is no multi-millisecond SRPSS GUI or synchronization job after Qt begins the frame.
+
+The old `QUICK_SYNC_READY -> RENDER_BEGIN` label is also fully corrected. Sync-ready -> `afterSynchronizing` is ~**0.031 / 0.090 ms**, `afterSynchronizing` -> `beforeRendering` ~**0.021 / 0.049 ms**, `beforeRendering` -> render-pass begin ~**0.724 / 3.803 ms**, and render-pass begin -> Visualizer `QSGRenderNode.render()` entry ~**1.558 / 4.876 ms**. This interval is Qt render-loop/render-pass/scenegraph work before the inline visualizer node, not ordinary runnable starvation or a missing Python pacer.
+
+The clean render pass itself partitions usefully: render-pass begin -> visualizer entry ~**1.552 / 4.876 ms**, visualizer entry -> `RENDER_DRAW` ~**1.574 / 5.566 ms**, and `RENDER_DRAW` -> render-pass end ~**0.086 / 0.248 ms**. This leaves local visualizer work as the only remaining area where ordinary SRPSS code can plausibly buy render-body headroom without redesigning Qt pacing.
+
+### False trails permanently added by CHK28
+
+Do not reopen these without contradictory evidence:
+- retained `QQuickItem.update()` request -> item-entry latency is **not** hidden SRPSS GUI work; it is overwhelmingly wait-to-next-Qt-frame admission;
+- `QUICK_SYNC_READY -> RENDER_BEGIN` is **not** a pure Windows scheduler wait and is not evidence for Python display pacing, `frameSwapped -> requestUpdate()`, a shorter GIL switch interval, or thread-priority escalation;
+- the sub-millisecond synchronization work after `beforeSynchronizing`/sync-ready is not a meaningful optimization target for the heavy residual;
+- Qt render-pass preparation and scenegraph traversal before the Visualizer node are not safely removable SRPSS work merely because they consume milliseconds.
+
+The next evidence lane is CHK29 Bubble renderer attribution. Heavy traces still show `RENDER_MODE_BEGIN -> RENDER_MODE_READY` at roughly **0.24 ms median / 3.1 ms p95**. CHK29 instruments only the explicit `--frame-trace` sidecar to separate Bubble layout/payload work, common uniforms, reactive array uploads, style uniforms, VAO bind and literal draw. Do not reduce Bubble cadence, authored motion, ghosts/tails, reaction amplitude or shader appearance to improve this metric.
+
+## 2026-09-16 — CHK29 Bubble attribution, active-music oracle and campaign closure
+
+CHK29 deliberately instrumented Bubble without changing its product behavior. The D1-heavy trace contained a long idle lane plus a brief real-playback Bubble reaction section before settling back to idle. Whole-run Bubble mode render was approximately **0.257 ms median / 3.074 ms p95**. The split was:
+
+- layout/payload resolution: **0.011 / 0.023 ms** median/p95;
+- one-time program boundary: **0.001 / 0.002 ms**;
+- common uniforms: **0.047 / 0.164 ms**;
+- reactive position/extra/trail upload: **0.118 / 0.290 ms**;
+- style uniforms: **0.050 / 0.103 ms**;
+- VAO bind: **0.003 / 0.010 ms**;
+- literal Bubble draw call: **0.014 / 0.056 ms**.
+
+The p95 tail is distributed across common/reactive/style submission, VAO bind and draw/driver boundaries rather than one removable local owner. In the p95 tail the reactive stage is the largest aggregate share, but it is **authored live reaction work**, not waste. The active playback section independently showed fresh source ages, large pulse/radius excursions and motion/burst response while Bubble cadence remained fully integrated; the run later closed at **22,457 requested / 22,457 integrated, ratio 1.000, failures 0**. This active section is retained as an acceptance oracle because idle-only traces cannot prove Bubble feel.
+
+### Final performance decision
+
+Do **not** micro-optimize Bubble from this attribution. A few tenths of a millisecond of ordinary work does not justify risk to attack latency, elasticity, breathing, loud-passage response, ghosts/tails, event admission, integration or source freshness. Any future Bubble-touching performance candidate requires an explicit active-music physical lane and operator feel, not merely an idle frame trace.
+
+The campaign closes here. The useful architectural wins are retained, the sidecar instrumentation stays available, and future performance work is reopened only by a concrete reproduced symptom or newly proven duplicated owner. CHK26 / `a0bf70932c` remains the forward GOLDEN.
+
+### Permanent R-87 false trails / negative controls
+
+Do not rediscover these without contradictory new evidence:
+
+- Windows render-thread priority and ordinary runnable starvation were not the primary owner.
+- A global 1 ms Python GIL switch interval worsened the target behavior and is rejected.
+- Audio smoothing/cadence reduction is not the owner and may not be used to manufacture headroom.
+- High-rate text logging on render phases contaminates the measurement; use the binary sidecar instead.
+- The old `frameSwapped -> requestUpdate()` feedback loop and Python display-refresh pacing are forbidden regressions.
+- Steady Python/PyOpenGL background redraw was real waste and is already removed by the retained-background architecture.
+- CUSTOM viewport mutation did not cause stencil-resource thrash.
+- The literal rounded-mask draw was not the clip-tail owner; broad removal of inherited scissor/stencil/restoration fences remains rejected.
+- CHK26's shared non-stencil state snapshot is the bounded clip optimization worth keeping; routine clip surgery is exhausted.
+- GUI snapshot -> Quick sync is not ~5 ms of local Python work; it is overwhelmingly next-frame Qt admission.
+- Sync-ready -> Visualizer render entry is not a pure scheduler wait; the material remainder is Qt render-pass/scenegraph work before the node.
+- Bubble renderer p95 does not expose a large safe non-reactive owner; routine Bubble renderer micro-optimization is closed.
+- A numerical win that feels worse, increases state age, weakens loud-passage reaction or alters authored Bubble motion is a regression regardless of averages.
+

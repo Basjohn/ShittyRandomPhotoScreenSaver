@@ -1,12 +1,8 @@
-"""
-RSS Feed Image Source - Thin facade for backward compatibility.
+"""RSS Feed Image Source compatibility facade.
 
-The real implementation lives in ``sources/rss/`` (cache, parser, downloader,
-coordinator, health, constants).  This file re-exports the public symbols that
-other modules historically imported from ``sources.rss_source`` so nothing
-breaks during the migration.
-
-Backup of the original monolith: ``bak/rss_source_pre_overhaul.py``
+The implementation lives in ``sources/rss/`` (cache, parser, downloader,
+coordinator, health and constants). This module preserves the established
+``sources.rss_source`` import surface for callers that still depend on it.
 """
 from pathlib import Path
 from typing import List, Optional, Callable
@@ -31,7 +27,7 @@ from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Legacy constant aliases
+# Compatibility constant aliases
 RATE_LIMIT_DELAY_SECONDS = 8.0
 RATE_LIMIT_RETRY_DELAY_SECONDS = 120
 MIN_CACHE_SIZE_BEFORE_CLEANUP = 20
@@ -65,7 +61,7 @@ class RSSSource(ImageProvider):
             save_directory=save_directory,
         )
 
-        # Expose for legacy callers that peek at internals
+        # Preserve the established facade attributes used by existing callers
         self._images = self._coordinator.get_cached_images()
         self.cache_dir = self._coordinator.cache_dir
 

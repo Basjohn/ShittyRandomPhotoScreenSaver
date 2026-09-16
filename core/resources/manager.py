@@ -520,9 +520,9 @@ class ResourceManager:
         Args:
             handle: The GL handle (integer from glGen*/glCreate*)
             handle_type: Type of handle ("vao", "vbo", "texture", "program", "shader", "query")
-            cleanup_func: Deprecated compatibility argument. It is never
-                retained or invoked because this registry does not own a GL
-                context.
+            cleanup_func: Temporary deprecated caller-compatibility argument. It is
+                never retained or invoked because this registry does not own a
+                GL context; retirement is tracked in ``Future_Cleanup.md``.
             description: Human-readable description
             group: Resource group for batch cleanup (default "gl")
             **metadata: Additional metadata

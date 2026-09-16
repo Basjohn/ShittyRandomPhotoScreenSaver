@@ -1,6 +1,6 @@
 # Transition Change Checklist
 
-Last updated: 2026-08-28
+Last updated: 2026-09-16
 
 Quick transition presentation is landed. Use this for future transition changes.
 
@@ -17,21 +17,9 @@ canonical transition registry/settings
 
 No new transition may depend on `GLCompositorWidget`, QWidget pixels or a compatibility presenter.
 
-## Old transition implementation status
+## Retired transition presentation
 
-All canonical transitions have Quick implementations.
-
-The old:
-
-- `rendering/transition_factory.py` pixel-construction role;
-- `transitions/gl_compositor_*_transition.py`;
-- old compositor transition presentation tests/helpers
-
-are **not visual-reference authority**.
-
-Delete them as soon as exact caller proof makes that safe. If the final call edge is inseparable from the old physical
-`DisplayWidget`, that edge leaves at H with the physical presenter. Do not preserve or reconstruct the old transition
-stack merely to keep the half-migrated app runnable, and do not postpone caller-dead transition pixels to I.
+All canonical transitions have Quick implementations. The old `transition_factory`/GL-compositor pixel stack and its presentation helpers are retired and absent from current source. They are not visual-reference authority and must not be reconstructed to satisfy stale tests or old documentation. Historical failure mechanisms belong in `Docs/Historical_Bugs/`.
 
 ## Preserve
 

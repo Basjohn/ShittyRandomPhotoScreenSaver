@@ -1,10 +1,10 @@
-"""Presentation-neutral widget family capability catalog (Phase E foundation).
+"""Presentation-neutral widget family capability catalog.
 
-Phase E introduces an application-level *capability activation* authority that is
-distinct from a widget instance's ordinary ``enabled`` checkbox. Settings (E2)
-lists one activation row per canonical widget *family*, and the runtime (E1
-``WidgetRuntimeManager``) resolves families generically. Both need one cheap
-catalog mapping a stable ``family_id`` to its member runtime widget ids.
+Application-level *capability activation* is distinct from a widget instance's
+ordinary ``enabled`` checkbox. Settings lists one activation row per canonical
+widget *family*, while ``WidgetRuntimeManager`` resolves families generically.
+Both use this catalog to map a stable ``family_id`` to its member runtime widget
+ids.
 
 This module is the single source of truth for family membership. It imports no
 QWidget/Quick/provider/renderer code — only ``os`` and the neutral
@@ -26,9 +26,9 @@ Membership vs availability:
 
 The Spotify visualizer participates in application-level capability activation
 through this catalog (family ``visualizers``, which *requires* the ``media``
-family). Its runtime/render ownership remains the special Phase-D visualizer
-subsystem — it does NOT become an ordinary Phase-F widget presentation family and
-does NOT move under ``WidgetRuntimeManager`` merely because it is catalogued here.
+family). Its runtime/render ownership remains the dedicated visualizer subsystem; it does
+NOT become an ordinary widget presentation family or move under
+``WidgetRuntimeManager`` merely because it is catalogued here.
 """
 from __future__ import annotations
 

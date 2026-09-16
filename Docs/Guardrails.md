@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
 ## Architecture decision
 
@@ -12,13 +12,11 @@ one selected physical display
 ```
 
 Do not reopen broad native/C++ presenter work without new evidence the accepted architecture cannot satisfy production.
-Do not use `QQuickWidget`, second accelerated runtime surfaces, or restore/deepen the deleted QRhiWidget/DisplayWidget architecture. H is closed; the old physical presenter is not a fallback product or test convenience.
+Do not use `QQuickWidget`, second accelerated runtime surfaces, or restore/deepen the deleted QRhiWidget/DisplayWidget architecture. The old physical presenter is retired and is not a fallback product or test convenience.
 
-## Migration continuity
+## Retired presentation architecture
 
-A working legacy screensaver during intermediate migration slices is **not** required. Do not preserve, restore or
-invent old QWidget/compositor presentation solely so the half-migrated app keeps running. Caller-dead old pixels may be
-deleted once their destination contract is owned and proven. H established final production ownership and caller-proven Phase-I cleanup is closed. Surviving residue is explicit cleanup debt; final compiled/installed/physical quality is proven through the current migration-close acceptance gates.
+The Qt Quick cutover is closed. The deleted QWidget/QRhiWidget/GLCompositor physical presentation path is not fallback architecture, test scaffolding or a continuity layer. Caller-dead residue belongs in `Future_Cleanup.md`; historical reasoning belongs in `Docs/Historical_Bugs/` or source control. Do not recreate retired presenters merely to satisfy stale tests or prose.
 
 ## Priority
 
@@ -79,10 +77,10 @@ Stop/reassess when:
 - valid generation 0 is lost or stale generation/request can publish/reveal;
 - resource ownership cannot be explained;
 - fallback silently changes presenter/renderer/capability/authored behavior;
-- second accelerated surface appears or `QQuickWidget` claims migration progress;
+- a second accelerated runtime surface appears or `QQuickWidget` is introduced as a presentation shortcut;
 - common Quick imports eagerly resolve inactive family backend/runtime trees;
 - family port duplicates provider/controller/timer/cache/action authority;
-- migration casually redesigns working family interaction/visual behavior without product intent.
+- architecture cleanup casually redesigns working family interaction/visual behavior without product intent.
 
 ## Evidence, validation and fallback guardrails
 
@@ -148,7 +146,4 @@ A deactivated family remains deactivated even if a saved layout contained it.
 Close admission before retirement. Fence stale generation/request state. Destroy custom GL on the legal render/context
 owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nested event loops.
 
-The operator-authorized 2026-09-05 Bubble equal-area response correction is documented in
-`Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` and `Docs/Reference/Visualizer_Reference.md`.
-It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps,
-DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
+The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69. It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.

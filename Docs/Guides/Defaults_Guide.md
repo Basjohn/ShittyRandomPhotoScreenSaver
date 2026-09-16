@@ -154,11 +154,11 @@ Adding/removing a transition updates those authorities together and keeps regist
 parity tests green. Dynamic import dormancy does **not** exempt the implementation module/resources from
 frozen-build packaging visibility.
 
-## 5.0.0 installer migration reset
+## 5.0.0 installer reset/import compatibility
 
-For the 5.0.0 migration release only, the Standard and MC installer `resetsettings` task defaults ON. A selected reset must remove both the current `settings_v2.json` snapshot and that profile's pre-JSON Qt `QSettings` registry tree; deleting JSON alone is not a reset because first launch can import the legacy registry state again. Diagnostic deliberately remains opt-in because it consumes the ordinary Screensaver profile.
+For the 5.0.0 compatibility boundary, the Standard and MC installer `resetsettings` task defaults ON. A selected reset must remove both the current `settings_v2.json` snapshot and that profile's pre-JSON Qt `QSettings` registry tree; deleting JSON alone is not a reset because first launch can import the legacy registry state again. Diagnostic deliberately remains opt-in because it consumes the ordinary Screensaver profile.
 
-If reset is not selected, valid legacy state is intentionally migrated, canonical missing leaves are filled, known aliases/schema are normalized, and validation repairs known invalid values. Malformed JSON or a non-mapping snapshot is treated as a load failure and regenerates canonical defaults. A syntactically valid historical value outside known migration/validation rules can survive by design, so v5's default-checked installer reset is the safe mass-migration baseline rather than a substitute for ongoing schema validation.
+If reset is not selected, valid legacy state is intentionally migrated, canonical missing leaves are filled, known aliases/schema are normalized, and validation repairs known invalid values. Malformed JSON or a non-mapping snapshot is treated as a load failure and regenerates canonical defaults. A syntactically valid historical value outside known migration/validation rules can survive by design, so v5's default-checked installer reset is the safe compatibility baseline rather than a substitute for ongoing schema validation.
 
 ## Reset / import safety
 
@@ -166,7 +166,7 @@ Hidden/unbuilt/deactivated Settings page never overwrites preserved detail value
 hydrate. Checked-in SST defaults are generated canonical artifacts, not installed-machine snapshots and must
 not leak private/machine-local state.
 
-## Retired migration-era schema
+## Retired schema accepted only as compatibility input
 
 Modern defaults/exports do not emit retired schema as current authority:
 
@@ -180,7 +180,7 @@ Modern defaults/exports do not emit retired schema as current authority:
 
 ## Safe default change
 
-Update canonical source -> profile override only for genuine profile differences -> typed models/normalizers -> UI load/save -> regenerate derived artifacts -> parity tests -> migration/import coverage when installed settings are affected -> current docs when the contract changes. Tests guard contract; they are not second authority.
+Update canonical source -> profile override only for genuine profile differences -> typed models/normalizers -> UI load/save -> regenerate derived artifacts -> parity tests -> compatibility/import coverage when installed settings are affected -> current docs when the contract changes. Tests guard contract; they are not second authority.
 
 The deterministic in-repo regeneration/check path is:
 

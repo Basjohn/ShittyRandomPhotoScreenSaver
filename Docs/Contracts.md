@@ -1,8 +1,8 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-09-14
+Last updated: 2026-09-16
 
-`Current_Plan.md` owns work admission. This file owns fast current/destination owner routing.
+`Current_Plan.md` owns work admission. This file owns fast current-owner routing.
 
 ## Physical presentation
 
@@ -21,8 +21,8 @@ Last updated: 2026-09-14
 | Settings theme semantics/backdrop contract | `Docs/Architecture/Settings_Theme_Architecture.md`; `SettingsThemeSpec` + Settings renderers + `core/windows/dwm_blur.py` |
 
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
-Migration scaffolding may still reference legacy `DisplayWidget` before the production cutover. That is never a
-destination contract or a reason to preserve a compatibility presenter.
+The Qt Quick cutover is complete: deleted `DisplayWidget`/old-presenter paths are history, not compatibility architecture.
+Do not preserve or recreate a presenter facade merely because a stale test/comment once referenced it.
 
 ## Settings theme ownership
 
@@ -38,11 +38,10 @@ On the current frameless translucent Settings HWND, Acrylic and Glass deliberate
 family. Acrylic = state 4 with theme native tint. Glass = untinted state 3; semantic Qt RGBA surfaces own its visible
 colour/opacity. Off = state 0. Do not conflate AccentPolicy state 3 with the documented `DwmEnableBlurBehindWindow` API.
 
-`themes/dark.qss` is legacy structural stylesheet residue, not visual authority. Production Settings/tray code no
-longer loads or references it: permanent narrow renderers own the surviving structure and `SettingsThemeSpec` remains
-the visual authority. The physical repository/build asset is pending a Windows/PySide file-absent acceptance matrix
-because GODZIP Foundry excludes `themes/`. Do not restore a loader, duplicate the QSS into another file/string, alter
-native backdrop/forged-edge geometry, or weaken theme failure semantics merely to finish physical deletion.
+`themes/dark.qss` is physically deleted and is not a supported asset. Production Settings/tray code has no loader or
+reference for it: permanent narrow renderers own the surviving structure and `SettingsThemeSpec` remains the visual
+authority. The installed file-absent Windows/PySide acceptance matrix is complete. Do not restore a loader, duplicate
+the old monolith into another file/string, alter native backdrop/forged-edge geometry, or weaken theme failure semantics.
 
 Runtime Widget Themes are a separate semantic colour authority over retained Widget/runtime-overlay appearance. Theme identity and Settings-window backdrop material are deliberately separate:
 
@@ -79,7 +78,7 @@ the event loop, add a retry timer, or special-case a family to avoid deleted-obj
 
 **Widget Theme palette precedence:** Widget Theme colours are the ordinary shared baseline. Explicit surviving specialized `widgets.<family>.*` colour values remain higher-precedence only where a genuine family-level authoring contract still exists; they are not silently reclassified as theme state. Branded Header Fill/Text/Border are **not** such family contracts anymore: Media/Gmail/Reddit/Steam resolve them through shared `header.*` semantics, with Header Fill exposed once in `Widgets -> General -> Style Overrides`. The Context Menu has no family override layer and takes Widget Theme palette values directly. A surviving specialized family swatch edit therefore does not create Widget Theme `Custom`; editing a Widget-Theme-owned shared value does.
 
-**Semantic visual-role contract (schema v3):** specialized decorative roles are sparse and inherit through one Qt-free resolver: intentional family override -> exact theme role -> shared semantic parent -> caller-supplied `local.*` current semantic value -> preserved current fallback. `local.*` tokens are runtime/presentation context only and must never serialize into `.srwtheme`, Custom or Settings. Default-valued compatibility fields act as implicit Inherit; only a genuinely changed *surviving specialized* family value is an explicit family override. Adding a role is therefore not permission to recolour Default Dark or to add a permanent visible Settings swatch. The ordinary shared authoring surface is `Widgets -> General -> Style Overrides`: Card Surface, Card Border and Header Fill edit Widget Theme state; Reset All Colours to Theme explicitly normalizes ordinary family colour/card-alpha compatibility overrides; Card Border Width is global geometry. Media Seek/Volume are examples of family controls that may remain because they are genuinely specialized. Do not recreate a Header Appearance palette or another Media/Steam/family-local theme cascade. Visualizer's specialised line/presentation system remains exempt from the generic decorative-stroke migration.
+**Semantic visual-role contract (schema v3):** specialized decorative roles are sparse and inherit through one Qt-free resolver: intentional family override -> exact theme role -> shared semantic parent -> caller-supplied `local.*` current semantic value -> preserved current fallback. `local.*` tokens are runtime/presentation context only and must never serialize into `.srwtheme`, Custom or Settings. Default-valued compatibility fields act as implicit Inherit; only a genuinely changed *surviving specialized* family value is an explicit family override. Adding a role is therefore not permission to recolour Default Dark or to add a permanent visible Settings swatch. The ordinary shared authoring surface is `Widgets -> General -> Style Overrides`: Card Surface, Card Border and Header Fill edit Widget Theme state; Reset All Colours to Theme explicitly normalizes ordinary family colour/card-alpha compatibility overrides; Card Border Width is global geometry. Media Seek/Volume are examples of family controls that may remain because they are genuinely specialized. Do not recreate a Header Appearance palette or another Media/Steam/family-local theme cascade. Visualizer's specialised line/presentation system remains exempt from the generic decorative-stroke theme projection.
 
 Manual editing of any Widget Theme-owned visual value has one separate deterministic contract: snapshot the complete
 currently resolved named Widget Theme into user-owned `Custom`, apply the edit to that snapshot, select `Custom`, and turn
@@ -116,7 +115,7 @@ The retained Context Menu follows the selected Widget Theme palette because it l
 
 ## Production runtime chain
 
-The destination connects exactly once:
+The production runtime connects exactly once:
 
 ```text
 QuickDisplayRuntime
@@ -136,24 +135,26 @@ Engine image processing consumes ordered immutable `DisplayProcessingDescriptor`
 GUI-materialized results back through a screen-identity-keyed manager/display-unit operation. It does not retain or inspect
 concrete QWidget/Quick presenter objects, compositor internals or private DPR fields.
 
-## Retirement timing
+## Retired presentation owners
 
-| Legacy/migration owner | Retirement |
+The cutover sequence is history; current code is governed by present ownership and explicit cleanup horizons.
+
+| Retired/superseded owner | Current rule |
 | --- | --- |
-| ordinary QWidget family pixels | already retired family-by-family in F |
-| shared old widget pixel helper | when last live old-pixel caller disappears |
-| old transition/visualizer-only pixels | caller-proof immediately; H only for inseparable physical-host edges |
-| old CUSTOM/edit/auxiliary pixels | caller-proof during G; no compatibility preservation for temporary continuity |
-| remaining old physical presenter/backend/software fallback | H |
-| residue/aliases/expired adapters | I |
+| ordinary QWidget family pixels | retired; do not restore |
+| shared old widget pixel helpers | remove when exact caller proof shows residue; never preserve for pixel compatibility |
+| old transition/visualizer pixel owners | retired except for explicitly retained neutral logic/data contracts |
+| old CUSTOM/edit/auxiliary pixel owners | retired; current Quick/session geometry owners are authoritative |
+| old physical presenter/backend/software fallback | retired and absent; not rollback architecture |
+| aliases/compatibility adapters | keep only while a named supported import/profile horizon requires them; removal is owned by `Future_Cleanup.md` |
 
-Historical code is not reference-protected merely because the half-migrated product once needed it to run.
+Historical code is not reference-protected merely because the product once needed it during cutover.
 
 ## Tooling authority
 
 Production runtime emits evidence; operator tooling consumes that evidence out of process unless a focused harness must explicitly construct a current owner. Production Python must not import `tools`/`scripts` analysis modules, and operator tooling must not restore deleted QWidget/GL/compositor/replay owners simply to preserve an old benchmark or parser. `tests/run_chunked.py` is the single test-profile authority; `tools/run_tests.py` is convenience delegation only.
 
-Built-in PERF/usage/QML instrumentation is the primary destination performance evidence. Retain an external parser/harness only when it answers a bounded question that current instrumentation/tests cannot answer more directly. Resource counters never authorize weakening Visualizer cadence, newest-state freshness, R-69 authored response, Media event ownership or R-63 black-flash protection.
+Built-in PERF/usage/QML instrumentation is the primary runtime performance evidence. Retain an external parser/harness only when it answers a bounded question that current instrumentation/tests cannot answer more directly. Resource counters never authorize weakening Visualizer cadence, newest-state freshness, R-69 authored response, Media event ownership or R-63 black-flash protection.
 
 Current tool disposition and deletion routing live in `Docs/Reference/Harness_Index.md`; production/tool boundary history is R-72.
 
@@ -230,7 +231,7 @@ with owned/recent/wishlist games.
 
 ### Startup composition
 
-**Physical status:** accepted in the post-H Quick runtime. The desktop -> first-wallpaper crossfade and coordinated Visualizer/widget startup reveal were physically validated after the startup-fade correction; later Settings/runtime replacement generations deliberately skip desktop recapture while retaining the independent startup gate. Preserve R-63 non-exact-cover/1 px overscan geometry throughout startup.
+**Physical status:** accepted in the current Quick runtime. The desktop -> first-wallpaper crossfade and coordinated Visualizer/widget startup reveal were physically validated after the startup-fade correction; later Settings/runtime replacement generations deliberately skip desktop recapture while retaining the independent startup gate. Preserve R-63 non-exact-cover/1 px overscan geometry throughout startup.
 
 Cold application startup (runtime generation 0) has one ordered retained presentation contract:
 
@@ -356,7 +357,7 @@ viewport_extent          # left/right width; top/bottom height
 ```
 
 All six current modes must support viewport extent and the core capability policy is now all-six-mode capable. Bubble is
-not a destination exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof, including equal
+not an exception and must not be re-gated to hide a defect. Preserve focused BTF/reflow proof, including equal
 renderer-content stream/drift head/trail travel for the same consume-once transient at canonical, wide and tall extents.
 Bubble presentation now uses `sqrt(content_width * content_height / 1.5)` as its response-height reference,
 following the operator rejection of height-only aspect coupling. The full logical radius waveform remains
@@ -399,7 +400,7 @@ before the fenced rebuild; an empty saved override map clears later overrides ra
 never recorded overrides replay their saved shared baseline. Cross-display transfer has one live retained pixel owner and
 preserves logical runtime/model identity.
 Healthy Edit Save transfers ordinary family/binding/service retirement records to that target without
-reconstruction, reinjection or provider restart. Clock variant/action context follows the destination.
+reconstruction, reinjection or provider restart. Clock variant/action context follows the receiving display owner.
 A geometry display crossing alone never requires generation replacement; slot-load and proven-corruption
 repair boundaries remain explicit.
 

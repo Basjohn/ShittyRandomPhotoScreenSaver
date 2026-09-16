@@ -77,8 +77,8 @@ def test_compositor_architecture_does_not_make_visualizer_card_universal():
 def test_project_overview_keeps_visualizer_scope_current():
     overview_text = (ROOT / "Docs" / "00_PROJECT_OVERVIEW.md").read_text(encoding="utf-8")
     assert "high-fidelity multi-mode visualizer" in overview_text
-    assert "F/G/H and caller-proven Phase-I cleanup are closed" in overview_text
-    assert "caller-proven Phase-I cleanup are closed" in overview_text
+    assert "Quick is the sole production presentation authority" in overview_text
+    assert "Superseded implementation decompositions are source-control history" in overview_text
     assert "wheel/corners -> uniform scale" in overview_text
     assert "R-69 is golden" in overview_text
     assert "persistent newest-source serial lane" in overview_text

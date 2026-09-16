@@ -48,8 +48,19 @@ The rapid switch burst itself still produced real transient stalls before the sc
 
 No Visualizer performance investigation remains active from this incident. The original long-run user-visible hitch was not re-established with trustworthy window-local evidence, so it is not an actionable current defect and no scheduled soak/probe branch is warranted. Future work may reopen performance only when normal use or logs produce a persistent, growing or otherwise traceable issue that survives the triggering activity.
 
-**Closed investigation reference:** `Docs/Reference/Visualizer_Post_Switch_Performance_Investigation.md`
-
 ## Guardrail
 
 A named causal window may not score a metric whose retained history crosses the window boundary unless the scorer explicitly subtracts/slices that history. A post-boundary exclusion is not a substitute for resetting/slicing a longer rolling metric.
+## Retained diagnostics and durable negative controls
+
+The closed post-switch investigation left a small set of useful permanent conclusions:
+
+- repeated render-host activation/retirement, including Sphere, converged to one active renderer; inactive resources retired and the shared quad did not multiply;
+- repeated presentation/publication/present-request counts did not show runaway amplification;
+- the mandatory GL-state isolation fence was not the cause of the false settled tail and must not be removed to chase this incident;
+- GUI `sync_present()` timing, Python thread census, GC, aggregate image-cache totals and native thread counts did not explain a persistent post-switch defect;
+- the Spectrum cold-paused activation correction found during the investigation remains a real product fix;
+- the original long-run hitch was never re-established with a trustworthy window-local oracle.
+
+Retain the opt-in A/B/C harness and boundary-only `--viz-switch-telemetry` because they can answer a future concrete recurrence without burdening ordinary runtime. Do not recreate the removed per-frame P4 investigation instrumentation or turn an intentionally abusive rapid-switch burst into standing backlog. Performance work reopens only when normal use or logs reproduce a persistent, growing or otherwise traceable defect after the triggering activity ends.
+
