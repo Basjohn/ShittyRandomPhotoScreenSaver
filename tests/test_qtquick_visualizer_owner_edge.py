@@ -279,6 +279,7 @@ def test_display_transfer_moves_publication_edge_without_recreating_controller()
         scene = _Scene()
         runtime = SimpleNamespace(
             runtime_generation=17,
+            screen_index=0,
             scene_controller=scene,
         )
         runtime.bind_visualizer_viewport_config = scene.set_visualizer_viewport_config_sink

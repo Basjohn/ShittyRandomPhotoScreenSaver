@@ -680,6 +680,7 @@ def test_quick_bubble_bulk_uniforms_use_reused_float32_transport(monkeypatch) ->
         matrix_values=tuple(float(i == j) for i in range(4) for j in range(4)),
         logical_size=(420.0, 280.0),
         quad_vao=1,
+        trace_context=None,
     )
 
     renderer.render(frame)

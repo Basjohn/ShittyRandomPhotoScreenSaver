@@ -60,6 +60,13 @@ class _Engine:
     def set_transient_lane_config(self, *_args):
         return None
 
+    def reconfigure_bar_count(self, *_args):
+        # Real BeatEngine/audio worker own bar-count reconfiguration; the
+        # controller-side logical bar-state resize happens in
+        # quick_technical_config regardless, so this fake only needs to be a
+        # callable authority.
+        return None
+
     _audio_worker = SimpleNamespace(set_audio_block_size=lambda *_args, **_kwargs: None)
 
 
