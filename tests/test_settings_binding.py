@@ -107,7 +107,11 @@ class TestSliderBinding:
     def test_load_missing_widget(self):
         tab = MagicMock(spec=[])  # no attributes
         b = SliderBinding('osc_speed', scale=100, default=1.0)
-        b.load(tab, {'osc_speed': 0.5})  # should not raise
+        assert not hasattr(tab, 'osc_speed')
+
+        b.load(tab, {'osc_speed': 0.5})
+
+        assert not hasattr(tab, 'osc_speed')
 
     def test_save_basic(self):
         tab = MagicMock()

@@ -30,14 +30,15 @@ def test_link_toggle_persists_current_paired_widget_identity() -> None:
 
 def test_settings_qrc_and_raw_widget_images_remain_distinct_asset_paths() -> None:
     qrc = _text(ROOT / "ui" / "resources" / "assets.qrc")
-    styles = _text(ROOT / "ui" / "tabs" / "shared_styles.py")
+    font_registration = _text(ROOT / "ui" / "font_registration.py")
     ui_init = _text(ROOT / "ui" / "__init__.py")
+    styles = _text(ROOT / "ui" / "tabs" / "shared_styles.py")
 
     # QRC is the embedded Settings-UI lane: fonts + small QSS icons.
     assert '<qresource prefix="/ui/assets">' in qrc
     assert "fonts/Jost-Regular.ttf" in qrc
     assert "combobox_closed.svg" in qrc
-    assert ":/ui/assets/fonts/Jost-Regular.ttf" in styles
+    assert ":/ui/assets/fonts/Jost-Regular.ttf" in font_registration
     assert ":/ui/assets/circle_checkbox_unchecked.svg" in styles
     assert "assets_rc" in ui_init
 

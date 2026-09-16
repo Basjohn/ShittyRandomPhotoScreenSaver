@@ -42,14 +42,6 @@ def test_production_python_never_imports_operator_analysis_tools():
     assert violations == []
 
 
-def test_test_convenience_wrapper_delegates_to_canonical_runner():
-    source = (ROOT / "tools" / "run_tests.py").read_text(encoding="utf-8")
-    assert 'RUNNER = ROOT / "tests" / "run_chunked.py"' in source
-    assert 'choices=("destination", "all")' in source
-    assert 'command.extend(("--profile", "destination"))' in source
-    assert "TEST_SUITES" not in source
-
-
 def test_external_resource_sampler_cannot_terminate_attached_pid():
     source = (ROOT / "tools" / "perf_measure.py").read_text(encoding="utf-8")
     tree = ast.parse(source)

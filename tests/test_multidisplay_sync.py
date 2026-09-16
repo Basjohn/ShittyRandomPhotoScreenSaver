@@ -4,6 +4,7 @@ Tests for multi-display synchronization (Phase 3).
 Tests the lock-free SPSC queue-based synchronization for coordinating
 transitions across multiple displays.
 """
+import logging
 import pytest
 import time
 from PySide6.QtGui import QGuiApplication
@@ -187,13 +188,12 @@ class TestQueueOverflow:
         dm = DisplayManager()
         dm.displays = [None] * 25  # Many displays
         dm.enable_transition_sync(True)
-        
-        # Fill queue (max 20 items)
-        for i in range(30):
-            dm._on_display_transition_ready(i)
-        
-        # Should have warnings about queue full
-        # (Can't easily test logs in pytest without caplog fixture setup)
+
+        with caplog.at_level(logging.WARNING):
+            for i in range(30):
+                dm._on_display_transition_ready(i)
+
+        assert any("queue full" in record.getMessage().lower() for record in caplog.records)
 
 
 class TestConcurrentReadySignals:

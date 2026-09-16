@@ -403,7 +403,7 @@ def test_one_render_host_lazily_resolves_all_modes_once_and_releases_every_owner
         host._quad_vbo = 12
 
     class _InheritedState:
-        def restore(self) -> None:
+        def restore_render_host(self) -> None:
             restores.append(True)
 
     monkeypatch.setattr(
@@ -413,8 +413,8 @@ def test_one_render_host_lazily_resolves_all_modes_once_and_releases_every_owner
     )
     monkeypatch.setattr(host, "_ensure_quad", _ensure_quad)
     monkeypatch.setattr(
-        render_host_module._InheritedGlState,
-        "capture",
+        render_host_module.InheritedGlState,
+        "capture_render_host",
         lambda: _InheritedState(),
     )
     monkeypatch.setattr(

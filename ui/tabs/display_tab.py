@@ -725,7 +725,11 @@ class DisplayTab(QWidget):
             self.sharpen_check.setChecked(sharpen)
 
             # Interaction Mode
-            interaction_mode = self._settings.get_bool('input.interaction_mode')
+            interaction_mode = (
+                True
+                if self._is_mc_profile
+                else self._settings.get_bool('input.interaction_mode')
+            )
             self.interaction_mode_check.setChecked(interaction_mode)
 
             # Cursor Halo Shape

@@ -70,9 +70,9 @@ def test_no_flag_host_switch_path_is_a_noop_for_telemetry(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        render_host_module._InheritedGlState,
-        "capture",
-        lambda: SimpleNamespace(restore=lambda: None),
+        render_host_module.InheritedGlState,
+        "capture_render_host",
+        lambda: SimpleNamespace(restore_render_host=lambda: None),
     )
     for name in (
         "glEnable",

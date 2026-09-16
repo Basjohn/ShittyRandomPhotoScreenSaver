@@ -1,94 +1,10 @@
-"""Regression tests for Reddit link handling A/B/C logic.
-
-These tests verify the smart exit behavior implemented to fix the Phase E
-cache corruption issue. The logic is:
-- Case A: Primary covered + Interaction Mode → Exit immediately
-- Case B: Primary covered + Ctrl held → Exit immediately  
-- Case C: MC mode (primary NOT covered) → Stay open, bring browser to foreground
-
-See: audits/PHASE_E_ROOT_CAUSE_ANALYSIS.md
-"""
+"""Current Reddit URL handoff and click-through regression contracts."""
 
 from unittest.mock import MagicMock
 
 import pytest
-from PySide6.QtCore import QPointF, QEvent, Qt
-from PySide6.QtGui import QMouseEvent
 
 import engine.display_manager as display_manager_module
-
-
-class TestRedditExitLogic:
-    """Test Reddit link handling exit logic."""
-    
-    def test_primary_covered_detection_same_screen(self):
-        """When click is on primary screen, primary_is_covered should be True."""
-        # This tests the logic path where this_is_primary = True
-        # which immediately sets primary_is_covered = True
-        
-        # The actual logic is in display_widget.py mousePressEvent
-        # We test the detection logic conceptually here
-        
-        # If self._screen is primary_screen, then this_is_primary = True
-        # If this_is_primary = True, then primary_is_covered = True
-        
-        this_is_primary = True  # Simulating click on primary display
-        primary_is_covered = this_is_primary  # Direct assignment in code
-        
-        assert primary_is_covered is True
-    
-    def test_primary_covered_detection_different_screen(self):
-        """When click is on secondary but primary has DisplayWidget, primary_is_covered = True."""
-        # This tests the coordinator lookup path
-        
-        # Simulate: click on secondary, but primary has a DisplayWidget registered
-        this_is_primary = False
-        primary_widget_exists = True  # coordinator.get_instance_for_screen returns widget
-        
-        primary_is_covered = this_is_primary or primary_widget_exists
-        
-        assert primary_is_covered is True
-    
-    def test_mc_mode_detection(self):
-        """When primary has no DisplayWidget (MC mode), primary_is_covered = False."""
-        # MC mode: screensaver only covers secondary displays, primary is free
-        
-        this_is_primary = False
-        primary_widget_exists = False  # No DisplayWidget on primary
-        
-        primary_is_covered = this_is_primary or primary_widget_exists
-        
-        assert primary_is_covered is False
-
-
-class TestCacheInvalidationMitigation:
-    """Test that the Phase E cache corruption is mitigated by immediate exit."""
-    
-    def test_no_setforegroundwindow_before_exit(self):
-        """Verify SetForegroundWindow is NOT called before exit_requested.
-        
-        The Phase E bug was caused by SetForegroundWindow stealing focus
-        BEFORE the screensaver windows were hidden, which triggered Windows
-        activation messages that corrupted Qt's QGraphicsEffect cache.
-        
-        The fix ensures exit happens first, then browser is foregrounded
-        via QTimer.singleShot(300ms) AFTER windows start closing.
-        """
-        # This is a design verification test - the actual implementation
-        # uses QTimer.singleShot(300, _bring_browser_foreground) which
-        # delays the SetForegroundWindow call until after exit_requested.emit()
-        
-        # The key invariant: exit_requested.emit() MUST happen BEFORE
-        # any SetForegroundWindow calls when primary_is_covered = True
-        
-        # We verify this by checking the code structure in display_widget.py:
-        # 1. if primary_is_covered:
-        # 2.     self._exiting = True
-        # 3.     QTimer.singleShot(300, _bring_browser_foreground)  # DELAYED
-        # 4.     self.exit_requested.emit()  # IMMEDIATE
-        
-        # The 300ms delay ensures windows are closing before focus steal
-        assert True  # Design verification - actual test is in integration
 
 
 class TestCleanQueueFlow:
@@ -280,20 +196,3 @@ class TestContextMenuClickThroughSuppression:
             assert dispatched == []
         finally:
             clear_runtime_pointer_input_suppression()
-
-
-@pytest.mark.skip(reason="Requires full Qt app with multi-monitor setup")
-class TestRedditExitIntegration:
-    """Integration tests requiring full DisplayWidget setup."""
-    
-    def test_case_a_interaction_mode_primary_covered(self):
-        """Case A: Interaction Mode + primary covered → immediate exit."""
-        pass
-    
-    def test_case_b_ctrl_held_primary_covered(self):
-        """Case B: Ctrl held + primary covered → immediate exit."""
-        pass
-    
-    def test_case_c_mc_mode_stay_open(self):
-        """Case C: MC mode (primary not covered) → stay open."""
-        pass

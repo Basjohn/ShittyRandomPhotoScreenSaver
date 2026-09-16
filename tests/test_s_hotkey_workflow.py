@@ -513,7 +513,11 @@ def test_engine_stop_quiesces_clears_and_fully_cleans_displays():
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr("engine.screensaver_engine.EngineState", _State)
-    monkeypatch.setattr(engine_lifecycle, "QCoreApplication", SimpleNamespace(quit=lambda: None))
+    monkeypatch.setattr(
+        engine_lifecycle,
+        "QCoreApplication",
+        SimpleNamespace(instance=lambda: None, closingDown=lambda: False, quit=lambda: None),
+    )
     try:
         engine_lifecycle.stop(engine, exit_app=False)
     finally:

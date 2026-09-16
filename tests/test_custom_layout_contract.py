@@ -96,7 +96,7 @@ def test_snap_local_rect_for_edit_snaps_to_display_edges_and_grid():
 
     far_edge_rect = snap_local_rect_for_edit(QRect(813, 507, 180, 90), display_size)
     assert far_edge_rect.left() == 816
-    assert far_edge_rect.top() == 504
+    assert far_edge_rect.top() == 510  # semantic bottom-edge snag beats nearby grid
 
 
 def test_snap_local_rect_for_edit_snaps_to_peer_edges_and_grid():
@@ -117,7 +117,7 @@ def test_snap_local_rect_for_edit_snaps_to_peer_edges_and_grid():
         peer_rects=[peer],
     )
     assert flush_left.left() == 144
-    assert flush_left.top() == 288
+    assert flush_left.top() == 290  # peer edge receives the intentional alignment bias
 
 
 def test_resolve_resize_edge_snap_snaps_moving_edge_to_peer_and_anchors_opposite():
@@ -202,7 +202,7 @@ def test_resolve_snap_local_rect_for_edit_reports_active_guides():
     assert snap.rect == QRect(480, 204, 140, 70)
     assert snap.vertical_guides
     assert snap.vertical_guides[0].position == 480
-    assert snap.vertical_guides[0].kind == "grid"
+    assert snap.vertical_guides[0].kind == "peer"
     assert snap.vertical_guides[0].distance == 6
     assert snap.horizontal_guides
     assert snap.horizontal_guides[0].position == 204

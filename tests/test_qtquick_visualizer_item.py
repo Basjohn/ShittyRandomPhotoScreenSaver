@@ -302,7 +302,7 @@ def test_local_clip_is_the_only_path_and_restores_temporary_stencil_contents() -
 
     begin_source = inspect.getsource(VisualizerClipHost.begin)
     assert begin_source.index("self._active_run = run") < begin_source.index(
-        "self._draw_mask(frame)"
+        "self._draw_mask("
     )
     assert "self.end(run)" in begin_source
     assert "stencil rollback both failed" in begin_source

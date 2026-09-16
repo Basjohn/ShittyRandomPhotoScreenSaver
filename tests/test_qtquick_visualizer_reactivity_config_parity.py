@@ -116,7 +116,7 @@ _SPECTRUM_CANONICAL_CONFIG = {
 
 
 def _owner(engine: _SpectrumConfigEngine, *, mode: str = "spectrum"):
-    runtime = SimpleNamespace(runtime_generation=17)
+    runtime = SimpleNamespace(runtime_generation=17, screen_index=0)
     return _make_owner(
         runtime,
         bar_count=33,

@@ -6,10 +6,9 @@
       "appearance": false
     },
     "widget_bucket_states": {
-      "reddit:primary": true,
-      "reddit:reddit1": false,
-      "reddit:feed": true,
-      "reddit:layout": true,
+      "reddit:reddit1": true,
+      "reddit:interaction": true,
+      "reddit:shared_layout": true,
       "media:appearance": true,
       "media:controls": true,
       "steam:achievement_pulse": true,

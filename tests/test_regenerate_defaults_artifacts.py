@@ -11,7 +11,7 @@ from core.settings.defaults_snapshot_builder import (
     build_sst_defaults_document,
     build_sst_defaults_snapshot,
 )
-from tools import regenerate_sst_defaults as module
+from tools import regenerate_defaults_artifacts as module
 from tools.defaults_foundry_core import walk_private_paths
 
 
@@ -26,8 +26,32 @@ def _flatten_leaves(value: Mapping[str, Any], prefix: str = "") -> dict[str, Any
     return leaves
 
 
+_SPARSE_RUNTIME_BUCKET_KEYS = (
+    "gmail_bucket_states",
+    "widget_bucket_states",
+    "visualizer_bucket_states",
+    "visualizer_tech_bucket_states",
+)
+
+
+def _normalize_sparse_runtime_bucket_state(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    normalized = json.loads(json.dumps(snapshot))
+    ui = normalized.get("ui")
+    if isinstance(ui, dict):
+        for key in _SPARSE_RUNTIME_BUCKET_KEYS:
+            bucket = ui.get(key)
+            if isinstance(bucket, dict) and not any(bool(value) for value in bucket.values()):
+                ui.pop(key, None)
+    return normalized
+
+
 def _load_outputs(root: Path) -> dict[str, dict[str, Any]]:
-    outputs = module.regenerate_sst_defaults(root)
+    module.regenerate_defaults_artifacts(
+        docs_dir=root,
+        include_json=False,
+        include_sst=True,
+    )
+    outputs = tuple(root / filename for _application, filename in module.EXPORT_TARGETS)
     assert all(path.parent == root and path.exists() for path in outputs)
     return {
         app_name: json.loads(path.read_text(encoding="utf-8"))
@@ -138,7 +162,19 @@ def test_generated_sst_import_matches_fresh_profile_reset(
 
     reference_snapshot = json.loads(reference_export.read_text(encoding="utf-8"))["snapshot"]
     imported_snapshot = json.loads(imported_export.read_text(encoding="utf-8"))["snapshot"]
-    assert imported_snapshot == reference_snapshot
+
+    # Generated SST/default artifacts intentionally keep a schema-complete set
+    # of all-false bucket identities, while fresh/reset live persistence uses
+    # the canonical sparse representation for "everything closed".  Compare
+    # after normalizing only that documented representation seam; every other
+    # setting must still round-trip exactly.
+    generated_ui = generated["snapshot"]["ui"]
+    for key in _SPARSE_RUNTIME_BUCKET_KEYS:
+        assert key in generated_ui
+        assert not any(bool(value) for value in generated_ui[key].values())
+    assert _normalize_sparse_runtime_bucket_state(imported_snapshot) == (
+        _normalize_sparse_runtime_bucket_state(reference_snapshot)
+    )
 
 
 def test_sst_generation_rejects_private_credential_fields(monkeypatch) -> None:
@@ -156,4 +192,4 @@ def test_sst_generation_rejects_private_credential_fields(monkeypatch) -> None:
     monkeypatch.setattr(builder, "build_sst_defaults_snapshot", _defaults_with_secret)
 
     with pytest.raises(ValueError, match="private/credential fields"):
-        module._build_payload(NORMAL_PROFILE)
+        module._build_sst_payload(NORMAL_PROFILE)

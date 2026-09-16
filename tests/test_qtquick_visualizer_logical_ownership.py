@@ -42,6 +42,26 @@ class _Engine:
     def get_perf_diagnostics(self):
         return {}
 
+    def set_floor_config(self, *_args):
+        return None
+
+    def set_sensitivity_config(self, *_args):
+        return None
+
+    def set_energy_boost(self, *_args):
+        return None
+
+    def set_agc_strength(self, *_args):
+        return None
+
+    def set_input_gain(self, *_args):
+        return None
+
+    def set_transient_lane_config(self, *_args):
+        return None
+
+    _audio_worker = SimpleNamespace(set_audio_block_size=lambda *_args, **_kwargs: None)
+
 
 _CANONICAL_BUBBLE_CONFIG = {
     "bubble_big_count": 8,
@@ -99,6 +119,18 @@ def test_fresh_controller_configured_started_advanced_without_widget(
     controller.enabled = True
     controller.playing = True
     controller.engine = _Engine()
+    from core.settings.default_contract import get_raw_default_settings
+    from core.settings.models import SpotifyVisualizerSettings
+    from widgets.spotify_visualizer.quick_technical_config import (
+        apply_controller_technical_config,
+    )
+    from widgets.spotify_visualizer.technical_config import build_technical_cache
+
+    model = SpotifyVisualizerSettings.from_mapping(
+        dict(get_raw_default_settings()["widgets"]["spotify_visualizer"])
+    )
+    technical = dict(build_technical_cache(None, model)["bubble"])
+    apply_controller_technical_config(controller, technical, reason="test_current_contract")
     assert controller.resolve_logical_mode_state("bubble", BubbleFrameRuntime) is not None
     controller.begin_render_activation(engine_generation=3, activation_id=4)
     state._mode_teardown_block_until_ready = False

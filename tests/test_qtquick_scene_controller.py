@@ -375,7 +375,10 @@ def test_scene_controller_is_the_narrow_quick_item_owner():
     assert "set_transition_run" in source
     assert "self._last_transition_run_id" in source
     assert "window.update" not in source
-    assert "afterRendering" not in source
+    assert "window.afterRendering.connect(" in source
+    assert "self._trace_after_rendering" in source
+    assert "if self._frame_trace is not None:" in source
+    assert "afterRendering.connect(self._on_" not in source
     assert "afterFrameEnd" not in source
     assert source.count("MediaArtworkImageProvider()") == 1
     assert source.count("addImageProvider(") == 1

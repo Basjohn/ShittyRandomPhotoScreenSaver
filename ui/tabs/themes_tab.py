@@ -240,14 +240,6 @@ class ThemesTab(QWidget):
             button.setToolTip(tooltip)
             del blocker
 
-    def _update_widget_link_button(self, checked: bool | None = None) -> None:
-        """Compatibility wrapper for the former Widget-only link control."""
-
-        if checked is None:
-            state=read_widget_theme_state(self._settings)
-            checked=state.keep_synced
-        self._sync_link_buttons(bool(checked))
-
     def _populate_settings_themes(self):
         self._loading_selection=True
         try:

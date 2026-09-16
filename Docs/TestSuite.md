@@ -108,6 +108,14 @@ Do not:
 
 Fixtures must follow current architecture. A fixture that manufactures a retired owner can give convincing green results for a product path that no longer exists.
 
+### 5.1 CHK53 pre-suite oracle audit
+
+The cleanup campaign is currently **test-first gated**. CHK53 removes/re-homes known stale tests and strengthens assertions that previously passed without proving their stated contract. The next intended-environment full run is therefore a decision gate: risky QSettings/SST/layout/theme/credential/Visualizer persisted-input retirement does not resume until the suite is green or every non-green result is explicitly classified.
+
+Current retained-Quick Visualizer contract modules are `test_qtquick_visualizer_owner_contract.py`, `test_qtquick_visualizer_technical_sync_contract.py`, and `test_qtquick_product_wiring_contract.py`. Phase/checkpoint-named predecessor files are retired; do not restore them to satisfy an external stale test list.
+
+A test that mentions a retired owner is not automatically obsolete. **Negative absence/import guards are current contracts.** Conversely, a test with no meaningful oracle, a tautological assertion, a permanently skipped empty shell, or a loop over a schema root that no longer exists is not useful evidence merely because it is green.
+
 ## 6. Permanent architecture gates
 
 ### 6.1 Qt Quick presentation and lifecycle

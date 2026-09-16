@@ -152,7 +152,7 @@ Historical code is not reference-protected merely because the product once neede
 
 ## Tooling authority
 
-Production runtime emits evidence; operator tooling consumes that evidence out of process unless a focused harness must explicitly construct a current owner. Production Python must not import `tools`/`scripts` analysis modules, and operator tooling must not restore deleted QWidget/GL/compositor/replay owners simply to preserve an old benchmark or parser. `tests/run_chunked.py` is the single test-profile authority; `tools/run_tests.py` is convenience delegation only.
+Production runtime emits evidence; operator tooling consumes that evidence out of process unless a focused harness must explicitly construct a current owner. Production Python must not import `tools`/`scripts` analysis modules, and operator tooling must not restore deleted QWidget/GL/compositor/replay owners simply to preserve an old benchmark or parser. `tests/run_chunked.py` is the single test-profile authority; no secondary test-runner facade is retained.
 
 Built-in PERF/usage/QML instrumentation is the primary runtime performance evidence. Retain an external parser/harness only when it answers a bounded question that current instrumentation/tests cannot answer more directly. Resource counters never authorize weakening Visualizer cadence, newest-state freshness, R-69 authored response, Media event ownership or R-63 black-flash protection.
 

@@ -3,64 +3,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-def test_gmail_settings_keys_exist() -> None:
-    """Verify Gmail settings keys are defined in default_settings.py."""
-    from core.settings.default_settings import DEFAULT_SETTINGS
-
-    # Check that gmail settings exist in defaults
-    gmail_keys = [k for k in DEFAULT_SETTINGS.keys() if k.startswith("gmail.")]
-    # If no gmail.* keys exist, that's okay - they might not be added yet
-    # Just verify the structure is correct if they do exist
-    if gmail_keys:
-        # Check for expected keys (subset)
-        expected_keys = [
-            "gmail.enabled",
-            "gmail.position",
-            "gmail.limit",
-            "gmail.refresh_interval",
-        ]
-        for key in expected_keys:
-            if key in gmail_keys:
-                assert key in DEFAULT_SETTINGS, f"Missing expected key: {key}"
-    else:
-        # No gmail settings yet - that's okay for this test
-        assert True
-
-
-def test_gmail_settings_flat_dict_structure() -> None:
-    """Verify Gmail settings follow flat-dict pattern (no nested dicts)."""
-    from core.settings.default_settings import DEFAULT_SETTINGS
-
-    for key, value in DEFAULT_SETTINGS.items():
-        if key.startswith("gmail."):
-            # Gmail settings should be flat (no nested dicts)
-            if isinstance(value, dict):
-                # Some settings might be dicts for colors/fonts, but they should be simple
-                # This is just a sanity check - complex nested structures should be avoided
-                for k, v in value.items():
-                    assert not isinstance(v, dict), f"Nested dict in {key}.{k}"
-
-
-def test_gmail_settings_type_safety() -> None:
-    """Verify Gmail settings have appropriate types."""
-    from core.settings.default_settings import DEFAULT_SETTINGS
-
-    # Check types for known keys
-    if "gmail.enabled" in DEFAULT_SETTINGS:
-        assert isinstance(DEFAULT_SETTINGS["gmail.enabled"], bool)
-
-    if "gmail.limit" in DEFAULT_SETTINGS:
-        assert isinstance(DEFAULT_SETTINGS["gmail.limit"], int)
-        assert DEFAULT_SETTINGS["gmail.limit"] > 0
-
-    if "gmail.refresh_interval" in DEFAULT_SETTINGS:
-        assert isinstance(DEFAULT_SETTINGS["gmail.refresh_interval"], int)
-        assert DEFAULT_SETTINGS["gmail.refresh_interval"] > 0
-
-    if "gmail.position" in DEFAULT_SETTINGS:
-        assert isinstance(DEFAULT_SETTINGS["gmail.position"], str)
-
-
 def test_gmail_text_cleanup_defaults_exist() -> None:
     """Verify Gmail text cleanup defaults are present in the widget settings dict."""
     from core.settings.default_settings import DEFAULT_SETTINGS

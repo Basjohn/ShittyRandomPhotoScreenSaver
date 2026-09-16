@@ -51,9 +51,9 @@ def test_system_stats_uses_shared_content_extent_reflow_contract() -> None:
 
 
 def test_widgets_nav_pills_reserve_full_label_width() -> None:
-    descriptors = _text("rendering/widget_descriptors.py")
-    assert "horizontalAdvance(descriptor.button_label)" in descriptors
-    assert "button.setMinimumWidth(max(70, label_width + 40))" in descriptors
+    widgets_tab = _text("ui/tabs/widgets_tab.py")
+    assert "horizontalAdvance(descriptor.button_label)" in widgets_tab
+    assert "button.setMinimumWidth(max(70, label_width + 40))" in widgets_tab
 
 
 def test_system_stats_metric_selection_skips_disabled_source_reads() -> None:

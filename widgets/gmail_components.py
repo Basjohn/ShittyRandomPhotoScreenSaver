@@ -181,11 +181,6 @@ def smart_title_case_subject(text: str) -> str:
     return _TITLE_WORD_RE.sub(convert, text)
 
 
-def _smart_title_case(text: str) -> str:
-    """Backward-compatible alias for Gmail subject title casing."""
-    return smart_title_case_subject(text)
-
-
 def shorten_subject(raw: str, max_words: int = 4, max_chars: int = 0) -> str:
     """Shorten a subject by word and/or character budget before pixel elision."""
     text = _clean_spaces(raw)

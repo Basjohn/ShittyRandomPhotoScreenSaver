@@ -69,7 +69,7 @@ DESTINATION_PROFILE = (
     "test_qtquick_gmail_presentation.py",
     "test_qtquick_achievement_pulse_presentation.py",
     "test_qtquick_abandonment_issues_presentation.py",
-    # Post-cutover maintained contracts added/reconciled 2026-09-09..11.
+    # Maintained retained-Quick contracts added/reconciled 2026-09-09..11.
     # Keep source-only guards in the destination profile as cheap early failures;
     # Qt-bearing files still execute in their own fresh subprocess on Windows.
     "test_about_art_theme.py",
@@ -81,9 +81,9 @@ DESTINATION_PROFILE = (
     "test_visualizer_settings_body_transaction_contract.py",
     "test_visualizer_user_authored_preset_catalog.py",
     "test_visualizer_technical_profile_contract.py",
-    "test_qtquick_visualizer_pre_cutover_audit.py",
+    "test_qtquick_visualizer_owner_contract.py",
     "test_qtquick_visualizer_reactivity_config_parity.py",
-    "test_qtquick_visualizer_true_f_gate.py",
+    "test_qtquick_visualizer_technical_sync_contract.py",
     "test_qtquick_visualizer_all_five_owner_chain.py",
     "test_qtquick_visualizer_admission.py",
     "test_qtquick_visualizer_monitor_routing.py",
@@ -170,7 +170,7 @@ DESTINATION_PROFILE = (
     # setup cannot cross-contaminate the rest of the profile.
     "test_qtquick_family_product_actions.py",
     "test_qtquick_clock_custom_variant_geometry.py",
-    "test_qtquick_postcutover_wiring.py",
+    "test_qtquick_product_wiring_contract.py",
     "test_qtquick_startup_reveal.py",
     "test_lifecycle_display_ownership_logging.py",
     "test_qt_message_capture_contract.py",

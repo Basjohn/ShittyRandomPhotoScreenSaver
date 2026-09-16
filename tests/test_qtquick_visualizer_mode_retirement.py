@@ -109,9 +109,9 @@ def _install_host_render_stubs(monkeypatch, host, renderers):
         render_host_module, "resolve_quick_visualizer_renderer", _resolve
     )
     monkeypatch.setattr(
-        render_host_module._InheritedGlState,
-        "capture",
-        lambda: SimpleNamespace(restore=lambda: None),
+        render_host_module.InheritedGlState,
+        "capture_render_host",
+        lambda: SimpleNamespace(restore_render_host=lambda: None),
     )
     for name in (
         "glEnable",
@@ -261,9 +261,9 @@ def test_render_retires_inactive_mode_before_resolving_current_mode(monkeypatch)
     host._quad_vao = 1
     host._quad_vbo = 1
     monkeypatch.setattr(
-        render_host_module._InheritedGlState,
-        "capture",
-        lambda: SimpleNamespace(restore=lambda: None),
+        render_host_module.InheritedGlState,
+        "capture_render_host",
+        lambda: SimpleNamespace(restore_render_host=lambda: None),
     )
     for name in (
         "glEnable",

@@ -676,8 +676,14 @@ class TestBubbleSimulationThreadSafety:
             bubble_drift_frequency=0.0,
             bubble_drift_direction="none",
         )
-        # None energy bands should not crash
         sim.tick(0.016, None, settings)
+        pos, extra, trail = sim.snapshot(
+            bass=0.0, mid_high=0.0, big_bass_pulse=0.0, small_freq_pulse=0.0
+        )
+        assert isinstance(pos, list)
+        assert isinstance(extra, list)
+        assert isinstance(trail, list)
+        assert len(pos) == sim.count * 4
 
 
 # ===========================================================================
@@ -1653,6 +1659,9 @@ class TestVisualizerModeBinding:
 
             def _active_visualizer_preset_is_custom(self):
                 return self._custom
+
+            def _get_active_visualizer_mode(self):
+                return "spectrum"
 
         custom_tab = _Tab(custom=True)
         WidgetsTab._update_rainbow_visibility(custom_tab)

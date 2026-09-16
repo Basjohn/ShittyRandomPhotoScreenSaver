@@ -300,19 +300,6 @@ class TestSettingsManagerCacheInvalidation:
 
         assert received == [("*", None)]
 
-    def test_cleanup_legacy_global_preset_state_clears_cached_legacy_keys(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        manager = _make_manager(tmp_path)
-        manager._settings.setValue("preset", "legacy-value")
-        assert manager.get("preset") == "legacy-value"
-
-        removed = manager.cleanup_legacy_global_preset_state()
-
-        assert "preset" in removed
-        assert manager.get("preset", "missing") == "missing"
-
     def test_import_from_sst_replace_mode_clears_stale_settings(self, tmp_path: Path) -> None:
         from core.settings.defaults import get_default_settings
 
@@ -890,8 +877,16 @@ class TestSettingsManagerDefaults:
 class TestSettingsManagerValidation:
     def test_validate_and_repair_handles_missing_keys(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)
-        # Should not raise
-        manager.validate_and_repair()
+        backend_mode = manager._settings.value("display.render_backend_mode")
+        expected_hw = isinstance(backend_mode, str) and backend_mode.lower().strip() == "opengl"
+
+        manager._settings.remove("display.hw_accel")
+        assert manager._settings.value("display.hw_accel") is None
+
+        repairs = manager.validate_and_repair()
+
+        assert repairs.get("display.hw_accel") == "Missing key"
+        assert manager._settings.value("display.hw_accel") is expected_hw
 
     def test_validate_and_repair_fixes_invalid_types(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)

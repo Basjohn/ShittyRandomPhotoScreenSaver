@@ -1,10 +1,8 @@
-"""Focused post-cutover wiring regressions from the 2026-08-30 operator audit.
+"""Current retained Quick product-wiring contracts.
 
-These tests intentionally target two composition facts that are broken on audited
-pushed main ``4f33981e``. They are expected to be RED before the corresponding
-source fixes land. They do not prescribe where the dependency is threaded; they
-only assert the production retained presentation receives a usable destination
-owner/action.
+These tests protect two production composition facts: Media artwork must publish
+through the QQmlEngine-owned provider, and retained Reddit clicks must route through
+the destination-owned product action seam.
 """
 
 from __future__ import annotations
@@ -89,13 +87,10 @@ def _retire_fixture(context, root, host, owner, factory, qt_app) -> None:
 
 @pytest.mark.qt
 def test_media_family_uses_the_qml_engines_registered_artwork_provider(qt_app) -> None:
-    """``image://mediaartwork`` must publish into the provider registered on QQmlEngine.
+    """``image://mediaartwork`` publishes into the provider registered on QQmlEngine.
 
-    Audited main creates one provider in ``QuickSceneFactory`` and a second private
-    provider in ``MediaFamilyAdapter``. A decoded image published into the private
-    provider can therefore never be resolved by the QML engine. The exact
-    dependency-threading mechanism is deliberately not asserted here; only owner
-    identity is.
+    The dependency-threading mechanism is deliberately not asserted here; only
+    canonical provider ownership is.
     """
 
     owner = QObject()

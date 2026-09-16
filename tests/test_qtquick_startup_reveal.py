@@ -259,4 +259,4 @@ def test_seeded_first_image_uses_fixed_crossfade_without_settings_transition(qt_
         manager.displays = []
         manager.disconnect_monitor_detection()
         manager.deleteLater()
-        app.processEvents()
+        qt_app.processEvents()

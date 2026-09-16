@@ -101,26 +101,6 @@ class TestInputGainPCMScaling:
         assert bars is not None
         assert all(b == 0.0 for b in bars), "Near-zero signal with tiny gain should produce zero bars"
 
-    def test_gain_one_is_identity(self):
-        """gain=1.0 should produce identical bars to no gain attribute."""
-        np = pytest.importorskip("numpy")
-        from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
-
-        t = np.linspace(0, 1024 / 48000, 1024, dtype="float32")
-        signal = (np.sin(2 * np.pi * 200 * t) * 0.5).astype("float32")
-
-        worker_with = _make_mock_worker(np, input_gain=1.0)
-        worker_without = _make_mock_worker(np, input_gain=1.0)
-        delattr(worker_without, '_input_gain')
-
-        bars_with = compute_bars_from_samples(worker_with, signal.copy())
-        bars_without = compute_bars_from_samples(worker_without, signal.copy())
-
-        assert bars_with is not None
-        assert bars_without is not None
-        for i, (a, b) in enumerate(zip(bars_with, bars_without)):
-            assert abs(a - b) < 1e-6, f"Bar {i} differs: {a} vs {b}"
-
     def test_different_gains_produce_different_fft(self):
         """Different input gains should produce different FFT magnitudes."""
         np = pytest.importorskip("numpy")

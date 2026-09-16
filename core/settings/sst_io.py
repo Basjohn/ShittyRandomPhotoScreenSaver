@@ -17,7 +17,6 @@ from core.steam.credentials import strip_secret_fields as strip_steam_secret_fie
 from core.settings.legacy_setting_aliases import promote_legacy_section_aliases
 from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
 from core.settings.structured_input_compat import normalize_legacy_structured_mapping_shape
-from core.settings.widget_input_compat import promote_legacy_clock_separator
 from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
 from core.settings.visualizer_presets import (
     normalize_visualizer_custom_snapshot_cache,
@@ -189,7 +188,7 @@ def _project_import_state(
 
 
 def _normalize_widgets_mapping(widgets_map: Mapping[str, Any]) -> Dict[str, Any]:
-    widgets_dict, _ = promote_legacy_clock_separator(widgets_map)
+    widgets_dict = dict(widgets_map)
     vis_section = widgets_dict.get('spotify_visualizer')
     if isinstance(vis_section, Mapping):
         widgets_dict['spotify_visualizer'] = normalize_visualizer_section_mapping(

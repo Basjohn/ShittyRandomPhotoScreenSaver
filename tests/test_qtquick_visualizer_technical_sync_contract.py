@@ -1,25 +1,8 @@
-"""True pre-cutover F closure bars.
+"""Current Visualizer technical-routing and retained-item sync contracts.
 
-These are deliberately stronger than the earlier all-five component proof.
-
-They cover two exact gaps found by the post-GREEN audit:
-
-1. canonical technical settings already resolve without a widget, but the Quick
-   owner does not yet apply that technical cache to the controller/shared engine;
-   several "technical" values are also authored-logical inputs and must reach the
-   controller-owned logical state rather than disappear with SpotifyVisualizerWidget;
-
-2. QuickVisualizerPresentationSync publishes a snapshot into the bridge, but the
-   retained VisualizerRenderItem must receive the SAME resolved presentation before
-   it can consume that snapshot at updatePaintNode().
-
-Run this file against the current pre-cutover checkpoint before changing code.
-Current audited expectation at 45b7c8f8:
-- canonical technical-cache resolution: GREEN;
-- Quick-owner engine technical apply: RED;
-- technical authored-logical routing: RED;
-- bar-count technical ownership: RED;
-- retained-item consumption: RED.
+These tests protect the post-cutover rule that canonical technical settings reach
+the shared engine/controller-owned logical state and that presentation sync commits
+the same resolved presentation consumed by the retained Quick render item.
 """
 
 from __future__ import annotations
@@ -160,7 +143,7 @@ def _owner_with_cached_model(
     mode = str(model.mode)
     engine = engine or _TechnicalEngine()
     owner = _make_owner(
-        SimpleNamespace(runtime_generation=31),
+        SimpleNamespace(runtime_generation=31, screen_index=0),
         bar_count=32,
         initial_mode=mode,
         engine_factory=lambda _count: engine,
@@ -383,7 +366,7 @@ def test_sync_commits_same_presentation_to_retained_item_and_item_consumes_snaps
     qt_app,
     monkeypatch,
 ) -> None:
-    """Exercise the boundary the earlier all-five proof stopped one step before."""
+    """Resolved presentation and bridge snapshot must meet at the retained item."""
 
     _quiet(monkeypatch)
     runtime, factory = _make_runtime(qt_app, 72)

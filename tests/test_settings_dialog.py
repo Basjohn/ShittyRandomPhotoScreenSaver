@@ -87,7 +87,7 @@ def test_settings_dialog_creation(qapp, settings_manager, animation_manager):
     assert dialog is not None
     assert dialog.windowFlags() & Qt.WindowType.FramelessWindowHint
     assert dialog.minimumSize().width() == 1280
-    assert dialog.minimumSize().height() == 700
+    assert dialog.minimumSize().height() == 760
 
 
 @pytest.mark.qt
@@ -575,7 +575,7 @@ def test_settings_dialog_builds_widgets_tab_in_lazy_mode():
     """Settings dialog should opt WidgetsTab into lazy section construction."""
     source = inspect.getsource(SettingsDialog._setup_ui)
     assert "lazy_sections=True" in source
-    assert 'self._tab_state_cache.get("widgets", {}).get("view_state", {})' in source
+    assert 'initial_view_state=self._initial_view_state_for_tab("widgets")' in source
 
 
 def test_settings_dialog_exposes_widgets_tab_via_lazy_accessor(qapp, settings_manager, animation_manager):

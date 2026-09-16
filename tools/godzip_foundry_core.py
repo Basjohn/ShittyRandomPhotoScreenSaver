@@ -141,11 +141,6 @@ class ArchiveInspection:
     def has_manifest(self) -> bool:
         return self.manifest is not None
 
-    @property
-    def proven_older(self) -> bool:
-        """Compatibility shim: baseline ancestry alone is no longer an apply blocker."""
-        return False
-
     def selection_requires_history_ack(
         self,
         selected_targets: Sequence[str],
