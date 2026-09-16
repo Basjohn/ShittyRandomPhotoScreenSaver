@@ -943,5 +943,4 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
  'workers': {'fft': {'enabled': False},
              'image': {'enabled': True},
              'max_workers': 'auto',
-             'rss': {'enabled': True},
-             'transition': {'enabled': True}}}
+             'rss': {'enabled': True}}}

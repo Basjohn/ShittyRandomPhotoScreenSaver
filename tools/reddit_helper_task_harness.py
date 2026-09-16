@@ -27,7 +27,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 TEMPLATE_PATH = REPO_ROOT / "scripts" / "reddit_helper_task_template.xml"
 DEFAULT_TASK_NAME = "SRPSS_RedditHelper"
-LEGACY_TASK_NAMES = (r"\SRPSS\RedditHelper", r"SRPSS\RedditHelper")
 DEFAULT_PACKAGED_HELPER = (
     REPO_ROOT
     / "release"

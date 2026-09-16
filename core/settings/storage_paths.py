@@ -22,14 +22,9 @@ Directory layout under the application data root::
 """
 from __future__ import annotations
 
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Optional
 
-from core.logging.logger import get_logger
-
-logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Profile → folder mapping (shared with json_store.determine_storage_path)
@@ -171,87 +166,6 @@ def get_steam_cache_dir(profile: Optional[str] = None, profile_key: str | None =
     d.mkdir(parents=True, exist_ok=True)
     return d
 
-
-# ---------------------------------------------------------------------------
-# Persisted/cache compatibility migration helpers
-#
-# These are one-way import bridges into canonical storage, not alternate storage
-# authorities. Their retirement horizon is tracked in ``Future_Cleanup.md``.
-# ---------------------------------------------------------------------------
-
-def migrate_file(old_path: Path, new_path: Path) -> bool:
-    """Copy a single file from *old_path* to *new_path* if it exists.
-
-    Returns True if a migration occurred, False otherwise.
-    Does NOT delete the old file (caller decides cleanup policy).
-    """
-    if not old_path.exists():
-        return False
-    if new_path.exists():
-        logger.debug("[STORAGE] Skipping migration — target already exists: %s", new_path)
-        return False
-    try:
-        new_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(old_path), str(new_path))
-        logger.info("[STORAGE] Migrated file: %s -> %s", old_path, new_path)
-        return True
-    except Exception as exc:
-        logger.warning("[STORAGE] File migration failed %s -> %s: %s", old_path, new_path, exc)
-        return False
-
-
-def migrate_directory(old_dir: Path, new_dir: Path, *, remove_old: bool = False) -> int:
-    """Copy contents of *old_dir* into *new_dir*.
-
-    Returns the number of files migrated.  Files already present in
-    *new_dir* are skipped (no overwrite).
-    """
-    if not old_dir.exists() or not old_dir.is_dir():
-        return 0
-    new_dir.mkdir(parents=True, exist_ok=True)
-    migrated = 0
-    try:
-        for item in old_dir.iterdir():
-            if item.is_file():
-                dest = new_dir / item.name
-                if dest.exists():
-                    continue
-                try:
-                    shutil.copy2(str(item), str(dest))
-                    migrated += 1
-                except Exception as exc:
-                    logger.debug("[STORAGE] Failed to migrate %s: %s", item.name, exc)
-    except Exception as exc:
-        logger.warning("[STORAGE] Directory migration failed %s -> %s: %s", old_dir, new_dir, exc)
-    if migrated > 0:
-        logger.info("[STORAGE] Migrated %d files: %s -> %s", migrated, old_dir, new_dir)
-    if remove_old and migrated > 0:
-        try:
-            shutil.rmtree(str(old_dir), ignore_errors=True)
-            logger.info("[STORAGE] Removed old directory: %s", old_dir)
-        except Exception:
-            pass
-    return migrated
-
-
-def run_all_migrations(profile: Optional[str] = None) -> None:
-    """Run supported legacy-path imports into canonical storage; safe to repeat."""
-    tmp = Path(tempfile.gettempdir())
-
-    # RSS cache: %TEMP%/screensaver_rss_cache/ -> <app_data>/cache/rss/
-    old_rss = tmp / "screensaver_rss_cache"
-    new_rss = get_rss_cache_dir(profile)
-    migrate_directory(old_rss, new_rss)
-
-    # Feed health: %TEMP%/srpss_feed_health.json -> <app_data>/state/feed_health.json
-    old_health = tmp / "srpss_feed_health.json"
-    new_health = get_feed_health_file(profile)
-    migrate_file(old_health, new_health)
-
-    # Weather cache: %TEMP%/screensaver_weather_cache.json -> <app_data>/cache/weather.json
-    old_weather = tmp / "screensaver_weather_cache.json"
-    new_weather = get_weather_cache_file(profile)
-    migrate_file(old_weather, new_weather)
 
 
 def reset_module_cache() -> None:

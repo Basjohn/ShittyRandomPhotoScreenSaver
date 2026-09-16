@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "profile": "legacy-widget-theme-material-state",
+  "snapshot": {
+    "widget_theme": {
+      "selected_id": "custom",
+      "keep_synced": false,
+      "card_material_override": "acrylic",
+      "custom": {
+        "format": "srpss.widget-theme",
+        "schema_version": 2,
+        "theme_id": "custom",
+        "name": "Legacy Custom",
+        "linked_settings_theme_id": null,
+        "default_card_material_mode": "glass",
+        "colors": {
+          "card.background": [35, 35, 35, 76],
+          "card.border": [255, 255, 255, 255],
+          "card.text": [255, 255, 255, 230],
+          "context.menu.surface": [25, 25, 25, 205],
+          "context.menu.border": [255, 255, 255, 255],
+          "context.menu.text": [255, 255, 255, 255],
+          "context.menu.selected_surface": [62, 62, 62, 220],
+          "context.menu.disabled_text": [120, 120, 130, 150],
+          "context.menu.separator": [90, 90, 90, 150],
+          "context.submenu.surface": [25, 25, 25, 205],
+          "context.submenu.border": [255, 255, 255, 255],
+          "context.submenu.text": [255, 255, 255, 255],
+          "context.submenu.selected_surface": [62, 62, 62, 220],
+          "context.submenu.checked_text": [255, 255, 255, 255],
+          "context.submenu.checked_surface": [62, 62, 62, 220]
+        }
+      }
+    },
+    "display": {
+      "image_interval": 47
+    }
+  },
+  "metadata": {
+    "fixture": "widget_theme_v2_material_state"
+  }
+}

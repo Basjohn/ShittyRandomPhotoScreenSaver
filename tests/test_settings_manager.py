@@ -300,27 +300,6 @@ class TestSettingsManagerCacheInvalidation:
 
         assert received == [("*", None)]
 
-    def test_cleanup_obsolete_settings_clears_cached_retired_widget_shadow_keys(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        manager = _make_manager(tmp_path)
-        manager.set(
-            "widgets",
-            {
-                "gmail": {
-                    "enabled": True,
-                    "intense_shadow": True,
-                }
-            },
-        )
-        assert manager.get("widgets.gmail.intense_shadow") is True
-
-        removed = manager.cleanup_obsolete_settings()
-
-        assert "widgets.gmail.intense_shadow" in removed
-        assert manager.get("widgets.gmail.intense_shadow", "missing") == "missing"
-
     def test_cleanup_legacy_global_preset_state_clears_cached_legacy_keys(
         self,
         tmp_path: Path,
@@ -563,10 +542,16 @@ class TestSettingsManagerDefaults:
         ):
             assert manager.get(key) == require_canonical_default(key, MC_PROFILE)
 
-    def test_legacy_hard_exit_alias_migrates_to_interaction_mode(self, tmp_path: Path) -> None:
+    def test_legacy_hard_exit_persisted_alias_migrates_to_interaction_mode(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures" / "settings_legacy_hard_exit_profile.json").read_text(
+                encoding="utf-8"
+            )
+        )
         manager._settings.remove("input.interaction_mode")
-        manager._settings.setValue("input.hard_exit", True)
+        for key, value in fixture.items():
+            manager._settings.setValue(key, value)
         manager._settings.sync()
 
         reloaded = SettingsManager(
@@ -576,9 +561,13 @@ class TestSettingsManagerDefaults:
         )
 
         assert reloaded.get("input.interaction_mode") is True
-        assert reloaded.get("input.hard_exit") is True
         assert reloaded.contains("input.interaction_mode") is True
+        assert reloaded.get("display.image_interval") == 47
         assert reloaded._settings.contains("input.hard_exit") is False
+        with pytest.raises(KeyError, match="Retired setting key"):
+            reloaded.get("input.hard_exit")
+        with pytest.raises(KeyError, match="Retired setting key"):
+            reloaded.set("input.hard_exit", False)
 
     def test_reset_visualizers_to_defaults_replaces_stale_visualizer_section(self, tmp_path: Path) -> None:
         from core.settings.defaults import get_default_settings
@@ -622,65 +611,6 @@ class TestSettingsManagerDefaults:
 
         repairs = manager.validate_and_repair()
         assert "widgets.spotify_visualizer" not in repairs
-
-    def test_cleanup_obsolete_settings_removes_retired_widget_shadow_keys(self, tmp_path: Path) -> None:
-        manager = _make_manager(tmp_path)
-        manager.set(
-            "widgets",
-            {
-                "clock": {
-                    "enabled": True,
-                    "analog_shadow_intense": True,
-                    "digital_shadow_intense": True,
-                },
-                "gmail": {
-                    "enabled": True,
-                    "intense_shadow": True,
-                },
-                "shadows": {
-                    "enabled": True,
-                    "text_enabled": True,
-                    "header_enabled": True,
-                },
-            },
-        )
-        manager._settings.setValue("widgets.clock.analog_shadow_intense", True)
-        manager._settings.setValue("widgets.weather.intense_shadow", True)
-
-        removed = manager.cleanup_obsolete_settings()
-
-        assert "widgets.clock.analog_shadow_intense" in removed
-        assert "widgets.clock.digital_shadow_intense" in removed
-        assert "widgets.weather.intense_shadow" in removed
-        assert "widgets.gmail.intense_shadow" in removed
-
-    def test_startup_removes_retired_transition_easing_without_losing_config(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        storage_root = tmp_path / "retired_transition_easing"
-        app_name = f"TestApp_{uuid.uuid4().hex}"
-        manager = SettingsManager(
-            organization="TestOrg",
-            application=app_name,
-            storage_base_dir=storage_root,
-        )
-        transitions = manager.get("transitions", {})
-        transitions["type"] = "Slide"
-        transitions["easing"] = "InOutBack"
-        manager.set("transitions", transitions)
-        manager.save()
-
-        reloaded = SettingsManager(
-            organization="TestOrg",
-            application=app_name,
-            storage_base_dir=storage_root,
-        )
-
-        persisted = reloaded.get("transitions", {})
-        assert persisted["type"] == "Slide"
-        assert "easing" not in persisted
-        assert reloaded.contains("transitions.easing") is False
 
     def test_startup_migrates_block_flip_columns_to_canonical_cols(
         self,

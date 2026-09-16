@@ -13,6 +13,17 @@ from typing import Hashable
 BucketScopeResolver = Callable[[str], Hashable]
 
 
+# Retired persisted Widget bucket identities accepted only at the input boundary.
+# Current defaults/UI/writers must never emit these names. Keep this table here,
+# next to the canonical bucket persistence normalizer, rather than in WidgetsTab.
+_LEGACY_WIDGET_BUCKET_KEY_ALIASES = {
+    "reddit:primary": "reddit:reddit1",
+    "reddit:feed": "reddit:interaction",
+    "reddit:layout": "reddit:shared_layout",
+    "reddit:appearance": "reddit:shared_appearance",
+}
+
+
 def normalize_single_open_bucket_states(
     canonical_keys: Iterable[str],
     raw: object,
@@ -43,6 +54,34 @@ def normalize_single_open_bucket_states(
     for key in winners.values():
         states[key] = True
     return states
+
+
+def normalize_widget_bucket_states(
+    canonical_keys: Iterable[str],
+    raw: object,
+) -> dict[str, bool]:
+    """Normalize persisted Widget bucket state into current canonical identities.
+
+    The sparse/single-open projection is current product behavior.  The four
+    Reddit key rewrites are a bounded old-profile input bridge only: when an
+    old and current identity are both present, the current identity wins.
+    """
+
+    keys = tuple(str(key) for key in canonical_keys)
+    rewritten: dict[str, object] = {}
+    if isinstance(raw, Mapping):
+        for raw_key, raw_value in raw.items():
+            key = str(raw_key)
+            canonical_key = _LEGACY_WIDGET_BUCKET_KEY_ALIASES.get(key, key)
+            if canonical_key in rewritten and key in _LEGACY_WIDGET_BUCKET_KEY_ALIASES:
+                continue
+            rewritten[canonical_key] = raw_value
+
+    return normalize_single_open_bucket_states(
+        keys,
+        rewritten,
+        scope_for_key=lambda key: widget_bucket_scope(key, keys),
+    )
 
 
 def set_single_open_bucket_state(

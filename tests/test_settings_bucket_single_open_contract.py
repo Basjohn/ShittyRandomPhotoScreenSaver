@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from core.settings.default_settings import DEFAULT_SETTINGS
+from core.settings.defaults import get_flat_defaults
 from core.settings.structured_roots import (
     SPARSE_STRUCTURED_MAPPING_PATHS,
     merge_missing_structured_defaults,
@@ -10,6 +12,7 @@ from core.settings.structured_roots import (
 from core.settings.ui_bucket_state import (
     flat_bucket_scope,
     normalize_single_open_bucket_states,
+    normalize_widget_bucket_states,
     set_single_open_bucket_state,
     sparse_open_bucket_states,
     visualizer_bucket_scope,
@@ -33,6 +36,84 @@ def test_fresh_settings_collapsible_state_is_all_closed() -> None:
         states = ui[state_map_name]
         assert states
         assert not any(states.values()), f"ui.{state_map_name} must start fully collapsed"
+
+
+def test_runtime_store_default_projection_omits_sparse_bucket_maps() -> None:
+    # Canonical defaults keep the full all-false maps as schema identity, while
+    # fresh/reset/SST-replace runtime persistence must encode all-closed as
+    # absence. This prevents current writers from depending on legacy full-map
+    # acceptance just after Reset or replace-import.
+    canonical_ui = DEFAULT_SETTINGS["ui"]
+    sparse_maps = (
+        "gmail_bucket_states",
+        "widget_bucket_states",
+        "visualizer_bucket_states",
+        "visualizer_tech_bucket_states",
+    )
+    for state_map_name in sparse_maps:
+        assert state_map_name in canonical_ui
+    for profile in ("Screensaver", "Screensaver_MC"):
+        runtime_ui = get_flat_defaults(profile)["ui"]
+        for state_map_name in sparse_maps:
+            assert state_map_name not in runtime_ui
+
+
+def test_legacy_bucket_profile_fixture_projects_to_current_sparse_state_idempotently() -> None:
+    fixture = json.loads(
+        (ROOT / "tests" / "fixtures" / "settings_bucket_state_legacy_profile.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    ui = fixture["ui"]
+
+    gmail_keys = tuple(DEFAULT_SETTINGS["ui"]["gmail_bucket_states"])
+    gmail = normalize_single_open_bucket_states(
+        gmail_keys,
+        ui["gmail_bucket_states"],
+        scope_for_key=flat_bucket_scope,
+    )
+    assert sparse_open_bucket_states(gmail) == {"layout": True}
+
+    widget_keys = tuple(DEFAULT_SETTINGS["ui"]["widget_bucket_states"])
+    widgets = normalize_widget_bucket_states(widget_keys, ui["widget_bucket_states"])
+    widget_sparse = sparse_open_bucket_states(widgets)
+    # A current identity wins over its retired alias even when the alias occurs
+    # earlier in persisted insertion order. Other retired Reddit identities are
+    # translated only at this input boundary.
+    assert "reddit:reddit1" not in widget_sparse
+    assert "reddit:interaction" not in widget_sparse
+    assert widget_sparse["reddit:shared_layout"] is True
+    assert widget_sparse["media:controls"] is True
+    assert widget_sparse["steam:achievement_pulse"] is True
+    assert widget_sparse["steam:achievement_pulse_appearance"] is True
+    assert "retired:ghost" not in widget_sparse
+
+    alias_cases = {
+        "reddit:primary": "reddit:reddit1",
+        "reddit:feed": "reddit:interaction",
+        "reddit:layout": "reddit:shared_layout",
+        "reddit:appearance": "reddit:shared_appearance",
+    }
+    for retired_key, canonical_key in alias_cases.items():
+        migrated = normalize_widget_bucket_states(widget_keys, {retired_key: True})
+        assert sparse_open_bucket_states(migrated) == {canonical_key: True}
+
+    # Current sparse output is a fixed point. A second load cannot resurrect
+    # aliases, false members, stale keys, or a second open bucket in one scope.
+    widgets_second = normalize_widget_bucket_states(widget_keys, widget_sparse)
+    assert sparse_open_bucket_states(widgets_second) == widget_sparse
+
+    custom_keys = tuple(DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"])
+    tech_keys = tuple(DEFAULT_SETTINGS["ui"]["visualizer_tech_bucket_states"])
+    combined_keys = custom_keys + tech_keys
+    combined_raw = dict(ui["visualizer_bucket_states"])
+    combined_raw.update(ui["visualizer_tech_bucket_states"])
+    combined = normalize_single_open_bucket_states(
+        combined_keys,
+        combined_raw,
+        scope_for_key=visualizer_bucket_scope,
+    )
+    assert sparse_open_bucket_states(combined) == {"spectrum:agc": True}
 
 
 def test_legacy_full_widget_map_normalizes_to_one_open_per_local_scope() -> None:

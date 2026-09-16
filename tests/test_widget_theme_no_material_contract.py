@@ -66,22 +66,20 @@ def test_widget_theme_schema_is_colour_only_v3() -> None:
     io = _text(ROOT / "ui" / "widget_theme_io.py")
     runtime = _text(ROOT / "ui" / "widget_theme_runtime.py")
     selection = _text(ROOT / "ui" / "widget_theme_selection.py")
+    compatibility = _text(ROOT / "core" / "settings" / "widget_theme_input_compat.py")
     active = _text(ROOT / "ui" / "widget_theme_active.py")
 
     assert "WIDGET_THEME_SCHEMA_VERSION = 3" in spec
-    for source in (spec, io, runtime, active):
+    for source in (spec, io, runtime, selection, active):
         assert "default_card_material_mode" not in source
         assert "card_material_override" not in source
         assert "effective_card_material_mode" not in source
-    # Selection contains the retired persisted key names only for a one-time
-    # rewrite of an existing user's settings root; it never writes them back.
-    assert selection.count('"card_material_override"') == 1
-    assert selection.count('"default_card_material_mode"') == 1
-    assert 'custom_payload.pop("default_card_material_mode", None)' in selection
-    assert '"card_material_override" in values' in selection
-    assert '"card_material_override":' not in selection
-    assert '"default_card_material_mode":' not in selection
-    assert "effective_card_material_mode" not in selection
+    # Old material-bearing profile/SST/QSettings input remains a bounded
+    # compatibility concern, but only at persisted-input boundaries. Current
+    # Widget Theme selection/runtime/file I/O must not know those names.
+    assert compatibility.count('"card_material_override"') == 1
+    assert compatibility.count('"default_card_material_mode"') == 1
+    assert "effective_card_material_mode" not in compatibility
     assert "get_active_widget_material_mode" not in active
 
 def test_style_overrides_keep_colours_and_border_width_but_no_surface_style() -> None:

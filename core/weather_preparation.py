@@ -11,7 +11,6 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
-import shutil
 import tempfile
 import threading
 from typing import Any, Mapping
@@ -249,50 +248,6 @@ def read_weather_provider_cache(
     }
 
 
-def _migrate_legacy_widget_cache(legacy_path: Path, widget_path: Path) -> bool:
-    """Atomically migrate a legacy cache without racing current persistence."""
-
-    temp_path: Path | None = None
-    try:
-        with _cache_lock(widget_path):
-            if not legacy_path.exists() or widget_path.exists():
-                return False
-            widget_path.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(
-                mode="wb",
-                dir=widget_path.parent,
-                prefix=f".{widget_path.name}.",
-                suffix=".tmp",
-                delete=False,
-            ) as handle:
-                temp_path = Path(handle.name)
-                with legacy_path.open("rb") as source:
-                    shutil.copyfileobj(source, handle)
-                handle.flush()
-            os.replace(temp_path, widget_path)
-            temp_path = None
-        logger.info("[STORAGE] Migrated file: %s -> %s", legacy_path, widget_path)
-        return True
-    except Exception:
-        logger.warning(
-            "[CACHE][WEATHER] Legacy widget-cache migration failed %s -> %s",
-            legacy_path,
-            widget_path,
-            exc_info=True,
-        )
-        return False
-    finally:
-        if temp_path is not None:
-            try:
-                temp_path.unlink(missing_ok=True)
-            except Exception:
-                logger.debug(
-                    "[CACHE][WEATHER] Failed to remove migration temp file: %s",
-                    temp_path,
-                    exc_info=True,
-                )
-
-
 def _widget_cache_sample(
     payload: Mapping[str, Any] | None,
     *,
@@ -376,7 +331,6 @@ def load_weather_startup_snapshot(
     *,
     widget_cache_path_override: Path | None = None,
     provider_cache_path_override: Path | None = None,
-    legacy_widget_cache_path: Path | None = None,
 ) -> PreparedWeatherStartup:
     """Load widget-first/provider-fallback startup state on an I/O thread."""
 
@@ -385,8 +339,6 @@ def load_weather_startup_snapshot(
         return PreparedWeatherStartup(None, None, None)
 
     widget_path = resolve_weather_widget_cache_path(widget_cache_path_override)
-    if legacy_widget_cache_path is not None:
-        _migrate_legacy_widget_cache(Path(legacy_widget_cache_path), widget_path)
     widget_sample = _widget_cache_sample(
         _read_json_mapping(widget_path),
         location=active_location,

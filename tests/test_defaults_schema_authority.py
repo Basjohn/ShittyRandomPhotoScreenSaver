@@ -205,13 +205,22 @@ def test_fresh_install_and_reset_follow_the_shared_structured_root_contract() ->
     assert "apply_preset_overlay=False" in builder
 
 
-def test_all_structured_roots_share_one_forward_repair_path() -> None:
+def test_all_structured_roots_share_one_input_compatibility_owner() -> None:
     manager = _text("core/settings/settings_manager.py")
+    store = _text("core/settings/json_store.py")
+    sst = _text("core/settings/sst_io.py")
+    compat = _text("core/settings/structured_input_compat.py")
     roots = _text("core/settings/structured_roots.py")
 
-    assert "for root in sorted(self._STRUCTURED_ROOTS):" in manager
-    assert "dotted members only fill missing paths" in manager
-    assert "self._settings.remove(flat_key)" in manager
+    # Retired flattened shapes are accepted only at persisted/import boundaries.
+    # Ordinary SettingsManager runtime access no longer owns a general repair pass.
+    assert "def _normalize_structured_root_storage" not in manager
+    assert "def _normalize_structured_mapping_shape" not in manager
+    assert "promote_legacy_structured_store_shape(flat)" in manager  # QSettings input
+    assert "promote_legacy_structured_store_shape(flat)" in store  # JSON input
+    assert "normalize_legacy_structured_mapping_shape(section_value)" in sst
+    assert "canonical nested members win" in compat.lower()
+
     for root in (
         "transitions",
         "ui",
@@ -399,6 +408,13 @@ def test_dead_transition_precompute_worker_is_removed() -> None:
     assert "TRANSITION_PRECOMPUTE" not in worker_types
     assert "TransitionWorker" not in workers_init
     assert not (ROOT / "core/process/workers/transition_worker.py").exists()
+
+    defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
+    snapshot = json.loads(_text("core/settings/defaults_snapshot.json"))
+    assert "transition" not in defaults["workers"]
+    assert "transition" not in snapshot["workers"]
+    assert "workers.transition.enabled" not in _text("Docs/SRPSS_Settings_Screensaver.sst")
+    assert "workers.transition.enabled" not in _text("Docs/SRPSS_Settings_Screensaver_MC.sst")
     # NOTE: the caller-dead widgets/spotify_visualizer/renderers island (and
     # rendering/image_processor.py) are proven to have no production importer, but
     # both are still entangled in mixed test files that also cover live behaviour.
@@ -633,6 +649,14 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
     fresh = get_flat_defaults("Screensaver")
     for structured_root in ("transitions", "ui", "widget_theme", "widgets"):
         assert isinstance(fresh[structured_root], dict)
+    sparse_bucket_maps = (
+        "gmail_bucket_states",
+        "widget_bucket_states",
+        "visualizer_bucket_states",
+        "visualizer_tech_bucket_states",
+    )
+    for state_map_name in sparse_bucket_maps:
+        assert state_map_name not in fresh["ui"]
     assert "visualizer_custom_presets" not in fresh
 
     class _Store:
@@ -657,11 +681,6 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
         def _coerce_import_value(_key: str, value: object) -> object:
             return deepcopy(value)
 
-        @staticmethod
-        def _normalize_structured_mapping_shape(value: object) -> tuple[dict[str, object], bool]:
-            assert isinstance(value, dict)
-            return deepcopy(value), False
-
     # The import/replace projection normalizes custom presets through the one
     # canonical cache authority (full-materialized, mode-scoped, retired keys
     # stripped) rather than storing the raw authored diff or wiping ownership.
@@ -679,6 +698,8 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
 
     replaced = _project_import_state(mgr, {}, merge=False)
     assert replaced["timing.interval"] == fresh["timing.interval"]
+    for state_map_name in sparse_bucket_maps:
+        assert state_map_name not in replaced["ui"]
     assert replaced["visualizer_custom_presets"] == normalized_existing
 
     incoming_custom = {"sine_wave": {"sine_wave_sensitivity": 1.5}}

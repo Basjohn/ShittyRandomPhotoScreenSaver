@@ -1794,8 +1794,7 @@
       "fft.enabled": false,
       "image.enabled": true,
       "max_workers": "auto",
-      "rss.enabled": true,
-      "transition.enabled": true
+      "rss.enabled": true
     }
   },
   "snapshot_version": 1

@@ -67,15 +67,6 @@ def test_parse_screensaver_args_ignores_handle_attribution_flag(monkeypatch) -> 
     assert preview_hwnd is None
 
 
-def test_parse_screensaver_args_ignores_gpu_timing_flag(monkeypatch) -> None:
-    monkeypatch.setattr(main.sys, "argv", ["main.py", "--gpu-timing", "/c"])
-
-    mode, preview_hwnd = main.parse_screensaver_args()
-
-    assert mode is main.ScreensaverMode.CONFIG
-    assert preview_hwnd is None
-
-
 def test_parse_screensaver_args_ignores_steam_dev_and_trace_flags(monkeypatch) -> None:
     monkeypatch.setattr(main.sys, "argv", ["main.py", "--devsteam", "--steam", "/c"])
 

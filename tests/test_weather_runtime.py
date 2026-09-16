@@ -99,6 +99,18 @@ def isolated_weather_cache(tmp_path, monkeypatch):
     )
 
 
+def test_weather_current_cache_has_no_retired_home_cache_migration_api() -> None:
+    import inspect
+    import core.weather_preparation as preparation
+    import widgets.weather_runtime as runtime
+
+    assert "_LEGACY_CACHE_FILE" not in vars(runtime)
+    assert not hasattr(preparation, "_migrate_legacy_widget_cache")
+    assert "legacy_widget_cache_path" not in inspect.signature(
+        preparation.load_weather_startup_snapshot
+    ).parameters
+
+
 def test_weather_runtime_construction_is_filesystem_and_provider_inert(monkeypatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(

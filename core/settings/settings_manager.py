@@ -18,11 +18,18 @@ from core.settings.json_store import (
     determine_storage_path,
     get_json_settings_store,
 )
+from core.settings.legacy_setting_aliases import (
+    LEGACY_DOTTED_SETTING_ALIASES,
+    is_legacy_setting_alias,
+)
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.structured_roots import (
     STRUCTURED_SETTINGS_ROOTS,
     merge_missing_structured_defaults,
 )
+from core.settings.structured_input_compat import promote_legacy_structured_store_shape
+from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
+from core.settings.widget_input_compat import promote_legacy_clock_separator
 from core.settings.visualizer_settings_snapshot import (
     migrate_legacy_visualizer_mode_activation_schema,
     normalize_visualizer_section_mapping,
@@ -61,34 +68,6 @@ class SettingsManager(QObject):
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
     _VISUALIZER_SCHEMA_VERSION = 9
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
-    _RETIRED_WIDGET_SHADOW_KEYS = frozenset({
-        "intense_shadow",
-        "analog_shadow_intense",
-        "digital_shadow_intense",
-    })
-    _OBSOLETE_KEYS = frozenset({
-        # Retired product keys dropped on load, never migrated (absent from
-        # canonical defaults and unreferenced in current source).
-        "display.vsync_enabled",
-        "display.fps_cap",
-        "transitions.easing",
-    })
-    _RETIRED_WIDGET_SHADOW_DOTTED_KEYS = frozenset({
-        "widgets.clock.analog_shadow_intense",
-        "widgets.clock.digital_shadow_intense",
-        "widgets.weather.intense_shadow",
-        "widgets.media.intense_shadow",
-        "widgets.reddit.intense_shadow",
-        "widgets.reddit2.intense_shadow",
-        "widgets.imgur.intense_shadow",
-        "widgets.gmail.intense_shadow",
-        # F0.5: the old global magnitude pair is retired; direction + per-bucket
-        # Extra Offset replace it. It is dropped on load, never migrated.
-        "widgets.shadows.offset",
-    })
-    _LEGACY_KEY_ALIASES = {
-        "input.hard_exit": "input.interaction_mode",
-    }
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.0
     _MANUAL_FLOOR_MAX = 1.0
@@ -160,10 +139,12 @@ class SettingsManager(QObject):
         except Exception:
             logger.debug("Legacy settings alias migration failed", exc_info=True)
 
+        # Promote bounded retired Widget keys before current defaults can fill
+        # their replacements and mask the user's old persisted value.
         try:
-            self._normalize_structured_root_storage()
+            self._migrate_legacy_clock_separator_before_defaults()
         except Exception:
-            logger.debug("Structured settings-root normalization failed", exc_info=True)
+            logger.debug("Legacy Clock separator migration failed", exc_info=True)
 
         # Upgrade the retired Visualizer enabled-id list *before* current defaults
         # are merged. Otherwise mode_activation defaults would mask the old user
@@ -210,11 +191,6 @@ class SettingsManager(QObject):
         except Exception:
             logger.debug("Settings validation failed", exc_info=True)
 
-        # Clean up obsolete settings for hygiene
-        try:
-            self.cleanup_obsolete_settings()
-        except Exception:
-            logger.debug("Settings cleanup failed", exc_info=True)
         try:
             self.cleanup_legacy_global_preset_state()
         except Exception:
@@ -308,6 +284,22 @@ class SettingsManager(QObject):
             except Exception:
                 logger.debug("[MIGRATE] Failed to read legacy key %s", key, exc_info=True)
 
+        flat, repaired_roots = promote_legacy_structured_store_shape(flat)
+        if repaired_roots:
+            logger.info(
+                "Promoted flattened structured QSettings roots during migration: %s",
+                list(repaired_roots),
+            )
+        raw_widget_theme = flat.get("widget_theme")
+        if isinstance(raw_widget_theme, Mapping):
+            promoted_widget_theme, widget_theme_repaired = (
+                promote_legacy_widget_theme_state(raw_widget_theme)
+            )
+            if widget_theme_repaired:
+                flat["widget_theme"] = promoted_widget_theme
+                logger.info(
+                    "Promoted retired Widget Theme material state during QSettings migration"
+                )
         self._settings.replace_all(flat)
         self._settings.update_metadata(
             migrated_from="qsettings",
@@ -347,14 +339,20 @@ class SettingsManager(QObject):
 
     @classmethod
     def _canonicalize_key(cls, key: str) -> str:
-        """Return the canonical dotted key for a possibly legacy alias."""
-        return cls._LEGACY_KEY_ALIASES.get(str(key), str(key))
+        """Require a current runtime key; retired aliases are input-only."""
+        text = str(key)
+        if is_legacy_setting_alias(text):
+            canonical = LEGACY_DOTTED_SETTING_ALIASES[text]
+            raise KeyError(
+                f"Retired setting key {text!r}; use current key {canonical!r}"
+            )
+        return text
 
     def _migrate_legacy_setting_aliases(self) -> None:
         """Forward-migrate retired dotted keys to their canonical names."""
         migrated: list[tuple[str, str]] = []
         with self._lock:
-            for legacy_key, canonical_key in self._LEGACY_KEY_ALIASES.items():
+            for legacy_key, canonical_key in LEGACY_DOTTED_SETTING_ALIASES.items():
                 if not self._settings.contains(legacy_key):
                     continue
                 legacy_value = self._settings.value(legacy_key)
@@ -370,115 +368,24 @@ class SettingsManager(QObject):
         if migrated:
             logger.info("Migrated legacy setting aliases: %s", migrated)
 
-    @staticmethod
-    def _assign_nested_if_missing(
-        target: Dict[str, Any],
-        parts: List[str],
-        value: Any,
-    ) -> bool:
-        """Assign one dotted compatibility value without overriding canonical shape."""
+    def _migrate_legacy_clock_separator_before_defaults(self) -> None:
+        """Promote the retired Clock separator key before defaults mask it."""
 
-        if not parts:
-            return False
-        current: Dict[str, Any] = target
-        for part in parts[:-1]:
-            existing = current.get(part, SettingsManager._MISSING)
-            if existing is SettingsManager._MISSING:
-                child: Dict[str, Any] = {}
-                current[part] = child
-                current = child
-                continue
-            if not isinstance(existing, Mapping):
-                return False
-            child = dict(existing)
-            current[part] = child
-            current = child
-        leaf = parts[-1]
-        if leaf in current:
-            return False
-        current[leaf] = deepcopy(value)
-        return True
-
-    @classmethod
-    def _normalize_structured_mapping_shape(
-        cls,
-        mapping: Mapping[str, Any],
-    ) -> tuple[Dict[str, Any], bool]:
-        """Expand dotted compatibility members inside one structured mapping.
-
-        Older reset/SST paths could serialize ``ui`` as e.g.
-        ``{"dialog_geometry.width": 1389}`` even though ``ui`` is explicitly a
-        structured root.  Nested members are authoritative when both forms are
-        present; dotted members only fill missing paths and are then retired.
-        """
-
-        normalized: Dict[str, Any] = {}
-        dotted_members: list[tuple[str, Any]] = []
-        changed = False
-        for key, value in mapping.items():
-            key_text = str(key)
-            if "." in key_text:
-                dotted_members.append((key_text, value))
-                changed = True
-                continue
-            # Only the root's member names are a persistence-shape concern.
-            # Nested mappings can legitimately contain semantic dotted keys
-            # (for example Widget Theme colour-role names such as
-            # ``card.background``), so never reinterpret them here.
-            normalized[key_text] = deepcopy(value)
-
-        for dotted, value in dotted_members:
-            cls._assign_nested_if_missing(
-                normalized,
-                [part for part in dotted.split(".") if part],
-                value,
-            )
-        return normalized, changed
-
-    def _normalize_structured_root_storage(self) -> None:
-        """Repair structured roots that were flattened by older persistence paths."""
-
-        repaired_roots: list[str] = []
         with self._lock:
-            all_keys = list(self._settings.allKeys())
-            # Normalize every declared structured root. Older QSettings/reset/SST
-            # paths could leave either a root mapping containing dotted members
-            # or separate ``root.member`` store keys. Nested values win; flat
-            # compatibility members only fill missing paths and are then retired.
-            for root in sorted(self._STRUCTURED_ROOTS):
-                raw_root = self._settings.value(root, self._MISSING)
-                if isinstance(raw_root, Mapping):
-                    normalized, changed = self._normalize_structured_mapping_shape(raw_root)
-                else:
-                    normalized = {}
-                    changed = False
+            raw_widgets = self._settings.value("widgets", None)
+            if not isinstance(raw_widgets, Mapping):
+                return
+            migrated, changed = promote_legacy_clock_separator(raw_widgets)
+            if not changed:
+                return
+            self._settings.setValue("widgets", migrated)
+            self._settings.sync()
+            self._clear_cache_locked()
 
-                prefix = f"{root}."
-                flat_keys = [key for key in all_keys if str(key).startswith(prefix)]
-                for flat_key in flat_keys:
-                    tail = str(flat_key)[len(prefix):]
-                    self._assign_nested_if_missing(
-                        normalized,
-                        [part for part in tail.split(".") if part],
-                        self._settings.value(flat_key),
-                    )
-                    self._settings.remove(flat_key)
-                    changed = True
+        logger.info(
+            "Migrated legacy Clock separator setting to widgets.clock.show_separator"
+        )
 
-                if changed:
-                    self._settings.setValue(root, normalized)
-                    repaired_roots.append(root)
-
-            if repaired_roots:
-                self._settings.sync()
-                self._clear_cache_locked()
-
-        if repaired_roots:
-            logger.info(
-                "Normalized flattened structured settings roots: %s",
-                repaired_roots,
-            )
-    
     def _migrate_legacy_visualizer_mode_activation_before_defaults(self) -> None:
         """Preserve old per-mode dormancy before current defaults can mask it.
 
@@ -575,7 +482,7 @@ class SettingsManager(QObject):
     def _normalize_widgets_mapping(value: Any) -> Any:
         if not isinstance(value, Mapping):
             return value
-        widgets = dict(value)
+        widgets, _ = promote_legacy_clock_separator(value)
         vis_section = widgets.get("spotify_visualizer")
         if isinstance(vis_section, Mapping):
             widgets["spotify_visualizer"] = normalize_visualizer_section_mapping(
@@ -1070,47 +977,6 @@ class SettingsManager(QObject):
                 self._clear_cache_locked()
                 self._settings.sync()
                 logger.info("Removed legacy global preset keys: %s", removed)
-        return removed
-
-    def cleanup_obsolete_settings(self) -> List[str]:
-        """Remove obsolete/retired settings from the JSON store.
-
-        Basic settings hygiene: drop keys that are no longer part of the
-        architecture (retired widget shadow keys) so stale values do not persist
-        across upgrades. Returns the list of removed keys.
-        """
-        removed: List[str] = []
-        with self._lock:
-            for key in self._OBSOLETE_KEYS | self._RETIRED_WIDGET_SHADOW_DOTTED_KEYS:
-                removed_structured = self._remove_structured_key_locked(key)
-                if removed_structured:
-                    removed.append(key)
-                    logger.debug("Removed obsolete structured setting: %s", key)
-                elif self._settings.contains(key):
-                    self._settings.remove(key)
-                    removed.append(key)
-                    logger.debug("Removed obsolete setting: %s", key)
-            widgets = self._settings.value("widgets")
-            if isinstance(widgets, Mapping):
-                widgets_copy = deepcopy(dict(widgets))
-                widgets_changed = False
-                for section_name, section in list(widgets_copy.items()):
-                    if not isinstance(section, Mapping):
-                        continue
-                    section_copy = dict(section)
-                    for retired_key in self._RETIRED_WIDGET_SHADOW_KEYS:
-                        if retired_key in section_copy:
-                            section_copy.pop(retired_key, None)
-                            removed.append(f"widgets.{section_name}.{retired_key}")
-                            widgets_changed = True
-                    if section_copy != section:
-                        widgets_copy[section_name] = section_copy
-                if widgets_changed:
-                    self._store_widgets_root_locked(widgets_copy)
-            if removed:
-                self._clear_cache_locked()
-                self._settings.sync()
-                logger.info("Cleaned up %d obsolete settings: %s", len(removed), removed)
         return removed
 
     def set(self, key: str, value: Any) -> None:

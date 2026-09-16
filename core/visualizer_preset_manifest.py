@@ -20,6 +20,12 @@ _MANAGED_PRESET_SLOT_RE = re.compile(r"^preset[_-]*(\d+)(?:[_-].+)?\.json$", re.
 _SUPPORTED_MODE_IDS = frozenset(VISUALIZER_MODE_IDS)
 
 
+def _manifest_entry_path(entry: object) -> Path:
+    """Return one manifest path using archive-style separators on every host."""
+
+    return Path(str(entry).replace("\\", "/"))
+
+
 def _is_frozen_build() -> bool:
     return bool(getattr(sys, "frozen", False)) or bool(getattr(builtins, "__compiled__", False))
 
@@ -33,7 +39,7 @@ def _normalize_manifest_entries(entries: object) -> set[str]:
     if not isinstance(entries, list):
         return set()
     return {
-        Path(str(entry)).as_posix()
+        _manifest_entry_path(entry).as_posix()
         for entry in entries
         if isinstance(entry, str)
         and entry.strip()
@@ -44,10 +50,10 @@ def _normalize_manifest_entries(entries: object) -> set[str]:
 def build_curated_visualizer_manifest_payload(entries: Collection[str]) -> dict[str, list[str]]:
     """Build the canonical manifest payload for a curated preset tree."""
     normalized = {
-        Path(str(entry)).as_posix()
+        _manifest_entry_path(entry).as_posix()
         for entry in entries
         if str(entry).strip()
-        and _is_supported_curated_preset_path(Path(str(entry)))
+        and _is_supported_curated_preset_path(_manifest_entry_path(entry))
     }
     return {
         "managed_curated_files": sorted(normalized),
@@ -103,15 +109,29 @@ def write_curated_visualizer_preset_manifest(
 ) -> set[str]:
     """Write a canonical manifest for the curated preset tree under *root*."""
     resolved_entries = {
-        Path(str(entry)).as_posix()
+        _manifest_entry_path(entry).as_posix()
         for entry in (entries if entries is not None else scan_curated_visualizer_preset_tree(root))
         if str(entry).strip()
-        and _is_supported_curated_preset_path(Path(str(entry)))
+        and _is_supported_curated_preset_path(_manifest_entry_path(entry))
     }
     manifest_path = get_visualizer_preset_manifest_path(root)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     payload = build_curated_visualizer_manifest_payload(resolved_entries)
-    manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    rendered = json.dumps(payload, indent=2) + "\n"
+
+    # Explicit regeneration is allowed to write this artifact, but a no-op
+    # regeneration must remain byte-stable across host platforms. Preserve the
+    # existing newline convention when content changes and skip the write
+    # entirely when the logical JSON is already canonical. This avoids Linux
+    # validation dirtying a Windows/CRLF checkout (and vice versa).
+    existing_bytes = manifest_path.read_bytes() if manifest_path.exists() else b""
+    if existing_bytes:
+        existing_text = existing_bytes.decode("utf-8")
+        if existing_text.replace("\r\n", "\n") == rendered:
+            return resolved_entries
+        newline = "\r\n" if b"\r\n" in existing_bytes else "\n"
+        rendered = rendered.replace("\n", newline)
+    manifest_path.write_bytes(rendered.encode("utf-8"))
     return resolved_entries
 
 
@@ -251,12 +271,12 @@ def sync_curated_preset_tree(
         return []
 
     managed_entries = {
-        Path(str(entry)).as_posix()
+        _manifest_entry_path(entry).as_posix()
         for entry in (
             manifest_entries if manifest_entries is not None else load_curated_visualizer_preset_manifest(root)
         )
         if str(entry).strip()
-        and _is_supported_curated_preset_path(Path(str(entry)))
+        and _is_supported_curated_preset_path(_manifest_entry_path(entry))
     }
     if not managed_entries:
         return []
@@ -299,12 +319,12 @@ def mirror_curated_visualizer_preset_tree(
         raise FileNotFoundError(f"Curated preset source root does not exist: {source_root}")
 
     resolved_entries = {
-        Path(str(entry)).as_posix()
+        _manifest_entry_path(entry).as_posix()
         for entry in (
             manifest_entries if manifest_entries is not None else resolve_curated_visualizer_manifest_entries(source_root)
         )
         if str(entry).strip()
-        and _is_supported_curated_preset_path(Path(str(entry)))
+        and _is_supported_curated_preset_path(_manifest_entry_path(entry))
     }
     if not resolved_entries:
         raise RuntimeError(f"No curated preset entries were discovered under {source_root}")

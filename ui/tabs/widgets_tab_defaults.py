@@ -1019,7 +1019,6 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
     shadows_config: dict[str, object] = (
         dict(existing_shadows) if isinstance(existing_shadows, Mapping) else {}
     )
-    shadows_config.pop("offset", None)
 
     shadows_config["enabled"] = tab.widget_shadows_enabled.isChecked()
     shadows_config["text_enabled"] = tab.widget_text_shadows_enabled.isChecked()

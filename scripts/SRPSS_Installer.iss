@@ -95,9 +95,6 @@ Root: HKCU; Subkey: "Software\ShittyRandomPhotoScreenSaver\Screensaver"; Flags: 
 ; Set SRPSS.scr as the current user's active screensaver.
 Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\SRPSS.scr"; Flags: uninsdeletevalue
 
-; Remove the legacy login-start helper entry.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SRPSS_RedditHelper"; Flags: deletevalue
-
 [Icons]
 Name: "{commondesktop}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; WorkingDir: "{sys}"; IconFilename: "{app}\SRPSS.ico"
 Name: "{group}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; WorkingDir: "{sys}"; IconFilename: "{app}\SRPSS.ico"
@@ -105,7 +102,6 @@ Name: "{group}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "des
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/F /IM SRPSS_RedditHelper.exe"; Flags: runhidden nowait; RunOnceId: "KillHelper"
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""SRPSS_RedditHelper"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteHelperTask"
-Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""\SRPSS\RedditHelper"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteLegacyHelperTask"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
@@ -242,7 +238,6 @@ begin
   );
 
   TryDeleteTaskByName(TaskName);
-  TryDeleteTaskByName('\SRPSS\RedditHelper');
 
   Log('SRPSS: registering Reddit helper task via Task Scheduler COM XML import');
   Log('SRPSS: task user id=' + TaskUserId);

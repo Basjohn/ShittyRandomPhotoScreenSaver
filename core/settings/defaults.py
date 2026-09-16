@@ -32,7 +32,10 @@ from .default_contract import (
     require_canonical_default,
 )
 from .visualizer_settings_snapshot import normalize_visualizer_section_mapping
-from .structured_roots import STRUCTURED_SETTINGS_ROOTS
+from .structured_roots import (
+    STRUCTURED_SETTINGS_ROOTS,
+    project_structured_defaults_for_persistence,
+)
 
 # Keys to preserve during reset (user-specific data)
 PRESERVE_ON_RESET = frozenset({
@@ -81,9 +84,11 @@ CANONICAL_DEFAULTS = get_default_settings(NORMAL_PROFILE)
 def get_flat_defaults(application: str | None = None) -> Dict[str, Any]:
     """Return defaults in the runtime store's key shape.
 
-    Declared structured roots remain complete mappings. Other mapping roots are
-    flattened to dotted leaf keys, matching :class:`JsonSettingsStore` rather
-    than maintaining a second hand-written list of special sections.
+    Declared structured roots remain mappings, except sparse persistence
+    subtrees whose identities live in canonical defaults but whose all-closed
+    runtime representation is absence. Other mapping roots are flattened to
+    dotted leaf keys, matching :class:`JsonSettingsStore` rather than
+    maintaining a second hand-written list of special sections.
     """
     nested = get_default_settings(application)
     flat: Dict[str, Any] = {}
@@ -98,7 +103,10 @@ def get_flat_defaults(application: str | None = None) -> Dict[str, Any]:
 
     for section, value in nested.items():
         if section in STRUCTURED_SETTINGS_ROOTS:
-            flat[section] = deepcopy(value)
+            flat[section] = project_structured_defaults_for_persistence(
+                str(section),
+                value if isinstance(value, Mapping) else {},
+            )
         elif isinstance(value, Mapping):
             flatten_mapping(value, section)
         else:

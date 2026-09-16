@@ -44,18 +44,16 @@ This is real migration work and should be tackled soon, but **only as evidence-d
 Maintain a small fixture corpus covering the actual surviving input families below. The goal is not to preserve every historical version forever; it is to know exactly which ones are still supported before deleting bridges.
 
 - [ ] pre-JSON **QSettings** profile -> canonical `settings_v2.json`;
-- [ ] early JSON profile containing retired dotted aliases / structured-root members;
+- [x] early JSON profile containing retired dotted aliases / structured-root members;
 - [ ] pre-current **Visualizer** profile: old `enabled_modes`, global technical/shared visual keys, retired modes/keys, old Bubble gradient semantics and current Custom/preset preservation;
 - [ ] old user-authored Visualizer preset payloads, especially Sphere finish/control aliases and sparse preset numbering;
 - [ ] old **SST** flat/nested snapshots and older `settings_version` input;
 - [ ] **layout-slot v1** payload -> current v2 semantics without inheriting newer per-display Clock overrides;
-- [ ] legacy Settings bucket full-boolean/multi-open maps -> current sparse one-open-per-scope form;
-- [ ] Settings Theme **schema v5 -> v6** user theme;
+- [x] legacy Settings bucket full-boolean/multi-open maps + retired Reddit bucket identities -> current sparse one-open-per-scope form (fixture landed; alias retirement horizon still open);
+- [x] Settings Theme **schema v5 -> v6** user theme fixture/proof + explicit input-boundary owner (support horizon remains open);
 - [ ] Widget Theme **schema v1/v2 -> v3** / abandoned material-field state;
 - [ ] old Clock separator key and old ordinary-family colour persistence;
-- [ ] legacy Weather/cache-storage locations;
 - [ ] legacy Gmail plaintext OAuth token -> encrypted storage + plaintext removal;
-- [ ] legacy Reddit helper startup artifacts (old task names / HKCU Run entry);
 - [ ] installer migration-reset path so a reset cannot silently re-import retired QSettings state.
 
 For each fixture, record whether the support horizon is **KEEP**, **remove after next major release**, or **already caller/input-dead**. Do not guess the horizon from code age.
@@ -73,14 +71,21 @@ For each fixture, record whether the support horizon is **KEEP**, **remove after
 
 ## MIGRATION HORIZON — persisted Settings aliases / structured-root normalization
 
-`SettingsManager` still accepts a narrow set of retired dotted names (currently including `input.hard_exit`) and compatibility members embedded in structured mappings, then rewrites/removes them into current canonical shape.
+The retired dotted-name registry is now explicitly an **input-boundary** concern, not a normal Settings API feature. The only current alias is `input.hard_exit` -> `input.interaction_mode`. Existing JSON/QSettings profiles are promoted during startup and SST import promotes the same nested/flat old input before coercion. Ordinary `get`/`contains` no longer map the old name, and `set` rejects it so current code cannot silently recreate retired schema.
 
-- [ ] Inventory `_LEGACY_KEY_ALIASES` plus structured dotted-member expansion as one input-boundary migration family.
-- [ ] Add representative old JSON fixtures and prove canonical keys win when both old and new names exist.
-- [ ] Remove aliases only after the supported old-profile horizon closes; current UI/default/SST output must never emit them while retained.
-- [ ] Treat `_OBSOLETE_KEYS` / retired shadow keys separately: drop-only sanitation is not a reason to recreate a migration value.
+- [x] Inventory the dotted alias registry: only `input.hard_exit` remains. Fixture the old profile key and prove promotion to current `input.interaction_mode`, sibling preservation, current-name precedence and SST flat/nested import projection.
+- [x] Rehome the existing SettingsManager test away from permanent runtime-alias semantics: it now proves one-time persisted migration, old-key removal, sibling preservation and explicit rejection of retired-key writes.
+- [ ] Define the supported old-profile/QSettings/SST horizon before deleting `LEGACY_DOTTED_SETTING_ALIASES`, `_migrate_legacy_setting_aliases()` and SST alias promotion.
+- [x] Audit **structured dotted-member expansion** separately within this family. Old JSON/QSettings/SST flattened members now share `core/settings/structured_input_compat.py` as an explicit input-only owner; canonical nested members win, current JsonStore persistence keeps declared roots nested, and the old SettingsManager-wide repair methods are retired. A distinguishing fixture proves both historical shapes, sibling preservation, nested semantic dotted-key preservation and durable second-load idempotence.
+- [ ] Define the structured-shape support horizon before deleting `structured_input_compat.py`. Old JSON/QSettings/SST data can still plausibly enter through supported import/startup paths, so CHK37 isolates the bridge rather than gambling with persisted user state.
 
-## MIGRATION HORIZON — Visualizer persisted schema / preset compatibility
+## KEEP / CURRENT INPUT — current Visualizer settings / preset architecture
+
+The current Visualizer settings and preset system is **not cleanup debt**. Keep the canonical mode registry, current mode activation/one-active-mode behavior, shared/global technical settings, per-mode settings, Bubble/Spectrum current semantics, isolated Sphere settings, current Settings UI/Reset/SST behavior, runtime reactivity/freshness, current preset selection/compaction, Custom state, and arbitrary/sparse user-authored preset files. Shipped preset manifests are never authority over the authored catalogue.
+
+Cleanup in this area applies only to **old input bridges** that translate representations no current writer emits. If a current caller ever depends on one of those bridges for ordinary current-format behavior, promote that behavior to its proper canonical owner before deleting the bridge. Do not redesign, flatten, merge or weaken the current Visualizer architecture under this program.
+
+## MIGRATION HORIZON — old Visualizer persisted-schema / preset inputs only
 
 Current runtime authority is the mode registry + per-mode settings/preset contracts. The migration layer is intentionally broader because old profiles and user-authored preset files can predate the current schema.
 
@@ -100,9 +105,9 @@ Surviving compatibility includes:
 - [ ] Verify old inputs migrate to current per-mode ownership once, while current defaults/model/UI/runtime never write retired global forms.
 - [ ] Retire migration functions in small groups only after the matching fixture family is outside the support horizon.
 
-### READY AFTER PROFILE PROOF — Visualizer `enabled_modes` bridge
+### READY AFTER PROFILE PROOF — retired Visualizer `enabled_modes` persisted-list bridge
 
-`widgets.spotify_visualizer.mode_activation.<stable_mode_id>` is the sole current persisted/runtime authority. The old `enabled_modes` list survives only as a pre-default compatibility signature.
+Current enabled-mode product behavior is protected. `widgets.spotify_visualizer.mode_activation.<stable_mode_id>` is the sole current persisted/runtime authority for that behavior; only the retired persisted `enabled_modes` **list representation** is cleanup debt, surviving as a pre-default compatibility signature.
 
 - [ ] Remove `migrate_legacy_enabled_modes_to_activation`, the SettingsManager pre-default hook and warning path only after the profile fixture proves the bridge is no longer required.
 - [ ] Never retain `enabled_modes` as a second dormancy representation.
@@ -124,35 +129,47 @@ Current layout-slot payload version is v2. v1 predates explicit per-display Cloc
 - [ ] Before removal, prove v1 slots cannot still be produced/imported by any supported release/tool.
 - [ ] Do not simplify this by inheriting current runtime overrides into old slots; that changes the saved layout's meaning.
 
-## MIGRATION HORIZON — Settings bucket persistence shape
+## KEEP / CURRENT INPUT — canonical Settings bucket normalization
 
-Bucket state is canonically sparse true-only with at most one open bucket per local scope. The normalizer still accepts old full boolean maps and resolves old multi-open state deterministically.
+Bucket state is canonically sparse true-only on disk, fully enumerated/fail-loud in memory, and limited to at most one open bucket per local scope. `core.settings.ui_bucket_state.normalize_single_open_bucket_states()` is the current canonical loader/repair operation: the same projection naturally ignores false members in both old full boolean maps and current sparse maps, drops unknown identities, and deterministically resolves impossible multi-open state. That behavior is not a separate migration branch and should not be made more complex merely to reject harmless old false members.
 
-- [ ] Treat this as cheap input compatibility until old settings-profile support is narrowed.
-- [ ] If retired, keep canonical in-memory enumeration/fail-loud getters; remove only the old persisted-shape accommodation.
+A persisted legacy full-map fixture now proves old input -> exact sparse current projection -> second-load fixed point. Fresh runtime-store projection, Reset, and SST replace-import no longer materialize the all-false maps, so current writers do not immediately depend on the compatibility reader. Startup still performs no rewrite of an existing old profile; its in-memory projection is canonical and the next real interaction writes the sparse form through the canonical setter.
+
+## MIGRATION HORIZON — retired Settings Widget bucket identities
+
+The bounded one-time bucket bridge is the old Reddit Widget-bucket identity set: `reddit:primary`, `reddit:feed`, `reddit:layout`, and `reddit:appearance`. Current defaults/UI/writers emit only `reddit:reddit1`, `reddit:interaction`, `reddit:shared_layout`, and `reddit:shared_appearance`. The bridge is now isolated beside the canonical bucket persistence normalizer instead of living in `WidgetsTab`.
+
+- [x] Fixture exact old names, canonical-name precedence, multi-open collapse, unknown-key drop, sparse output and second-load idempotence.
+- [ ] Define the old-profile support horizon before deleting these four persisted-key rewrites.
+- [ ] When that horizon closes, remove only the alias table/rewrite; keep canonical sparse/full in-memory normalization, schema enumeration, fail-loud getters and scope rules.
 - [ ] No startup write loop/poller is needed merely to normalize bucket state.
 
 ## MIGRATION HORIZON — Settings Theme schema v5 -> v6
 
-`.srtheme` schema v6 adds `about.art.liquid`; v5 user themes are upgraded deterministically from their existing primary accent instead of failing whole-theme load.
+Current Settings Theme runtime/authoring is schema v6 only. User-authored schema-v5 `.srtheme` files are admitted only through `ui.settings_theme_input_compat.promote_legacy_settings_theme_payload()`, which requires the exact historical v5 colour-role set, seeds `about.art.liquid` from `chrome.outer_border` RGB at full alpha, and hands a v6 payload to the strict current parser.
 
-- [ ] Keep v5 acceptance while v5 user-authored themes are supported.
-- [ ] Before retiring v5, prove Theme Foundry/current export produces v6 and define the user-theme compatibility horizon explicitly.
-- [ ] Do not replace strict schema validation with default-merging just to keep arbitrary ancient/incomplete theme files alive.
+- [x] Land a distinguishing real-file fixture and prove exact v5 -> v6 promotion, current-role preservation, alpha rule, idempotence and strict rejection of incomplete v5 themes.
+- [x] Prove Theme Foundry/current serialization emits schema v6 including `about.art.liquid`; remove the stale Foundry-owned v5 migration test and rehome that proof to the file-input boundary.
+- [ ] Keep the explicit v5 input bridge while v5 user-authored themes are supported; define that external-file compatibility horizon before deleting it.
+- [ ] When the horizon closes, remove `settings_theme_input_compat.py` and the v5 fixture assertions together. Do not weaken strict current v6 validation or default-merge arbitrary ancient/incomplete theme files.
 
 ## MIGRATION HORIZON — Widget Theme v1/v2 material-state rewrite
 
-`ui.widget_theme_selection.read_widget_theme_state()` still upgrades abandoned material-bearing Widget Theme state to v3, removing only the retired material field while preserving identity/link metadata/semantic colours.
+Current Widget Theme selection/runtime/file I/O is colour-only schema v3 and has no material-state compatibility. Old profile/QSettings/SST state is admitted only through `core.settings.widget_theme_input_compat.promote_legacy_widget_theme_state()`, which removes the retired root-level `card_material_override` and upgrades schema-v1/v2 Custom payloads by dropping `default_card_material_mode` and setting schema v3 while preserving identity/link metadata/semantic colours.
 
-- [ ] Prove persisted v1/v2 fixture -> exact v3 state and second-load idempotence.
-- [ ] Remove the rewrite only after supported old profiles can no longer contain those schemas.
+- [x] Prove distinguishing persisted v1/v2 material state -> exact v3 state, no semantic-colour loss, SST promotion and durable JSON second-load idempotence.
+- [x] Remove material-key/schema-migration knowledge from current `ui.widget_theme_selection`; rehome the old no-material test expectation to the explicit persisted-input compatibility owner.
+- [ ] Remove `widget_theme_input_compat.py` and its old-input fixture assertions only after supported old profiles/QSettings/SSTs can no longer contain those schemas.
 - [ ] Never reintroduce card-material runtime ownership to make the old state meaningful.
 
-## DELETE AFTER HORIZON — Clock separator compatibility key
+## MIGRATION HORIZON — Clock separator persisted-key promotion
 
-Current ownership is `widgets.clock.show_separator` + `widgets.clock.separator_thickness`. `widgets.clock.show_digital_separator` survives only as a read compatibility input for older saved configs.
+Current ownership is `widgets.clock.show_separator` + `widgets.clock.separator_thickness`. The retired `widgets.clock.show_digital_separator` name is now admitted only at persisted-input boundaries: startup promotes it **before** current defaults can mask an old `False` value, and SST import applies the same promotion. Current UI and Quick presentation consume `show_separator` only.
 
-- [ ] After profile-horizon proof, remove the legacy fallback from Clock presentation/settings loading and its compatibility tests.
+- [x] Fixture a real distinguishing old value (`show_digital_separator=False` while the current canonical default is `True`), prove exact promotion, current-key precedence, legacy-key removal and second-pass idempotence.
+- [x] Remove duplicate legacy reads from Clock Settings loading and Quick presentation after promotion became the canonical input seam.
+- [x] Retire the old presentation-layer compatibility test; it targeted the wrong owner and its positive case accidentally matched the canonical default, so it did not prove the legacy path. Rehome the proof to the persistence/import boundary.
+- [ ] Define the old-profile/SST support horizon. When it closes, remove `promote_legacy_clock_separator`, the startup pre-default hook, the SST promotion and the legacy fixture assertions together; keep current `show_separator` UI/presentation/default tests.
 
 ## DELETE AFTER HORIZON — ordinary Widget family colour bridge
 
@@ -164,15 +181,6 @@ Temporarily retained compatibility is limited to old per-family colour persisten
 - [ ] Audit remaining non-header family colour fields individually: keep only genuine durable customization; retire invisible precedence.
 - [ ] Keep `Reset All Colours to Theme` if it remains a useful permanent action; delete only obsolete compatibility plumbing.
 
-## MIGRATION HORIZON — storage/cache path imports
-
-`core.settings.storage_paths.run_all_migrations()` still copies old TEMP-based RSS/feed-health/weather state into the canonical `%APPDATA%/SRPSS...` tree, and Weather separately admits the old `~/.srpss_last_weather.json` widget cache.
-
-- [ ] Inventory which legacy files can still exist from a supported installed release.
-- [ ] Prove migration is non-destructive, target-wins, idempotent and cannot overwrite newer canonical cache/state.
-- [ ] Once the horizon closes, remove old TEMP/home probes and then prune generic migration helpers if no current caller remains.
-- [ ] Cache migration retirement must not change the last-good cache contract or trigger synchronous startup I/O on the GUI thread.
-
 ## MIGRATION HORIZON — Gmail plaintext OAuth token cleanup
 
 Gmail bootstrap still recognizes the old plaintext `gmail_credentials.json`, converts valid OAuth credentials to encrypted storage, and deletes/retries deletion of the plaintext file.
@@ -180,26 +188,6 @@ Gmail bootstrap still recognizes the old plaintext `gmail_credentials.json`, con
 - [ ] Keep this migration while an installed supported release may have emitted the plaintext token.
 - [ ] Before retirement, prove successful conversion, failed-conversion safety, and deferred plaintext deletion behavior from a real fixture.
 - [ ] When the horizon closes, remove the plaintext read/migration path but keep encrypted credential failure explicit; never add a plaintext fallback.
-
-## MIGRATION HORIZON — Reddit helper startup artifact cleanup
-
-Current helper startup ownership is the canonical scheduled task. Runtime still removes the old HKCU Run entry and recognizes historical scheduled-task names during cleanup.
-
-- [ ] Establish which installer/helper versions can still leave each old task/Run entry behind.
-- [ ] Remove legacy task names and HKCU Run cleanup only after that installed-base horizon closes.
-- [ ] Do not remove the current task owner or reintroduce helper polling/startup duplication.
-
-## AUDIT — Visualizer diagnostic subset CLI aliases
-
-`--viz-diagnostics` / `--viz-diag` still have live meaning: they enable the visualizer diagnostic subset without the full `--viz` bundle. They are therefore **not** parser fossils. The proven no-op/parser-only tokens (`--devcurve`, `--devstats`, `--diag-pair-warm-finish`, `--diag-p4-stages`, `--diag-p4-no-perf-hud`, `--qsg-render-timing`) have been retired.
-
-- [ ] Decide whether the subset aliases still have an external operator/script use worth preserving.
-- [ ] If retired later, remove both aliases from logging bootstrap + Foundry together and update any Historical Bug runbook that still recommends them.
-- Keep `--viz` and `--frame-trace`; this is not permission to reduce current diagnostic authority.
-
-## AUDIT — GPU timing CLI versus Quick ownership
-
-- [ ] Reconcile `main.py`/logging's advertised `--gpu-timing` owner-context query capability with current Quick production: exact search finds no Quick GL timer-query consumer. Preserve useful PERF logging; remove stale claims or deliberately implement measured, bounded owner-context diagnostics when a real attribution task needs them. Do not restore the retired compositor to make this switch truthful.
 
 ## AUDIT — non-Windows DPAPI plaintext fallback
 

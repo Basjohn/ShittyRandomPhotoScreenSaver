@@ -817,20 +817,6 @@ def test_clock_qml_contract_has_retained_two_pass_analogue_shadows_and_no_effect
     assert "color.alpha() * 0.45" not in clock_model
 
 
-def test_clock_separator_legacy_key_is_read_only_compatibility_input() -> None:
-    legacy = ClockPresentationConfig.from_mapping(
-        "clock",
-        {"show_digital_separator": True, "separator_thickness": 3},
-    )
-    current = ClockPresentationConfig.from_mapping(
-        "clock",
-        {"show_separator": False, "show_digital_separator": True, "separator_thickness": 5},
-    )
-    assert legacy.show_separator is True
-    assert legacy.separator_thickness == pytest.approx(3.0)
-    assert current.show_separator is False
-    assert current.separator_thickness == pytest.approx(5.0)
-
 
 def test_static_registry_maps_clock_family_without_member_duplication() -> None:
     from rendering.quick.widgets.registry import ORDINARY_WIDGET_FAMILY_COMPONENTS

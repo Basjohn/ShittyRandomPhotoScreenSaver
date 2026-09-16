@@ -59,7 +59,6 @@ logger = get_logger(__name__)
 # Optional test/profile override; canonical path is resolved by an I/O task so
 # constructing the service never touches the filesystem.
 _CACHE_FILE: Optional[Path] = None
-_LEGACY_CACHE_FILE = Path.home() / ".srpss_last_weather.json"
 
 
 class WeatherRuntimeService:
@@ -246,7 +245,6 @@ class WeatherRuntimeService:
         location_key = _normalize_weather_location_key(location)
         widget_cache_override = _CACHE_FILE
         provider_cache_override = open_meteo_provider_module._WEATHER_CACHE_FILE
-        legacy_cache_path = _LEGACY_CACHE_FILE
         runtime_generation = self._runtime_generation
         self_ref = weakref.ref(self)
 
@@ -255,7 +253,6 @@ class WeatherRuntimeService:
                 location,
                 widget_cache_path_override=widget_cache_override,
                 provider_cache_path_override=provider_cache_override,
-                legacy_widget_cache_path=legacy_cache_path,
             )
 
         _load_snapshot._srpss_runtime_generation = runtime_generation

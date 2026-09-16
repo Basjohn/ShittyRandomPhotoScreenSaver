@@ -331,7 +331,6 @@ Use only relevant existing diagnostic flag families such as:
 
 ```text
 --perf
---gpu-timing
 --usage
 --viz
 --geo

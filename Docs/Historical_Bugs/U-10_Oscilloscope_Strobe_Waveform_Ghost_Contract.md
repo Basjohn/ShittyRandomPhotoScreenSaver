@@ -20,7 +20,7 @@
 - **Long-term prevention:**
   - keep Oscilloscope fixes mode-owned unless an oracle proves shared waveform extraction is wrong
   - keep the Oscilloscope waveform response, ghost stability, idle/live-boundary, transient-width strobe, and reactive-glow bars green after any visualizer transport change
-  - use bounded `--viz` / `--viz-diag` diagnostics for speed alpha, waveform delta, ghost ring depth, transient width mix, sensitivity modulation, and glow drive if the issue reopens
+  - use bounded `--viz` diagnostics for speed alpha, waveform delta, ghost ring depth, transient width mix, sensitivity modulation, and glow drive if the issue reopens
   - do not remove glow, ghosting, multi-line rendering, or current-good mode behavior as a fake fix
 - **First implementation pass:**
   - added `widgets.spotify_visualizer.oscilloscope_contract` for mode-owned waveform blend, ghost ring, and transient-width accent contracts

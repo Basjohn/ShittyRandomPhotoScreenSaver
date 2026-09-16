@@ -387,7 +387,7 @@ def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settin
                 assert toggle.isChecked() is False
                 toggle.click()
                 qt_app.processEvents()
-                assert tab.get_widget_bucket_state(section, bucket, False) is True
+                assert tab.get_widget_bucket_state(section, bucket) is True
         finally:
             tab.deleteLater()
     finally:

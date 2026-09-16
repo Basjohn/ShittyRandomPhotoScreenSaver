@@ -867,7 +867,10 @@ def _load_mode_presets_from_disk(mode: str) -> Dict[int, VisualizerPreset]:
 def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
     global _CURATED_TREE_SYNCED
     if not _CURATED_TREE_SYNCED:
-        reconcile_curated_visualizer_preset_tree(_presets_root(), allow_non_frozen=True)
+        # Runtime/source-tree reads must not mutate authored preset artifacts.
+        # Frozen managed trees may still reconcile/prune their shipped copy,
+        # while source-mode authoring/regeneration remains an explicit action.
+        reconcile_curated_visualizer_preset_tree(_presets_root())
         sync_curated_preset_tree(_presets_root())
         _CURATED_TREE_SYNCED = True
 
