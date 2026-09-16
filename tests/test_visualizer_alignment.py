@@ -160,6 +160,13 @@ def test_advanced_toggle_hides_only_advanced(
         builder(tab, layout)
         container.show()
         qt_app.processEvents()
+        # V6a: the normal/advanced mode-body controls are only presented in the
+        # Custom preset (build_mode_scaffold hides normal_widget + advanced_host
+        # off Custom). Put the slider on Custom so the advanced-toggle contract
+        # (hides only advanced, not normal/helper) is actually exercised.
+        preset_slider = getattr(tab, slider_attr)
+        preset_slider.set_preset_index(preset_slider.custom_index())
+        qt_app.processEvents()
         owned = getattr(tab, "_owned_containers", None)
         if owned is None:
             owned = []
