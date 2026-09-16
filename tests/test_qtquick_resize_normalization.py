@@ -83,7 +83,8 @@ def test_two_live_saves_and_cancel_preserve_scale_and_identity(qt_app, family, t
         window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
     reloads = []
     owner = QuickCustomLayoutOwner(settings_manager=settings, participants_provider=lambda: (unit,),
-        visualizer_provider=lambda: (None, None), reload_request=reloads.append)
+        visualizer_provider=lambda: (None, None), reload_request=reloads.append,
+        live_config_commit=lambda widgets: None)
     try:
         assert unit.bind_families(widgets_config=widgets,
             shadow_values=require_canonical_default("widgets.shadows")) == (family,)
@@ -155,7 +156,7 @@ def test_two_live_saves_and_cancel_preserve_scale_and_identity(qt_app, family, t
             assert float(card.item.property("presentationScale")) == pytest.approx(.4, abs=.003)
             owner = QuickCustomLayoutOwner(settings_manager=settings,
                 participants_provider=lambda: (unit,), visualizer_provider=lambda: (None, None),
-                reload_request=reloads.append)
+                reload_request=reloads.append, live_config_commit=lambda widgets: None)
             assert owner.start()
             assert owner.save()
             assert card.model.config == config

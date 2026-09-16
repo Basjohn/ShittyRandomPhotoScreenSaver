@@ -481,6 +481,7 @@ def test_single_quick_custom_owner_cancel_restores_same_retained_item(qt_app) ->
         participants_provider=lambda: (unit,),
         visualizer_provider=lambda: (None, None),
         reload_request=reloads.append,
+        live_config_commit=lambda widgets: None,
     )
     try:
         presentation = unit.presenter.presentation_for_widget_id("clock")
@@ -534,6 +535,7 @@ def test_single_quick_custom_owner_save_commits_geometry_size_and_enabled(
         participants_provider=lambda: (unit,),
         visualizer_provider=lambda: (None, None),
         reload_request=reloads.append,
+        live_config_commit=lambda widgets: None,
     )
     try:
         assert owner.start() is True
@@ -1168,6 +1170,7 @@ def test_routed_ordinary_custom_transfer_moves_same_item_cancel_and_save(qt_app)
         participants_provider=lambda: routes,
         visualizer_provider=lambda: (None, None),
         reload_request=reloads.append,
+        live_config_commit=lambda widgets: None,
     )
     source_host = units[0].runtime.scene_controller.ordinary_widget_host
     target_host = units[1].runtime.scene_controller.ordinary_widget_host
