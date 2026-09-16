@@ -201,7 +201,15 @@ def test_sst_export_and_import_strip_injected_steam_secret_fields(tmp_path: Path
     assert target.import_from_sst(str(malicious_path), merge=True) is True
 
     steam_settings = target.get("widgets")["steam"]
-    assert steam_settings == {"safe_card_setting": True}
+    # Privacy contract: injected credentials must never persist. Non-secret fields
+    # merge normally (merge=True keeps the target's existing steam defaults), so
+    # the safe field lands while api_key/profile_identifier are stripped entirely.
+    assert "api_key" not in steam_settings
+    assert "profile_identifier" not in steam_settings
+    serialized = json.dumps(steam_settings)
+    assert SENTINEL_KEY not in serialized
+    assert SENTINEL_PROFILE not in serialized
+    assert steam_settings["safe_card_setting"] is True
 
 
 def test_disconnect_account_clears_credentials_and_account_private_cache(

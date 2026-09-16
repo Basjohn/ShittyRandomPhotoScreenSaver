@@ -116,8 +116,11 @@ def test_onboarding_reuses_settings_and_restores_quit_policy() -> None:
             "QApplication": object,
             "SettingsManager": object,
             "AnimationManager": Animations,
-            "SettingsDialog": Dialog,
-            "QMessageBox": MessageBox,
+            # Production resolves the QWidget dialog / message box lazily through
+            # these indirection helpers so Qt widgets import only on explicit
+            # paths; provide them rather than the classes directly.
+            "_settings_dialog_class": lambda: Dialog,
+            "_message_box_class": lambda: MessageBox,
             "logger": Logger(),
         },
     )
