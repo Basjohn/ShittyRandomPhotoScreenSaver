@@ -33,6 +33,28 @@ SpotifyVisualizerAudioWorker = _audio_worker.SpotifyVisualizerAudioWorker
 _SpotifyBeatEngine = _beat_engine._SpotifyBeatEngine
 
 
+def _apply_canonical_dsp_config(worker) -> None:
+    """Resolve the source + transient DSP config the current FFT->bars pipeline
+    requires before it will produce bars.
+
+    The rewritten ``bar_computation`` pipeline fails closed with RuntimeError when
+    the Spectrum notch/shape configuration or transient express-lane clamp is
+    unresolved (returning zero bars). Production resolves these through the source
+    config pipeline; a white-box worker must be configured the same way. Passing a
+    single source key triggers full canonical repair of notch/shape/nodes/drop.
+    """
+    from widgets.spotify_visualizer.source_config_applier import (
+        apply_engine_vis_mode_kwargs,
+    )
+
+    apply_engine_vis_mode_kwargs(worker, {"spectrum_mirrored": False})
+    # Canonical Spectrum transient express-lane + gain/boost resolution.
+    worker.set_transient_lane_config(1.0, 0.65, 1.5)
+    worker.set_agc_strength(0.5)
+    worker.set_input_gain(1.0)
+    worker.set_energy_boost(1.0)
+
+
 class TestSpotifyVisualizerIntegration:
     """Comprehensive Spotify visualizer integration test suite."""
     
@@ -65,7 +87,8 @@ class TestSpotifyVisualizerIntegration:
             worker._floor_headroom = 0.18
             worker._silence_floor_threshold = 0.05
             worker._raw_bass_avg = 0.12
-            
+            _apply_canonical_dsp_config(worker)
+
             # Create synthetic audio data representing typical music
             sample_rate = 44100
             duration = 0.1
@@ -133,7 +156,8 @@ class TestSpotifyVisualizerIntegration:
             worker._floor_headroom = 0.18
             worker._silence_floor_threshold = 0.05
             worker._raw_bass_avg = 0.12
-            
+            _apply_canonical_dsp_config(worker)
+
             # Test different signal levels
             test_cases = [
                 ("low_bass", 0.1),
