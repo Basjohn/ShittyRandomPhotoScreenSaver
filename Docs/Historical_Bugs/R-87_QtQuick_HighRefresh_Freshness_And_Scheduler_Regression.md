@@ -571,3 +571,51 @@ Source review finds a bounded duplicate-query seam that does not require weakeni
 This is deliberately **not** a removal of `_InheritedClipState` or of scissor/stencil ownership. Incoming Quick scissor resolution, front/back stencil capture, nesting, rounded mask draws, stencil restoration, GL state programming, uniforms, mask geometry, Bubble authored cadence/reactivity, Qt scheduling and retained-background ownership remain unchanged. The existing CHK24/CHK25 `--frame-trace` sidecar instrumentation is retained; CHK26 adds a marker for the unique blend function/equation capture that has moved into the shared snapshot. Old CHK25 reporter output remains byte-for-byte unchanged.
 
 Because CHK26 moves a small set of unique render-host queries earlier into clip begin, the acceptance criterion is **whole-render/freshness improvement**, not a requirement that `RENDER_PREP_READY -> RENDER_HOST_BEGIN` alone fall. The predicted signature is a near-collapse of `RENDER_HOST_BEGIN -> RENDER_GL_STATE_READY` and clip-end mask query intervals, with neutral-or-better `RENDER_BEGIN -> RENDER_DRAW`, publication->draw, source freshness and subjective smoothness. Real installed Qt/OpenGL acceptance must also prove rounded clipping/no bleed, a mode hotswap, Settings teardown/rebuild and clean final lifecycle. CHK23 remains GOLDEN until that physical acceptance succeeds.
+
+
+## 2026-09-16 — CHK26 physical shared-state result; clip seam closed; CHK27 sync-admission attribution
+
+The corrected CHK26 shared inherited-GL-state candidate completed the installed D1-heavy acceptance lane. In the clean 15–60 s window, the duplicated clipped render-host state read fell from CHK25 ~**0.153 / 0.319 ms** to CHK26 ~**0.016 / 0.030 ms median/p95**. Duplicate teardown mask binding/flag reads likewise collapse to trace-scale overhead. The whole visualizer render body improves from ~**1.884 / 5.831 ms** to ~**1.541 / 5.645 ms**, while publication->draw moves ~**12.683 / 14.545 ms** to ~**12.522 / 14.535 ms**. This is a bounded real win, not a wholesale freshness fix.
+
+The physical correctness evidence is clean: CUSTOM edit/resize saved, several normal visualizer hotswaps completed and returned to Bubble, Settings tore down generation 0 and rebuilt generation 1, Bubble recovered to ~89–90 logical revisions/s, QML capture contains zero messages, native-fault capture is clean and final lifecycle teardown completes. The trace contains **664,399 records / 4 dropped / 0 write errors**. CHK26 therefore validates the specific duplicate-query ownership hypothesis. The clip seam is now considered exhausted for routine performance work; do not keep removing inherited scissor/stencil/state-restoration fences for smaller gains.
+
+**CHK26 is now the formal operator-accepted GOLDEN.** The operator explicitly reported the corrected CHK26 run as **neutral or better** subjectively and pushed repository commit `a0bf70932c` as the GOLDEN landmark. CHK23 is now the immediately prior GOLDEN rollback/bisect landmark; CHK15 / `0abc479c52` remains the older baseline landmark. The promotion rests on the bounded objective win plus clean clipping/hotswap/Settings/lifecycle behavior and neutral-or-better physical smoothness.
+
+The next residual is `GUI_SNAPSHOT_PUBLISH -> QUICK_SYNC_CONSUME`, still approximately **5.4 ms median** in settled heavy evidence. CHK27 changes no production scheduling. It adds explicit-`--frame-trace` markers after presentation commit, after the retained update request, at `updatePaintNode()` entry, and immediately after bridge snapshot acquisition. This separates GUI-side follow-up, Qt dirty-item/update admission, bridge acquisition, and local pre-sync diagnostic work while preserving the legacy aggregate marker. Ordinary runtime performs no new timestamping when `--frame-trace` is absent. Historical CHK25/CHK26 traces remain byte-for-byte report-compatible.
+
+If the request->item-entry segment dominates, treat that as **Qt admission evidence**, not permission to resurrect a Python refresh timer or `frameSwapped` feedback loop. Inspect Qt-native ownership first. If a locally owned commit/request/diagnostic substage dominates instead, repair only that proven owner.
+
+### CHK26 GOLDEN low-usage mixed-display soak
+
+A separate ~**26m38s** low-usage dual-display soak adds longevity and mixed-refresh confidence without replacing the heavy acceptance lane. Both Quick display surfaces remained alive through repeated authored transitions. The Visualizer was live-hopped from the LG/60 Hz display to the MSI/high-refresh display at ~**01:58:17**, then the CUSTOM transfer was saved at ~**01:58:31**; the remainder of the soak stayed healthy on the high-refresh owner.
+
+Bubble ended at **131,529 requested / 131,529 integrated**, integration ratio **1.000**, with cumulative average **90.0 FPS** over ~**1,461.9 s** of active tick accounting. QML capture ended with **0 messages**, native-fault capture is empty, and final shutdown is clean.
+
+The corrected rolling frame-trace storage contract was physically exercised rather than merely source-tested: **6,557,771 records written / 0 dropped / 0 write errors / 7 rotations**. The four retained files occupied ~**97 MiB** at exit and represented ~**679.4 s (~11m19s)** of newest high-resolution history. This confirms the 4 × 32 MiB / 128 MiB ceiling prevents the former unbounded-soak disk growth while preserving full-fidelity recent events.
+
+The retained low-contention window is exceptionally healthy: `RENDER_BEGIN -> DRAW` ~**0.550 / 0.841 ms median/p95**, shared-state `RENDER_HOST_BEGIN -> RENDER_GL_STATE_READY` ~**0.0076 / 0.0105 ms**, `GUI_SNAPSHOT_PUBLISH -> QUICK_SYNC_CONSUME` ~**0.960 / 2.030 ms**, and publication -> **first** draw ~**2.774 / 4.239 ms**. These values are **not** a replacement GOLDEN benchmark because the workload is deliberately lighter than the D1-heavy acceptance lane.
+
+The cross-display hop reveals one diagnostic false trail: the old display's `PERF_HUD` can retain a stale `viz_mode=bubble` label while `viz_draw_fps=0`, `viz_revision_hz=0`, and `viz_age_ms` grows indefinitely. Binary trace ownership shows no active Visualizer renders on that display after the hop. This is stale telemetry presentation, not duplicate runtime ownership.
+
+### Closed clip-path false trails
+
+Do not reopen these without contradictory new evidence:
+- CUSTOM viewport resize did **not** cause stencil-resource reallocation/churn.
+- The literal rounded-mask `glDrawArrays()` was **not** the dominant p95 owner.
+- Broad removal of `_InheritedClipState`, inherited scissor/stencil handling, or GL restoration fences remains rejected on correctness grounds.
+- The only bounded duplicate-query seam with a good risk/reward ratio was the non-stencil shared inherited-state capture removed by CHK26.
+- After CHK26, routine clip micro-optimization is exhausted; further performance work belongs at the separately measured GUI snapshot -> Quick sync/admission seam.
+
+
+
+## 2026-09-16 — CHK27 installed GUI->Quick admission attribution; CHK28 Qt-native phase trace
+
+CHK27's D1-heavy physical trace (`801,200` records, `5` dropped, `0` write errors) closes the local-work fork inside the long-standing GUI snapshot -> Quick sync residual. In the clean 15–60 s settled window, `GUI_SNAPSHOT_PUBLISH -> QUICK_SYNC_CONSUME` is ~**5.452 / 6.890 ms median/p95**, but only ~**0.141 / 0.263 ms** is presentation commit, ~**0.030 / 0.060 ms** is the retained `QQuickItem.update()` request call itself, ~**0.051 / 0.115 ms** is render-bridge snapshot acquisition, and ~**0.072 / 0.142 ms** is the remaining local pre-consume work. The dominant segment is **`GUI_PRESENT_REQUEST_READY -> QUICK_SYNC_ITEM_ENTRY` at ~5.118 / 6.487 ms**.
+
+This is a major attribution correction: the ~5.4 ms aggregate is **not 5 ms of SRPSS GUI/Python work**. The retained update request has already returned; Qt has not yet entered `VisualizerRenderItem.updatePaintNode()`. Qt documents `QQuickItem.update()` as causing `updatePaintNode()` during the scenegraph synchronization stage, and the threaded render loop places `beforeSynchronizing -> updatePaintNode() synchronization -> rendering` on the render thread. Treat this as Qt frame admission/phase latency until a more specific native phase proves otherwise. Do not revive Python refresh pacing, polling, swap-feedback, continuous duplicate drawing or cadence changes to cosmetically shrink it.
+
+CHK27 leaves CHK26 / `a0bf70932c` GOLDEN unchanged. The clean settled publication->draw path remains ~**12.970 / 14.871 ms** and the run ends with zero QML messages, clean native-fault capture and clean lifecycle teardown. The automatic transition late in the run is outside the clean attribution window.
+
+The adjacent `QUICK_SYNC_READY -> RENDER_BEGIN` interval remains ~**4.630 / 6.405 ms**. CHK16 already disproved the old interpretation of this as ordinary Windows runnable starvation. CHK28 therefore adds direct, explicit-`--frame-trace` markers for QQuickWindow `beforeFrameBegin`, `beforeSynchronizing`, `afterSynchronizing`, `beforeRendering`, `beforeRenderPassRecording`, `afterRenderPassRecording`, and `afterRendering`. These use a separate render-cycle identity namespace and do not alter scheduling. The reporter can now distinguish next-frame admission, remaining synchronization, Qt render handoff, render-pass preparation and scenegraph work before the visualizer render node. Historical traces are report-compatible because the new events are optional.
+
+Closed false trail added by CHK27: **do not target presentation commit, render-bridge acquisition or local pre-sync diagnostics as the cause of the heavy ~5.4 ms snapshot->sync residual.** They are sub-millisecond and jointly tiny compared with Qt admission.

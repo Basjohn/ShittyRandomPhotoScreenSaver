@@ -307,6 +307,8 @@ class VisualizerRenderItem(QQuickItem):
         old_node: QSGNode | None,
         _update_data: QQuickItem.UpdatePaintNodeData,
     ) -> QSGNode:
+        trace = self._frame_trace
+        sync_item_entry_ns = time.perf_counter_ns() if trace is not None else None
         node = (
             old_node
             if isinstance(old_node, VisualizerRenderNode)
@@ -325,6 +327,27 @@ class VisualizerRenderItem(QQuickItem):
                 mode_id=identity.mode_id,
                 required_presentation=presentation,
                 allow_presentation_rebase=self._custom_layout_presentation_authority,
+            )
+
+        if snapshot is not None and trace is not None:
+            screen_index = int(getattr(self._bound_window, "screen_index", -1))
+            common_trace_fields = {
+                "screen_index": screen_index,
+                "revision": snapshot.logical_revision,
+                "logical_timestamp_ns": logical_timestamp_ns(
+                    snapshot.logical.logical_timestamp
+                ),
+                "auxiliary": int(snapshot.logical.runtime_generation),
+            }
+            if sync_item_entry_ns is not None:
+                trace.record(
+                    FrameTraceEvent.QUICK_SYNC_ITEM_ENTRY,
+                    timestamp_ns=sync_item_entry_ns,
+                    **common_trace_fields,
+                )
+            trace.record(
+                FrameTraceEvent.QUICK_SYNC_SNAPSHOT_ACQUIRED,
+                **common_trace_fields,
             )
 
         if snapshot is not None and is_viz_diagnostics_enabled():

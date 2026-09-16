@@ -55,7 +55,28 @@ EVENT_NAMES = {
     41: "clip_end_mask_gl_state_applied",
     42: "clip_end_mask_uniforms_ready",
     43: "clip_begin_shared_gl_state_ready",
+    44: "gui_presentation_commit_ready",
+    45: "gui_present_request_ready",
+    46: "quick_sync_item_entry",
+    47: "quick_sync_snapshot_acquired",
+    48: "quick_before_frame_begin",
+    49: "quick_before_synchronizing",
+    50: "quick_after_synchronizing",
+    51: "quick_before_rendering",
+    52: "quick_before_render_pass_recording",
+    53: "quick_after_render_pass_recording",
+    54: "quick_after_rendering",
 }
+
+RENDER_CYCLE_EVENT_IDS = frozenset(range(48, 55))
+RENDER_CYCLE_STAGES = (
+    (48, 49, "before_frame_begin->before_synchronizing"),
+    (49, 50, "before_synchronizing->after_synchronizing"),
+    (50, 51, "after_synchronizing->before_rendering"),
+    (51, 52, "before_rendering->before_render_pass"),
+    (52, 53, "render_pass_recording"),
+    (53, 54, "after_render_pass->after_rendering"),
+)
 
 
 CLIP_BEGIN_STAGES = (
@@ -404,6 +425,140 @@ def _print_clip_tail_breakdown(
             f"dominant_frames={dominant.get(label, 0)}"
         )
 
+def _summary_ms(values_ns: list[int]) -> tuple[float, float, float] | None:
+    if not values_ns:
+        return None
+    values_ms = [value / 1_000_000.0 for value in values_ns]
+    return (
+        statistics.median(values_ms),
+        _pct(values_ms, .95),
+        _pct(values_ms, .99),
+    )
+
+
+def _print_render_cycle_attribution(
+    *,
+    screen: int,
+    render_cycle_events: dict[tuple[int, int, int], dict[int, list[int]]],
+    by_window_revision: dict[tuple[int, int, int], dict[int, list[int]]],
+) -> None:
+    """Report Qt-native frame phases and bridge them to visualizer markers.
+
+    Render-cycle identities are intentionally separate from visualizer logical
+    revisions. Cross-boundary attribution is reconstructed by containment in the
+    same QQuickWindow synchronization/render cycle.
+    """
+
+    cycles: list[dict[int, int]] = []
+    for (event_screen, _generation, _cycle), events in render_cycle_events.items():
+        if event_screen != screen:
+            continue
+        row: dict[int, int] = {}
+        for event, stamps in events.items():
+            if stamps:
+                row[event] = stamps[0]
+        if 48 in row:
+            cycles.append(row)
+    cycles.sort(key=lambda row: row[48])
+    if not cycles:
+        return
+
+    print(f"screen={screen} quick_render_cycles={len(cycles)}")
+    for start_event, end_event, label in RENDER_CYCLE_STAGES:
+        values = [
+            row[end_event] - row[start_event]
+            for row in cycles
+            if start_event in row
+            and end_event in row
+            and row[end_event] >= row[start_event]
+        ]
+        summary = _summary_ms(values)
+        if summary is None:
+            continue
+        median, p95, p99 = summary
+        print(
+            f"screen={screen} quick_phase={label} n={len(values)} "
+            f"median_ms={median:.3f} p95_ms={p95:.3f} p99_ms={p99:.3f}"
+        )
+
+    # Index cycles by synchronization start. updatePaintNode() must occur between
+    # beforeSynchronizing and afterSynchronizing in the threaded render loop.
+    sync_cycles = [row for row in cycles if 49 in row and 50 in row]
+    sync_starts = [row[49] for row in sync_cycles]
+
+    def cycle_for_sync_timestamp(ts_ns: int) -> dict[int, int] | None:
+        import bisect
+        index = bisect.bisect_right(sync_starts, ts_ns) - 1
+        if index < 0:
+            return None
+        row = sync_cycles[index]
+        if row[49] <= ts_ns <= row[50]:
+            return row
+        return None
+
+    admission_parts: dict[str, list[int]] = defaultdict(list)
+    post_sync_parts: dict[str, list[int]] = defaultdict(list)
+    for (event_screen, _generation, _revision), events in by_window_revision.items():
+        if event_screen != screen:
+            continue
+        requests = events.get(45, ())
+        entries = events.get(46, ())
+        ready = events.get(7, ())
+        render_begin = events.get(8, ())
+        for request_ts, entry_ts in zip(requests, entries):
+            if entry_ts < request_ts:
+                continue
+            row = cycle_for_sync_timestamp(entry_ts)
+            if row is None:
+                continue
+            if 48 in row and row[48] >= request_ts:
+                admission_parts["present_request->before_frame_begin"].append(
+                    row[48] - request_ts
+                )
+                if 49 in row and row[49] >= row[48]:
+                    admission_parts["before_frame_begin->before_synchronizing"].append(
+                        row[49] - row[48]
+                    )
+            if 49 in row and entry_ts >= row[49]:
+                admission_parts["before_synchronizing->item_entry"].append(
+                    entry_ts - row[49]
+                )
+
+        for ready_ts, render_ts in zip(ready, render_begin):
+            if render_ts < ready_ts:
+                continue
+            row = cycle_for_sync_timestamp(ready_ts)
+            if row is None:
+                continue
+            if 50 in row and row[50] >= ready_ts:
+                post_sync_parts["sync_ready->after_synchronizing"].append(
+                    row[50] - ready_ts
+                )
+            if 50 in row and 51 in row and row[51] >= row[50]:
+                post_sync_parts["after_synchronizing->before_rendering"].append(
+                    row[51] - row[50]
+                )
+            if 51 in row and 52 in row and row[52] >= row[51]:
+                post_sync_parts["before_rendering->before_render_pass"].append(
+                    row[52] - row[51]
+                )
+            if 52 in row and render_ts >= row[52]:
+                post_sync_parts["before_render_pass->visualizer_render_begin"].append(
+                    render_ts - row[52]
+                )
+
+    for family, parts in (("quick_admission", admission_parts), ("quick_post_sync", post_sync_parts)):
+        for label, values in parts.items():
+            summary = _summary_ms(values)
+            if summary is None:
+                continue
+            median, p95, p99 = summary
+            print(
+                f"screen={screen} {family}_stage={label} n={len(values)} "
+                f"median_ms={median:.3f} p95_ms={p95:.3f} p99_ms={p99:.3f}"
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("trace", type=Path)
@@ -443,6 +598,11 @@ def main() -> int:
         lambda: defaultdict(list)
     )
     background_transition_by_key: dict[tuple[int, int], int] = {}
+    # QQuickWindow phase events use a render-cycle sequence, not a visualizer
+    # logical revision. Keep them in a distinct identity namespace.
+    render_cycle_events: dict[tuple[int, int, int], dict[int, list[int]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     draws_by_screen = Counter()
     swaps_by_screen = Counter()
     unique_draw_revisions: dict[int, set[tuple[int, int]]] = defaultdict(set)
@@ -462,7 +622,9 @@ def main() -> int:
         counts[event] += 1
         if event in (15, 16, 17, 18) and revision >= 0:
             worker_events[(int(aux), int(revision))][event].append(ts_ns)
-        if event in (19, 20, 21, 22, 23) and screen >= 0 and revision >= 0:
+        if event in RENDER_CYCLE_EVENT_IDS and screen >= 0 and revision >= 0:
+            render_cycle_events[(int(screen), int(aux), int(revision))][event].append(ts_ns)
+        elif event in (19, 20, 21, 22, 23) and screen >= 0 and revision >= 0:
             key = (int(screen), int(revision))
             background_events[key][event].append(ts_ns)
             background_transition_by_key[key] = int(aux)
@@ -714,6 +876,11 @@ def main() -> int:
         for start_event, end_event, label in (
             (2, 3, "gui_wake->gui_snapshot"),
             (3, 4, "gui_snapshot->quick_sync"),
+            (3, 44, "gui_snapshot->presentation_commit_ready"),
+            (44, 45, "presentation_commit_ready->present_request_ready"),
+            (45, 46, "present_request_ready->quick_sync_item_entry"),
+            (46, 47, "quick_sync_item_entry->snapshot_acquired"),
+            (47, 4, "quick_sync_snapshot_acquired->quick_sync_consume"),
             (4, 7, "quick_sync->quick_sync_ready"),
             (7, 8, "quick_sync_ready->render_begin"),
             (8, 9, "render_begin->render_prep_ready"),
@@ -774,6 +941,11 @@ def main() -> int:
                     f"p99={_pct(deltas, .99):.3f} max={max(deltas):.3f}"
                 )
 
+        _print_render_cycle_attribution(
+            screen=screen,
+            render_cycle_events=render_cycle_events,
+            by_window_revision=by_window_revision,
+        )
         _print_clip_stage_breakdown(
             screen=screen,
             by_window_revision=by_window_revision,

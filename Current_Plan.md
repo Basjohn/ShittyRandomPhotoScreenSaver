@@ -667,7 +667,7 @@ Research lock for this candidate: Qt 6 `QSGRenderNode` documentation says render
 
 **Secondary CHK15 anomaly — rotation-timer gap oracle:** `screensaver_perf.log` reports two very large `_on_rotation_timer` gaps (~172,987 ms around 18:55:22 and ~152,734 ms around 19:05:29), classified as `unknown_ui_thread_stall`. These occur amid manual/image-transition/reset activity and are not mirrored by the visualizer freshness/lifecycle evidence, so **do not attribute them to R-87 or call them real UI stalls yet**. Audit the rotation-timer gap oracle/reset semantics separately after the scheduling investigation; determine whether manual rotation / timer re-arm legitimately invalidates its expected-period baseline. Preserve as a secondary diagnostic smell, not a reason to alter the working Quick architecture.
 
-## 19. Performance baseline history — CHK15 lock -> CHK23 current GOLDEN
+## 19. Performance baseline history — CHK15 -> CHK23 -> CHK26 current GOLDEN
 
 **Baseline decision (operator-confirmed 2026-09-15): CHK15 is now the performance baseline to defend.**
 The blind telemetry assessment was completed before subjective feedback. Afterward the operator reported that the mixed-refresh
@@ -862,7 +862,7 @@ Mixed-refresh behavior also survives. D0 transition-excluded steady publication-
 
 The supplied pair also does not show a post-startup Settings teardown/rebuild generation, so do not claim that one specific CHK21 seam was re-proven here. Detailed frozen evidence: `.godzip/CHK21_ACCEPTANCE_RESULT.md`.
 
-Current posture after operator acceptance: **CHK23 promotes the CHK21 retained-background architecture to the new GOLDEN forward baseline.** The slight context-menu/edit softness was reported mainly in the intentionally brutal dual-display heavy run, was not present in the single-display run, was not corroborated by event-loop telemetry, and is explicitly accepted by the operator as a likely timing/load-sensitive subjective note rather than a baseline blocker. Preserve the note, but do **not** reopen or roll back the retained-background architecture unless it reproducibly recurs. CHK15 / repository commit `0abc479c52` remains the older immutable rollback/bisect landmark. Detailed promotion evidence is frozen at `.godzip/CHK23_GOLDEN_ACCEPTANCE.md`.
+Historical posture at the CHK23 promotion point: **CHK23 promoted the CHK21 retained-background architecture to the then-current GOLDEN forward baseline.** The slight context-menu/edit softness was reported mainly in the intentionally brutal dual-display heavy run, was not present in the single-display run, was not corroborated by event-loop telemetry, and is explicitly accepted by the operator as a likely timing/load-sensitive subjective note rather than a baseline blocker. Preserve the note, but do **not** reopen or roll back the retained-background architecture unless it reproducibly recurs. CHK15 / repository commit `0abc479c52` remains the older immutable rollback/bisect landmark. Detailed promotion evidence is frozen at `.godzip/CHK23_GOLDEN_ACCEPTANCE.md`.
 
 ### 19.2H CHK23 GOLDEN acceptance and next headroom seam
 CHK23 is a documentation/baseline-promotion checkpoint over the physically validated CHK21 production bytes. No new production behavior is introduced by the CHK23 promotion itself. The accepted D1-heavy retained-background result is approximately **14.144 / 16.497 ms publication->draw**, **14.827 / 17.272 ms publication->swap**, **5.391 / 8.035 ms GUI snapshot->Quick sync**, **4.412 / 6.647 ms Quick-sync-ready->render-begin**, and **2.699 / 7.538 ms render-begin->draw** median/p95, with Bubble still authored at roughly **89–90 logical revisions/s**. The mixed-refresh acceptance also remained healthy: D0 transition-excluded steady publication->draw ~**7.048 / 24.126 ms**, and after the live D0->D1 visualizer hop the settled D1 window ~**13.642 / 16.160 ms**. No black flash, stale presentation, fallback, device-loss, QObject/lifecycle leak or high-refresh transition runaway was observed.
@@ -917,9 +917,96 @@ The same pre-test review exposed a diagnostic-storage bug: `--frame-trace` had a
 
 Corrected source validation: **65/65 directly runnable contracts PASS** (12 runtime-purity + 25 frame-trace/ownership/retention + 20 retained A/B/C + 8 scheduler-trace tooling), and **903/903 Python files compile**. The CHK25 installed binary still produces byte-for-byte identical reporter output when no rolling segments exist. Physical CHK26 acceptance is therefore still outstanding and should use the same D1-heavy sequence described above.
 
+### 19.2M CHK26 physical result -> CHK27 GUI snapshot-to-Quick-sync attribution
+The corrected CHK26 candidate has now completed its installed D1-heavy acceptance run. The candidate does what the refined CHK25 trace predicted: it removes duplicated synchronous non-stencil GL-state reads without removing the inherited clip/stencil correctness fences or merely shifting the whole cost into a new unmeasured render-host stage.
+
+Use the clean **15–60 s settled** lane for CHK25 -> CHK26 candidate attribution. At the time of that comparison CHK23 was the accepted GOLDEN reference, while CHK25 was the closest instrumentation-equivalent predecessor for proving the local production delta:
+
+- `RENDER_HOST_BEGIN -> RENDER_GL_STATE_READY`: CHK25 ~**0.153 / 0.319 ms** -> CHK26 ~**0.016 / 0.030 ms** median/p95;
+- clip-end duplicate binding/flag reads fall from roughly **0.084 ms combined median** to roughly **0.002 ms**;
+- `RENDER_BEGIN -> DRAW`: CHK25 ~**1.884 / 5.831 ms** -> CHK26 ~**1.541 / 5.645 ms**;
+- publication -> draw: CHK25 ~**12.683 / 14.545 ms** -> CHK26 ~**12.522 / 14.535 ms**.
+
+The whole-frame result is therefore **real but modest**: about **0.34 ms median** recovered inside the render body, with a small publication->draw median improvement and essentially flat p95. Do not inflate this into a larger claim. The unique shared capture moved earlier exactly as designed, so the old clip-parent interval itself is not expected to collapse. The important result is that duplicate reads vanished and the whole render did not get worse.
+
+The installed correctness sweep is also clean in the evidence logs: CUSTOM edit/resize completed and saved; normal hotswaps ran through Dev Curve, Sphere, Spectrum, Oscilloscope, Sine and back to Bubble; Settings tore generation 0 down and rebuilt generation 1; Bubble returned to the expected ~89–90 logical revisions/s; QML capture contains **0 messages/warnings/errors/criticals**; native-fault capture is clean; final lifecycle teardown completes. The frame trace contains **664,399 records / 4 dropped / 0 write errors** and did not need to rotate during this short run. The rolling trace cap remains the soak-safe contract.
+
+This is sufficient objective evidence to **stop optimizing the clip seam**. Do not keep shaving rounded-mask state handling just because some tail remains: the literal draw was already exonerated, the proven duplicate query set is now removed, and further work approaches correctness-sensitive Qt/OpenGL ownership for diminishing return. **CHK26 is now the formal operator-accepted GOLDEN.** The operator explicitly reported the corrected CHK26 run as **neutral or better** subjectively and pushed repository commit `a0bf70932c` as the GOLDEN landmark. CHK23 is now the immediately prior GOLDEN rollback/bisect landmark; CHK15 / `0abc479c52` remains the older baseline landmark. The promotion is intentionally based on the combination of bounded objective improvement, preserved clipping/hotswap/Settings/lifecycle correctness, and neutral-or-better physical smoothness—not on the size of the numerical win alone.
+
+The next larger residual is the long-standing **GUI snapshot -> Quick sync** interval, still about **5.4 ms median** in clean heavy evidence. CHK27 is **attribution-only** and changes no scheduling/admission policy. It extends the retained explicit `--frame-trace` sidecar with four markers:
+
+1. `GUI_PRESENTATION_COMMIT_READY` immediately after the published presentation has been committed;
+2. `GUI_PRESENT_REQUEST_READY` immediately after retained `QQuickItem.update()` presentation has been requested;
+3. `QUICK_SYNC_ITEM_ENTRY` timestamped at the very start of `VisualizerRenderItem.updatePaintNode()`;
+4. `QUICK_SYNC_SNAPSHOT_ACQUIRED` immediately after the render bridge returns the snapshot that this sync consumes.
+
+The existing `GUI_SNAPSHOT_PUBLISH`, `QUICK_SYNC_CONSUME`, and `QUICK_SYNC_READY` markers remain untouched. The reporter can therefore split the old aggregate `GUI_SNAPSHOT_PUBLISH -> QUICK_SYNC_CONSUME` seam into:
+
+`publish -> presentation commit` -> `commit -> update request returned` -> **`request returned -> updatePaintNode entry`** -> `item entry -> bridge snapshot acquired` -> `snapshot acquired -> legacy QUICK_SYNC_CONSUME`.
+
+The bold interval is the key Qt-admission candidate. The final pre-consume interval isolates the existing local diagnostics/pre-sync work that the legacy marker intentionally sat after. `updatePaintNode()` captures its entry timestamp only when an explicit frame-trace sink exists, and the entry record is emitted only after a real snapshot has been acquired, so ordinary runtime receives **zero new timestamp/record work** and empty/stale sync callbacks do not manufacture correlation records. Binary format remains v1 and the rolling 128 MiB disk ceiling remains unchanged.
+
+Do **not** optimize scheduling yet. If the physical CHK27 trace proves the bulk is `GUI_PRESENT_REQUEST_READY -> QUICK_SYNC_ITEM_ENTRY`, first research/inspect the Qt-native admission/dirty-item ownership before changing update scheduling. If GUI commit/request work or post-acquisition diagnostics own a material part instead, prefer that locally owned seam. Do not add a Python pacer/timer, polling wake, `frameSwapped -> requestUpdate()` loop, or reduce Bubble cadence/reactivity.
+
+CHK27 source/tooling authority is **67/67 PASS** (12 runtime-purity + 27 frame-trace/ownership/retention/attribution + 8 scheduler-trace tooling + 20 retained A/B/C harness), and **903/903 Python files compile**. CHK25 and CHK26 historical binary traces produce byte-for-byte identical report text under the CHK27 reporter because events 44–47 are absent.
+
+The next physical evidence is deliberately cheap: **one settled D1-heavy explicit-`--frame-trace` run, roughly 60–90 seconds**. No edit/resize, hotswap, Settings cycle, transition, D0 or dual-display work is required for this attribution-only checkpoint; CHK26 already exercised the correctness seams and CHK27 does not change them.
+
+### 19.2N CHK26 GOLDEN low-usage mixed-display soak addendum
+A separate ~**26m38s** low-usage dual-display soak strengthens CHK26 without replacing the heavy acceptance lane. Both Quick display surfaces remained active through repeated authored transitions. The Visualizer was also live-hopped from the LG/60 Hz display to the MSI/high-refresh display at ~**01:58:17**, then the CUSTOM transfer was saved at ~**01:58:31**; the remainder of the soak stayed healthy on the high-refresh owner.
+
+Long-run authority remained clean:
+- Bubble cumulative tick accounting ended at **131,529 requested / 131,529 integrated**, integration ratio **1.000**, with cumulative average **90.0 FPS** over ~**1,461.9 s** of active tick accounting.
+- QML capture ended with **0 messages** and **0 write errors**; native-fault capture is empty; final ProcessSupervisor/ThreadManager/cache shutdown is clean.
+- The rolling explicit `--frame-trace` sink wrote **6,557,771 records**, **0 dropped**, **0 write errors**, and performed **7 rotations**. At exit the retained four-file window occupied ~**97 MiB** and covered ~**679.4 s (~11m19s)**, directly proving the 4 × 32 MiB / 128 MiB soak-safe retention contract prevents unbounded trace growth.
+- In the retained low-contention window, `RENDER_BEGIN -> DRAW` is ~**0.550 / 0.841 ms median/p95**, `RENDER_HOST_BEGIN -> RENDER_GL_STATE_READY` is ~**0.0076 / 0.0105 ms**, `GUI_SNAPSHOT_PUBLISH -> QUICK_SYNC_CONSUME` is ~**0.960 / 2.030 ms**, and publication -> **first** draw is ~**2.774 / 4.239 ms**. These are resilience numbers only; do not compare them directly against the heavy GOLDEN lane as if workload were equivalent.
+- Settled event-loop late-p95 is generally ~2 ms-class late in the soak; the final larger spike occurs during shutdown and is not steady-state evidence.
+
+The hop exposed one **telemetry-only trap** worth preserving for future analysis: after Visualizer ownership moves away from a display, that old display's `PERF_HUD` can continue printing a stale `viz_mode=bubble` label with `viz_draw_fps=0`, `viz_revision_hz=0` and ever-growing `viz_age_ms`. The binary trace shows no active Visualizer render events on that old display after transfer. Treat this as stale diagnostic presentation, **not** as evidence of a duplicate live Visualizer owner.
+
+**Clip-path false trails are now closed and must stay documented:** viewport resizing did not cause stencil-resource churn; the literal rounded-mask `glDrawArrays()` was not the p95 owner; wholesale removal of inherited scissor/stencil/GL restoration fences remains rejected; and after CHK26 removed the proven duplicate non-stencil query set, routine clip micro-optimization is exhausted. Further freshness work belongs at the independently measured GUI snapshot -> Quick sync/admission seam, not by reopening the clip-mask investigation.
+
+### 19.2O CHK27 physical result -> CHK28 Qt-native render-loop phase attribution
+CHK27's installed D1-heavy trace decisively narrows the old ~5.4 ms `GUI_SNAPSHOT_PUBLISH -> QUICK_SYNC_CONSUME` residual. Use the clean **15–60 s** settled lane before the automatic transition tail:
+
+- publication -> draw: ~**12.970 / 14.871 ms median/p95**;
+- GUI snapshot -> Quick sync: ~**5.452 / 6.890 ms**;
+- snapshot -> presentation commit: ~**0.141 / 0.263 ms**;
+- presentation commit -> retained `QQuickItem.update()` request returned: ~**0.030 / 0.060 ms**;
+- **update request returned -> `updatePaintNode()` entry: ~5.118 / 6.487 ms**;
+- item entry -> bridge snapshot acquired: ~**0.051 / 0.115 ms**;
+- snapshot acquired -> legacy Quick-sync consume marker: ~**0.072 / 0.142 ms**;
+- Quick-sync consume -> sync-ready: ~**0.081 / 0.193 ms**;
+- sync-ready -> visualizer render begin: ~**4.630 / 6.405 ms**;
+- visualizer render begin -> draw: ~**1.714 / 6.062 ms**.
+
+The result **exonerates SRPSS GUI follow-up and render-bridge work as owners of the ~5.4 ms aggregate**. Roughly 5.1 ms is spent after the retained update request has returned but before Qt enters `VisualizerRenderItem.updatePaintNode()`. This is Qt Quick dirty-item/render-loop admission latency, not 5 ms of local Python work. Do not attack presentation commit, bridge acquisition or pre-sync diagnostics on the basis of this residual. Do not resurrect a Python refresh timer, polling wake, `frameSwapped -> requestUpdate()` feedback loop, or continuous repeated visualizer drawing merely to shorten the admission interval.
+
+Qt's documented threaded scenegraph order explains why this boundary exists: a `QQuickItem.update()` schedules `updatePaintNode()` for the scenegraph synchronization stage; the render thread emits `beforeSynchronizing`, synchronizes dirty items through `updatePaintNode()`, then continues through the rendering stage. The measured wait is therefore a **phase/admission boundary** until proven otherwise, not a CPU hotspot.
+
+CHK27 itself is healthy: the trace closes at **801,200 records / 5 dropped / 0 write errors / 0 rotations**; QML capture ends with **0 messages**; native-fault capture is clean; final lifecycle teardown completes. The automatic transition late in the run is excluded from the clean 15–60 s attribution window and does not invalidate it. CHK26 / `a0bf70932c` remains GOLDEN; CHK27 changes no product scheduling.
+
+The adjacent `QUICK_SYNC_READY -> RENDER_BEGIN` interval remains ~**4.63 / 6.41 ms** in that clean window. Historical CHK16 already proved this must **not** be called pure Windows scheduler starvation; it contains Qt/scenegraph work after SRPSS sync and before the visualizer `QSGRenderNode.render()` callback. CHK28 therefore remains **attribution-only** and adds explicit-`--frame-trace` direct `QQuickWindow` phase markers:
+
+1. `beforeFrameBegin`;
+2. `beforeSynchronizing`;
+3. `afterSynchronizing`;
+4. `beforeRendering`;
+5. `beforeRenderPassRecording`;
+6. `afterRenderPassRecording`;
+7. `afterRendering`.
+
+They use a separate per-window render-cycle sequence so Qt-native frame identities cannot collide with visualizer logical revisions. The reporter keeps all CHK23–CHK27 output byte-for-byte unchanged when these events are absent, and when present it splits both the request->`updatePaintNode()` admission path and the sync-ready->render-begin path across Qt's native frame phases. All connections exist only when explicit `--frame-trace` is active and are `Qt.DirectConnection` render-thread observers; they add no scheduling request, timer, polling owner or ordinary-runtime work.
+
+Interpret CHK28 conservatively. If request->item-entry is mostly request->`beforeFrameBegin`, that confirms ordinary next-frame admission and closes the 5.4 ms seam as non-actionable without pacing architecture changes. If meaningful time appears after `beforeSynchronizing`, identify the concrete scene synchronization owner before changing anything. For the post-sync interval, distinguish remaining synchronization, Qt handoff, render-pass setup, and scenegraph work before the visualizer node. Only a locally controllable stage with meaningful payoff may become a production candidate.
+
+Available-container changed authority is **49/49 PASS** (12 runtime-purity + 29 frame-trace/ownership/retention/phase-attribution + 8 scheduler-trace tooling), and **903/903 Python files compile**. The project-wide PySide suite remains unavailable in this container because PySide6 is not installed; do not misreport that environmental boundary as a full-suite pass. The CHK27 installed binary produces byte-for-byte identical report text under the CHK28 reporter because events 48–54 are absent.
+
+The next physical evidence is one **D1-heavy explicit-`--frame-trace` settled run, ~60–90 seconds**. No edit, hotswap, Settings, D0 or dual-display work is required. An automatic transition can be excluded from the settled attribution window as usual.
+
 ### 19.3 Regression gates before any scheduling change can become the new baseline
 For every candidate change:
-- compare settled candidate windows against **CHK23 GOLDEN**, not whole-run averages; retain CHK15 as the older rollback/bisect landmark and historical pre-retained-background reference;
+- compare settled candidate windows primarily against **CHK26 GOLDEN / `a0bf70932c`**, not whole-run averages; retain CHK23 as the immediately prior GOLDEN rollback/bisect landmark and CHK15 as the older pre-retained-background archaeology reference;
 - compare publication→wake, snapshot→sync, sync-ready→render-begin, render-body, publication→draw, revision cadence, source age,
   transition request rate and event-loop tails;
 - exercise at least one mode hotswap and one Settings teardown/rebuild; broader torture is optional unless the change touches
@@ -928,10 +1015,10 @@ For every candidate change:
   stale/repeated frames, or changing presets/geometry semantics;
 - reject if the operator reports new crawl/choppiness even when numerical percentiles look better;
 - do not require another dual-display run for every iteration. D1 is the routine scheduling lane; D0-only is enough for
-  high-refresh transition checks. Use the already-collected mixed-refresh CHK23 acceptance evidence as the expensive forward reference; retain CHK15 only for older rollback/bisect archaeology.
+  high-refresh transition checks. Use the already-collected CHK23 mixed-refresh acceptance plus the CHK26 low-usage hop/soak evidence as expensive cross-display references; routine candidates still use D1 unless they touch mixed-refresh/display ownership. Retain CHK15 only for older rollback/bisect archaeology.
 
 ### 19.4 Golden baseline / rollback rule
-**CHK23 is the current accepted GOLDEN performance/freshness baseline and forward comparison authority.** It promotes the physically validated CHK21 retained-background production architecture; CHK23 itself is documentation/baseline promotion only. Preserve the CHK23 GODZIP and handoff as the primary recovery point for future performance work.
+**CHK26 / repository commit `a0bf70932c` is the current operator-accepted GOLDEN performance/freshness baseline and forward comparison authority.** It retains the CHK23 retained-background architecture and additionally removes the physically proven duplicate non-stencil GL-state queries through the bounded shared inherited-state contract. Its promotion is backed by D1-heavy objective improvement, clean rounded clipping/edit/hotswap/Settings/lifecycle evidence, and operator-reported neutral-or-better smoothness. Preserve CHK26 as the primary forward rollback/recovery point.
 
-The repository CHK15 commit **`0abc479c52`** (marked `BASELINE`) remains an **older immutable rollback/bisect landmark** from before retained-background ownership. Do not rewrite or discard it. If a later candidate regresses, compare first against CHK23, and use CHK15 when it is useful to determine whether the regression was introduced before or after the retained-background optimization. Any future GOLDEN promotion still requires installed evidence and neutral-or-better visible behavior; numerical improvement never overrides visible regressions.
+**CHK23 is the immediately prior GOLDEN rollback/bisect landmark** and remains the expensive mixed-refresh/retained-background acceptance reference. The repository CHK15 commit **`0abc479c52`** (marked `BASELINE`) remains the older immutable pre-retained-background rollback/bisect landmark. Do not rewrite or discard either. If a later candidate regresses, compare first against CHK26, then use CHK23 and CHK15 to determine which architectural era introduced the regression. Any future GOLDEN promotion still requires installed evidence and neutral-or-better visible behavior; numerical improvement never overrides visible regressions.
 

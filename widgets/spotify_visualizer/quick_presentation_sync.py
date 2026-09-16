@@ -220,8 +220,28 @@ class QuickVisualizerPresentationSync:
             # Commit the SAME record embedded in the just-published snapshot.
             # Do not independently resolve presentation again.
             self._commit_presentation(presentation)
+        if trace is not None:
+            trace.record(
+                FrameTraceEvent.GUI_PRESENTATION_COMMIT_READY,
+                screen_index=self._screen_index(),
+                revision=publication.revision,
+                logical_timestamp_ns=logical_timestamp_ns(
+                    getattr(logical, "logical_timestamp", 0.0)
+                ),
+                auxiliary=int(getattr(logical, "runtime_generation", -1)),
+            )
         if self._request_present is not None:
             self._request_present()
+        if trace is not None:
+            trace.record(
+                FrameTraceEvent.GUI_PRESENT_REQUEST_READY,
+                screen_index=self._screen_index(),
+                revision=publication.revision,
+                logical_timestamp_ns=logical_timestamp_ns(
+                    getattr(logical, "logical_timestamp", 0.0)
+                ),
+                auxiliary=int(getattr(logical, "runtime_generation", -1)),
+            )
         return True
 
 
