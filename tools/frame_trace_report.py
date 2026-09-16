@@ -35,8 +35,141 @@ EVENT_NAMES = {
     21: "background_draw_begin",
     22: "background_draw_ready",
     23: "background_render_ready",
+    24: "clip_begin_resources_ready",
+    25: "clip_begin_inherited_ready",
+    26: "clip_begin_setup_ready",
+    27: "clip_begin_mask_state_ready",
+    28: "clip_begin_mask_draw_ready",
+    29: "clip_begin_mask_restore_ready",
+    30: "clip_end_setup_ready",
+    31: "clip_end_mask_state_ready",
+    32: "clip_end_mask_draw_ready",
+    33: "clip_end_mask_restore_ready",
+    34: "clip_end_inherited_ready",
+    35: "clip_begin_inherited_scissor_ready",
+    36: "clip_begin_inherited_front_ready",
+    37: "clip_begin_mask_bindings_ready",
+    38: "clip_begin_mask_gl_state_applied",
+    39: "clip_begin_mask_uniforms_ready",
+    40: "clip_end_mask_bindings_ready",
+    41: "clip_end_mask_gl_state_applied",
+    42: "clip_end_mask_uniforms_ready",
+    43: "clip_begin_shared_gl_state_ready",
 }
 
+
+CLIP_BEGIN_STAGES = (
+    (9, 24, "resource_guard"),
+    (24, 25, "inherited_state_capture"),
+    (25, 26, "scissor_stencil_setup"),
+    (26, 27, "mask_state_capture"),
+    (27, 28, "mask_draw"),
+    (28, 29, "mask_local_restore"),
+    (29, 10, "final_stencil_admission"),
+)
+CLIP_END_STAGES = (
+    (14, 30, "stencil_teardown_setup"),
+    (30, 31, "mask_state_capture"),
+    (31, 32, "mask_draw"),
+    (32, 33, "mask_local_restore"),
+    (33, 34, "inherited_state_restore"),
+    (34, 5, "post_clip_bookkeeping"),
+)
+
+# CHK25 leaves the CHK24 aggregate stage contract intact for historical traces
+# and emits this deeper split only when the new optional markers are present.
+CLIP_BEGIN_REFINED_STAGES = (
+    (9, 24, "resource_guard"),
+    (24, 35, "inherited_scissor_capture"),
+    (35, 36, "inherited_front_stencil_capture"),
+    (36, 25, "inherited_back_stencil_capture"),
+    (25, 26, "scissor_stencil_setup"),
+    (26, 37, "mask_binding_state_capture"),
+    (37, 27, "mask_flag_state_capture"),
+    (27, 38, "mask_state_programming"),
+    (38, 39, "mask_uniform_upload"),
+    (39, 28, "mask_draw_call"),
+    (28, 29, "mask_local_restore"),
+    (29, 10, "final_stencil_admission"),
+)
+
+# CHK26 carries one non-stencil state snapshot through mask -> mode -> mask.
+# Event 43 isolates the additional blend-function/equation queries that used to
+# live in the render-host capture so the old CHK25 marker meanings remain intact.
+CLIP_BEGIN_REFINED_SHARED_STAGES = (
+    (9, 24, "resource_guard"),
+    (24, 35, "inherited_scissor_capture"),
+    (35, 36, "inherited_front_stencil_capture"),
+    (36, 25, "inherited_back_stencil_capture"),
+    (25, 26, "scissor_stencil_setup"),
+    (26, 37, "mask_binding_state_capture"),
+    (37, 27, "mask_flag_state_capture"),
+    (27, 43, "shared_render_state_extra_capture"),
+    (43, 38, "mask_state_programming"),
+    (38, 39, "mask_uniform_upload"),
+    (39, 28, "mask_draw_call"),
+    (28, 29, "mask_local_restore"),
+    (29, 10, "final_stencil_admission"),
+)
+
+CLIP_END_REFINED_STAGES = (
+    (14, 30, "stencil_teardown_setup"),
+    (30, 40, "mask_binding_state_capture"),
+    (40, 31, "mask_flag_state_capture"),
+    (31, 41, "mask_state_programming"),
+    (41, 42, "mask_uniform_upload"),
+    (42, 32, "mask_draw_call"),
+    (32, 33, "mask_local_restore"),
+    (33, 34, "inherited_state_restore"),
+    (34, 5, "post_clip_bookkeeping"),
+)
+
+
+
+
+def _trace_segment_paths(path: Path) -> list[Path]:
+    """Return retained rolling trace segments oldest -> newest.
+
+    Legacy/small traces remain a single ``screensaver_frame_trace.bin``.  The
+    soak-safe writer keeps numeric siblings where ``.1`` is the immediately
+    previous segment, so descending numeric order reconstructs chronology.
+    """
+
+    path = Path(path)
+    prefix = f"{path.stem}."
+    suffix = path.suffix
+    rotated: list[tuple[int, Path]] = []
+    for candidate in path.parent.glob(f"{path.stem}.*{suffix}"):
+        name = candidate.name
+        if not name.startswith(prefix) or not name.endswith(suffix):
+            continue
+        middle = name[len(prefix): -len(suffix)] if suffix else name[len(prefix):]
+        if middle.isdigit():
+            rotated.append((int(middle), candidate))
+    paths = [candidate for _index, candidate in sorted(rotated, reverse=True)]
+    if path.is_file():
+        paths.append(path)
+    return paths
+
+
+def _read_trace_chain(path: Path) -> tuple[bytes, int]:
+    paths = _trace_segment_paths(path)
+    if not paths:
+        raise SystemExit(f"trace does not exist: {path}")
+    payloads: list[bytes] = []
+    first_header: bytes | None = None
+    for segment in paths:
+        raw = segment.read_bytes()
+        if len(raw) < HEADER.size:
+            raise SystemExit(f"trace segment is too short: {segment}")
+        magic, version, record_size, _capacity = HEADER.unpack_from(raw, 0)
+        if magic != MAGIC or version != 1 or record_size != RECORD.size:
+            raise SystemExit(f"unsupported frame trace format: {segment}")
+        if first_header is None:
+            first_header = raw[:HEADER.size]
+        payloads.append(raw[HEADER.size:])
+    assert first_header is not None
+    return first_header + b"".join(payloads), len(paths)
 
 def _pct(values: list[float], q: float) -> float:
     if not values:
@@ -135,6 +268,142 @@ def _print_render_gap_overlap(
         )
 
 
+def _print_clip_stage_breakdown(
+    *,
+    screen: int,
+    by_window_revision: dict[tuple[int, int, int], dict[int, list[int]]],
+    phase: str,
+    parent_start_event: int,
+    parent_end_event: int,
+    parent_label: str,
+    stages: tuple[tuple[int, int, str], ...],
+) -> None:
+    parent_occurrences = 0
+    complete_occurrences = 0
+    for (event_screen, _generation, _revision), stage_events in by_window_revision.items():
+        if event_screen != screen:
+            continue
+        parent_occurrences += min(
+            len(stage_events.get(parent_start_event, ())),
+            len(stage_events.get(parent_end_event, ())),
+        )
+        if all(stage_events.get(event) for pair in stages for event in pair[:2]):
+            complete_occurrences += min(
+                *(len(stage_events.get(event, ())) for pair in stages for event in pair[:2]),
+                len(stage_events.get(parent_start_event, ())),
+                len(stage_events.get(parent_end_event, ())),
+            )
+    if complete_occurrences:
+        print(
+            f"screen={screen} clip_{phase}_coverage "
+            f"parent_interval={parent_label} parent_n={parent_occurrences} "
+            f"fully_attributed_n={complete_occurrences}"
+        )
+
+    for start_event, end_event, label in stages:
+        stage_ns: list[int] = []
+        parent_ns: list[int] = []
+        for (event_screen, _generation, _revision), stage_events in by_window_revision.items():
+            if event_screen != screen:
+                continue
+            starts = stage_events.get(start_event, ())
+            ends = stage_events.get(end_event, ())
+            parent_starts = stage_events.get(parent_start_event, ())
+            parent_ends = stage_events.get(parent_end_event, ())
+            count = min(len(starts), len(ends), len(parent_starts), len(parent_ends))
+            for index in range(count):
+                start = starts[index]
+                end = ends[index]
+                parent_start = parent_starts[index]
+                parent_end = parent_ends[index]
+                if end < start or parent_end < parent_start:
+                    continue
+                if start < parent_start or end > parent_end:
+                    continue
+                stage_ns.append(end - start)
+                parent_ns.append(parent_end - parent_start)
+        if not stage_ns:
+            continue
+        values_ms = [value / 1_000_000.0 for value in stage_ns]
+        parent_total_ns = sum(parent_ns)
+        share = (100.0 * sum(stage_ns) / parent_total_ns) if parent_total_ns else 0.0
+        print(
+            f"screen={screen} clip_{phase}_stage={label} "
+            f"parent_interval={parent_label} n={len(values_ms)} "
+            f"median_ms={statistics.median(values_ms):.3f} "
+            f"p95_ms={_pct(values_ms, .95):.3f} "
+            f"p99_ms={_pct(values_ms, .99):.3f} "
+            f"parent_total_share_pct={share:.2f}"
+        )
+
+
+def _print_clip_tail_breakdown(
+    *,
+    screen: int,
+    by_window_revision: dict[tuple[int, int, int], dict[int, list[int]]],
+    phase: str,
+    parent_start_event: int,
+    parent_end_event: int,
+    parent_label: str,
+    stages: tuple[tuple[int, int, str], ...],
+) -> None:
+    rows: list[tuple[int, dict[str, int]]] = []
+    for (event_screen, _generation, _revision), stage_events in by_window_revision.items():
+        if event_screen != screen:
+            continue
+        parent_starts = stage_events.get(parent_start_event, ())
+        parent_ends = stage_events.get(parent_end_event, ())
+        event_counts = [len(parent_starts), len(parent_ends)]
+        for start_event, end_event, _label in stages:
+            event_counts.extend((
+                len(stage_events.get(start_event, ())),
+                len(stage_events.get(end_event, ())),
+            ))
+        count = min(event_counts) if event_counts else 0
+        for index in range(count):
+            parent_start = parent_starts[index]
+            parent_end = parent_ends[index]
+            if parent_end < parent_start:
+                continue
+            values: dict[str, int] = {}
+            valid = True
+            for start_event, end_event, label in stages:
+                start = stage_events[start_event][index]
+                end = stage_events[end_event][index]
+                if end < start or start < parent_start or end > parent_end:
+                    valid = False
+                    break
+                values[label] = end - start
+            if valid:
+                rows.append((parent_end - parent_start, values))
+    if not rows:
+        return
+    threshold_ns = _pct([parent for parent, _values in rows], .95)
+    tail = [(parent, values) for parent, values in rows if parent >= threshold_ns]
+    if not tail:
+        return
+    total_parent_ns = sum(parent for parent, _values in tail)
+    print(
+        f"screen={screen} clip_{phase}_p95_tail "
+        f"parent_interval={parent_label} threshold_ms={threshold_ns / 1_000_000.0:.3f} "
+        f"tail_n={len(tail)}"
+    )
+    dominant: Counter[str] = Counter()
+    for _parent, values in tail:
+        if values:
+            dominant[max(values, key=values.get)] += 1
+    for _start_event, _end_event, label in stages:
+        values_ns = [values[label] for _parent, values in tail]
+        values_ms = [value / 1_000_000.0 for value in values_ns]
+        share = (100.0 * sum(values_ns) / total_parent_ns) if total_parent_ns else 0.0
+        print(
+            f"screen={screen} clip_{phase}_p95_tail_stage={label} "
+            f"n={len(values_ms)} median_ms={statistics.median(values_ms):.3f} "
+            f"p95_ms={_pct(values_ms, .95):.3f} "
+            f"parent_tail_share_pct={share:.2f} "
+            f"dominant_frames={dominant.get(label, 0)}"
+        )
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("trace", type=Path)
@@ -148,7 +417,7 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
-    raw = args.trace.read_bytes()
+    raw, trace_segments = _read_trace_chain(args.trace)
     if len(raw) < HEADER.size:
         raise SystemExit("trace is too short")
     magic, version, record_size, capacity = HEADER.unpack_from(raw, 0)
@@ -223,6 +492,8 @@ def main() -> int:
                 unique_swap_revisions[screen].add((int(aux), revision))
 
     print(f"records={records} capacity={capacity}")
+    if trace_segments > 1:
+        print(f"trace_segments={trace_segments} retention=rolling_oldest_to_newest")
     for event in sorted(counts):
         print(f"{EVENT_NAMES.get(event, str(event))}: {counts[event]}")
     if unscoped_logical_publishes:
@@ -447,11 +718,37 @@ def main() -> int:
             (7, 8, "quick_sync_ready->render_begin"),
             (8, 9, "render_begin->render_prep_ready"),
             (9, 10, "render_prep_ready->render_host_begin"),
+            (9, 24, "render_prep_ready->clip_begin_resources_ready"),
+            (24, 25, "clip_begin_resources_ready->inherited_ready"),
+            (25, 26, "clip_begin_inherited_ready->setup_ready"),
+            (26, 27, "clip_begin_setup_ready->mask_state_ready"),
+            (27, 28, "clip_begin_mask_state_ready->mask_draw_ready"),
+            (28, 29, "clip_begin_mask_draw_ready->mask_restore_ready"),
+            (29, 10, "clip_begin_mask_restore_ready->render_host_begin"),
+            (24, 35, "clip_begin_resources_ready->inherited_scissor_ready"),
+            (35, 36, "clip_begin_inherited_scissor_ready->inherited_front_ready"),
+            (36, 25, "clip_begin_inherited_front_ready->inherited_ready"),
+            (26, 37, "clip_begin_setup_ready->mask_bindings_ready"),
+            (37, 27, "clip_begin_mask_bindings_ready->mask_state_ready"),
+            (27, 38, "clip_begin_mask_state_ready->mask_gl_state_applied"),
+            (38, 39, "clip_begin_mask_gl_state_applied->mask_uniforms_ready"),
+            (39, 28, "clip_begin_mask_uniforms_ready->mask_draw_ready"),
             (10, 11, "render_host_begin->render_gl_state_ready"),
             (11, 12, "render_gl_state_ready->render_mode_begin"),
             (12, 13, "render_mode_begin->render_mode_ready"),
             (13, 14, "render_mode_ready->render_host_ready"),
             (14, 5, "render_host_ready->draw"),
+            (14, 30, "render_host_ready->clip_end_setup_ready"),
+            (30, 31, "clip_end_setup_ready->mask_state_ready"),
+            (31, 32, "clip_end_mask_state_ready->mask_draw_ready"),
+            (32, 33, "clip_end_mask_draw_ready->mask_restore_ready"),
+            (33, 34, "clip_end_mask_restore_ready->inherited_ready"),
+            (34, 5, "clip_end_inherited_ready->draw"),
+            (30, 40, "clip_end_setup_ready->mask_bindings_ready"),
+            (40, 31, "clip_end_mask_bindings_ready->mask_state_ready"),
+            (31, 41, "clip_end_mask_state_ready->mask_gl_state_applied"),
+            (41, 42, "clip_end_mask_gl_state_applied->mask_uniforms_ready"),
+            (42, 32, "clip_end_mask_uniforms_ready->mask_draw_ready"),
             (8, 5, "render_begin->draw"),
         ):
             deltas: list[float] = []
@@ -476,6 +773,60 @@ def main() -> int:
                     f"p95={_pct(deltas, .95):.3f} "
                     f"p99={_pct(deltas, .99):.3f} max={max(deltas):.3f}"
                 )
+
+        _print_clip_stage_breakdown(
+            screen=screen,
+            by_window_revision=by_window_revision,
+            phase="begin",
+            parent_start_event=9,
+            parent_end_event=10,
+            parent_label="render_prep_ready->render_host_begin",
+            stages=CLIP_BEGIN_STAGES,
+        )
+        _print_clip_stage_breakdown(
+            screen=screen,
+            by_window_revision=by_window_revision,
+            phase="end",
+            parent_start_event=14,
+            parent_end_event=5,
+            parent_label="render_host_ready->draw",
+            stages=CLIP_END_STAGES,
+        )
+        if counts.get(35, 0) > 0:
+            refined_begin_stages = (
+                CLIP_BEGIN_REFINED_SHARED_STAGES
+                if counts.get(43, 0) > 0
+                else CLIP_BEGIN_REFINED_STAGES
+            )
+            _print_clip_stage_breakdown(
+                screen=screen,
+                by_window_revision=by_window_revision,
+                phase="begin_refined",
+                parent_start_event=9,
+                parent_end_event=10,
+                parent_label="render_prep_ready->render_host_begin",
+                stages=refined_begin_stages,
+            )
+            if counts.get(43, 0) > 0:
+                _print_clip_tail_breakdown(
+                    screen=screen,
+                    by_window_revision=by_window_revision,
+                    phase="begin_refined",
+                    parent_start_event=9,
+                    parent_end_event=10,
+                    parent_label="render_prep_ready->render_host_begin",
+                    stages=refined_begin_stages,
+                )
+        if counts.get(40, 0) > 0:
+            _print_clip_stage_breakdown(
+                screen=screen,
+                by_window_revision=by_window_revision,
+                phase="end_refined",
+                parent_start_event=14,
+                parent_end_event=5,
+                parent_label="render_host_ready->draw",
+                stages=CLIP_END_REFINED_STAGES,
+            )
 
         render_entry_gaps: list[tuple[int, int]] = []
         for (event_screen, _generation, _revision), stage_events in by_window_revision.items():

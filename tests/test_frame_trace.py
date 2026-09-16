@@ -237,7 +237,10 @@ def test_render_trace_splits_sync_wait_from_python_gl_work() -> None:
     host_body = host.split("def render(", 1)[1].split(
         "def release_inactive_implementations", 1
     )[0]
-    assert host_body.index("_InheritedGlState.capture()") < host_body.index(
+    assert host_body.index("InheritedGlState.capture_render_host()") < host_body.index(
+        "FrameTraceEvent.RENDER_GL_STATE_READY"
+    )
+    assert host_body.index("inherited_gl_state is not None") < host_body.index(
         "FrameTraceEvent.RENDER_GL_STATE_READY"
     )
     assert host_body.index("FrameTraceEvent.RENDER_GL_STATE_READY") < host_body.index(
@@ -537,3 +540,350 @@ def test_report_splits_background_idle_transition_and_render_entry_overlap(tmp_p
     assert "idle_n=1 idle_median=5.000" in out
     assert "transition_n=1 transition_median=6.000" in out
     assert "sync_ready_render_begin_background_render_overlap scope=all gaps=2 overlap_gaps=2" in out
+
+
+def test_clip_trace_is_explicit_deferred_and_absent_from_untraced_clip_calls() -> None:
+    root = Path(__file__).resolve().parents[1]
+    node = (root / "rendering" / "quick" / "visualizer" / "node.py").read_text(
+        encoding="utf-8"
+    )
+    clip = (root / "rendering" / "quick" / "visualizer" / "clip_host.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "current_frame_trace" not in clip
+    assert "if trace is None:" in node
+    assert "self._clip_host.begin(clip_frame, state)" in node
+    assert "trace_context=clip_trace" in node
+    assert node.index("FrameTraceEvent.RENDER_DRAW") < node.index("clip_trace.flush()")
+
+    begin_body = clip.split("def begin(", 1)[1].split("def end(", 1)[0]
+    assert begin_body.index("CLIP_BEGIN_RESOURCES_READY") < begin_body.index(
+        "CLIP_BEGIN_INHERITED_READY"
+    )
+    assert begin_body.index("CLIP_BEGIN_INHERITED_READY") < begin_body.index(
+        "CLIP_BEGIN_SETUP_READY"
+    )
+    capture_body = clip.split("def capture(", 1)[1].split("def restore(", 1)[0]
+    assert capture_body.index("CLIP_BEGIN_INHERITED_SCISSOR_READY") < capture_body.index(
+        "CLIP_BEGIN_INHERITED_FRONT_READY"
+    )
+    draw_body = clip.split("def _draw_mask(", 1)[1].split("__all__", 1)[0]
+    assert draw_body.index("CLIP_BEGIN_MASK_BINDINGS_READY") < draw_body.index(
+        "CLIP_BEGIN_MASK_STATE_READY"
+    )
+    assert draw_body.index("CLIP_BEGIN_MASK_STATE_READY") < draw_body.index(
+        "CLIP_BEGIN_MASK_GL_STATE_APPLIED"
+    )
+    assert draw_body.index("CLIP_BEGIN_MASK_GL_STATE_APPLIED") < draw_body.index(
+        "CLIP_BEGIN_MASK_UNIFORMS_READY"
+    )
+    assert draw_body.index("CLIP_BEGIN_MASK_UNIFORMS_READY") < draw_body.index(
+        "CLIP_BEGIN_MASK_DRAW_READY"
+    )
+    assert draw_body.index("CLIP_BEGIN_MASK_DRAW_READY") < draw_body.index(
+        "CLIP_BEGIN_MASK_RESTORE_READY"
+    )
+    end_body = clip.split("def end(", 1)[1].split("def release_resources", 1)[0]
+    assert end_body.index("CLIP_END_SETUP_READY") < end_body.index(
+        "CLIP_END_INHERITED_READY"
+    )
+
+
+def test_report_splits_clip_stages_and_reports_parent_contribution(tmp_path: Path) -> None:
+    trace_path = tmp_path / "clip_trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    rows = [
+        # Clip begin parent: render_prep_ready 1 ms -> render_host_begin 12 ms.
+        (1_000_000, 9, 1, 7, 0, 3),
+        (2_000_000, 24, 1, 7, 0, 3),
+        (4_000_000, 25, 1, 7, 0, 3),
+        (5_000_000, 26, 1, 7, 0, 3),
+        (7_000_000, 27, 1, 7, 0, 3),
+        (10_000_000, 28, 1, 7, 0, 3),
+        (11_000_000, 29, 1, 7, 0, 3),
+        (12_000_000, 10, 1, 7, 0, 3),
+        # Clip end parent: render_host_ready 20 ms -> render_draw 30 ms.
+        (20_000_000, 14, 1, 7, 0, 3),
+        (21_000_000, 30, 1, 7, 0, 3),
+        (23_000_000, 31, 1, 7, 0, 3),
+        (26_000_000, 32, 1, 7, 0, 3),
+        (27_000_000, 33, 1, 7, 0, 3),
+        (29_000_000, 34, 1, 7, 0, 3),
+        (30_000_000, 5, 1, 7, 0, 3),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "clip_begin_mask_state_ready: 1" in out
+    assert "clip_end_inherited_ready: 1" in out
+    assert (
+        "screen=1 clip_begin_coverage "
+        "parent_interval=render_prep_ready->render_host_begin parent_n=1 fully_attributed_n=1"
+    ) in out
+    assert (
+        "screen=1 clip_begin_stage=inherited_state_capture "
+        "parent_interval=render_prep_ready->render_host_begin n=1 "
+        "median_ms=2.000 p95_ms=2.000 p99_ms=2.000 parent_total_share_pct=18.18"
+    ) in out
+    assert (
+        "screen=1 clip_begin_stage=mask_draw "
+        "parent_interval=render_prep_ready->render_host_begin n=1 "
+        "median_ms=3.000 p95_ms=3.000 p99_ms=3.000 parent_total_share_pct=27.27"
+    ) in out
+    assert (
+        "screen=1 clip_end_stage=inherited_state_restore "
+        "parent_interval=render_host_ready->draw n=1 "
+        "median_ms=2.000 p95_ms=2.000 p99_ms=2.000 parent_total_share_pct=20.00"
+    ) in out
+    assert "clip_begin_refined_coverage" not in out
+
+
+def test_report_refines_clip_state_and_actual_draw_call_when_chk25_events_exist(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "clip_trace_refined.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    rows = [
+        # Clip begin parent: 1 -> 15 ms. Existing CHK24 aggregate markers stay
+        # present while CHK25 markers split inherited state and mask draw.
+        (1_000_000, 9, 1, 7, 0, 3),
+        (2_000_000, 24, 1, 7, 0, 3),
+        (3_000_000, 35, 1, 7, 0, 3),
+        (5_000_000, 36, 1, 7, 0, 3),
+        (6_000_000, 25, 1, 7, 0, 3),
+        (7_000_000, 26, 1, 7, 0, 3),
+        (8_000_000, 37, 1, 7, 0, 3),
+        (9_000_000, 27, 1, 7, 0, 3),
+        (10_000_000, 38, 1, 7, 0, 3),
+        (11_000_000, 39, 1, 7, 0, 3),
+        (13_000_000, 28, 1, 7, 0, 3),
+        (14_000_000, 29, 1, 7, 0, 3),
+        (15_000_000, 10, 1, 7, 0, 3),
+        # Clip end parent: 20 -> 30 ms with the same refined mask split.
+        (20_000_000, 14, 1, 7, 0, 3),
+        (21_000_000, 30, 1, 7, 0, 3),
+        (22_000_000, 40, 1, 7, 0, 3),
+        (23_000_000, 31, 1, 7, 0, 3),
+        (24_000_000, 41, 1, 7, 0, 3),
+        (25_000_000, 42, 1, 7, 0, 3),
+        (27_000_000, 32, 1, 7, 0, 3),
+        (28_000_000, 33, 1, 7, 0, 3),
+        (29_000_000, 34, 1, 7, 0, 3),
+        (30_000_000, 5, 1, 7, 0, 3),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "clip_begin_inherited_scissor_ready: 1" in out
+    assert "clip_begin_mask_uniforms_ready: 1" in out
+    assert (
+        "screen=1 clip_begin_refined_coverage "
+        "parent_interval=render_prep_ready->render_host_begin "
+        "parent_n=1 fully_attributed_n=1"
+    ) in out
+    assert (
+        "screen=1 clip_begin_refined_stage=inherited_front_stencil_capture "
+        "parent_interval=render_prep_ready->render_host_begin n=1 "
+        "median_ms=2.000 p95_ms=2.000 p99_ms=2.000 "
+        "parent_total_share_pct=14.29"
+    ) in out
+    assert (
+        "screen=1 clip_begin_refined_stage=mask_draw_call "
+        "parent_interval=render_prep_ready->render_host_begin n=1 "
+        "median_ms=2.000 p95_ms=2.000 p99_ms=2.000 "
+        "parent_total_share_pct=14.29"
+    ) in out
+    assert (
+        "screen=1 clip_end_refined_stage=mask_draw_call "
+        "parent_interval=render_host_ready->draw n=1 "
+        "median_ms=2.000 p95_ms=2.000 p99_ms=2.000 "
+        "parent_total_share_pct=20.00"
+    ) in out
+
+
+def test_chk26_clipped_gl_state_is_captured_once_and_carried_through_mode() -> None:
+    root = Path(__file__).resolve().parents[1]
+    clip = (root / "rendering" / "quick" / "visualizer" / "clip_host.py").read_text(
+        encoding="utf-8"
+    )
+    node = (root / "rendering" / "quick" / "visualizer" / "node.py").read_text(
+        encoding="utf-8"
+    )
+    host = (root / "rendering" / "quick" / "visualizer" / "render_host.py").read_text(
+        encoding="utf-8"
+    )
+    shared = (root / "rendering" / "quick" / "visualizer" / "gl_state.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "InheritedGlState.capture_clipped_shared" in clip
+    assert "run.inherited_gl_state =" in clip
+    assert clip.count("inherited_gl_state=run.inherited_gl_state") >= 3
+    assert "inherited_gl_state=clip_run.inherited_gl_state" in node
+    assert "if inherited_gl_state is not None" in host
+    assert "InheritedGlState.capture_render_host()" in host
+    assert "CLIP_BEGIN_SHARED_GL_STATE_READY" in shared
+
+    # The shared snapshot is safe to reuse through the mode because color-mask
+    # ownership remains exclusive to the clip host. A future mode that starts
+    # changing color writes must extend the common fence instead of silently
+    # invalidating the carried-state contract.
+    implementation_root = root / "rendering" / "quick" / "visualizer" / "implementations"
+    implementation_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted(implementation_root.glob("*.py"))
+    )
+    assert "glColorMask" not in implementation_source
+    assert "glColorMask" not in host
+
+
+def test_report_splits_chk26_shared_capture_and_tail_without_rewriting_old_stages(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "chk26_clip_trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    # One fully attributed clipped frame. Values are intentionally simple so the
+    # CHK26-only shared-capture split and p95-tail summary are deterministic.
+    rows = [
+        (1_000_000, 9, 1, 7, 0, 3),
+        (2_000_000, 24, 1, 7, 0, 3),
+        (3_000_000, 35, 1, 7, 0, 3),
+        (4_000_000, 36, 1, 7, 0, 3),
+        (5_000_000, 25, 1, 7, 0, 3),
+        (6_000_000, 26, 1, 7, 0, 3),
+        (7_000_000, 37, 1, 7, 0, 3),
+        (8_000_000, 27, 1, 7, 0, 3),
+        (10_000_000, 43, 1, 7, 0, 3),
+        (13_000_000, 38, 1, 7, 0, 3),
+        (14_000_000, 39, 1, 7, 0, 3),
+        (15_000_000, 28, 1, 7, 0, 3),
+        (16_000_000, 29, 1, 7, 0, 3),
+        (17_000_000, 10, 1, 7, 0, 3),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "clip_begin_shared_gl_state_ready: 1" in out
+    assert "clip_begin_refined_stage=shared_render_state_extra_capture" in out
+    assert "median_ms=2.000" in out
+    assert "clip_begin_refined_stage=mask_state_programming" in out
+    assert "median_ms=3.000" in out
+    assert "clip_begin_refined_p95_tail" in out
+    assert "clip_begin_refined_p95_tail_stage=mask_state_programming" in out
+
+
+def test_frame_trace_rolls_disk_segments_instead_of_growing_without_bound(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "screensaver_frame_trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    segment_bytes = header.size + (10 * record.size)
+    sink = FrameTraceSink(
+        path,
+        capacity=512,
+        segment_bytes=segment_bytes,
+        retained_segments=3,
+    )
+    payload = b"".join(
+        record.pack(1_000 + revision, 1, 1, revision, 0, 7)
+        for revision in range(40)
+    )
+    assert sink._write_trace_data(payload) == 40
+    metrics = sink.close()
+
+    retained = [path.with_name("screensaver_frame_trace.2.bin"),
+                path.with_name("screensaver_frame_trace.1.bin"), path]
+    assert all(candidate.is_file() for candidate in retained)
+    assert all(candidate.stat().st_size <= segment_bytes for candidate in retained)
+    assert metrics["retained_bytes_limit"] == segment_bytes * 3
+    assert metrics["rotations"] == 3
+
+    timestamps: list[int] = []
+    for candidate in retained:
+        raw = candidate.read_bytes()
+        magic, version, record_size, _capacity = header.unpack_from(raw, 0)
+        assert magic == b"SRPSSFT1"
+        assert version == 1
+        assert record_size == record.size
+        for offset in range(header.size, len(raw), record.size):
+            timestamps.append(record.unpack_from(raw, offset)[0])
+    # Four ten-record segments were produced; only the newest three survive.
+    assert timestamps == list(range(1_010, 1_040))
+
+
+def test_frame_trace_report_reads_rolling_segments_oldest_to_newest(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "screensaver_frame_trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    segment_bytes = header.size + (10 * record.size)
+    sink = FrameTraceSink(
+        path,
+        capacity=512,
+        segment_bytes=segment_bytes,
+        retained_segments=3,
+    )
+    payload = b"".join(
+        record.pack(1_000_000 + revision, 1, 1, revision, 0, 7)
+        for revision in range(40)
+    )
+    sink._write_trace_data(payload)
+    sink.close()
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert "records=30 capacity=512" in completed.stdout
+    assert "trace_segments=3 retention=rolling_oldest_to_newest" in completed.stdout
+    assert "logical_publish: 30" in completed.stdout
+
+
+def test_render_host_retains_lazy_quad_integer_state_helper() -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = (
+        root / "rendering" / "quick" / "visualizer" / "render_host.py"
+    ).read_text(encoding="utf-8")
+    assert "def _int_state(name: int) -> int:" in source
+    ensure_quad = source.split("def _ensure_quad(self)", 1)[1]
+    assert "_int_state(gl.GL_VERTEX_ARRAY_BINDING)" in ensure_quad
+    assert "_int_state(gl.GL_ARRAY_BUFFER_BINDING)" in ensure_quad

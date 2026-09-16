@@ -508,13 +508,52 @@ def priority_stats(events: Sequence[SchedulerEvent], *, render_tid: int) -> dict
     }
 
 
+
+
+def _frame_trace_segment_paths(path: Path) -> list[Path]:
+    path = Path(path)
+    prefix = f"{path.stem}."
+    suffix = path.suffix
+    rotated: list[tuple[int, Path]] = []
+    for candidate in path.parent.glob(f"{path.stem}.*{suffix}"):
+        name = candidate.name
+        if not name.startswith(prefix) or not name.endswith(suffix):
+            continue
+        middle = name[len(prefix): -len(suffix)] if suffix else name[len(prefix):]
+        if middle.isdigit():
+            rotated.append((int(middle), candidate))
+    paths = [candidate for _index, candidate in sorted(rotated, reverse=True)]
+    if path.is_file():
+        paths.append(path)
+    return paths
+
+
+def _read_frame_trace_chain(path: Path) -> bytes:
+    paths = _frame_trace_segment_paths(path)
+    if not paths:
+        raise FileNotFoundError(path)
+    header_bytes: bytes | None = None
+    payloads: list[bytes] = []
+    for segment in paths:
+        raw = segment.read_bytes()
+        if len(raw) < _FRAME_HEADER.size:
+            raise ValueError(f"frame trace segment is too short: {segment}")
+        magic, version, record_size, _capacity = _FRAME_HEADER.unpack_from(raw, 0)
+        if magic != _FRAME_MAGIC or version != 1 or record_size != _FRAME_RECORD.size:
+            raise ValueError(f"unsupported SRPSS frame trace format: {segment}")
+        if header_bytes is None:
+            header_bytes = raw[:_FRAME_HEADER.size]
+        payloads.append(raw[_FRAME_HEADER.size:])
+    assert header_bytes is not None
+    return header_bytes + b"".join(payloads)
+
 def read_frame_gaps(
     frame_trace_path: Path,
     *,
     start_ns: int,
     end_ns: int,
 ) -> dict[str, list[FrameGap]]:
-    raw = Path(frame_trace_path).read_bytes()
+    raw = _read_frame_trace_chain(Path(frame_trace_path))
     if len(raw) < _FRAME_HEADER.size:
         raise ValueError("frame trace is too short")
     magic, version, record_size, _capacity = _FRAME_HEADER.unpack_from(raw, 0)

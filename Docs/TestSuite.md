@@ -946,3 +946,34 @@ A test-affecting slice is complete only when:
 - `tests/test_frame_trace.py` now proves the version-1 binary reporter understands optional nested render events without breaking older traces, preserves event ordering around the real Quick node/render-host callsites, and reports node-prep / host / selected-mode / post-host timing. Direct source execution: **13/13 PASS**.
 - `tests/test_qtquick_runtime_purity_source.py` permanently rejects the retired Quick pacer live-state ghosts `skipped_deadlines`, `frame_swaps`, and `update_pending`. Historical log parsing remains tool-level only. Direct source execution: **12/12 PASS**.
 - Current directly runnable authority set: **51/51 PASS** (12 purity + 13 frame trace + 6 service/scheduler + 20 retained A/B/C harness). PySide/QML runtime tests remain installed-only in this container.
+
+---
+
+## 0.14 2026-09-16 R-87 CHK24 visualizer clip-host attribution boundary
+
+- `tests/test_frame_trace.py` now contains **19** source-executable frame-trace contracts. The CHK24 additions prove clip-stage tracing is explicit/deferred rather than an ordinary-runtime sink path, preserve the untraced `VisualizerClipHost.begin(frame, state)` call, and prove the reporter resolves begin/end clip substages with median/p95/p99 plus parent-interval contribution. Current execution: **19/19 PASS**.
+- The version-1 binary format is unchanged. Re-running the supplied accepted CHK23 D1-heavy `screensaver_frame_trace.bin` through the CHK24 reporter produces byte-for-byte identical report text, proving older golden traces are not silently reinterpreted.
+- Current directly runnable authority set: **57/57 PASS** (12 runtime purity + 19 frame trace + 6 service/scheduler + 20 retained A/B/C harness). The full supplied tree contains **902 Python files; 902/902 compile**.
+- Installed PySide/Qt/OpenGL execution remains **NEEDS RUN** for the new clip markers. The next physical evidence is one D1-heavy run with explicit `--frame-trace`; no dual-display run is required because CHK24 does not touch display routing, retained-background ownership, transition scheduling or CUSTOM geometry ownership.
+
+---
+
+## 0.15 2026-09-16 R-87 CHK25 clip-host attribution refinement
+
+- The CHK24 installed D1-heavy trace proved the parent seam is real and the observer is not manufacturing it, but also proved the first `mask_draw` bucket was too broad: it still contained GL state application/binding, four uniform uploads, and the literal `glDrawArrays()` call. CHK25 therefore refines attribution only; it does **not** change clip/stencil production behavior.
+- `tests/test_frame_trace.py` now contains **20** source-executable contracts. The new fixture proves refined CHK25 events resolve inherited scissor/front-stencil/back-stencil capture and mask binding-query / flag-query / state-programming / uniform-upload / literal-draw-call stages while older CHK24 traces retain their aggregate report without invented refined lines. Current execution: **20/20 PASS**.
+- Current directly runnable authority set: **58/58 PASS** (12 runtime purity + 20 frame trace + 6 service/scheduler + 20 retained A/B/C harness).
+- The full supplied tree remains **902 Python files; 902/902 compile**.
+- Reporter backward compatibility is explicitly re-proven: the installed CHK24 binary trace produces byte-for-byte identical default report output under the CHK24 and CHK25 reporters, and the accepted CHK23 trace produces byte-for-byte identical output when rerun with its original 15-second timeline option.
+- Installed PySide/Qt/OpenGL evidence remains **NEEDS RUN** for CHK25's refined markers. One settled D1-heavy `--frame-trace` run is sufficient; edit/resize is no longer required because CHK24 already falsified geometry/stencil-resource churn as the steady clip-tail owner.
+
+---
+
+## 0.16 2026-09-16 R-87 CHK26 shared inherited-GL-state candidate
+
+- CHK25 installed evidence proved the literal first-mask `glDrawArrays()` is not the dominant clip-tail owner and exposed a repeated synchronous state-query pattern across begin mask -> render host -> end mask.
+- `tests/test_frame_trace.py` now contains **22** source-executable contracts. The CHK26 additions prove the clipped branch captures one shared non-stencil inherited state snapshot and passes it through the mode host, preserve the legacy standalone capture on the unclipped/overflow path, retain clip-local color-mask ownership, and verify the reporter recognizes the new shared-capture stage without rewriting CHK25 output.
+- The version-1 binary format remains unchanged. Re-running the installed CHK25 binary through the CHK26 reporter produces byte-for-byte identical report text because old traces have no CHK26 event.
+- Current directly runnable authority set: **60/60 PASS** (12 runtime purity + 22 frame trace/ownership + 6 service/scheduler + 20 retained A/B/C harness).
+- The full tree now contains **903 Python files; 903/903 compile**.
+- Installed PySide/Qt/OpenGL acceptance is **NEEDS RUN**. The required physical lane is D1-heavy with explicit `--frame-trace`: obtain a long settled Bubble window, then briefly exercise rounded-clip geometry and one mode hotswap, perform Settings teardown/rebuild, and return to settled Bubble. The candidate is rejected for clip bleed/stencil corruption/state leakage, lifecycle failure, Bubble/reactivity change, worse subjective smoothness, or degraded freshness even if duplicate-query trace stages collapse.
