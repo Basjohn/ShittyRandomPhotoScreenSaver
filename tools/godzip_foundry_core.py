@@ -57,30 +57,18 @@ RUN_DEFAULT_FLAGS = (
     "--geo",
     "--life",
     "--viz",
-    "--gpu-timing",
     "--cache",
     "--fresh",
 )
 
-# Accepted by the product parser for compatibility/history, but intentionally
-# not offered by GODZIP Foundry's RUN UI.  Keep this tool-only policy separate
-# from production CLI retirement so a Foundry cleanup cannot silently change
-# application compatibility.
-RUN_FOUNDRY_HIDDEN_FLAGS = frozenset(
-    {
-        "--viz-diagnostics",  # live compatibility subset; --viz already enables it
-    }
-)
 RUN_FLAG_ALIASES = {
     "-d": "--debug",
     "-v": "--verbose",
-    "--viz-diag": "--viz-diagnostics",
 }
 RUN_FLAG_DESCRIPTIONS = {
     "--debug": "Enable debug logging",
     "--verbose": "Unsuppress noisy DEBUG producers (debug already writes screensaver_verbose.log)",
     "--perf": "Performance metrics/logging",
-    "--gpu-timing": "Sampled owner-context GPU timing (implies --perf)",
     "--usage": "CPU/GPU/memory/thread usage",
     "--handle-attribution": "Windows handle-type sidecar (implies --usage)",
     "--frame-trace": "Explicit binary publication→Quick→draw trace (not diagnostic-all)",
@@ -91,7 +79,6 @@ RUN_FLAG_DESCRIPTIONS = {
     "--cache": "Image-cache/prefetch/cache-authority diagnostics",
     "--steam": "Steam widget-family diagnostics",
     "--noupdates": "Disable automatic Gmail/Reddit/Weather retrievals",
-    "--viz-diagnostics": "Extra Spotify visualizer diagnostics",
     "--fresh": "Clear current logs before starting",
     "--devsteam": "Show the unfinished Steam Journey scaffold",
 }
@@ -2115,7 +2102,6 @@ __all__ = [
     "RepoFile",
     "RUN_DEFAULT_FLAGS",
     "RUN_ENTRYPOINTS",
-    "RUN_FOUNDRY_HIDDEN_FLAGS",
     "RUN_FLAG_DESCRIPTIONS",
     "SelectiveSyncResult",
     "apply_godzip",

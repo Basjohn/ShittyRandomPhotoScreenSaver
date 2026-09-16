@@ -160,23 +160,6 @@ def test_canonical_defaults_shadows_are_clean() -> None:
     assert 0 <= shadows["text_opacity"] <= 1
 
 
-def test_retired_offset_pair_is_stripped_on_cleanup(tmp_path: Path) -> None:
-    manager = SettingsManager(
-        organization="TestOrg",
-        application=f"TestApp_{uuid.uuid4().hex}",
-        storage_base_dir=tmp_path / uuid.uuid4().hex,
-    )
-    manager.set("widgets", {"shadows": {"enabled": True, "offset": [4, 4]}})
-    assert manager.get("widgets.shadows.offset") == [4, 4]
-
-    removed = manager.cleanup_obsolete_settings()
-
-    assert "widgets.shadows.offset" in removed
-    assert manager.get("widgets.shadows.offset", "missing") == "missing"
-    # Sibling shadow keys are preserved.
-    assert manager.get("widgets.shadows.enabled") is True
-
-
 # --------------------------------------------------------------------------- #
 # Widgets → General controls                                                  #
 # --------------------------------------------------------------------------- #
@@ -242,7 +225,6 @@ def test_general_save_merges_and_preserves_canonical_and_future_keys(qt_app) -> 
             "frame_opacity": 0.77,
             "blur_radius": 18,
             "future_unknown_key": 7,
-            "offset": [4, 4],
         }
     )
     # User edits: turn drop shadows off, set darkness 50%, extra offset 5, pick SE.
@@ -265,8 +247,6 @@ def test_general_save_merges_and_preserves_canonical_and_future_keys(qt_app) -> 
     # Unedited canonical and unknown-future keys are preserved.
     assert shadows_config["color"] == [0, 0, 0, 255]
     assert shadows_config["future_unknown_key"] == 7
-    # The retired magnitude pair is never re-persisted.
-    assert "offset" not in shadows_config
 
 
 @pytest.mark.qt

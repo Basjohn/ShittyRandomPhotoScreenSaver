@@ -129,7 +129,6 @@ from godzip_foundry_core import (  # noqa: E402
     RepoFile,
     RUN_DEFAULT_FLAGS,
     RUN_ENTRYPOINTS,
-    RUN_FOUNDRY_HIDDEN_FLAGS,
     apply_godzip,
     build_run_command,
     collect_log_files,
@@ -2720,11 +2719,7 @@ class RunTab(QWidget):
     def refresh_flags(self) -> None:
         self._building = True
         try:
-            self._flags = tuple(
-                flag
-                for flag in discover_run_flags(self.repo_root)
-                if flag not in RUN_FOUNDRY_HIDDEN_FLAGS
-            )
+            self._flags = tuple(discover_run_flags(self.repo_root))
             settings = _load_local_settings(self.repo_root)
             remembered_entrypoint = str(settings.get("run_entrypoint", "main.py"))
             if remembered_entrypoint not in RUN_ENTRYPOINTS:

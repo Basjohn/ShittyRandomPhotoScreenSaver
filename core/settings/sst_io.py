@@ -14,7 +14,11 @@ from typing import TYPE_CHECKING, Any, Dict
 
 from core.logging.logger import get_logger
 from core.steam.credentials import strip_secret_fields as strip_steam_secret_fields
+from core.settings.legacy_setting_aliases import promote_legacy_section_aliases
 from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
+from core.settings.structured_input_compat import normalize_legacy_structured_mapping_shape
+from core.settings.widget_input_compat import promote_legacy_clock_separator
+from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
 from core.settings.visualizer_presets import (
     normalize_visualizer_custom_snapshot_cache,
 )
@@ -152,18 +156,23 @@ def _project_import_state(
         if section_key in STRUCTURED_SETTINGS_ROOTS:
             if not isinstance(section_value, Mapping):
                 raise TypeError(f"{section_key} SST section must be a mapping")
-            normalized, _ = mgr._normalize_structured_mapping_shape(section_value)
+            normalized, _ = normalize_legacy_structured_mapping_shape(section_value)
+            if section_key == "widget_theme":
+                normalized, _ = promote_legacy_widget_theme_state(normalized)
             incoming = _coerce_nested_import_mapping(mgr, section_key, normalized)
             existing = state.get(section_key, {})
             if merge and isinstance(existing, Mapping):
-                existing_normalized, _ = mgr._normalize_structured_mapping_shape(existing)
+                existing_normalized, _ = normalize_legacy_structured_mapping_shape(existing)
                 incoming = _deep_overlay_mapping(existing_normalized, incoming)
             state[section_key] = incoming
             continue
 
         if isinstance(section_value, Mapping):
-            for raw_subkey, subval in section_value.items():
-                dotted = mgr._canonicalize_key(f"{section_key}.{raw_subkey}")
+            section_mapping, _legacy_alias_changed = promote_legacy_section_aliases(
+                section_key, section_value
+            )
+            for raw_subkey, subval in section_mapping.items():
+                dotted = f"{section_key}.{raw_subkey}"
                 if dotted in _SST_NON_IMPORTABLE_KEYS:
                     logger.info("Skipping runtime-owned/retired SST key: %s", dotted)
                     continue
@@ -180,7 +189,7 @@ def _project_import_state(
 
 
 def _normalize_widgets_mapping(widgets_map: Mapping[str, Any]) -> Dict[str, Any]:
-    widgets_dict: Dict[str, Any] = dict(widgets_map)
+    widgets_dict, _ = promote_legacy_clock_separator(widgets_map)
     vis_section = widgets_dict.get('spotify_visualizer')
     if isinstance(vis_section, Mapping):
         widgets_dict['spotify_visualizer'] = normalize_visualizer_section_mapping(

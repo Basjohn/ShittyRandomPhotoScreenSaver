@@ -72,7 +72,6 @@ The capture is **not** a process-level stderr redirect. Raw non-Qt native fd-2 w
 Existing sidecars remain the first destinations for their domains:
 
 - `--perf` → `screensaver_perf.log`, `perf_widgets.log`
-- `--gpu-timing` → sampled owner-context GL timing in `screensaver_perf.log` and implies `--perf`
 - `--usage` → `screensaver_usage.log`
 - `--handle-attribution` → `screensaver_usage.log` + `screensaver_handles.log` (Windows helper process; implies `--usage`)
 - `--viz` → `screensaver_spotify_vis.log`, `screensaver_spotify_vol.log`
@@ -91,11 +90,6 @@ CUSTOM decision, canonical effective monitor, requested screen, participant/bind
 set, current failover state, chosen unit and construction result/reject reason. It is not a
 per-frame stream. A pending-grace result describes that initial decision; correlate it with
 the existing `[VIS_FAILOVER]` lifecycle messages for later fallback/reclaim outcomes.
-
-Ordinary `--perf` is the comparable CPU/frame/delivery profile. The heavier
-`--gpu-timing` route is separate because GL query polling and begin/end calls can alter
-paint cost. It samples one paint in eight and records coverage; use it only for an
-owner-GPU causal question, never as an unnamed baseline.
 
 ## Rotation and Retention
 

@@ -45,6 +45,17 @@ def test_build_helper_arguments_matches_expected_shape():
     assert arguments.endswith("--idle-exit-seconds 20")
 
 
+def test_installer_and_harness_have_no_retired_reddit_startup_artifacts():
+    installer = (REPO_ROOT / "scripts" / "SRPSS_Installer.iss").read_text(encoding="utf-8")
+    harness_source = (REPO_ROOT / "tools" / "reddit_helper_task_harness.py").read_text(encoding="utf-8")
+
+    assert r"\SRPSS\RedditHelper" not in installer
+    assert r"Software\Microsoft\Windows\CurrentVersion\Run" not in installer
+    assert "DeleteLegacyHelperTask" not in installer
+    assert "LEGACY_TASK_NAMES" not in harness_source
+    assert "SRPSS_RedditHelper" in installer
+
+
 def test_storage_recovery_harness_exercises_bounded_failure_path():
     from tools import reddit_helper_task_harness as harness
 

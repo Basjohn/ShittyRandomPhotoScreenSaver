@@ -121,7 +121,7 @@ Use only:
 
 `--debug --fresh --usage --perf --life`
 
-Do not add `--verbose` or `--gpu-timing`.
+Do not add `--verbose` or a new owner-context GPU timer-query probe.
 
 Decision is binary:
 

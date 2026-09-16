@@ -9,7 +9,7 @@ making it operationally reliable:
 - the helper itself lives only for the active saver session / queued handoff
 - helper health is derived from a shared heartbeat file plus a saver-owned
   session ticket in ProgramData
-- legacy HKCU Run cleanup is retained only to remove old startup behavior
+- the canonical root scheduled task is the only packaged startup/launch authority
 """
 
 from __future__ import annotations
@@ -35,14 +35,12 @@ logger = get_logger(__name__)
 
 HELPER_EXE_NAME = "SRPSS_RedditHelper.exe"
 HEARTBEAT_FILE_NAME = "reddit_helper_heartbeat.json"
-RUN_VALUE_NAME = "SRPSS_RedditHelper"
 HELPER_HEARTBEAT_STALE_SECONDS = 10.0
 HELPER_LAUNCH_COOLDOWN_SECONDS = 15.0
 SESSION_HELPER_IDLE_EXIT_SECONDS = 45.0
 SESSION_HELPER_SHUTDOWN_PREFIX = "reddit_helper_shutdown_"
 SESSION_TICKET_FILE_NAME = "reddit_helper_session.json"
 SCHEDULED_TASK_NAME = r"SRPSS_RedditHelper"
-LEGACY_SCHEDULED_TASK_NAMES = (r"\SRPSS\RedditHelper", r"SRPSS\RedditHelper")
 SESSION_TICKET_REFRESH_SECONDS = 10.0
 SESSION_TICKET_VALID_FOR_SECONDS = 25.0
 
@@ -126,36 +124,26 @@ def _source_helper_command() -> Optional[list[str]]:
 
 def _scoped_watch_args(
     *,
-    persistent: bool,
     owner_pid: int | None = None,
     idle_exit_seconds: float | None = None,
 ) -> list[str]:
-    args = [
+    resolved_owner_pid = int(owner_pid or os.getpid())
+    resolved_idle_exit = int(
+        max(1.0, float(idle_exit_seconds or SESSION_HELPER_IDLE_EXIT_SECONDS))
+    )
+    return [
         "--watch",
         "--queue",
         str(_queue_dir()),
+        "--owner-pid",
+        str(resolved_owner_pid),
+        "--idle-exit-seconds",
+        str(resolved_idle_exit),
     ]
-    if persistent:
-        args.append("--persistent")
-    else:
-        resolved_owner_pid = int(owner_pid or os.getpid())
-        resolved_idle_exit = int(
-            max(1.0, float(idle_exit_seconds or SESSION_HELPER_IDLE_EXIT_SECONDS))
-        )
-        args.extend(
-            [
-                "--owner-pid",
-                str(resolved_owner_pid),
-                "--idle-exit-seconds",
-                str(resolved_idle_exit),
-            ]
-        )
-    return args
 
 
 def resolve_helper_command(
     *,
-    persistent: bool = False,
     owner_pid: int | None = None,
     idle_exit_seconds: float | None = None,
 ) -> Optional[list[str]]:
@@ -164,7 +152,6 @@ def resolve_helper_command(
         return [
             str(installed),
             *_scoped_watch_args(
-                persistent=persistent,
                 owner_pid=owner_pid,
                 idle_exit_seconds=idle_exit_seconds,
             ),
@@ -175,7 +162,6 @@ def resolve_helper_command(
             return [
                 str(candidate),
                 *_scoped_watch_args(
-                    persistent=persistent,
                     owner_pid=owner_pid,
                     idle_exit_seconds=idle_exit_seconds,
                 ),
@@ -187,7 +173,6 @@ def resolve_helper_command(
     return [
         *command,
         *_scoped_watch_args(
-            persistent=persistent,
             owner_pid=owner_pid,
             idle_exit_seconds=idle_exit_seconds,
         ),
@@ -421,134 +406,58 @@ def request_session_helper_shutdown(*, source: str = "app_exit", owner_pid: int 
         return False
 
 
-def _format_run_value(command: list[str]) -> str:
-    return subprocess.list2cmdline(command)
-
-
-def _ensure_run_entry(command: list[str]) -> bool:
-    if os.name != "nt":
-        return False
-    if not command:
-        return False
-    exe_path = command[0]
-    if not exe_path.lower().endswith(".exe"):
-        return False
-
-    try:
-        import winreg
-
-        desired = _format_run_value(command)
-        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run")
-        try:
-            current, _ = winreg.QueryValueEx(key, RUN_VALUE_NAME)
-        except FileNotFoundError:
-            current = None
-
-        if current != desired:
-            winreg.SetValueEx(key, RUN_VALUE_NAME, 0, winreg.REG_SZ, desired)
-            logger.info("[REDDIT-HELPER] Ensured HKCU Run entry for helper watcher")
-        return True
-    except Exception as exc:
-        logger.warning("[REDDIT-HELPER] Failed to ensure HKCU Run entry: %s", exc, exc_info=True)
-        return False
-
-
-def remove_helper_run_entry(*, source: str = "runtime_cleanup") -> bool:
-    """Remove the legacy HKCU Run helper entry if it still exists."""
-    if os.name != "nt":
-        return False
-
-    try:
-        import winreg
-
-        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run")
-        try:
-            winreg.QueryValueEx(key, RUN_VALUE_NAME)
-        except FileNotFoundError:
-            return False
-
-        winreg.DeleteValue(key, RUN_VALUE_NAME)
-        logger.info("[REDDIT-HELPER] Removed legacy HKCU Run entry (%s)", source)
-        return True
-    except FileNotFoundError:
-        return False
-    except Exception as exc:
-        logger.warning("[REDDIT-HELPER] Failed to remove HKCU Run entry: %s", exc, exc_info=True)
-        return False
-
-
-def _scheduled_task_names_for_run() -> tuple[str, ...]:
-    return (SCHEDULED_TASK_NAME, *LEGACY_SCHEDULED_TASK_NAMES)
-
-
 def _run_helper_scheduled_task(*, source: str) -> bool:
-    """Ask Task Scheduler to start the interactive helper task on demand."""
+    """Ask the canonical Task Scheduler entry to start the helper on demand."""
     if os.name != "nt":
         return False
 
+    task_name = SCHEDULED_TASK_NAME
     schtasks_path = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "schtasks.exe"
+    command = [str(schtasks_path), "/Run", "/TN", task_name]
     kwargs: dict[str, object] = {
         "capture_output": True,
         "text": True,
         "timeout": 15,
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
     }
-    if os.name == "nt":
-        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-
-    last_failure: tuple[int | None, str, str] | None = None
-    for task_name in _scheduled_task_names_for_run():
-        command = [str(schtasks_path), "/Run", "/TN", task_name]
-        try:
-            _log_helper_event(
-                f"task run request source={source} task={task_name!r} command={command!r}"
-            )
-            result = subprocess.run(command, **kwargs)
-            stdout = (result.stdout or "").strip()
-            stderr = (result.stderr or "").strip()
-            if result.returncode == 0:
-                logger.info(
-                    "[REDDIT-HELPER] Scheduled task run accepted (%s via %s)",
-                    source,
-                    task_name,
-                )
-                _log_helper_event(
-                    f"task run accepted source={source} task={task_name!r} stdout={stdout!r}"
-                )
-                return True
-
-            last_failure = (result.returncode, stdout, stderr)
-            logger.warning(
-                "[REDDIT-HELPER] Scheduled task run failed (%s via %s) rc=%s stdout=%s stderr=%s",
+    try:
+        _log_helper_event(
+            f"task run request source={source} task={task_name!r} command={command!r}"
+        )
+        result = subprocess.run(command, **kwargs)
+        stdout = (result.stdout or "").strip()
+        stderr = (result.stderr or "").strip()
+        if result.returncode == 0:
+            logger.info(
+                "[REDDIT-HELPER] Scheduled task run accepted (%s via %s)",
                 source,
                 task_name,
-                result.returncode,
-                stdout,
-                stderr,
             )
             _log_helper_event(
-                f"task run failed source={source} task={task_name!r} rc={result.returncode} stdout={stdout!r} stderr={stderr!r}"
+                f"task run accepted source={source} task={task_name!r} stdout={stdout!r}"
             )
-        except Exception as exc:
-            last_failure = (None, "", repr(exc))
-            logger.warning(
-                "[REDDIT-HELPER] Scheduled task run errored (%s via %s): %s",
-                source,
-                task_name,
-                exc,
-                exc_info=True,
-            )
-            _log_helper_event(
-                f"task run exception source={source} task={task_name!r} error={exc!r}"
-            )
-
-    if last_failure:
-        rc, stdout, stderr = last_failure
+            return True
         logger.warning(
-            "[REDDIT-HELPER] Scheduled task run failed for all known task names (%s) rc=%s stdout=%s stderr=%s",
+            "[REDDIT-HELPER] Scheduled task run failed (%s via %s) rc=%s stdout=%s stderr=%s",
             source,
-            rc,
+            task_name,
+            result.returncode,
             stdout,
             stderr,
+        )
+        _log_helper_event(
+            f"task run failed source={source} task={task_name!r} rc={result.returncode} stdout={stdout!r} stderr={stderr!r}"
+        )
+    except Exception as exc:
+        logger.warning(
+            "[REDDIT-HELPER] Scheduled task run errored (%s via %s): %s",
+            source,
+            task_name,
+            exc,
+            exc_info=True,
+        )
+        _log_helper_event(
+            f"task run exception source={source} task={task_name!r} error={exc!r}"
         )
     return False
 
@@ -617,7 +526,6 @@ def _launch_helper(command: list[str]) -> bool:
 def ensure_helper_runtime(
     *,
     source: str = "app_start",
-    persistent: bool = False,
     owner_pid: int | None = None,
     idle_exit_seconds: float | None = None,
     allow_system: bool = False,
@@ -644,13 +552,6 @@ def ensure_helper_runtime(
         logger.debug("[REDDIT-HELPER] Skipping helper bootstrap in SYSTEM context (%s)", source)
         _log_helper_event(f"bootstrap skipped system-disallowed source={source}")
         return False
-    if running_as_system and persistent:
-        logger.warning(
-            "[REDDIT-HELPER] Refusing persistent helper bootstrap in SYSTEM context (%s)",
-            source,
-        )
-        _log_helper_event(f"bootstrap refused persistent-in-system source={source}")
-        return False
     if is_mc_build():
         logger.debug("[REDDIT-HELPER] Skipping helper bootstrap in MC build (%s)", source)
         _log_helper_event(f"bootstrap skipped mc-build source={source}")
@@ -659,9 +560,6 @@ def ensure_helper_runtime(
         logger.warning("[REDDIT-HELPER] Bridge unavailable; helper bootstrap skipped (%s)", source)
         _log_helper_event(f"bootstrap skipped bridge-unavailable source={source}")
         return False
-
-    if not persistent and not running_as_system:
-        remove_helper_run_entry(source=source)
 
     if is_helper_healthy():
         logger.debug("[REDDIT-HELPER] Existing helper heartbeat is healthy (%s)", source)
@@ -675,7 +573,7 @@ def ensure_helper_runtime(
         _log_helper_event(f"bootstrap cooled-down source={source}")
         return False
 
-    if not persistent and _should_prefer_scheduled_task(source=source, running_as_system=running_as_system):
+    if _should_prefer_scheduled_task(source=source, running_as_system=running_as_system):
         launched = _run_helper_scheduled_task(source=source)
         if launched:
             _record_launch_attempt(
@@ -688,7 +586,6 @@ def ensure_helper_runtime(
         return launched
 
     command = resolve_helper_command(
-        persistent=persistent,
         owner_pid=owner_pid,
         idle_exit_seconds=idle_exit_seconds,
     )
@@ -696,16 +593,6 @@ def ensure_helper_runtime(
         logger.warning("[REDDIT-HELPER] No helper command available for bootstrap (%s)", source)
         _log_helper_event(f"bootstrap failed no-command source={source}")
         return False
-
-    try:
-        command_path = Path(command[0]).resolve()
-        installed_path = _installed_helper_path().resolve()
-    except Exception:
-        command_path = Path(command[0])
-        installed_path = _installed_helper_path()
-
-    if persistent and not running_as_system and command_path == installed_path:
-        _ensure_run_entry(command)
 
     launched = _launch_helper(command)
     if launched:

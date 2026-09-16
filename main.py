@@ -141,7 +141,6 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --debug, -d - Enable debug logging
     - --verbose, -v - Enable full verbose log stream
     - --perf - Enable performance logging
-    - --gpu-timing - Enable sampled owner-context GL timer queries (implies --perf)
     - --usage - Enable low-cadence CPU/GPU/memory/thread logging
     - --handle-attribution - Add explicit Windows handle-type sidecar (implies --usage)
     - --frame-trace - Explicit binary publication->Quick->draw trace (not diagnostic-all)
@@ -152,7 +151,6 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --cache - Enable image-cache/prefetch/cache-authority diagnostics
     - --steam - Enable Steam widget family diagnostics
     - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
-    - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
     - --devsteam - Show the unfinished Steam Journey scaffold
     
     Returns:
@@ -160,9 +158,8 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
         "--noupdates", "--frame-trace",
-        "--viz-diagnostics", "--viz-diag",
         "--fresh", "--devsteam",
     }
     # Diagnostic experiment admissions (--abc-drive[=|space]<A|B|C>,
@@ -335,7 +332,6 @@ def _schedule_runtime_reddit_helper_session(engine) -> bool:
 
     launched = reddit_helper_runtime.ensure_helper_runtime(
         source="run_session_start",
-        persistent=False,
         allow_system=True,
     )
     _log_helper_event(
@@ -365,8 +361,7 @@ def _schedule_runtime_reddit_helper_session(engine) -> bool:
             if not reddit_helper_runtime.is_helper_healthy():
                 relaunched = reddit_helper_runtime.ensure_helper_runtime(
                     source="run_session_keepalive",
-                    persistent=False,
-                    allow_system=True,
+                                allow_system=True,
                 )
                 _log_helper_event(f"session helper keepalive launch={int(bool(relaunched))}")
         except Exception as exc:
@@ -764,10 +759,8 @@ def main(*, entrypoint: str = "main"):
         debug=debug_mode,
         verbose=verbose_mode,
         perf=perf_mode,
-        gpu_timing=logging_profile.gpu_timing,
         usage=usage_mode,
         viz=logging_profile.viz,
-        viz_diag=logging_profile.viz_diag,
         geo=logging_profile.geo,
         settings_trace=logging_profile.settings_trace,
         lifecycle=logging_profile.lifecycle,

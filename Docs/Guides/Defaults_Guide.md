@@ -55,8 +55,9 @@ Collapsible Settings bucket identity is canonical under `ui.gmail_bucket_states`
 `ui.widget_bucket_states`, `ui.visualizer_bucket_states` and `ui.visualizer_tech_bucket_states`, and every canonical
 bucket starts closed. Those four maps are deliberately **sparse persisted state**: canonical defaults enumerate valid identities, while
 storage contains only the currently open identity for each local accordion scope. Missing entries mean closed.
-`SettingsManager` must not deep-fill these sparse subtrees on startup. Legacy full boolean maps are accepted and
-normalized to one winner per local scope; the next bucket interaction writes the sparse form. Nested card buckets
+`SettingsManager` must not deep-fill these sparse subtrees on startup. Fresh runtime-store projection, Reset and
+SST replace-import likewise omit the all-closed maps rather than re-emitting a full false representation. Legacy full
+boolean maps are accepted and normalized to one winner per local scope; the next bucket interaction writes the sparse form. Nested card buckets
 (for example Steam Layout/Appearance/Content) coordinate inside their parent card rather than closing that parent.
 Visualizer Technical AGC/Transient are per-mode leaf buckets; the outer `Advanced` and `Technical` disclosures are
 independent parent state and must remain open while their child buckets are used.
@@ -172,7 +173,6 @@ Modern defaults/exports do not emit retired schema as current authority:
 
 - old global preset/custom-preset-backup keys are migration input only where compatibility still reads;
 - legacy `transitions.type="Random"` is migration input only; `random_always` is live;
-- `widgets.shadows.offset`, Intense shadow mode and text blur are retired;
 - `shadowtuning.json` is retired;
 - deprecated Imgur product/default surface was removed in F0 and must not be recreated;
 - retired visualizer growth/card-height fields are not Quick presentation geometry and are removed/ignored

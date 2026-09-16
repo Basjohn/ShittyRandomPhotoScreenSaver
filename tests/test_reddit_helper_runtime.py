@@ -6,6 +6,17 @@ from pathlib import Path
 
 
 class TestRedditHelperRuntime:
+    def test_runtime_has_no_retired_startup_artifact_compatibility(self):
+        import inspect
+        from core.windows import reddit_helper_runtime as runtime
+
+        assert not hasattr(runtime, "LEGACY_SCHEDULED_TASK_NAMES")
+        assert not hasattr(runtime, "RUN_VALUE_NAME")
+        assert not hasattr(runtime, "remove_helper_run_entry")
+        assert not hasattr(runtime, "_ensure_run_entry")
+        assert "persistent" not in inspect.signature(runtime.ensure_helper_runtime).parameters
+        assert "persistent" not in inspect.signature(runtime.resolve_helper_command).parameters
+
     def test_repo_helper_candidate_uses_canonical_release_directory(
         self, tmp_path, monkeypatch
     ):
@@ -76,7 +87,7 @@ class TestRedditHelperRuntime:
         monkeypatch.setattr(runtime, "_installed_helper_path", lambda: installed)
         monkeypatch.setattr(runtime, "_repo_helper_candidates", lambda: [])
 
-        command = runtime.resolve_helper_command(persistent=False)
+        command = runtime.resolve_helper_command()
 
         assert command is not None
         assert command[0] == str(installed)
@@ -97,7 +108,6 @@ class TestRedditHelperRuntime:
         monkeypatch.setattr(runtime, "_repo_helper_candidates", lambda: [])
 
         command = runtime.resolve_helper_command(
-            persistent=False,
             owner_pid=9999,
             idle_exit_seconds=123.0,
         )
@@ -107,26 +117,6 @@ class TestRedditHelperRuntime:
         assert command[command.index("--owner-pid") + 1] == "9999"
         assert "--idle-exit-seconds" in command
         assert command[command.index("--idle-exit-seconds") + 1] == "123"
-
-    def test_resolve_helper_command_marks_installed_helper_persistent_when_requested(self, tmp_path, monkeypatch):
-        from core.windows import reddit_helper_runtime as runtime
-
-        base_dir = tmp_path / "base"
-        installed = base_dir / "helper" / "SRPSS_RedditHelper.exe"
-        installed.parent.mkdir(parents=True)
-        installed.write_text("", encoding="utf-8")
-
-        monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
-        monkeypatch.setattr(runtime, "_queue_dir", lambda: base_dir / "url_queue")
-        monkeypatch.setattr(runtime, "_installed_helper_path", lambda: installed)
-        monkeypatch.setattr(runtime, "_repo_helper_candidates", lambda: [])
-
-        command = runtime.resolve_helper_command(persistent=True)
-
-        assert command is not None
-        assert command[0] == str(installed)
-        assert "--persistent" in command
-        assert "--owner-pid" not in command
 
     def test_resolve_helper_command_marks_source_helper_session_scoped(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime
@@ -149,7 +139,7 @@ class TestRedditHelperRuntime:
         )
         monkeypatch.setattr(runtime.os, "getpid", lambda: 4242)
 
-        command = runtime.resolve_helper_command(persistent=False)
+        command = runtime.resolve_helper_command()
 
         assert command is not None
         assert "--owner-pid" in command
@@ -182,8 +172,6 @@ class TestRedditHelperRuntime:
         signal_dir.mkdir(parents=True)
 
         launches: list[list[str]] = []
-        registrations: list[list[str]] = []
-
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
         monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
         monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
@@ -194,16 +182,14 @@ class TestRedditHelperRuntime:
         monkeypatch.setattr(
             runtime,
             "resolve_helper_command",
-            lambda **kwargs: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir), "--persistent"],
+            lambda **kwargs: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir), "--owner-pid", "4242", "--idle-exit-seconds", "45"],
         )
-        monkeypatch.setattr(runtime, "_ensure_run_entry", lambda command: registrations.append(command) or True)
         monkeypatch.setattr(runtime, "_launch_helper", lambda command: launches.append(command) or True)
 
-        assert runtime.ensure_helper_runtime(source="test", persistent=True) is True
-        assert len(registrations) == 1
+        assert runtime.ensure_helper_runtime(source="test") is True
         assert len(launches) == 1
-        assert "--persistent" in registrations[0]
-        assert "--persistent" in launches[0]
+        assert "--owner-pid" in launches[0]
+        assert "--persistent" not in launches[0]
 
     def test_ensure_helper_runtime_skips_launch_when_heartbeat_is_fresh(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime
@@ -230,12 +216,11 @@ class TestRedditHelperRuntime:
         monkeypatch.setattr(
             runtime,
             "resolve_helper_command",
-            lambda **kwargs: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir), "--persistent"],
+            lambda **kwargs: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir), "--owner-pid", "4242", "--idle-exit-seconds", "45"],
         )
-        monkeypatch.setattr(runtime, "_ensure_run_entry", lambda command: True)
         monkeypatch.setattr(runtime, "_launch_helper", lambda command: launches.append(command) or True)
 
-        assert runtime.ensure_helper_runtime(source="test", persistent=True) is True
+        assert runtime.ensure_helper_runtime(source="test") is True
         assert launches == []
 
     def test_ensure_helper_runtime_skips_in_system_context(self, monkeypatch):
@@ -291,19 +276,18 @@ class TestRedditHelperRuntime:
         monkeypatch.setattr(
             runtime,
             "resolve_helper_command",
-            lambda **kwargs: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir), "--persistent"],
+            lambda **kwargs: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir), "--owner-pid", "4242", "--idle-exit-seconds", "45"],
         )
-        monkeypatch.setattr(runtime, "_ensure_run_entry", lambda command: True)
         monkeypatch.setattr(runtime, "_recent_launch_attempt", lambda: True)
         monkeypatch.setattr(runtime, "_process_alive", lambda pid: pid == 999)
         monkeypatch.setattr(runtime, "_terminate_process", lambda pid: terminations.append(pid) or True)
         monkeypatch.setattr(runtime, "_launch_helper", lambda command: launches.append(command) or True)
 
-        assert runtime.ensure_helper_runtime(source="test", persistent=True) is True
+        assert runtime.ensure_helper_runtime(source="test") is True
         assert terminations == [999]
         assert len(launches) == 1
 
-    def test_ensure_helper_runtime_session_scope_does_not_write_run_entry(self, tmp_path, monkeypatch):
+    def test_ensure_helper_runtime_direct_launch_is_session_scoped(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime
 
         base_dir = tmp_path / "base"
@@ -313,7 +297,6 @@ class TestRedditHelperRuntime:
         signal_dir.mkdir(parents=True)
 
         launches: list[list[str]] = []
-        registrations: list[list[str]] = []
 
         monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
         monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
@@ -327,43 +310,12 @@ class TestRedditHelperRuntime:
             "resolve_helper_command",
             lambda **kwargs: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir), "--owner-pid", "4242"],
         )
-        removals: list[str] = []
-        monkeypatch.setattr(runtime, "_ensure_run_entry", lambda command: registrations.append(command) or True)
-        monkeypatch.setattr(runtime, "remove_helper_run_entry", lambda source="": removals.append(source) or True)
         monkeypatch.setattr(runtime, "_launch_helper", lambda command: launches.append(command) or True)
 
-        assert runtime.ensure_helper_runtime(source="test", persistent=False) is True
-        assert registrations == []
-        assert removals == ["test"]
+        assert runtime.ensure_helper_runtime(source="test") is True
         assert len(launches) == 1
-
-    def test_remove_helper_run_entry_deletes_existing_value(self, monkeypatch):
-        from core.windows import reddit_helper_runtime as runtime
-
-        class _WinReg:
-            HKEY_CURRENT_USER = object()
-
-            def __init__(self):
-                self.values = {runtime.RUN_VALUE_NAME: "legacy command"}
-                self.deleted: list[str] = []
-
-            def CreateKey(self, root, path):  # noqa: N802, ARG002
-                return "key"
-
-            def QueryValueEx(self, key, name):  # noqa: N802, ARG002
-                if name not in self.values:
-                    raise FileNotFoundError
-                return self.values[name], None
-
-            def DeleteValue(self, key, name):  # noqa: N802, ARG002
-                self.deleted.append(name)
-                self.values.pop(name, None)
-
-        fake_winreg = _WinReg()
-        monkeypatch.setitem(__import__("sys").modules, "winreg", fake_winreg)
-
-        assert runtime.remove_helper_run_entry(source="test_cleanup") is True
-        assert fake_winreg.deleted == [runtime.RUN_VALUE_NAME]
+        assert "--owner-pid" in launches[0]
+        assert "--persistent" not in launches[0]
 
     def test_ensure_helper_runtime_can_launch_session_scoped_helper_task_from_system_when_allowed(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime
@@ -386,7 +338,6 @@ class TestRedditHelperRuntime:
 
         assert runtime.ensure_helper_runtime(
             source="system-test",
-            persistent=False,
             allow_system=True,
             owner_pid=4242,
         ) is True
@@ -415,33 +366,10 @@ class TestRedditHelperRuntime:
 
         assert runtime.ensure_helper_runtime(
             source="run_session_start",
-            persistent=False,
             allow_system=True,
         ) is True
         assert task_runs == ["run_session_start"]
         assert launches == []
-
-    def test_ensure_helper_runtime_still_rejects_persistent_system_launch(self, tmp_path, monkeypatch):
-        from core.windows import reddit_helper_runtime as runtime
-
-        base_dir = tmp_path / "base"
-        queue_dir = base_dir / "url_queue"
-        signal_dir = base_dir / "signals"
-        queue_dir.mkdir(parents=True)
-        signal_dir.mkdir(parents=True)
-
-        monkeypatch.setattr(runtime, "_running_as_system", lambda: True)
-        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
-        monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
-        monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
-        monkeypatch.setattr(runtime, "_queue_dir", lambda: queue_dir)
-        monkeypatch.setattr(runtime, "_signal_dir", lambda: signal_dir)
-
-        assert runtime.ensure_helper_runtime(
-            source="system-persistent",
-            persistent=True,
-            allow_system=True,
-        ) is False
 
     def test_refresh_session_ticket_writes_programdata_signal(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime

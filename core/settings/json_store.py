@@ -23,6 +23,8 @@ from core.settings.persistence import (
     get_settings_persistence,
 )
 from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
+from core.settings.structured_input_compat import promote_legacy_structured_store_shape
+from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
 
 logger = get_logger(__name__)
 
@@ -147,6 +149,27 @@ class JsonSettingsStore:
             else:
                 flat[key] = value
 
+        flat, repaired_roots = promote_legacy_structured_store_shape(flat)
+        if repaired_roots:
+            logger.info(
+                "Promoted flattened structured settings roots while loading %s: %s",
+                self._path,
+                list(repaired_roots),
+            )
+
+        widget_theme_repaired = False
+        raw_widget_theme = flat.get("widget_theme")
+        if isinstance(raw_widget_theme, Mapping):
+            promoted_widget_theme, widget_theme_repaired = (
+                promote_legacy_widget_theme_state(raw_widget_theme)
+            )
+            if widget_theme_repaired:
+                flat["widget_theme"] = promoted_widget_theme
+                logger.info(
+                    "Promoted retired Widget Theme material state while loading %s",
+                    self._path,
+                )
+
         self._data = flat
         self._meta = {
             "version": payload.get("version", SNAPSHOT_VERSION),
@@ -158,6 +181,11 @@ class JsonSettingsStore:
             ),
         }
         self._finish_load_locked()
+        if repaired_roots or widget_theme_repaired:
+            # The in-memory image now differs from disk and must be written once
+            # at the next durability boundary. Mark it as a real state revision
+            # so a second load does not depend on compatibility promotion again.
+            self._mark_changed_locked()
 
     def _finish_load_locked(self) -> None:
         # Re-loading is a new authoritative state, but owner revisions must

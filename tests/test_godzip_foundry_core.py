@@ -437,9 +437,9 @@ def test_godzip_diff_uses_archived_dirty_bytes_and_finds_later_git_and_worktree_
 
 def _add_runtime_surface(repo: Path, *, windows_venv: bool = False) -> None:
     flags = [
-        "--debug", "-d", "--verbose", "-v", "--perf", "--gpu-timing",
+        "--debug", "-d", "--verbose", "-v", "--perf",
         "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache",
-        "--steam", "--noupdates", "--viz-diagnostics", "--viz-diag",
+        "--steam", "--noupdates",
         "--fresh", "--devsteam",
     ]
     (repo / "main.py").write_text(
@@ -466,7 +466,8 @@ def test_run_flag_discovery_uses_current_main_cli_surface_and_collapses_aliases(
 
     assert "--debug" in flags
     assert "--verbose" in flags
-    assert "--viz-diagnostics" in flags
+    assert "--gpu-timing" not in flags
+    assert "--viz-diagnostics" not in flags
     assert "-d" not in flags
     assert "-v" not in flags
     assert "--viz-diag" not in flags

@@ -1795,9 +1795,6 @@
     "max_workers": "auto",
     "rss": {
       "enabled": true
-    },
-    "transition": {
-      "enabled": true
     }
   }
 }

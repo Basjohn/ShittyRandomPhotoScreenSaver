@@ -102,22 +102,11 @@ def read_widget_theme_state(settings: WidgetThemeSelectionStore) -> WidgetThemeS
         selected = default_selected
     custom = values.get("custom", default_custom)
     custom_payload = dict(custom) if isinstance(custom, Mapping) else None
-    migrated = "card_material_override" in values
-    if custom_payload is not None and custom_payload.get("schema_version") in {1, 2}:
-        # One-time state migration from the abandoned material-bearing Widget
-        # Theme schemas. Drop only that retired field and retain stable identity,
-        # link metadata, and every semantic colour. This is a migration, not a
-        # runtime fallback: the persisted root is immediately rewritten as v3.
-        custom_payload.pop("default_card_material_mode", None)
-        custom_payload["schema_version"] = 3
-        migrated = True
     state = WidgetThemeState(
         selected_id=selected,
         keep_synced=_to_bool(values.get("keep_synced"), default_keep_synced),
         custom_payload=custom_payload,
     )
-    if migrated:
-        persist_widget_theme_state(settings, state)
     return state
 
 

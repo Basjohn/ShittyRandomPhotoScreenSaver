@@ -1,0 +1,29 @@
+{
+  "ui": {
+    "gmail_bucket_states": {
+      "backend": false,
+      "layout": true,
+      "appearance": false
+    },
+    "widget_bucket_states": {
+      "reddit:primary": true,
+      "reddit:reddit1": false,
+      "reddit:feed": true,
+      "reddit:layout": true,
+      "media:appearance": true,
+      "media:controls": true,
+      "steam:achievement_pulse": true,
+      "steam:achievement_pulse_layout": true,
+      "steam:achievement_pulse_appearance": true,
+      "retired:ghost": true
+    },
+    "visualizer_bucket_states": {
+      "spectrum:shape": true,
+      "bubble:appearance": false
+    },
+    "visualizer_tech_bucket_states": {
+      "spectrum:agc": true,
+      "bubble:agc": false
+    }
+  }
+}

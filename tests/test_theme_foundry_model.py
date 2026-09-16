@@ -6,13 +6,17 @@ from tools.theme_foundry_model import (
     most_used_colors,
     replace_matching_color_roles,
 )
-from ui.settings_theme_io import settings_theme_from_json, settings_theme_to_json
-from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME, Rgba
+from ui.settings_theme_io import settings_theme_from_json, settings_theme_to_json, settings_theme_to_payload
+from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME, Rgba, SETTINGS_THEME_SCHEMA_VERSION
 
 
-def test_theme_draft_round_trips_current_schema() -> None:
+def test_theme_draft_round_trips_and_exports_current_schema() -> None:
     draft = ThemeDraft.from_spec(DEFAULT_DARK_SETTINGS_THEME)
-    assert draft.to_spec() == DEFAULT_DARK_SETTINGS_THEME
+    spec = draft.to_spec()
+    assert spec == DEFAULT_DARK_SETTINGS_THEME
+    payload = settings_theme_to_payload(spec)
+    assert payload["schema_version"] == SETTINGS_THEME_SCHEMA_VERSION
+    assert "about.art.liquid" in payload["colors"]
 
 
 def test_theme_draft_authors_glass_as_schema_v6_backdrop() -> None:
@@ -100,17 +104,3 @@ def test_most_used_colors_keeps_alpha_variants_separate() -> None:
         (translucent, ("translucent.a", "translucent.b", "translucent.c")),
         (opaque, ("opaque.a", "opaque.b")),
     )
-
-
-def test_schema_v5_theme_migrates_about_art_liquid_role() -> None:
-    import json
-
-    payload = json.loads(settings_theme_to_json(DEFAULT_DARK_SETTINGS_THEME))
-    payload["schema_version"] = 5
-    payload["colors"].pop("about.art.liquid")
-    payload["name"] = "Legacy Blue"
-    payload["colors"]["chrome.outer_border"] = [12, 34, 56, 180]
-
-    migrated = settings_theme_from_json(json.dumps(payload))
-    assert migrated.schema_version == DEFAULT_DARK_SETTINGS_THEME.schema_version
-    assert migrated.color("about.art.liquid") == Rgba(12, 34, 56, 255)

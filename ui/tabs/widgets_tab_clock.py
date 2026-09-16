@@ -380,9 +380,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     time_layout.addWidget(tab._clock_analog_container)
 
-    # Separator is shared by analogue and digital faces.  The old persisted
-    # ``show_digital_separator`` name survives as a read-only compatibility
-    # input only; current UI and saves own the mode-neutral ``show_separator``.
+    # Separator is shared by analogue and digital faces.
     separator_row = _aligned_row(time_layout, "Separator:")
     tab.clock_show_separator = QCheckBox("Show Above Day / Date")
     tab.clock_show_separator.setProperty("circleIndicator", True)
@@ -646,11 +644,9 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.clock_show_date.setChecked(
         tab._config_bool('clock', clock_config, 'show_date')
     )
-    separator_value = clock_config.get(
-        'show_separator',
-        clock_config.get('show_digital_separator', tab._default_bool('clock', 'show_separator')),
+    tab.clock_show_separator.setChecked(
+        tab._config_bool('clock', clock_config, 'show_separator')
     )
-    tab.clock_show_separator.setChecked(bool(separator_value))
     tab.clock_separator_thickness.setValue(
         max(1, min(8, tab._config_int('clock', clock_config, 'separator_thickness')))
     )

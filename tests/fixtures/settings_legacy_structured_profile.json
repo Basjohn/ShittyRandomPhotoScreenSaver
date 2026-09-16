@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "profile": "Screensaver",
+  "snapshot": {
+    "ui": {
+      "dialog_geometry.width": 1389,
+      "dialog_geometry": {
+        "width": 1600
+      }
+    },
+    "ui.dialog_geometry.height": 900,
+    "widgets": {
+      "clock.enabled": false,
+      "clock": {
+        "show_separator": true
+      }
+    },
+    "widgets.clock.show_seconds": false,
+    "widget_theme": {
+      "custom": {
+        "colors": {
+          "card.background": [12, 34, 56, 255]
+        }
+      }
+    },
+    "display": {
+      "image_interval": 47
+    }
+  },
+  "metadata": {
+    "fixture": "legacy_structured_shape"
+  }
+}

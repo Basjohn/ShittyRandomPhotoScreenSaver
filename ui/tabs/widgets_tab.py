@@ -76,6 +76,7 @@ from ui.flow_layout import FlowContainer
 from core.settings.ui_bucket_state import (
     flat_bucket_scope,
     normalize_single_open_bucket_states,
+    normalize_widget_bucket_states,
     set_single_open_bucket_state,
     sparse_open_bucket_states,
     widget_bucket_scope,
@@ -351,25 +352,9 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         if not isinstance(canonical, Mapping):
             raise KeyError("Canonical UI defaults are missing ui.widget_bucket_states")
         canonical_keys = tuple(str(key) for key in canonical)
-        raw = self._settings.get(self._WIDGET_BUCKET_STATE_KEY)
-        aliases = {
-            "reddit:primary": "reddit:reddit1",
-            "reddit:feed": "reddit:interaction",
-            "reddit:layout": "reddit:shared_layout",
-            "reddit:appearance": "reddit:shared_appearance",
-        }
-        repaired_raw: dict[str, bool] = {}
-        if isinstance(raw, Mapping):
-            for raw_key, raw_value in raw.items():
-                key = str(raw_key)
-                canonical_key = aliases.get(key, key)
-                if canonical_key in repaired_raw and key in aliases:
-                    continue
-                repaired_raw[canonical_key] = bool(raw_value)
-        return normalize_single_open_bucket_states(
+        return normalize_widget_bucket_states(
             canonical_keys,
-            repaired_raw,
-            scope_for_key=lambda key: widget_bucket_scope(key, canonical_keys),
+            self._settings.get(self._WIDGET_BUCKET_STATE_KEY),
         )
 
     def get_gmail_bucket_state(self, bucket: str) -> bool:
@@ -396,7 +381,6 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         self,
         section: str,
         bucket: str,
-        _legacy_default: bool | None = None,
     ) -> bool:
         """Return whether this is the remembered open bucket for its local scope."""
         return bool(self._widget_bucket_state[f"{section}:{bucket}"])

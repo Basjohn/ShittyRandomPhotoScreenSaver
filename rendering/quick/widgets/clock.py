@@ -304,24 +304,6 @@ class ClockPresentationConfig:
                 "analog_face_shadow",
             )
         }
-        # Compatibility read for configurations saved before the separator was
-        # recognized as a shared analogue/digital control.  Current saves use
-        # ``show_separator`` only; Future Cleanup owns removal after the supported
-        # compatibility horizon expires.
-        if "show_separator" not in values and "show_separator" not in base_values:
-            if normalized_id == "clock":
-                projected["show_separator"] = values.get(
-                    "show_digital_separator",
-                    base_canonical["show_separator"],
-                )
-            else:
-                projected["show_separator"] = base_values.get(
-                    "show_digital_separator",
-                    values.get(
-                        "show_digital_separator",
-                        base_canonical["show_separator"],
-                    ),
-                )
         projected["timezone"] = values.get("timezone", canonical["timezone"])
 
         overrides = values.get("display_mode_overrides", {})

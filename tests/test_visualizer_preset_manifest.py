@@ -151,6 +151,43 @@ def test_reconcile_curated_preset_tree_prunes_duplicate_slots_and_rewrites_manif
     assert load_curated_visualizer_preset_manifest(root) == resolved
 
 
+def test_runtime_reconcile_is_read_only_for_source_tree(tmp_path: Path) -> None:
+    root = tmp_path / "visualizer_modes"
+    spectrum = root / "spectrum"
+    spectrum.mkdir(parents=True)
+    (spectrum / "preset_1_pillars.json").write_text("{}", encoding="utf-8")
+
+    manifest_path = root.parent / "visualizer_modes_manifest.json"
+    original = (
+        b'{\r\n  "managed_curated_files": [\r\n'
+        b'    "spectrum/preset_1_pillars.json"\r\n  ]\r\n}\r\n'
+    )
+    manifest_path.write_bytes(original)
+
+    assert reconcile_curated_visualizer_preset_tree(root) == {
+        "spectrum/preset_1_pillars.json"
+    }
+    assert manifest_path.read_bytes() == original
+
+
+def test_manifest_noop_write_preserves_existing_newline_bytes(tmp_path: Path) -> None:
+    root = tmp_path / "visualizer_modes"
+    spectrum = root / "spectrum"
+    spectrum.mkdir(parents=True)
+    entry = "spectrum/preset_1_pillars.json"
+    (spectrum / "preset_1_pillars.json").write_text("{}", encoding="utf-8")
+
+    manifest_path = root.parent / "visualizer_modes_manifest.json"
+    original = (
+        b'{\r\n  "managed_curated_files": [\r\n'
+        b'    "spectrum/preset_1_pillars.json"\r\n  ]\r\n}\r\n'
+    )
+    manifest_path.write_bytes(original)
+
+    assert write_curated_visualizer_preset_manifest(root, {entry}) == {entry}
+    assert manifest_path.read_bytes() == original
+
+
 def test_duplicate_prune_is_frozen_or_explicit_only(tmp_path: Path) -> None:
     root = tmp_path / "visualizer_modes"
     spectrum = root / "spectrum"

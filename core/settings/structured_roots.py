@@ -36,6 +36,37 @@ SPARSE_STRUCTURED_MAPPING_PATHS = frozenset(
 )
 
 
+def project_structured_defaults_for_persistence(
+    root: str,
+    defaults: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Project one canonical structured root into runtime-store default shape.
+
+    Canonical defaults enumerate sparse mapping identities as schema, but fresh
+    runtime persistence represents "nothing remembered" by omitting those
+    subtrees. Reset/SST-replace must use the same projection as fresh startup so
+    they cannot re-emit the old full-false bucket representation.
+    """
+
+    projected: dict[str, Any] = deepcopy(dict(defaults))
+    root_name = str(root)
+    for sparse_path in SPARSE_STRUCTURED_MAPPING_PATHS:
+        if not sparse_path or sparse_path[0] != root_name:
+            continue
+        cursor: dict[str, Any] | None = projected
+        for part in sparse_path[1:-1]:
+            child = cursor.get(part) if cursor is not None else None
+            if not isinstance(child, Mapping):
+                cursor = None
+                break
+            child_copy = deepcopy(dict(child))
+            cursor[part] = child_copy
+            cursor = child_copy
+        if cursor is not None and len(sparse_path) > 1:
+            cursor.pop(sparse_path[-1], None)
+    return projected
+
+
 def merge_missing_structured_defaults(
     existing: Mapping[str, Any],
     defaults: Mapping[str, Any],
@@ -77,4 +108,5 @@ __all__ = [
     "SPARSE_STRUCTURED_MAPPING_PATHS",
     "STRUCTURED_SETTINGS_ROOTS",
     "merge_missing_structured_defaults",
+    "project_structured_defaults_for_persistence",
 ]

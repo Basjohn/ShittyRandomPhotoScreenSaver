@@ -1507,11 +1507,11 @@ def test_widget_bucket_state_roundtrip(qt_app, settings_manager):
         assert reddit1.isChecked() is False
         assert reddit2.isChecked() is True
 
-        assert tab.get_widget_bucket_state("clock", "time", False) is False
-        assert tab.get_widget_bucket_state("clock", "layout", False) is True
-        assert tab.get_widget_bucket_state("media", "controls", False) is True
-        assert tab.get_widget_bucket_state("reddit", "reddit1", False) is False
-        assert tab.get_widget_bucket_state("reddit", "secondary", False) is True
+        assert tab.get_widget_bucket_state("clock", "time") is False
+        assert tab.get_widget_bucket_state("clock", "layout") is True
+        assert tab.get_widget_bucket_state("media", "controls") is True
+        assert tab.get_widget_bucket_state("reddit", "reddit1") is False
+        assert tab.get_widget_bucket_state("reddit", "secondary") is True
     finally:
         tab.deleteLater()
 
