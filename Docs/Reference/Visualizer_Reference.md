@@ -1,8 +1,8 @@
 # Visualizer Reference
 
-Last updated: 2026-09-07
+Last updated: 2026-09-16
 
-Current visualizer behavior and accepted presentation destination.
+Current visualizer behavior and accepted presentation architecture.
 
 ## 1. Modes
 
@@ -20,9 +20,7 @@ heavy implementation imports into it.
 
 ## 1A. Registered modes vs enabled modes — landed admission boundary
 
-Per-mode admission/dormancy is implemented. `core/settings/visualizer_mode_registry.py` owns all registered descriptors and lazy wiring; persisted `enabled_modes` owns user mode admission; the top-level Visualizers Settings tab builds mode bodies lazily and keeps disabled/unselected bodies dormant. The old modularization decomposition is retained as historical implementation evidence in `Docs/Fossils/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md`.
-
-The destination distinction is:
+Per-mode admission/dormancy is implemented. `core/settings/visualizer_mode_registry.py` owns all registered descriptors and lazy wiring; persisted `enabled_modes` owns user mode admission; the top-level Visualizers Settings tab builds mode bodies lazily and keeps disabled/unselected bodies dormant. The ownership distinction is:
 
 ```text
 all registered canonical modes
@@ -63,7 +61,7 @@ Primary owner:
 
 Supporting logical/source modules remain Python.
 
-Durable accepted destination flow:
+Durable accepted flow:
 
 ```text
 source / engine
@@ -83,7 +81,7 @@ source / engine
 
 Bridge binding alone does not prove delivery: a complete current snapshot must actually be composed, published and admitted by the retained visualizer item.
 
-Old GUI `present_tick`/compositor presentation is retired production architecture. Any surviving reference belongs to historical evidence or caller-dead I residue and must not be restored merely to satisfy an old harness.
+Old GUI `present_tick`/compositor presentation is retired production architecture. Any surviving reference belongs to historical evidence or caller-dead residue and must not be restored merely to satisfy an old harness.
 
 ## 4. Presentation ownership
 
@@ -95,7 +93,7 @@ Destination:
 - no independent swap/vsync owner;
 - no self-driven visualizer repaint loop.
 
-The historical `SpotifyBarsGLOverlay` presenter is retired. A surviving import/reference is I residue unless exact caller proof identifies a neutral non-presentation contract.
+The historical `SpotifyBarsGLOverlay` presenter is retired. A surviving import/reference is cleanup residue unless exact caller proof identifies a neutral non-presentation contract.
 
 ## 5. Logical / presentation split
 
@@ -114,7 +112,7 @@ Presentation side owns:
 
 The worker does not mutate Quick items or GPU resources.
 
-Audio analysis uses one persistent serial `visualizer.audio_analysis` compute lane with one in-flight packet plus newest-pending source replacement. Detached DSP state is retained across ordinary frames and rebuilt/fenced only at real config/activation/reset epochs; no generic per-frame Future/task fallback is part of the destination.
+Audio analysis uses one persistent serial `visualizer.audio_analysis` compute lane with one in-flight packet plus newest-pending source replacement. Detached DSP state is retained across ordinary frames and rebuilt/fenced only at real config/activation/reset epochs; no generic per-frame Future/task fallback is part of the current architecture.
 
 Configuration follows the consuming owner. Values used by authored logical evolution or mode-owned frame runtimes are
 presentation-neutral resolved configuration; renderer-only style/chrome is presentation-owned. Legacy widget attribute
@@ -123,7 +121,7 @@ location and Settings subsection are not ownership rules.
 The resolved technical cache is deliberately not monolithic: DSP/capture controls apply through the controller-owned shared
 BeatEngine/audio-worker boundary, while technical-origin transient controls that authored logical evolution reads live on
 controller-owned logical state. Bar-count reconfiguration keeps controller, engine generation and logical display-bar
-mirror/freshness state coherent. Legacy overlay-only mirrors have no destination role without an exact retained consumer.
+mirror/freshness state coherent. Legacy overlay-only mirrors have no current role without an exact retained consumer.
 
 ## 6. Latest-state semantics
 
@@ -249,7 +247,7 @@ devcurve_growth
 ```
 
 Those values altered card height independently of common width and were already ignored once CUSTOM
-geometry owned the old visualizer. They are not authored mode behavior and are not destination
+geometry owned the old visualizer. They are not authored mode behavior and are not current
 settings.
 
 The five established carded modes share one canonical baseline viewport aspect ratio. A mode switch or
@@ -342,9 +340,9 @@ Pause/Play preserves:
 - no visualizer pause debounce;
 - prompt visible authored state change.
 
-Historical/current `BeatEngine` retains the same cold-Play ramp and warm-capture policy. Migration-added visible delay must be localized across Media truth -> owner -> source freshness -> mode readiness -> publication -> retained draw rather than hidden by retuning the historical ramp.
+Historical/current `BeatEngine` retains the same cold-Play ramp and warm-capture policy. Newly introduced visible delay must be localized across Media truth -> owner -> source freshness -> mode readiness -> publication -> retained draw rather than hidden by retuning the historical ramp.
 
-The migration must not turn normal Pause/Play into renderer/window recreation. Current timing/reactivity authoring guidance lives in `Docs/Guides/Visualizer_Reactivity_Authoring.md`; Bubble-specific temporal evidence remains in `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
+Normal Pause/Play must not turn into renderer/window recreation. Current timing/reactivity authoring guidance lives in `Docs/Guides/Visualizer_Reactivity_Authoring.md`; Bubble-specific temporal evidence remains in `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
 ## 14. CUSTOM / Edit
 
@@ -352,7 +350,7 @@ CUSTOM/Edit preserves one authoritative committed geometry.
 
 Control UI may remain QWidget if appropriate.
 
-Live runtime pixels belong to the Quick scene after migration; edit plumbing must not recreate a
+Live runtime pixels belong to the Quick scene; edit plumbing must not recreate a
 second accelerated presentation surface.
 
 Required visualizer resize semantics:
@@ -364,7 +362,7 @@ left/right     -> viewport width
 top/bottom     -> viewport height
 ```
 
-Viewport resizing is part of the destination CUSTOM contract, not optional QoL and not permission to stretch a
+Viewport resizing is part of the current CUSTOM contract, not optional QoL and not permission to stretch a
 rendered image. Save/Cancel and layout slots preserve scale and extent separately.
 
 ## 14A. Visualizer display admission / semantic mode + preset cycles

@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -13,7 +13,7 @@ not automatic current architecture instructions.
 
 ## Open / Watchlist Records
 
-- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **[~] OPEN / SIGNIFICANTLY IMPROVED, NOT SOLVED**. Checkpoint-3 frame trace physically validates event-driven Quick admission as a major win; operator-observed Checkpoint-5 dual-display behavior is better again, but settled-heavy residual crawl remains and the post-sync render path still needs fine-grained trace proof. — CHK5 dual-display binary confirms ~90 Hz is logical cadence, D0 is much fresher in steady state, and the remaining `frameSwapped -> requestUpdate()` transition feedback can overdrive D0 to ~287 draws/s and sharply worsen freshness; swap-trace attribution was repaired in CHK8; CHK10 additionally exposed a separate mode-hotswap live-audio authority regression at Spectrum -> Oscilloscope, now tracked without rolling back the pacing gains.
+- [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **SOLVED / CHK26 GOLDEN**. CHK23 removed steady Python/PyOpenGL background redraw through retained Qt-native content; CHK26 removed proven duplicate non-stencil GL-state queries and was physically accepted neutral-or-better at repository commit `a0bf70932c`. CHK27–CHK29 then attributed the largest apparent residuals to Qt frame/render-phase ownership or small distributed Bubble/driver work and closed generic performance fishing. Reopen only from a concrete reproduced symptom.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
 - [U-09 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split](Historical_Bugs/U-09_Visualizer_Custom_Runtime_Shape_Poison.md)
@@ -25,15 +25,15 @@ not automatic current architecture instructions.
 - [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **SOLVED**. The 58-minute Windows soak preserved scaled-prefetch liveness through sustained cache eviction pressure.
 - [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **SOLVED**. The 58-minute Windows soak showed no recursive zero-delay due storm or request multiplication.
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](Historical_Bugs/R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md) — **CORRECTNESS PRESERVED / AWAITING VALIDATION**. No long debounce admitted; physical multi-stage wake remains the acceptance gate.
-- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. E2.7 implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
+- [R-26 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn](Historical_Bugs/R-26_Visualizer_Custom_Display_Participation.md) — **PARTIAL / AWAITING VALIDATION**. implementation is independently audited GREEN; physical dual-display wake/late-return acceptance remains.
 - [R-81 — Clock Layout Slot Restored Variant Geometry Without Restoring Per-Display Face State](Historical_Bugs/R-81_Clock_Layout_Slot_Mode_State_Omission.md) — **RESOLVED IN CODE / AWAITING VALIDATION**. Dedicated automated coverage is intentionally deferred to the next test pass; current sequencing remains in `Current_Plan.md`.
 
-No other R-series record is current implementation sequencing. Current migration work is owned by
+No other R-series record is current implementation sequencing. Current work is owned by
 `Current_Plan.md`; historical Phase/P-number status prose never admits current work.
 
 Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDATION` describe the incident record unless this index and `Current_Plan.md` explicitly promote the item as current. They do not independently admit work.
 
-- R-69 Bubble extreme-viewport scaling is **accepted as a golden contract**: never reintroduce global viewport compression of authored head/Ghost response. Any oversized extreme expansion tail is separate J visual debt.
+- R-69 Bubble extreme-viewport scaling is **accepted as a golden contract**: never reintroduce global viewport compression of authored head/Ghost response. Any oversized extreme expansion tail is separate visual debt.
 
 ## Standalone R Records
 

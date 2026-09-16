@@ -61,7 +61,7 @@ The sidecar is always on, even when no optional logging flags are enabled. A suc
 
 The Qt/QML sidecar records milliseconds, severity, PID, thread, sequence, category, source file/line/function when available, and message. It is synchronous/direct rather than routed through `SRPSSLogWriter`, because the channel exists specifically to retain Qt/QML diagnostics that may occur during queue saturation/closing/native failure.
 
-For source-mode/installed Quick acceptance, inspect `screensaver.log` and `screensaver_qml.log` together. Unexpected migration-relevant QML binding/component/provider/signal/slot/scene warnings are first-class evidence.
+For source-mode/installed Quick acceptance, inspect `screensaver.log` and `screensaver_qml.log` together. Unexpected QML binding/component/provider/signal/slot/scene warnings are first-class evidence.
 
 Permanent capture tests: `tests/test_qt_message_capture_contract.py` (fake-handler contract) and `tests/test_qt_message_capture_qml_runtime.py` (real QQmlEngine warning path; requires PySide runtime).
 
@@ -223,10 +223,9 @@ Absent or wholly unknown metadata falls back to existing name/tag routing so thi
 and unmigrated records remain compatible.
 
 Human-readable tags such as `[PERF]`, `[CACHE]` and `[GL CACHE]` remain useful for people
-and existing parsers, but newly migrated producers must not depend on them for delivery.
+and existing parsers, but new or touched producers must not depend on them for delivery.
 
-Late Phase 7 should migrate high-volume families systematically and simplify filters so
-routing no longer depends on token quirks.
+When touching a high-volume logging producer, prefer explicit family metadata and simplify routing so delivery does not depend on visible-token quirks. Do not launch a tree-wide rewrite merely to erase older compatible heuristics.
 
 ## Evidence Parser Compatibility
 

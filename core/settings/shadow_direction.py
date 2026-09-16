@@ -1,4 +1,4 @@
-"""Canonical eight-direction shadow orientation authority (Phase E4).
+"""Canonical eight-direction shadow orientation authority.
 
 One presentation-neutral token owns shadow *orientation only*. Every shadow
 class (card, text, header, control, icon, volume slider, ...) keeps its own

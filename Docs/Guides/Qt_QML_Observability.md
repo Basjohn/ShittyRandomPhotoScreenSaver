@@ -1,12 +1,12 @@
 # Qt / QML Observability Contract
 
-Last updated: 2026-08-30
+Last updated: 2026-09-16
 
 ## Purpose
 
 SRPSS has more than one diagnostic plane. Python logging alone is not sufficient evidence for a Qt Quick application.
 
-Qt/QML binding failures, component warnings, signal/slot complaints, scene-graph diagnostics and other Qt messages travel through Qt's own message-handler path. During the Quick migration this blind spot hid a real Clock retirement failure even while the Python logs looked clean.
+Qt/QML binding failures, component warnings, signal/slot complaints, scene-graph diagnostics and other Qt messages travel through Qt's own message-handler path. This blind spot previously hid a real Clock retirement failure even while the Python logs looked clean.
 
 The capture is now **permanent always-on product infrastructure**.
 
@@ -65,7 +65,7 @@ file does not exist
 => capture/setup/path/packaging problem; do not claim Qt/QML evidence
 
 file exists + messages
-=> inspect and classify every migration-relevant warning/error
+=> inspect and classify every runtime-relevant warning/error
 ```
 
 The 2026-08-30 17:37–17:40 physical source-mode sidecar is a concrete clean example: `session_start` and `session_end` are present, with `messages=0`, empty category/level maps and `write_errors=0`. An almost-empty file is therefore a successful clean capture, not missing evidence.
@@ -113,12 +113,12 @@ Uninstall must restore the prior handler rather than blindly installing `None`.
 
 ## Runtime gate rule
 
-For any H/J source-mode or installed physical claim involving Quick/QML:
+For any source-mode or installed physical claim involving Quick/QML:
 
 1. read `screensaver.log` for the main runtime sequence;
 2. read `screensaver_qml.log` for Qt/QML evidence over the same timestamp range;
 3. follow owning family sidecars when needed;
-4. do not call the gate GREEN while unexplained migration-relevant Qt/QML warnings/errors remain.
+4. do not call the gate GREEN while unexplained runtime-relevant Qt/QML warnings/errors remain.
 
 This does **not** mean every third-party informational Qt line is automatically a product failure. It means the diagnostic plane must be intentionally classified rather than ignored.
 
@@ -131,7 +131,7 @@ This does **not** mean every third-party informational Qt line is automatically 
 - shader/component load failures;
 - scene-graph warnings tied to the current runtime transition.
 
-These messages may identify an H functional/lifecycle seam even when Python owners report normal completion.
+These messages may identify a functional/lifecycle seam even when Python owners report normal completion.
 
 ## Correlation
 
@@ -264,5 +264,5 @@ freshness source — acceptable and comparable to the retired ~2.5s poll.
 - no control flow driven by whether logging succeeded;
 - no swallowing fatal/error evidence to keep a test green;
 - no duplicated Quick owner just to expose diagnostics;
-- no migration gate based solely on the console;
+- no acceptance gate based solely on the console;
 - no raw stderr redirection without an explicit subprocess/crash design.

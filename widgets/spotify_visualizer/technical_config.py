@@ -19,8 +19,8 @@ def build_technical_cache(
 ) -> Dict[str, Dict[str, Any]]:
     """Return the complete canonical/preset-resolved technical map per mode.
 
-    ``widget`` is retained in the signature for call-site compatibility during
-    the Qt Quick migration; it is deliberately unused.  Resolution failures are
+    ``widget`` remains in the established call signature for compatibility with
+    existing callers; it is deliberately unused.  Resolution failures are
     authority errors and propagate immediately rather than producing a partial
     cache that later invents values at the consumer.
     """

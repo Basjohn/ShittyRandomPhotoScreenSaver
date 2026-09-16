@@ -306,8 +306,8 @@ class ClockPresentationConfig:
         }
         # Compatibility read for configurations saved before the separator was
         # recognized as a shared analogue/digital control.  Current saves use
-        # ``show_separator`` only; remove this fallback in Future Cleanup once
-        # the migration horizon has passed.
+        # ``show_separator`` only; Future Cleanup owns removal after the supported
+        # compatibility horizon expires.
         if "show_separator" not in values and "show_separator" not in base_values:
             if normalized_id == "clock":
                 projected["show_separator"] = values.get(

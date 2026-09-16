@@ -1,4 +1,4 @@
-"""Shared presentation-neutral Gmail runtime ownership (Phase E1 slice 7).
+"""Shared presentation-neutral Gmail runtime ownership.
 
 ``GmailBackend.instance()`` remains the process-wide backend/auth authority.  A
 screensaver runtime may create one Gmail presenter per display, but those

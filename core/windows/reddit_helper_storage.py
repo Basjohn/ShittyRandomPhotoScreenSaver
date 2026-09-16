@@ -231,10 +231,10 @@ def install_emergency_logging(*, verbose: bool = False) -> Path | None:
 
 
 def install_null_logging(*, verbose: bool = False) -> None:
-    """Backward-compatible name retained for the existing worker.
+    """Compatibility name still imported by the current worker.
 
-    This intentionally does *not* install a NullHandler. Older worker builds
-    import this name, so changing its behaviour fixes silent startup failures
-    without rewriting the worker.
+    This intentionally does *not* install a NullHandler: it delegates to
+    fail-visible emergency logging. Rename/removal is tracked in
+    ``Future_Cleanup.md`` and must preserve that behaviour.
     """
     install_emergency_logging(verbose=verbose)

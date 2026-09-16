@@ -24,7 +24,7 @@ from .clip_host import (
     VisualizerClipHost,
     VisualizerClipTraceContext,
 )
-from .render_contract import snapshot_is_render_admissible
+from .render_contract import VisualizerModeTraceContext, snapshot_is_render_admissible
 from .render_host import QuickVisualizerRenderHost
 from .telemetry import VisualizerRenderNodeTelemetry
 
@@ -259,6 +259,17 @@ class VisualizerRenderNode(QSGRenderNode):
                 )
             overflow = mode_capabilities.requests_unclipped_renderer_overflow(snapshot)
             clip_trace: VisualizerClipTraceContext | None = None
+            mode_trace: VisualizerModeTraceContext | None = None
+            if trace is not None:
+                mode_trace = VisualizerModeTraceContext(
+                    trace,
+                    screen_index=self._screen_index,
+                    revision=snapshot.logical_revision,
+                    logical_timestamp_ns=logical_timestamp_ns(
+                        snapshot.logical.logical_timestamp
+                    ),
+                    auxiliary=int(snapshot.logical.runtime_generation),
+                )
             if overflow:
                 # Descriptor-gated experimental overflow bypasses only this
                 # render-node-local stencil. Qt/inherited scene state is still
@@ -281,6 +292,7 @@ class VisualizerRenderNode(QSGRenderNode):
                     matrix_values=matrix_values,
                     frame_trace=trace,
                     screen_index=self._screen_index,
+                    mode_trace_context=mode_trace,
                 )
                 if trace is not None:
                     trace.record(
@@ -329,6 +341,7 @@ class VisualizerRenderNode(QSGRenderNode):
                         frame_trace=trace,
                         screen_index=self._screen_index,
                         inherited_gl_state=clip_run.inherited_gl_state,
+                        mode_trace_context=mode_trace,
                     )
                     if trace is not None:
                         trace.record(
@@ -366,6 +379,8 @@ class VisualizerRenderNode(QSGRenderNode):
                     # only after the parent draw marker so their sink writes do not
                     # contaminate the intervals under investigation.
                     clip_trace.flush()
+                if mode_trace is not None:
+                    mode_trace.flush()
         except Exception as exc:
             self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
             logger.exception("[QUICK] Visualizer render node failed: %s", exc)

@@ -1095,3 +1095,97 @@ def test_report_splits_chk28_qt_native_admission_and_render_phases(
         "screen=1 quick_post_sync_stage=before_render_pass->visualizer_render_begin n=1 "
         "median_ms=1.600"
     ) in out
+
+
+def test_chk29_bubble_mode_trace_is_explicit_deferred_sidecar_only() -> None:
+    root = Path(__file__).resolve().parents[1]
+    frame_trace_source = (root / "core" / "performance" / "frame_trace.py").read_text(
+        encoding="utf-8"
+    )
+    render_contract = (
+        root / "rendering" / "quick" / "visualizer" / "render_contract.py"
+    ).read_text(encoding="utf-8")
+    bubble = (
+        root / "rendering" / "quick" / "visualizer" / "implementations" / "bubble.py"
+    ).read_text(encoding="utf-8")
+    node = (root / "rendering" / "quick" / "visualizer" / "node.py").read_text(
+        encoding="utf-8"
+    )
+    reporter = (root / "tools" / "frame_trace_report.py").read_text(
+        encoding="utf-8"
+    )
+
+    events = (
+        "BUBBLE_LAYOUT_PAYLOAD_READY",
+        "BUBBLE_PROGRAM_READY",
+        "BUBBLE_COMMON_UNIFORMS_READY",
+        "BUBBLE_REACTIVE_UNIFORMS_READY",
+        "BUBBLE_STYLE_UNIFORMS_READY",
+        "BUBBLE_VAO_READY",
+        "BUBBLE_DRAW_READY",
+    )
+    for event_name in events:
+        assert event_name in frame_trace_source
+        assert event_name in bubble
+
+    assert "class VisualizerModeTraceContext" in render_contract
+    assert "time.perf_counter_ns()" in render_contract
+    assert "trace = frame.trace_context" in bubble
+    assert "bubble_render_p95_tail_stage" in reporter
+
+    render_body = node.split("def render(self, state:", 1)[1].split(
+        "def releaseResources", 1
+    )[0]
+    assert "if trace is not None:\n                mode_trace = VisualizerModeTraceContext(" in render_body
+    assert render_body.index("FrameTraceEvent.RENDER_DRAW") < render_body.index(
+        "mode_trace.flush()"
+    )
+
+
+def test_report_splits_chk29_bubble_render_body(tmp_path: Path) -> None:
+    trace_path = tmp_path / "chk29_bubble_trace.bin"
+    header = struct.Struct("<8sHHI")
+    record = struct.Struct("<QHhqqq")
+    rows = [
+        (1_000_000, 12, 1, 7, 900_000, 3),
+        (1_100_000, 55, 1, 7, 900_000, 3),
+        (1_200_000, 56, 1, 7, 900_000, 3),
+        (1_400_000, 57, 1, 7, 900_000, 3),
+        (1_700_000, 58, 1, 7, 900_000, 3),
+        (1_900_000, 59, 1, 7, 900_000, 3),
+        (2_000_000, 60, 1, 7, 900_000, 3),
+        (2_100_000, 61, 1, 7, 900_000, 3),
+        (2_200_000, 13, 1, 7, 900_000, 3),
+    ]
+    payload = bytearray(header.pack(b"SRPSSFT1", 1, record.size, 512))
+    for row in rows:
+        payload.extend(record.pack(*row))
+    trace_path.write_bytes(payload)
+
+    completed = subprocess.run(
+        [sys.executable, "tools/frame_trace_report.py", str(trace_path)],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = completed.stdout
+    assert "bubble_layout_payload_ready: 1" in out
+    assert (
+        "screen=1 bubble_render_coverage "
+        "parent_interval=render_mode_begin->render_mode_ready parent_n=1 "
+        "fully_attributed_n=1"
+    ) in out
+    assert (
+        "screen=1 bubble_render_stage=layout_payload_resolution "
+        "parent_interval=render_mode_begin->render_mode_ready n=1 median_ms=0.100"
+    ) in out
+    assert (
+        "screen=1 bubble_render_stage=reactive_uniform_upload "
+        "parent_interval=render_mode_begin->render_mode_ready n=1 median_ms=0.300"
+    ) in out
+    assert (
+        "screen=1 bubble_render_stage=draw_call "
+        "parent_interval=render_mode_begin->render_mode_ready n=1 median_ms=0.100"
+    ) in out
+    assert "screen=1 bubble_render_p95_tail " in out

@@ -1,8 +1,8 @@
 # Harness Index
 
-Last updated: 2026-09-12
+Last updated: 2026-09-16
 
-Compact routing for recurring investigation and migration sign-off commands.
+Compact routing for recurring regression, attribution and installed-acceptance commands.
 
 `Docs/TestSuite.md` is the canonical live test inventory/retirement ledger. This file routes useful
 commands and runtime harnesses; it is not an exhaustive manifest and does not decide whether a legacy
@@ -12,7 +12,7 @@ Harness success is evidence, not automatic final visual/timing/lifecycle sign-of
 the environment appropriate to the claim it makes; physical cadence, GPU utilization, subjective
 motion feel and real multi-monitor topology require corresponding Windows/Qt/OpenGL/hardware evidence.
 
-SRPSS does not use hosted repository CI as the normal migration harness path unless the operator
+SRPSS does not use hosted repository CI as the normal local acceptance path unless the operator
 explicitly requests it.
 
 ## 1. Targeted tests first
@@ -20,13 +20,9 @@ explicitly requests it.
 Ordinary widget pixels and resize geometry: `python -m tools.ordinary_widget_resize_capture
 --output logs/widget_resize_normalization/before`. The retained long-term harness,
 comparison command and evidence boundaries are documented in
-[Ordinary_Widget_Resize_Capture.md](Ordinary_Widget_Resize_Capture.md).
+[Ordinary_Widget_Resize_Capture.md](../Guides/Ordinary_Widget_Resize_Capture.md).
 
-Offline Visualizer reactivity: `python -m tools.visualizer_replay` verifies fixed
-floors through the authored logical/Quick snapshot seam without a window or live
-audio source. `python -m pytest tests/test_visualizer_replay.py -q` adds negative
-controls, fixture integrity and presentation-independence checks. Optional HTML and
-new calibration candidates are documented in `Future_Work/Visualizer_Replay_Reactivity_Floor.md`.
+Offline Visualizer reactivity evidence is test/fixture-owned: `python -m pytest tests/test_visualizer_replay.py -q` exercises deterministic replay assertions against retained fixtures/goldens. The old Visualizer replay executable is retired; do not recreate its deleted physical host merely for convenience. Use live PERF/installed evidence for scheduler/delivery/presentation questions.
 
 Prefer the smallest test set that can falsify the current slice:
 
@@ -34,10 +30,9 @@ Prefer the smallest test set that can falsify the current slice:
 pytest path\to\test_file.py -q --tb=short
 ```
 
-Use `Docs/TestSuite.md` to identify current/permanent, migration-critical, WILL-BE-OBSOLETE and obsolete
-test ownership.
+Use `Docs/TestSuite.md` to identify current/permanent, environment-gated, obsolete and rehome test ownership.
 
-For current destination-authority work, use the maintained phase-neutral profile owned by `Docs/TestSuite.md`:
+For current destination-authority work, use the maintained profile owned by `Docs/TestSuite.md`:
 
 ```powershell
 python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
@@ -46,7 +41,7 @@ python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 9
 Maintained profiles isolate selected targets in fresh pytest subprocesses so queued Qt/QQuick teardown from one target cannot
 poison an unrelated result. `--chunks` groups/logs those isolated targets; it is not four giant shared Qt processes.
 
-The whole-tree wrapper remains a broad post-cutover **reconciliation/regression diagnostic**; Phase I is closed and this command does not resurrect it as a live phase:
+The whole-tree wrapper is a broad **reconciliation/regression diagnostic**, not the primary product gate:
 
 ```powershell
 python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
@@ -69,11 +64,11 @@ A successful capture eagerly creates `screensaver_qml.log` with a session marker
 
 Focused capture validation: `pytest tests/test_qt_message_capture_contract.py tests/test_qt_message_capture_qml_runtime.py -q --tb=short`. The second test requires real PySide6/QQmlEngine.
 
-Relevant Qt/QML warning/error lines must be correlated to the same timestamp window before calling a runtime/J claim GREEN. Use `Docs/Guides/Qt_QML_Observability.md` for capture semantics and the raw-stderr boundary.
+Relevant Qt/QML warning/error lines must be correlated to the same timestamp window before calling a runtime/physical claim GREEN. Use `Docs/Guides/Qt_QML_Observability.md` for capture semantics and the raw-stderr boundary.
 
 ## 1B. Tooling authority
 
-Use `Docs/Reference/Harness_Index.md` plus `Docs/TestSuite.md` / `Future_Cleanup.md` before preserving a migration-era script; absent retired tooling belongs to source history, not a recreated audit file. Production code must never import operator analysis tools (`R-72`). Built-in PERF/usage/QML telemetry is the primary application-health evidence; retain external parsers only for a narrow demonstrated cross-event question.
+Use `Docs/Reference/Harness_Index.md` plus `Docs/TestSuite.md` / `Future_Cleanup.md` before preserving an old script; absent retired tooling belongs to source history, not a recreated audit file. Production code must never import operator analysis tools (`R-72`). Built-in PERF/usage/QML telemetry is the primary application-health evidence; retain external parsers only for a narrow demonstrated cross-event question.
 
 Current independent resource observation:
 
@@ -100,12 +95,11 @@ python tools\qtquick_visualizer_switch_smoke.py
 
 `visualizer_switch_abc_harness.py` uses the R-80 window-local event-loop oracle and fails old rolling-only causal logs closed. `--abc-drive` and `--viz-switch-telemetry` are explicit diagnostic admissions; the retained render-host ownership telemetry is boundary-only and allocates only when admitted. The closed P4 per-frame/per-draw presentation/fence timing hooks were removed and must not be restored without a new reproduced defect and a concrete missing fact.
 
-These harnesses are **not scheduled work** and rapid-switch startup hitching alone is not a defect. Reopen only from future evidence that persists/grows after the triggering activity. See `Docs/Reference/Visualizer_Post_Switch_Performance_Investigation.md`.
+These harnesses are **not scheduled work** and rapid-switch startup hitching alone is not a defect. Reopen only from future evidence that persists/grows after the triggering activity. R-80 is the permanent historical oracle/failure record.
 
-## 2. Phase-C Quick transition regression harnesses
+## 2. Quick transition regression harnesses
 
-Phase-C implementation and deterministic hardening are landed. These commands remain useful regression/
-acceptance harnesses; they are **not an unfinished Phase-C implementation checklist**.
+These commands are retained regression/acceptance harnesses for the current Quick transition implementations; they are not an implementation checklist.
 
 ### Blinds
 
@@ -133,10 +127,9 @@ Canonical case families include:
 
 Use exact tool/source case names if they differ from this human-readable summary.
 
-## 3. Landed Phase-C discriminator expectations
+## 3. Transition discriminator expectations
 
-The real-GL smokes were strengthened during Phase C and those properties remain regression requirements.
-Do not create a second strengthening project merely because this section is detailed.
+The real-GL smokes protect parameter-sensitive transition behavior. Do not create a separate strengthening project merely because this section is detailed.
 
 For parameter-sensitive cases hold constant, as applicable:
 
@@ -162,7 +155,7 @@ Effect-specific midpoint/contrast oracles supplement exact endpoints:
 
 Do not invent a visual `mosaic_mode` oracle while the canonical Crumble shader does not consume it.
 
-## 4. Phase-C request/uniform and GL-state tests
+## 4. Transition request/uniform and GL-state tests
 
 Direct parameter -> uniform wiring and common GL-state-fence coverage are ordinary focused pytest
 regressions. They supplement rather than replace the real-GL wrappers.
@@ -173,13 +166,13 @@ See `Docs/TestSuite.md` and `Docs/Guides/Transition_Change_Checklist.md`.
 
 ## 5. Visualizer authored-fidelity evidence
 
-The old `tools/visualizer_replay.py` executable is retired because it imported the deleted replay physical owner. **Do not restore that host.**
+The old Visualizer replay executable is retired because it imported the deleted replay physical owner. **Do not restore that host.**
 
-Preserve authored evidence through current temporal/BTF/viewport tests plus `tests/fixtures/visualizer_replay/`, `tests/goldens/visualizer_replay/` and `tests/goldens/visualizer_temporal/`. The former `tools/generate_visualizer_replay_fixtures.py` executable is no longer in the current tree; fixture/golden data remains evidence and must not be regenerated through a resurrected replay presenter.
+Preserve authored evidence through current temporal/BTF/viewport tests plus `tests/fixtures/visualizer_replay/`, `tests/goldens/visualizer_replay/` and `tests/goldens/visualizer_temporal/`. The former replay-fixture generator is no longer in the current tree; fixture/golden data remains evidence and must not be regenerated through a resurrected replay presenter.
 
-Do not regenerate goldens merely to accommodate presentation migration. For Bubble, apply `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
+Do not regenerate goldens merely because implementation ownership changed. For Bubble, apply `Docs/Guardrails/Bubble_Temporal_Fidelity.md`.
 
-## 6. Logical-runtime / Phase-D permanent gates
+## 6. Visualizer logical-runtime permanent gates
 
 Search current tests by contract rather than stale test names when needed:
 
@@ -204,13 +197,11 @@ Required properties include:
 - local SDF/stencil clip composes/restores valid inherited framebuffer state;
 - 1.5 default aspect / wide/tall compatibility without anisotropic distortion.
 
-Phase D is complete; these are permanent/future-integration gates, not instructions to rerun the whole
-migration.
+These are permanent/future-integration gates, not instructions to rerun closed architecture-selection work.
 
 ## 7. Qt Quick runtime checks
 
-Use P0 evidence as architecture-selection record; do not expand P0 merely to reconfirm the chosen
-presenter.
+The Qt Quick presenter is accepted architecture. Use focused runtime evidence for the seam being changed rather than rerunning old architecture-selection experiments.
 
 Focused Quick harnesses prove as relevant:
 
@@ -224,9 +215,9 @@ Focused Quick harnesses prove as relevant:
 - resource cleanup;
 - exact transition/visualizer/widget contract being changed.
 
-## 8. Closed E/F/G/H ownership regressions and current I routing
+## 8. Capability/runtime ownership regression routing
 
-### 8.1 Landed E/F capability/ownership foundation
+### 8.1 Capability/ownership foundation
 
 Focused tests already guard:
 
@@ -251,9 +242,9 @@ tests/test_visualizer_failover_reclaim.py
 
 This list is routing, not a frozen manifest.
 
-### 8.2 Closed E1 ownership regression
+### 8.2 Shared runtime/service ownership
 
-E1 is closed. Its surviving owner tests remain permanent regression coverage for:
+Permanent owner tests cover:
 
 - family-exclusive providers/models;
 - timers/polls/refresh callbacks;
@@ -263,9 +254,9 @@ E1 is closed. Its surviving owner tests remain permanent regression coverage for
 - clean deactivation retirement/reactivation;
 - fresh-process deactivated import/construction dormancy.
 
-Do not describe this as future Phase-E work and do not infer full provider/process dormancy from factory-creation gating alone.
+Treat this as current capability/dormancy architecture and do not infer full provider/process dormancy from factory-creation gating alone.
 
-### 8.3 Landed Settings capability UI regression
+### 8.3 Settings capability UI regression
 
 Preserve focused Settings/runtime cases for:
 
@@ -280,9 +271,9 @@ Preserve focused Settings/runtime cases for:
 
 Provider/model/resource retirement assertions stay at the actual neutral owner; do not move them back into presentation tests.
 
-### 8.4 Current destination routing
+### 8.4 Current broad routing
 
-G4/G7/G8/H implementation and H physical acceptance are closed. Do not use old phase command bundles as the current bar.
+The related implementation/physical acceptance is closed. Use the current focused gates in this index and `Docs/TestSuite.md`, not old command bundles.
 
 The maintained `destination` profile is the ordinary broad architecture regression route:
 
@@ -292,11 +283,11 @@ python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 9
 
 Use smaller focused files/nodeids first for the slice being changed. The destination profile covers deterministic/runtime-shaped Quick
 display/unit/family/CUSTOM/input/transition/visualizer ownership, including the stronger technical-config + real retained-item
-visualizer boundary. It intentionally does **not** turn operator-hardware-dependent QScreen/topology cells into a per-commit H
+visualizer boundary. It intentionally does **not** turn operator-hardware-dependent QScreen/topology cells into an ordinary automated
 gate.
 
 Real two-display identity/topology, A -> B -> A physical ingress, mixed refresh/DPR, off/wake and final installed
-multi-display acceptance remain J evidence. Run those physical cells separately/isolated when the claim requires the operator's
+multi-display acceptance remain physical evidence. Run those cells separately/isolated when the claim requires the operator's
 actual hardware.
 
 ### 8.5 Friend Pulse / System Stats retained-card evidence
@@ -320,7 +311,7 @@ python tools/system_stats_s0_probe.py --condition cpu-ram --samples 3 --interval
 python tools/system_stats_s0_probe.py --condition cpu-ram --samples 3 --interval-seconds 10 --contention-workers 2
 ```
 
-See `Docs/Reference/System_Stats_S0_Admission.md` for measured CPU/RAM admission and the rejected GPU/VRAM candidate.
+See `Docs/Reference/System_Stats_Widget.md` for the current product contract plus the preserved CPU/RAM admission and rejected GPU/VRAM evidence.
 
 
 ## 9. Physical evidence
@@ -332,7 +323,7 @@ Do not interpret startup/capture rows before intentional presentation as active-
 Do not infer continuous displayed FPS from sparse/non-occupancy GDI `DisplayedTime` rows.
 Use p95/p99/tails/severe gaps plus phase correlation when cadence evidence is actually needed.
 
-R-26 remains a separate **PARTIAL / AWAITING VALIDATION** historical topology/failover record until its full off/asleep/late-return sequence is exercised on corresponding hardware. That residual is J physical evidence and does not reopen H; implementation review alone does not manufacture the missing scenario.
+R-26 remains a separate **PARTIAL / AWAITING VALIDATION** historical topology/failover record until its full off/asleep/late-return sequence is exercised on corresponding hardware. That residual requires physical evidence; implementation review alone does not manufacture the missing scenario.
 
 ## 10. Runtime diagnostics
 
@@ -362,21 +353,15 @@ Check as relevant:
 - generation zero;
 - Quick scene/window retirement;
 - render-resource retirement;
-- deactivated capability retirement at the owner that has actually migrated;
+- deactivated capability retirement at the current owning runtime;
 - no retired callback publication;
 - no background thread/process preventing test/product shutdown.
 
 A pytest summary followed by a process that never exits should be diagnosed as ownership/lifecycle
 failure rather than hidden by larger timeout values.
 
-## 12. Historical / current-legacy harnesses
+## 12. Historical / retired harnesses
 
-Historical harnesses may describe QOpenGLWidget/QRhiWidget/GLCompositor paths. They remain evidence,
-not current architecture instructions.
+Historical harnesses may describe QOpenGLWidget/QRhiWidget/GLCompositor paths. They remain evidence, not current architecture instructions. A surviving harness that asserts a retired physical presenter is obsolete unless `Docs/TestSuite.md` identifies a still-valid neutral behavior that must first be rehomed to the current owner.
 
-Current pre-cutover harnesses that assert the still-live QRhi/GLCompositor presenter are
-**CURRENT-LEGACY — WILL BE OBSOLETE at H/I** unless `Docs/TestSuite.md` identifies a surviving contract
-that must first be rehomed to Quick.
-
-Do not copy a historical presentation mechanism back into Qt Quick merely because its old harness is
-detailed.
+Do not copy a historical presentation mechanism back into Qt Quick merely because its old harness is detailed.

@@ -9,6 +9,7 @@ from typing import Sequence
 import numpy as np
 from OpenGL import GL as gl
 
+from core.performance.frame_trace import FrameTraceEvent
 from core.settings.bubble_gradient_semantics import (
     get_bubble_gradient_shader_mode,
     get_bubble_gradient_shader_vector,
@@ -213,6 +214,7 @@ class QuickBubbleRenderer:
         return bool(self._program)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
+        trace = frame.trace_context
         snapshot = frame.snapshot
         mode_state = snapshot.logical.mode_state
         if not isinstance(mode_state, BubbleFrame):
@@ -244,8 +246,12 @@ class QuickBubbleRenderer:
             self._layout_cache_key = layout_key
         layout = self._layout_cache
         payload = resolve_quick_bubble_payload(snapshot)
+        if trace is not None:
+            trace.mark(FrameTraceEvent.BUBBLE_LAYOUT_PAYLOAD_READY)
         if not self._program:
             self._initialize()
+        if trace is not None:
+            trace.mark(FrameTraceEvent.BUBBLE_PROGRAM_READY)
 
         parameters = mode_state.parameters
         uniforms = self._uniforms
@@ -270,6 +276,8 @@ class QuickBubbleRenderer:
         gl.glUniform1f(uniforms["u_border_width"], presentation.border_width)
         gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
         gl.glUniform1i(uniforms["u_bubble_count"], payload.bubble_count)
+        if trace is not None:
+            trace.mark(FrameTraceEvent.BUBBLE_COMMON_UNIFORMS_READY)
         if payload.bubble_count:
             position_buffer = _copy_uniform_float_buffer(
                 self._position_uniform_buffer,
@@ -328,6 +336,8 @@ class QuickBubbleRenderer:
             uniforms["u_viewport_stroke_extra_half_px"],
             layout.viewport_stroke_extra_half_px,
         )
+        if trace is not None:
+            trace.mark(FrameTraceEvent.BUBBLE_REACTIVE_UNIFORMS_READY)
 
         specular_direction = get_bubble_specular_shader_vector(
             str(parameter(parameters, "bubble_specular_direction"))
@@ -385,8 +395,14 @@ class QuickBubbleRenderer:
             )
             hue = safe_hue(mode_state.simulation_timestamp * speed * 0.1)
         gl.glUniform1f(uniforms["u_rainbow_hue_offset"], hue)
+        if trace is not None:
+            trace.mark(FrameTraceEvent.BUBBLE_STYLE_UNIFORMS_READY)
         gl.glBindVertexArray(frame.quad_vao)
+        if trace is not None:
+            trace.mark(FrameTraceEvent.BUBBLE_VAO_READY)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        if trace is not None:
+            trace.mark(FrameTraceEvent.BUBBLE_DRAW_READY)
 
     def release_resources(self) -> None:
         if not self._program:

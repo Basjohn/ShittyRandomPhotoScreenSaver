@@ -223,7 +223,7 @@ class DisplayManager(QObject):
         self._startup_reveal_emitted = False
         self._quick_startup_reveal: QuickStartupRevealCoordinator | None = None
         
-        # Phase 3: Multi-display synchronization (lock-free)
+        # Multi-display transition synchronization (lock-free)
         self._transition_ready_queue: Optional[SPSCQueue] = None
         self._sync_enabled = False
         self._transition_work_pending = False
@@ -2085,7 +2085,7 @@ class DisplayManager(QObject):
         )
 
         if custom and requested >= 0:
-            # Durable CUSTOM failover/reclaim (E2.7): drive the presentation-neutral
+            # Durable CUSTOM failover/reclaim: drive the presentation-neutral
             # lifecycle over the Quick ownership topology. Start each generation
             # from a clean failover record so a fresh outage arms a fresh grace
             # generation.
@@ -4324,7 +4324,7 @@ class DisplayManager(QObject):
             return False
         return False
     
-    # --- Phase 3: Multi-Display Synchronization (Lock-Free) ---
+    # --- Multi-display transition synchronization (lock-free) ---
     
     def enable_transition_sync(self, enabled: bool = True) -> None:
         """

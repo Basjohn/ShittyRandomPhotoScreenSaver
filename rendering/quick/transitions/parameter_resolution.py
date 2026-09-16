@@ -1,4 +1,4 @@
-"""Pure Settings-to-request resolution for parameterized Phase-C Quick effects.
+"""Pure Settings-to-request resolution for parameterized Quick effects.
 
 The render thread accepts only explicit immutable values. This module keeps
 Settings spelling, legacy fall-through behaviour, random choice, clamps, and
@@ -204,7 +204,7 @@ def _resolve_crumble(
     # Deliberately preserve CURRENT old factory semantics. The Settings UI
     # exposes "Bias Old Image" / "Bias New Image", but the old factory does
     # not recognize either spelling and falls through to 0.0. H0 may repair
-    # that UX deliberately; Phase C must not silently change presentation.
+    # that UX deliberately; parameter resolution must not silently change presentation.
     weight_mode = {
         "Top Weighted": 0.0,
         "Bottom Weighted": 1.0,

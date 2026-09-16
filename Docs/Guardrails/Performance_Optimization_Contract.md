@@ -1,8 +1,8 @@
 # Performance Optimization Contract
 
-Last updated: 2026-09-12
+Last updated: 2026-09-16
 
-This document is the canonical admission/acceptance contract for SRPSS performance work after Phase H.
+This document is the canonical admission/acceptance contract for SRPSS performance work on the accepted Qt Quick runtime.
 
 Read it before changing cadence, scheduling, GC policy, resource lifetime, Quick presentation, Visualizer analysis, caching, or instrumentation in the name of performance.
 
@@ -44,6 +44,7 @@ Before any performance patch, confirm every relevant box remains binding:
 - [ ] Bubble preserves R-69: no global viewport-dependent compression of head/radius response, motion, Ghost/history displacement or other authored reaction.
 - [ ] Spectrum/Oscilloscope/Sine/DevCurve geometry adaptation may reframe/reflow/smooth presentation but may not quietly weaken musical response.
 - [ ] Bubble temporal fidelity/integration remains intact; do not skip authored logical steps to reduce work.
+- [ ] If Bubble itself is touched, idle traces are not acceptance: require an active-music physical lane proving source freshness, attack/settle, elasticity/breathing, loud-passage expansion, ghost/tail motion and operator feel.
 - [ ] The persistent `visualizer.audio_analysis` lane remains one-in-flight + newest-pending, with no per-frame generic Future/task fallback.
 - [ ] Media remains native-event-owned plus slow reconciliation/watchdog; no fast polling resurrection.
 - [ ] Cursor Halo passive pointer motion remains native `QCursor` presentation; do not turn pointer motion back into QML scene invalidation.
@@ -105,9 +106,9 @@ Track across settings/CUSTOM/runtime recreation and long soak:
 
 ## 4. 2026-09-01 reference envelopes — evidence, not hard SLAs
 
-These numbers are reference points from the accepted post-H architecture. Different hardware/load/topology can legitimately differ. Use them to recognize **shape changes**, not to fail a machine for missing an exact number.
+These numbers are reference points from the accepted Quick architecture. Different hardware/load/topology can legitimately differ. Use them to recognize **shape changes**, not to fail a machine for missing an exact number.
 
-### Heavy-load H acceptance reference
+### Heavy-load acceptance reference
 
 ```text
 Visualizer logical publication: ~89-90 Hz when active
@@ -164,7 +165,7 @@ A later operator comparison of two runs at different overall load provides a str
 
 Interpretation: a stop-the-world pause can be highly visible while Bubble's measured compute cost, FPS/cadence and rolling ms counters remain healthy, because the process is paused **outside** the measured Bubble work and the next calculation resumes cheaply. A zero-yield Gen2 pause also proves that "objects collected" is not a useful proxy for pause cost; long-lived tracked graph scanning/lifetime shape remains a candidate.
 
-J instrumentation should therefore correlate GC callback start/stop timestamps, generation/duration/yield, process wall-clock inter-tick gaps and active GUI/Quick presentation timing in one epoch. When mechanism hunting is needed, prefer bounded tracked-object/type/lifetime evidence around the pause over collector-threshold experiments. Do not remove the scalar Bubble fades, lower authored cadence, or move forced collections merely because aggregate counters look cleaner.
+If GC mechanism hunting is reopened, instrumentation should correlate GC callback start/stop timestamps, generation/duration/yield, process wall-clock inter-tick gaps and active GUI/Quick presentation timing in one epoch. When mechanism hunting is needed, prefer bounded tracked-object/type/lifetime evidence around the pause over collector-threshold experiments. Do not remove the scalar Bubble fades, lower authored cadence, or move forced collections merely because aggregate counters look cleaner.
 
 ## 5. Telemetry interpretation guardrails
 
@@ -210,27 +211,24 @@ After the change:
 - [ ] New instrumentation does not add meaningful hot-path work.
 - [ ] Any instructive failed optimization is recorded in Historical Bugs/guardrails when it could plausibly be repeated.
 
-## 8. Reopen gate — no active performance investigation
+## 8. Reopen gate — performance is symptom-driven
 
-There is currently **no active Visualizer performance target** from the closed post-switch investigation. Rapid mode-switch startup hitches are not backlog work by themselves when they stop with the triggering activity and leave steady-state ownership/resources/presentation healthy.
+CHK26 is the current accepted performance/freshness architecture. CHK27-CHK29 then mapped the largest apparent residuals and closed them as either Qt frame/render-phase ownership or small distributed Bubble/driver work. There is **no active generic headroom campaign**.
 
-Reopen performance work only when normal use, a directly observed run, or logs expose a **persistent, growing or otherwise traceable defect**. Preserve that failing condition first. Do not schedule synthetic soak/probe campaigns merely to search for a problem. If a real defect is reproduced, use existing diagnostics before adding instrumentation, then add only the smallest missing measurement needed to localize the demonstrated failure.
+Reopen performance work only when normal use, a directly observed run, a soak, or a new feature exposes a **persistent, growing or otherwise traceable defect**, or when evidence reveals clearly duplicated/useless work with a bounded owner. Preserve that failing condition first. Do not schedule synthetic soak/probe campaigns merely to search for the next percentile. If a real defect is reproduced, use existing diagnostics before adding instrumentation, then add only the smallest missing measurement needed to localize it.
 
-Stable CPU/GPU/cache/thread/handle numbers remain non-targets unless the failing evidence shows avoidable work or growth. Any reopened work still owes the full freshness/reactivity/latency-tail acceptance contract above.
+Stable CPU/GPU/cache/thread/handle numbers and small distributed driver/GL costs remain non-targets unless the failing evidence shows avoidable work or growth. Any reopened work still owes the full freshness/reactivity/latency-tail acceptance contract above.
 
 
 ## Instrumentation/tool ownership
 
 - Built-in PERF/usage/QML instrumentation is the primary runtime evidence plane when a real issue warrants diagnostics.
 - The corrected ABC harness/driver and `--viz-switch-telemetry` are retained as explicit opt-in tools; boundary lifecycle telemetry allocates only when admitted.
-- Closed-investigation P4 presentation/fence/sync timing hooks must not remain on ordinary render/presentation hot paths. They were removed after R-80 closure; do not restore them without a new reproduced defect and a concrete missing fact.
+- Deep frame/clip/Qt-phase/Bubble timing is retained behind explicit `--frame-trace`. It must remain zero-work in ordinary runtime and bounded on disk; do not delete useful sidecar markers merely because a specific investigation closes.
 - Generic offline archaeology parsers are not performance authority merely because they can summarize the same numbers.
 - Keep an external parser only for a narrow demonstrated cross-event question that the runtime does not already summarize; `image_change_perf_parser.py` is the current example.
 - `perf_measure.py` is retained because it observes the process tree independently/out of process; its CPU/RSS/thread/handle results remain context, never Visualizer freshness proof.
 - Production must never import/execute operator analysis tools (`R-72`).
 - Tool output cannot authorize any change forbidden by the reactivity/freshness/latency-tail checklist above.
 
-The operator-authorized 2026-09-05 Bubble equal-area response correction is documented in
-`Docs/Future_Work/Visualizer_Visual_Regression_Recovery.md` and `Docs/Reference/Visualizer_Reference.md`.
-It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps,
-DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
+The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69. It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.

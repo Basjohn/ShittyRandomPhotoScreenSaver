@@ -10,8 +10,8 @@ Examples::
     python tools/run_tests.py --suite all
     python tools/run_tests.py --test tests/test_qtquick_window.py
 
-``destination`` is the maintained post-H authority.  ``all`` is the broad
-whole-tree Phase-I reconciliation diagnostic.  Explicit tests use the same
+``destination`` is the maintained destination authority.  ``all`` is the broad
+whole-tree reconciliation diagnostic.  Explicit tests use the same
 chunked runner rather than a separate pytest wrapper.
 """
 from __future__ import annotations
@@ -35,7 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("destination", "all"),
         default="destination",
         help=(
-            "destination = maintained post-H authority (default); "
+            "destination = maintained destination authority (default); "
             "all = broad whole-tree reconciliation diagnostic"
         ),
     )

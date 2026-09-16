@@ -1,6 +1,6 @@
 """Real-GL repeated-mode-switch lifecycle smoke for the inline Quick visualizer host.
 
-Authority: ``Docs/Reference/Visualizer_Post_Switch_Performance_Investigation.md`` closed repeated-switch lifecycle reference.
+Authority: ``Docs/Historical_Bugs/R-80_ABC_EventLoop_Rolling_Window_Contamination.md`` closed repeated-switch lifecycle record.
 Guardrail: ``Docs/Guardrails/Performance_Optimization_Contract.md``.
 
 This reuses the proven real-``QQuickWindow`` / ``VisualizerRenderItem`` /

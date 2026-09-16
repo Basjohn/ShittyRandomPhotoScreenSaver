@@ -1238,7 +1238,7 @@ class QuickSceneController(QObject):
         return self._readiness
 
     def set_background_proof_progress(self, progress: float) -> None:
-        """Drive the Phase A background until real image state lands in Phase C."""
+        """Drive the proof background before a real presentation image is admitted."""
 
         if not self._readiness.admission_open:
             raise RuntimeError("Quick scene admission is closed")
@@ -2135,8 +2135,8 @@ class QuickSceneController(QObject):
     def _on_frame_swapped(self) -> None:
         self._update_perf_hud_on_swap()
         snapshot = self._telemetry.snapshot()
-        # A rendered migration proof/empty clear is not an intentional product
-        # base frame. Reveal readiness requires an actually uploaded image.
+        # A rendered proof/empty clear is not an intentional product base frame.
+        # Reveal readiness requires an actually uploaded image.
         intentional_image_ready = _render_snapshot_has_intentional_base_frame(
             snapshot
         )

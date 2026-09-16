@@ -88,6 +88,16 @@ class FrameTraceEvent(IntEnum):
     QUICK_BEFORE_RENDER_PASS_RECORDING = 52
     QUICK_AFTER_RENDER_PASS_RECORDING = 53
     QUICK_AFTER_RENDERING = 54
+    # CHK29 Bubble render-body attribution. These remain explicit
+    # --frame-trace-only deferred sidecar samples; they are timestamped in the
+    # mode renderer and flushed only after the parent RENDER_DRAW marker.
+    BUBBLE_LAYOUT_PAYLOAD_READY = 55
+    BUBBLE_PROGRAM_READY = 56
+    BUBBLE_COMMON_UNIFORMS_READY = 57
+    BUBBLE_REACTIVE_UNIFORMS_READY = 58
+    BUBBLE_STYLE_UNIFORMS_READY = 59
+    BUBBLE_VAO_READY = 60
+    BUBBLE_DRAW_READY = 61
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"

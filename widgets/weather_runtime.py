@@ -1,4 +1,4 @@
-"""Presentation-neutral Weather runtime-data service (Phase E1 slice 3).
+"""Presentation-neutral Weather runtime-data service.
 
 ``WeatherRuntimeService`` owns the non-pixel behavior required to obtain and
 maintain Weather data independently of Weather presentation ownership:

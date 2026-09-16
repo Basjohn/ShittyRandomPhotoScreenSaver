@@ -1,4 +1,4 @@
-"""Shared presentation-neutral system-mute ownership for Media (Phase E1).
+"""Shared presentation-neutral system-mute ownership for Media.
 
 The Windows endpoint object is acquired lazily on the UI/runtime thread.  One
 owner per runtime generation coordinates availability, mute state, semantic

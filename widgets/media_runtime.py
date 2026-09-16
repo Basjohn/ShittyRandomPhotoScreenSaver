@@ -1,4 +1,4 @@
-"""Shared presentation-neutral Media runtime ownership (Phase E1 slice 6).
+"""Shared presentation-neutral Media runtime ownership.
 
 The configured media provider, selected GSMTC session, transport target and
 accepted track/artwork snapshot are application-wide facts.  A screensaver can

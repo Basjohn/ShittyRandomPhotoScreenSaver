@@ -1,9 +1,7 @@
 """Presentation-neutral display easing for Spectrum solid bars.
 
-This authored state advances only on the visualizer logical tick.  The
-presentation-neutral runtime controller and the legacy overlay each own their
-temporary migration-era instance, but render cadence never advances either
-one.  It must not change FFT/audio behavior, shared beat-engine smoothing, or
+This authored state advances only on the visualizer logical tick.  Each admitted logical/presentation owner keeps its own temporary easing
+instance, but render cadence never advances that authored state.  It must not change FFT/audio behavior, shared beat-engine smoothing, or
 per-mode floor contracts.
 """
 from __future__ import annotations

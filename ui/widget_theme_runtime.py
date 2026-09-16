@@ -185,10 +185,10 @@ def begin_theme_owned_edit(
     Snapshot the currently resolved Widget Theme into user-owned Custom, apply the
     edit, and return the new persisted state (selection = Custom, Keep Synced OFF).
     ``resolved_optional_colors`` is the presentation/configuration authority's
-    current concrete value for sparse specialized roles. Phase-1b UI wiring must
-    supply that map when creating Custom so an inherited role is frozen rather than
-    silently changing if a later parent/default changes. The optional argument keeps
-    legacy/core-only callers source-compatible until that UI lands.
+    current concrete value for sparse specialized roles. Current UI callers supply
+    that map when creating Custom so an inherited role is frozen rather than silently
+    changing if a later parent/default changes. The optional argument preserves the
+    established pure/core call surface for callers that do not materialize optional roles.
 
     The shipped ``.srwtheme`` is never mutated.
     """

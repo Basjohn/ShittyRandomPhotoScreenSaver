@@ -1,4 +1,4 @@
-"""Responsive wrapping flow layout for Settings capability surfaces (Phase E2).
+"""Responsive wrapping flow layout for Settings capability surfaces.
 
 A width-driven layout: children are placed left-to-right and wrap onto new rows
 when the available width is exhausted, recomputing on resize. It is the shared

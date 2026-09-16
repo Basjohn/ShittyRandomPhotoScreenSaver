@@ -1,8 +1,6 @@
-# Voxel Sphere — accepted experimental preservation and future migration gate
+# Voxel Sphere — accepted experimental preservation and isolation contract
 
-Status: **ACCEPTED EXPERIMENTAL — ISOLATED.** Visual/product acceptance does **not** promote Sphere into permanent/shared visualizer architecture. All experimental modes remain independently removable, lazy and mode-owned until the operator explicitly authorizes migration.
-
-Current supplied source provenance before this polish pass: `c45845d44d21537ca4c09be41f6decf4cde0d16a`.
+Status: **ACCEPTED EXPERIMENTAL — ISOLATED.** Visual/product acceptance does **not** promote Sphere into permanent/shared visualizer architecture. It remains independently removable, lazy and mode-owned until the operator explicitly authorizes promotion.
 
 ## Current golden
 
@@ -15,22 +13,22 @@ Only two curated Sphere presets remain:
 | 1 | **Glass Current** | Former Preset 5 / Transparent React snapshot. Intake (`Particle Outtake` off), translucent fill and bright independent edges preserved. |
 | 2 | **Voxel Bloom** | Former Preset 6 / Reactive Voxel snapshot. Outtake on, opaque neutral presentation and Sphere shadow enabled. |
 
-Their exact persisted snapshots are golden inputs. A future migration must preserve resolved behaviour, not merely names or superficially similar slider values.
+Their exact persisted snapshots are golden inputs. A future promotion must preserve resolved behaviour, not merely names or superficially similar slider values.
 
 ## Isolation / ownership contract
 
 - The descriptor remains an independently disabled experimental mode with lazy Settings builder, capture, frame runtime and renderer. Heavy resources stay dormant while disabled and retire through the existing render-context lifecycle.
-- Canonical persisted state remains in the existing `sphere_*` namespace. Do not invent a private Settings manager/default store, and do not migrate Sphere into shared setting families merely for tidiness.
+- Canonical persisted state remains in the existing `sphere_*` namespace. Do not invent a private Settings manager/default store, and do not promote Sphere into shared setting families merely for tidiness.
 - Sphere currently declares `technical_controls=False`, `rainbow_controls=False` and `shared_bar_appearance=False`. Those omissions are deliberate isolation, not missing wiring to repair.
-- The descriptor currently resolves its hidden technical profile through canonical **Spectrum** technical settings. That resolved technical state is part of the pre-migration golden even though Sphere has no generic technical-control UI. Do not casually expose, remap or replace it.
+- The descriptor currently resolves its hidden technical profile through canonical **Spectrum** technical settings. That resolved technical state is part of the isolated Sphere golden even though Sphere has no generic technical-control UI. Do not casually expose, remap or replace it.
 - Existing BeatEngine spectrum/live-pre-AGC seams remain read-only consumers of already-authored analysis. No second FFT, worker, timer, poller or private cadence is allowed.
-- Product acceptance does not authorize extracting Sphere internals into shared infrastructure. Reuse/extraction is a future migration decision requiring explicit operator activation.
+- Product acceptance does not authorize extracting Sphere internals into shared infrastructure. Reuse/extraction is a future promotion decision requiring explicit operator activation.
 
 ### What is reusable from the experimental-isolation method
 
 The **boundary mechanism** is valuable architecture for future experiments: descriptor-driven lazy Settings/runtime/renderer/capture resolution, independent enable/disable/dormancy, a private persisted prefix, explicit opt-out from shared setting families, and normal renderer retirement. Future experimental modes should reuse that pattern rather than contaminating accepted-mode owners.
 
-Do **not** generalize Sphere itself to achieve this. `sphere_*` parameters, Sphere audio/voxel logic, hard-coded Sphere capability memberships and Sphere shader semantics remain private implementation. Extracting or refactoring those into a shared experimental framework is itself migration work and is forbidden until explicitly requested. Reusable isolation means a reusable **host seam**, not a reusable Sphere feature stack.
+Do **not** generalize Sphere itself to achieve this. `sphere_*` parameters, Sphere audio/voxel logic, hard-coded Sphere capability memberships and Sphere shader semantics remain private implementation. Extracting or refactoring those into a shared experimental framework is promotion work and is forbidden until explicitly requested. Reusable isolation means a reusable **host seam**, not a reusable Sphere feature stack.
 
 ## Current Settings hygiene
 
@@ -48,9 +46,9 @@ Additional presentation controls expose existing renderer constants rather than 
 
 The current experimental drop-shadow implementation is a **projected voxel silhouette**, not the old circular proxy and not voxel-to-voxel lighting. Shadow and hero compile the same Sphere vertex shader and consume the same rigid rotation, fragmentation, size pulse, tracer-local turns, perspective and intake/outtake cohort transforms. The shadow fragment contributes flat inherited shadow colour only. Sphere-local **Shadow Opacity / Softness / Distance / Size** controls parameterize this pass; softness may add one expanded instanced feather layer, while disabled/zero-opacity shadow adds no second shadow clear/draw. Do not generalize this into shared 3D shadow infrastructure unless another concrete consumer proves the same contract.
 
-## Future permanent-migration golden gate — dormant until explicitly activated
+## Future promotion golden gate — dormant until explicitly activated
 
-Before any architectural migration, capture both **Glass Current** and **Voxel Bloom** with:
+Before any architectural promotion into shared/permanent ownership, capture both **Glass Current** and **Voxel Bloom** with:
 
 - their exact persisted Sphere snapshots, including presentation baselines such as Edge Weight `1.0`, Voxel Size Variation `0.35`, the accepted Tracer Color and Depth Shading disabled unless explicitly re-authored;
 - the exact resolved hidden technical profile/settings that reproduce today's behaviour;
@@ -59,12 +57,12 @@ Before any architectural migration, capture both **Glass Current** and **Voxel B
 - representative renderer captures at ordinary and extreme CUSTOM aspect/scale where the existing capture seam can provide deterministic evidence;
 - baseline replay evidence for the five accepted permanent modes over the same shared-analysis change boundary.
 
-After migration, replay identical evidence. Migration is rejected if either Sphere golden materially changes without explicit approval **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Technical controls require particular caution: their current hidden resolved values are behavioural input even though Sphere has no generic technical-control UI.
+After the candidate promotion, replay identical evidence. Promotion is rejected if either Sphere golden materially changes without explicit approval **or** any accepted permanent mode changes in reactivity, latency, source freshness, visual fidelity, cross-mode bleed/isolation, cadence, lifecycle, CPU/GPU resource behaviour or dormancy. Technical controls require particular caution: their current hidden resolved values are behavioural input even though Sphere has no generic technical-control UI.
 
 The existing deterministic Visualizer/`FeatureFrame` replay seam is the preferred foundation. Extend it only as needed; do not build a Sphere-only second replay engine.
 
-Until the operator activates this gate, **do not migrate Sphere at all**.
+Until the operator activates this gate, **do not promote Sphere into shared/permanent owners at all**.
 
-### 2026-09-10 post-presentation isolation audit
+## Current shared-boundary rule
 
-After adding Sphere-local Edge Weight, Voxel Size Variation, Tracer Color and optional Depth Shading, the descriptor, capture/runtime, BeatEngine/shared logical runtime and all permanent-mode renderers/runtimes remain byte-identical to the pre-visual-polish checkpoint. The sole shared config-module delta is confined to the existing Sphere parameter tuple/apply branch. This is evidence that presentation polish has not widened Sphere's ownership boundary; it does **not** activate migration.
+Sphere-specific presentation controls remain confined to Sphere-owned descriptor/capture/runtime/renderer/config branches. Permanent-mode runtimes/renderers and shared logical analysis must not gain Sphere-specific behavior merely to tidy the experiment. Any proposed extraction into shared infrastructure is a **promotion** and must pass the dormant golden gate above.

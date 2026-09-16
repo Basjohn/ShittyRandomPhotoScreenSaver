@@ -17,7 +17,7 @@ Findings this harness reproduces (2026-09-03):
 * The partitioned `ProcessUsageCollector` (heavy sub-cadence) keeps light samples
   at ~1-3 ms with no system-wide enumeration.
 
-See `Docs/QtQuick_Migration/Visualizer_Hitch_Attribution_And_Optimization_Plan_2026-09-03.md`.
+See `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` for the current negative-control history and interpretation limits.
 
 Run: `python tools/viz_logical_gil_contention_harness.py`
 """

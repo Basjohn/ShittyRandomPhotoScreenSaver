@@ -1,6 +1,6 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-09-07
+Last updated: 2026-09-16
 
 Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavior or presentation.
 
@@ -10,9 +10,7 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - `Docs/Reference/Visualizer_Reference.md`
 - `Docs/Guides/Visualizer_Reactivity_Authoring.md`
-- `Docs/Fossils/Visualizer_Reactivity_Historical_Current_Evidence_Matrix_2026-08-31.md`
 - `Current_Plan.md`
-- `Docs/Fossils/Visualizer_Mode_Modularization_And_Settings_Tab_Decomposition_2026-09-02.md` when changing mode registration/enablement/Settings composition
 - `Docs/Guardrails/Performance_Optimization_Contract.md` for any hitch/cadence/tail optimization
 
 If source contradicts these durable destination contracts, determine whether source is missing implementation before weakening the contract.
@@ -42,7 +40,7 @@ When a visible freeze, jump or flicker is reported:
 - [ ] Separate steady-state periodic hitches from startup/recreation first-frame age.
 - [ ] Keep R-76 Spectrum height-aware temporal scaling intact while global delivery is unhealthy; retest renderer quantization/pixel pitch only after deterministic hitches are removed.
 - [ ] Keep Bubble R-69/BTF intact; no viewport compensation, radius/motion compression or lower cadence as a hitch workaround.
-- [ ] Preserve the landed V0-V7 modularization boundary: centralized lazy wiring, persisted enabled-mode admission, dormant disabled runtimes/renderers/Settings bodies, dedicated Visualizers tab, and Media dependency UX. The old V0-V7 sequence is historical evidence, not work to replay.
+- [ ] Preserve the current modularization boundary: centralized lazy wiring, persisted enabled-mode admission, dormant disabled runtimes/renderers/Settings bodies, dedicated Visualizers tab, and Media dependency UX. Do not reconstruct retired cutover sequencing as implementation authority.
 - [ ] A periodic diagnostics task that correlates with hitches is not exempt because it is "only diagnostics"; redesign it without losing needed observability.
 - [ ] A GC hitch is an allocation/lifetime/scheduling problem to attribute, not permission to globally disable GC or accept unbounded retention.
 
@@ -90,9 +88,9 @@ Render-thread state is detached, generation/activation fenced and latest-state o
 - [ ] Bridge binding alone is never treated as proof.
 - [ ] No second timer/cadence, FIFO, catch-up, paint acknowledgement or legacy `present_tick()` call was introduced.
 
-## 4C. Historical reactivity parity audit
+## 4C. Reactivity parity audit
 
-For reactivity regressions, compare directly with known-good `3fe5df687387b6b6a121142372c43a7719442386` before tuning.
+For reactivity regressions, use the durable Bubble/Visualizer contracts and Historical Bug records before tuning. The older known-good `3fe5df687387b6b6a121142372c43a7719442386` remains a regression-archeology reference, not current architecture authority.
 
 - [ ] Separate intentional idle energy/motion from real music reactivity; smooth authored idle motion at ~90 Hz is not proof that live source energy arrived.
 - [ ] Compare source identity/readiness before changing gain. If `playing && !reactive_source_ready`, determine why current source identity was rejected/delayed.
@@ -101,7 +99,7 @@ For reactivity regressions, compare directly with known-good `3fe5df687387b6b6a1
 - [ ] Spectrum changes remain Spectrum-specific unless shared source evidence proves a common cause.
 - [ ] Bubble physics/sensitivity are not tuned until source/configuration/publication parity is proven.
 - [ ] Sine paused idle must continue through authored state/snapshot/presentation; no QML timer workaround.
-- [ ] Play/Pause timing distinguishes historical cold-start shaping from migration-added warm/source/publication/presentation delay.
+- [ ] Play/Pause timing distinguishes historical cold-start shaping from newly introduced warm/source/publication/presentation delay.
 - [ ] Retired `*_growth` sizing controls stay retired.
 
 ## 5. Shell / clip

@@ -1,7 +1,7 @@
-# Steam Friend Pulse — Current-Architecture Product Decomposition
+# Steam Friend Pulse — Current Product Contract
 
 Status: **IMPLEMENTED / PUBLIC — CURRENT ARCHITECTURE REFERENCE**
-Last updated: 2026-09-13
+Last updated: 2026-09-16
 Current sequencing authority: `Current_Plan.md`  
 Stable widget id: `friend_pulse`
 
@@ -78,22 +78,9 @@ Current source already provides useful pieces that must remain the authority:
 Do not add parallel credentials, a second API key path, browser-cookie scraping, authenticated Store scraping, a
 card-local network timer, private Steam session handling or a second settings/default authority.
 
-## 2. Rollback / comparison boundary
+## 2. Product contract
 
-Before implementation:
-
-1. pin the exact pre-feature GODZIP/HEAD;
-2. preserve current Steam backend/request/cache tests and the stable `friend_pulse` settings/default payload;
-3. capture accepted Achievement Pulse + Abandonment Issues Steam-family source/lifecycle tests so new shared work cannot
-   regress them;
-4. preserve the former scaffold only as a stable-id/settings migration input, not as presentation goldens.
-
-The feature is removable until accepted: its new substantive provider/preparation/runtime/QML files should have a
-bounded deletion boundary.
-
-## 3. Product contract
-
-### 3.1 Primary information
+### 2.1 Primary information
 
 The card is a **complete observable friend roster**, ordered online first and offline last. Each accepted entry needs only
 source-backed information:
@@ -108,7 +95,7 @@ Do not claim joinability, shared ownership, party availability, session start ti
 facts unless a current allowed Steam source explicitly supplies them. The historical mock phrase “playing a game you
 own” is not a product requirement.
 
-### 3.2 Useful summary
+### 2.2 Useful summary
 
 The compact card provides:
 
@@ -122,7 +109,7 @@ The former `playing / total friends` summary rail and the abandoned unread-messa
 All online friends precede offline friends. Playing/change state may order friends within the online partition, but must
 never erase online-idle friends. Offline friends fill any remaining visible slots and remain available by scrolling.
 
-### 3.3 Stable visible capacity
+### 2.3 Stable visible capacity
 
 The default visible capacity is **eight**, user-adjustable from one through twenty-four. It is configuration-owned rather
 than a height that expands/contracts with every refresh.
@@ -132,7 +119,7 @@ card height. A retained `GridView`/`ListView` scrolls the full model instead of 
 tree. CUSTOM horizontal content extent is presentation state and may admit additional readable grid columns beyond the
 configured baseline capacity; this does not mutate `visible_row_capacity` or the card's authored defaults.
 
-### 3.4 Empty / private / stale / failure states
+### 2.4 Empty / private / stale / failure states
 
 These states are semantically distinct:
 
@@ -146,7 +133,7 @@ These states are semantically distinct:
 
 A stale accepted snapshot may remain visually useful, but stale data may not generate a new “just changed” cue.
 
-## 4. Privacy contract
+## 3. Privacy contract
 
 The existing Steam family `privacy_mode` is the only privacy-mode authority.
 
@@ -176,7 +163,7 @@ The existing Steam family `privacy_mode` is the only privacy-mode authority.
 Changing privacy mode must reproject already accepted neutral state where possible. It must not force an unnecessary
 network refresh merely to change pixels.
 
-### 4.1 Semantic action boundary
+### 3.1 Semantic action boundary
 
 - the account-private normalized cache may retain validated numeric Steam IDs; API keys remain credential-store only;
 - the shared runtime owner holds the current fingerprint-to-ID map and clears it on last lease/retirement/failure;
@@ -192,9 +179,9 @@ network refresh merely to change pixels.
 - a finite event glow means a newly observed game transition, not a Steam message notification. The current allowed Steam
   sources cannot deep-link to a particular chat message.
 
-## 5. Source / request architecture
+## 4. Source / request architecture
 
-### 5.1 Allowed sources
+### 4.1 Allowed sources
 
 Use the existing allowed Steam source metadata:
 
@@ -207,7 +194,7 @@ PLAYER_SUMMARIES
 
 No additional source is added merely to decorate the card.
 
-### 5.2 Shared refresh ownership
+### 4.2 Shared refresh ownership
 
 Friend Pulse owns one generation-scoped semantic source cadence, not one cadence per card/display. Its interval comes
 only from canonical `steam.refresh_minutes`; there is no Friend Pulse-local interval or second provider. Endpoint work
@@ -222,7 +209,7 @@ Required behavior:
 - existing rate-limit/backoff/timeout/redaction contracts remain authoritative;
 - no QML `Timer`, per-card timer, polling thread or presentation-owned HTTP.
 
-### 5.3 Accepted neutral state
+### 4.3 Accepted neutral state
 
 Introduce a small immutable presentation-neutral source state, conceptually:
 
@@ -243,7 +230,7 @@ FriendPulseSnapshot
 The exact types belong in a Friend Pulse-owned source/preparation module unless an existing neutral Steam model is a
 literal semantic match. Do not inflate shared Steam models for speculative reuse.
 
-### 5.4 Change detection
+### 4.4 Change detection
 
 Change emphasis is derived only between coherent accepted snapshots. It is presentation/product state, not a second
 poller.
@@ -256,7 +243,7 @@ poller.
 
 Do not build a persistent social-activity history database.
 
-## 6. Avatar / asset policy
+## 5. Avatar / asset policy
 
 Avatar work is optional enrichment, never admission-critical.
 
@@ -270,7 +257,7 @@ Avatar work is optional enrichment, never admission-critical.
 If this creates a second independent image-downloader architecture, stop and reuse/extract the smallest current asset
 seam instead.
 
-## 7. Runtime / dormancy contract
+## 6. Runtime / dormancy contract
 
 Friend Pulse is admitted only when **all** runtime conditions are true:
 
@@ -296,7 +283,7 @@ lifetime follows real Steam consumer cardinality.
 
 Opening Settings must not instantiate source/runtime work.
 
-## 8. Retained Quick presentation
+## 7. Retained Quick presentation
 
 Use the existing process engine/window and ordinary retained widget host.
 
@@ -325,7 +312,7 @@ Presentation requirements:
 - finite theme-colored presentation-only glow for proven game-change emphasis is acceptable;
 - no continuous hidden animation cadence.
 
-## 9. Ordinary-widget normalization
+## 8. Ordinary-widget normalization
 
 Friend Pulse inherits the ordinary-widget contract, including:
 
@@ -345,7 +332,7 @@ Friend Pulse inherits the ordinary-widget contract, including:
 The default `420x180` scaffold geometry is only a starting authoring hint; eyes-on Quick layout may revise canonical
 preferred dimensions if the actual useful row design needs it. Normalization contracts, not old pixels, are binding.
 
-## 10. Settings design
+## 9. Settings design
 
 Keep Settings small. Reuse the existing Steam family Connection / Privacy controls.
 
@@ -371,7 +358,7 @@ Do not add:
 Any new collapsible Settings bucket identity must be added to canonical UI-state defaults in the same slice and obey the
 current closed-by-default / one-open-per-local-scope contract.
 
-## 11. Logging / security
+## 10. Logging / security
 
 - Steam API key never appears in logs/export/test fixtures/screenshots;
 - validated Steam IDs may exist only in the account-private cache and owner-only runtime action map;
@@ -381,71 +368,7 @@ current closed-by-default / one-open-per-local-scope contract.
 - no full friend payload dump in normal diagnostics;
 - failure logs distinguish private/rate-limited/network/invalid response where current Steam result types support it.
 
-## 12. Implementation phases
-
-### F0 — evidence + rollback — implemented
-
-- pin GODZIP/HEAD;
-- audit current `friend_pulse` scaffold/default/descriptor hits;
-- record which scaffold fields are still valid generic settings and which are dead mock residue;
-- freeze current Steam sibling tests.
-
-### F1 — source fixture contract — implemented
-
-- add fixture-only FriendList + PlayerSummaries coverage;
-- prove private/empty/rate-limited/malformed behavior;
-- prove IDs remain inside the private cache/runtime boundary and secrets remain redacted;
-- define accepted neutral snapshot types.
-
-### F2 — bounded source preparation — implemented
-
-- implement cache-first friend/source preparation through existing request policy;
-- batch summaries without per-friend request fan-out;
-- build previous-accepted-snapshot change evidence;
-- no UI yet.
-
-### F3 — lease / dormancy owner — implemented
-
-- wire the standard Steam/runtime manager admission gates;
-- prove two displays share one source result;
-- prove zero Friend Pulse work with no effective consumer;
-- prove stale completion rejected after disable/recreation.
-
-### F4 — retained Quick card — implemented
-
-- implement online-first/offline-fill full-roster hierarchy;
-- virtualized stable rows / configured visible capacity;
-- private/empty/stale/error states;
-- no avatars yet.
-
-### F5 — privacy + Rich avatar enrichment — implemented
-
-- Strict/Balanced/Rich projection;
-- visible-row-only avatar hydration;
-- retained per-friend action popup with private target resolution in Python;
-- cache/revision fences;
-- no presentation identity leak in Strict.
-
-### F6 — normalization / Settings / theming — implemented
-
-- ordinary resize, stacking, global CUSTOM, glow, theme semantics;
-- bucket/default schema updates only where genuinely needed;
-- remove obsolete mock card presentation path if caller proof says it is dead.
-
-### F7 — retained acceptance checklist
-
-Implementation is landed. Live/installed validation status is owned only by `Current_Plan.md`; this section preserves the durable acceptance contract.
-
-- deterministic fixtures;
-- request/backoff/cache tests;
-- multi-display cardinality;
-- enable/disable/family-deactivate/recreate soak;
-- Settings-open dormancy;
-- eyes-on long names/game names/privacy modes/theme contrast;
-- performance comparison against Steam family disabled;
-- keep public admission and dormancy invariants green while the physical cells close.
-
-## 13. Performance bars
+## 11. Performance bars
 
 Friend Pulse should be nearly static between Steam refreshes.
 
@@ -461,7 +384,7 @@ Reject implementation if it:
 The preferred optimization is always **less work / shared work / event-owned work**, never lowering another subsystem’s
 reactivity or freshness.
 
-## 14. Removal boundary
+## 12. Removal boundary
 
 The implementation remains deliberately removable as:
 
@@ -469,11 +392,11 @@ The implementation remains deliberately removable as:
 - bounded descriptor/registration wiring;
 - its canonical Settings/default additions;
 - focused tests/docs;
-- explicit migration cleanup for any retired scaffold keys.
+- explicit compatibility cleanup for any retired scaffold keys.
 
 Removing Friend Pulse must not require editing Achievement Pulse or Abandonment Issues business logic.
 
-## 15. Acceptance summary
+## 13. Acceptance summary
 
 The durable Friend Pulse contract is:
 

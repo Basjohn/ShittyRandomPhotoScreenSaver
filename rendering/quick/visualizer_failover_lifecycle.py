@@ -1,4 +1,4 @@
-"""Presentation-neutral Visualizer CUSTOM failover/reclaim lifecycle (E2.7).
+"""Presentation-neutral Visualizer CUSTOM failover/reclaim lifecycle.
 
 Policy layer over the process-scoped failover state
 (``rendering/quick/visualizer_failover.py``). It owns the durable contract and
@@ -8,8 +8,7 @@ display participates, and creating/retiring the SINGLE Quick visualizer owner.
 It constructs and retires nothing itself, so it is free of any QWidget /
 DisplayWidget / physical-host coupling and free of any second presenter.
 
-Durable contract preserved (audit ``Docs/QtQuick_Migration/
-07_Settings_Capability_Activation.md`` §"Visualizer CUSTOM failover/reclaim"):
+Durable current contract (see ``Spec.md`` and ``Docs/Contracts.md``):
 
 - configured CUSTOM target unavailable -> ONE global outage generation;
 - full 30 s one-shot grace (never a poll), not an immediate fallback;
@@ -290,7 +289,7 @@ def run_fallback_recheck(
 
 
 def reclaim_custom_visualizer_owner(topology) -> None:
-    """Event-driven reclaim of the configured CUSTOM visualizer display (E2.7).
+    """Event-driven reclaim of the configured CUSTOM visualizer display.
 
     Invoked from the existing display/topology event machinery (a monitor
     returning triggers a Quick rebuild whose admission reclaims), never a
@@ -391,7 +390,7 @@ def reclaim_custom_visualizer_owner(topology) -> None:
 def retire_visualizer_failover_on_capability_change(topology) -> None:
     """Retire the GLOBAL Visualizer failover lifecycle when capability is off.
 
-    Canonical capability-deactivation reaction (E2.7): when Media or Visualizers
+    Canonical capability-deactivation reaction: when Media or Visualizers
     becomes ineffective, an in-flight failover (pending grace or live temporary
     fallback) must be RETIRED — not merely blocked from creating — so it cannot
     stay stuck:

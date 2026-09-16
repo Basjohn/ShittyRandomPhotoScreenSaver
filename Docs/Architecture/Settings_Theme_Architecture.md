@@ -206,17 +206,9 @@ Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies
 
 ## `dark.qss` status
 
-`themes/dark.qss` is now **legacy source/package debris only**, not a production Settings/tray dependency or theme authority. The 2026-09-14 retirement pass removed both runtime loaders after caller-proofing the surviving structure: `ui/settings_theme.py` owns the tiny Settings-root typography/checkbox structural base, `ui/settings_menu_style.py` owns tray-menu structure using existing ThemeSpec context-menu roles, and the color-picker wrapper owns its former subsettings chrome. No legacy palette was copied into a replacement monolith.
+`themes/dark.qss` is **retired and physically deleted**. The 2026-09-14 operator-accepted retirement removed both runtime loaders after caller-proofing the surviving structure: `ui/settings_theme.py` owns the narrow Settings-root typography/checkbox structural base, `ui/settings_menu_style.py` owns tray-menu structure using ThemeSpec context-menu roles, and the color-picker wrapper owns its residual subsettings chrome. No legacy palette was copied into a replacement monolith.
 
-**Physical absence is still not retirement proof.** GODZIP Foundry intentionally excludes `themes/`, so the real repository asset remains pending deletion until the intended Windows/PySide absence matrix is green. Until then:
-
-1. never restore a loader/fallback merely because the asset exists in the repository;
-2. keep surviving structure with its narrow permanent renderer/component owner;
-3. keep colour/opacity/shadow authority in ThemeSpec;
-4. run Settings/tray/picker plus Acrylic/Glass fresh-start/live-switch acceptance with the file physically absent;
-5. then delete the repository/build asset and prove packaging no longer carries it.
-
-Native backdrop code and forged edge geometry are outside that cleanup unless an independently proven defect requires change.
+The permanent rule is simple: never restore `dark.qss`, add a fallback stylesheet loader, or replace it with another monolithic Settings QSS. Surviving structure belongs to narrow renderer/component owners; colour, opacity and shadow semantics belong to `SettingsThemeSpec`. Native backdrop code and forged edge geometry remain separate owners unless an independently proven defect requires change. Acceptance evidence is retained in `Docs/TestSuite.md`; the completed execution diary is not a live architecture document.
 
 ## Theme Foundry authoring contract
 

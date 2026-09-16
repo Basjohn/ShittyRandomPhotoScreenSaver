@@ -66,6 +66,13 @@ EVENT_NAMES = {
     52: "quick_before_render_pass_recording",
     53: "quick_after_render_pass_recording",
     54: "quick_after_rendering",
+    55: "bubble_layout_payload_ready",
+    56: "bubble_program_ready",
+    57: "bubble_common_uniforms_ready",
+    58: "bubble_reactive_uniforms_ready",
+    59: "bubble_style_uniforms_ready",
+    60: "bubble_vao_ready",
+    61: "bubble_draw_ready",
 }
 
 RENDER_CYCLE_EVENT_IDS = frozenset(range(48, 55))
@@ -76,6 +83,17 @@ RENDER_CYCLE_STAGES = (
     (51, 52, "before_rendering->before_render_pass"),
     (52, 53, "render_pass_recording"),
     (53, 54, "after_render_pass->after_rendering"),
+)
+
+BUBBLE_RENDER_STAGES = (
+    (12, 55, "layout_payload_resolution"),
+    (55, 56, "program_initialization"),
+    (56, 57, "common_uniform_upload"),
+    (57, 58, "reactive_uniform_upload"),
+    (58, 59, "style_uniform_upload"),
+    (59, 60, "vao_bind"),
+    (60, 61, "draw_call"),
+    (61, 13, "post_draw_return"),
 )
 
 
@@ -419,6 +437,93 @@ def _print_clip_tail_breakdown(
         share = (100.0 * sum(values_ns) / total_parent_ns) if total_parent_ns else 0.0
         print(
             f"screen={screen} clip_{phase}_p95_tail_stage={label} "
+            f"n={len(values_ms)} median_ms={statistics.median(values_ms):.3f} "
+            f"p95_ms={_pct(values_ms, .95):.3f} "
+            f"parent_tail_share_pct={share:.2f} "
+            f"dominant_frames={dominant.get(label, 0)}"
+        )
+
+
+def _print_bubble_stage_breakdown(
+    *,
+    screen: int,
+    by_window_revision: dict[tuple[int, int, int], dict[int, list[int]]],
+) -> None:
+    """Report CHK29 Bubble-only substages inside RENDER_MODE_BEGIN -> READY."""
+
+    parent_start_event = 12
+    parent_end_event = 13
+    parent_label = "render_mode_begin->render_mode_ready"
+    rows: list[tuple[int, dict[str, int]]] = []
+    parent_occurrences = 0
+    for (event_screen, _generation, _revision), stage_events in by_window_revision.items():
+        if event_screen != screen:
+            continue
+        starts = stage_events.get(parent_start_event, ())
+        ends = stage_events.get(parent_end_event, ())
+        parent_occurrences += min(len(starts), len(ends))
+        event_counts = [len(starts), len(ends)]
+        for start_event, end_event, _label in BUBBLE_RENDER_STAGES:
+            event_counts.extend((
+                len(stage_events.get(start_event, ())),
+                len(stage_events.get(end_event, ())),
+            ))
+        count = min(event_counts) if event_counts else 0
+        for index in range(count):
+            parent_start = starts[index]
+            parent_end = ends[index]
+            if parent_end < parent_start:
+                continue
+            values: dict[str, int] = {}
+            valid = True
+            for start_event, end_event, label in BUBBLE_RENDER_STAGES:
+                start = stage_events[start_event][index]
+                end = stage_events[end_event][index]
+                if end < start or start < parent_start or end > parent_end:
+                    valid = False
+                    break
+                values[label] = end - start
+            if valid:
+                rows.append((parent_end - parent_start, values))
+    if not rows:
+        return
+
+    print(
+        f"screen={screen} bubble_render_coverage "
+        f"parent_interval={parent_label} parent_n={parent_occurrences} "
+        f"fully_attributed_n={len(rows)}"
+    )
+    parent_total_ns = sum(parent for parent, _values in rows)
+    for _start_event, _end_event, label in BUBBLE_RENDER_STAGES:
+        values_ns = [values[label] for _parent, values in rows]
+        values_ms = [value / 1_000_000.0 for value in values_ns]
+        share = (100.0 * sum(values_ns) / parent_total_ns) if parent_total_ns else 0.0
+        print(
+            f"screen={screen} bubble_render_stage={label} "
+            f"parent_interval={parent_label} n={len(values_ms)} "
+            f"median_ms={statistics.median(values_ms):.3f} "
+            f"p95_ms={_pct(values_ms, .95):.3f} "
+            f"p99_ms={_pct(values_ms, .99):.3f} "
+            f"parent_total_share_pct={share:.2f}"
+        )
+
+    threshold_ns = _pct([parent for parent, _values in rows], .95)
+    tail = [(parent, values) for parent, values in rows if parent >= threshold_ns]
+    total_tail_ns = sum(parent for parent, _values in tail)
+    dominant: Counter[str] = Counter()
+    for _parent, values in tail:
+        dominant[max(values, key=values.get)] += 1
+    print(
+        f"screen={screen} bubble_render_p95_tail "
+        f"parent_interval={parent_label} threshold_ms={threshold_ns / 1_000_000.0:.3f} "
+        f"tail_n={len(tail)}"
+    )
+    for _start_event, _end_event, label in BUBBLE_RENDER_STAGES:
+        values_ns = [values[label] for _parent, values in tail]
+        values_ms = [value / 1_000_000.0 for value in values_ns]
+        share = (100.0 * sum(values_ns) / total_tail_ns) if total_tail_ns else 0.0
+        print(
+            f"screen={screen} bubble_render_p95_tail_stage={label} "
             f"n={len(values_ms)} median_ms={statistics.median(values_ms):.3f} "
             f"p95_ms={_pct(values_ms, .95):.3f} "
             f"parent_tail_share_pct={share:.2f} "
@@ -998,6 +1103,11 @@ def main() -> int:
                 parent_end_event=5,
                 parent_label="render_host_ready->draw",
                 stages=CLIP_END_REFINED_STAGES,
+            )
+        if counts.get(55, 0) > 0:
+            _print_bubble_stage_breakdown(
+                screen=screen,
+                by_window_revision=by_window_revision,
             )
 
         render_entry_gaps: list[tuple[int, int]] = []

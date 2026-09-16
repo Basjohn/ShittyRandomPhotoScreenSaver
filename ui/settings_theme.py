@@ -48,7 +48,7 @@ def _theme_scaled_alpha(theme: SettingsThemeSpec, token: str, scale: float) -> s
 
 
 def _build_base_structural_styles() -> str:
-    """Render the small live structural base formerly inherited from legacy base stylesheet.
+    """Render the small live structural base for the Settings shell.
 
     This deliberately contains no palette authority.  Caller-proof against the
     current Settings tree reduced the old monolith to a global fallback font and

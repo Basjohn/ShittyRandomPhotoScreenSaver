@@ -132,11 +132,11 @@ Both are required at the same time.
 
 ## 4. Protected behavioural shape
 
-The Phase 2 visualizer fidelity lock established deterministic Bubble replay and quantitative
+The established visualizer fidelity baseline provides deterministic Bubble replay and quantitative
 trajectory/elasticity metrics. Infrastructure work must preserve the approved replay/golden
 behaviour unless an intentional Bubble behaviour change is explicitly authorized.
 
-Representative protected isolated-impulse evidence from the established Phase 2 baseline includes:
+Representative protected isolated-impulse evidence from that accepted baseline includes:
 
 ```text
 logical response latency        0 ms
@@ -704,10 +704,12 @@ Purpose:
 Purpose:
 
 - final perceptual confirmation;
-- driver/runtime effects not represented in synthetic tests.
+- driver/runtime effects not represented in synthetic tests;
+- **active-music reaction proof whenever the candidate touches Bubble timing, simulation, payload, reactive uniforms, source admission or presentation delivery.**
 
-Layer 4 remains required for relevant visual/timing changes, but Layers 1–3 should catch
-mechanically obvious BTF violations before operator time is spent.
+Idle Bubble is useful for pacing/render attribution but is **not** sufficient acceptance for a Bubble-affecting production change. The active lane must include real reactive input and check source freshness, attack/settle, elasticity/breathing, loud-passage expansion, motion/ghost/tail behavior, cadence/integration and operator feel. A candidate may not substitute an idle-only trace because the idle path can remain perfect while musical response has been flattened or delayed.
+
+Layer 4 remains required for relevant visual/timing changes, but Layers 1–3 should catch mechanically obvious BTF violations before operator time is spent.
 
 ---
 
@@ -732,16 +734,6 @@ If an intentional product decision changes Bubble behaviour:
 ## 20. Evidence sources / negative controls
 
 Important existing evidence:
-
-### Phase 2 Visualizer Fidelity Lock
-
-the retired Phase-2 Visualizer Fidelity Lock (source history)
-
-Use for:
-
-- deterministic baseline;
-- trajectory/elasticity metrics;
-- replay/golden policy.
 
 ### R-54 Bubble Cadence Gate
 
@@ -779,7 +771,7 @@ Canonical, very wide and very tall CUSTOM shapes must preserve comparable author
 
 ### Bubble parity / reactivity evidence
 
-Current authority is the maintained Bubble reactivity/cadence/BTF/viewport test set plus temporal fixtures/goldens and live PERF evidence. The former `tests/test_visualizer_replay.py` and `tests/test_bubble_reactivity.py` was retired in I because it compared simulation revisions only and had **no viewport/domain/DPR/presentation-scaling oracle**; it could not catch R-69.
+Current authority is the maintained Bubble reactivity/cadence/BTF/viewport test set plus temporal fixtures/goldens, live PERF evidence, and the CHK29 active-music acceptance reference recorded in R-87. `tests/test_visualizer_replay.py` and `tests/test_bubble_reactivity.py` remain useful logical/simulation evidence, but they are not sufficient viewport/domain/DPR/presentation-scaling oracles and therefore cannot catch R-69 by themselves.
 
 Synthetic logical evidence is useful only for the layer it actually observes and is never a substitute for live scheduler/delivery/presentation evidence.
 
@@ -849,4 +841,4 @@ Golden negative controls:
 - no viewport/domain-dependent fade duration or alpha attenuation;
 - no radius, pulse, movement, stream/drift, Ghost/history, trail or R-69 scaling rewrite;
 - cold-start field bootstrap keeps its distinct slower authored fade;
-- physical J acceptance must compare canonical, very wide and very tall CUSTOM geometry.
+- physical acceptance must compare canonical, very wide and very tall CUSTOM geometry.

@@ -126,7 +126,7 @@ DESTINATION_PROFILE = (
     "test_settings_theme_qobject_lifetime.py",
     "test_settings_dark_qss_retirement_contract.py",
     "test_reddit_exit_logic.py::TestContextMenuClickThroughSuppression::test_menu_action_arms_pointer_guard_and_reddit_open_is_refused",
-    # Permanent post-H performance/freshness contracts. These are deliberately
+    # Permanent Quick-runtime performance/freshness contracts. These are deliberately
     # phase-neutral: I/J must not regain green by weakening reaction cadence,
     # newest-state semantics, native-cursor ownership or viewport fidelity.
     "test_visualizer_compute_lanes.py",

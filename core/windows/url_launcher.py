@@ -10,9 +10,9 @@ either:
 - **SCR builds**: via the ProgramData file queue + user-session watcher
 - **MC builds**: via ``QDesktopServices.openUrl()`` directly
 
-This module retains stub functions so callers that haven't been updated
-yet won't crash.  Phase 3 (click handler refactor) will remove these
-callers entirely.
+This module currently retains caller-dead compatibility stubs only. Their
+removal is tracked in ``Future_Cleanup.md``; do not restore the retired process/
+token-launch path while deleting them.
 """
 
 from __future__ import annotations

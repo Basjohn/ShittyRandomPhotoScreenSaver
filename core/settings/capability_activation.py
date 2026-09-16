@@ -1,4 +1,4 @@
-"""Application-level capability activation (Phase E).
+"""Application-level capability activation authority.
 
 "Activated" is a distinct authority from a widget instance's ordinary
 ``enabled`` checkbox or a transition's random-pool membership. It answers a
@@ -15,7 +15,7 @@ can consult activation cheaply. Missing persisted members resolve through the
 canonical defaults contract; call sites never invent an independent activation
 or pool default.
 
-See ``Docs/QtQuick_Migration/07_Settings_Capability_Activation.md``.
+Current ownership is summarized in ``Docs/Contracts.md`` and ``Spec.md``.
 """
 from __future__ import annotations
 

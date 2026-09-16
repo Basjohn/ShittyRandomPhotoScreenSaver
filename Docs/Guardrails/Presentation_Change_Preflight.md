@@ -17,7 +17,7 @@ VisualizerLogicalRuntime
 -> Quick presentation
 ```
 
-Legacy `DisplayWidget`/QRhiWidget/`GLCompositorWidget` physical presentation was removed by H. It is not rollback architecture, a test convenience fallback or a continuity path. Do not rebuild old pixels to satisfy stale harnesses.
+Legacy `DisplayWidget`/QRhiWidget/`GLCompositorWidget` physical presentation is retired and absent from production. It is not rollback architecture, a test convenience fallback or a continuity path. Do not rebuild old pixels to satisfy stale harnesses.
 
 ## Rejected
 
@@ -32,7 +32,7 @@ Legacy `DisplayWidget`/QRhiWidget/`GLCompositorWidget` physical presentation was
 - per-mode visualizer logical clocks;
 - `QQuickWidget` runtime presenter;
 - old compositor/software presenter fallback;
-- broad second native/C++ physical-presenter migration;
+- broad second native/C++ physical-presenter architecture;
 - anisotropic stretching in place of visualizer viewport reflow.
 
 ## Visualizer geometry preflight
