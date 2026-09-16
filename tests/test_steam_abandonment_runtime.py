@@ -431,8 +431,9 @@ def test_retired_abandonment_and_unconverted_steam_qwidget_pixels_have_no_caller
     production_sources = "\n".join(
         Path(path).read_text(encoding="utf-8")
         for path in (
-            "rendering/widget_factories.py",
             "rendering/widget_descriptors.py",
+            "rendering/quick/widgets/family_binder.py",
+            "rendering/quick/widgets/host.py",
         )
     )
     for retired_marker in (
