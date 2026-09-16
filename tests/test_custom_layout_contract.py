@@ -209,7 +209,10 @@ def test_resolve_snap_local_rect_for_edit_reports_active_guides():
     assert snap.horizontal_guides[0].kind == "grid"
     assert snap.horizontal_guides[0].distance == 0
     assert any(guide.position == 200 and guide.kind == "peer" for guide in snap.horizontal_assists)
-    assert any(guide.position == 480 and guide.kind == "peer" for guide in snap.vertical_assists)
+    # The widget's left edge snapped directly onto the peer's right edge, so 480 is
+    # the primary vertical guide (asserted above) and is intentionally NOT duplicated
+    # into the assists: assists exclude the winning primary line.
+    assert not any(guide.position == 480 and guide.kind == "peer" for guide in snap.vertical_assists)
 
 
 def test_resolve_snap_local_rect_for_edit_can_report_peer_guides_when_closer_than_grid():
