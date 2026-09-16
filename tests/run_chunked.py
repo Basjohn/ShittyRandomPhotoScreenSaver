@@ -2,7 +2,7 @@
 
 Two execution modes intentionally differ:
 
-* Maintained profiles (canonical ``destination``; ``h-destination`` is a temporary compatibility alias) are **target-isolated**.
+* The maintained ``destination`` profile is **target-isolated**.
   A single collection preflight validates the whole profile, then every selected
   profile target runs in its own fresh pytest process. ``--chunks`` only partitions those
   file processes into a small number of reporting/log groups. This prevents
@@ -182,9 +182,6 @@ DESTINATION_PROFILE = (
 
 PROFILES = {
     "destination": DESTINATION_PROFILE,
-    # Temporary compatibility alias for old local commands/docs while I removes
-    # phase-named migration residue. It is intentionally the exact same tuple.
-    "h-destination": DESTINATION_PROFILE,
 }
 
 

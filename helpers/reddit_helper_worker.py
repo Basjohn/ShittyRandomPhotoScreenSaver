@@ -48,7 +48,7 @@ from core.windows.reddit_helper_storage import (
     QUEUE_ENTRY_MAX_BYTES,
     QUEUE_MAX_LIVE_ENTRIES,
     QUEUE_MAX_TOTAL_BYTES,
-    install_null_logging,
+    install_emergency_logging,
     make_rotating_log_handler,
     queue_usage,
     read_json_bounded,
@@ -116,7 +116,7 @@ def configure_logging(log_dir: Path, verbose: bool) -> bool:
         )
         return True
     except Exception:
-        install_null_logging(verbose=verbose)
+        install_emergency_logging(verbose=verbose)
         return False
 
 

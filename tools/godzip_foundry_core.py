@@ -68,12 +68,7 @@ RUN_DEFAULT_FLAGS = (
 # application compatibility.
 RUN_FOUNDRY_HIDDEN_FLAGS = frozenset(
     {
-        "--devcurve",          # documented product no-op
-        "--devstats",          # documented product no-op
-        "--viz-diagnostics",   # legacy subset; --viz already enables viz diagnostics
-        "--diag-pair-warm-finish",  # parser-only historical diagnostic token
-        "--diag-p4-stages",    # parser-only historical diagnostic token
-        "--qsg-render-timing", # retired R-87 observer; compatibility no-op only
+        "--viz-diagnostics",  # live compatibility subset; --viz already enables it
     }
 )
 RUN_FLAG_ALIASES = {
@@ -98,11 +93,7 @@ RUN_FLAG_DESCRIPTIONS = {
     "--noupdates": "Disable automatic Gmail/Reddit/Weather retrievals",
     "--viz-diagnostics": "Extra Spotify visualizer diagnostics",
     "--fresh": "Clear current logs before starting",
-    "--devcurve": "Legacy compatibility no-op",
     "--devsteam": "Show the unfinished Steam Journey scaffold",
-    "--diag-pair-warm-finish": "Internal paired warm-finish diagnostics",
-    "--diag-p4-stages": "Internal P4 stage diagnostics",
-    "--diag-p4-no-perf-hud": "Internal P4 diagnostics without perf HUD",
 }
 
 

@@ -45,8 +45,6 @@ A green static/source test is never a substitute for a required Qt/QML, real-GL 
 python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-`h-destination` is a compatibility alias only. Do not create a second maintained profile for the same destination architecture.
-
 ### 3.2 Broad reconciliation diagnostic
 
 ```powershell

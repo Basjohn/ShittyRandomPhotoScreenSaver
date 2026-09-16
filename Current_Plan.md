@@ -13,12 +13,13 @@ Production performance/freshness authority is **CHK26 / repository commit `a0bf7
 
 Bubble remains the strongest protected reaction canary. Any future production change touching its timing/simulation/payload/reactive delivery requires active-music physical acceptance; idle-only evidence is insufficient.
 
-## 0. Documentation consolidation + compatibility debt inventory — active
+## 0. Documentation consolidation + compatibility cleanup — active
 
 - [~] Keep shrinking live docs toward present owners: current contracts/guides/reference for what is true now; `Docs/Historical_Bugs/` for durable regression archaeology; source control for ordinary chronology.
 - [~] Keep code comments/docstrings aligned with current ownership and remove phase/cutover breadcrumbs that imply retired migration docs remain authority.
 - [~] Use **`Future_Cleanup.md` as the single forward cleanup/debt register**, including caller-dead code, deprecated shims and **real persisted-data/schema migration bridges**. Do not delete a real migration seam merely because it is old.
-- [ ] After this documentation campaign, execute the migration/cleanup ledger in bounded slices. Establish representative old-profile/import fixtures and explicit support horizons before removing QSettings/Visualizer/SST/layout/theme/cache/credential compatibility.
+- [~] Burn down caller-proven `READY` residue in bounded slices without mixing it with product behavior changes. Completed cleanup leaves this ledger rather than becoming chronology.
+- [ ] Next migration step: establish representative old-profile/import fixtures and explicit support horizons before removing QSettings/Visualizer/SST/layout/theme/cache/credential compatibility.
 - [ ] Keep the separate full-suite red/stale-test report as its own pass; feed only classified production/cleanup conclusions back into `Future_Cleanup.md`/`Docs/TestSuite.md`.
 
 ## 1. Steam Friend Pulse — public implementation complete, awaiting live/installed acceptance

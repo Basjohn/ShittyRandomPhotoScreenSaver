@@ -1,8 +1,8 @@
 """Bars for the native-presentation P4 diagnostics.
 
-Covers the DWM composition-timing probe, the present-context state probe, and
-the --diag-p4-no-perf-hud control. All are observational: nothing here may
-block, flush, or alter presentation.
+Covers the retained DWM composition-timing probe and present-context state
+probe. All are observational: nothing here may block, flush, or alter
+presentation.
 """
 from __future__ import annotations
 
@@ -138,10 +138,3 @@ class TestIdentityJoin:
         assert qpc_delta_ms(0, 1000, None) is None
         assert qpc_delta_ms(0, 1000, 0) is None
 
-
-class TestNoPerfHudControl:
-    def test_flag_is_registered_in_the_cli_inventory(self):
-        import pathlib
-
-        main_src = pathlib.Path("main.py").read_text(encoding="utf-8")
-        assert '"--diag-p4-no-perf-hud"' in main_src

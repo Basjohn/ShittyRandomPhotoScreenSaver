@@ -214,9 +214,6 @@ class _Controller:
             )
         )
 
-    def is_app_process_running(self) -> bool:
-        return True
-
 
 class _ControllerFactory:
     def __init__(self, infos: dict[str, MediaTrackInfo | None]) -> None:

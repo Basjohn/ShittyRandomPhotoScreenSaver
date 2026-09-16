@@ -85,15 +85,6 @@ def test_parse_screensaver_args_ignores_steam_dev_and_trace_flags(monkeypatch) -
     assert preview_hwnd is None
 
 
-def test_parse_screensaver_args_tolerates_retired_system_stats_flag(monkeypatch) -> None:
-    monkeypatch.setattr(main.sys, "argv", ["main.py", "--devstats", "/c"])
-
-    mode, preview_hwnd = main.parse_screensaver_args()
-
-    assert mode is main.ScreensaverMode.CONFIG
-    assert preview_hwnd is None
-
-
 def test_main_uses_authoritative_compiled_runtime_detection(monkeypatch) -> None:
     monkeypatch.setattr(main, "is_compiled_runtime", lambda: True)
 

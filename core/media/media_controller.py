@@ -22,7 +22,6 @@ import threading
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.media.provider_registry import (
-    get_provider_process_exe_names,
     normalize_provider_id,
     provider_matches_source_app_user_model_id,
 )
@@ -180,15 +179,6 @@ class BaseMediaController:
 
     def seek_fraction(self, fraction: float) -> bool:  # pragma: no cover - interface
         raise NotImplementedError
-
-    def is_app_process_running(self) -> bool:
-        """Lightweight check whether the target media app process exists.
-
-        Used by idle polling to distinguish 'app not running' (deep idle,
-        ~30s) from 'app running but no media session' (normal idle, ~5s).
-        Default returns False; platform implementations override.
-        """
-        return False
 
 
 class NoOpMediaController(BaseMediaController):
@@ -1468,87 +1458,6 @@ class WindowsGlobalMediaController(BaseMediaController):
             )
 
         return self._invoke_simple_action("seek", _seek)
-
-    # ------------------------------------------------------------------
-    # Process detection (lightweight, no GSMTC overhead)
-    # ------------------------------------------------------------------
-    def is_app_process_running(self) -> bool:
-        """Check if the target media app is running via Windows process snapshot.
-
-        Uses CreateToolhelp32Snapshot (ctypes) — fast, zero-dependency,
-        does not touch GSMTC. Safe to call from IO thread.
-        """
-        process_names = get_provider_process_exe_names(self._provider_id)
-        if not process_names:
-            return False
-        try:
-            return _win_any_process_exists(process_names)
-        except Exception:
-            logger.debug("[MEDIA] Process detection failed", exc_info=True)
-            return False
-
-
-def _win_process_exists(exe_name: str) -> bool:
-    """Return True if a process matching *exe_name* (case-insensitive) exists.
-
-    Compatibility wrapper over the one-snapshot multi-name owner.
-    """
-
-    return _win_any_process_exists((exe_name,))
-
-
-def _win_any_process_exists(exe_names: Iterable[str]) -> bool:
-    """Return True if any exact process name exists using one Toolhelp snapshot.
-
-    Uses the Windows Toolhelp32 API via ctypes — no external dependencies.
-    """
-    import ctypes
-    import ctypes.wintypes
-
-    TH32CS_SNAPPROCESS = 0x00000002
-    INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
-
-    class PROCESSENTRY32W(ctypes.Structure):
-        _fields_ = [
-            ("dwSize", ctypes.wintypes.DWORD),
-            ("cntUsage", ctypes.wintypes.DWORD),
-            ("th32ProcessID", ctypes.wintypes.DWORD),
-            ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
-            ("th32ModuleID", ctypes.wintypes.DWORD),
-            ("cntThreads", ctypes.wintypes.DWORD),
-            ("th32ParentProcessID", ctypes.wintypes.DWORD),
-            ("pcPriClassBase", ctypes.wintypes.LONG),
-            ("dwFlags", ctypes.wintypes.DWORD),
-            ("szExeFile", ctypes.c_wchar * 260),
-        ]
-
-    kernel32 = ctypes.windll.kernel32
-    snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-    if snapshot == INVALID_HANDLE_VALUE:
-        return False
-
-    pe = PROCESSENTRY32W()
-    pe.dwSize = ctypes.sizeof(PROCESSENTRY32W)
-    targets = {
-        str(exe_name).strip().casefold()
-        for exe_name in exe_names
-        if str(exe_name).strip()
-    }
-    if not targets:
-        kernel32.CloseHandle(snapshot)
-        return False
-
-    try:
-        if not kernel32.Process32FirstW(snapshot, ctypes.byref(pe)):
-            return False
-        while True:
-            if pe.szExeFile.casefold() in targets:
-                return True
-            if not kernel32.Process32NextW(snapshot, ctypes.byref(pe)):
-                return False
-    finally:
-        kernel32.CloseHandle(snapshot)
-
 
 def create_media_controller(thread_manager=None, app_filter: str = "spotify") -> BaseMediaController:
     """Factory that returns the best available media controller.

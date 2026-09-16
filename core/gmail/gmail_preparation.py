@@ -141,13 +141,6 @@ def _decode_email_cache(data: str) -> tuple[tuple[EmailMetadata, ...], bool]:
     return emails, True
 
 
-def deserialize_email_cache(data: str) -> list[EmailMetadata]:
-    """Compatibility wrapper returning the old list shape; retirement is tracked in ``Future_Cleanup.md``."""
-
-    emails, _valid = _decode_email_cache(data)
-    return list(emails)
-
-
 def load_gmail_startup_snapshot(
     cache_path: Path,
     *,
@@ -229,7 +222,6 @@ def write_gmail_email_cache(
 
 __all__ = [
     "PreparedGmailStartup",
-    "deserialize_email_cache",
     "load_gmail_startup_snapshot",
     "reserve_gmail_cache_write",
     "serialize_email_cache",

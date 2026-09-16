@@ -1,6 +1,6 @@
 """RUN-lifetime garbage-collection policy for the Qt Quick architecture.
 
-The legacy ``GCController`` in ``frame_budget.py`` was never wired into the
+The retired pre-Qt-Quick frame-owned GC controller was never wired into the
 retained Qt Quick runtime.  It also tried to disable/enable collection around a
 notional Python-owned frame, which no longer matches the threaded Qt Quick
 scene graph.
