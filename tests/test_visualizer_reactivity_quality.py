@@ -47,6 +47,12 @@ def _make_spectrum_soak_worker(np_module, bar_count: int = 15):
     worker._manual_floor = 0.12
     worker._applied_noise_floor = 0.12
     worker._raw_bass_avg = 0.12
+    # The current bar_computation pipeline fails closed (zero bars) until the
+    # transient express-lane clamp and energy/gain resolution are present.
+    worker.set_transient_lane_config(1.0, 0.65, 1.5)
+    worker.set_energy_boost(1.0)
+    worker.set_agc_strength(0.5)
+    worker.set_input_gain(1.0)
     return worker
 
 
