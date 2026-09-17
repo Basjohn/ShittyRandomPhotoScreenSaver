@@ -10,17 +10,17 @@ This document retains dormant feature intent, durable architecture rules and rel
 ## Authority / activation rule
 
 `Future_Work.md` is **not active sequencing by default**. Normal work continues to be owned by
-`Current_Plan.md` and `Future_Cleanup.md` unless the operator deliberately selects a future item.
+`Current_Plan.md` unless the operator deliberately selects a future item.
 
 An agent may implement work from this file only when **either**:
 
 1. the operator explicitly asks for a named `Future_Work.md` item; **or**
-2. `Current_Plan.md` contains no remaining important active work and no **READY** cleanup row in
-   `Future_Cleanup.md` is scheduled ahead of the feature. `DELETE AFTER HORIZON` rows are dormant
-   gates and do not block unrelated future work merely by existing.
+2. `Current_Plan.md` contains no remaining important active work. A horizon-gated persisted-input
+   compatibility bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`) is dormant
+   user-data protection and does not block unrelated future work merely by existing.
 
 **Operator override:** an explicit request for a named `Future_Work.md` item overrides the normal sequencing above.
-Unfinished `Current_Plan.md` or `Future_Cleanup.md` work is not, by itself, permission to refuse or defer that named
+Unfinished `Current_Plan.md` work is not, by itself, permission to refuse or defer that named
 future item. Only a genuine technical prerequisite required to implement the requested item safely may block direct
 implementation. Where practical, satisfy that prerequisite as the opening subphase of the requested work instead of
 deferring the feature wholesale. Preserve unrelated active work and its rollback boundaries while doing so.
@@ -32,8 +32,6 @@ Normal priority:
 
 ```text
 Current_Plan.md active work
-        ↓
-Future_Cleanup.md scheduled READY debt/deletion work
         ↓
 Future_Work.md new features / experiments
 ```

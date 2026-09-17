@@ -110,7 +110,7 @@ Fixtures must follow current architecture. A fixture that manufactures a retired
 
 ### 5.1 Stale-oracle discipline (gate closed 2026-09-17)
 
-The former test-first gate is closed: the broad-suite reds were reconciled (all test-side drift against current architecture; production correct throughout) and the maintained destination profile is 132/132 GREEN. Compatibility-bridge retirement is no longer globally frozen — it is now governed per-item by `Future_Cleanup.md` (horizon-gated, one bridge at a time, whole test cascade updated in the same commit). The discipline below is permanent, not a one-time audit.
+The former test-first gate is closed: the broad-suite reds were reconciled (all test-side drift against current architecture; production correct throughout) and the maintained destination profile is 132/132 GREEN. Compatibility-bridge retirement is no longer globally frozen — it is governed per-item by `Docs/Architecture/Persisted_Input_Compatibility.md` (horizon-gated, one bridge at a time, whole test cascade updated in the same commit). The discipline below is permanent, not a one-time audit.
 
 Current retained-Quick Visualizer contract modules are `test_qtquick_visualizer_owner_contract.py`, `test_qtquick_visualizer_technical_sync_contract.py`, and `test_qtquick_product_wiring_contract.py`. Phase/checkpoint-named predecessor files are retired; do not restore them to satisfy an external stale test list.
 

@@ -55,7 +55,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | System Stats current contract | `Docs/Reference/System_Stats_Widget.md` |
 | Sphere current experimental contract | `Docs/Reference/Sphere_Visualizer.md` |
 | historical bug / rejected-method routing | `Docs/Historical_Bugs.md` then `Docs/Historical_Bugs/README.md` |
-| cleanup / compatibility / schema-migration debt | `Future_Cleanup.md` |
+| compatibility / schema-migration bridges | `Docs/Architecture/Persisted_Input_Compatibility.md` |
 | broad deferred features | `Future_Work.md` |
 | dormant future ordering | `FWPlan.md` |
 
@@ -80,4 +80,4 @@ Any production change that touches Bubble reaction/timing requires active-music 
 
 ## Documentation hygiene
 
-Do not add another inventory/changelog/history layer. Closed decompositions are consolidated into current contracts or Historical Bugs and then deleted from the live docs tree. `Future_Cleanup.md` is the single forward ledger for real compatibility/schema-migration debt as well as caller-dead cleanup. When paths move, update this router and all live cross-references in the same checkpoint.
+Do not add another inventory/changelog/history layer. Closed decompositions are consolidated into current contracts or Historical Bugs and then deleted from the live docs tree. Persisted-input compatibility bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated — not a backlog); caller-dead residue is deleted outright, not tracked in a register. When paths move, update this router and all live cross-references in the same checkpoint.

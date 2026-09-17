@@ -480,7 +480,7 @@ selected display
 
 Do not run old/new production runtime managers in parallel or restore the deleted physical presenter/backend. Preserve semantic cardinality. Ordinary committed Visualizer viewport extent remains authoritative outside CUSTOM and the temporary CUSTOM working override wins only while editing.
 
-Current source must be reasoned about from present owners/contracts rather than the former F/G/H/I/J cutover phase labels. Surviving compatibility and persisted-schema migration residue is explicit `Future_Cleanup.md` debt; active product/bug work lives in `Current_Plan.md`.
+Current source must be reasoned about from present owners/contracts rather than the former F/G/H/I/J cutover phase labels. Surviving compatibility and persisted-schema migration bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated); active product/bug work lives in `Current_Plan.md`.
 
 ## Documentation roles
 
@@ -488,7 +488,7 @@ Current source must be reasoned about from present owners/contracts rather than 
 - `Spec.md`: durable product/architecture;
 - focused docs/guardrails: durable subsystem contracts;
 - `Docs/TestSuite.md`: live test inventory/status ledger;
-- `Future_Cleanup.md`: cleanup, compatibility/schema-migration and retirement debt;
+- `Docs/Architecture/Persisted_Input_Compatibility.md`: persisted-input compatibility-bridge guard (user-data protection, horizon-gated);
 - `Future_Work.md`: deferred features;
 - `FWPlan.md`: operator-activated Future Work implementation and validation checklists;
 - `Docs/Historical_Bugs/`: durable regression/failed-method history; ordinary chronology remains in source control.

@@ -33,10 +33,10 @@ Anything promoted into active execution is intentionally omitted from this file.
 
 ## Cleanup interaction
 
-Future implementation does not reopen retired cleanup or superseded ownership. Before coding a selected item, inspect
-`Future_Cleanup.md` only for a genuine technical prerequisite. READY cleanup does not become feature scope merely
-because nearby code is touched. Never restore retired QWidget/native-event/compositor/polling owners to satisfy an old
-test.
+Future implementation does not reopen retired cleanup or superseded ownership. A persisted-input compatibility bridge
+(`Docs/Architecture/Persisted_Input_Compatibility.md`) is not touched merely because nearby code is; it is horizon-gated
+user-data protection, not feature scope. Never restore retired QWidget/native-event/compositor/polling owners to satisfy
+an old test.
 
 ## Checkpoint discipline
 

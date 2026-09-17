@@ -68,7 +68,7 @@ Relevant Qt/QML warning/error lines must be correlated to the same timestamp win
 
 ## 1B. Tooling authority
 
-Use `Docs/Reference/Harness_Index.md` plus `Docs/TestSuite.md` / `Future_Cleanup.md` before preserving an old script; absent retired tooling belongs to source history, not a recreated audit file. Production code must never import operator analysis tools (`R-72`). Built-in PERF/usage/QML telemetry is the primary application-health evidence; retain external parsers only for a narrow demonstrated cross-event question.
+Use `Docs/Reference/Harness_Index.md` plus `Docs/TestSuite.md` before preserving an old script; absent retired tooling belongs to source history, not a recreated audit file. Production code must never import operator analysis tools (`R-72`). Built-in PERF/usage/QML telemetry is the primary application-health evidence; retain external parsers only for a narrow demonstrated cross-event question.
 
 Current independent resource observation:
 
