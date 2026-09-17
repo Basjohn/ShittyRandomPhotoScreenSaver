@@ -1,15 +1,14 @@
-# Future Cleanup — Active Debt / Compatibility / Schema-Migration Ledger
+# Compatibility & Migration Register — protected until horizon, NOT a backlog
 
 Last updated: 2026-09-17
 
-This is the single forward register for **cleanup, compatibility residue, persisted-data/schema migration debt, deprecated shims and caller-proven retirement work**. It is not a changelog and it is not a museum of completed work.
+**This is a defensive register, not a to-do list.** Its entries are the compatibility bridges that carry real old user data (profiles, presets, themes, layouts, credentials) into the current schema. They are isolated at input boundaries, cost ~nothing at runtime, and are **correct** — the healthiest state of this codebase is with them intact. This file exists to *stop* someone from mistaking a `*_input_compat.py` / migration seam for "legacy cruft" and deleting user-data protection.
 
-- Active product/bug work belongs in `Current_Plan.md`.
-- Durable current architecture belongs in `Spec.md`, `Docs/Architecture/`, `Docs/Guardrails/`, Guides or Reference.
-- Root-cause / failed-method history belongs in `Docs/Historical_Bugs/`.
-- Ordinary chronology belongs in source control.
+- **Removal is horizon-gated and operator-initiated.** Nothing here is scheduled. A bridge is removed only after *you* declare its support horizon closed AND rules 1-8 below are met in one slice. Reading, indexing or cross-linking this file is not permission to start removing bridges.
+- **Do not treat these as debt to "pay down soon."** Prematurely removing any of them is a data-loss / resurrection / credential-exposure disaster (see the BLOCKED clauses). Leaving them is not rot.
+- Genuinely caller-dead residue (**READY**) is the only remove-now class, and there is currently none pending here — every live entry is horizon-gated compatibility.
 
-`Current_Plan.md` outranks this ledger when priorities conflict.
+Where each belongs otherwise: active product/bug work → `Current_Plan.md`; durable architecture → `Spec.md`, `Docs/Architecture/`, `Docs/Guardrails/`, Guides/Reference; root-cause history → `Docs/Historical_Bugs/`; ordinary chronology → source control. `Current_Plan.md` outranks this register when priorities conflict.
 
 ## Status vocabulary
 
