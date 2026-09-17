@@ -20,7 +20,7 @@ Bubble remains the strongest protected reaction canary. Any future production ch
 ## 2. Up-and-coming feature work
 
 Accepted next builds — queued, not yet started. The full decomposition stays in the linked doc; do not
-duplicate that spec here.
+duplicate that spec.
 
 - [ ] **CUSTOM Visualizer quarter-turn orientation glyph.** A themed turn/flip glyph in CUSTOM Edit mode
   that advances the visualizer's logical "up" by one clockwise quarter-turn per click
