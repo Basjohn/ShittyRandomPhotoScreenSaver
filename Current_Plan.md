@@ -27,12 +27,6 @@ These are landed optimizations the operator has accepted in normal use; each rem
 - [~] **Media first Play/Pause duplicate — containment.** Keep transport event-driven. The narrow same-burst duplicate guard must not expand into polling or suppress legitimate retry/Next/Previous semantics; prefer removing any reproducible duplicate at its origin.
 - [ ] **Quick-native startup/legacy image-boundary audit — optional.** Startup desktop capture is a genuinely GUI-native `QScreen.grabWindow()` source and should not be changed without startup profiling. Separately audit whether the synchronous legacy image publication/failure path can consume detached Quick-native presentation state or be retired. Do not widen this without startup profiling justification.
 
-## 3. Defaults/test authority follow-ups
-
-The large mutable-default/test-authority audit is closed; durable rules live in `Docs/TestSuite.md` and `Docs/Guides/Defaults_Guide.md`.
-
-- [ ] **Achievement cadence authority coverage gap:** Achievement runtime follows the same canonical `widgets.steam.refresh_minutes` authority as Abandonment but lacks the symmetric positive test. Add that authority test when this family is next touched; this is coverage debt, not a product defect.
-
 ---
 
 ## Standing guardrails
