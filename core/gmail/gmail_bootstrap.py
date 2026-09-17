@@ -176,6 +176,14 @@ def _load_oauth_credentials(path: Path) -> Optional[PreparedOAuthCredentials]:
 def _write_encrypted_atomic(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     ciphertext = encrypt_user_data(payload)
+    # Never persist a legacy-token migration as plaintext: a `plain::` fallback
+    # (non-Windows) is a failure, so the migration raises and the caller keeps the
+    # original file rather than writing an unencrypted token. Matches Steam's
+    # strict DPAPI-only credential contract.
+    if not ciphertext.startswith(b"dpapi::"):
+        raise RuntimeError(
+            "Gmail token storage requires DPAPI protection; refusing plaintext write"
+        )
     fd, tmp_name = tempfile.mkstemp(
         prefix=f".{path.name}.",
         suffix=".tmp",

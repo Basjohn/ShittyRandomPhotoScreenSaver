@@ -23,7 +23,7 @@ from PySide6.QtCore import QObject, Signal, QCoreApplication
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
-from core.windows.dpapi import save_encrypted
+from core.windows.dpapi import encrypt_user_data
 
 logger = get_logger(__name__)
 
@@ -214,8 +214,17 @@ class GmailOAuthManager(QObject):
         if target is None or self._token_path is None:
             return
         try:
-            plaintext = pickle.dumps(target.to_dict())
-            save_encrypted(self._token_path, plaintext)
+            ciphertext = encrypt_user_data(pickle.dumps(target.to_dict()))
+            # Mirror the strict Steam credential contract: never persist an OAuth
+            # token unless DPAPI produced a real encrypted blob. A `plain::`
+            # fallback (non-Windows) is treated as failure and never written.
+            if not ciphertext.startswith(b"dpapi::"):
+                logger.error(
+                    "[GMAIL_OAUTH] Token encryption did not produce DPAPI output; "
+                    "refusing plaintext token write"
+                )
+                return
+            self._token_path.write_bytes(ciphertext)
             logger.info("[GMAIL_OAUTH] Saved credentials")
         except Exception as exc:
             logger.error("[GMAIL_OAUTH] Failed to save credentials: %s", exc)
