@@ -480,7 +480,9 @@ implementation/descriptor rather than manufacturing a new transition identity.
 
 ---
 
-## 8.1 CUSTOM Visualizer quarter-turn orientation — feasibility accepted, dormant
+## 8.1 CUSTOM Visualizer quarter-turn orientation — accepted, promoted to `Current_Plan.md` up-and-coming
+
+(This section remains the authoritative decomposition; `Current_Plan.md` §2 carries the active pointer.)
 
 Feature request: while CUSTOM Edit mode is active, eligible Visualizers gain a small turn/flip glyph. Each click advances the
 content orientation by one clockwise quarter-turn: `0° -> 90° -> 180° -> 270° -> 0°`. Example: a tall Spectrum whose bars
