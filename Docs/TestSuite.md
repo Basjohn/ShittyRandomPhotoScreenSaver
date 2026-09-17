@@ -13,14 +13,14 @@ The maintained product profile is `destination` in `tests/run_chunked.py`.
 Current-tree inventory at this checkpoint:
 
 ```text
-369 test_*.py modules
+373 test_*.py modules
 132 maintained destination targets
 0 missing destination target files
 ```
 
 The destination profile is **target-isolated**: each selected target runs in its own fresh pytest subprocess so queued Qt/QQuick teardown from one target cannot poison another target's result.
 
-The last complete intended-environment destination run recorded before the R-87 performance campaign was **132/132 GREEN on Windows + PySide6 + OpenGL (2026-09-14)**. Do not misrepresent that historical full-profile run as proof of later source changes. R-87/CHK26 acceptance is instead backed by its focused source/static tests plus installed D1-heavy, mixed-display/lifecycle and operator visual evidence recorded in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` and `Docs/Guardrails/Performance_Optimization_Contract.md`.
+The maintained destination profile last ran **132/132 GREEN on Windows + PySide6 + OpenGL (2026-09-17)**, after the broad-suite red reconciliation closed (all failures were test-side drift against current architecture; production was correct in every case). Do not misrepresent a profile pass as proof of later source changes. R-87/CHK26 performance acceptance is separately backed by focused source/static tests plus installed D1-heavy, mixed-display/lifecycle and operator visual evidence in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` and `Docs/Guardrails/Performance_Optimization_Contract.md`.
 
 The current agent/container may lack PySide6/OpenGL. In that environment, a collection failure caused by missing runtime dependencies is **ENVIRONMENT BLOCKED**, not a product RED and not a PASS.
 
@@ -108,9 +108,9 @@ Do not:
 
 Fixtures must follow current architecture. A fixture that manufactures a retired owner can give convincing green results for a product path that no longer exists.
 
-### 5.1 CHK53 pre-suite oracle audit
+### 5.1 Stale-oracle discipline (gate closed 2026-09-17)
 
-The cleanup campaign is currently **test-first gated**. CHK53 removes/re-homes known stale tests and strengthens assertions that previously passed without proving their stated contract. The next intended-environment full run is therefore a decision gate: risky QSettings/SST/layout/theme/credential/Visualizer persisted-input retirement does not resume until the suite is green or every non-green result is explicitly classified.
+The former test-first gate is closed: the broad-suite reds were reconciled (all test-side drift against current architecture; production correct throughout) and the maintained destination profile is 132/132 GREEN. Compatibility-bridge retirement is no longer globally frozen — it is now governed per-item by `Future_Cleanup.md` (horizon-gated, one bridge at a time, whole test cascade updated in the same commit). The discipline below is permanent, not a one-time audit.
 
 Current retained-Quick Visualizer contract modules are `test_qtquick_visualizer_owner_contract.py`, `test_qtquick_visualizer_technical_sync_contract.py`, and `test_qtquick_product_wiring_contract.py`. Phase/checkpoint-named predecessor files are retired; do not restore them to satisfy an external stale test list.
 
