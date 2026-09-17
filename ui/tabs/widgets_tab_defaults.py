@@ -70,7 +70,8 @@ _SHADOW_SPIN_SHADOW_PAD = 10
 # User-invoked migration bridge for the ordinary retained Widget Theme families.
 # These sections are the current colour-semantic consumers; Visualizer-authored
 # colours are deliberately excluded because they are not generic Widget Theme
-# presentation.  See Future_Cleanup.md for the eventual retirement gate.
+# presentation.  See Docs/Architecture/Persisted_Input_Compatibility.md for the
+# eventual retirement gate.
 _THEME_COLOR_OVERRIDE_SECTIONS = (
     "clock",
     "weather",

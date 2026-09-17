@@ -17,7 +17,7 @@ SRPSS documentation is organized by **current role**, not by the phase/checkpoin
 | `Docs/Future_Work/` | genuinely pending or operator-activated work only |
 | `Docs/Historical_Bugs/` | permanent regression, root-cause and failed-method evidence |
 | `Docs/TestSuite.md` | live test inventory/status authority |
-| `Future_Cleanup.md` | single forward register for cleanup, compatibility/schema migration and retirement debt |
+| `Docs/Architecture/Persisted_Input_Compatibility.md` | persisted-input compatibility-bridge guard (user-data protection, horizon-gated — not a backlog) |
 | `Future_Work.md` / `FWPlan.md` | broad deferred ideas and dormant ordering |
 
 Keep only the small routing authorities at `Docs/` root plus generated evidence with a stable path contract.
@@ -65,7 +65,7 @@ For a meaningful ownership change, inspect at least:
 - `Index.md`;
 - `Docs/Contracts.md`;
 - the relevant Architecture/Guardrail/Guide/Reference document;
-- `Future_Cleanup.md` if old ownership, compatibility input or persisted schema is being retired;
+- `Docs/Architecture/Persisted_Input_Compatibility.md` if old ownership, compatibility input or persisted schema is being retired;
 - `Docs/TestSuite.md` if test inventory/authority changes;
 - the relevant Historical Bug when the repair creates a durable negative control.
 

@@ -146,7 +146,7 @@ The cutover sequence is history; current code is governed by present ownership a
 | old transition/visualizer pixel owners | retired except for explicitly retained neutral logic/data contracts |
 | old CUSTOM/edit/auxiliary pixel owners | retired; current Quick/session geometry owners are authoritative |
 | old physical presenter/backend/software fallback | retired and absent; not rollback architecture |
-| aliases/compatibility adapters | keep only while a named supported import/profile horizon requires them; removal is owned by `Future_Cleanup.md` |
+| aliases/compatibility adapters | keep only while a named supported import/profile horizon requires them; horizon-gated per `Docs/Architecture/Persisted_Input_Compatibility.md` |
 
 Historical code is not reference-protected merely because the product once needed it during cutover.
 

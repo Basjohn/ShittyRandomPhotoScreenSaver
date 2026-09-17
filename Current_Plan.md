@@ -16,7 +16,7 @@ Bubble remains the strongest protected reaction canary. Any future production ch
 
 - [~] Keep shrinking live docs toward present owners: current contracts/guides/reference for what is true now; `Docs/Historical_Bugs/` for durable regression archaeology; source control for ordinary chronology.
 - [~] Keep code comments/docstrings aligned with current ownership and remove phase/cutover breadcrumbs that imply retired migration docs remain authority.
-- [~] Treat `Future_Cleanup.md` as the protective compatibility register (not a backlog): keep real persisted-data/schema migration bridges intact until a support horizon is explicitly declared; delete only caller-proven `READY` residue, in bounded slices, never mixed with product behavior changes.
+- [~] Keep persisted-input compatibility bridges intact until their support horizon is explicitly declared closed — they are user-data protection, not a cleanup backlog (`Docs/Architecture/Persisted_Input_Compatibility.md`). Delete caller-proven dead residue outright, with its full test cascade in the same commit, never mixed with product behavior changes.
 
 ## 2. Runtime/lifetime follow-ups — landed, optional further proof
 
@@ -69,7 +69,7 @@ exact current source + current reconciled test tree
 -> Current_Plan.md (this file: active work + order)
 -> Spec.md
 -> FWPlan.md (future / non-blocking implementation)
--> Future_Cleanup.md / Docs/TestSuite.md (compatibility register + test truth)
+-> Docs/TestSuite.md (test truth)
 -> Index.md + focused/decomposition docs
 ```
 
@@ -77,7 +77,7 @@ exact current source + current reconciled test tree
 
 - `Index.md` — routing map to current owners.
 - `Docs/TestSuite.md`
-- `Future_Cleanup.md`
+- `Docs/Architecture/Persisted_Input_Compatibility.md` — compatibility-bridge guard.
 - `FWPlan.md` / `Future_Work.md`
 - `Docs/Reference/Steam_Friend_Pulse.md`
 - `Docs/Reference/System_Stats_Widget.md`

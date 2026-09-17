@@ -418,9 +418,9 @@ def test_dead_transition_precompute_worker_is_removed() -> None:
     # NOTE: the caller-dead widgets/spotify_visualizer/renderers island (and
     # rendering/image_processor.py) are proven to have no production importer, but
     # both are still entangled in mixed test files that also cover live behaviour.
-    # Their removal + test split is tracked in Future_Cleanup.md; asserting the
-    # deletion of a still-present file here would be a false RED, so it is not
-    # asserted until that cleanup slice lands.
+    # Their removal + test split is a single bounded slice once the mixed test
+    # file is separated; asserting the deletion of a still-present file here
+    # would be a false RED, so it is not asserted until that slice lands.
 
 
 def test_visualizer_runtime_config_has_canonical_replacement_not_empty_holes() -> None:
@@ -513,7 +513,8 @@ def test_resolved_runtime_consumers_do_not_rebuild_product_defaults() -> None:
     # rendering/image_processor.py is caller-dead (production uses
     # rendering/image_processor_async.py) but its test file still mixes live
     # AsyncImageProcessor coverage with dead ImageProcessor coverage; its removal
-    # + test split is tracked in Future_Cleanup.md rather than asserted here.
+    # + test split is a single bounded slice once that file is separated, rather
+    # than asserted here.
 
     # Global shadow product values are repaired once at the typed Settings
     # boundary and consumed as a complete generation snapshot. Ordinary Quick

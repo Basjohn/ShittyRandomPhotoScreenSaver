@@ -16,7 +16,7 @@ Do not use `QQuickWidget`, second accelerated runtime surfaces, or restore/deepe
 
 ## Retired presentation architecture
 
-The Qt Quick cutover is closed. The deleted QWidget/QRhiWidget/GLCompositor physical presentation path is not fallback architecture, test scaffolding or a continuity layer. Caller-dead residue belongs in `Future_Cleanup.md`; historical reasoning belongs in `Docs/Historical_Bugs/` or source control. Do not recreate retired presenters merely to satisfy stale tests or prose.
+The Qt Quick cutover is closed. The deleted QWidget/QRhiWidget/GLCompositor physical presentation path is not fallback architecture, test scaffolding or a continuity layer. Caller-dead residue is deleted outright with its test cascade in the same commit; historical reasoning belongs in `Docs/Historical_Bugs/` or source control. Do not recreate retired presenters merely to satisfy stale tests or prose.
 
 ## Priority
 

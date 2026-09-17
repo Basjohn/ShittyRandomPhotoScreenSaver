@@ -26,7 +26,7 @@ The old `DisplayWidget` / QRhiWidget / `GLCompositorWidget` physical path was re
 The Qt Quick runtime is operator-accepted and is the sole production presentation authority.
 
 - Active product/bug work lives only in `Current_Plan.md`.
-- Surviving cleanup, compatibility/schema migration, deprecated shim and caller-dead residue lives in `Future_Cleanup.md`.
+- Persisted-input compatibility/schema-migration bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated). Caller-dead residue is deleted outright, not parked in a register.
 - Deferred product experiments live in `Future_Work.md` / focused future-work documents.
 - Durable failed-method and regression history lives in `Docs/Historical_Bugs/`.
 - Superseded implementation decompositions are source-control history, not live documentation.
@@ -78,4 +78,4 @@ change invalidates it.
 
 ## Retired-path policy
 
-Do not rebuild caller-dead QWidget/compositor presentation for compatibility or test convenience. The retained Qt Quick scene is production authority; any surviving old-path residue must have an explicit current caller or be cleanup debt. Real persisted-data compatibility is tracked separately in `Future_Cleanup.md` and may remain only as a one-way input migration into current authority.
+Do not rebuild caller-dead QWidget/compositor presentation for compatibility or test convenience. The retained Qt Quick scene is production authority; any surviving old-path residue must have an explicit current caller or be deleted. Real persisted-data compatibility is described in `Docs/Architecture/Persisted_Input_Compatibility.md` and may remain only as a one-way input migration into current authority.

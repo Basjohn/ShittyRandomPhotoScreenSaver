@@ -125,8 +125,8 @@ def test_reset_scope_covers_every_ordinary_theme_family_but_not_visualizer() -> 
                 assert key == "color" or key.endswith("_color")
 
 
-def test_cleanup_ledger_marks_the_manual_migration_bridge_for_later_retirement() -> None:
-    cleanup = _text("Future_Cleanup.md")
-    assert "DELETE AFTER HORIZON — ordinary Widget family colour bridge" in cleanup
-    assert "user-invoked" in cleanup
-    assert "not a supported hidden palette" in cleanup
+def test_family_color_bridge_documented_as_user_invoked_reset() -> None:
+    doc = _text("Docs/Architecture/Persisted_Input_Compatibility.md")
+    assert "Ordinary Widget family colour bridge" in doc
+    assert "user-invoked action" in doc
+    assert "never startup normalization" in doc
