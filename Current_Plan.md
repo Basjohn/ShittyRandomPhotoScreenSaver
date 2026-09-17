@@ -31,9 +31,29 @@ duplicate that spec here.
   shape/reactivity/preset invariants hold. Accepted carded modes only (Spectrum, Oscilloscope, Sine,
   Bubble, Dev Curve); Voxel Sphere excluded. Full spec + golden-proof gate: `Future_Work.md` §8.1.
 - [ ] **Games You Follow.** Next retained Steam family member — currently owned only by the `--devsteam`
-  scaffold. Its first retained implementation must consume both shared `content_extent` axes and reuse
-  the Friend Pulse source/privacy/cache/runtime ownership rather than adding a second owner. Full
+  scaffold. Feasibility-gated: only after the existing-key `GetGamesFollowed` route is live/fixture-proved.
+  Its first retained implementation must consume both shared `content_extent` axes and reuse the Friend
+  Pulse source/privacy/cache/runtime ownership rather than adding a second owner. Full
   admission/decomposition: `Docs/Future_Work/Steam_Games_You_Follow.md`.
+- [ ] **System volume/mute OSD — as a widget.** Promote the opt-in system-audio OSD from ephemeral overlay
+  to a positionable **widget with optional dormancy**: an Edit-mode shell resolved on the correct display so
+  the user can side-resize (hor-only / vert-only), corner-size and wheel-scale it through the shared
+  `content_extent` reflow + uniform-scale system, round-tripping through the ordinary CUSTOM save/load/slot
+  path. Its level bar reuses the Media volume bar's visual language (a proper left→right fill), with text
+  customization — font/size; text position = left of bar / inside bar / right of bar / no text / numbers-only;
+  and bar thickness. Theme semantics inherited (may match media volume). Disabled ⇒ fully dormant (no shell,
+  no item, no endpoint, no callback). Full spec + COM/threading/dormancy traps: `Future_Work.md` §10.2.
+- [ ] **Achievement Pulse / Abandonment Issues / Weather — presentation hor-only & vert-only sizing.** Extend
+  the shared `content_extent` one-axis side-reflow (plus corner/wheel uniform scale) to these three families,
+  matching the other widgets. For now the extra axis room adjusts spacing/placement/padding only (room for
+  richer content later) — with one exception: **Weather's vertical growth reveals a 5-day forecast as an
+  additional section**. Reuse the existing content-extent owner; never add a second sizing/normalization
+  authority.
+
+**Build constraint for the widget work in this section:** maintain widget normalization and reuse the shared
+widget aspects — `content_extent` side-reflow + uniform scale, the CUSTOM Edit shell/overlay, Restore Size,
+theme roles, the volume-bar component — rather than re-implementing per widget. Introduce a new reusable only
+when it is genuinely the better architecture; never fork a second normalization/sizing owner.
 
 ## Standing guardrails — routed, not duplicated
 

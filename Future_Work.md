@@ -547,9 +547,9 @@ This ranking contains dormant ideas only. Active/promoted work is deliberately a
 5. **Deformable 3D Sphere / Blob Sphere experiment**;
 6. **Organic Growth / Ink Bloom** prototype;
 7. other 3D visualizer experiments;
-8. **Games You Follow** — feasibility-gated only after the existing-key `GetGamesFollowed` route is live/fixture-proved; first retained implementation must use both shared `content_extent` axes with side reflow + corner/wheel uniform scaling;
-9. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use without changing ownership;
-10. **System volume/mute OSD overlay [LOW, opt-in]** — event-driven Core Audio push only; safe only with the COM→GUI marshal, callback coalescing, single restart-on-change hide timer, default-device re-bind and strict dormancy from §10.2.
+8. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use without changing ownership.
+
+(**Games You Follow** and the **System volume/mute OSD** were promoted out of this dormant ranking to `Current_Plan.md` §2; their decompositions remain at `Docs/Future_Work/Steam_Games_You_Follow.md` and §10.2 respectively.)
 
 Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if their first prototypes are abandoned. Their intended identities should not collapse into generic `shatter`, `pixel dissolve`, or `audio sphere` effects.
 
@@ -563,11 +563,17 @@ Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a q
 
 Use FlowContainers in additional Settings sections only where they materially improve alignment and space usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct otherwise lazy bodies.
 
-## 10.2 System volume/mute OSD overlay [opt-in, LOW]
+## 10.2 System volume/mute OSD overlay [opt-in — promoted to `Current_Plan.md` §2]
 
-Operator-curious, not yet requested for build. A small pure-Qt-Quick on-screen display that briefly shows the current **system** (Windows master) volume level and mute state when they change — from the End/PgUp/PgDown faux media keys or from any external source (hardware keys, tray mixer, another app). It is an overlay only; it never becomes a second system-audio owner. Existing owners to reuse, not duplicate: the process-global endpoint `core/media/system_mute.py` (`IAudioEndpointVolume`, acquired once, on the UI thread, deliberately behind mute-widget admission) and the dormant lease `widgets/system_mute_runtime.py`.
+Now spec'd for build (see `Current_Plan.md` §2). A pure-Qt-Quick on-screen display that shows the current **system** (Windows master) volume level and mute state when they change — from the End/PgUp/PgDown faux media keys or from any external source (hardware keys, tray mixer, another app). It never becomes a second system-audio owner. Existing owners to reuse, not duplicate: the process-global endpoint `core/media/system_mute.py` (`IAudioEndpointVolume`, acquired once, on the UI thread, deliberately behind mute-widget admission) and the dormant lease `widgets/system_mute_runtime.py`.
 
-This is feasible with **zero cost at rest and no polling**, but only if every trap below is honoured. Getting any one wrong turns it into a native crash, a stale/flickering OSD, or a dormancy violation.
+**Product / widget requirements.** The OSD is a positionable **widget with optional dormancy**, not just a flash overlay:
+
+- [ ] **Edit-mode shell + widget sizing.** During CUSTOM Edit mode the OSD resolves a shell on the correct display so the user can side-resize (hor-only / vert-only), corner-size and wheel-scale it like the other widgets, through the shared `content_extent` side-reflow + uniform-scale system — one session/CUSTOM-owned presentation override, never a second settings/normalization owner. It round-trips through the ordinary CUSTOM save/load/slot path and Restore Size. Disabled ⇒ no shell resolved (dormancy below still holds absolutely).
+- [ ] **Bar visual reuses the Media volume bar.** Render the level with the same visual language as the Media widget's volume bar (share the component where it stays clean), but as a proper left→right fill adjustment. Theme semantics inherited — may be identical to media volume.
+- [ ] **Text customization.** Font + size; text-position modes = {left of bar | inside bar | right of bar | no text | numbers-only}; and bar-thickness customization. Theme-driven only, no bespoke palette.
+
+The COM/threading/dormancy traps below still apply in full — they are why it must be opt-in. This is feasible with **zero cost at rest and no polling**, but only if every trap is honoured. Getting any one wrong turns it into a native crash, a stale/flickering OSD, or a dormancy violation.
 
 - [ ] **Event-driven, never polled.** Drive it from `IAudioEndpointVolumeCallback::OnNotify` (register on the endpoint via pycaw). The OS pushes a notification on every master volume/mute change from any source. No `QTimer` poll, no cadence, no per-frame lookup; at rest the callback simply does not fire. Today the runtime only publishes on the app's own toggle/refresh — this adds live external-change awareness.
 - [ ] **Marshal COM → GUI thread before touching Qt.** `OnNotify` fires on a COM/MMDevice thread, not the GUI thread. Hop to the GUI thread via a queued signal / `run_on_ui_thread` before mutating any Quick item. A direct cross-thread Qt or COM touch here is a native crash, not a glitch — the same apartment discipline `system_mute.py` already documents.
