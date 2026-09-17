@@ -1219,6 +1219,11 @@ class WidgetRuntimeDescriptor:
     # Corners/wheel retain the shared uniform-scale floor; this only prevents a
     # side handle from collapsing a reflowing presentation below a sane layout.
     content_extent_minimum_size: tuple[int, int] | None = None
+    # Dense authored cards may permit side-axis growth/recovery without ever
+    # admitting a logical content box smaller than their current authored
+    # reference. The owner resolves this against authored_reference_size once
+    # at edit admission so session/persistence/QML share one floor.
+    content_extent_floor_at_authored_size: bool = False
     writes_custom_position_key: bool = True
     writes_custom_monitor_key: bool = True
     dev_feature_env: str | None = None
@@ -1457,6 +1462,8 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="weather_scale",
+        content_extent_axes=("horizontal", "vertical"),
+        content_extent_minimum_size=(420, 220),
     ),
     WidgetRuntimeDescriptor(
         widget_id="media",
@@ -1563,6 +1570,9 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="steam_card_scale",
+        content_extent_axes=("horizontal", "vertical"),
+        content_extent_minimum_size=(600, 290),
+        content_extent_floor_at_authored_size=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="abandonment_issues",
@@ -1578,6 +1588,9 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="steam_card_scale",
+        content_extent_axes=("horizontal", "vertical"),
+        content_extent_minimum_size=(600, 300),
+        content_extent_floor_at_authored_size=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="friend_pulse",

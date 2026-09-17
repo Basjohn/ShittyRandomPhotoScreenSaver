@@ -926,6 +926,13 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
 
     assert descriptors["weather"].attr_name == "weather_widget"
     assert descriptors["weather"].custom_layout_resize_mode == "weather_scale"
+    assert descriptors["weather"].content_extent_axes == ("horizontal", "vertical")
+    assert descriptors["weather"].content_extent_minimum_size == (420, 220)
+
+    assert descriptors["achievement_pulse"].content_extent_axes == ("horizontal", "vertical")
+    assert descriptors["achievement_pulse"].content_extent_floor_at_authored_size is True
+    assert descriptors["abandonment_issues"].content_extent_axes == ("horizontal", "vertical")
+    assert descriptors["abandonment_issues"].content_extent_floor_at_authored_size is True
 
     assert descriptors["media"].attr_name == "media_widget"
     assert descriptors["media"].custom_layout_resize_mode == "media_scale"
@@ -934,6 +941,28 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
 
     assert descriptors["gmail"].supports_layout_resize_edit is True
     assert descriptors["reddit"].requires_size_reset_affordance is True
+
+    ordinary_reflow_families = {
+        "weather",
+        "media",
+        "reddit",
+        "reddit2",
+        "gmail",
+        "achievement_pulse",
+        "abandonment_issues",
+        "friend_pulse",
+        "system_stats",
+    }
+    assert {
+        widget_id
+        for widget_id, descriptor in descriptors.items()
+        if descriptor.supports_layout_resize_edit
+        and descriptor.content_extent_axes == ("horizontal", "vertical")
+    } == ordinary_reflow_families
+    assert descriptors["clock"].content_extent_axes == ()
+    assert descriptors["clock2"].content_extent_axes == ()
+    assert descriptors["clock3"].content_extent_axes == ()
+    assert descriptors["spotify_visualizer"].content_extent_axes == ()
 
 
 def test_live_refresh_handlers_follow_runtime_descriptors():

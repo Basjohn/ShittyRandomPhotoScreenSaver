@@ -34,6 +34,7 @@ MoveFinishedHandler = Callable[[], None]
 DisplayTransferCapability = Callable[[CustomLayoutSessionItem, str], bool]
 DisplayTransferHandler = Callable[[CustomLayoutSessionItem, str], bool]
 SizeResetHandler = Callable[[CustomLayoutSessionItem], bool]
+ContentRotationHandler = Callable[[CustomLayoutSessionItem], bool]
 
 # Semantic edge-handle ids for the one-axis viewport-extent operation. Visualizer
 # corners are also viewport gestures, but their two-axis dispatch is owned by the
@@ -64,6 +65,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     _CAN_TRANSFER_RIGHT_ROLE = _WIDGET_ID_ROLE + 10
     _CONTENT_EXTENT_AXES_ROLE = _WIDGET_ID_ROLE + 11
     _SIZE_RESET_CAPABLE_ROLE = _WIDGET_ID_ROLE + 12
+    _CONTENT_ROTATION_CAPABLE_ROLE = _WIDGET_ID_ROLE + 13
 
     def __init__(
         self,
@@ -80,6 +82,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
+        content_rotation_handler: ContentRotationHandler | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -97,6 +100,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._display_transfer_capability = display_transfer_capability
         self._display_transfer_handler = display_transfer_handler
         self._size_reset_handler = size_reset_handler
+        self._content_rotation_handler = content_rotation_handler
         self._items: list[CustomLayoutSessionItem] = []
         session.subscribe_changes(self._on_session_item_changed)
         self.refresh()
@@ -116,6 +120,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._CAN_TRANSFER_RIGHT_ROLE: QByteArray(b"canTransferRight"),
             self._CONTENT_EXTENT_AXES_ROLE: QByteArray(b"contentExtentAxes"),
             self._SIZE_RESET_CAPABLE_ROLE: QByteArray(b"sizeResetCapable"),
+            self._CONTENT_ROTATION_CAPABLE_ROLE: QByteArray(b"contentRotationCapable"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # type: ignore[override]
@@ -152,6 +157,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return sorted(item.content_extent_axes)
         if role == self._SIZE_RESET_CAPABLE_ROLE:
             return bool(item.size_reset_capable)
+        if role == self._CONTENT_ROTATION_CAPABLE_ROLE:
+            return bool(item.content_rotation_capable)
         return None
 
     @Slot()
@@ -249,6 +256,18 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         item = self._items[int(row)]
         handler = self._size_reset_handler
         if not item.size_reset_capable or handler is None:
+            return False
+        return bool(handler(item))
+
+    @Slot(int, result=bool)
+    def rotateContent(self, row: int) -> bool:
+        """Advance one eligible item's layout-owned content quarter-turn."""
+
+        if not 0 <= int(row) < len(self._items):
+            return False
+        item = self._items[int(row)]
+        handler = self._content_rotation_handler
+        if not item.content_rotation_capable or handler is None:
             return False
         return bool(handler(item))
 
@@ -419,6 +438,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 self._CAN_TRANSFER_RIGHT_ROLE,
                 self._CONTENT_EXTENT_AXES_ROLE,
                 self._SIZE_RESET_CAPABLE_ROLE,
+                self._CONTENT_ROTATION_CAPABLE_ROLE,
             ],
         )
 
@@ -464,6 +484,7 @@ class RetainedCustomLayoutOverlay:
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
+        content_rotation_handler: ContentRotationHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         self.clear_session()
         model = CustomLayoutOverlayModel(
@@ -479,6 +500,7 @@ class RetainedCustomLayoutOverlay:
             display_transfer_capability=display_transfer_capability,
             display_transfer_handler=display_transfer_handler,
             size_reset_handler=size_reset_handler,
+            content_rotation_handler=content_rotation_handler,
             parent=self.item,
         )
         self._model = model

@@ -13,6 +13,10 @@ OverlayWidget {
 
     readonly property real authoredWidth: achievementModel.authoredWidth
     readonly property real authoredHeight: achievementModel.authoredHeight
+    readonly property real baseAuthoredWidth: achievementModel.baseAuthoredWidth
+    readonly property real baseAuthoredHeight: achievementModel.baseAuthoredHeight
+    readonly property real extraContentWidth: Math.max(0.0, authoredWidth - baseAuthoredWidth)
+    readonly property real extraContentHeight: Math.max(0.0, authoredHeight - baseAuthoredHeight)
     readonly property real contentScale: Math.max(
         0.05,
         Math.min(width / authoredWidth, height / authoredHeight)
@@ -168,15 +172,16 @@ OverlayWidget {
                 achievementRoot.achievementModel.artworkShape === "portrait"
                     ? artworkWidth * 1.4
                     : (verticalArtwork ? artworkWidth : 86.0)
-            // The vertical artwork/metric rail is centered over the third
-            // supporting-field column (PREVIOUSLY in the default composition).
-            // Keep this relationship mathematical so future size changes cannot
-            // drift the cover back toward the outer edge.
-            readonly property real thirdFieldColumnCenter: 18.0 + 2.0 * 191.0 + 182.0 / 2.0
-            readonly property real artworkX: verticalArtwork
-                ? thirdFieldColumnCenter - artworkWidth / 2.0 : 402.0
+            // Preserve the accepted 600px authored anchors exactly, then move
+            // the major artwork rail right by only the added CUSTOM width. This
+            // turns extra horizontal extent into title/field breathing room
+            // without changing the baseline composition by a pixel.
+            readonly property real artworkX: (verticalArtwork
+                ? 491.0 - artworkWidth / 2.0 : 402.0)
+                + achievementRoot.extraContentWidth
             readonly property real titleWidth: !achievementRoot.achievementModel.showArtwork
-                ? 564.0 : (verticalArtwork ? artworkX - 32.0 : 370.0)
+                ? Math.max(120.0, authoredCanvas.width - 36.0)
+                : Math.max(120.0, artworkX - 32.0)
 
             Item {
                 id: artworkFrame
@@ -425,12 +430,10 @@ OverlayWidget {
                 id: metricText
                 objectName: "achievementMetric"
                 visible: achievementRoot.achievementModel.metricValue.length > 0
-                x: normalContent.verticalArtwork
-                    ? normalContent.artworkX - 10.0 : 392.0
+                x: normalContent.artworkX - 10.0
                 y: normalContent.verticalArtwork
                     ? 14.0 + normalContent.artworkHeight + 6.0 : 108.0
-                width: normalContent.verticalArtwork
-                    ? normalContent.artworkWidth + 20.0 : 200.0
+                width: normalContent.artworkWidth + 20.0
                 height: 28.0
                 text: achievementRoot.achievementModel.metricLabel
                     + ": " + achievementRoot.achievementModel.metricValue
@@ -631,6 +634,16 @@ OverlayWidget {
                     readonly property int columnCount: progressPulse.visible ? 2 : 3
                     readonly property int compactRow: Math.floor(index / columnCount)
                     readonly property int column: index % columnCount
+                    readonly property real columnGap: 9.0
+                    readonly property real fieldAreaLeft: progressPulse.visible ? 208.0 : 18.0
+                    readonly property real fieldAreaWidth: Math.max(
+                        1.0, authoredCanvas.width - fieldAreaLeft
+                            - (progressPulse.visible ? 19.0 : 18.0)
+                    )
+                    readonly property real columnWidth: Math.max(
+                        120.0,
+                        (fieldAreaWidth - columnGap * (columnCount - 1)) / columnCount
+                    )
                     readonly property int railStride:
                         achievementRoot.achievementModel.shelfStyle
                         ? 1
@@ -646,9 +659,9 @@ OverlayWidget {
                         authoredCanvas.height - 16.0
                         - achievementRoot.achievementModel.capsuleHeight
                         - (railCount - 1) * railStep
-                    x: (progressPulse.visible ? 208.0 : 18.0) + column * 191.0
+                    x: fieldAreaLeft + column * (columnWidth + columnGap)
                     y: firstRailY + compactRow * railStride * railStep
-                    width: 182.0
+                    width: columnWidth
                     height: achievementRoot.achievementModel.shelfStyle
                         ? achievementRoot.achievementModel.capsuleHeight
                         : (achievementRoot.achievementModel.doubleCapsules
@@ -685,8 +698,10 @@ OverlayWidget {
             id: connectRequired
             objectName: "achievementConnectRequired"
             visible: achievementRoot.achievementModel.viewState === "connect_required"
-            x: 44.0
-            y: 76.0
+            x: 44.0 + Math.max(0.0,
+                (authoredCanvas.width - achievementRoot.baseAuthoredWidth) * 0.5)
+            y: 76.0 + Math.max(0.0,
+                (authoredCanvas.height - achievementRoot.baseAuthoredHeight) * 0.5)
             width: 332.0
             height: 61.0
 

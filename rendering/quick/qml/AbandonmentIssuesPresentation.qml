@@ -14,6 +14,10 @@ OverlayWidget {
 
     readonly property real authoredWidth: abandonmentModel.authoredWidth
     readonly property real authoredHeight: abandonmentModel.authoredHeight
+    readonly property real baseAuthoredWidth: abandonmentModel.baseAuthoredWidth
+    readonly property real baseAuthoredHeight: abandonmentModel.baseAuthoredHeight
+    readonly property real extraContentWidth: Math.max(0.0, authoredWidth - baseAuthoredWidth)
+    readonly property real extraContentHeight: Math.max(0.0, authoredHeight - baseAuthoredHeight)
     uniformScaleTransform: true
 
     // Rotation fades only data that actually changes. Archive chrome, shelves,
@@ -182,7 +186,7 @@ OverlayWidget {
             Shape {
                 id: archiveTab
                 objectName: "abandonmentArchiveTab"
-                x: 447.0
+                x: authoredCanvas.width - width - 18.0
                 y: 19.0
                 width: 135.0
                 height: 30.0
@@ -255,7 +259,8 @@ OverlayWidget {
                 readonly property real textLeft:
                     abandonmentRoot.abandonmentModel.showArtwork
                     ? 22.0 + artworkWidth + 24.0 : 24.0
-                readonly property real textWidth: Math.max(150.0, 578.0 - textLeft)
+                readonly property real textWidth: Math.max(150.0,
+                    authoredCanvas.width - 22.0 - textLeft)
 
                 Item {
                     id: artworkShelf
@@ -435,8 +440,11 @@ OverlayWidget {
                     id: ageStamp
                     objectName: "abandonmentAgeStamp"
                     x: normalContent.textLeft
-                    y: 160.0
-                    width: Math.min(300.0, normalContent.textWidth)
+                    y: 160.0 + abandonmentRoot.extraContentHeight * 0.20
+                    width: Math.min(
+                        300.0 + abandonmentRoot.extraContentWidth * 0.30,
+                        normalContent.textWidth
+                    )
                     height: 54.0
                     radius: 6.0
                     color: abandonmentRoot.abandonmentModel.steamMetricSurfaceColor
@@ -516,7 +524,8 @@ OverlayWidget {
                             (normalContent.textWidth - 12.0) * 0.5
                         )
                         x: normalContent.textLeft + column * (shelfWidth + 12.0)
-                        y: 226.0 + row * 31.0
+                        y: 226.0 + abandonmentRoot.extraContentHeight * 0.65
+                            + row * 31.0
                         width: shelfWidth
                         height: 25.0
 
@@ -596,8 +605,8 @@ OverlayWidget {
                 id: connectRequired
                 objectName: "abandonmentConnectRequired"
                 visible: abandonmentRoot.abandonmentModel.viewState === "connect_required"
-                x: 74.0
-                y: 122.0
+                x: 74.0 + abandonmentRoot.extraContentWidth * 0.5
+                y: 122.0 + abandonmentRoot.extraContentHeight * 0.5
                 width: 412.0
                 height: 66.0
 

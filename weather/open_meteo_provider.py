@@ -307,7 +307,7 @@ class OpenMeteoProvider:
                 'current': 'temperature_2m,weather_code,wind_speed_10m,is_day,relative_humidity_2m,precipitation,rain',
                 'hourly': 'precipitation_probability',
                 'daily': 'temperature_2m_max,temperature_2m_min,weathercode',
-                'forecast_days': 2,  # Today + tomorrow
+                'forecast_days': 6,  # Today + the next five days
                 'forecast_hours': 1,  # Only need current hour for precip probability
                 'timezone': 'auto'
             }
@@ -355,22 +355,39 @@ class OpenMeteoProvider:
             # Map weather code to condition
             condition = self.WEATHER_CODES.get(weather_code, "Unknown")
             
-            # Extract tomorrow's forecast (index 1 = tomorrow)
+            # Keep the compact Tomorrow line, and retain the next five daily
+            # rows for the taller CUSTOM Weather presentation. This is one
+            # provider request/cadence; expanded presentation never launches a
+            # second fetch path.
             forecast_text = None
+            forecast_days = []
             daily = data.get('daily', {})
             if daily:
                 try:
+                    dates = daily.get('time', [])
                     temps_max = daily.get('temperature_2m_max', [])
                     temps_min = daily.get('temperature_2m_min', [])
                     codes = daily.get('weathercode', [])
-                    if len(temps_max) > 1 and len(temps_min) > 1 and len(codes) > 1:
-                        tomorrow_max = temps_max[1]
-                        tomorrow_min = temps_min[1]
-                        tomorrow_code = codes[1]
-                        tomorrow_condition = self.WEATHER_CODES.get(tomorrow_code, "")
-                        # Use title case for forecast condition
+                    available = min(len(temps_max), len(temps_min), len(codes))
+                    for index in range(1, min(available, 6)):
+                        day_label = f"Day {index}"
+                        if index < len(dates):
+                            try:
+                                day_label = datetime.fromisoformat(str(dates[index])).strftime("%a")
+                            except (TypeError, ValueError):
+                                pass
+                        day_condition = self.WEATHER_CODES.get(codes[index], "")
+                        condition_display = day_condition.title() if day_condition else ""
+                        forecast_days.append(
+                            f"{day_label}: {temps_min[index]:.0f}°-{temps_max[index]:.0f}°C / {condition_display}"
+                        )
+                    if available > 1:
+                        tomorrow_condition = self.WEATHER_CODES.get(codes[1], "")
                         tomorrow_condition_display = tomorrow_condition.title() if tomorrow_condition else ""
-                        forecast_text = f"Tomorrow: {tomorrow_min:.0f}°-{tomorrow_max:.0f}°C/{tomorrow_condition_display}"
+                        forecast_text = (
+                            f"Tomorrow: {temps_min[1]:.0f}°-{temps_max[1]:.0f}°C/"
+                            f"{tomorrow_condition_display}"
+                        )
                 except Exception as e:
                     logger.debug("[MISC] Exception suppressed: %s", e)
             
@@ -383,7 +400,8 @@ class OpenMeteoProvider:
                 'windspeed': windspeed,
                 'humidity': humidity,
                 'precipitation_probability': precipitation,
-                'forecast': forecast_text
+                'forecast': forecast_text,
+                'forecast_days': forecast_days
             }
             
             # Cache successful result

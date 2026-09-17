@@ -425,6 +425,52 @@ def test_qml_preserves_archive_shelf_age_stamp_and_two_column_ledger(tmp_path) -
         engine.deleteLater()
 
 
+def test_custom_content_extent_reflows_archive_spacing_without_new_size_owner(qt_app, tmp_path) -> None:
+    model = _model()
+    model.activate()
+    model.on_abandonment_presentation(
+        _presentation(tmp_path / "content-extent.png"),
+        animate=False,
+    )
+    base_width = float(model.baseAuthoredWidth)
+    base_height = float(model.baseAuthoredHeight)
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        archive_tab = _find_visual_item(item, "abandonmentArchiveTab")
+        age_stamp = _find_visual_item(item, "abandonmentAgeStamp")
+        ledger = _find_visual_item(item, "abandonmentLedgerShelf_playtime")
+        assert archive_tab is not None and age_stamp is not None and ledger is not None
+        base_tab_x = archive_tab.x()
+        base_age_y = age_stamp.y()
+        base_age_width = age_stamp.width()
+        base_ledger_y = ledger.y()
+
+        assert model.set_content_extent(base_width + 200.0, base_height + 100.0) is True
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        qt_app.processEvents()
+
+        assert model.contentExtentActive is True
+        assert archive_tab.x() == pytest.approx(base_tab_x + 200.0)
+        assert age_stamp.y() == pytest.approx(base_age_y + 20.0)
+        assert age_stamp.width() >= base_age_width
+        assert ledger.y() == pytest.approx(base_ledger_y + 65.0)
+
+        assert model.clear_content_extent() is True
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        qt_app.processEvents()
+        assert model.contentExtentActive is False
+        assert archive_tab.x() == pytest.approx(base_tab_x)
+        assert age_stamp.y() == pytest.approx(base_age_y)
+        assert ledger.y() == pytest.approx(base_ledger_y)
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+
+
 def test_qml_keeps_delegates_stable_across_same_shape_model_updates(tmp_path) -> None:
     model = _model()
     model.activate()
@@ -622,6 +668,14 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
         engine = QQmlEngine.contextForObject(item).engine()
         field_model = model.field_model
         assert item.property("fadeOpacity") == pytest.approx(0.0)
+
+        retained._apply_custom_layout_size_payload(
+            {"content_extent": [config.authored_size[0] + 120.0, config.authored_size[1] + 80.0]}
+        )
+        assert model.contentExtentActive is True
+        assert model.authoredWidth == pytest.approx(config.authored_size[0] + 120.0)
+        retained._apply_custom_layout_size_payload({})
+        assert model.contentExtentActive is False
 
         assert retained.activate(manager) is True
         qt_app.processEvents()

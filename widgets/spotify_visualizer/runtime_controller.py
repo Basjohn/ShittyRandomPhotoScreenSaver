@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import copy
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from core.settings.visualizer_mode_registry import (
@@ -100,7 +100,12 @@ class VisualizerRuntimeController:
         self._committed_viewport_extent = (
             CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
         )
+        # CUSTOM orientation is retained per canonical carded mode. The map is
+        # sparse (zero-degree entries are omitted) and selected by ``_mode_id``
+        # under the same existing controller lock as viewport extent.
+        self._committed_content_rotations: dict[str, int] = {}
         self._custom_viewport_override: tuple[float, float] | None = None
+        self._custom_content_rotation_override: dict[str, int] | None = None
         self._render_bridge = VisualizerSnapshotBridge()
         # The presentation-neutral destination owner for this generation's
         # authored per-tick logical state. The authored logical step advances
@@ -360,24 +365,78 @@ class VisualizerRuntimeController:
         return self._render_bridge.identity
 
     @property
-    def presentation_viewport_extent(self) -> tuple[float, float]:
-        """Effective logical viewport extent for the next authored step.
+    def presentation_layout_metrics(self) -> tuple[tuple[float, float], int, bool]:
+        """Return physical CUSTOM extent, orientation and override state atomically.
 
-        The temporary CUSTOM working override wins while it is active; otherwise
-        the ordinary committed presentation extent applies.
+        Retained publication needs both values together.  Snapshotting them under
+        one existing controller lock avoids a second steady-state lock acquisition
+        while keeping temporary CUSTOM overrides coherent.
         """
 
         with self._lock:
-            if self._custom_viewport_override is not None:
-                return self._custom_viewport_override
-            return self._committed_viewport_extent
+            has_override = self._custom_viewport_override is not None
+            extent = (
+                self._custom_viewport_override
+                if has_override
+                else self._committed_viewport_extent
+            )
+            rotations = (
+                self._custom_content_rotation_override
+                if self._custom_content_rotation_override is not None
+                else self._committed_content_rotations
+            )
+            quarters = (
+                int(rotations.get(self._mode_id, 0))
+                if self._presentation_policy.content_rotation_capable
+                else 0
+            )
+            return extent, quarters, has_override
+
+    @property
+    def presentation_physical_viewport_extent(self) -> tuple[float, float]:
+        """Physical CUSTOM viewport extent before content orientation."""
+
+        return self.presentation_layout_metrics[0]
+
+    @property
+    def presentation_content_rotation_quarters(self) -> int:
+        """Effective quarter-turn token for the current mode presentation."""
+
+        return self.presentation_layout_metrics[1]
+
+    @property
+    def presentation_viewport_extent(self) -> tuple[float, float]:
+        """Effective logical viewport extent for the next authored step."""
+
+        extent, quarters, _has_override = self.presentation_layout_metrics
+        # Keep the overwhelmingly common 0°/180° path allocation-free, matching
+        # the pre-feature steady-state cost as closely as possible.
+        if quarters & 1:
+            return (extent[1], extent[0])
+        return extent
 
     @property
     def committed_viewport_extent(self) -> tuple[float, float]:
-        """Ordinary committed presentation extent, ignoring any CUSTOM override."""
+        """Ordinary committed physical extent, ignoring any CUSTOM override."""
 
         with self._lock:
             return self._committed_viewport_extent
+
+    @property
+    def committed_content_rotation_quarters(self) -> int:
+        """Persisted CUSTOM orientation for the current canonical mode."""
+
+        with self._lock:
+            if not self._presentation_policy.content_rotation_capable:
+                return 0
+            return int(self._committed_content_rotations.get(self._mode_id, 0))
+
+    @property
+    def committed_content_rotations(self) -> dict[str, int]:
+        """Copy of sparse persisted CUSTOM orientations for all capable modes."""
+
+        with self._lock:
+            return dict(self._committed_content_rotations)
 
     @property
     def has_custom_viewport_override(self) -> bool:
@@ -387,30 +446,79 @@ class VisualizerRuntimeController:
     def set_custom_viewport_override(
         self,
         extent: tuple[float, float] | None,
+        content_rotation_quarters: object = 0,
     ) -> None:
-        """Publish (or retire) the temporary CUSTOM working viewport extent.
+        """Publish (or retire) the temporary CUSTOM viewport/orientation state.
 
         This is the presentation-neutral seam for the retained CUSTOM edge
         operation: while edit mode is active the GUI-owned session pushes its
-        working logical world here, and the next authored logical step consumes
-        it in preference to the committed extent. Viewport extent is state, not
-        an authored temporal event, so the latest value coalesces freely - no
-        queue, clock or acknowledgement. ``None`` retires the override, which
-        falls back to the committed extent (never manufactured canonical). Only
-        plain typed floats cross this boundary; no QQuickItem/QScreen/render
-        object ever does.
+        working physical viewport plus sparse per-mode orientation state here,
+        and the next authored logical step consumes them in preference to the
+        committed values. They are state, not authored temporal events, so the
+        latest values coalesce freely - no queue, clock or acknowledgement.
+        ``None`` retires the override and falls back to committed truth. The
+        argument name is retained for compatibility with the former scalar
+        carrier; mappings are the current representation. No QQuickItem,
+        QScreen or render object crosses this boundary.
         """
+
+        from widgets.spotify_visualizer.presentation_orientation import (
+            content_rotation_map_from_legacy,
+            normalize_content_rotation_by_mode,
+        )
 
         if extent is None:
             resolved: tuple[float, float] | None = None
+            rotations: dict[str, int] | None = None
         else:
             width = float(extent[0])
             height = float(extent[1])
             if not (width > 0.0 and height > 0.0):
                 raise ValueError("viewport extent must be positive")
             resolved = (width, height)
+            rotations = None
         with self._lock:
+            if resolved is not None:
+                rotations = (
+                    normalize_content_rotation_by_mode(content_rotation_quarters)
+                    if isinstance(content_rotation_quarters, Mapping)
+                    else content_rotation_map_from_legacy(
+                        content_rotation_quarters
+                    )
+                )
             self._custom_viewport_override = resolved
+            self._custom_content_rotation_override = rotations
+
+    def hydrate_committed_layout_metrics(
+        self,
+        viewport_extent: tuple[float, float],
+        content_rotation_quarters: object = 0,
+    ) -> None:
+        """Rehydrate persisted physical CUSTOM metrics before runtime start.
+
+        ``content_rotation_quarters`` accepts the current sparse per-mode map
+        and the former scalar token as read-only compatibility input.
+        """
+
+        from widgets.spotify_visualizer.presentation_orientation import (
+            content_rotation_map_from_legacy,
+            normalize_content_rotation_by_mode,
+        )
+
+        width = float(viewport_extent[0])
+        height = float(viewport_extent[1])
+        if not (width > 0.0 and height > 0.0):
+            raise ValueError("viewport extent must be positive")
+        rotations = (
+            normalize_content_rotation_by_mode(content_rotation_quarters)
+            if isinstance(content_rotation_quarters, Mapping)
+            else content_rotation_map_from_legacy(
+                content_rotation_quarters
+            )
+        )
+        with self._lock:
+            self._committed_viewport_extent = (width, height)
+            self._committed_content_rotations = rotations
 
     def commit_presentation_metrics(
         self,
@@ -437,6 +545,25 @@ class VisualizerRuntimeController:
             raise ValueError("visualizer presentation policy does not match mode")
         with self._lock:
             self._committed_viewport_extent = presentation.viewport_extent
+            if policy.content_rotation_capable:
+                quarters = int(presentation.content_rotation_quarters)
+                current = int(self._committed_content_rotations.get(self._mode_id, 0))
+                if quarters != current:
+                    if quarters:
+                        self._committed_content_rotations[self._mode_id] = quarters
+                    else:
+                        self._committed_content_rotations.pop(self._mode_id, None)
+
+    def commit_content_rotation_map(self, value: object) -> None:
+        """Promote one full sparse CUSTOM orientation map at Save boundary."""
+
+        from widgets.spotify_visualizer.presentation_orientation import (
+            normalize_content_rotation_by_mode,
+        )
+
+        rotations = normalize_content_rotation_by_mode(value)
+        with self._lock:
+            self._committed_content_rotations = rotations
 
     def resolve_logical_mode_state(
         self,

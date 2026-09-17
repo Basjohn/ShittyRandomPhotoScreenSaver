@@ -286,6 +286,58 @@ def test_uniform_custom_admission_uses_visible_card_envelope_not_dead_letterbox(
     assert item.resize_scale == 1.0
 
 
+def test_dense_content_extent_floor_resolves_to_live_authored_reference(qt_app) -> None:
+    """Dense cards never persist a side-drag box smaller than their authored canvas."""
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+
+    class _QmlItem:
+        def property(self, name: str):
+            return {
+                "preferredContentWidth": 744.0,
+                "preferredContentHeight": 412.0,
+            }.get(name)
+
+    presentation = SimpleNamespace(item=_QmlItem(), model=SimpleNamespace(config=None))
+    presenter = SimpleNamespace(
+        bound_widget_ids=("achievement_pulse",),
+        geometry_for=lambda _widget_id: OverlayWidgetGeometry(80, 90, 744, 412),
+        authored_geometry_for=lambda _widget_id: OverlayWidgetGeometry(80, 90, 744, 412),
+        presentation_for_widget_id=lambda _widget_id: presentation,
+    )
+    binding = _DisplayBinding(
+        identity="display:test",
+        monitor_route="1",
+        unit=SimpleNamespace(presenter=presenter),
+        screen=screen,
+        geometry=QRect(screen.geometry()),
+    )
+    settings = _Settings({
+        "achievement_pulse": {
+            "enabled": True,
+            "position": "Custom",
+            "monitor": "1",
+        }
+    })
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings,
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    session = CustomLayoutSession()
+    descriptors = {}
+
+    owner._admit_ordinary_items(session, descriptors, binding, settings.widgets)
+
+    assert len(session.items()) == 1
+    item = session.items()[0]
+    assert item.model_identity == "achievement_pulse"
+    assert item.authored_reference_size == (744, 412)
+    assert item.content_extent_minimum_size == (744, 412)
+
+
 def test_custom_owner_publishes_peer_and_center_guides_from_snap_resolution() -> None:
     class _GuideScene:
         def __init__(self) -> None:

@@ -14,6 +14,9 @@ from core.settings.visualizer_mode_registry import (
     VisualizerModePresentationPolicy,
     VisualizerShellPolicy,
 )
+from widgets.spotify_visualizer.presentation_orientation import (
+    normalize_content_rotation_quarters,
+)
 from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO,
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
@@ -93,6 +96,7 @@ def resolve_visualizer_presentation(
     dpr: float = 1.0,
     uniform_visual_scale: float = 1.0,
     viewport_extent: Sequence[object] | None = None,
+    content_rotation_quarters: object = 0,
     scene_fade: float = 1.0,
     content_fade: float = 1.0,
     border_width: float,
@@ -124,6 +128,14 @@ def resolve_visualizer_presentation(
         if viewport_extent is None
         else viewport_extent,
         name="viewport extent",
+    )
+    rotation_quarters = normalize_content_rotation_quarters(
+        content_rotation_quarters
+    )
+    logical_aspect_ratio = (
+        extent_height / extent_width
+        if rotation_quarters & 1
+        else extent_width / extent_height
     )
     requested_scale = _finite(uniform_visual_scale, name="uniform visual scale")
     if requested_scale <= 0.0:
@@ -225,10 +237,11 @@ def resolve_visualizer_presentation(
         baseline_aspect_ratio=CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO,
         uniform_visual_scale=resolved_scale,
         viewport_extent=(extent_width, extent_height),
-        current_aspect_ratio=extent_width / extent_height,
+        current_aspect_ratio=logical_aspect_ratio,
         scene_fade=scene_fade,
         content_fade=content_fade,
         border_width=resolved_border,
+        content_rotation_quarters=rotation_quarters,
         shell_style=style,
     )
 
@@ -240,6 +253,7 @@ def resize_visualizer_presentation(
     outer_origin: Sequence[object],
     relative_scale: float,
     viewport_extent: Sequence[object] | None = None,
+    content_rotation_quarters: object | None = None,
 ) -> ResolvedVisualizerPresentation:
     """Reproject one resolved presentation at a new uniform scale and/or extent.
 
@@ -269,6 +283,11 @@ def resize_visualizer_presentation(
         clip_policy=baseline.clip_policy,
         viewport_resize_capable=baseline.viewport_resize_capable,
     )
+    target_rotation = (
+        baseline.content_rotation_quarters
+        if content_rotation_quarters is None
+        else normalize_content_rotation_quarters(content_rotation_quarters)
+    )
 
     def _authored_scalar(name: str) -> float:
         return float(style[name]) / baseline_scale
@@ -282,6 +301,7 @@ def resize_visualizer_presentation(
         dpr=baseline.dpr,
         uniform_visual_scale=baseline_scale * factor,
         viewport_extent=target_extent,
+        content_rotation_quarters=target_rotation,
         scene_fade=baseline.scene_fade,
         content_fade=baseline.content_fade,
         border_width=float(style["authored_border_width"]),

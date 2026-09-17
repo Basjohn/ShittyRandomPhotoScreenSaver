@@ -250,6 +250,54 @@ def test_retained_layout_policy_preserves_shapes_and_grows_complete_capsule_rail
     assert large_capsules.authored_size[1] > doubled.authored_size[1]
 
 
+def test_custom_content_extent_grows_logical_canvas_and_reflows_major_rails(qt_app) -> None:
+    model = _model()
+    model.activate()
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=build_mock_steam_view_model("achievement_pulse")
+        ),
+        animate=False,
+    )
+    base_width = float(model.baseAuthoredWidth)
+    base_height = float(model.baseAuthoredHeight)
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        artwork = _find_visual_item(item, "achievementArtworkFrame")
+        rarity = _find_visual_item(item, "achievementField_rarity")
+        pulse = _find_visual_item(item, "achievementProgressPulse")
+        assert artwork is not None and rarity is not None and pulse is not None
+        base_artwork_x = artwork.x()
+        base_rarity_width = rarity.width()
+        base_pulse_y = pulse.y()
+
+        assert model.set_content_extent(base_width + 220.0, base_height + 120.0) is True
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        qt_app.processEvents()
+
+        assert model.contentExtentActive is True
+        assert model.authoredWidth == pytest.approx(base_width + 220.0)
+        assert model.authoredHeight == pytest.approx(base_height + 120.0)
+        assert artwork.x() == pytest.approx(base_artwork_x + 220.0)
+        assert rarity.width() > base_rarity_width
+        assert pulse.y() == pytest.approx(base_pulse_y + 120.0)
+
+        assert model.clear_content_extent() is True
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        qt_app.processEvents()
+        assert model.contentExtentActive is False
+        assert model.authoredWidth == pytest.approx(base_width)
+        assert model.authoredHeight == pytest.approx(base_height)
+        assert artwork.x() == pytest.approx(base_artwork_x)
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+
+
 def test_latest_unlock_visibility_does_not_allocate_bottom_capsule_rails() -> None:
     default = _config(artwork_shape="portrait", double_capsules=True)
     no_latest = replace(
@@ -773,6 +821,14 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
         field_model = model.field_model
         unlock_model = model.unlock_model
         assert item.property("fadeOpacity") == pytest.approx(0.0)
+
+        presentation._apply_custom_layout_size_payload(
+            {"content_extent": [config.authored_size[0] + 120.0, config.authored_size[1] + 80.0]}
+        )
+        assert model.contentExtentActive is True
+        assert model.authoredWidth == pytest.approx(config.authored_size[0] + 120.0)
+        presentation._apply_custom_layout_size_payload({})
+        assert model.contentExtentActive is False
 
         assert presentation.activate(manager) is True
         qt_app.processEvents()

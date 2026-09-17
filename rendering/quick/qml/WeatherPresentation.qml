@@ -39,7 +39,7 @@ OverlayWidget {
     // genuinely requires it - it must never silently shrink below the authored
     // floor. Height is content/layout driven. Intrinsic sources only (no
     // width<->preferredWidth feedback). J refines eyes-on parity.
-    preferredContentWidth: Math.max(
+    readonly property real intrinsicContentWidth: Math.max(
         600.0,
         (weatherModel.showConditionIcon ? weatherModel.iconSize + 12.0 : 0.0)
             + Math.max(locationText.implicitWidth, conditionText.implicitWidth)
@@ -47,12 +47,32 @@ OverlayWidget {
             + 2.0 * weatherRoot.legacyHorizontalInset
             + 2.0 * weatherRoot.legacyTextInset
     )
-    preferredContentHeight: Math.max(
+    readonly property real compactReadyContentHeight:
+        primaryRow.height
+        + (detailsBand.visible ? readyColumn.spacing + detailsBand.height : 0.0)
+        + (forecastBand.visible ? readyColumn.spacing + forecastBand.height : 0.0)
+    readonly property real compactIntrinsicContentHeight: Math.max(
+        60.0, compactReadyContentHeight
+    ) + weatherRoot.shellInset
+        + 2.0 * weatherRoot.legacyVerticalInset
+    readonly property real extendedForecastRequiredHeight:
+        compactIntrinsicContentHeight
+        + readyColumn.spacing
+        + extendedForecastColumn.implicitHeight
+    readonly property bool extendedForecastVisible:
+        weatherModel.extendedForecastAvailable
+        && weatherModel.contentExtentActive
+        && weatherModel.contentExtentHeight >= extendedForecastRequiredHeight
+    readonly property real intrinsicContentHeight: Math.max(
         // Intrinsic Column layout only; its positioned child bounding box must
         // not become a feedback source during CUSTOM geometry changes.
         60.0, readyColumn.implicitHeight
     ) + weatherRoot.shellInset
         + 2.0 * weatherRoot.legacyVerticalInset
+    preferredContentWidth: weatherModel.contentExtentActive
+        ? weatherModel.contentExtentWidth : intrinsicContentWidth
+    preferredContentHeight: weatherModel.contentExtentActive
+        ? weatherModel.contentExtentHeight : intrinsicContentHeight
 
     TapHandler {
         enabled: weatherRoot.weatherModel.viewState !== "missing"
@@ -203,6 +223,7 @@ OverlayWidget {
             }
 
             Item {
+                id: detailsBand
                 objectName: "weatherDetailsBand"
                 width: readyColumn.width
                 height: visible ? detailsColumn.implicitHeight : 0.0
@@ -300,6 +321,7 @@ OverlayWidget {
             }
 
             Item {
+                id: forecastBand
                 objectName: "weatherForecastBand"
                 width: readyColumn.width
                 height: visible ? forecastColumn.implicitHeight : 0.0
@@ -326,6 +348,60 @@ OverlayWidget {
                         font.family: weatherRoot.weatherModel.fontFamily
                         font.pointSize: weatherRoot.weatherModel.detailFontSize
                         font.italic: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        wrap: true
+                        shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                        shadowColor: weatherRoot.weatherModel.textShadowColor
+                        shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
+                        shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
+                    }
+                }
+            }
+
+            Item {
+                objectName: "weatherExtendedForecastBand"
+                width: readyColumn.width
+                height: visible ? extendedForecastColumn.implicitHeight : 0.0
+                visible: weatherRoot.extendedForecastVisible
+
+                Column {
+                    id: extendedForecastColumn
+                    width: parent.width
+                    spacing: 6.0
+
+                    Separator {
+                        width: parent.width
+                        height: 1.0
+                        thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
+                        lineColor: weatherRoot.weatherModel.separatorColor
+                    }
+
+                    ShadowedText {
+                        objectName: "weatherExtendedForecastLabel"
+                        width: parent.width
+                        height: implicitHeight
+                        text: "5-DAY FORECAST"
+                        color: weatherRoot.weatherModel.textColor
+                        font.family: weatherRoot.weatherModel.fontFamily
+                        font.pointSize: weatherRoot.weatherModel.detailFontSize * 0.78
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                        shadowColor: weatherRoot.weatherModel.textShadowColor
+                        shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
+                        shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
+                    }
+
+                    ShadowedText {
+                        objectName: "weatherExtendedForecastText"
+                        width: parent.width
+                        height: implicitHeight
+                        text: weatherRoot.weatherModel.extendedForecastText
+                        color: weatherRoot.weatherModel.textColor
+                        font.family: weatherRoot.weatherModel.fontFamily
+                        font.pointSize: weatherRoot.weatherModel.detailFontSize
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         wrap: true

@@ -452,6 +452,9 @@ class AbandonmentIssuesPresentationModel(QObject):
         self._active = False
         self._retired = False
         self._pending_presentation: AbandonmentPreparedPresentation | None = None
+        # CUSTOM-only logical canvas; Settings-authored geometry remains the
+        # baseline and corner/wheel scaling remains one shared outer transform.
+        self._content_extent: tuple[int, int] | None = None
         self._pending_manual_refresh = False
         self._pending_rotation = False
 
@@ -616,6 +619,35 @@ class AbandonmentIssuesPresentationModel(QObject):
             self._snapshot,
             interaction_enabled=normalized,
         )
+        self.stateChanged.emit()
+        return True
+
+    def set_content_extent(
+        self, width: float | None, height: float | None
+    ) -> bool:
+        """Apply a CUSTOM-only logical canvas for side-axis reflow."""
+
+        if width is None or height is None:
+            return self.clear_content_extent()
+        try:
+            resolved_width = int(round(float(width)))
+            resolved_height = int(round(float(height)))
+        except (TypeError, ValueError):
+            return False
+        base_width, base_height = self.config.authored_size
+        resolved_width = max(int(round(base_width)), min(4000, resolved_width))
+        resolved_height = max(int(round(base_height)), min(4000, resolved_height))
+        extent = (resolved_width, resolved_height)
+        if extent == self._content_extent:
+            return False
+        self._content_extent = extent
+        self.stateChanged.emit()
+        return True
+
+    def clear_content_extent(self) -> bool:
+        if self._content_extent is None:
+            return False
+        self._content_extent = None
         self.stateChanged.emit()
         return True
 
@@ -852,12 +884,32 @@ class AbandonmentIssuesPresentationModel(QObject):
         return self.style.text_shadow_offset_y
 
     @Property(float, notify=stateChanged)
-    def authoredWidth(self) -> float:
+    def baseAuthoredWidth(self) -> float:
         return self.config.authored_size[0]
 
     @Property(float, notify=stateChanged)
-    def authoredHeight(self) -> float:
+    def baseAuthoredHeight(self) -> float:
         return self.config.authored_size[1]
+
+    @Property(bool, notify=stateChanged)
+    def contentExtentActive(self) -> bool:
+        return self._content_extent is not None
+
+    @Property(float, notify=stateChanged)
+    def authoredWidth(self) -> float:
+        return (
+            float(self._content_extent[0])
+            if self._content_extent is not None
+            else self.baseAuthoredWidth
+        )
+
+    @Property(float, notify=stateChanged)
+    def authoredHeight(self) -> float:
+        return (
+            float(self._content_extent[1])
+            if self._content_extent is not None
+            else self.baseAuthoredHeight
+        )
 
 
 class RetainedAbandonmentIssuesPresentation:
@@ -924,9 +976,13 @@ class RetainedAbandonmentIssuesPresentation:
         self,
         payload: Mapping[str, Any],
     ) -> None:
-        # CUSTOM owns outer geometry only. Historical per-value entries must not
-        # mutate the Settings-authored baseline during committed layout replay.
-        del payload
+        # Side handles may carry one logical content box. Historical per-value
+        # artwork/font keys remain ignored: Settings still owns authored values.
+        extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
+        if isinstance(extent, (tuple, list)) and len(extent) == 2:
+            self._model.set_content_extent(extent[0], extent[1])
+        else:
+            self._model.clear_content_extent()
 
     def apply_input_state(self, input_state: object) -> bool:
         if isinstance(input_state, Mapping):

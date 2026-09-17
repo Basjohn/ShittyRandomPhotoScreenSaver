@@ -350,6 +350,7 @@ class WeatherPresentationSnapshot:
     condition_text: str
     temperature_text: str
     forecast_text: str
+    forecast_days: tuple[str, ...]
     error_text: str
     condition_icon_source: str
     rain_text: str
@@ -371,6 +372,7 @@ def _initial_snapshot(
         condition_text="Open Weather Settings" if missing else "Loading weather…",
         temperature_text="",
         forecast_text="",
+        forecast_days=(),
         error_text="",
         condition_icon_source="",
         rain_text="0%",
@@ -398,6 +400,7 @@ class WeatherPresentationModel(QObject):
         self._snapshot = _initial_snapshot(config, style)
         self._active = False
         self._retired = False
+        self._content_extent: tuple[int, int] | None = None
 
     def set_runtime_service(self, runtime_service: Any) -> None:
         """Accept the neutral owner injected by ``WidgetRuntimeManager``."""
@@ -495,6 +498,46 @@ class WeatherPresentationModel(QObject):
     def weather_pending_first_show(self) -> bool:
         return self.is_active and self._snapshot.view_state == "loading"
 
+    def set_content_extent(
+        self, width: float | None, height: float | None
+    ) -> bool:
+        """Apply one CUSTOM-only Weather reflow box."""
+
+        if width is None or height is None:
+            return self.clear_content_extent()
+        try:
+            resolved_width = int(round(float(width)))
+            resolved_height = int(round(float(height)))
+        except (TypeError, ValueError):
+            return False
+        resolved_width = max(420, min(4000, resolved_width))
+        resolved_height = max(220, min(4000, resolved_height))
+        extent = (resolved_width, resolved_height)
+        if extent == self._content_extent:
+            return False
+        self._content_extent = extent
+        self.stateChanged.emit()
+        return True
+
+    def clear_content_extent(self) -> bool:
+        if self._content_extent is None:
+            return False
+        self._content_extent = None
+        self.stateChanged.emit()
+        return True
+
+    @Property(bool, notify=stateChanged)
+    def contentExtentActive(self) -> bool:
+        return self._content_extent is not None
+
+    @Property(float, notify=stateChanged)
+    def contentExtentWidth(self) -> float:
+        return float(self._content_extent[0]) if self._content_extent is not None else 0.0
+
+    @Property(float, notify=stateChanged)
+    def contentExtentHeight(self) -> float:
+        return float(self._content_extent[1]) if self._content_extent is not None else 0.0
+
     def request_refresh(self) -> bool:
         """Request the existing runtime owner to perform a manual refresh."""
 
@@ -571,6 +614,11 @@ class WeatherPresentationModel(QObject):
                 condition_text=condition_text,
                 temperature_text=f"{temp:.0f}°C",
                 forecast_text=str(data.get("forecast") or ""),
+                forecast_days=tuple(
+                    str(row).strip()
+                    for row in (data.get("forecast_days") or ())[:5]
+                    if str(row).strip()
+                ) if isinstance(data.get("forecast_days"), (tuple, list)) else (),
                 error_text="",
                 condition_icon_source=_condition_icon_source(
                     weather_code, condition_text, is_day_value
@@ -625,6 +673,21 @@ class WeatherPresentationModel(QObject):
     @Property(str, notify=stateChanged)
     def forecastText(self) -> str:
         return self._snapshot.forecast_text
+
+    @Property(str, notify=stateChanged)
+    def extendedForecastText(self) -> str:
+        return "\n".join(self._snapshot.forecast_days)
+
+    @Property(bool, notify=stateChanged)
+    def extendedForecastAvailable(self) -> bool:
+        """Whether retained data can populate Weather's expanded forecast band.
+
+        The presentation owns the geometry admission threshold because only QML
+        knows the current compact intrinsic height. This prevents a horizontal-only
+        CUSTOM edit from accidentally revealing richer vertical content.
+        """
+
+        return bool(self.showForecast and self._snapshot.forecast_days)
 
     @Property(str, notify=stateChanged)
     def errorText(self) -> str:
@@ -792,9 +855,13 @@ class RetainedWeatherPresentation:
         self,
         payload: Mapping[str, object],
     ) -> None:
-        # Current-format older saves may contain per-value sizes. Geometry now
-        # owns CUSTOM scaling; replay must not rewrite the Settings baseline.
-        del payload
+        # Side handles may carry one logical content box. Current-format older
+        # per-value size keys stay ignored so Settings retains authored values.
+        extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
+        if isinstance(extent, (tuple, list)) and len(extent) == 2:
+            self._model.set_content_extent(extent[0], extent[1])
+        else:
+            self._model.clear_content_extent()
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

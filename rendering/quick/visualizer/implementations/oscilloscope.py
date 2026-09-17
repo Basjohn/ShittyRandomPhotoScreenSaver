@@ -82,6 +82,7 @@ class QuickOscilloscopeRenderer:
     def __init__(self) -> None:
         self._program = 0
         self._uniforms: dict[str, int] = {}
+        self._last_content_rotation_quarters: int | None = None
 
     @property
     def has_resources(self) -> bool:
@@ -95,21 +96,12 @@ class QuickOscilloscopeRenderer:
             raise TypeError("Oscilloscope renderer received another mode frame")
 
         presentation = snapshot.presentation
-        outer_x, outer_y, _outer_width, _outer_height = presentation.outer_rect
-        content_x, content_y, content_width, content_height = (
-            presentation.content_rect
-        )
-        local_content_rect = (
-            content_x - outer_x,
-            content_y - outer_y,
-            content_width,
-            content_height,
-        )
+        local_content_rect = frame.logical_content_rect
         layout = compute_quick_oscilloscope_layout(
             local_content_rect=local_content_rect,
             visual_scale=presentation.uniform_visual_scale,
             viewport_height_scale=(
-                presentation.viewport_extent[1]
+                presentation.logical_viewport_extent[1]
                 / presentation.baseline_viewport_size[1]
             ),
         )
@@ -156,7 +148,14 @@ class QuickOscilloscopeRenderer:
             frame.matrix_values,
         )
         gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform2f(uniforms["u_resolution"], *frame.logical_size)
+        content_rotation_quarters = frame.content_rotation_quarters
+        if content_rotation_quarters != self._last_content_rotation_quarters:
+            gl.glUniform1i(
+                uniforms["uContentRotationQuarters"],
+                content_rotation_quarters,
+            )
+            self._last_content_rotation_quarters = content_rotation_quarters
+        gl.glUniform2f(uniforms["u_resolution"], *frame.oriented_logical_size)
         gl.glUniform1f(uniforms["u_dpr"], presentation.dpr)
         gl.glUniform2f(uniforms["u_viewport_origin_px"], 0.0, 0.0)
         gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
@@ -282,6 +281,7 @@ class QuickOscilloscopeRenderer:
             return
         gl.glDeleteProgram(self._program)
         self._program = 0
+        self._last_content_rotation_quarters = None
         self._uniforms.clear()
 
     def _initialize(self) -> None:
@@ -298,6 +298,7 @@ class QuickOscilloscopeRenderer:
             required = (
                 "uMatrix",
                 "uItemSize",
+                "uContentRotationQuarters",
                 "u_resolution",
                 "u_dpr",
                 "u_viewport_origin_px",

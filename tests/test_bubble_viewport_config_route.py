@@ -77,8 +77,8 @@ def _controller():
     )
 
 
-def _commit(controller, extent):
-    """Simulate the ordinary presentation publication committing an extent."""
+def _commit(controller, extent, *, content_rotation_quarters=0):
+    """Simulate ordinary presentation publication committing CUSTOM metrics."""
 
     controller.commit_presentation_metrics(
         resolve_visualizer_presentation(
@@ -86,6 +86,7 @@ def _commit(controller, extent):
             display_size=(1920.0, 1080.0),
             outer_origin=(40.0, 60.0),
             viewport_extent=extent,
+            content_rotation_quarters=content_rotation_quarters,
         )
     )
 
@@ -113,6 +114,65 @@ def test_custom_override_takes_precedence_over_committed_extent_and_coalesces() 
     for bad in ((0.0, 280.0), (420.0, -1.0)):
         with pytest.raises(ValueError):
             controller.set_custom_viewport_override(bad)
+
+
+def test_custom_rotation_swaps_only_effective_logical_extent_and_survives_mode_isolation() -> None:
+    controller = _controller()
+    controller.set_custom_viewport_override((630.0, 280.0), 1)
+
+    assert controller.presentation_physical_viewport_extent == (630.0, 280.0)
+    assert controller.presentation_viewport_extent == (280.0, 630.0)
+    assert controller.presentation_content_rotation_quarters == 1
+
+    # Save promotes both physical extent and orientation; retiring CUSTOM lands
+    # on those committed metrics rather than manufacturing another geometry.
+    _commit(controller, (630.0, 280.0), content_rotation_quarters=1)
+    controller.set_custom_viewport_override(None)
+    assert controller.committed_viewport_extent == (630.0, 280.0)
+    assert controller.committed_content_rotation_quarters == 1
+    assert controller.presentation_viewport_extent == (280.0, 630.0)
+
+    # Experimental Sphere is explicitly isolated: it ignores the layout token
+    # without deleting it, so returning to an accepted carded mode restores it.
+    controller.set_mode("sphere")
+    assert controller.presentation_content_rotation_quarters == 0
+    assert controller.presentation_viewport_extent == (630.0, 280.0)
+    controller.set_mode("bubble")
+    assert controller.presentation_content_rotation_quarters == 1
+    assert controller.presentation_viewport_extent == (280.0, 630.0)
+
+
+
+def test_committed_and_custom_orientation_are_selected_per_mode_without_new_cadence() -> None:
+    controller = _controller()
+    controller.hydrate_committed_layout_metrics(
+        (630.0, 280.0),
+        {"bubble": 1, "spectrum": 2, "devcurve": 3},
+    )
+
+    assert controller.presentation_content_rotation_quarters == 1
+    controller.set_mode("spectrum")
+    assert controller.presentation_content_rotation_quarters == 2
+    assert controller.presentation_viewport_extent == (630.0, 280.0)
+    controller.set_mode("devcurve")
+    assert controller.presentation_content_rotation_quarters == 3
+    assert controller.presentation_viewport_extent == (280.0, 630.0)
+    controller.set_mode("oscilloscope")
+    assert controller.presentation_content_rotation_quarters == 0
+
+    controller.set_custom_viewport_override(
+        (630.0, 280.0),
+        {"bubble": 2, "spectrum": 3},
+    )
+    controller.set_mode("bubble")
+    assert controller.presentation_content_rotation_quarters == 2
+    controller.set_mode("spectrum")
+    assert controller.presentation_content_rotation_quarters == 3
+    controller.set_mode("sphere")
+    assert controller.presentation_content_rotation_quarters == 0
+    controller.set_custom_viewport_override(None)
+    controller.set_mode("bubble")
+    assert controller.presentation_content_rotation_quarters == 1
 
 
 def test_cancel_restores_committed_and_save_promotes_committed() -> None:

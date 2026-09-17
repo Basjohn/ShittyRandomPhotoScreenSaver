@@ -20,6 +20,9 @@ from core.settings.visualizer_mode_registry import (
     VisualizerClipPolicy,
     VisualizerShellPolicy,
 )
+from widgets.spotify_visualizer.presentation_orientation import (
+    normalize_content_rotation_quarters,
+)
 
 
 RectTuple: TypeAlias = tuple[float, float, float, float]
@@ -712,6 +715,10 @@ class ResolvedVisualizerPresentation:
     scene_fade: float
     content_fade: float
     border_width: float
+    # CUSTOM layout-owned content orientation. The persisted physical viewport
+    # remains ``viewport_extent``; accepted modes derive their logical world from
+    # this token without changing the outer card geometry.
+    content_rotation_quarters: int = 0
     shell_style: FrozenFields = FrozenFields()
 
     def __post_init__(self) -> None:
@@ -737,6 +744,11 @@ class ResolvedVisualizerPresentation:
             "viewport_extent",
             _size_tuple(self.viewport_extent, name="viewport extent"),
         )
+        object.__setattr__(
+            self,
+            "content_rotation_quarters",
+            normalize_content_rotation_quarters(self.content_rotation_quarters),
+        )
         for name in (
             "baseline_aspect_ratio",
             "uniform_visual_scale",
@@ -753,7 +765,10 @@ class ResolvedVisualizerPresentation:
             abs_tol=1e-12,
         ):
             raise ValueError("visualizer baseline aspect ratio is not canonical")
-        expected_aspect = self.viewport_extent[0] / self.viewport_extent[1]
+        if self.content_rotation_quarters & 1:
+            expected_aspect = self.viewport_extent[1] / self.viewport_extent[0]
+        else:
+            expected_aspect = self.viewport_extent[0] / self.viewport_extent[1]
         if not math.isclose(
             self.current_aspect_ratio,
             expected_aspect,
@@ -777,8 +792,16 @@ class ResolvedVisualizerPresentation:
         )
 
     @property
-    def content_viewport_size(self) -> SizeTuple:
+    def logical_viewport_extent(self) -> SizeTuple:
+        # Preserve the pre-feature steady-state tuple on 0°/180°; only odd
+        # quarter-turns need a derived allocation.
+        if self.content_rotation_quarters & 1:
+            return (self.viewport_extent[1], self.viewport_extent[0])
         return self.viewport_extent
+
+    @property
+    def content_viewport_size(self) -> SizeTuple:
+        return self.logical_viewport_extent
 
 
 @dataclass(frozen=True, slots=True)
