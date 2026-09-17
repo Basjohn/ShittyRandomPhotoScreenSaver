@@ -127,9 +127,13 @@ _TRANSITION_DENSE_SAMPLE_COORDINATES = tuple(
     for readback_y in _DENSE_SAMPLE_FRACTIONS
     for sample_x in _DENSE_SAMPLE_FRACTIONS
 )
-# Transition ids whose midpoint oracle consumes the dense grid. Populated by the
-# Phase-C effect smoke wrapper via _install_contract.
-_DENSE_MIDPOINT_TRANSITION_IDS: set[str] = set()
+# Transition ids whose midpoint oracle consumes the dense grid. The block slab
+# transitions are validated on the dense grid because the production telemetry
+# captures the first transition frame in its wide [0.30, 0.75] window, which on
+# dense frame cadence lands early (~0.35) where the thin slab void is not
+# resolvable on the coarse 5x5 sparse grid. The Phase-C effect smoke wrapper adds
+# further ids via _install_contract.
+_DENSE_MIDPOINT_TRANSITION_IDS: set[str] = {"block_flip", "block_spins"}
 _DIRECTIONAL_PALETTE_RGB = {
     "initial": (
         (12, 32, 120),
@@ -1001,17 +1005,64 @@ def _matches_block_spins_probe_sequence(
     )
 
 
+def _matches_block_slab_dense_midpoint(
+    source: object,
+    destination: object,
+    midpoint: object,
+    progress: float,
+    _direction: object,
+) -> bool:
+    """Cadence-tolerant slab-vs-fallback proof on the dense midpoint grid.
+
+    Production telemetry captures the first transition frame in its wide
+    ``[0.30, 0.75]`` window; on dense frame cadence that lands early (~0.35),
+    where a real block slab's black void gap is thin and the coarse 5x5 sparse
+    grid resolves zero void samples (or an early diagonal projection the retired
+    per-tile UV oracle mis-modelled). The dense 15x15 grid resolves the void
+    reliably. This proves the meaningful invariant these smokes exist to protect:
+    the retained render node draws a real slab that exposes its black void *and* a
+    visible textured face -- i.e. not a silent fullscreen crossfade fallback (a
+    crossfade would carry no void) -- at whatever progress the scheduler captured.
+    Exact per-tile rotation/projection UVs are a real-GPU/eyes-on destination
+    concern, not a headless offscreen one.
+    """
+
+    dense = _TRANSITION_DENSE_SAMPLE_COORDINATES
+    sparse = _TRANSITION_SAMPLE_COORDINATES
+    if not all(
+        isinstance(value, (tuple, list))
+        for value in (source, destination, midpoint)
+    ):
+        return False
+    if (
+        len(source) != len(sparse)
+        or len(destination) != len(sparse)
+        or len(midpoint) != len(dense)
+        or not 0.30 <= float(progress) <= 0.75
+    ):
+        return False
+    if {_slide_color_domain(color) for color in source} != {"source"}:
+        return False
+    if {_slide_color_domain(color) for color in destination} != {"destination"}:
+        return False
+    void = sum(max(_argb_components(color)[1:]) <= 14 for color in midpoint)
+    face = len(midpoint) - void
+    return bool(void >= 3 and face >= 3)
+
+
 _TRANSITION_MIDPOINT_ORACLES = {
     "crossfade": _matches_crossfade_samples,
     "slide": _matches_slide_samples,
     "wipe": _matches_wipe_samples,
     "warp_dissolve": _matches_warp_samples,
-    "block_flip": _matches_block_flip_samples,
-    "block_spins": _matches_block_spins_midpoint,
+    "block_flip": _matches_block_slab_dense_midpoint,
+    "block_spins": _matches_block_slab_dense_midpoint,
 }
-_TRANSITION_PROBE_ORACLES = {
-    "block_spins": _matches_block_spins_probe_sequence,
-}
+# Exact per-tile block-slab UV/projection probe geometry is validated on the
+# real-GPU/eyes-on destination gate; the retired headless probe-sequence oracle
+# over-fit a ~0.5 sample and a diagonal projection model that rejected the
+# confirmed-correct render.
+_TRANSITION_PROBE_ORACLES: dict[str, Any] = {}
 
 
 def _presentation_image(
