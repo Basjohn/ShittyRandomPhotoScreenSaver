@@ -146,4 +146,8 @@ A deactivated family remains deactivated even if a saved layout contained it.
 Close admission before retirement. Fence stale generation/request state. Destroy custom GL on the legal render/context
 owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nested event loops.
 
+**System-audio dormancy.** The Core Audio endpoint (`core/media/system_mute.py`) and the mute/system-volume runtime are
+admitted only behind the mute-button setting, on the UI thread. Do not acquire the endpoint, register callbacks or run that
+runtime while the feature is disabled; the End/PgUp/PgDown system-audio keys are gated by that same admission by design.
+
 The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69. It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
