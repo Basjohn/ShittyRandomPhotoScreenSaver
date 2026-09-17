@@ -33,9 +33,13 @@ def test_get_current_weather_uses_documented_current_block(
         },
         "hourly": {"precipitation_probability": [15]},
         "daily": {
-            "temperature_2m_max": [20.0, 23.0],
-            "temperature_2m_min": [11.0, 13.0],
-            "weathercode": [2, 3],
+            "time": [
+                "2026-09-18", "2026-09-19", "2026-09-20",
+                "2026-09-21", "2026-09-22", "2026-09-23",
+            ],
+            "temperature_2m_max": [20.0, 23.0, 24.0, 25.0, 21.0, 19.0],
+            "temperature_2m_min": [11.0, 13.0, 14.0, 15.0, 12.0, 10.0],
+            "weathercode": [2, 3, 1, 0, 61, 63],
         },
     }
     mock_get.side_effect = [geocode_response, weather_response]
@@ -49,6 +53,9 @@ def test_get_current_weather_uses_documented_current_block(
     assert weather["windspeed"] == 12.0
     assert weather["humidity"] == 48
     assert weather["precipitation_probability"] == 15
+    assert len(weather["forecast_days"]) == 5
+    assert weather["forecast_days"][0].startswith("Sat: 13°-23°C")
     params = mock_get.call_args_list[1].kwargs["params"]
     assert "current_weather" not in params
     assert params["current"].startswith("temperature_2m,weather_code,wind_speed_10m")
+    assert params["forecast_days"] == 6

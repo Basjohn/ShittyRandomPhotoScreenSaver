@@ -70,6 +70,7 @@ Item {
             required property bool resizable
             required property bool viewportResizeCapable
             required property bool sizeResetCapable
+            required property bool contentRotationCapable
             required property real resizeScale
             required property bool canTransferLeft
             required property bool canTransferRight
@@ -95,13 +96,6 @@ Item {
                 return edges
             }
 
-            // Gmail/Reddit establish the shared branded-header row at an authored
-            // 32 px centreline (14 px card inset + 18 px half-height).  The edit
-            // overlay lives outside the widget's retained transform, so project
-            // the session-owned absolute CUSTOM scale here to keep the X on that
-            // same row for every widget, including families with no refresh glyph.
-            readonly property real editChromeHeaderCenterY: 32.0 * Math.max(0.05, resizeScale)
-
             objectName: "customLayoutEditFrame-" + widgetId
             x: geometryX
             y: geometryY
@@ -121,17 +115,13 @@ Item {
                 width: 22
                 height: 22
                 radius: width / 2
-                // Keep the established right-side slot (immediately left of a
-                // refresh accessory where present), but align its centre to the
-                // shared header/logo/refresh row at the current CUSTOM scale.
-                x: editFrame.width - width - 34
-                y: Math.max(
-                    1.0,
-                    Math.min(
-                        Math.max(1.0, editFrame.height - height - 1.0),
-                        editFrame.editChromeHeaderCenterY - height / 2.0
-                    )
-                )
+                // One consistent edit-chrome close slot: proper top-right,
+                // independent of family header/refresh layout. Keep it above
+                // widget content so an underlying refresh/click target can never
+                // receive the same press.
+                x: Math.max(1.0, editFrame.width - width - 10.0)
+                y: Math.max(1.0, Math.min(10.0, editFrame.height - height - 1.0))
+                z: 80
                 antialiasing: true
                 color: customLayoutOverlay.closeButtonColor
                 border.width: 1
@@ -142,7 +132,7 @@ Item {
                 // a small circle, which is what looked deformed before.
                 Item {
                     anchors.centerIn: parent
-                    width: closeControl.width * 0.44
+                    width: closeControl.width * 0.484
                     height: width
                     Rectangle {
                         anchors.centerIn: parent
@@ -167,7 +157,50 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: customLayoutOverlay.sessionModel.closeItem(editFrame.index)
+                    // Explicitly consume the full pointer sequence. Some widgets
+                    // have live refresh/action targets beneath this top-right
+                    // edit-chrome slot; close must never click through to them.
+                    propagateComposedEvents: false
+                    onPressed: function(mouse) { mouse.accepted = true }
+                    onClicked: function(mouse) {
+                        mouse.accepted = true
+                        customLayoutOverlay.sessionModel.closeItem(editFrame.index)
+                    }
+                }
+            }
+
+            Rectangle {
+                id: rotateContentControl
+                objectName: "customLayoutRotateContent-" + editFrame.widgetId
+                visible: editFrame.contentRotationCapable
+                width: 22
+                height: 22
+                radius: width / 2
+                // Keep the turn action in the lower-right edit-chrome slot,
+                // inset from the viewport edge/corner resize handles so the
+                // two gestures never compete for the same pointer region.
+                x: Math.max(1.0, editFrame.width - width - 10.0)
+                y: Math.max(1.0, editFrame.height - height - 10.0)
+                z: 40
+                antialiasing: true
+                color: customLayoutOverlay.closeButtonColor
+                border.width: 1
+                border.color: customLayoutOverlay.closeButtonBorderColor
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "↻"
+                    color: customLayoutOverlay.closeButtonGlyphColor
+                    font.pixelSize: 15
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: customLayoutOverlay.sessionModel.rotateContent(editFrame.index)
                 }
             }
 
@@ -208,8 +241,8 @@ Item {
             MouseArea {
                 id: moveArea
                 anchors.fill: parent
-                // Keep the move zone clear of the scale-aware header-row close
-                // control so its full circle stays clickable at every size.
+                // Keep the move zone clear of the top-right close control so its
+                // full circle stays clickable at every size.
                 anchors.topMargin: Math.max(32.0, closeControl.y + closeControl.height + 2.0)
                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 property real pressOffsetX: 0

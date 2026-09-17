@@ -32,6 +32,9 @@ class VisualizerModePresentationPolicy:
     shell_policy: VisualizerShellPolicy
     clip_policy: VisualizerClipPolicy
     viewport_resize_capable: bool
+    # CUSTOM quarter-turn orientation is a presentation/layout capability.
+    # Accepted carded modes opt in; experimental Sphere remains isolated.
+    content_rotation_capable: bool = False
 
 
 _REFLOWING_CARDED_POLICY = VisualizerModePresentationPolicy(
@@ -43,6 +46,7 @@ _REFLOWING_CARDED_POLICY = VisualizerModePresentationPolicy(
     # installed eyes-on acceptance is deferred until Quick is production
     # authoritative after H.
     viewport_resize_capable=True,
+    content_rotation_capable=True,
 )
 
 @dataclass(frozen=True)

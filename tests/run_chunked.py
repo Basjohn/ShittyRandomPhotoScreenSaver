@@ -106,6 +106,7 @@ DESTINATION_PROFILE = (
     "test_qtquick_visualizer_bubble.py",
     "test_qtquick_visualizer_devcurve.py",
     "test_qtquick_visualizer_geometry.py",
+    "test_visualizer_presentation_orientation.py",
     "test_qtquick_visualizer_fade_authority.py",
     "test_qtquick_runtime_reality.py",
     "test_media_generation_recreation.py",

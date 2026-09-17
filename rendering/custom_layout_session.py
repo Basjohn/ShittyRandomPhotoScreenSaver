@@ -16,10 +16,10 @@ ViewportExtent = tuple[float, float]
 def normalize_viewport_extent(value: object) -> ViewportExtent | None:
     """Return a canonical positive ``(world_width, world_height)`` pair or None.
 
-    The extent is the visualizer's logical/render world before uniform visual
-    scale.  ``None`` means "no independent extent committed"; callers fall back
-    to the canonical baseline aspect.  This is deliberately generic session
-    state: only viewport-resize-capable items ever populate it.
+    The extent is the Visualizer's persisted physical CUSTOM world before
+    uniform visual scale and before any discrete content quarter-turn. ``None``
+    means "no independent extent committed"; callers fall back to the canonical
+    baseline aspect. Only viewport-resize-capable items populate it.
     """
 
     if value is None:
@@ -96,12 +96,17 @@ class CustomLayoutSessionItem:
     # Viewport-extent resize working state. ``resize_scale`` above stays the
     # uniform wheel operation and is never repurposed as extent; Visualizer side
     # handles change one world axis and Visualizer corners change both axes.
-    # These carry the visualizer's logical world width/height so uniform scale
-    # and viewport extent resolve independently; ``None`` means the canonical
-    # baseline aspect. Only viewport-resize-capable items populate them.
+    # These carry the Visualizer's physical edited world width/height so uniform
+    # scale and viewport extent resolve independently; content orientation may
+    # derive a swapped effective logical world downstream. ``None`` means the
+    # canonical baseline aspect. Only viewport-resize-capable items populate them.
     viewport_resize_capable: bool = False
     baseline_viewport_extent: ViewportExtent | None = None
     current_viewport_extent: ViewportExtent | None = None
+    # Optional discrete content orientation affordance. The actual persisted
+    # token remains inside size_payload so layout slots and persistence keep one
+    # existing carrier rather than adding a parallel schema.
+    content_rotation_capable: bool = False
     # Ordinary content-extent resize working state (distinct from the visualizer
     # viewport above). ``content_extent_axes`` names which side axes reflow the
     # widget's logical content box ("horizontal" and/or "vertical"); corners stay
@@ -140,6 +145,7 @@ class CustomLayoutSessionItem:
             self.resize_scale = self.baseline_resize_scale
         self.removed = bool(self.removed)
         self.viewport_resize_capable = bool(self.viewport_resize_capable)
+        self.content_rotation_capable = bool(self.content_rotation_capable)
         self.baseline_viewport_extent = normalize_viewport_extent(
             self.baseline_viewport_extent
         )

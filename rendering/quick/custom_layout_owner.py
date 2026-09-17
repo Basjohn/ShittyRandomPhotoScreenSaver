@@ -70,6 +70,14 @@ from rendering.widget_descriptors import (
     widget_writes_custom_monitor_key,
     widget_writes_custom_position_key,
 )
+from widgets.spotify_visualizer.presentation_orientation import (
+    CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
+    CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,
+    normalize_content_rotation_by_mode,
+    resolve_content_rotation_for_mode,
+    rotate_quarters_clockwise,
+    set_content_rotation_for_mode,
+)
 from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
@@ -222,6 +230,7 @@ class QuickCustomLayoutOwner:
                     ),
                     display_transfer_handler=self.transfer_display,
                     size_reset_handler=self.restore_item_size,
+                    content_rotation_handler=self.rotate_visualizer_content,
                 )
         except Exception:
             for binding in bindings.values():
@@ -1073,6 +1082,16 @@ class QuickCustomLayoutOwner:
             )
             authored_payload.pop("content_extent", None)
 
+            content_extent_minimum_size = descriptor.content_extent_minimum_size
+            if descriptor.content_extent_floor_at_authored_size:
+                configured_min_width, configured_min_height = (
+                    content_extent_minimum_size or (1, 1)
+                )
+                content_extent_minimum_size = (
+                    max(int(configured_min_width), authored_width),
+                    max(int(configured_min_height), authored_height),
+                )
+
             item = CustomLayoutSessionItem(
                 source_key=key,
                 model_identity=widget_id,
@@ -1089,7 +1108,7 @@ class QuickCustomLayoutOwner:
                     widget_id, widgets
                 ),
                 content_extent_axes=content_axes,
-                content_extent_minimum_size=descriptor.content_extent_minimum_size,
+                content_extent_minimum_size=content_extent_minimum_size,
                 baseline_content_extent=committed_content_extent,
                 size_reset_capable=descriptor.requires_size_reset_affordance,
                 authored_reference_size=(authored_width, authored_height),
@@ -1133,6 +1152,14 @@ class QuickCustomLayoutOwner:
         }
         if extent is not None:
             payload["viewport_extent"] = [extent[0], extent[1]]
+        # Preserve all carded-mode orientations even when the currently selected
+        # experimental mode (Sphere) does not consume or expose them. Sphere
+        # therefore renders at 0° without erasing dormant per-mode layout state.
+        rotations = normalize_content_rotation_by_mode(
+            owner.controller.committed_content_rotations
+        )
+        if rotations:
+            payload[CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY] = rotations
         key = CustomLayoutKey("spotify_visualizer", binding.identity)
         item = CustomLayoutSessionItem(
             source_key=key,
@@ -1149,6 +1176,9 @@ class QuickCustomLayoutOwner:
             ),
             viewport_resize_capable=True,
             baseline_viewport_extent=extent,
+            content_rotation_capable=bool(
+                owner.controller.presentation_policy.content_rotation_capable
+            ),
             size_reset_capable=descriptor.requires_size_reset_affordance,
             authored_reference_size=(
                 float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0])
@@ -1167,6 +1197,47 @@ class QuickCustomLayoutOwner:
         self._visualizer_pixels_per_world[key] = (
             self._pixels_per_world_from_geometry(global_rect, extent)
         )
+
+    def rotate_visualizer_content(self, item: CustomLayoutSessionItem) -> bool:
+        """Advance one eligible Visualizer CUSTOM content orientation by 90°."""
+
+        if (
+            not self._active
+            or self._session is None
+            or item.model_identity != "spotify_visualizer"
+            or not item.content_rotation_capable
+        ):
+            return False
+        owner, _unit = self._visualizer_provider()
+        if owner is None:
+            return False
+        # The session role is an admission snapshot. Re-check the live mode
+        # capability at the action boundary so an unusual mode switch while
+        # Edit is open can never route a stale rotate click into Sphere.
+        if not owner.controller.presentation_policy.content_rotation_capable:
+            return False
+        mode_id = owner.controller.mode_id
+        rotations = normalize_content_rotation_by_mode(
+            item.current_size_payload.get(CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, {})
+        )
+        current = resolve_content_rotation_for_mode(
+            rotations,
+            mode_id,
+            legacy_value=item.current_size_payload.get(
+                CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, 0
+            ),
+        )
+        next_rotation = rotate_quarters_clockwise(current)
+        rotations = set_content_rotation_for_mode(rotations, mode_id, next_rotation)
+        payload = dict(item.current_size_payload)
+        payload.pop(CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, None)
+        if rotations:
+            payload[CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY] = rotations
+        else:
+            payload.pop(CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, None)
+        item.current_size_payload = payload
+        self._session.notify_item_changed(item)
+        return True
 
     def restore_item_size(self, item: CustomLayoutSessionItem) -> bool:
         """Restore one item to authored size/shape while remaining in CUSTOM.
@@ -1212,6 +1283,13 @@ class QuickCustomLayoutOwner:
                 "width": width,
                 "height": height,
             }
+            rotations = normalize_content_rotation_by_mode(
+                item.current_size_payload.get(
+                    CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, {}
+                )
+            )
+            if rotations:
+                payload[CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY] = rotations
             item.restore_authored_size(
                 rect,
                 size_payload=payload,
@@ -1861,6 +1939,14 @@ class QuickCustomLayoutOwner:
                 payload["viewport_extent"] = [extent[0], extent[1]]
             else:
                 payload.pop("viewport_extent", None)
+            rotations = normalize_content_rotation_by_mode(
+                payload.get(CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, {})
+            )
+            payload.pop(CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, None)
+            if rotations:
+                payload[CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY] = rotations
+            else:
+                payload.pop(CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, None)
         # Persist the content-extent box only once a side drag has established
         # one (current_content_extent is None until then), so a uniform-only edit
         # never pins a box and the family keeps its config-derived authored size.
@@ -2107,6 +2193,9 @@ class QuickCustomLayoutOwner:
                 owner.commit_live_custom_layout(
                     local_rect=(local.x, local.y, local.width, local.height),
                     viewport_extent=extent,
+                    content_rotation_by_mode=item.current_size_payload.get(
+                        CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, {}
+                    ),
                 )
                 continue
             if item.current_display_identity != item.source_key.display_identity:

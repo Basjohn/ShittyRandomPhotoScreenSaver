@@ -2570,6 +2570,11 @@ class DisplayManager(QObject):
                     denormalize_local_rect(custom_entry.rect, screen_size),
                     screen_size,
                 )
+                from widgets.spotify_visualizer.presentation_orientation import (
+                    CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
+                    CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,
+                )
+
                 owner.configure_committed_layout(
                     local_rect=(
                         float(local_rect.x()),
@@ -2579,6 +2584,12 @@ class DisplayManager(QObject):
                     ),
                     viewport_extent=normalize_viewport_extent(
                         custom_entry.size_payload.get("viewport_extent")
+                    ),
+                    content_rotation_by_mode=custom_entry.size_payload.get(
+                        CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
+                        custom_entry.size_payload.get(
+                            CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, 0
+                        ),
                     ),
                 )
             # Ordinary placement is resolved before start so the first retained

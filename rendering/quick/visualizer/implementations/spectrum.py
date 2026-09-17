@@ -119,6 +119,7 @@ class QuickSpectrumRenderer:
     def __init__(self) -> None:
         self._program = 0
         self._uniforms: dict[str, int] = {}
+        self._last_content_rotation_quarters: int | None = None
 
     @property
     def has_resources(self) -> bool:
@@ -140,19 +141,10 @@ class QuickSpectrumRenderer:
         )
 
         presentation = snapshot.presentation
-        outer_x, outer_y, _outer_width, _outer_height = presentation.outer_rect
-        content_x, content_y, content_width, content_height = (
-            presentation.content_rect
-        )
-        local_content_rect = (
-            content_x - outer_x,
-            content_y - outer_y,
-            content_width,
-            content_height,
-        )
+        local_content_rect = frame.logical_content_rect
         layout = compute_quick_spectrum_layout(
             local_content_rect=local_content_rect,
-            viewport_extent=presentation.viewport_extent,
+            viewport_extent=presentation.logical_viewport_extent,
             visual_scale=presentation.uniform_visual_scale,
             bar_count=count,
         )
@@ -198,7 +190,14 @@ class QuickSpectrumRenderer:
             frame.matrix_values,
         )
         gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform2f(uniforms["u_resolution"], *frame.logical_size)
+        content_rotation_quarters = frame.content_rotation_quarters
+        if content_rotation_quarters != self._last_content_rotation_quarters:
+            gl.glUniform1i(
+                uniforms["uContentRotationQuarters"],
+                content_rotation_quarters,
+            )
+            self._last_content_rotation_quarters = content_rotation_quarters
+        gl.glUniform2f(uniforms["u_resolution"], *frame.oriented_logical_size)
         gl.glUniform1f(uniforms["u_dpr"], presentation.dpr)
         gl.glUniform2f(uniforms["u_viewport_origin_px"], 0.0, 0.0)
         gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
@@ -290,6 +289,7 @@ class QuickSpectrumRenderer:
             return
         gl.glDeleteProgram(self._program)
         self._program = 0
+        self._last_content_rotation_quarters = None
         self._uniforms.clear()
 
     def _initialize(self) -> None:
@@ -306,6 +306,7 @@ class QuickSpectrumRenderer:
             required = (
                 "uMatrix",
                 "uItemSize",
+                "uContentRotationQuarters",
                 "u_resolution",
                 "u_dpr",
                 "u_viewport_origin_px",

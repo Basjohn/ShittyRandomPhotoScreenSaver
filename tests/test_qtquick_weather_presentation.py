@@ -158,6 +158,13 @@ def _sample(**overrides):
         "humidity": 68,
         "windspeed": 12.6,
         "forecast": "Tomorrow: 19°C, light rain",
+        "forecast_days": [
+            "Fri: 19°-24°C / Light Rain",
+            "Sat: 18°-25°C / Partly Cloudy",
+            "Sun: 17°-26°C / Clear Sky",
+            "Mon: 16°-23°C / Overcast",
+            "Tue: 15°-22°C / Moderate Rain",
+        ],
     }
     values.update(overrides)
     return values
@@ -256,6 +263,12 @@ def test_weather_model_is_stable_runtime_consumer_for_loading_ready_and_cached_e
     assert model.windText == "12.6 km/h"
     assert model.detailIconSize == 30.0
     assert model.forecastText == "Tomorrow: 19°C, light rain"
+    assert model.extendedForecastText.count("\n") == 4
+    assert model.extendedForecastAvailable is True
+    assert model.set_content_extent(760, 420) is True
+    assert model.extendedForecastAvailable is True
+    assert model.clear_content_extent() is True
+    assert model.extendedForecastAvailable is True
     assert model.conditionIconSource.endswith("partly-cloudy-day.png")
     assert "/images/weather/presented/" in model.conditionIconSource.replace("\\", "/")
     assert "/images/weather/presented/detail/" in model.rainIconSource.replace("\\", "/")
@@ -446,6 +459,30 @@ def test_weather_family_uses_current_scene_host_and_mutates_without_recreation(q
         assert _find_visual_item(item, "weatherReadyContent") is not None
         assert _find_visual_item(item, "weatherConditionIconRight") is not None
         assert model.viewState == "ready"
+
+        compact_height = float(item.property("preferredContentHeight"))
+        presentation._apply_custom_layout_size_payload(
+            {"content_extent": [760.0, compact_height]}
+        )
+        qt_app.processEvents()
+        extended = _find_visual_item(item, "weatherExtendedForecastBand")
+        assert extended is not None and extended.isVisible() is False
+        assert model.contentExtentActive is True
+        assert model.contentExtentWidth == pytest.approx(760.0)
+        assert model.contentExtentHeight == pytest.approx(compact_height)
+
+        expanded_height = compact_height + 320.0
+        presentation._apply_custom_layout_size_payload(
+            {"content_extent": [760.0, expanded_height]}
+        )
+        qt_app.processEvents()
+        assert extended.isVisible() is True
+        assert model.contentExtentHeight == pytest.approx(expanded_height)
+
+        presentation._apply_custom_layout_size_payload({})
+        qt_app.processEvents()
+        assert extended.isVisible() is False
+        assert model.contentExtentActive is False
 
         next_config = replace(
             model.config,

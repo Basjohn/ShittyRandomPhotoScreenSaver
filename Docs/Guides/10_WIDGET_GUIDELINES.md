@@ -1,6 +1,6 @@
 # Ordinary Widget Authoring Guide
 
-Last updated: 2026-09-13
+Last updated: 2026-09-18
 
 Canonical guide for adding or deeply refactoring a **non-Visualizer runtime widget** in the accepted Qt
 Quick architecture. This guide is based on the landed retained Quick families: Clock, Weather, Media, Reddit/Reddit2,
@@ -283,9 +283,11 @@ CUSTOM geometry is not their authority.
 
 ### Optional side-axis content reflow
 
-Uniform whole-card resizing remains the default. Opt into `content_extent_axes` only when extra horizontal/vertical
-playroom has a clear presentation benefit (current examples: Friend Pulse, Reddit, Gmail, System Stats and Media). Reuse
-the shared session/owner/payload path; do not create a family-local resize mode or Settings-backed width/height.
+Uniform whole-card resizing remains the default. Opt into `content_extent_axes` only when horizontal/vertical
+playroom has a clear presentation benefit. All current resizable ordinary non-Clock families now use the shared path:
+Weather, Media, Reddit/Reddit2, Gmail, Achievement Pulse, Abandonment Issues, Friend Pulse and System Stats. Reuse
+the shared session/owner/payload path; do not create a family-local resize mode or Settings-backed width/height. Clock
+remains the explicit variant-aware sizing exception; Visualizer owns its separate viewport contract.
 
 Contract:
 
@@ -293,12 +295,17 @@ Contract:
 - corner/wheel -> whole retained presentation scales uniformly;
 - family model/QML reflows only presentation (columns, rows, spacing, metadata, artwork, etc.);
 - family may provide bounded **logical side-drag floors** through the shared policy, but those floors do not replace the
-  generic uniform whole-card floor;
+  generic uniform whole-card floor; dense authored cards may request the shared owner to resolve that logical floor
+  against the live authored reference at edit admission so persistence, handles and QML never disagree about a smaller
+  content box;
 - `content_extent` is CUSTOM state, not a product preference/default;
 - Save/slot persistence use the shared CUSTOM payload; Cancel restores the prior committed extent;
 - Restore Size clears the extent and returns to canonical authored size while preserving X/Y/display and remaining in
   CUSTOM;
-- side-resize updates may not redefine authored geometry, invoke stacking/auto-fit, or schedule timers/debounce/polling.
+- side-resize updates may not redefine authored geometry, invoke stacking/auto-fit, or schedule timers/debounce/polling;
+- richer content revealed by a larger extent must remain presentation-driven and reuse existing provider/runtime cadence.
+  Weather's five-day expansion is the current example: the existing Weather request carries today + five future daily rows,
+  while QML reveals the extra band only when the CUSTOM vertical extent actually has enough room.
 
 A new family should not copy Media/Friend Pulse arithmetic as infrastructure. It should declare axes/minima and consume
 the common logical extent; family-local code owns only its own internal reflow. This keeps normalization extensible without

@@ -83,6 +83,19 @@ def _optional_int(value: Any) -> int | None:
         return None
 
 
+def _forecast_day_lines(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    rows: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            rows.append(text)
+        if len(rows) >= 5:
+            break
+    return tuple(rows)
+
+
 def _age_seconds(timestamp: datetime) -> float:
     try:
         now = datetime.now(timestamp.tzinfo) if timestamp.tzinfo is not None else datetime.now()
@@ -102,6 +115,7 @@ class PreparedWeatherSample:
     precipitation_probability: float | None
     windspeed: float | None
     forecast: str | None
+    forecast_days: tuple[str, ...]
     is_day: int
     weather_code: int | None
     observed_at: datetime
@@ -117,6 +131,7 @@ class PreparedWeatherSample:
             "precipitation_probability": self.precipitation_probability,
             "windspeed": self.windspeed,
             "forecast": self.forecast,
+            "forecast_days": list(self.forecast_days),
             "is_day": self.is_day,
             "weather_code": self.weather_code,
         }
@@ -140,6 +155,8 @@ class PreparedWeatherSample:
             payload["windspeed"] = float(self.windspeed)
         if self.forecast:
             payload["forecast"] = str(self.forecast)
+        if self.forecast_days:
+            payload["forecast_days"] = list(self.forecast_days)
         payload["is_day"] = int(self.is_day)
         if self.weather_code is not None:
             payload["weather_code"] = int(self.weather_code)
@@ -213,6 +230,7 @@ def prepare_weather_sample(
         precipitation_probability=_optional_float(precipitation),
         windspeed=_optional_float(windspeed),
         forecast=str(forecast_value) if forecast_value else None,
+        forecast_days=_forecast_day_lines(data.get("forecast_days")),
         is_day=1 if is_day is None else is_day,
         weather_code=_optional_int(data.get("weather_code")),
         observed_at=observed_at or datetime.now(),

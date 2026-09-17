@@ -201,6 +201,7 @@ class QuickBubbleRenderer:
     def __init__(self) -> None:
         self._program = 0
         self._uniforms: dict[str, int] = {}
+        self._last_content_rotation_quarters: int | None = None
         # Persistent render-thread transport. Immutable authored snapshots remain
         # tuples; only the OpenGL upload representation is mutable/reused.
         self._position_uniform_buffer = np.zeros(_BUBBLE_POS_SIZE, dtype=np.float32)
@@ -220,27 +221,18 @@ class QuickBubbleRenderer:
         if not isinstance(mode_state, BubbleFrame):
             raise TypeError("Bubble renderer received another mode frame")
         presentation = snapshot.presentation
-        outer_x, outer_y, _outer_width, _outer_height = presentation.outer_rect
-        content_x, content_y, content_width, content_height = (
-            presentation.content_rect
-        )
-        local_content_rect = (
-            content_x - outer_x,
-            content_y - outer_y,
-            content_width,
-            content_height,
-        )
+        local_content_rect = frame.logical_content_rect
         layout_key = (
             local_content_rect,
             presentation.uniform_visual_scale,
-            presentation.viewport_extent,
+            presentation.logical_viewport_extent,
             presentation.baseline_viewport_size,
         )
         if self._layout_cache_key != layout_key or self._layout_cache is None:
             self._layout_cache = compute_quick_bubble_layout(
                 local_content_rect=local_content_rect,
                 visual_scale=presentation.uniform_visual_scale,
-                viewport_extent=presentation.viewport_extent,
+                viewport_extent=presentation.logical_viewport_extent,
                 baseline_viewport_size=presentation.baseline_viewport_size,
             )
             self._layout_cache_key = layout_key
@@ -263,7 +255,14 @@ class QuickBubbleRenderer:
             frame.matrix_values,
         )
         gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform2f(uniforms["u_resolution"], *frame.logical_size)
+        content_rotation_quarters = frame.content_rotation_quarters
+        if content_rotation_quarters != self._last_content_rotation_quarters:
+            gl.glUniform1i(
+                uniforms["uContentRotationQuarters"],
+                content_rotation_quarters,
+            )
+            self._last_content_rotation_quarters = content_rotation_quarters
+        gl.glUniform2f(uniforms["u_resolution"], *frame.oriented_logical_size)
         gl.glUniform1f(uniforms["u_dpr"], presentation.dpr)
         gl.glUniform2f(uniforms["u_viewport_origin_px"], 0.0, 0.0)
         gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
@@ -409,6 +408,7 @@ class QuickBubbleRenderer:
             return
         gl.glDeleteProgram(self._program)
         self._program = 0
+        self._last_content_rotation_quarters = None
         self._uniforms.clear()
 
     def _initialize(self) -> None:
@@ -425,6 +425,7 @@ class QuickBubbleRenderer:
             required = (
                 "uMatrix",
                 "uItemSize",
+                "uContentRotationQuarters",
                 "u_resolution",
                 "u_dpr",
                 "u_viewport_origin_px",

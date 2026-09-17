@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-09-16
+Last updated: 2026-09-18
 
 This file is the **current test/acceptance authority** for SRPSS. It describes what deserves trust now, how to classify evidence, and which architecture contracts must stay guarded. It is not a checkpoint diary or migration changelog; source control and `Docs/Historical_Bugs/` preserve chronology.
 
@@ -13,14 +13,14 @@ The maintained product profile is `destination` in `tests/run_chunked.py`.
 Current-tree inventory at this checkpoint:
 
 ```text
-373 test_*.py modules
-132 maintained destination targets
+375 test_*.py modules
+133 maintained destination targets
 0 missing destination target files
 ```
 
 The destination profile is **target-isolated**: each selected target runs in its own fresh pytest subprocess so queued Qt/QQuick teardown from one target cannot poison another target's result.
 
-The maintained destination profile last ran **132/132 GREEN on Windows + PySide6 + OpenGL (2026-09-17)**, after the broad-suite red reconciliation closed (all failures were test-side drift against current architecture; production was correct in every case). Do not misrepresent a profile pass as proof of later source changes. R-87/CHK26 performance acceptance is separately backed by focused source/static tests plus installed D1-heavy, mixed-display/lifecycle and operator visual evidence in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` and `Docs/Guardrails/Performance_Optimization_Contract.md`.
+The pre-orientation maintained destination profile last ran **132/132 GREEN on Windows + PySide6 + OpenGL (2026-09-17)**, after the broad-suite red reconciliation closed (all failures were test-side drift against current architecture; production was correct in every case). The current profile is now 133 targets because the CUSTOM Visualizer quarter-turn contract was added after that run. The subsequent 2026-09-18 ordinary-widget `content_extent` completion (Achievement Pulse / Abandonment Issues / Weather plus shared dense-floor policy and Weather five-day reveal) updates existing maintained targets but does not add another target file. The resulting 133-target profile is **NEEDS RUN** until executed on the intended environment. Do not misrepresent the earlier 132/132 pass as proof of later source changes. R-87/CHK26 performance acceptance is separately backed by focused source/static tests plus installed D1-heavy, mixed-display/lifecycle and operator visual evidence in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` and `Docs/Guardrails/Performance_Optimization_Contract.md`.
 
 The current agent/container may lack PySide6/OpenGL. In that environment, a collection failure caused by missing runtime dependencies is **ENVIRONMENT BLOCKED**, not a product RED and not a PASS.
 

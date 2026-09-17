@@ -50,6 +50,7 @@ def _item(
     resizable: bool = False,
     viewport_capable: bool = False,
     baseline_viewport_extent: tuple[float, float] | None = None,
+    content_rotation_capable: bool = False,
     content_extent_axes: frozenset[str] = frozenset(),
     baseline_content_extent: tuple[float, float] | None = None,
     size_reset_capable: bool = False,
@@ -68,6 +69,7 @@ def _item(
         resize_capable=resizable,
         viewport_resize_capable=viewport_capable,
         baseline_viewport_extent=baseline_viewport_extent,
+        content_rotation_capable=content_rotation_capable,
         content_extent_axes=content_extent_axes,
         baseline_content_extent=baseline_content_extent,
         size_reset_capable=size_reset_capable,
@@ -153,6 +155,40 @@ def test_overlay_restore_size_role_and_action_route_through_owner_handler() -> N
     assert model.restoreSize(0) is True
     assert calls == [id(friend)]
     assert friend.current_global_rect == QRect(110, 220, 420, 220)
+
+
+def test_visualizer_overlay_exposes_content_turn_only_through_owner_handler() -> None:
+    session = CustomLayoutSession()
+    visualizer = _item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(120, 80, 420, 280),
+        resizable=True,
+        viewport_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+        content_rotation_capable=True,
+    )
+    session.add_item(visualizer)
+    calls: list[int] = []
+
+    def rotate(item):
+        calls.append(id(item))
+        item.current_size_payload = {"content_rotation_quarters": 1}
+        session.notify_item_changed(item)
+        return True
+
+    model = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+        content_rotation_handler=rotate,
+    )
+    roles = {bytes(name).decode(): role for role, name in model.roleNames().items()}
+    index = model.index(0, 0)
+
+    assert model.data(index, roles["contentRotationCapable"]) is True
+    assert model.rotateContent(0) is True
+    assert calls == [id(visualizer)]
+    assert visualizer.current_size_payload["content_rotation_quarters"] == 1
 
 
 def test_visualizer_overlay_exposes_discrete_display_hop_without_copying_state() -> None:
@@ -1155,6 +1191,18 @@ def test_quick_custom_layout_overlay_is_presentation_only() -> None:
     assert "drag.target" not in qml
     assert "sessionModel.moveItem(" in qml
     assert "sessionModel.closeItem(" in qml
+    assert "sessionModel.rotateContent(editFrame.index)" in qml
+    assert "contentRotationCapable" in qml
+    close_block = qml[qml.index("id: closeControl"):qml.index("id: rotateContentControl")]
+    assert "x: Math.max(1.0, editFrame.width - width - 10.0)" in close_block
+    assert "y: Math.max(1.0, Math.min(10.0, editFrame.height - height - 1.0))" in close_block
+    assert "z: 80" in close_block
+    assert "width: closeControl.width * 0.484" in close_block
+    assert "propagateComposedEvents: false" in close_block
+    assert "onPressed: function(mouse) { mouse.accepted = true }" in close_block
+    rotate_block = qml[qml.index("id: rotateContentControl"):qml.index("id: restoreSizeControl")]
+    assert "x: Math.max(1.0, editFrame.width - width - 10.0)" in rotate_block
+    assert "y: Math.max(1.0, editFrame.height - height - 10.0)" in rotate_block
     assert "sessionModel.transferItem(editFrame.index, \"left\")" in qml
     assert "sessionModel.transferItem(editFrame.index, \"right\")" in qml
     assert "canTransferLeft" in qml

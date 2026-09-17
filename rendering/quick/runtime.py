@@ -383,18 +383,18 @@ class QuickDisplayRuntime(QObject):
 
     def bind_visualizer_viewport_config(
         self,
-        override_sink: Callable[[tuple[float, float] | None], None],
+        override_sink: Callable[[tuple[float, float] | None, object], None],
     ) -> None:
-        """Bind the corrected-G4 visualizer viewport-config ownership once.
+        """Bind the visualizer CUSTOM viewport/orientation ownership once.
 
-        The display owner wires the retained CUSTOM viewport-config sink to the
-        visualizer runtime controller's ``set_custom_viewport_override`` so a live
-        edge drag drives only the temporary working override, while the ordinary
-        committed extent stays the controller's own commit path. Retiring the
-        override (CUSTOM inactive) falls back to the committed extent - never a
-        manufactured canonical. Only plain typed floats cross this seam; no
-        QQuickItem/QScreen/render-thread object enters Bubble logical state, and
-        no second config map/queue/timer/clock is introduced.
+        The display owner wires the retained CUSTOM config sink to the visualizer
+        runtime controller's ``set_custom_viewport_override`` so edge drags and
+        discrete quarter-turn edits drive only temporary working layout state.
+        Ordinary committed physical extent/orientation stay on the controller's
+        commit path. Retiring CUSTOM falls back to that committed truth. Only
+        plain typed values cross this seam; no QQuickItem/QScreen/render-thread
+        object enters logical state, and no second config map/queue/timer/clock
+        is introduced.
         """
 
         if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):

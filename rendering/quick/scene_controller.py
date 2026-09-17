@@ -39,6 +39,7 @@ from .context_menu import (
     QuickContextMenuShadowStyle,
 )
 from .custom_layout_overlay import (
+    ContentRotationHandler,
     CustomLayoutOverlayModel,
     DisplayTransferCapability,
     DisplayTransferHandler,
@@ -398,7 +399,7 @@ class QuickSceneController(QObject):
         # next authored logical step. Plain typed floats only; no scene/render
         # object crosses it.
         self._visualizer_viewport_config_sink: (
-            Callable[[tuple[float, float] | None], None] | None
+            Callable[[tuple[float, float] | None, object], None] | None
         ) = None
         self._visualizer_loader: QQuickItem | None = None
         self._visualizer_root: QQuickItem | None = None
@@ -873,6 +874,7 @@ class QuickSceneController(QObject):
         display_transfer_capability: DisplayTransferCapability | None = None,
         display_transfer_handler: DisplayTransferHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
+        content_rotation_handler: ContentRotationHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind this display's retained pixels to shared CUSTOM working state."""
 
@@ -906,6 +908,7 @@ class QuickSceneController(QObject):
             display_transfer_capability=display_transfer_capability,
             display_transfer_handler=display_transfer_handler,
             size_reset_handler=size_reset_handler,
+            content_rotation_handler=content_rotation_handler,
         )
         underlay = self._custom_layout_guide_underlay
         if underlay is not None:
@@ -1112,18 +1115,17 @@ class QuickSceneController(QObject):
 
     def set_visualizer_viewport_config_sink(
         self,
-        sink: Callable[[tuple[float, float] | None], None] | None,
+        sink: Callable[[tuple[float, float] | None, object], None] | None,
     ) -> None:
-        """Bind the logical viewport-config seam that consumes the CUSTOM extent.
+        """Bind the CUSTOM viewport/orientation config seam.
 
         The destination orchestration passes the visualizer runtime controller's
-        ``set_custom_viewport_override`` here so a live retained edge drag
-        publishes its temporary working world to the next authored logical step,
-        overriding the committed extent only while edit mode is active. Pushing
-        ``None`` (no active CUSTOM visualizer item) retires that override and the
-        runtime falls back to the committed extent - it never manufactures
-        canonical. Binding immediately republishes the current CUSTOM extent so
-        the sink starts from truth.
+        ``set_custom_viewport_override`` here so retained edge drags and discrete
+        quarter-turn edits publish one temporary physical extent + orientation
+        pair to the next authored logical step. Pushing ``None`` (no active
+        CUSTOM visualizer item) retires that override and the runtime falls back
+        to committed layout truth. Binding immediately republishes the current
+        pair so the sink starts from truth.
         """
 
         self._visualizer_viewport_config_sink = sink
@@ -1131,17 +1133,29 @@ class QuickSceneController(QObject):
             self._publish_visualizer_viewport_config()
 
     def _publish_visualizer_viewport_config(self) -> None:
-        """Push the current CUSTOM logical extent (or baseline) to the sink."""
+        """Push the current CUSTOM physical extent + orientation to the sink."""
 
         sink = self._visualizer_viewport_config_sink
         if sink is None:
             return
         extent: tuple[float, float] | None = None
+        rotation_state: object = {}
         if self._custom_layout_session is not None:
             active_item = self._active_custom_layout_item("spotify_visualizer")
             if active_item is not None:
                 extent = active_item.current_viewport_extent
-        sink(extent)
+                from widgets.spotify_visualizer.presentation_orientation import (
+                    CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
+                    CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,
+                )
+
+                rotation_state = active_item.current_size_payload.get(
+                    CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
+                    active_item.current_size_payload.get(
+                        CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, 0
+                    ),
+                )
+        sink(extent, rotation_state)
 
     def _sync_custom_layout_visualizer(self) -> None:
         # Publish the latest logical viewport extent even when there is no Quick
@@ -1182,9 +1196,10 @@ class QuickSceneController(QObject):
                 max(1.0, float(self._window.width())),
                 max(1.0, float(self._window.height())),
             )
-        # CUSTOM carries two independent operations: wheel changes uniform
-        # visual scale, while Visualizer side/corner handles change one/two
-        # logical viewport axes. The QRect is the retained edit authority, including
+        # CUSTOM carries independent operations: wheel changes uniform visual
+        # scale, Visualizer side/corner handles change one/two physical viewport
+        # axes, and the optional quarter-turn maps that physical world into the
+        # effective logical domain. The QRect is the retained edit authority, including
         # after a normal publication refreshed baseline from committed state.
         effective_extent = active_item.current_viewport_extent or baseline.viewport_extent
         relative_scale = _custom_visualizer_relative_scale(
@@ -1201,12 +1216,33 @@ class QuickSceneController(QObject):
             max(display_size[0], local_origin[0] + target_width),
             max(display_size[1], local_origin[1] + target_height),
         )
+        from widgets.spotify_visualizer.presentation_orientation import (
+            CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
+            CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,
+            resolve_content_rotation_for_mode,
+        )
+        mode_id = ""
+        render_item = self._visualizer_item
+        if render_item is not None and render_item.render_identity is not None:
+            mode_id = str(render_item.render_identity.mode_id)
+        rotations = active_item.current_size_payload.get(
+            CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, {}
+        )
+        rotation_quarters = resolve_content_rotation_for_mode(
+            rotations,
+            mode_id,
+            legacy_value=active_item.current_size_payload.get(
+                CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY, 0
+            ),
+        )
+
         resized = resize_visualizer_presentation(
             baseline,
             display_size=display_size,
             outer_origin=local_origin,
             relative_scale=relative_scale,
             viewport_extent=effective_extent,
+            content_rotation_quarters=rotation_quarters,
         )
         self._apply_visualizer_presentation_items(
             resized,

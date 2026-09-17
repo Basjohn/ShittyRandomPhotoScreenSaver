@@ -1,8 +1,8 @@
 # Current Plan — Active Work
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
-The Qt Quick runtime is operator-accepted. This file contains **active work only**; completed cutover work, accepted feature closeouts (Steam Friend Pulse, System Stats, Settings slider crash hardening, Friend Pulse shadow/artwork polish, content-extent resize rollout), Sphere polish, widget resize/Edit lifetime and bucket normalization are intentionally absent — their durable contracts live in the family Reference docs.
+The Qt Quick runtime is operator-accepted. This file contains **active work only**; completed cutover work, accepted feature closeouts (Steam Friend Pulse, System Stats, Settings slider crash hardening, Friend Pulse shadow/artwork polish), Sphere polish, widget resize/Edit lifetime and bucket normalization are intentionally absent — their durable contracts live in the family Reference docs.
 
 ---
 
@@ -19,17 +19,29 @@ Bubble remains the strongest protected reaction canary. Any future production ch
 
 ## 2. Up-and-coming feature work
 
-Accepted next builds — queued, not yet started. The full decomposition stays in the linked doc; do not
-duplicate that spec.
+Accepted next builds, with the first slice now in validation. The full decomposition stays in the linked doc; do not
+duplicate that spec here.
 
-- [ ] **CUSTOM Visualizer quarter-turn orientation glyph.** A themed turn/flip glyph in CUSTOM Edit mode
-  that advances the visualizer's logical "up" by one clockwise quarter-turn per click
-  (`0° → 90° → 180° → 270°`), persisted in the CUSTOM `size_payload` and round-tripping through
-  Save/Cancel, layout slots and cross-display hop. It is a **presentation/layout-seam** transform
-  resolved through the shared Visualizer render contract (kin to vertical/horizontal-only scaling),
-  **not** a final-pixel QML `rotation`: `90°/270°` swap to an effective logical viewport so authored
-  shape/reactivity/preset invariants hold. Accepted carded modes only (Spectrum, Oscilloscope, Sine,
-  Bubble, Dev Curve); Voxel Sphere excluded. Full spec + golden-proof gate: `Future_Work.md` §8.1.
+- [~] **CUSTOM Visualizer quarter-turn orientation glyph.** Implementation checkpoint 2026-09-17 is
+  in-tree and the 2026-09-18 follow-up makes orientation **per canonical carded mode**: one sparse
+  `content_rotation_quarters_by_mode` map rides the existing CUSTOM `size_payload` (the former global
+  scalar remains read-only compatibility input and expands across all capable carded modes);
+  the persisted/edited viewport stays physical while the shared Visualizer presentation/render contract
+  derives the effective logical world and common quad coordinate turn. The five accepted carded modes
+  consume that seam; Sphere neither exposes nor renders the turn, while its selection cannot erase a
+  dormant carded-mode token. Save/Cancel, layout slots, cross-display state and Restore Size ownership
+  stay on their existing carriers. Local static/contract probes pass, but this container has no PySide6,
+  so the focused Qt/QML tests, maintained destination profile, real-GL shader path and installed eyes-on
+  gate remain **NEEDS RUN** before this item is accepted/closed. General performance self-audit also
+  tightened the steady-state path: retained publication snapshots extent/orientation/override under one
+  existing controller lock, and the GL rotation uniform is cached so it uploads only on first use or an
+  actual turn rather than on every draw. No timer, polling, provider wake, alternate cadence, runtime
+  rebuild or per-frame Settings read was added. Operator reports the installed turn behavior is working well;
+  the edit glyph has since been moved from the header/upper-left area to an inset **bottom-right** slot that
+  stays clear of the right/bottom edge-resize strips and corner handle. A requested live-hover rotate glyph is
+  **not admitted yet**: mutating persisted CUSTOM layout outside the edit transaction needs a proper shared live
+  layout-action owner; do not let QML write persistence or bolt a second orientation authority onto the live card.
+  Full suite/complete per-mode acceptance remains pending. Full spec + golden-proof gate: `Future_Work.md` §8.1.
 - [ ] **Games You Follow.** Next retained Steam family member — currently owned only by the `--devsteam`
   scaffold. Feasibility-gated: only after the existing-key `GetGamesFollowed` route is live/fixture-proved.
   Its first retained implementation must consume both shared `content_extent` axes and reuse the Friend
@@ -43,12 +55,30 @@ duplicate that spec.
   customization — font/size; text position = left of bar / inside bar / right of bar / no text / numbers-only;
   and bar thickness. Theme semantics inherited (may match media volume). Disabled ⇒ fully dormant (no shell,
   no item, no endpoint, no callback). Full spec + COM/threading/dormancy traps: `Future_Work.md` §10.2.
-- [ ] **Achievement Pulse / Abandonment Issues / Weather — presentation hor-only & vert-only sizing.** Extend
-  the shared `content_extent` one-axis side-reflow (plus corner/wheel uniform scale) to these three families,
-  matching the other widgets. For now the extra axis room adjusts spacing/placement/padding only (room for
-  richer content later) — with one exception: **Weather's vertical growth reveals a 5-day forecast as an
-  additional section**. Reuse the existing content-extent owner; never add a second sizing/normalization
-  authority.
+- [~] **Achievement Pulse / Abandonment Issues / Weather — presentation hor-only & vert-only sizing.**
+  **Implemented in-tree 2026-09-18; Windows/PySide/QML acceptance still NEEDS RUN.** All current resizable
+  ordinary non-Clock families now declare the shared horizontal+vertical `content_extent` contract. Achievement
+  Pulse and Abandonment Issues preserve their dense authored canvas as the side-drag floor while redistributing
+  added room through their existing layout; the shared CUSTOM owner resolves that floor once at edit admission so
+  persisted/session geometry cannot disagree with QML. Weather reflows on both axes and reveals its retained five-day
+  forecast only when the CUSTOM vertical box has enough room beyond the compact intrinsic presentation. The Weather
+  provider widens its existing single request from 2 to 6 daily rows (today + five future days); no second fetch, timer,
+  provider or cadence was added. Corner/wheel scale remains the existing uniform outer transform. Focused family +
+  owner tests were updated alongside the implementation; full intended-environment validation remains the acceptance gate.
+- [ ] **CUSTOM editable child geometry — after the content-extent rollout.** Add one shared role-based edit
+  primitive for a deliberately small set of major visual children, not arbitrary QML elements. CUSTOM becomes
+  the sole active size authority for an overridden child while its authored Settings value remains preserved
+  underneath; normalize/reuse the existing **“Disable Custom To Adjust!”** disabled-settings treatment wherever
+  those authorities would otherwise fight. Initial candidates are Media artwork + seek/volume bars + one grouped playback-controls role, Steam artwork, Achievement Pulse badge,
+  Friend Pulse's grouped avatar role, optional Weather hero icon, and Clock **analogue-only** grouped separator /
+  Roman-numeral roles. Parent selection in global Edit mode reveals the smaller child-role handles for only that
+  widget; do not carpet the whole scene with child handles.
+  Child overflow feeds the existing `content_extent` owner; growth may request outer expansion, while shrinking
+  never auto-collapses the outer widget. Persist normalized logical geometry, keep Save/Cancel/slots/reset on the
+  shared CUSTOM owner, and add no recurring runtime work outside real edit/state events. Artwork size commits may
+  request an appropriately higher-quality source through the existing artwork/image owner and crossfade only once
+  the replacement is ready, preserving original-aspect/crop rules and never refetching on drag ticks. Detailed
+  architecture + build order: `Docs/Future_Work/Custom_Child_Geometry.md`.
 
 **Build constraint for the widget work in this section:** maintain widget normalization and reuse the shared
 widget aspects — `content_extent` side-reflow + uniform scale, the CUSTOM Edit shell/overlay, Restore Size,

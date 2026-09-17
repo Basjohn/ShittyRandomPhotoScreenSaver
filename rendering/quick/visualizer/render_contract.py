@@ -16,11 +16,23 @@ layout(location = 0) in vec2 aPosition;
 
 uniform mat4 uMatrix;
 uniform vec2 uItemSize;
+uniform int uContentRotationQuarters;
 
 out vec2 v_uv;
 
+vec2 logicalUvFromPhysicalUv(vec2 physicalUv) {
+    int q = uContentRotationQuarters & 3;
+    if (q == 1)
+        return vec2(physicalUv.y, 1.0 - physicalUv.x);
+    if (q == 2)
+        return vec2(1.0 - physicalUv.x, 1.0 - physicalUv.y);
+    if (q == 3)
+        return vec2(1.0 - physicalUv.y, physicalUv.x);
+    return physicalUv;
+}
+
 void main() {
-    v_uv = aPosition;
+    v_uv = logicalUvFromPhysicalUv(aPosition);
     gl_Position = uMatrix * vec4(aPosition * uItemSize, 0.0, 1.0);
 }
 """
@@ -125,6 +137,39 @@ class QuickVisualizerRenderFrame:
             raise ValueError("visualizer render item must have positive dimensions")
         if self.quad_vao <= 0:
             raise ValueError("visualizer render frame requires a live quad")
+
+    @property
+    def content_rotation_quarters(self) -> int:
+        return int(self.snapshot.presentation.content_rotation_quarters)
+
+    @property
+    def oriented_logical_size(self) -> tuple[float, float]:
+        if self.content_rotation_quarters & 1:
+            return (self.logical_size[1], self.logical_size[0])
+        return self.logical_size
+
+    @property
+    def logical_content_rect(self) -> tuple[float, float, float, float]:
+        presentation = self.snapshot.presentation
+        outer_x, outer_y, _outer_width, _outer_height = presentation.outer_rect
+        content_x, content_y, content_width, content_height = presentation.content_rect
+        physical_rect = (
+            content_x - outer_x,
+            content_y - outer_y,
+            content_width,
+            content_height,
+        )
+        if self.content_rotation_quarters == 0:
+            return physical_rect
+        from widgets.spotify_visualizer.presentation_orientation import (
+            logical_rect_from_physical_rect,
+        )
+
+        return logical_rect_from_physical_rect(
+            physical_rect,
+            physical_size=self.logical_size,
+            content_rotation_quarters=self.content_rotation_quarters,
+        )
 
 
 class QuickVisualizerRenderer(Protocol):

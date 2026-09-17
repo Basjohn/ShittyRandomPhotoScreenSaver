@@ -497,10 +497,12 @@ other viewport-derived invariants. The feature therefore belongs at the shared V
 - [ ] **Initial scope: carded accepted modes only.** Admit Spectrum, Oscilloscope, Sine Waves, Bubble and Dev Curve. Exclude
   frameless modes and specifically Voxel Sphere initially. Sphere has experimental unclipped overflow, 3-D lighting/shadow and
   its own coordinate semantics; do not make this feature a reason to couple Sphere back into accepted-mode architecture.
-- [ ] Add one CUSTOM-layout-owned quarter-turn token, preferably `content_rotation_quarters` constrained to `{0,1,2,3}`.
-  It is **layout/presentation state, not a Visualizer setting or preset technical setting**. Persist it inside the Visualizer's
-  existing CUSTOM `size_payload`; old entries with no token resolve to `0`. Do not add a second settings authority or mutate
-  authored preset payloads.
+- [ ] Add one CUSTOM-layout-owned **per-mode** quarter-turn state inside the existing `size_payload`: a sparse
+  `content_rotation_quarters_by_mode` map keyed only by canonical rotation-capable carded modes, each constrained to
+  `{1,2,3}` with missing/zero meaning `0`. It is **layout/presentation state, not a Visualizer setting or preset technical
+  setting**. The former global `content_rotation_quarters` token is read-only compatibility input and must expand to all
+  capable carded modes so old global semantics survive even when Sphere is active during migration. Do not add a second
+  settings authority or mutate authored preset payloads.
 - [ ] Keep the physical saved geometry authoritative and unchanged. The committed `rect`, monitor route, uniform scale and
   `viewport_extent` remain exactly what the user edited. For `90°/270°`, resolve an **effective logical content viewport** with
   width/height swapped, run the existing mode shape/reactivity logic against that logical domain, then apply one shared
@@ -512,13 +514,16 @@ other viewport-derived invariants. The feature therefore belongs at the shared V
   screen-space direction directly (for example Bubble gradient/specular direction); prefer deriving those vectors through the
   common orientation transform rather than adding per-mode orientation settings.
 - [ ] Edit UI: add one themed circular turn glyph to `CustomLayoutOverlay.qml`, visible only for the active Visualizer when the
-  current descriptor admits quarter-turn orientation. It must not steal drag/resize/display-hop input zones and must remain
-  scale/header aligned with existing edit chrome. Clicking changes working session state immediately; Cancel restores the
-  admission value, Save commits it, Restore Size must **not** silently reset orientation unless product UX explicitly decides
-  that Restore Size owns orientation too.
-- [ ] Save/load/slot contract: existing layout slots already capture the whole `custom_layout` root, so orientation must round
-  trip through ordinary CUSTOM save/load and slot Save/Load without a parallel slot schema. Cross-display hop must preserve the
-  token. Legacy layouts/slots with no token must load identically to today (`0`). Version-bump only if the normalizer cannot
+  current descriptor admits quarter-turn orientation. It must not steal drag/resize/display-hop input zones. Clicking changes
+  only the **current mode's** working orientation; Cancel restores the admission map, Save commits the full map, and Restore
+  Size must **not** silently reset orientation unless product UX explicitly decides that Restore Size owns orientation too.
+  A live-hover rotate affordance is a separate admission problem: do not let the live QML card mutate persisted CUSTOM state
+  directly. Add it only if a shared live layout-action owner can preserve the same persistence/session authority without a
+  second state owner or recurring hover/poll work.
+- [ ] Save/load/slot contract: existing layout slots already capture the whole `custom_layout` root, so the per-mode orientation
+  map must round trip through ordinary CUSTOM save/load and slot Save/Load without a parallel slot schema. Cross-display hop must
+  preserve the complete map. Legacy layouts/slots with no orientation state load identically to today (`0`); legacy global scalar
+  layouts expand that scalar across every capable carded mode before any per-mode divergence. Version-bump only if the normalizer cannot
   safely treat the optional size-payload field as backward compatible; do not bump merely because a new optional payload key
   exists.
 - [ ] **Golden behavioural proof before merge:** with orientation `0`, resolved presentation/render state must be semantically

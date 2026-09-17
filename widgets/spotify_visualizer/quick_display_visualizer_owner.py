@@ -507,12 +507,14 @@ class QuickDisplayVisualizerOwner:
         *,
         local_rect: tuple[float, float, float, float] | None,
         viewport_extent: tuple[float, float] | None = None,
+        content_rotation_by_mode: object = None,
     ) -> None:
         """Hydrate one saved CUSTOM outer rect before logical runtime start.
 
-        The rect and optional logical extent are ordinary committed truth.  The
-        retained CUSTOM session may later install a temporary extent override,
-        but no edit-session state is stored here.
+        The rect, optional physical viewport extent and sparse per-mode content
+        orientation are ordinary committed truth. The retained CUSTOM session
+        may later install temporary overrides, but no edit-session owner is
+        duplicated here.
         """
 
         if self._retired or self._started:
@@ -532,9 +534,15 @@ class QuickDisplayVisualizerOwner:
                 raise ValueError("visualizer committed viewport extent must be positive")
         self._committed_layout_rect = (x, y, width, height)
         self._committed_layout_extent = extent
-        # Rehydrate committed logical-world truth before the authored logical
-        # runtime can consume it. The same resolved record is later published
-        # by the GUI synchronization edge.
+        # Rehydrate physical CUSTOM truth before the authored logical runtime can
+        # consume it. Orientation is layout state, not a Visualizer preset.
+        hydration_extent = extent or self._controller.committed_viewport_extent
+        self._controller.hydrate_committed_layout_metrics(
+            hydration_extent,
+            content_rotation_by_mode,
+        )
+        # The same resolved record is later published by the GUI synchronization
+        # edge, validating the current mode policy without creating another owner.
         self._controller.commit_presentation_metrics(
             self._resolve_current_presentation()
         )
@@ -550,8 +558,9 @@ class QuickDisplayVisualizerOwner:
         *,
         local_rect: tuple[float, float, float, float],
         viewport_extent: tuple[float, float],
+        content_rotation_by_mode: object = None,
     ) -> None:
-        """Promote active CUSTOM geometry without recreating its generation."""
+        """Promote active CUSTOM geometry/orientation without recreating its generation."""
 
         if self._retired or not self._started or not self._bound:
             raise RetainedRuntimeIncoherenceError("live CUSTOM layout requires a bound running visualizer")
@@ -569,6 +578,17 @@ class QuickDisplayVisualizerOwner:
             raise RetainedRuntimeIncoherenceError("live CUSTOM visualizer has no retained presentation")
         if presentation.viewport_extent != (extent_width, extent_height):
             raise RetainedRuntimeIncoherenceError("live CUSTOM visualizer extent differs from retained presentation")
+        from widgets.spotify_visualizer.presentation_orientation import (
+            resolve_content_rotation_for_mode,
+        )
+        expected_rotation = resolve_content_rotation_for_mode(
+            content_rotation_by_mode,
+            self._controller.mode_id,
+        )
+        if presentation.content_rotation_quarters != expected_rotation:
+            raise RetainedRuntimeIncoherenceError(
+                "live CUSTOM visualizer orientation differs from retained presentation"
+            )
         expected = (x, y, width, height)
         # CUSTOM owns an integer QRect while the retained visualizer owns a
         # uniform floating projection.  Each edge of that QRect is rounded
@@ -587,6 +607,10 @@ class QuickDisplayVisualizerOwner:
         # This preserves the prior committed pair if a malformed presentation
         # is ever routed here.
         self._controller.commit_presentation_metrics(presentation)
+        # Save promotes the complete sparse map, not only the currently visible
+        # mode, so modes rotated earlier in the same edit session survive an
+        # in-process mode switch without requiring recreation.
+        self._controller.commit_content_rotation_map(content_rotation_by_mode)
         self._committed_layout_rect = tuple(float(value) for value in presentation.outer_rect)
         self._committed_layout_extent = (extent_width, extent_height)
 
@@ -639,12 +663,15 @@ class QuickDisplayVisualizerOwner:
         # authority.  Otherwise, a freshly rehydrated persisted extent wins
         # only until the first retained presentation consumes it; after that
         # the controller's committed extent is authoritative as before.
-        if self._controller.has_custom_viewport_override:
-            viewport_extent = self._controller.presentation_viewport_extent
+        controller_extent, content_rotation_quarters, has_custom_override = (
+            self._controller.presentation_layout_metrics
+        )
+        if has_custom_override:
+            viewport_extent = controller_extent
         elif self._committed_layout_extent is not None:
             viewport_extent = self._committed_layout_extent
         else:
-            viewport_extent = self._controller.presentation_viewport_extent
+            viewport_extent = controller_extent
         if committed_rect is None:
             outer_origin = self._authored_outer_origin
             uniform_scale = 1.0
@@ -658,6 +685,7 @@ class QuickDisplayVisualizerOwner:
             dpr=dpr,
             uniform_visual_scale=uniform_scale,
             viewport_extent=viewport_extent,
+            content_rotation_quarters=content_rotation_quarters,
             scene_fade=scene_fade,
             content_fade=self._mode_transition_fade,
             **self._card_shadow_kwargs,
