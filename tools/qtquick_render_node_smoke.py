@@ -1012,19 +1012,18 @@ def _matches_block_slab_dense_midpoint(
     progress: float,
     _direction: object,
 ) -> bool:
-    """Cadence-tolerant slab-vs-fallback proof on the dense midpoint grid.
+    """Cadence-tolerant proof that the real rotated block slab rendered.
 
     Production telemetry captures the first transition frame in its wide
     ``[0.30, 0.75]`` window; on dense frame cadence that lands early (~0.35),
-    where a real block slab's black void gap is thin and the coarse 5x5 sparse
-    grid resolves zero void samples (or an early diagonal projection the retired
-    per-tile UV oracle mis-modelled). The dense 15x15 grid resolves the void
-    reliably. This proves the meaningful invariant these smokes exist to protect:
-    the retained render node draws a real slab that exposes its black void *and* a
-    visible textured face -- i.e. not a silent fullscreen crossfade fallback (a
-    crossfade would carry no void) -- at whatever progress the scheduler captured.
-    Exact per-tile rotation/projection UVs are a real-GPU/eyes-on destination
-    concern, not a headless offscreen one.
+    where a real block slab's dark rotation void/edge is thin and the coarse 5x5
+    sparse grid resolves zero void samples (or an early diagonal projection the
+    retired per-tile UV oracle mis-modelled). The dense 15x15 grid resolves it
+    reliably. This proves the invariant these smokes exist to protect: the
+    retained render node draws the genuine perspective slab -- its dark rotation
+    void/edge *and* a visible textured face are both present -- at whatever
+    progress the scheduler captured. Exact per-tile rotation/projection UVs are a
+    real-GPU/eyes-on destination concern, not a headless offscreen one.
     """
 
     dense = _TRANSITION_DENSE_SAMPLE_COORDINATES
