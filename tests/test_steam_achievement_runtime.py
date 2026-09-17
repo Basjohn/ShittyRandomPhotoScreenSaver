@@ -14,6 +14,7 @@ from PySide6.QtGui import QImage
 import pytest
 
 from core.resources.manager import ResourceManager
+from core.settings.default_contract import require_canonical_default
 from core.steam.achievement_pulse import AchievementPulseSelection
 from core.threading.manager import TaskResult, ThreadManager
 from rendering.widget_runtime_services import get_runtime_service_spec
@@ -87,6 +88,15 @@ def _model(*, appid: int = 101, icon_url: str = ""):
 
 def _prepared(*, appid: int = 101) -> AchievementPulsePreparedPresentation:
     return AchievementPulsePreparedPresentation(model=_model(appid=appid))
+
+
+def test_default_refresh_minutes_follows_canonical_steam_authority() -> None:
+    # Achievement Pulse shares the canonical Steam cadence authority with
+    # Abandonment (widgets.steam.refresh_minutes); its runtime config default must
+    # source from there, not carry an independent achievement-local cadence default.
+    assert AchievementPulseRuntimeConfig().refresh_minutes == int(
+        require_canonical_default("widgets.steam.refresh_minutes")
+    )
 
 
 def _image() -> QImage:
