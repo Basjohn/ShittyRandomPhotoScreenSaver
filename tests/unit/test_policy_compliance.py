@@ -32,6 +32,12 @@ class TestThreadingPolicyCompliance:
         # Process-scoped ordered writers intentionally outlive runtime generations
         "core/logging/logger.py",
         "core/settings/persistence.py",
+        # Opt-in --frame-trace only: a single dedicated below-normal-priority
+        # writer that applies its own native thread priority, owns a bounded ring
+        # + segment rotation, and flushes at atexit. Dormant unless the flag is
+        # passed. Same process-lifetime writer shape as logger/persistence;
+        # ThreadManager runtime-generation tasks cannot represent it.
+        "core/performance/frame_trace.py",
         # Visualizer logical cadence is explicit runtime infrastructure: one
         # non-daemon generation-owned thread, wakeable and synchronously joined on
         # stop. ThreadManager task semantics cannot represent that cadence loop.
