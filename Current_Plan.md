@@ -1,9 +1,8 @@
 # Current Plan — Active Work
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
-The Qt Quick runtime is operator-accepted. This file contains **active work only**; completed cutover work, Sphere polish,
-widget resize/Edit lifetime, bucket normalization and other accepted closeout items are intentionally absent.
+The Qt Quick runtime is operator-accepted. This file contains **active work only**; completed cutover work, accepted feature closeouts (Steam Friend Pulse, System Stats, Settings slider crash hardening, Friend Pulse shadow/artwork polish, content-extent resize rollout), Sphere polish, widget resize/Edit lifetime and bucket normalization are intentionally absent — their durable contracts live in the family Reference docs.
 
 ---
 
@@ -13,147 +12,28 @@ Production performance/freshness authority is **CHK26 / repository commit `a0bf7
 
 Bubble remains the strongest protected reaction canary. Any future production change touching its timing/simulation/payload/reactive delivery requires active-music physical acceptance; idle-only evidence is insufficient.
 
-## 0. Documentation consolidation + compatibility cleanup — active
+## 1. Documentation / ownership hygiene — perpetual maintenance
 
 - [~] Keep shrinking live docs toward present owners: current contracts/guides/reference for what is true now; `Docs/Historical_Bugs/` for durable regression archaeology; source control for ordinary chronology.
 - [~] Keep code comments/docstrings aligned with current ownership and remove phase/cutover breadcrumbs that imply retired migration docs remain authority.
-- [~] Use **`Future_Cleanup.md` as the single forward cleanup/debt register**, including caller-dead code, deprecated shims and **real persisted-data/schema migration bridges**. Do not delete a real migration seam merely because it is old.
-- [~] Burn down caller-proven `READY` residue in bounded slices without mixing it with product behavior changes. Completed cleanup leaves this ledger rather than becoming chronology.
-- [x] Settings bucket migration cleanup closed: canonical sparse/single-open normalization remains current behavior; fresh/Reset/SST-replace omit all-false maps; the retired Reddit bucket-name rewrite table is now deleted because it preserved only historical accordion-open presentation state. The retained full-map fixture proves current normalization/idempotence using canonical identities; unknown old identities simply drop.
-- [x] Clock separator migration fully retired after its bounded proof phase: removed `show_digital_separator` startup/SST promotion, the compatibility module, fixture and migration-only tests. Current `show_separator` / `separator_thickness` UI, persistence and Quick presentation remain independently covered by current-contract tests.
-- [x] Caller-dead facade tranche retired: removed Foundry `proven_older`, Gmail `_smart_title_case`, Build Foundry `--venv`, the secondary `tools/run_tests.py` runner facade, and the `tools/regenerate_sst_defaults.py` compatibility entrypoint. Canonical owners/tests now point directly at `tests/run_chunked.py`, `smart_title_case_subject`, `--mode venv`, and `tools/regenerate_defaults_artifacts.py`.
-- [x] CHK36 checkpointed the sole persisted dotted alias, `input.hard_exit` -> `input.interaction_mode`: startup/SST remain old-input boundaries, ordinary Settings runtime access no longer maps the retired name, writes reject it, and the existing alias test was updated rather than left encoding permanent compatibility.
-- [x] Structured dotted-member compatibility is now isolated at persisted/import boundaries rather than living as a general SettingsManager repair pass. Old JSON, QSettings and SST shapes share one compatibility owner; canonical writers remain nested; a distinguishing old-profile fixture proves current-name precedence, unrelated-state preservation, semantic dotted-key preservation and durable second-load idempotence. The existing defaults-authority test was rehomed to the new boundary instead of being left stale.
-- [x] Visualizer preset manifest validation/import is source-tree read-only. The previous Linux validation side effect was traced to non-frozen runtime reconciliation plus host newline translation; no-op manifest writes are byte-stable, explicit writes preserve the existing newline convention, and manifest path normalization is host-independent.
-- [x] CHK37 checkpointed the structured-input + manifest-hygiene slice before opening another migration family.
-- [x] Widget Theme v1/v2 abandoned material state is now a persisted-input-only bridge. JSON/QSettings/SST promote it through `widget_theme_input_compat`; current selection/runtime/file I/O know only colour-only v3. A real legacy profile fixture proves v1/v2 preservation, SST promotion, one durable rewrite and clean second load. The existing no-material contract was updated so it no longer requires the retired names to remain in the current selection owner.
-- [x] CHK38 checkpointed the Widget Theme input-boundary slice before choosing another migration family.
-- [x] Settings Theme v5 -> v6 user-file compatibility isolated: `ui.settings_theme_input_compat` is the sole historical file-input owner; the current parser validates v6 after promotion; a static distinguishing v5 user-theme fixture proves exact migration/idempotence/strict failure; Foundry current-export coverage is v6-only; the stale Foundry-owned migration test is rehomed. Checkpoint as CHK39 before another family.
-- [x] Weather home-cache compatibility retired rather than preserved as a new facade: `~/.srpss_last_weather.json` was cache-only last-good state with no authored/import/credential contract, so the bridge/startup probe/fixture/tests were deleted after proof. The temporary shared-lock extraction was folded back into current `weather_preparation` because no second current owner needs it.
-- [x] Pre-canonical `%TEMP%` storage migration retired completely after CHK41: RSS thumbnails/cache, feed-health backoff state and provider Weather cache are all regenerable runtime/cache state with no authored/import/credential contract. Removed engine startup import, `storage_path_input_compat.py`, compatibility tests and static fixtures; current `storage_paths.py` remains the sole path authority.
-- [x] Reddit helper startup compatibility retired: current product runtime is session-scoped and the canonical root `SRPSS_RedditHelper` scheduled task is the only packaged launch authority. Removed legacy scheduled-task fallback names, HKCU Run create/remove code, dead runtime `persistent=True` branch, installer legacy Run/task cleanup, harness legacy-name constant, and stale tests that existed only to keep those paths alive.
-- [x] Visualizer diagnostic CLI debris retired: operator-confirmed `--viz` is the sole live Visualizer diagnostic entry point. Removed `--viz-diagnostics` / `--viz-diag`, redundant bootstrap `viz_diag` state, Foundry hidden-flag/alias handling, and the stale Historical Bug invocation; tests now prove the retired spellings are inert and `--viz` owns current diagnostics.
-- [x] Dead GPU-timing diagnostic surface retired: `--gpu-timing` had no current Qt Quick/OpenGL query consumer; its getter/state were referenced only by logging tests, while production contained no timer-query begin/end implementation. Removed the flag, internal bootstrap/state/getter, Foundry/help/docs claims and stale tests; ordinary `--perf` remains the current performance logging owner.
-- [x] Dead transition-worker schema default retired: `workers.transition.enabled` had no production reader after the transition precompute worker was removed. Removed it from canonical defaults and regenerated snapshot/SST artifacts; the existing dead-worker authority test now proves both runtime owner and dead default are absent. No new migration/sanitizer was added for an inert ancient profile key.
-- [x] Generic obsolete-key startup sanitation retired: `display.vsync_enabled`, `display.fps_cap` and `transitions.easing` have no current reader/writer and were kept alive only by `_OBSOLETE_KEYS` plus a deletion test. Removed that table and the stale test; current SRPSS neither emits nor interprets those keys.
-- [x] Retired Widget-shadow sanitation retired: no current reader exists for Intense-shadow keys or the old `widgets.shadows.offset` pair. Removed both retired-key registries, the entire startup `cleanup_obsolete_settings()` path, the General-page compatibility pop and cleanup-only tests. Current canonical shadow schema/absence guards remain; ancient inert unknown values are no longer a reason for permanent cleanup code.
-- [x] Root-level Visualizer preset-state startup sanitation retired: canonical defaults/current runtime no longer own `preset` or `custom_preset_backup`, so SettingsManager no longer carries a startup deletion pass or redundant default-seeding exclusion for them. This does **not** change current per-mode preset keys, `visualizer_custom_presets`, Custom preservation, technical settings, mode activation, or the separate old preset-file/SST input horizons.
-- [~] **TEST-FIRST GATE ACTIVE (CHK53):** static stale/oracle audit is cleaning known false greens and retired-owner expectations before the next full intended-environment run. Risky persisted-state/schema retirement is frozen until the separate full-suite agent reports green or every non-green result is classified and repaired without resurrecting retired architecture. Every later migration-retirement slice must still search the existing test tree for the retired symbol/owner and classify those tests in the same checkpoint.
+- [~] Treat `Future_Cleanup.md` as the protective compatibility register (not a backlog): keep real persisted-data/schema migration bridges intact until a support horizon is explicitly declared; delete only caller-proven `READY` residue, in bounded slices, never mixed with product behavior changes.
 
-## 1. Steam Friend Pulse — public implementation complete, awaiting live/installed acceptance
+## 2. Runtime/lifetime follow-ups — landed, optional further proof
 
-Current product/architecture contract: `Docs/Reference/Steam_Friend_Pulse.md`. Implementation chronology is not duplicated here.
+These are landed optimizations the operator has accepted in normal use; each remains a "do not regress" note plus an optional deeper-proof candidate, not blocking work. Closed incidents live in Historical Bugs (R-82 scaled-prefetch orphaning, R-83 Reddit sub-ms re-arm, R-84 handle slope, R-87 performance/freshness).
 
-The public retained Grid/Rows card, privacy/source/cache/runtime ownership, bounded avatar/action routing, optional online count, pinning, shared `content_extent` reflow and Restore Size support are landed. `--devsteam` now owns only unfinished Games You Follow.
+- [~] **Scaled speculation execution policy.** Keep R-82 liveness/correctness and the lazy serial below-normal-priority background CPU owner. Do not restore the speculative helper process, generic COMPUTE occupancy or normal-priority competition merely for throughput. Reopen only if mixed-refresh physical evidence improves or stays neutral without freshness/reactivity loss.
+- [~] **Gmail/Reddit hidden delegate reduction.** Python retains the larger accepted source buffer while QML materializes only the effective visible count. Do not reintroduce hidden Repeater forests.
+- [~] **Media first Play/Pause duplicate — containment.** Keep transport event-driven. The narrow same-burst duplicate guard must not expand into polling or suppress legitimate retry/Next/Previous semantics; prefer removing any reproducible duplicate at its origin.
+- [ ] **Quick-native startup/legacy image-boundary audit — optional.** Startup desktop capture is a genuinely GUI-native `QScreen.grabWindow()` source and should not be changed without startup profiling. Separately audit whether the synchronous legacy image publication/failure path can consume detached Quick-native presentation state or be retired. Do not widen this without startup profiling justification.
 
-- [?] **Dropped-message hotfix installed validation:** run a normal Friend Pulse refresh/lease delivery and confirm no UI-invoker `AttributeError`, roster/state updates continue, and the removed unread-message path produces no source/backoff work.
-- [?] **PySide/CUSTOM validation:** run the Friend Pulse runtime/QML plus CUSTOM session/overlay/owner tests. Confirm hover-only pins, removed status circles, offline desaturation/clipping, ALL-CAPS status/game chrome, `X FRIEND(S) ONLINE`, wide-grid expansion beyond the old four/six-column ceilings, and `↶` Restore Size routing with exact X/Y/display preservation. Side-resize Friend Pulse/System Stats before Restore Size and prove the target is canonical authored geometry rather than committed CUSTOM `content_extent`.
-- [?] **Real-account eyes-on:** inspect long names/game names, Rich avatar hydration, Strict/Balanced reprojection, private/unavailable/stale wording, manual refresh, chat/profile/Store routing, rounded avatar/tile borders, hover-only multi-pin behavior, finite friend-change glow, wide-grid expansion and online-count summary against real themes.
-- [?] **Installed multi-display soak:** two-display/DPI/theme/CUSTOM/stacking use must preserve one shared source owner, no refresh multiplication and clean last-card/family-deactivation retirement.
+## 3. Defaults/test authority follow-ups
+
+The large mutable-default/test-authority audit is closed; durable rules live in `Docs/TestSuite.md` and `Docs/Guides/Defaults_Guide.md`.
+
+- [ ] **Achievement cadence authority coverage gap:** Achievement runtime follows the same canonical `widgets.steam.refresh_minutes` authority as Abandonment but lacks the symmetric positive test. Add that authority test when this family is next touched; this is coverage debt, not a product defect.
 
 ---
-
-## 2. System Stats — public CPU/Memory/Uptime/Network implementation complete, awaiting installed soak
-
-Current product/architecture contract: `Docs/Reference/System_Stats_Widget.md`. The product source remains isolated from diagnostic `--usage`; the family is visible by default while the member remains disabled, so no sampler exists without an admitted retained-card consumer.
-
-The single shared fixed-delay sampler, CPU/Memory/Uptime/Network metric selection, 10-second minimum/default interval, two-axis `content_extent`, canonical authored geometry, project-owned header glyph and Settings-family retirement hardening are landed. GPU/VRAM remains deliberately rejected rather than a dormant backlog item.
-
-- [?] **Installed/PySide presentation validation:** confirm the `System Stats` pill does not clip, all four metric toggles round-trip, disabled metric reads stay skipped without sampler multiplication, the 1.25 px metric-section outline balances the 5 px accent block, horizontal/vertical side handles reflow cleanly, and Restore Size returns canonical authored geometry when no emergency display fit is required.
-- [?] **All-widget load/unload validation:** repeatedly deactivate/reactivate every widget family, including with a coalesced Settings save pending, and confirm no deleted-QObject mutation, rejected UI callback, stale control, or lazy-rebuild/configuration regression.
-- [?] **Minimum-interval contention acceptance:** with all four metrics enabled at the 10-second floor, prove no meaningful Visualizer freshness/reactivity or event-loop/presentation-tail regression.
-- [?] **Lifetime/multi-display soak:** repeated enable/disable, interval changes, runtime recreation and two-display use must preserve one shared owner, no refresh multiplication and clean final retirement.
-
----
-
-## 3. Settings slider commit / crash hardening — additional active work
-
-This is additive and must not displace the Friend Pulse/Restore Size acceptance work above. A 2026-09-13
-older-checkpoint crash log ends during an extreme Accessibility slider save storm: each slider increment re-saved all four
-Accessibility values and published four `settings.changed` events. `SettingsManager.set()` correctly treats every semantic
-mutation as a persistence revision, so slider drag batching belongs at the shared UI-control/connection seam, not inside
-SettingsManager and not behind a new polling/debounce owner.
-
-- [x] **Diagnosed:** Accessibility slider drag currently calls `_save_settings()` on every `valueChanged`, re-emitting
-  `dimming.enabled`, `dimming.opacity`, `pixel_shift.enabled`, and `pixel_shift.rate` for every increment. The supplied
-  log terminates mid-storm at 17:51:19. This is strong correlation with the crash but not proof of native crash cause;
-  `native_faults.log` contains no captured fault record.
-- [x] Add one shared `NoWheelSlider` commit signal: live `valueChanged` remains available for labels/previews, while
-  persistence-capable tabs bind save work to the release/commit boundary. Keyboard/programmatic discrete changes remain
-  discrete commits; no timer/poller is introduced.
-- [x] Migrate immediate-persistence slider paths (Accessibility, Display glow sliders, Sources ratio, Transitions sliders)
-  to release-time commit and add focused tests. Accessibility additionally persists only the setting that actually changed,
-  reducing the reproduced 46-save/186-event storm to one semantic mutation per committed slider interaction. Preserve
-  existing Widgets/Visualizer coalescing authority; audit those slider bindings for redundant callback churn without
-  layering a second debounce/persistence owner. Pure source/SSOT contract checks pass 3/3 in the PySide-less environment.
-- [?] Installed Settings validation: drag each affected slider aggressively, confirm labels/previews remain live while
-  persistence/settings events occur once per drag commit, then repeat the crash reproduction and inspect writer/event logs.
-
-## 4. Friend Pulse directional-shadow audit + dynamic artwork crossfade polish
-
-- [x] **Audit started:** Friend Pulse already gives the BrandedHeader a directional card shadow and text uses the shared
-  text-shadow roles. Row/grid tile surfaces, avatar frames, pin/menu controls, separators and the empty-state icon do not
-  currently own equivalent directional surface shadows.
-- [x] **Shadow prescription:** add, if visual validation agrees, subtle same-direction shadows to row/grid tile surfaces.
-  Avatar frames should not use a filled rectangular shadow: shadow the border-ring alpha itself (or an equivalent
-  outline-only source) so the empty/transparent interior stays empty, using the existing global card shadow direction/color
-  with lower alpha/blur. The empty-state icon may take a very light same-direction shadow. Leave thin separators, pin
-  glyphs/buttons and three-dot affordances unshadowed by default; they are too small and become muddy fast. Do not invent a
-  Friend Pulse-only direction authority.
-- [x] Improve dynamic Media/Steam artwork changes through the shared event-driven `ArtworkFadeImage` SSOT. Keep the current
-  readiness-gated two-buffer/no-flash contract and frame-demand ownership; make replacement transitions gentler for every
-  existing Media/Achievement/Abandonment artwork consumer without per-widget timers or duplicate transition machinery.
-  Shared replacement fade is now 520 ms with `InOutSine`; empty-source fade is 280 ms. The Abandonment-local 340 ms override
-  was removed so the shared primitive is authoritative. Pure artwork/slider contract checks pass 9/9 combined.
-- [?] Visual validation across Media + Steam artwork surfaces: rapid source churn, missing->ready, ready->missing, same-source
-  withdrawal, DPR/theme changes, and no retained second texture after transition idle.
-
----
-
-
-## 5. Runtime/lifetime follow-ups
-
-Closed incidents are not active-plan material: scaled-prefetch orphaning is preserved in `Docs/Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md`, Reddit sub-millisecond recursive re-arm in `Docs/Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md`, and the performance/freshness campaign in R-87 / the accepted baseline context above.
-
-- [?] **R-84 replacement-generation handle baseline:** stable runtime is flat; one bounded 3–5 Settings-replacement churn run still decides whether the first replacement is one-time lazy/native initialization or whether every full replacement retains another persistent handle bundle. Use the existing `--handle-attribution` evidence plane; do not add another broad handle probe or request another discovery soak. Full mechanism/evidence: `Docs/Historical_Bugs/R-84_Usage_PDH_Cardinality_Handle_Slope_Observer_Effect.md`.
-- [?] **Normal image-rotation GUI hitch candidate — Windows proof required.** The repaired path publishes detached `PresentationImage` state from the compute task instead of bouncing processed `QImage -> QPixmap -> QImage` on the UI thread. Prove ordinary rotations collapse UI publication cost without changing pixels/DPR/identity, transition source/destination truth, history/accounting, stale-generation rejection or scaled-cache behavior. If a meaningful residual survives while UI publication is cheap, investigate the Qt-native detached buffer/upload boundary rather than retuning the Visualizer.
-- [?] **Context Menu invalidation candidate — Windows proof required.** QML notification ownership is split into entries/anchor/visibility so open/hide does not rebuild entry delegates merely because visibility or anchor changed. Repeated open/dismiss must preserve submenu grace, click-outside swallowing, single-owner policy and theme/shadow appearance while removing the old large event-loop tail.
-- [~] **Scaled speculation execution policy — installed proof required.** Keep R-82 liveness/correctness and the lazy serial below-normal-priority background CPU owner. Do not restore the speculative helper process, generic COMPUTE occupancy or normal-priority competition merely for throughput. Accept only if mixed-refresh physical evidence improves or remains neutral without freshness/reactivity loss.
-- [~] **Gmail/Reddit hidden delegate reduction — installed Qt validation pending.** Python retains the larger accepted source buffer while QML materializes only the effective visible count. Validate instant CUSTOM expansion, Settings SSOT and unchanged source cadence; do not reintroduce hidden Repeater forests.
-- [~] **System Stats presentation invalidation — installed validation pending.** Dynamic metric samples use the narrow sample notification rather than broad structural invalidation. The shared 10 s sampler/cadence is unchanged.
-- [~] **Media first Play/Pause duplicate — containment under validation.** Keep transport event-driven. The narrow same-burst duplicate guard must not expand into polling or suppress legitimate retry/Next/Previous semantics; prefer removing any reproducible duplicate at its origin.
-- [ ] **Quick-native startup/legacy image-boundary audit — gated by normal detached-path proof.** Startup desktop capture is a genuinely GUI-native `QScreen.grabWindow()` source and should not be changed without startup profiling. Separately audit whether the synchronous legacy image publication/failure path can consume detached Quick-native presentation state or be retired. Do not widen this work until normal runtime proof is accepted.
-
----
-
-## 6. Defaults/test authority follow-ups
-
-The large mutable-default/test-authority audit is closed and its durable rules now live in `Docs/TestSuite.md` and `Docs/Guides/Defaults_Guide.md`. Keep only unresolved cleanup here.
-
-- [?] **Achievement cadence authority coverage gap:** Achievement runtime follows the same canonical `widgets.steam.refresh_minutes` authority as Abandonment but lacks the symmetric positive test. Add that authority test when this family is next touched; this is coverage debt, not evidence of a product defect.
-
----
-
-## 7. Test-report / debris intake
-
-The separate full-suite agent/report owns red/stale-test archaeology. Detailed test policy lives in `Docs/TestSuite.md`; deletion and compatibility timing live in `Future_Cleanup.md`.
-
-- [ ] Classify incoming failures as current RED, environment-blocked, stale/rehome, or caller-proven debris before touching production.
-- [ ] Feed only real cleanup/debt conclusions into `Future_Cleanup.md`; do not restore retired owners to make historical tests green.
-- [~] **CHK54 RED-repair tranche:** first full-suite run reported 326 PASS files, 45 FAIL files, 2 collection errors and 0 hangs. Repair is test-signal-first: restore current fixtures/oracles to current owners, fix genuine production regressions, and never resurrect retired compatibility merely to satisfy a stale test.
-- [x] High-leverage RED clusters repaired for the next suite run: stale Quick Visualizer `screen_index` fakes; retired `_InheritedGlState` patch ownership; logical-tick technical setup; Reddit worker dependency on retired `remove_helper_run_entry`; current source/doc ownership drift; stale image-pipeline Settings/prefetch fakes; sparse Settings bucket default-artifact oracle; transition activation/asynchronous admission tests; save-debounce seam; and several stale Settings/Quick/Steam implementation assertions.
-- [x] Genuine current bugs found during RED triage repaired without widening compatibility: MC Display Settings now preserves the MC profile invariant `input.interaction_mode=True`; the Reddit helper worker no longer imports/calls the CHK43-retired login-start cleanup.
-- [!] **Protected unresolved REDs for next full-suite report:** Bubble reaction/viewport quality, 3D Blockflip rendering, recent image-prefetch ordering semantics, credential/SST/export privacy, custom-layout retained-runtime corruption, replay/reactivity floors, authored preset transfer and other behavior tests must be investigated as real signal before any threshold/expectation is changed. Block Puzzle Flip is low-value if its remaining tests prove to be retired-product debris; do not spend equivalent risk budget preserving it.
-- [!] Bubble-specific interpretation: migration-era Bubble changed extreme-viewport speed/population caps while preserving authored reactivity, and replay goldens were moved to floors. Do not weaken Bubble quality assertions merely because they are red; first reconcile the failing viewport/golden fixture with those current contracts.
-
----
-
-## 8. Content-extent resize rollout — landed architecture, remaining physical validation
-
-Current contract: `Docs/Guides/10_WIDGET_GUIDELINES.md`, `Docs/Contracts.md` and relevant family Reference docs. Whole-card uniform resize remains the default; admitted `content_extent` side reflow is one CUSTOM/session-owned presentation override, never a second settings/normalization owner. Friend Pulse, Reddit/Reddit2, Gmail, System Stats and Media are current consumers.
-
-- [?] **Media installed validation:** repeatedly horizontal/vertical side-resize plus corner/wheel resize with and without external app volume. Confirm Title/Artist remain left-anchored, family logical floors are axis-correct, seek/control/artwork/volume behavior remains coherent, `Allow Landscape Artwork` removes only the square cap, and Restore Size returns canonical authored geometry without disturbing X/Y/display.
-- [ ] **Games You Follow** must consume both shared content-extent axes in its first retained implementation; detailed future admission remains in `Docs/Future_Work/Steam_Games_You_Follow.md`.
 
 ## Standing guardrails
 
@@ -174,6 +54,7 @@ Current contract: `Docs/Guides/10_WIDGET_GUIDELINES.md`, `Docs/Contracts.md` and
 - **Media ownership:** GSMTC/event ownership is primary; no fast Media polling or
   process-probe fallbacks. Visualizer consumes Media admission but never acquires a
   second Media owner.
+- **System-audio dormancy:** the Core Audio endpoint (`core/media/system_mute.py`) and the mute/system-volume runtime are admitted only behind the mute-button setting, on the UI thread. Do not acquire the endpoint, register callbacks, or run that runtime while the feature is disabled; the End/PgUp/PgDown system-audio keys are gated by that same admission by design.
 - **Performance admission:** CHK26 / `a0bf70932c` is the current operator-accepted GOLDEN and the generic headroom campaign is closed. Reopen performance work only for a reproducible symptom, a soak/resource trend, a measurable feature regression, or a newly proven large locally owned hotspot. Preserve logical freshness/reactivity; Bubble is a protected reaction oracle, not an optimization target. See `Docs/Guardrails/Performance_Optimization_Contract.md`.
 - **Defaults SSOT:** `core/settings/default_settings.py` is the sole authority;
   `.json`/`.sst` are derived and audit-gated. Never add a second default authority.
@@ -183,6 +64,7 @@ Current contract: `Docs/Guides/10_WIDGET_GUIDELINES.md`, `Docs/Contracts.md` and
   from `SettingsThemeSpec`. Never reintroduce a monolithic Settings QSS file or a
   fallback stylesheet loader, even when the asset is absent.
 - **Visualizer preset ownership:** per-mode preset files are user-authored state. Users may add arbitrary counts, delete down to one, and leave sparse authored numbers. Runtime compacts them into slider positions without renaming/deleting files. A shipped preset manifest is packaging/reconciliation metadata, never runtime authority over user-authored presets.
+- **Protected behaviour REDs are real signal:** Bubble reaction/replay/viewport, 3D Blockflip pixels, image-prefetch ordering, custom-layout retained-runtime, credential/SST/export privacy and preset transfer must be investigated against current owners/floors before any assertion changes. When current behaviour is operator-confirmed correct, protect it as a floor; never weaken a protected contract to reach green.
 - **No fallback architecture:** failures should remain explicit and diagnosable; do
   not solve closeout work by adding silent fallback ownership, timers, or pollers.
 
@@ -193,7 +75,7 @@ exact current source + current reconciled test tree
 -> Current_Plan.md (this file: active work + order)
 -> Spec.md
 -> FWPlan.md (future / non-blocking implementation)
--> Future_Cleanup.md / Docs/TestSuite.md (cleanup + test truth)
+-> Future_Cleanup.md / Docs/TestSuite.md (compatibility register + test truth)
 -> Index.md + focused/decomposition docs
 ```
 
@@ -202,6 +84,6 @@ exact current source + current reconciled test tree
 - `Index.md` — routing map to current owners.
 - `Docs/TestSuite.md`
 - `Future_Cleanup.md`
-- `FWPlan.md`
+- `FWPlan.md` / `Future_Work.md`
 - `Docs/Reference/Steam_Friend_Pulse.md`
 - `Docs/Reference/System_Stats_Widget.md`
