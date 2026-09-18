@@ -35,16 +35,36 @@ DisplayTransferCapability = Callable[[CustomLayoutSessionItem, str], bool]
 DisplayTransferHandler = Callable[[CustomLayoutSessionItem, str], bool]
 SizeResetHandler = Callable[[CustomLayoutSessionItem], bool]
 ContentRotationHandler = Callable[[CustomLayoutSessionItem], bool]
+PresentationItemResolver = Callable[[CustomLayoutSessionItem], QQuickItem | None]
+ChildResizeBeginHandler = Callable[
+    [CustomLayoutSessionItem, str, str, QPoint, float, float], bool
+]
+ChildResizeUpdateHandler = Callable[
+    [CustomLayoutSessionItem, str, str, QPoint, bool], bool
+]
+ChildContentExtentHandler = Callable[[CustomLayoutSessionItem, float, float], bool]
 
-# Semantic edge-handle ids for the one-axis viewport-extent operation. Visualizer
-# corners are also viewport gestures, but their two-axis dispatch is owned by the
-# Python layout owner; ordinary corners remain the existing uniform-widget resize.
-# QML emits handle ids verbatim and never owns the geometry math.
+# Semantic handle ids for the shared edit chrome. Side edges are one-axis
+# viewport/content-extent gestures. Ordinary square corners retain uniform scale;
+# the separate ``content_*`` diagonal handles opt into two-axis content reflow.
+# QML emits semantic ids verbatim and never owns the geometry math.
 _VIEWPORT_EDGE_HANDLES = frozenset({"left", "right", "top", "bottom"})
+_CONTENT_CORNER_HANDLES = frozenset(
+    {
+        "content_top_left",
+        "content_top_right",
+        "content_bottom_left",
+        "content_bottom_right",
+    }
+)
 
 
 def _is_viewport_edge_handle(handle: str) -> bool:
     return str(handle) in _VIEWPORT_EDGE_HANDLES
+
+
+def _is_content_corner_handle(handle: str) -> bool:
+    return str(handle) in _CONTENT_CORNER_HANDLES
 
 
 class CustomLayoutOverlayModel(QAbstractListModel):
@@ -66,6 +86,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     _CONTENT_EXTENT_AXES_ROLE = _WIDGET_ID_ROLE + 11
     _SIZE_RESET_CAPABLE_ROLE = _WIDGET_ID_ROLE + 12
     _CONTENT_ROTATION_CAPABLE_ROLE = _WIDGET_ID_ROLE + 13
+    _SELECTED_FOR_CHILD_EDIT_ROLE = _WIDGET_ID_ROLE + 14
+    _PRESENTATION_ITEM_ROLE = _WIDGET_ID_ROLE + 15
 
     def __init__(
         self,
@@ -83,6 +105,10 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         display_transfer_handler: DisplayTransferHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
+        presentation_item_resolver: PresentationItemResolver | None = None,
+        child_resize_begin_handler: ChildResizeBeginHandler | None = None,
+        child_resize_update_handler: ChildResizeUpdateHandler | None = None,
+        child_content_extent_handler: ChildContentExtentHandler | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -101,8 +127,13 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._display_transfer_handler = display_transfer_handler
         self._size_reset_handler = size_reset_handler
         self._content_rotation_handler = content_rotation_handler
+        self._presentation_item_resolver = presentation_item_resolver
+        self._child_resize_begin_handler = child_resize_begin_handler
+        self._child_resize_update_handler = child_resize_update_handler
+        self._child_content_extent_handler = child_content_extent_handler
         self._items: list[CustomLayoutSessionItem] = []
         session.subscribe_changes(self._on_session_item_changed)
+        session.subscribe_selection(self._on_session_selection_changed)
         self.refresh()
 
     def roleNames(self) -> dict[int, QByteArray]:  # type: ignore[override]
@@ -121,6 +152,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             self._CONTENT_EXTENT_AXES_ROLE: QByteArray(b"contentExtentAxes"),
             self._SIZE_RESET_CAPABLE_ROLE: QByteArray(b"sizeResetCapable"),
             self._CONTENT_ROTATION_CAPABLE_ROLE: QByteArray(b"contentRotationCapable"),
+            self._SELECTED_FOR_CHILD_EDIT_ROLE: QByteArray(b"selectedForChildEdit"),
+            self._PRESENTATION_ITEM_ROLE: QByteArray(b"presentationItem"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # type: ignore[override]
@@ -159,6 +192,18 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             return bool(item.size_reset_capable)
         if role == self._CONTENT_ROTATION_CAPABLE_ROLE:
             return bool(item.content_rotation_capable)
+        if role == self._SELECTED_FOR_CHILD_EDIT_ROLE:
+            session = self._session
+            return bool(session is not None and session.selected_item() is item)
+        if role == self._PRESENTATION_ITEM_ROLE:
+            resolver = self._presentation_item_resolver
+            if resolver is None:
+                return None
+            try:
+                target = resolver(item)
+                return target if target is not None and _is_valid_qobject(target) else None
+            except (RuntimeError, TypeError):
+                return None
         return None
 
     @Slot()
@@ -214,6 +259,17 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         session = self._session
         if session is not None:
             session.notify_item_changed(item)
+
+    @Slot(int, result=bool)
+    def selectItem(self, row: int) -> bool:
+        """Select one parent for transient child/edit-chrome focus."""
+
+        if not 0 <= int(row) < len(self._items):
+            return False
+        session = self._session
+        if session is None:
+            return False
+        return bool(session.select_item(self._items[int(row)]))
 
     @Slot()
     def finishMove(self) -> None:
@@ -328,6 +384,95 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._notify_resize(item)
         return True
 
+    @Slot(int, str, str, float, float, float, float, result=bool)
+    def beginChildResize(
+        self,
+        row: int,
+        role_id: str,
+        handle: str,
+        local_x: float,
+        local_y: float,
+        visible_width: float,
+        visible_height: float,
+    ) -> bool:
+        if not 0 <= int(row) < len(self._items):
+            return False
+        item = self._items[int(row)]
+        if item.child_role(role_id) is None:
+            return False
+        handler = self._child_resize_begin_handler
+        if handler is None:
+            return False
+        cursor = self._global_point(local_x, local_y)
+        return bool(
+            handler(
+                item,
+                str(role_id),
+                str(handle),
+                cursor,
+                float(visible_width),
+                float(visible_height),
+            )
+        )
+
+    @Slot(int, str, str, float, float, bool, result=bool)
+    def resizeChild(
+        self,
+        row: int,
+        role_id: str,
+        handle: str,
+        local_x: float,
+        local_y: float,
+        finalize: bool,
+    ) -> bool:
+        if not 0 <= int(row) < len(self._items):
+            return False
+        item = self._items[int(row)]
+        if item.child_role(role_id) is None:
+            return False
+        handler = self._child_resize_update_handler
+        if handler is None:
+            return False
+        cursor = self._global_point(local_x, local_y)
+        if not handler(
+            item, str(role_id), str(handle), cursor, bool(finalize)
+        ):
+            return False
+        self._notify_resize(item)
+        return True
+
+    @Slot(int, str, result="QVariantList")
+    def childResizeHandles(self, row: int, role_id: str) -> list[str]:
+        """Return descriptor-owned handles for one focused child role."""
+
+        if not 0 <= int(row) < len(self._items):
+            return []
+        role = self._items[int(row)].child_role(role_id)
+        return list(role.resize_handles) if role is not None else []
+
+
+    @Slot(int, float, float, result=bool)
+    def ensureChildContentExtent(
+        self, row: int, required_width: float, required_height: float
+    ) -> bool:
+        """Grow an ordinary parent's logical content box after a child edit.
+
+        Families may report a retained minimum requirement, but QML never owns
+        the outer rectangle.  The shared Python owner admits growth only; a
+        smaller child never collapses the user's outer CUSTOM geometry.
+        """
+
+        if not 0 <= int(row) < len(self._items):
+            return False
+        item = self._items[int(row)]
+        handler = self._child_content_extent_handler
+        if handler is None or not item.child_geometry_capable:
+            return False
+        if not handler(item, float(required_width), float(required_height)):
+            return False
+        self._notify_resize(item)
+        return True
+
     @Slot(int, int, result=bool)
     def resizeWheel(self, row: int, angle_delta_y: int) -> bool:
         """Apply one uniform wheel-resize request through the canonical owner."""
@@ -345,6 +490,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         session = self._session
         if session is not None:
             session.unsubscribe_changes(self._on_session_item_changed)
+            session.unsubscribe_selection(self._on_session_selection_changed)
         self.beginResetModel()
         self._items = []
         self._session = None
@@ -357,6 +503,11 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._display_transfer_capability = None
         self._display_transfer_handler = None
         self._size_reset_handler = None
+        self._content_rotation_handler = None
+        self._presentation_item_resolver = None
+        self._child_resize_begin_handler = None
+        self._child_resize_update_handler = None
+        self._child_content_extent_handler = None
         self.endResetModel()
 
     def _resizable_item(self, row: int) -> CustomLayoutSessionItem | None:
@@ -372,10 +523,10 @@ class CustomLayoutOverlayModel(QAbstractListModel):
     ) -> CustomLayoutSessionItem | None:
         """Gate a resize handle by its semantic role.
 
-        The four side handles require viewport capability. Corners remain
-        available to every resizable item; the owner interprets Visualizer corners
-        as two-axis viewport extent and ordinary corners as uniform widget resize.
-        This keeps the semantic split without giving ordinary widgets side handles.
+        Side handles require their declared viewport/content axis. Existing
+        square corners remain available to every resizable item and keep their
+        established Visualizer-viewport / ordinary-uniform semantics. Distinct
+        ``content_*`` diagonal corners require both ordinary content axes.
         """
 
         if not 0 <= int(row) < len(self._items):
@@ -386,6 +537,13 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 return item
             axis = "horizontal" if str(handle) in {"left", "right"} else "vertical"
             return item if axis in item.content_extent_axes else None
+        if _is_content_corner_handle(handle):
+            return (
+                item
+                if not item.viewport_resize_capable
+                and {"horizontal", "vertical"}.issubset(item.content_extent_axes)
+                else None
+            )
         return item if item.resize_capable else None
 
     def _can_transfer(self, item: CustomLayoutSessionItem, direction: str) -> bool:
@@ -442,6 +600,20 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             ],
         )
 
+    def _on_session_selection_changed(
+        self,
+        _selected: CustomLayoutSessionItem | None,
+    ) -> None:
+        if not self._items:
+            return
+        first = self.index(0, 0)
+        last = self.index(len(self._items) - 1, 0)
+        self.dataChanged.emit(
+            first,
+            last,
+            [self._SELECTED_FOR_CHILD_EDIT_ROLE],
+        )
+
     def _publish_item_change(self, item: CustomLayoutSessionItem) -> None:
         publisher = self._item_change_publisher
         if publisher is not None:
@@ -485,6 +657,10 @@ class RetainedCustomLayoutOverlay:
         display_transfer_handler: DisplayTransferHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
+        presentation_item_resolver: PresentationItemResolver | None = None,
+        child_resize_begin_handler: ChildResizeBeginHandler | None = None,
+        child_resize_update_handler: ChildResizeUpdateHandler | None = None,
+        child_content_extent_handler: ChildContentExtentHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         self.clear_session()
         model = CustomLayoutOverlayModel(
@@ -501,6 +677,10 @@ class RetainedCustomLayoutOverlay:
             display_transfer_handler=display_transfer_handler,
             size_reset_handler=size_reset_handler,
             content_rotation_handler=content_rotation_handler,
+            presentation_item_resolver=presentation_item_resolver,
+            child_resize_begin_handler=child_resize_begin_handler,
+            child_resize_update_handler=child_resize_update_handler,
+            child_content_extent_handler=child_content_extent_handler,
             parent=self.item,
         )
         self._model = model

@@ -8,6 +8,7 @@ local image sources only.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -96,6 +97,7 @@ def _grid_columns_for(
     authored_width: int,
     *,
     custom_horizontal_extent: bool = False,
+    avatar_scale: float = 1.0,
 ) -> int:
     """Fit readable avatar cells to the current logical card width.
 
@@ -108,7 +110,19 @@ def _grid_columns_for(
     normalized_capacity = max(1, min(24, int(capacity)))
     normalized_width = max(420, min(4000, int(authored_width)))
     content_width = normalized_width - 36
-    fitted = max(1, int((content_width + _GRID_GAP) // (110 + _GRID_GAP)))
+    try:
+        resolved_avatar_scale = float(avatar_scale)
+    except (TypeError, ValueError):
+        resolved_avatar_scale = 1.0
+    if not math.isfinite(resolved_avatar_scale) or resolved_avatar_scale <= 0.0:
+        resolved_avatar_scale = 1.0
+    resolved_avatar_scale = max(0.55, min(2.00, resolved_avatar_scale))
+    # Avatar customization changes the readable cell footprint, not the source
+    # roster or provider. Baseline scale=1.0 retains the existing 110px fit.
+    minimum_cell_width = max(72.0, 110.0 * resolved_avatar_scale)
+    fitted = max(
+        1, int((content_width + _GRID_GAP) // (minimum_cell_width + _GRID_GAP))
+    )
     column_limit = 24 if custom_horizontal_extent else normalized_capacity
     return min(column_limit, fitted)
 
@@ -447,6 +461,7 @@ class FriendPulseRowListModel(QAbstractListModel):
 
 class FriendPulsePresentationModel(QObject):
     stateChanged = Signal()
+    customGeometryChanged = Signal()
     friendChangePulseRequested = Signal(int)
 
     def __init__(
@@ -480,6 +495,10 @@ class FriendPulsePresentationModel(QObject):
         # This is presentation-only session/layout state; it never mutates the
         # normalized ``visible_row_capacity``/``preferred_width`` settings.
         self._content_extent: tuple[int, int] | None = None
+        # One grouped CUSTOM avatar role. The shared layout session owns the
+        # persisted factor; every row/grid avatar consumes this single scalar so
+        # no per-friend geometry state or provider activity is introduced.
+        self._custom_avatar_scale = 1.0
 
     @property
     def is_active(self) -> bool:
@@ -787,6 +806,7 @@ class FriendPulsePresentationModel(QObject):
             return False
         self._content_extent = extent
         self.stateChanged.emit()
+        self.customGeometryChanged.emit()
         return True
 
     def clear_content_extent(self) -> bool:
@@ -796,6 +816,30 @@ class FriendPulsePresentationModel(QObject):
             return False
         self._content_extent = None
         self.stateChanged.emit()
+        self.customGeometryChanged.emit()
+        return True
+
+    def set_custom_child_geometry(self, child_geometry: object) -> bool:
+        """Project the grouped CUSTOM avatar role into retained presentation state."""
+
+        raw = child_geometry if isinstance(child_geometry, Mapping) else {}
+        avatar = raw.get("avatars") if isinstance(raw, Mapping) else None
+        if not isinstance(avatar, Mapping):
+            avatar = {}
+        try:
+            scale = float(avatar.get("width_scale", 1.0))
+        except (TypeError, ValueError):
+            scale = 1.0
+        if not math.isfinite(scale) or scale <= 0.0:
+            scale = 1.0
+        scale = max(0.55, min(2.00, scale))
+        if abs(scale - self._custom_avatar_scale) <= 1.0e-4:
+            return False
+        self._custom_avatar_scale = scale
+        # Avatar size and grid-column admission share one narrow geometry signal
+        # so a drag sample neither wakes unrelated state bindings nor emits two
+        # separate geometry notifications.
+        self.customGeometryChanged.emit()
         return True
 
     def retire(self) -> None:
@@ -862,7 +906,7 @@ class FriendPulsePresentationModel(QObject):
     def viewMode(self) -> str:
         return self.config.view_mode
 
-    @Property(int, notify=stateChanged)
+    @Property(int, notify=customGeometryChanged)
     def gridColumns(self) -> int:
         # A horizontal content-extent override reflows the avatar grid. The
         # authored baseline still respects ``visible_row_capacity``; once the
@@ -878,7 +922,12 @@ class FriendPulsePresentationModel(QObject):
             self.config.capacity,
             width,
             custom_horizontal_extent=custom_extent,
+            avatar_scale=self._custom_avatar_scale,
         )
+
+    @Property(float, notify=customGeometryChanged)
+    def customAvatarScale(self) -> float:
+        return float(self._custom_avatar_scale)
 
     @Property(int, constant=True)
     def visibleCapacity(self) -> int:
@@ -1088,12 +1137,11 @@ class RetainedFriendPulsePresentation:
     ) -> None:
         """Consume the CUSTOM content-box override from the layout payload.
 
-        ``content_extent`` is the only size-payload key Friend Pulse honours; it
-        drives the reflow (vertical -> more rows, horizontal -> grid columns).
-        Its absence clears any prior override so the card returns to its authored
-        size. Legacy per-value keys stay intentionally ignored (H9). This handler
-        runs for both live edits and committed CUSTOM replay, so a saved extent
-        reflows on load and through slot save/restore.
+        ``content_extent`` owns the outer logical reflow while the shared
+        ``child_geometry`` payload may project the one grouped avatar-size role.
+        Their absence clears prior overrides so normal/non-CUSTOM presentation
+        returns to authored truth. Legacy per-value keys stay ignored (H9). The
+        handler runs for live edits and committed CUSTOM replay/slot restore.
         """
 
         extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
@@ -1101,6 +1149,9 @@ class RetainedFriendPulsePresentation:
             self._model.set_content_extent(extent[0], extent[1])
         else:
             self._model.clear_content_extent()
+
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
+        self._model.set_custom_child_geometry(child_geometry)
 
     def apply_input_state(self, input_state: object) -> bool:
         value = (

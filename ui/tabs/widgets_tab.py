@@ -53,7 +53,7 @@ from rendering.widget_descriptors import (
     is_custom_position_selected_for_widget,
     load_widget_section,
     load_widget_sections,
-    restore_all_custom_layouts_to_authored_layout,
+    restore_widget_family_to_authored_layout,
     restore_all_widget_positions_to_application_defaults,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
@@ -528,7 +528,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         notice.setText(
             "<span style='color: rgba(255, 176, 82, 235);'>"
             "<a href='disable-custom' style='color: rgba(255, 176, 82, 255); text-decoration: underline;'>"
-            "Disable Custom Mode</a> To Change!</span>"
+            "Disable Custom</a> To Adjust!</span>"
         )
         notice.linkActivated.connect(lambda _link, sid=section_id: self._on_custom_resize_lock_link_activated(sid))
         insert_index = parent_layout.indexOf(row_widget)
@@ -577,7 +577,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         confirmed = StyledPopup.question(
             self,
             "Disable Custom Mode",
-            "This will return your widgets to their last known good locations, are you sure?",
+            "This will return the affected widget to its last known good authored location, are you sure?",
             yes_text="Revert",
             no_text="Nope",
             default_to_yes=False,
@@ -585,7 +585,14 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         if not confirmed:
             return
         widgets_cfg = self._settings.get_widgets_map()
-        restored_any = restore_all_custom_layouts_to_authored_layout(widgets_cfg)
+        # CUSTOM resize locks are scoped to the authored controls they protect.
+        # Reverting one notice must never dismantle unrelated CUSTOM widgets.
+        restored_any = False
+        for widget_id in binding.widget_ids:
+            restored_any = (
+                restore_widget_family_to_authored_layout(widgets_cfg, widget_id)
+                or restored_any
+            )
         if not restored_any:
             return
         self._save_coalesce_token += 1

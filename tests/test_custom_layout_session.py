@@ -283,3 +283,41 @@ def test_restore_authored_size_changes_only_shape_payload_and_resize_state() -> 
     assert item.current_enabled is False
     assert item.removed is True
     assert item.baseline_global_rect == original_baseline
+
+
+def test_parent_selection_is_transient_session_state_and_clears_with_item_retirement():
+    session = CustomLayoutSession()
+    first = _item(
+        CustomLayoutKey("media", "display:a"),
+        QRect(40, 50, 520, 210),
+    )
+    second = _item(
+        CustomLayoutKey("friend_pulse", "display:b"),
+        QRect(900, 80, 610, 334),
+    )
+    session.add_item(first)
+    session.add_item(second)
+    seen: list[str | None] = []
+    session.subscribe_selection(
+        lambda selected: seen.append(
+            None if selected is None else selected.source_key.widget_id
+        )
+    )
+
+    assert session.selected_item() is None
+    assert session.select_item(first) is True
+    assert session.selected_item() is first
+    assert session.select_item(first) is False
+    assert session.select_item(second) is True
+    assert session.selected_item() is second
+
+    # Selection is edit-session chrome state, not persistence. If the selected
+    # parent leaves the working scene, selection retires immediately.
+    second.current_enabled = False
+    session.notify_item_changed(second)
+    assert session.selected_item() is None
+    assert seen == ["media", "friend_pulse", None]
+
+    session.select_item(first)
+    session.restore_baseline()
+    assert session.selected_item() is None

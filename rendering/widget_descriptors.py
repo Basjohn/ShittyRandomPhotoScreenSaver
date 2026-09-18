@@ -15,6 +15,10 @@ from typing import Any, Callable, Dict, Mapping
 from core.dev_gates import gate_signature, is_named_gate_enabled
 
 from core.settings.defaults import get_default_settings
+from rendering.custom_child_geometry import (
+    CustomChildRoleDescriptor,
+    freeform_artwork_child_role,
+)
 from core.settings.widget_family_catalog import (
     WIDGET_FAMILY_DESCRIPTORS,  # noqa: F401 - compatibility re-export
     WidgetFamilyDescriptor,  # noqa: F401 - compatibility re-export
@@ -688,22 +692,39 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
         control_attrs=("gmail_font_size",),
         anchor_attr="gmail_font_size",
     ),
+    # Steam cards deliberately own independent CUSTOM lock scopes. They share
+    # one Settings section/provider family, but their authored geometry controls
+    # are not one authority: CUSTOM Achievement must not disable Friend Pulse or
+    # Abandonment controls (and vice versa). Future Steam cards add one descriptor
+    # here rather than expanding a section-wide lock.
     WidgetCustomResizeLockDescriptor(
-        section_id="steam",
-        widget_ids=("achievement_pulse", "abandonment_issues", "friend_pulse"),
-        position_combo_attrs=(
-            "achievement_pulse_position",
-            "abandonment_issues_position",
-            "friend_pulse_position",
-        ),
+        section_id="steam_achievement_pulse",
+        widget_ids=("achievement_pulse",),
+        position_combo_attrs=("achievement_pulse_position",),
         control_attrs=(
             "achievement_pulse_font_size",
-            "abandonment_issues_font_size",
+            "achievement_pulse_artwork_shape",
+            "achievement_pulse_square_artwork_size",
+        ),
+        anchor_attr="achievement_pulse_font_size",
+    ),
+    WidgetCustomResizeLockDescriptor(
+        section_id="steam_abandonment_issues",
+        widget_ids=("abandonment_issues",),
+        position_combo_attrs=("abandonment_issues_position",),
+        control_attrs=("abandonment_issues_font_size",),
+        anchor_attr="abandonment_issues_font_size",
+    ),
+    WidgetCustomResizeLockDescriptor(
+        section_id="steam_friend_pulse",
+        widget_ids=("friend_pulse",),
+        position_combo_attrs=("friend_pulse_position",),
+        control_attrs=(
             "friend_pulse_font_size",
             "friend_pulse_name_font_size",
             "friend_pulse_visible_row_capacity",
         ),
-        anchor_attr="achievement_pulse_font_size",
+        anchor_attr="friend_pulse_font_size",
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="system_stats",
@@ -1224,6 +1245,10 @@ class WidgetRuntimeDescriptor:
     # reference. The owner resolves this against authored_reference_size once
     # at edit admission so session/persistence/QML share one floor.
     content_extent_floor_at_authored_size: bool = False
+    # Small descriptor-declared set of major visual child roles that CUSTOM may
+    # resize independently. Persistence remains in the parent's existing CUSTOM
+    # size payload; QML only publishes retained target geometry for edit chrome.
+    custom_child_roles: tuple[CustomChildRoleDescriptor, ...] = ()
     writes_custom_position_key: bool = True
     writes_custom_monitor_key: bool = True
     dev_feature_env: str | None = None
@@ -1573,6 +1598,30 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         content_extent_axes=("horizontal", "vertical"),
         content_extent_minimum_size=(600, 290),
         content_extent_floor_at_authored_size=True,
+        custom_child_roles=(
+            # Artwork frames are freeform X/Y; the retained image itself keeps
+            # native aspect via PreserveAspectCrop. Intrinsic-shape roles stay
+            # uniform so circles/square badges cannot be distorted.
+            freeform_artwork_child_role(
+                resize_handles=("bottom_left",),
+            ),
+            CustomChildRoleDescriptor(
+                "badge",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.55, 0.55),
+                maximum_scale=(2.50, 2.50),
+                uniform_scale=True,
+                resize_handles=("bottom_right",),
+            ),
+            CustomChildRoleDescriptor(
+                "progress_circle",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.60, 0.60),
+                maximum_scale=(2.25, 2.25),
+                uniform_scale=True,
+                resize_handles=("top_right",),
+            ),
+        ),
     ),
     WidgetRuntimeDescriptor(
         widget_id="abandonment_issues",
@@ -1616,6 +1665,18 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="ordinary_uniform",
         content_extent_axes=("horizontal", "vertical"),
+        custom_child_roles=(
+            # One grouped intrinsic role: every visible avatar consumes the same
+            # scalar, preserving shape/alignment without per-avatar state.
+            CustomChildRoleDescriptor(
+                "avatars",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.55, 0.55),
+                maximum_scale=(2.00, 2.00),
+                uniform_scale=True,
+                resize_handles=("bottom_right",),
+            ),
+        ),
     ),
     WidgetRuntimeDescriptor(
         widget_id="system_stats",

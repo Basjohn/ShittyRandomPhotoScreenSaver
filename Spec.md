@@ -288,7 +288,7 @@ CUSTOM disables this derived planner; first Edit preserves the visible footprint
 
 Ordinary card CUSTOM resize starts with one retained whole-card transform, with Settings-authored baseline values
 unchanged. A family may additionally opt into the **shared `content_extent` presentation-reflow contract** on selected side
-axes. Side handles then change a logical family content box at constant uniform scale; corners/wheel still resize the whole
+axes. Side handles then change one logical family content axis at constant uniform scale; an optional selected-parent diagonal corner may change both admitted content axes through the same owner; existing square corners/wheel still resize the whole
 retained presentation uniformly. The descriptor/session/owner is the sole persistence authority for that extent. Family
 QML/models may consume it to reflow rows, spacing, metadata or artwork, but may not persist geometry, mutate product
 Settings, create a placement solver, or add a resize timer/debounce/poller. Family-owned logical side-drag floors are

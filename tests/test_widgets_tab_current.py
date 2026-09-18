@@ -611,7 +611,8 @@ class TestWidgetsTab:
             assert tab.media_artwork_size.isEnabled() is False
             notice = tab._custom_resize_lock_notice_labels["media"]
             assert notice.isHidden() is False
-            assert "Disable Custom Mode" in notice.text()
+            assert "Disable Custom" in notice.text()
+            assert "To Adjust!" in notice.text()
             assert tab.media_font_combo.isEnabled() is True
             assert tab.media_show_controls.isEnabled() is True
             assert tab.media_playback_progress_enabled.isEnabled() is True

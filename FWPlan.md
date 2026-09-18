@@ -19,7 +19,7 @@ Anything promoted into active execution is intentionally omitted from this file.
 5. **Deformable 3D Sphere / Blob Sphere** — separate future experiment; never mutate the accepted Voxel Sphere into it.
 6. **Organic Growth / Ink Bloom** — bounded shader experiment.
 7. **Other 3D Visualizer experiments** — each gets its own isolated mode boundary/decomposition.
-8. **Games You Follow** — feasibility-gated Steam news card. First prove `IStoreService/GetGamesFollowed/v1` with the existing user Web API key + linked SteamID64 through current request machinery; no QR/session/cookie/scrape fallback. Last-good followed/news caches remain usable indefinitely when stale. Its first retained card must already use shared horizontal/vertical `content_extent` side reflow while corners/wheel stay whole-card uniform.
+8. **Games You Follow** — feasibility-gated Steam news card. First prove `IStoreService/GetGamesFollowed/v1` with the existing user Web API key + linked SteamID64 through current request machinery; no QR/session/cookie/scrape fallback. Last-good followed/news caches remain usable indefinitely when stale. Its first retained card must already use shared horizontal/vertical `content_extent` side reflow; its optional diagonal content corner may reflow both axes together, while existing square corners/wheel stay whole-card uniform.
 9. **Settings FlowContainer polish [low]** — only for a demonstrated layout improvement.
 
 ## Golden / landed work is not backlog

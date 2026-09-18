@@ -908,6 +908,26 @@ def test_narrow_grid_keeps_event_glow_and_friend_title_allocated(
         qt_app.processEvents()
 
 
+def test_custom_avatar_role_is_one_uniform_group_and_uses_narrow_geometry_signals() -> None:
+    model = _model(view_mode="grid", capacity=12, preferred_width=900)
+    base_columns = int(model.gridColumns)
+    state_spy = QSignalSpy(model.stateChanged)
+    geometry_spy = QSignalSpy(model.customGeometryChanged)
+
+    # Intrinsic avatar geometry canonicalizes to one scalar even if persisted
+    # input has mismatched axes. It must not wake unrelated state bindings.
+    assert model.set_custom_child_geometry(
+        {"avatars": {"width_scale": 1.8, "height_scale": 0.6}}
+    ) is True
+    assert model.customAvatarScale == pytest.approx(1.8)
+    assert int(model.gridColumns) <= base_columns
+    assert geometry_spy.count() == 1
+    assert state_spy.count() == 0
+
+    assert model.set_custom_child_geometry({}) is True
+    assert model.customAvatarScale == pytest.approx(1.0)
+
+
 def test_content_extent_override_reflows_grid_columns() -> None:
     service = _RuntimeService()
     model = _model(service, view_mode="grid", capacity=6, preferred_width=760)

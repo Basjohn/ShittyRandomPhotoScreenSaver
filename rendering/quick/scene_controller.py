@@ -39,6 +39,9 @@ from .context_menu import (
     QuickContextMenuShadowStyle,
 )
 from .custom_layout_overlay import (
+    ChildContentExtentHandler,
+    ChildResizeBeginHandler,
+    ChildResizeUpdateHandler,
     ContentRotationHandler,
     CustomLayoutOverlayModel,
     DisplayTransferCapability,
@@ -875,6 +878,9 @@ class QuickSceneController(QObject):
         display_transfer_handler: DisplayTransferHandler | None = None,
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
+        child_resize_begin_handler: ChildResizeBeginHandler | None = None,
+        child_resize_update_handler: ChildResizeUpdateHandler | None = None,
+        child_content_extent_handler: ChildContentExtentHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind this display's retained pixels to shared CUSTOM working state."""
 
@@ -909,6 +915,10 @@ class QuickSceneController(QObject):
             display_transfer_handler=display_transfer_handler,
             size_reset_handler=size_reset_handler,
             content_rotation_handler=content_rotation_handler,
+            presentation_item_resolver=self._custom_layout_presentation_item,
+            child_resize_begin_handler=child_resize_begin_handler,
+            child_resize_update_handler=child_resize_update_handler,
+            child_content_extent_handler=child_content_extent_handler,
         )
         underlay = self._custom_layout_guide_underlay
         if underlay is not None:
@@ -916,6 +926,27 @@ class QuickSceneController(QObject):
             underlay.setProperty("horizontalCenterGuides", [])
             underlay.setProperty("editActive", True)
         return model
+
+    def _custom_layout_presentation_item(
+        self, item: CustomLayoutSessionItem
+    ) -> QQuickItem | None:
+        """Return one live ordinary root for transient child edit chrome.
+
+        The session never stores this QObject.  The overlay asks the retained
+        scene on demand while Edit is active, so child-handle presentation cannot
+        become a second lifetime/geometry owner. Visualizer intentionally has no
+        editable-child target.
+        """
+
+        if item.model_identity == "spotify_visualizer":
+            return None
+        host = self._ordinary_widget_host
+        if host is None:
+            return None
+        presentation = host.presentation_for_model_identity(item.model_identity)
+        if presentation is None or not presentation.is_qt_alive:
+            return None
+        return presentation.item
 
     def refresh_custom_layout_session(self) -> None:
         """Reproject current session state onto the same retained items."""
