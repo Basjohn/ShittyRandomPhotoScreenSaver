@@ -35,6 +35,9 @@ def test_general_section_renames_only_user_facing_defaults_surface(qt_app, setti
         assert tab._general_layout_toggle.isChecked() is False
         assert tab._general_cache_toggle.isChecked() is False
         assert tab._general_style_overrides_toggle.isChecked() is False
+        assert tab.widget_child_collision_enabled.text() == "Enable Child Widget Collisions"
+        assert tab.widget_child_collision_enabled.property("circleIndicator") is True
+        assert tab.widget_child_collision_enabled.isChecked() is False
         assert tuple(tab.cache_family_checks) == tuple(
             descriptor.family_id for descriptor in get_cache_family_descriptors()
         )

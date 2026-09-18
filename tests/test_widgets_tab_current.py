@@ -179,7 +179,7 @@ class TestWidgetsTab:
             "media": {"enabled": True, "position": "Bottom Left", "monitor": "ALL"},
             "spotify_visualizer": {"enabled": True, "mode": "bubble"},
             "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
-            "global": {"card_border_width_px": 3},
+            "global": {"card_border_width_px": 3, "child_collision_enabled": False},
         })
 
         tab = WidgetsTab(
@@ -243,7 +243,6 @@ class TestWidgetsTab:
         settings_manager.set("widgets", {
             "media": {
                 "enabled": True,
-                "child_collision_enabled": False,
                 "show_controls": True,
                 "playback_progress_enabled": True,
                 "playback_progress_height": 11,
@@ -262,8 +261,6 @@ class TestWidgetsTab:
         )
         try:
             assert tab.media_playback_progress_enabled.isChecked() is True
-            assert tab.media_child_collision_enabled.property("circleIndicator") is True
-            assert tab.media_child_collision_enabled.isChecked() is False
             assert tab.media_playback_progress_height.value() == 11
             assert tab._media_progress_fill_color.getRgb() == (15, 125, 235, 210)
             assert tab.media_playback_progress_shadow_enabled.isChecked() is True
@@ -273,7 +270,6 @@ class TestWidgetsTab:
             assert tab.media_playback_progress_glow_color_btn.isEnabled() is True
 
             saved = save_media_settings(tab)
-            assert saved["child_collision_enabled"] is False
             assert saved["playback_progress_enabled"] is True
             assert saved["playback_progress_height"] == 11
             assert saved["playback_progress_fill_color"] == [15, 125, 235, 210]
@@ -1178,6 +1174,7 @@ class TestWidgetsTab:
                 },
                 "global": {
                     "card_border_width_px": 6,
+                    "child_collision_enabled": True,
                     "stacking_enabled": False,
                 },
             })
@@ -1188,12 +1185,14 @@ class TestWidgetsTab:
             assert tab.widget_text_shadows_enabled.isChecked() is False
             assert tab.widget_header_shadows_enabled.isChecked() is True
             assert tab.widget_stacking_enabled.isChecked() is False
+            assert tab.widget_child_collision_enabled.isChecked() is True
             assert tab.card_border_width_spin.value() == 6
 
             tab.widget_shadows_enabled.setChecked(True)
             tab.widget_text_shadows_enabled.setChecked(True)
             tab.widget_header_shadows_enabled.setChecked(False)
             tab.widget_stacking_enabled.setChecked(True)
+            tab.widget_child_collision_enabled.setChecked(False)
             tab.card_border_width_spin.setValue(4)
             tab._save_settings_now()
 
@@ -1221,6 +1220,7 @@ class TestWidgetsTab:
                     assert saved_shadows[key] == expected
             assert "offset" not in saved_shadows
             assert widgets_cfg["global"]["card_border_width_px"] == 4
+            assert widgets_cfg["global"]["child_collision_enabled"] is False
             assert widgets_cfg["global"]["stacking_enabled"] is True
         finally:
             tab.deleteLater()

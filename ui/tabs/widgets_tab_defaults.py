@@ -775,6 +775,25 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     row.addStretch()
     layout_settings_layout.addLayout(row)
 
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 8, 0, 8)
+    row.setSpacing(12)
+    tab.widget_child_collision_enabled = QCheckBox("Enable Child Widget Collisions")
+    tab.widget_child_collision_enabled.setProperty("circleIndicator", True)
+    tab.widget_child_collision_enabled.setToolTip(
+        "Global CUSTOM Edit preference. When enabled, editable child elements resist "
+        "and cannot settle overlapping one another. Turn it off to allow child elements "
+        "to overlap and pass through each other; snapping, alignment guides, parent "
+        "containment and fixed obstacles remain active."
+    )
+    tab.widget_child_collision_enabled.setChecked(
+        tab._default_bool("global", "child_collision_enabled")
+    )
+    tab.widget_child_collision_enabled.stateChanged.connect(tab._save_settings)
+    row.addWidget(tab.widget_child_collision_enabled)
+    row.addStretch()
+    layout_settings_layout.addLayout(row)
+
     surface_row, _ = add_aligned_row(
         style_overrides_layout,
         "Card Surface:",
@@ -997,8 +1016,13 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
     border_width = tab._config_int("global", global_cfg, "card_border_width_px")
     border_width = max(0, min(12, border_width))
     stacking_enabled = tab._config_bool("global", global_cfg, "stacking_enabled")
+    child_collision_enabled = tab._config_bool(
+        "global", global_cfg, "child_collision_enabled"
+    )
     tab._global_card_border_width = border_width
     tab.widget_stacking_enabled.setChecked(stacking_enabled)
+    if hasattr(tab, "widget_child_collision_enabled"):
+        tab.widget_child_collision_enabled.setChecked(child_collision_enabled)
     if hasattr(tab, "card_border_width_spin"):
         tab.card_border_width_spin.setValue(border_width)
 
@@ -1044,6 +1068,11 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
     border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px"))
     global_config = {
         "card_border_width_px": int(border_width),
+        "child_collision_enabled": (
+            tab.widget_child_collision_enabled.isChecked()
+            if hasattr(tab, "widget_child_collision_enabled")
+            else tab._default_bool("global", "child_collision_enabled")
+        ),
         "stacking_enabled": tab.widget_stacking_enabled.isChecked(),
     }
     return shadows_config, global_config

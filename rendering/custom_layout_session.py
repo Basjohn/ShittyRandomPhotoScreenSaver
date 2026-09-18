@@ -135,7 +135,7 @@ class CustomLayoutSessionItem:
     # collision admission; snapping/guides, real-parent clipping/containment and
     # declared fixed obstacles remain active.  This is Settings-owned state,
     # not CUSTOM geometry/persistence, and therefore never enters size_payload.
-    child_collision_enabled: bool = True
+    child_collision_enabled: bool = False
     baseline_child_sizes: dict[str, CustomChildSize] = field(default_factory=dict)
     current_child_sizes: dict[str, CustomChildSize] = field(default_factory=dict)
     # Transient retained-family minimum implied by the currently resolved child
