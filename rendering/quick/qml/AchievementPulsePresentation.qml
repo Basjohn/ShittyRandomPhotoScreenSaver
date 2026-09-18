@@ -42,6 +42,7 @@ OverlayWidget {
         }
         return roles
     }
+    customEditableChildRequirementTarget: normalContent
 
     readonly property real authoredWidth: achievementModel.authoredWidth
     readonly property real authoredHeight: achievementModel.authoredHeight

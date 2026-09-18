@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from PySide6.QtCore import QRect
 
 from rendering.custom_child_geometry import (
+    CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY,
     CustomChildRoleDescriptor,
     CustomChildSize,
     child_role_map,
@@ -130,8 +131,19 @@ class CustomLayoutSessionItem:
     # Keeping a normalized working map here avoids reparsing/allocating the
     # persisted payload on every pointer move.
     custom_child_roles: tuple[CustomChildRoleDescriptor, ...] = ()
+    # Widget-scoped Edit preference.  False disables only editable-child peer
+    # collision admission; snapping/guides, real-parent clipping/containment and
+    # declared fixed obstacles remain active.  This is Settings-owned state,
+    # not CUSTOM geometry/persistence, and therefore never enters size_payload.
+    child_collision_enabled: bool = True
     baseline_child_sizes: dict[str, CustomChildSize] = field(default_factory=dict)
     current_child_sizes: dict[str, CustomChildSize] = field(default_factory=dict)
+    # Transient retained-family minimum implied by the currently resolved child
+    # geometry.  This is deliberately NOT persisted: the family presentation
+    # re-reports it when selected for child editing.  The owner uses it only as
+    # a floor for parent content-extent side/corner gestures so those controls
+    # cannot cut back through an already-customized child.
+    child_content_requirement: ViewportExtent | None = None
     # Per-widget Restore Size authority.  This is deliberately distinct from
     # the admission baseline above: baseline may already be a committed CUSTOM
     # shape/scale, while authored_reference_size is the current non-CUSTOM
@@ -151,6 +163,7 @@ class CustomLayoutSessionItem:
         self.baseline_enabled = bool(self.baseline_enabled)
         self.current_enabled = bool(self.current_enabled)
         self.is_duplicate = bool(self.is_duplicate)
+        self.child_collision_enabled = bool(self.child_collision_enabled)
         self.resize_capable = bool(self.resize_capable)
         self.baseline_resize_scale = float(self.baseline_resize_scale)
         if not self.baseline_resize_scale > 0.0:
@@ -199,6 +212,9 @@ class CustomLayoutSessionItem:
             ).items()
             if str(role_id) in role_map and isinstance(size, CustomChildSize)
         }
+        self.child_content_requirement = normalize_viewport_extent(
+            self.child_content_requirement
+        )
         self.size_reset_capable = bool(self.size_reset_capable)
         self.authored_reference_size = normalize_viewport_extent(
             self.authored_reference_size
@@ -256,6 +272,24 @@ class CustomLayoutSessionItem:
         else:
             self.current_child_sizes[normalized_id] = size
         return True
+
+    def restore_authored_child_geometry(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Clear every descriptor-owned CUSTOM child override atomically.
+
+        Restore Size is an authored-state transaction, not an incremental role
+        mutation. Keep the session's fast working cache and the one persisted
+        ``child_geometry`` carrier in lockstep here so the Python owner cannot
+        accidentally clear one authority while leaving stale child placement in
+        the other. Unknown/retired child records are intentionally removed too:
+        an explicit authored reset must not allow them to spring back after a
+        later role/settings change.
+        """
+
+        result = dict(payload)
+        result.pop(CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY, None)
+        self.current_child_sizes = {}
+        self.child_content_requirement = None
+        return result
 
     def set_geometry(
         self,
@@ -316,6 +350,10 @@ class CustomLayoutSessionItem:
         self.current_viewport_extent = self.baseline_viewport_extent
         self.current_content_extent = self.baseline_content_extent
         self.current_child_sizes = dict(self.baseline_child_sizes)
+        # The retained presentation re-derives this selected-parent floor. Never
+        # carry a requirement from an abandoned edit gesture across Cancel/reset
+        # semantics or a later re-entry.
+        self.child_content_requirement = None
         self.removed = False
 
     def restore_authored_size(

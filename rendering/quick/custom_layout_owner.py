@@ -21,8 +21,12 @@ from core.settings.default_contract import require_canonical_default
 from rendering.custom_child_geometry import (
     CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY,
     CustomChildSize,
-    clamp_child_size,
+    clamp_child_geometry,
+    flip_child_alignment,
     normalize_child_geometry,
+    resolve_child_move_geometry,
+    resolve_child_resize_geometry,
+    set_child_semantic_anchor,
     update_child_geometry_payload,
 )
 from rendering.custom_layout_contract import (
@@ -135,7 +139,20 @@ class _ChildResizeOrigin:
     cursor: QPoint
     visible_width: float
     visible_height: float
+    normalization_width: float
+    normalization_height: float
     size: CustomChildSize
+
+
+@dataclass(frozen=True, slots=True)
+class _ChildMoveOrigin:
+    role_id: str
+    cursor: QPoint
+    normalization_width: float
+    normalization_height: float
+    placement_compensation_x: float
+    placement_compensation_y: float
+    geometry: CustomChildSize
 
 
 class QuickCustomLayoutOwner:
@@ -165,6 +182,12 @@ class QuickCustomLayoutOwner:
         self._descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         self._resize_origins: dict[CustomLayoutKey, _ResizeOrigin] = {}
         self._child_resize_origins: dict[CustomLayoutKey, _ChildResizeOrigin] = {}
+        self._child_move_origins: dict[CustomLayoutKey, _ChildMoveOrigin] = {}
+        # Stable object identity of the globally selected child-edit parent.
+        # Selection changes are the authoritative retirement boundary for
+        # transient child gestures/containment; QML destruction remains a
+        # defensive fallback rather than the sole cleanup owner.
+        self._selected_child_edit_item: CustomLayoutSessionItem | None = None
         # One Edit session owns one stable pixels-per-world authority for the
         # Visualizer viewport. Retained presentation publications may refresh
         # style/content while editing, but may not silently replace this geometry
@@ -180,6 +203,11 @@ class QuickCustomLayoutOwner:
         self._deferred_topology_reconciliation_reason: str | None = None
         self._active = False
         self._retired = False
+        self._settings_change_signal = getattr(settings_manager, "settings_changed", None)
+        if self._settings_change_signal is not None and hasattr(
+            self._settings_change_signal, "connect"
+        ):
+            self._settings_change_signal.connect(self._on_settings_changed)
 
     @property
     def is_active(self) -> bool:
@@ -192,6 +220,59 @@ class QuickCustomLayoutOwner:
     @property
     def session(self) -> CustomLayoutSession | None:
         return self._session
+
+    @staticmethod
+    def _resolve_child_collision_enabled(
+        widgets: Mapping[str, Any],
+        widget_id: str,
+        descriptor: WidgetRuntimeDescriptor,
+    ) -> bool:
+        """Resolve the widget-scoped child/child collision preference.
+
+        A single editable child cannot collide with a sibling, so no product
+        setting is required for those families yet.  As soon as a descriptor
+        exposes multiple editable roles the canonical Settings default becomes
+        mandatory.  This makes rollout failures loud instead of quietly growing
+        another shadow fallback.
+        """
+
+        if len(descriptor.custom_child_roles) <= 1:
+            return True
+        default = bool(
+            require_canonical_default(
+                f"widgets.{widget_id}.child_collision_enabled"
+            )
+        )
+        section = widgets.get(widget_id, {})
+        if not isinstance(section, Mapping):
+            return default
+        return bool(section.get("child_collision_enabled", default))
+
+    def _on_settings_changed(self, key: str, value: object) -> None:
+        """Live-refresh the Edit-only peer collision preference.
+
+        WidgetsTab writes the structured ``widgets`` root.  Updating an active
+        CUSTOM session here is event-driven and mutates only the session flag;
+        no geometry or CUSTOM payload is rewritten, and nothing runs on render
+        cadence or outside a Settings change event.
+        """
+
+        if key != "widgets" or not self._active or self._session is None:
+            return
+        widgets = value if isinstance(value, Mapping) else self._settings_manager.get_widgets_map()
+        for item in self._session.items():
+            descriptor = self._descriptors.get(item.source_key)
+            if descriptor is None or len(descriptor.custom_child_roles) <= 1:
+                continue
+            enabled = self._resolve_child_collision_enabled(
+                widgets,
+                item.source_key.widget_id,
+                descriptor,
+            )
+            if item.child_collision_enabled == enabled:
+                continue
+            item.child_collision_enabled = enabled
+            self._session.notify_item_changed(item)
 
     def can_start(self) -> bool:
         if self._retired or self._settings_manager is None:
@@ -250,8 +331,15 @@ class QuickCustomLayoutOwner:
                     size_reset_handler=self.restore_item_size,
                     content_rotation_handler=self.rotate_visualizer_content,
                     child_resize_begin_handler=self.begin_child_resize,
+                    child_resize_preview_handler=self.preview_child_resize,
                     child_resize_update_handler=self.update_child_resize,
+                    child_move_begin_handler=self.begin_child_move,
+                    child_move_update_handler=self.update_child_move,
+                    child_alignment_flip_handler=self.flip_child_alignment,
+                    child_semantic_anchor_handler=self.set_child_semantic_anchor,
+                    child_gesture_cancel_handler=self.cancel_child_gesture,
                     child_content_extent_handler=self.ensure_child_content_extent,
+                    child_content_extent_clear_handler=self.clear_child_content_extent,
                 )
         except Exception:
             for binding in bindings.values():
@@ -266,6 +354,8 @@ class QuickCustomLayoutOwner:
         self._descriptors = descriptors
         self._session = session
         self._coordinator = coordinator
+        self._selected_child_edit_item = None
+        session.subscribe_selection(self._on_child_edit_selection_changed)
         self._active = True
         logger.info(
             "[CUSTOM_LAYOUT] Started one Quick session displays=%d items=%d",
@@ -273,6 +363,33 @@ class QuickCustomLayoutOwner:
             len(session.items()),
         )
         return True
+
+
+    def _on_child_edit_selection_changed(
+        self,
+        selected: CustomLayoutSessionItem | None,
+    ) -> None:
+        """Retire transient child-edit state at the stable selection boundary.
+
+        QML loaders/delegates are presentation details and may be destroyed after
+        model rows have already been rebuilt.  Relying on an old row index during
+        ``Component.onDestruction`` can therefore target the wrong session item.
+        The session's selected object identity is stable, so make it the primary
+        cleanup authority: the previous parent loses pointer origins and its
+        selected-Edit-only containment floor immediately when focus moves away.
+
+        This callback is event-owned and exists only for an active CUSTOM edit
+        session.  It adds no runtime cadence outside Edit.
+        """
+
+        previous = self._selected_child_edit_item
+        if previous is selected:
+            return
+        if previous is not None:
+            self._resize_origins.pop(previous.source_key, None)
+            self.cancel_child_gesture(previous)
+            self.clear_child_content_extent(previous)
+        self._selected_child_edit_item = selected
 
     def cancel(self) -> bool:
         if not self._active or self._session is None:
@@ -478,6 +595,13 @@ class QuickCustomLayoutOwner:
                 )
             self._finish()
         self._retired = True
+        signal = self._settings_change_signal
+        self._settings_change_signal = None
+        if signal is not None and hasattr(signal, "disconnect"):
+            try:
+                signal.disconnect(self._on_settings_changed)
+            except (RuntimeError, TypeError):
+                pass
         self._participants_provider = lambda: ()
         self._visualizer_provider = lambda: (None, None)
         return True
@@ -795,6 +919,11 @@ class QuickCustomLayoutOwner:
         elif not item.resize_capable:
             return False
 
+        # One item has one active geometry gesture owner. If a child pointer
+        # stream was interrupted and a parent handle takes over, retire only the
+        # transient child origin before capturing the parent resize origin.
+        self.cancel_child_gesture(item)
+
         uniform_scale = None
         if is_viewport_handle:
             uniform_scale = self._visualizer_pixels_per_world.get(item.source_key)
@@ -858,6 +987,8 @@ class QuickCustomLayoutOwner:
         cursor: QPoint,
         visible_width: float,
         visible_height: float,
+        normalization_width: float,
+        normalization_height: float,
     ) -> bool:
         """Begin one descriptor-gated child-size gesture.
 
@@ -868,26 +999,39 @@ class QuickCustomLayoutOwner:
 
         role = item.child_role(role_id)
         handle_id = str(handle or "")
-        if role is None or handle_id not in role.resize_handles:
+        if role is None or not role.admits_resize_handle(handle_id):
             return False
         try:
             width = float(visible_width)
             height = float(visible_height)
+            norm_width = float(normalization_width)
+            norm_height = float(normalization_height)
         except (TypeError, ValueError):
             return False
         if not (
             math.isfinite(width)
             and math.isfinite(height)
+            and math.isfinite(norm_width)
+            and math.isfinite(norm_height)
             and width > 1.0
             and height > 1.0
+            and norm_width > 1.0e-6
+            and norm_height > 1.0e-6
         ):
             return False
+        # A new child gesture owns this item exclusively. Retire any stale
+        # parent/move origin left by an interrupted pointer stream rather than
+        # allowing one prior gesture to leak into a repeat adjustment.
+        self._resize_origins.pop(item.source_key, None)
+        self._child_move_origins.pop(item.source_key, None)
         self._child_resize_origins[item.source_key] = _ChildResizeOrigin(
             role_id=role.role_id,
             handle=handle_id,
             cursor=QPoint(cursor),
             visible_width=width,
             visible_height=height,
+            normalization_width=norm_width,
+            normalization_height=norm_height,
             size=item.child_size(role.role_id),
         )
         return True
@@ -908,37 +1052,25 @@ class QuickCustomLayoutOwner:
             or role is None
             or origin.role_id != role.role_id
             or origin.handle != handle_id
-            or handle_id not in role.resize_handles
+            or not role.admits_resize_handle(handle_id)
         ):
+            if finalize:
+                self._child_resize_origins.pop(item.source_key, None)
             return False
 
-        dx = float(cursor.x() - origin.cursor.x())
-        dy = float(cursor.y() - origin.cursor.y())
-        if handle_id.endswith("left"):
-            dx = -dx
-        if handle_id.startswith("top_"):
-            dy = -dy
-
-        width_ratio = max(1.0e-6, origin.visible_width + dx) / origin.visible_width
-        height_ratio = max(1.0e-6, origin.visible_height + dy) / origin.visible_height
-        if role.uniform_scale:
-            # A corner can lead with either axis. Pick the larger proportional
-            # departure from the press point and apply it to both dimensions,
-            # preserving the authored child aspect without QML geometry math.
-            width_departure = abs(math.log(max(1.0e-6, width_ratio)))
-            height_departure = abs(math.log(max(1.0e-6, height_ratio)))
-            ratio = width_ratio if width_departure >= height_departure else height_ratio
-            next_size = clamp_child_size(
-                role,
-                origin.size.width_scale * ratio,
-                origin.size.height_scale * ratio,
-            )
-        else:
-            next_size = clamp_child_size(
-                role,
-                origin.size.width_scale * width_ratio,
-                origin.size.height_scale * height_ratio,
-            )
+        resolved = resolve_child_resize_geometry(
+            role,
+            origin.size,
+            handle=handle_id,
+            raw_dx=float(cursor.x() - origin.cursor.x()),
+            raw_dy=float(cursor.y() - origin.cursor.y()),
+            visible_width=origin.visible_width,
+            visible_height=origin.visible_height,
+            normalization_width=origin.normalization_width,
+            normalization_height=origin.normalization_height,
+            outer_scale=float(item.resize_scale),
+        )
+        next_size = resolved.geometry
         changed = item.set_child_size(role.role_id, next_size)
         if changed:
             item.current_size_payload = update_child_geometry_payload(
@@ -950,17 +1082,217 @@ class QuickCustomLayoutOwner:
             self._child_resize_origins.pop(item.source_key, None)
         return changed
 
+    def preview_child_resize(
+        self,
+        item: CustomLayoutSessionItem,
+        role_id: str,
+        handle: str,
+        cursor: QPoint,
+    ) -> QPoint | None:
+        """Return the descriptor-bounded pointer equivalent without mutation.
+
+        QML collision/containment needs a live rectangle before committing a
+        resize sample.  Feeding it the raw pointer used to let an extreme drag
+        grow the parent beyond a child's descriptor maximum and leave permanent
+        empty space.  Preview and commit now share the exact same resolver.
+        """
+
+        origin = self._child_resize_origins.get(item.source_key)
+        role = item.child_role(role_id)
+        handle_id = str(handle or "")
+        if (
+            origin is None
+            or role is None
+            or origin.role_id != role.role_id
+            or origin.handle != handle_id
+            or not role.admits_resize_handle(handle_id)
+        ):
+            return None
+        resolved = resolve_child_resize_geometry(
+            role,
+            origin.size,
+            handle=handle_id,
+            raw_dx=float(cursor.x() - origin.cursor.x()),
+            raw_dy=float(cursor.y() - origin.cursor.y()),
+            visible_width=origin.visible_width,
+            visible_height=origin.visible_height,
+            normalization_width=origin.normalization_width,
+            normalization_height=origin.normalization_height,
+            outer_scale=float(item.resize_scale),
+        )
+        width_delta = resolved.visible_width - origin.visible_width
+        height_delta = resolved.visible_height - origin.visible_height
+        return QPoint(
+            origin.cursor.x()
+            + int(round(-width_delta if handle_id.endswith("left") else width_delta)),
+            origin.cursor.y()
+            + int(round(-height_delta if (handle_id == "top" or handle_id.startswith("top_")) else height_delta)),
+        )
+
+    def begin_child_move(
+        self,
+        item: CustomLayoutSessionItem,
+        role_id: str,
+        cursor: QPoint,
+        normalization_width: float,
+        normalization_height: float,
+        placement_compensation_x: float = 0.0,
+        placement_compensation_y: float = 0.0,
+    ) -> bool:
+        """Begin one authored-relative child placement gesture.
+
+        The retained overlay reports pointer coordinates and the role's stable
+        authored normalization box. Python owns the persisted normalized offset;
+        QML remains only the live presentation/collision admission surface.
+        """
+
+        role = item.child_role(role_id)
+        if role is None or not role.movable:
+            return False
+        try:
+            norm_width = float(normalization_width)
+            norm_height = float(normalization_height)
+            compensation_x = float(placement_compensation_x)
+            compensation_y = float(placement_compensation_y)
+        except (TypeError, ValueError):
+            return False
+        if not (
+            math.isfinite(norm_width)
+            and math.isfinite(norm_height)
+            and math.isfinite(compensation_x)
+            and math.isfinite(compensation_y)
+            and norm_width > 1.0e-6
+            and norm_height > 1.0e-6
+        ):
+            return False
+        self._resize_origins.pop(item.source_key, None)
+        self._child_resize_origins.pop(item.source_key, None)
+        self._child_move_origins[item.source_key] = _ChildMoveOrigin(
+            role_id=role.role_id,
+            cursor=QPoint(cursor),
+            normalization_width=norm_width,
+            normalization_height=norm_height,
+            placement_compensation_x=compensation_x,
+            placement_compensation_y=compensation_y,
+            geometry=item.child_size(role.role_id),
+        )
+        return True
+
+    def update_child_move(
+        self,
+        item: CustomLayoutSessionItem,
+        role_id: str,
+        cursor: QPoint,
+        finalize: bool,
+    ) -> bool:
+        origin = self._child_move_origins.get(item.source_key)
+        role = item.child_role(role_id)
+        if (
+            origin is None
+            or role is None
+            or not role.movable
+            or origin.role_id != role.role_id
+        ):
+            if finalize:
+                self._child_move_origins.pop(item.source_key, None)
+            return False
+
+        next_geometry = resolve_child_move_geometry(
+            role,
+            origin.geometry,
+            raw_dx=float(cursor.x() - origin.cursor.x()),
+            raw_dy=float(cursor.y() - origin.cursor.y()),
+            normalization_width=origin.normalization_width,
+            normalization_height=origin.normalization_height,
+            outer_scale=float(item.resize_scale),
+            placement_compensation_x=origin.placement_compensation_x,
+            placement_compensation_y=origin.placement_compensation_y,
+        )
+        changed = item.set_child_size(role.role_id, next_geometry)
+        if changed:
+            item.current_size_payload = update_child_geometry_payload(
+                item.current_size_payload,
+                item.custom_child_roles,
+                item.current_child_sizes,
+            )
+        if finalize:
+            self._child_move_origins.pop(item.source_key, None)
+        return changed
+
+    def flip_child_alignment(
+        self, item: CustomLayoutSessionItem, role_id: str
+    ) -> bool:
+        """Toggle one descriptor-admitted role alignment in the shared payload.
+
+        This is an explicit Edit-mode click transaction, not pointer cadence. The
+        role stays inside the existing ``child_geometry`` carrier so Save/Cancel/
+        Restore/slots keep one authority and family rendering only projects it.
+        """
+
+        role = item.child_role(role_id)
+        if role is None or not role.alignment_flip:
+            return False
+        next_geometry = flip_child_alignment(role, item.child_size(role.role_id))
+        changed = item.set_child_size(role.role_id, next_geometry)
+        if changed:
+            item.current_size_payload = update_child_geometry_payload(
+                item.current_size_payload,
+                item.custom_child_roles,
+                item.current_child_sizes,
+            )
+        return changed
+
+    def set_child_semantic_anchor(
+        self,
+        item: CustomLayoutSessionItem,
+        role_id: str,
+        anchor: str | None,
+    ) -> bool:
+        """Commit one descriptor-admitted semantic corner anchor."""
+
+        role = item.child_role(role_id)
+        if role is None or not role.semantic_corner_anchor:
+            return False
+        next_geometry = set_child_semantic_anchor(
+            role, item.child_size(role.role_id), anchor
+        )
+        changed = item.set_child_size(role.role_id, next_geometry)
+        if changed:
+            item.current_size_payload = update_child_geometry_payload(
+                item.current_size_payload,
+                item.custom_child_roles,
+                item.current_child_sizes,
+            )
+        return changed
+
+    def cancel_child_gesture(self, item: CustomLayoutSessionItem) -> None:
+        """Retire transient child pointer origins without mutating committed state."""
+
+        self._child_resize_origins.pop(item.source_key, None)
+        self._child_move_origins.pop(item.source_key, None)
+
+    def clear_child_content_extent(self, item: CustomLayoutSessionItem) -> bool:
+        """Retire selected-Edit-only containment without changing outer geometry."""
+
+        if item.child_content_requirement is None:
+            return False
+        item.child_content_requirement = None
+        return True
+
     def ensure_child_content_extent(
         self,
         item: CustomLayoutSessionItem,
         required_width: float,
         required_height: float,
     ) -> bool:
-        """Grow the shared ordinary content box to satisfy a child requirement.
+        """Record a child floor and grow the shared ordinary content box if needed.
 
-        The family reports only a logical minimum after its normal layout has
-        resolved the committed child size.  This owner alone mutates outer
-        geometry.  Requirements may grow the box, never shrink it.
+        The retained family reports the logical minimum implied by its current
+        customized children.  The latest requirement is kept transiently in the
+        edit session so later parent content-side/corner gestures cannot cut back
+        through those children.  A smaller requirement lowers only that gesture
+        floor; it never auto-shrinks the user's outer box.  This owner remains the
+        sole mutator of outer geometry.
         """
 
         if (
@@ -978,6 +1310,11 @@ class QuickCustomLayoutOwner:
             requested_width = 0.0
         if not math.isfinite(requested_height):
             requested_height = 0.0
+        if requested_width > 0.0 and requested_height > 0.0:
+            # Session-only state.  It is re-derived from retained presentation
+            # geometry whenever this parent is selected for child editing, so no
+            # second persisted geometry authority or steady-state observer exists.
+            item.child_content_requirement = (requested_width, requested_height)
 
         scale = max(1.0e-6, float(item.resize_scale))
         current_box = item.current_content_extent
@@ -1002,8 +1339,12 @@ class QuickCustomLayoutOwner:
         if binding is None:
             return False
         minimum = quick_custom_content_extent_minimum_size(item)
-        target_width = max(minimum.width(), int(round(next_width * scale)))
-        target_height = max(minimum.height(), int(round(next_height * scale)))
+        # This is a minimum containment floor, not a nearest-pixel preference.
+        # Rounding down can leave a fractional child overflow unresolved and make
+        # later retained-geometry notifications retry the same impossible growth.
+        # Ceil admits the logical requirement in one bounded step (at most +1 px).
+        target_width = max(minimum.width(), int(math.ceil(next_width * scale)))
+        target_height = max(minimum.height(), int(math.ceil(next_height * scale)))
         current = item.current_global_rect
         local = clamp_local_rect_to_bounds(
             QRect(
@@ -1022,6 +1363,19 @@ class QuickCustomLayoutOwner:
             float(local.width()) / scale,
             float(local.height()) / scale,
         )
+        current_extent = item.current_content_extent
+        if (
+            local.width() == current.width()
+            and local.height() == current.height()
+            and current_extent is not None
+            and abs(float(current_extent[0]) - admitted_box[0]) <= 1.0e-4
+            and abs(float(current_extent[1]) - admitted_box[1]) <= 1.0e-4
+        ):
+            # Display bounds can make a requested overflow physically impossible.
+            # Keep the transient child floor for parent-gesture protection, but do
+            # not republish an identical outer rectangle on every pointer sample.
+            return False
+
         payload = dict(item.current_size_payload)
         payload.update(
             width=local.width(),
@@ -1351,6 +1705,11 @@ class QuickCustomLayoutOwner:
                 content_extent_minimum_size=content_extent_minimum_size,
                 baseline_content_extent=committed_content_extent,
                 custom_child_roles=descriptor.custom_child_roles,
+                child_collision_enabled=self._resolve_child_collision_enabled(
+                    widgets,
+                    widget_id,
+                    descriptor,
+                ),
                 baseline_child_sizes=committed_child_sizes,
                 current_child_sizes=committed_child_sizes,
                 size_reset_capable=descriptor.requires_size_reset_affordance,
@@ -1499,6 +1858,11 @@ class QuickCustomLayoutOwner:
             or item.current_display_identity not in self._bindings
         ):
             return False
+        # Reset is a transaction boundary. Kill any partially-owned child or
+        # parent pointer origin before replacing geometry so a later release cannot
+        # replay deltas against the newly-authored state.
+        self.cancel_child_gesture(item)
+        self._resize_origins.pop(item.source_key, None)
         binding = self._bindings[item.current_display_identity]
         authored_width = max(1.0, float(item.authored_reference_size[0]))
         authored_height = max(1.0, float(item.authored_reference_size[1]))
@@ -1551,9 +1915,11 @@ class QuickCustomLayoutOwner:
             )
             payload.pop("content_extent", None)
             if item.child_geometry_capable:
-                payload = update_child_geometry_payload(
-                    payload, item.custom_child_roles, item.current_child_sizes
-                )
+                # One session method owns the authored child reset transaction:
+                # working cache + persisted carrier + transient containment floor
+                # are cleared together. Position/display remain untouched by the
+                # outer Restore Size contract.
+                payload = item.restore_authored_child_geometry(payload)
             item.restore_authored_size(
                 rect,
                 size_payload=payload,
@@ -2566,6 +2932,13 @@ class QuickCustomLayoutOwner:
                         binding.identity,
                     )
         finally:
+            # Selection owns transient child-edit retirement by stable object
+            # identity. Close that state before dropping the session/listener so
+            # no stale floor or interrupted pointer origin can survive teardown.
+            session = self._session
+            if session is not None:
+                self._on_child_edit_selection_changed(None)
+                session.unsubscribe_selection(self._on_child_edit_selection_changed)
             # Shared Python ownership must close exactly once even when one display's
             # retained C++ graph is already damaged. This prevents the half-Edit
             # state observed when display 0 threw before display 1 was cleared.
@@ -2574,6 +2947,8 @@ class QuickCustomLayoutOwner:
             self._descriptors = {}
             self._resize_origins = {}
             self._child_resize_origins = {}
+            self._child_move_origins = {}
+            self._selected_child_edit_item = None
             self._visualizer_pixels_per_world.clear()
             self._visualizer_move_transfer_latch.clear()
             self._active = False

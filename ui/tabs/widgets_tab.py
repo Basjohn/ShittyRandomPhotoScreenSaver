@@ -540,6 +540,24 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         self._custom_resize_lock_notice_labels[section_id] = notice
         return notice
 
+    def _set_custom_lock_aware_enabled(self, control, enabled: bool) -> None:
+        """Apply one authored dependency state beneath the CUSTOM lock layer.
+
+        Settings-family dependency rules (for example Steam artwork visibility)
+        remain the base authority for whether a control *would* be enabled.
+        CUSTOM is only an additional disable layer. Remembering that base state
+        prevents CUSTOM unlock from resurrecting controls that their own family
+        still requires disabled, while dependency changes made during CUSTOM are
+        preserved for the eventual unlock.
+        """
+
+        if control is None or not _is_valid_qobject(control):
+            return
+        authored_enabled = bool(enabled)
+        control.setProperty("_customResizeAuthoredEnabled", authored_enabled)
+        lock_active = bool(control.property("_customResizeLockActive"))
+        control.setEnabled(authored_enabled and not lock_active)
+
     def _refresh_custom_resize_lock_state(self) -> None:
         widgets_cfg = self._widgets_config_for_custom_resize_lock_state()
         active_sections: set[str] = set()
@@ -553,7 +571,17 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
                 if control is not None and _is_valid_qobject(control)
             ]
             for control in controls:
-                control.setEnabled(not lock_active)
+                authored_enabled = control.property("_customResizeAuthoredEnabled")
+                if authored_enabled is None:
+                    # Capture the family's current authored/dependency state only
+                    # once. Family updaters that own dependencies subsequently
+                    # maintain this property through _set_custom_lock_aware_enabled.
+                    authored_enabled = bool(control.isEnabled())
+                    control.setProperty(
+                        "_customResizeAuthoredEnabled", authored_enabled
+                    )
+                control.setProperty("_customResizeLockActive", bool(lock_active))
+                control.setEnabled(bool(authored_enabled) and not lock_active)
             notice = self._ensure_custom_resize_lock_notice(binding)
             if notice is not None:
                 notice.setVisible(bool(lock_active))
@@ -1071,10 +1099,16 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         self._save_coalesce_token += 1
         self._save_coalesce_pending = False
 
-        # CUSTOM-resize notices are owned visually by the family container but
-        # retained separately for fast refresh. Drop that side reference before
-        # Qt destroys the child so no delayed save can touch a dead wrapper.
-        self._custom_resize_lock_notice_labels.pop(section_id, None)
+        # CUSTOM-resize notices are owned visually by the physical Settings
+        # section but use independent widget/family lock-scope ids. Steam is the
+        # canonical case: one ``steam`` page owns three separate lock notices.
+        # Drop every notice owned by this physical section before Qt destroys the
+        # child so no delayed save can touch a dead wrapper.
+        for binding in self._iter_custom_resize_lock_bindings():
+            if str(binding.settings_section_id) == section_id:
+                self._custom_resize_lock_notice_labels.pop(
+                    str(binding.section_id), None
+                )
         try:
             container.setParent(None)
             container.deleteLater()

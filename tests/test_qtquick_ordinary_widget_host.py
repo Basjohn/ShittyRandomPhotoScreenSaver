@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtGui import QColor
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QPointF
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
 from core.settings.shadow_direction import ShadowDirection, resolve_signed_offset
 from rendering.quick.bootstrap import quick_qml_root
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
-from rendering.quick.state import QuickWindowPolicy
+from rendering.quick.state import QuickInputState, QuickWindowPolicy
 from rendering.quick.widgets.host import (
     OrdinaryWidgetPresentationHost,
     OverlayCardStyle,
@@ -396,6 +396,88 @@ def test_production_ordinary_shadows_use_one_display_underlay_below_all_cards() 
     assert "offset: Qt.vector2d(0.0, 0.0)" in underlay
     assert 'item.setProperty("externalCardShadow", True)' in host
     assert "create_overlay_card_shadow" in scene
+
+
+@pytest.mark.qt
+def test_custom_layout_input_gate_blocks_semantics_and_is_inherited(qt_app) -> None:
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(
+        owner=owner, screen_index=0, runtime_generation=77
+    )
+    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
+    assert host_item is not None
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item,
+        context=context,
+        create_overlay_item=factory.create_overlay_widget,
+    )
+
+    widget = host.create_widget(
+        model_identity="interactive-family",
+        geometry=OverlayWidgetGeometry(0.0, 0.0, 200.0, 120.0),
+    )
+    widget.item.setProperty("semanticDoubleClickEnabled", True)
+    seen: list[tuple[bool, bool]] = []
+    host.set_widget_input_state_handler(
+        widget,
+        lambda state: seen.append(
+            (
+                bool(getattr(state, "interaction_mode_enabled", False)),
+                bool(getattr(state, "ctrl_held", False)),
+            )
+        ) or True,
+    )
+    live_state = QuickInputState(
+        screen_index=0,
+        runtime_generation=77,
+        interaction_mode_enabled=True,
+        ctrl_held=True,
+    )
+    host.apply_input_state(live_state)
+    assert seen[-1] == (True, True)
+    assert widget.item.property("customLayoutInputBlocked") is False
+
+    assert host.set_custom_layout_input_blocked(True) is True
+    assert widget.item.property("customLayoutInputBlocked") is True
+    assert seen[-1] == (False, False)
+    assert host.handles_semantic_double_click_at(QPointF(10.0, 10.0)) is False
+
+    # A family appearing while Edit is already active inherits the gate before
+    # scene admission and receives the blocked form of the cached input state.
+    late = host.create_widget(
+        model_identity="late-interactive-family",
+        geometry=OverlayWidgetGeometry(220.0, 0.0, 200.0, 120.0),
+    )
+    late_seen: list[tuple[bool, bool]] = []
+    host.set_widget_input_state_handler(
+        late,
+        lambda state: late_seen.append(
+            (
+                bool(getattr(state, "interaction_mode_enabled", False)),
+                bool(getattr(state, "ctrl_held", False)),
+            )
+        ) or True,
+    )
+    assert late.item.property("customLayoutInputBlocked") is True
+    assert late_seen[-1] == (False, False)
+
+    assert host.set_custom_layout_input_blocked(False) is True
+    assert widget.item.property("customLayoutInputBlocked") is False
+    assert late.item.property("customLayoutInputBlocked") is False
+    assert seen[-1] == (True, True)
+    assert late_seen[-1] == (True, True)
+
+    qml = (QML_ROOT / "OverlayWidget.qml").read_text(encoding="utf-8")
+    assert 'property bool customLayoutInputBlocked: false' in qml
+    assert 'active: overlayWidget.customLayoutInputBlocked && overlayWidget.visible' in qml
+    assert 'acceptedButtons: Qt.AllButtons' in qml
+    assert 'onDoubleClicked: function(mouse) { mouse.accepted = true }' in qml
+
+    host.retire_all()
+    factory.deleteLater()
+    owner.deleteLater()
+    qt_app.processEvents()
 
 
 @pytest.mark.qt

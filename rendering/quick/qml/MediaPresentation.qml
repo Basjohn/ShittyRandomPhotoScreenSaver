@@ -8,8 +8,9 @@ OverlayWidget {
     // H9: CUSTOM wheel/corner resize is one uniform retained-presentation scale.
     // Header, metadata, artwork, progress and controls scale together from the
     // outer-rect / baseline-preferred ratio, so a resize no longer recentres or
-    // respaces individual bands. CUSTOM resize is purely geometric here; font and
-    // artwork sizes stay Settings-owned (no per-value payload scaling).
+    // respaces individual bands. Whole-widget CUSTOM resize remains purely
+    // geometric; admitted child roles below may additionally own their normalized
+    // presentation geometry while Settings retains all non-geometry styling.
     uniformScaleTransform: true
 
     required property var mediaModel
@@ -23,6 +24,75 @@ OverlayWidget {
     signal appVolumeStepRequested(int direction)
     signal systemMuteToggleRequested()
     signal seekFractionRequested(real fraction)
+
+    // CUSTOM exposes only four deliberate Media child roles. The shared edit
+    // overlay owns the smaller handles and Python/session owns normalized
+    // factors/persistence; these retained targets never become geometry owners.
+    customEditableChildRoles: {
+        const roles = []
+        const normW = mediaRoot.canonicalPreferredCardWidth
+            + mediaRoot.canonicalVolumeAccessoryExtent
+        const normH = mediaRoot.canonicalPreferredHeight
+        if (artworkFrame.visible) {
+            roles.push({
+                "roleId": "artwork",
+                "target": artworkFrame,
+                "geometryDependencies": [mediaColumn, mainBand],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (progressBand.visible) {
+            roles.push({
+                "roleId": "seek_bar",
+                "target": progressTrack,
+                "geometryDependencies": [mediaColumn, progressBand],
+                // Seek-height changes reflow the retained controls slot below it.
+                // Movement does not use this exception, so free placement still
+                // cannot cross the controls surface.
+                "resizeReflowRoleIds": ["transport_controls"],
+                "resizeReflowAxes": ["vertical"],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (appVolumeSlider.visible) {
+            roles.push({
+                "roleId": "volume_bar",
+                "target": appVolumeTrack,
+                "geometryDependencies": [appVolumeSlider],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (controlsRow.visible) {
+            roles.push({
+                "roleId": "transport_controls",
+                "target": controlsRow,
+                "geometryDependencies": [mediaColumn, controlsBandSlot],
+                "resizeReflowGate": controlsRow,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        return roles
+    }
+    // Collision truth includes only painted non-role regions. Transport edits
+    // own the complete controls surface, including the mute control; seek itself
+    // is already an editable peer. Do not register invisible structural slots
+    // such as progressBand as obstacles: once a child is freely placed, an empty
+    // authored layout reservation must not become a second/ghost placement
+    // authority. These rectangles are inspected only while the selected edit
+    // layer exists.
+    customEditableChildObstacles: [
+        headerFrame,
+        metadata
+    ]
+    customEditableChildRequirementTarget: customChildRequirement
 
     // Content-driven outer size (H option A). Width honours the historical
     // ordinary-card minimum footprint (600) and enlarges above it only when the
@@ -41,11 +111,75 @@ OverlayWidget {
     readonly property real canonicalPreferredHeight: Math.max(
         220.0, mediaModel.artworkSize + 60.0
     )
-    readonly property real volumeAccessoryExtent:
+    readonly property real canonicalVolumeAccessoryExtent:
         mediaModel.appVolumeAvailable ? 48.0 : 0.0
+    readonly property real canonicalCardContentWidth: Math.max(
+        1.0, canonicalPreferredCardWidth - mediaRoot.shellInset
+    )
+    readonly property real canonicalProgressTrackWidth: Math.max(
+        1.0,
+        (canonicalCardContentWidth
+            - 2.0 * Math.max(12.0, canonicalCardContentWidth * 0.08)) * 0.75
+    )
+    readonly property real canonicalProgressTrackHeight: mediaModel.progressHeight
+    readonly property real canonicalControlsHeight: Math.max(
+        38.0, mediaRoot.mediaModel.fontSize * 2.15
+    )
+    // Manual child placement is authored-relative, not relative to a
+    // reflowing Column slot. Once seek/transport has a real X/Y offset, cancel
+    // later ancestor-band movement in the retained target binding. The first real
+    // move folds the current ancestor displacement into the same persisted offset
+    // through the shared placement-compensation contract, so detachment is visual
+    // no-op at the pointer. These are static bindings only; no edit/runtime cadence.
+    readonly property real childPlacementEpsilon: 0.0001
+    function childOnAuthoredRail(xOffset, yOffset) {
+        return Math.abs(Number(xOffset || 0.0)) <= childPlacementEpsilon
+            && Math.abs(Number(yOffset || 0.0)) <= childPlacementEpsilon
+    }
+    readonly property bool seekOnAuthoredRail: childOnAuthoredRail(
+        mediaModel.customSeekXOffset, mediaModel.customSeekYOffset
+    )
+    readonly property bool transportOnAuthoredRail: childOnAuthoredRail(
+        mediaModel.customTransportXOffset, mediaModel.customTransportYOffset
+    )
+    readonly property real canonicalProgressBandHeight: canonicalProgressTrackHeight + 8.0
+    readonly property real canonicalControlsBandY: canonicalPreferredHeight - canonicalControlsHeight
+    readonly property real canonicalProgressBandY: canonicalPreferredHeight
+        - canonicalProgressBandHeight
+        - (mediaModel.controlsBandAvailable ? canonicalControlsHeight + 12.0 : 0.0)
+    readonly property real canonicalSystemMuteHeight:
+        (canonicalCardContentWidth < 210.0 ? 30.0 : 36.0) * 0.75
+    readonly property real canonicalSystemMuteWidth:
+        (canonicalCardContentWidth < 210.0 ? 32.0 : 40.0) * 0.75
+    readonly property real canonicalArtworkWidth: Math.max(
+        1.0,
+        Math.min(
+            mediaRoot.mediaModel.artworkSize * 0.85 * 0.85,
+            canonicalCardContentWidth
+                - Math.max(180.0, mediaRoot.mediaModel.fontSize * 10.0)
+        )
+    )
+    readonly property real canonicalArtworkHeight: Math.max(
+        88.0,
+        canonicalPreferredHeight
+            - (mediaModel.controlsBandAvailable
+                ? canonicalControlsHeight + 12.0 : 0.0)
+    )
+    readonly property real canonicalVolumeTrackWidth: 18.0
+    readonly property real canonicalVolumeTrackHeight: Math.max(
+        1.0, canonicalPreferredHeight - 2.0 * mediaRoot.cardPadding - 12.0
+    )
+    readonly property real customVolumeTrackWidth:
+        canonicalVolumeTrackWidth * mediaModel.customVolumeWidthScale
+    readonly property real customVolumeTrackHeight:
+        canonicalVolumeTrackHeight * mediaModel.customVolumeHeightScale
+    // The existing 48 px accessory lane already fits the descriptor's full
+    // 9.9..45 px volume-width range. Keep the lane fixed so a child drag cannot
+    // steal width from the card or create a preferred-size feedback path.
+    readonly property real volumeAccessoryExtent: canonicalVolumeAccessoryExtent
     readonly property real effectivePreferredWidth: mediaModel.contentExtentActive
         ? mediaModel.contentExtentWidth
-        : canonicalPreferredCardWidth + volumeAccessoryExtent
+        : canonicalPreferredCardWidth + canonicalVolumeAccessoryExtent
     readonly property real effectivePreferredHeight: mediaModel.contentExtentActive
         ? mediaModel.contentExtentHeight
         : canonicalPreferredHeight
@@ -80,6 +214,70 @@ OverlayWidget {
     accessoryExtent: volumeAccessoryExtent
     preferredContentWidth: effectivePreferredWidth
     preferredContentHeight: effectivePreferredHeight
+
+    // Family-wide grow-only requirement is observed live while a child gesture
+    // runs. It is built from stable authored baselines plus child geometry only,
+    // so outer growth can never feed back into the child baseline.
+    QtObject {
+        id: customChildRequirement
+        // Only visible/admitted roles contribute. Persisted geometry for a
+        // temporarily absent seek/volume/transport role must not silently grow
+        // the card while that child is not present.
+        readonly property real artworkWidthExtra: artworkFrame.visible
+            ? Math.max(0.0, artworkFrame.width - mediaRoot.canonicalArtworkWidth)
+            : 0.0
+        readonly property real artworkHeightExtra: artworkFrame.visible
+            ? Math.max(0.0, artworkFrame.height - mediaRoot.canonicalArtworkHeight)
+            : 0.0
+        // Nested seek/transport contribute to family reflow only while they
+        // remain on their authored rails. Once freely placed, their exact mapped
+        // occupied rectangles are already owned by the selected Edit containment
+        // floor; continuing to grow the family reservation from their size would
+        // create a second invisible layout authority and empty-space inflation.
+        readonly property real seekWidthExtra: progressBand.visible
+                && mediaRoot.seekOnAuthoredRail
+            ? Math.max(0.0, progressTrack.width - mediaRoot.canonicalProgressTrackWidth)
+            : 0.0
+        readonly property real seekHeightExtra: progressBand.visible
+                && mediaRoot.seekOnAuthoredRail
+            ? Math.max(0.0, progressTrack.height - mediaRoot.canonicalProgressTrackHeight)
+            : 0.0
+        readonly property real transportWidthExtra: controlsRow.visible
+                && mediaRoot.transportOnAuthoredRail
+            ? Math.max(0.0, controlsRow.width - mediaRoot.canonicalCardContentWidth)
+            : 0.0
+        readonly property real transportHeightExtra: controlsRow.visible
+                && mediaRoot.transportOnAuthoredRail
+            ? Math.max(0.0, controlsRow.height - mediaRoot.canonicalControlsHeight)
+            : 0.0
+        readonly property real accessoryHeightExtra: appVolumeSlider.visible
+            ? Math.max(0.0, appVolumeTrack.height - mediaRoot.canonicalVolumeTrackHeight)
+            : 0.0
+
+        // Placement itself is not approximated here. The selected Edit layer
+        // derives an exact transient floor from the mapped occupied role rects it
+        // already owns. Keeping this family target size/reflow-only avoids the old
+        // failure where any harmless positive move inflated the parent even while
+        // the child still fit comfortably inside it.
+
+        // Artwork occupies the right rail while seek occupies the left. If both
+        // widen, preserving their accepted baseline separation requires both
+        // positive deltas, not merely the larger one. Transport owns its own
+        // full-width band and therefore competes by max rather than sum.
+        readonly property real cardWidthExtra: Math.max(
+            transportWidthExtra, artworkWidthExtra + seekWidthExtra
+        )
+        readonly property real cardHeightExtra:
+            artworkHeightExtra + seekHeightExtra + transportHeightExtra
+        readonly property real requiredContentWidth:
+            mediaRoot.canonicalPreferredCardWidth
+                + mediaRoot.canonicalVolumeAccessoryExtent
+                + cardWidthExtra
+        readonly property real requiredContentHeight: Math.max(
+            mediaRoot.canonicalPreferredHeight + cardHeightExtra,
+            mediaRoot.canonicalPreferredHeight + accessoryHeightExtra
+        )
+    }
 
     function appVolumeLevelAt(y, height) {
         if (height <= 0.0)
@@ -164,7 +362,7 @@ OverlayWidget {
                 parent.height
                     - headerFrame.height
                     - progressBand.height
-                    - controlsRow.height
+                    - controlsBandSlot.height
                     - mediaColumn.spacing * (mediaRoot.visibleSectionCount - 1)
             )
 
@@ -225,47 +423,42 @@ OverlayWidget {
                 readonly property real topInColumn: headerFrame.visible
                     ? headerFrame.y
                     : mainBand.y
-                readonly property real normalBottomInColumn: controlsRow.visible
-                    ? controlsRow.y - mediaColumn.spacing
-                    : mediaColumn.height
-                readonly property bool seekWouldIntersectArtwork: progressBand.visible
-                    && (progressTrack.x + progressTrack.width) > (artworkFrame.x - 2.0)
-                readonly property real bottomInColumn: seekWouldIntersectArtwork
-                    ? progressBand.y - mediaColumn.spacing
-                    : normalBottomInColumn
-                readonly property real referenceHeight: Math.max(
-                    1.0, bottomInColumn - topInColumn
-                )
-                readonly property real widthScale: 0.85 * 0.85
-                readonly property real baseArtworkWidth:
-                    mediaRoot.mediaModel.artworkSize * widthScale
-                readonly property real extraHorizontalRoom:
-                    mediaRoot.authoredCardWidth - mediaRoot.canonicalPreferredCardWidth
-                readonly property real minimumMetadataRoom: Math.max(
-                    180.0, mediaRoot.mediaModel.fontSize * 10.0
-                )
-                readonly property real reflowArtworkWidth: Math.max(
-                    88.0,
-                    baseArtworkWidth + extraHorizontalRoom * 0.35
-                )
                 readonly property real artworkStrokeWidth: mediaRoot.scaleAwareStrokeWidth(
                     mediaRoot.mediaModel.artworkBorderWidth
                 )
                 readonly property real imageInset: Math.max(0.75, artworkStrokeWidth * 0.65)
-                readonly property real metadataLimitedArtworkWidth: Math.max(
-                    1.0, mainBand.width - minimumMetadataRoom
-                )
-                readonly property real shapeLimitedArtworkWidth:
-                    mediaRoot.mediaModel.allowLandscapeArtwork
-                        ? metadataLimitedArtworkWidth
-                        : Math.min(referenceHeight, metadataLimitedArtworkWidth)
+                // Explicit ancestor invalidation for edit-only mapToItem chrome.
+                // This is a cheap retained binding, not a cadence.
+                property real customEditMappingDependency: mainBand.y + mediaColumn.y
+                    + mediaRoot.authoredCardX
+                // Artwork frame geometry is freeform in CUSTOM. The source image
+                // below remains PreserveAspectCrop, so the bitmap is never
+                // distorted regardless of the rectangle the user draws.
                 width: visible
-                    ? Math.min(reflowArtworkWidth, shapeLimitedArtworkWidth)
+                    ? mediaRoot.canonicalArtworkWidth
+                        * mediaRoot.mediaModel.customArtworkWidthScale
                     : 0.0
-                height: visible ? referenceHeight : 0.0
-                anchors.right: parent.right
-                y: visible ? topInColumn - mainBand.y : 0.0
-                radius: mediaRoot.mediaModel.roundedArtwork ? width / 8.0 : 0.0
+                height: visible
+                    ? mediaRoot.canonicalArtworkHeight
+                        * mediaRoot.mediaModel.customArtworkHeightScale
+                    : 0.0
+                // Stable authored X anchor: child width no longer implicitly
+                // changes its own position. The bottom-left edit handle owns the
+                // one compensating X offset needed to keep the right edge fixed.
+                x: visible
+                    ? mediaRoot.canonicalCardContentWidth
+                        - mediaRoot.canonicalArtworkWidth
+                        + mediaRoot.mediaModel.customArtworkXOffset
+                            * (mediaRoot.canonicalPreferredCardWidth
+                                + mediaRoot.canonicalVolumeAccessoryExtent)
+                    : 0.0
+                y: visible
+                    ? topInColumn - mainBand.y
+                        + mediaRoot.mediaModel.customArtworkYOffset
+                            * mediaRoot.canonicalPreferredHeight
+                    : 0.0
+                radius: mediaRoot.mediaModel.roundedArtwork
+                    ? Math.min(width, height) / 8.0 : 0.0
                 color: "transparent"
                 clip: false
 
@@ -330,19 +523,39 @@ OverlayWidget {
             objectName: "mediaProgressBand"
             visible: mediaRoot.mediaModel.progressAvailable
             width: parent.width
-            height: visible ? mediaRoot.mediaModel.progressHeight + 8.0 : 0.0
+            // This slot is authored-flow bookkeeping, not the free child's
+            // geometry owner. While seek is on-rail it follows seek height so
+            // downstream authored content reflows naturally. Once seek is moved
+            // off-rail, keep only the canonical reservation; the selected Edit
+            // containment floor owns the real placed rectangle.
+            height: visible
+                ? (mediaRoot.seekOnAuthoredRail
+                    ? progressTrack.height + 8.0
+                    : mediaRoot.canonicalProgressBandHeight)
+                : 0.0
 
             Rectangle {
                 id: progressTrack
                 objectName: "mediaProgressTrack"
-                anchors.left: parent.left
-                anchors.leftMargin: 2.0
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.max(
-                    1.0,
-                    (parent.width - 2.0 * Math.max(12.0, parent.width * 0.08)) * 0.75
-                )
-                height: mediaRoot.mediaModel.progressHeight
+                property real customEditMappingDependency: progressBand.y + mediaColumn.y
+                    + mediaRoot.authoredCardX
+                readonly property real customEditAncestorReflowY:
+                    progressBand.y - mediaRoot.canonicalProgressBandY
+                property real customEditPlacementCompensationX: 0.0
+                property real customEditPlacementCompensationY:
+                    mediaRoot.seekOnAuthoredRail ? customEditAncestorReflowY : 0.0
+                x: 2.0
+                    + mediaRoot.mediaModel.customSeekXOffset
+                        * (mediaRoot.canonicalPreferredCardWidth
+                            + mediaRoot.canonicalVolumeAccessoryExtent)
+                y: 4.0
+                    + mediaRoot.mediaModel.customSeekYOffset
+                        * mediaRoot.canonicalPreferredHeight
+                    - (mediaRoot.seekOnAuthoredRail ? 0.0 : customEditAncestorReflowY)
+                width: mediaRoot.canonicalProgressTrackWidth
+                    * mediaRoot.mediaModel.customSeekWidthScale
+                height: mediaRoot.canonicalProgressTrackHeight
+                    * mediaRoot.mediaModel.customSeekHeightScale
                 radius: height / 2.0
                 color: mediaRoot.mediaModel.progressTrackColor
 
@@ -398,272 +611,314 @@ OverlayWidget {
             }
         }
 
-        Rectangle {
-            id: controlsRow
-            objectName: "mediaControlsRow"
+        Item {
+            id: controlsBandSlot
+            objectName: "mediaControlsBandSlot"
             visible: mediaRoot.mediaModel.controlsBandAvailable
             width: parent.width
-            height: visible ? Math.max(38.0, mediaRoot.mediaModel.fontSize * 2.15) : 0.0
-            radius: 12.0
-            color: mediaRoot.mediaModel.controlsSurfaceColor
-            border.width: mediaRoot.scaleAwareStrokeWidth(1.5)
-            border.color: mediaRoot.mediaModel.controlsBorderColor
-            clip: false
-
-            // Transport bar uses the same global direction with 15% more
-            // displacement and a deliberately small cached blur.
-            RectangularShadow {
-                anchors.fill: parent
-                visible: mediaRoot.mediaModel.surfaceShadowEnabled
-                color: mediaRoot.mediaModel.surfaceShadowColor
-                blur: mediaRoot.mediaModel.surfaceShadowBlur
-                radius: parent.radius
-                spread: 0.0
-                offset: Qt.vector2d(
-                    mediaRoot.mediaModel.surfaceShadowOffsetX * 1.15,
-                    mediaRoot.mediaModel.surfaceShadowOffsetY * 1.15
-                )
-                cached: true
-                z: -1
-            }
-
-            Row {
-                visible: mediaRoot.mediaModel.controlsAvailable
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.right: parent.right
-                anchors.rightMargin: systemMuteButton.visible
-                    ? systemMuteButton.width + 4.0
-                    : 0.0
-
-                Item {
-                    id: previousButton
-                    objectName: "mediaPreviousButton"
-                    width: (parent.width - 2.0) / 3.0
-                    height: parent.height
-                    opacity: mediaRoot.mediaModel.canPrevious
-                        ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
-                        : 0.25
-                    scale: previousTap.pressed ? 1.08 : 1.0
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "←"
-                        color: mediaRoot.mediaModel.controlsIconColor
-                        font.family: mediaRoot.mediaModel.fontFamily
-                        font.pointSize: mediaRoot.mediaModel.fontSize
-                        font.bold: true
-                    }
-
-                    TapHandler {
-                        id: previousTap
-                        enabled: mediaRoot.mediaModel.interactionEnabled
-                            && mediaRoot.mediaModel.canPrevious
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: mediaRoot.previousRequested()
-                    }
-                }
-
-                Rectangle {
-                    width: mediaRoot.scaleAwareStrokeWidth(1.0)
-                    height: parent.height * 0.7
-                    y: (parent.height - height) / 2.0
-                    color: mediaRoot.mediaModel.controlsSeparatorColor
-                }
-
-                Item {
-                    id: playPauseButton
-                    objectName: "mediaPlayPauseButton"
-                    width: (parent.width - 2.0) / 3.0
-                    height: parent.height
-                    opacity: mediaRoot.mediaModel.canPlayPause
-                        ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
-                        : 0.25
-                    scale: playPauseTap.pressed ? 1.08 : 1.0
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: mediaRoot.mediaModel.playbackState === "playing" ? "||" : "▶"
-                        color: mediaRoot.mediaModel.controlsIconColor
-                        font.family: mediaRoot.mediaModel.fontFamily
-                        font.pointSize: mediaRoot.mediaModel.fontSize * 0.9
-                        font.bold: true
-                    }
-
-                    TapHandler {
-                        id: playPauseTap
-                        enabled: mediaRoot.mediaModel.interactionEnabled
-                            && mediaRoot.mediaModel.canPlayPause
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: mediaRoot.playPauseRequested()
-                    }
-                }
-
-                Rectangle {
-                    width: mediaRoot.scaleAwareStrokeWidth(1.0)
-                    height: parent.height * 0.7
-                    y: (parent.height - height) / 2.0
-                    color: mediaRoot.mediaModel.controlsSeparatorColor
-                }
-
-                Item {
-                    id: nextButton
-                    objectName: "mediaNextButton"
-                    width: (parent.width - 2.0) / 3.0
-                    height: parent.height
-                    opacity: mediaRoot.mediaModel.canNext
-                        ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
-                        : 0.25
-                    scale: nextTap.pressed ? 1.08 : 1.0
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "→"
-                        color: mediaRoot.mediaModel.controlsIconColor
-                        font.family: mediaRoot.mediaModel.fontFamily
-                        font.pointSize: mediaRoot.mediaModel.fontSize
-                        font.bold: true
-                    }
-
-                    TapHandler {
-                        id: nextTap
-                        enabled: mediaRoot.mediaModel.interactionEnabled
-                            && mediaRoot.mediaModel.canNext
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: mediaRoot.nextRequested()
-                    }
-                }
-            }
+            // As with progressBand, an off-rail transport is no longer an
+            // authored-flow child. Preserve the canonical slot so family layout
+            // remains stable while exact placement/containment owns the visual
+            // rectangle in selected Edit.
+            height: visible
+                ? (mediaRoot.transportOnAuthoredRail
+                    ? Math.max(mediaRoot.canonicalControlsHeight, controlsRow.height)
+                    : mediaRoot.canonicalControlsHeight)
+                : 0.0
 
             Rectangle {
-                id: systemMuteButton
-                objectName: "mediaSystemMuteButton"
-                visible: mediaRoot.mediaModel.systemMuteAvailable
-                height: (parent.width < 210.0
-                    ? Math.min(30.0, parent.height * 0.92)
-                    : Math.min(36.0, parent.height * 0.92)) * 0.75
-                width: (parent.width < 210.0
-                    ? Math.min(32.0, (height / 0.75) * 1.08)
-                    : Math.min(40.0, (height / 0.75) * 1.08)) * 0.75
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.right: parent.right
-                anchors.rightMargin: 4.0
-                radius: Math.max(8.0, Math.min(12.0, height * 0.32))
-                border.width: mediaRoot.scaleAwareStrokeWidth(1.25)
-                border.color: mediaRoot.mediaModel.systemMuteBorderColor
-                scale: systemMuteTap.pressed ? 1.06 : 1.0
-                property real feedbackOpacity: 0.0
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0.0
-                        color: Qt.rgba(
-                            mediaRoot.mediaModel.systemMuteBackgroundColor.r,
-                            mediaRoot.mediaModel.systemMuteBackgroundColor.g,
-                            mediaRoot.mediaModel.systemMuteBackgroundColor.b,
-                            Math.min(
-                                1.0,
-                                mediaRoot.mediaModel.systemMuteBackgroundColor.a * 0.95
-                                    + 30.0 / 255.0
-                            )
-                        )
-                    }
-                    GradientStop {
-                        position: 1.0
-                        color: Qt.rgba(
-                            mediaRoot.mediaModel.systemMuteBackgroundColor.r,
-                            mediaRoot.mediaModel.systemMuteBackgroundColor.g,
-                            mediaRoot.mediaModel.systemMuteBackgroundColor.b,
-                            mediaRoot.mediaModel.systemMuteBackgroundColor.a * 0.85
-                        )
-                    }
-                }
+                id: controlsRow
+                objectName: "mediaControlsRow"
+                visible: controlsBandSlot.visible
+                property real customEditMappingDependency: controlsBandSlot.y + mediaColumn.y
+                    + mediaRoot.authoredCardX
+                property bool customEditReflowEnabled: mediaRoot.transportOnAuthoredRail
+                readonly property real customEditAncestorReflowY:
+                    controlsBandSlot.y - mediaRoot.canonicalControlsBandY
+                property real customEditPlacementCompensationX: 0.0
+                property real customEditPlacementCompensationY:
+                    mediaRoot.transportOnAuthoredRail ? customEditAncestorReflowY : 0.0
+                x: mediaRoot.mediaModel.customTransportXOffset
+                    * (mediaRoot.canonicalPreferredCardWidth
+                        + mediaRoot.canonicalVolumeAccessoryExtent)
+                y: mediaRoot.mediaModel.customTransportYOffset
+                    * mediaRoot.canonicalPreferredHeight
+                    - (mediaRoot.transportOnAuthoredRail ? 0.0 : customEditAncestorReflowY)
+                width: mediaRoot.canonicalCardContentWidth
+                    * mediaRoot.mediaModel.customTransportWidthScale
+                height: mediaRoot.canonicalControlsHeight
+                    * mediaRoot.mediaModel.customTransportHeightScale
+                radius: 12.0
+                color: mediaRoot.mediaModel.controlsSurfaceColor
+                border.width: mediaRoot.scaleAwareStrokeWidth(1.5)
+                border.color: mediaRoot.mediaModel.controlsBorderColor
+                clip: false
 
-                Rectangle {
+                // Transport bar uses the same global direction with 15% more
+                // displacement and a deliberately small cached blur.
+                RectangularShadow {
                     anchors.fill: parent
-                    anchors.margins: 3.0
-                    radius: Math.max(1.0, parent.radius - 1.0)
-                    color: "transparent"
-                    border.width: mediaRoot.scaleAwareStrokeWidth(1.0)
-                    border.color: mediaRoot.mediaModel.systemMuteInnerBorderColor
+                    visible: mediaRoot.mediaModel.surfaceShadowEnabled
+                    color: mediaRoot.mediaModel.surfaceShadowColor
+                    blur: mediaRoot.mediaModel.surfaceShadowBlur
+                    radius: parent.radius
+                    spread: 0.0
+                    offset: Qt.vector2d(
+                        mediaRoot.mediaModel.surfaceShadowOffsetX * 1.15,
+                        mediaRoot.mediaModel.surfaceShadowOffsetY * 1.15
+                    )
+                    cached: true
+                    z: -1
                 }
 
-                Canvas {
-                    id: systemMuteIcon
-                    objectName: "mediaSystemMuteIcon"
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width, parent.height) * 0.64
-                    height: width
-                    property bool muted: mediaRoot.mediaModel.systemMuted
-                    property color iconColor: mediaRoot.mediaModel.systemMuteIconColor
-                    onMutedChanged: requestPaint()
-                    onIconColorChanged: requestPaint()
-                    onWidthChanged: requestPaint()
-                    onHeightChanged: requestPaint()
-                    onPaint: {
-                        var context = getContext("2d")
-                        context.reset()
-                        context.fillStyle = iconColor
-                        context.strokeStyle = iconColor
-                        context.lineCap = "round"
-                        context.lineWidth = Math.max(1.2, width * 0.045)
-                        context.beginPath()
-                        context.moveTo(width * 0.18, height * 0.42)
-                        context.lineTo(width * 0.32, height * 0.42)
-                        context.lineTo(width * 0.48, height * 0.27)
-                        context.lineTo(width * 0.48, height * 0.73)
-                        context.lineTo(width * 0.32, height * 0.58)
-                        context.lineTo(width * 0.18, height * 0.58)
-                        context.closePath()
-                        context.fill()
-                        if (muted) {
-                            context.beginPath()
-                            context.moveTo(width * 0.48, height * 0.28)
-                            context.lineTo(width * 0.78, height * 0.72)
-                            context.stroke()
-                        } else {
-                            context.beginPath()
-                            context.arc(
-                                width * 0.44, height * 0.5, width * 0.22,
-                                -0.68, 0.68
-                            )
-                            context.stroke()
-                            context.beginPath()
-                            context.arc(
-                                width * 0.44, height * 0.5, width * 0.36,
-                                -0.68, 0.68
-                            )
-                            context.stroke()
+                Row {
+                    id: transportGroup
+                    objectName: "mediaTransportControls"
+                    visible: mediaRoot.mediaModel.controlsAvailable
+                    x: 0.0
+                    y: 0.0
+                    width: Math.max(
+                        1.0,
+                        parent.width
+                            - (systemMuteButton.visible ? systemMuteButton.width + 8.0 : 0.0)
+                    )
+                    height: parent.height
+
+                    Item {
+                        id: previousButton
+                        objectName: "mediaPreviousButton"
+                        width: (parent.width - 2.0) / 3.0
+                        height: parent.height
+                        opacity: mediaRoot.mediaModel.canPrevious
+                            ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
+                            : 0.25
+                        scale: previousTap.pressed ? 1.08 : 1.0
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "←"
+                            color: mediaRoot.mediaModel.controlsIconColor
+                            font.family: mediaRoot.mediaModel.fontFamily
+                            font.pointSize: mediaRoot.mediaModel.fontSize
+                                * mediaRoot.mediaModel.customTransportHeightScale
+                            font.bold: true
+                        }
+
+                        TapHandler {
+                            id: previousTap
+                            enabled: mediaRoot.mediaModel.interactionEnabled
+                                && mediaRoot.mediaModel.canPrevious
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: mediaRoot.previousRequested()
+                        }
+                    }
+
+                    Rectangle {
+                        width: mediaRoot.scaleAwareStrokeWidth(1.0)
+                        height: parent.height * 0.7
+                        y: (parent.height - height) / 2.0
+                        color: mediaRoot.mediaModel.controlsSeparatorColor
+                    }
+
+                    Item {
+                        id: playPauseButton
+                        objectName: "mediaPlayPauseButton"
+                        width: (parent.width - 2.0) / 3.0
+                        height: parent.height
+                        opacity: mediaRoot.mediaModel.canPlayPause
+                            ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
+                            : 0.25
+                        scale: playPauseTap.pressed ? 1.08 : 1.0
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: mediaRoot.mediaModel.playbackState === "playing" ? "||" : "▶"
+                            color: mediaRoot.mediaModel.controlsIconColor
+                            font.family: mediaRoot.mediaModel.fontFamily
+                            font.pointSize: mediaRoot.mediaModel.fontSize * 0.9
+                                * mediaRoot.mediaModel.customTransportHeightScale
+                            font.bold: true
+                        }
+
+                        TapHandler {
+                            id: playPauseTap
+                            enabled: mediaRoot.mediaModel.interactionEnabled
+                                && mediaRoot.mediaModel.canPlayPause
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: mediaRoot.playPauseRequested()
+                        }
+                    }
+
+                    Rectangle {
+                        width: mediaRoot.scaleAwareStrokeWidth(1.0)
+                        height: parent.height * 0.7
+                        y: (parent.height - height) / 2.0
+                        color: mediaRoot.mediaModel.controlsSeparatorColor
+                    }
+
+                    Item {
+                        id: nextButton
+                        objectName: "mediaNextButton"
+                        width: (parent.width - 2.0) / 3.0
+                        height: parent.height
+                        opacity: mediaRoot.mediaModel.canNext
+                            ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
+                            : 0.25
+                        scale: nextTap.pressed ? 1.08 : 1.0
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "→"
+                            color: mediaRoot.mediaModel.controlsIconColor
+                            font.family: mediaRoot.mediaModel.fontFamily
+                            font.pointSize: mediaRoot.mediaModel.fontSize
+                                * mediaRoot.mediaModel.customTransportHeightScale
+                            font.bold: true
+                        }
+
+                        TapHandler {
+                            id: nextTap
+                            enabled: mediaRoot.mediaModel.interactionEnabled
+                                && mediaRoot.mediaModel.canNext
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: mediaRoot.nextRequested()
                         }
                     }
                 }
 
                 Rectangle {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    color: "white"
-                    opacity: parent.feedbackOpacity
-                }
-
-                SequentialAnimation {
-                    id: systemMuteFeedback
-                    NumberAnimation {
-                        target: systemMuteButton
-                        property: "feedbackOpacity"
-                        from: 0.47
-                        to: 0.0
-                        duration: 350
-                        easing.type: Easing.OutCubic
+                    id: systemMuteButton
+                    objectName: "mediaSystemMuteButton"
+                    visible: mediaRoot.mediaModel.systemMuteAvailable
+                    height: Math.min(
+                        parent.height * 0.92,
+                        mediaRoot.canonicalSystemMuteHeight
+                            * mediaRoot.mediaModel.customTransportHeightScale
+                    )
+                    width: Math.min(
+                        parent.width * 0.28,
+                        mediaRoot.canonicalSystemMuteWidth
+                            * mediaRoot.mediaModel.customTransportWidthScale
+                    )
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: parent.right
+                    anchors.rightMargin: 4.0
+                    radius: Math.max(8.0, Math.min(12.0, height * 0.32))
+                    border.width: mediaRoot.scaleAwareStrokeWidth(1.25)
+                    border.color: mediaRoot.mediaModel.systemMuteBorderColor
+                    scale: systemMuteTap.pressed ? 1.06 : 1.0
+                    property real feedbackOpacity: 0.0
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0.0
+                            color: Qt.rgba(
+                                mediaRoot.mediaModel.systemMuteBackgroundColor.r,
+                                mediaRoot.mediaModel.systemMuteBackgroundColor.g,
+                                mediaRoot.mediaModel.systemMuteBackgroundColor.b,
+                                Math.min(
+                                    1.0,
+                                    mediaRoot.mediaModel.systemMuteBackgroundColor.a * 0.95
+                                        + 30.0 / 255.0
+                                )
+                            )
+                        }
+                        GradientStop {
+                            position: 1.0
+                            color: Qt.rgba(
+                                mediaRoot.mediaModel.systemMuteBackgroundColor.r,
+                                mediaRoot.mediaModel.systemMuteBackgroundColor.g,
+                                mediaRoot.mediaModel.systemMuteBackgroundColor.b,
+                                mediaRoot.mediaModel.systemMuteBackgroundColor.a * 0.85
+                            )
+                        }
                     }
-                }
 
-                TapHandler {
-                    id: systemMuteTap
-                    enabled: mediaRoot.mediaModel.interactionEnabled
-                    acceptedButtons: Qt.LeftButton
-                    onTapped: {
-                        systemMuteFeedback.restart()
-                        mediaRoot.systemMuteToggleRequested()
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 3.0
+                        radius: Math.max(1.0, parent.radius - 1.0)
+                        color: "transparent"
+                        border.width: mediaRoot.scaleAwareStrokeWidth(1.0)
+                        border.color: mediaRoot.mediaModel.systemMuteInnerBorderColor
+                    }
+
+                    Canvas {
+                        id: systemMuteIcon
+                        objectName: "mediaSystemMuteIcon"
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width, parent.height) * 0.64
+                        height: width
+                        property bool muted: mediaRoot.mediaModel.systemMuted
+                        property color iconColor: mediaRoot.mediaModel.systemMuteIconColor
+                        onMutedChanged: requestPaint()
+                        onIconColorChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                        onPaint: {
+                            var context = getContext("2d")
+                            context.reset()
+                            context.fillStyle = iconColor
+                            context.strokeStyle = iconColor
+                            context.lineCap = "round"
+                            context.lineWidth = Math.max(1.2, width * 0.045)
+                            context.beginPath()
+                            context.moveTo(width * 0.18, height * 0.42)
+                            context.lineTo(width * 0.32, height * 0.42)
+                            context.lineTo(width * 0.48, height * 0.27)
+                            context.lineTo(width * 0.48, height * 0.73)
+                            context.lineTo(width * 0.32, height * 0.58)
+                            context.lineTo(width * 0.18, height * 0.58)
+                            context.closePath()
+                            context.fill()
+                            if (muted) {
+                                context.beginPath()
+                                context.moveTo(width * 0.48, height * 0.28)
+                                context.lineTo(width * 0.78, height * 0.72)
+                                context.stroke()
+                            } else {
+                                context.beginPath()
+                                context.arc(
+                                    width * 0.44, height * 0.5, width * 0.22,
+                                    -0.68, 0.68
+                                )
+                                context.stroke()
+                                context.beginPath()
+                                context.arc(
+                                    width * 0.44, height * 0.5, width * 0.36,
+                                    -0.68, 0.68
+                                )
+                                context.stroke()
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: "white"
+                        opacity: parent.feedbackOpacity
+                    }
+
+                    SequentialAnimation {
+                        id: systemMuteFeedback
+                        NumberAnimation {
+                            target: systemMuteButton
+                            property: "feedbackOpacity"
+                            from: 0.47
+                            to: 0.0
+                            duration: 350
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    TapHandler {
+                        id: systemMuteTap
+                        enabled: mediaRoot.mediaModel.interactionEnabled
+                        acceptedButtons: Qt.LeftButton
+                        onTapped: {
+                            systemMuteFeedback.restart()
+                            mediaRoot.systemMuteToggleRequested()
+                        }
                     }
                 }
             }
@@ -675,22 +930,23 @@ OverlayWidget {
                 id: appVolumeSlider
                 objectName: "mediaAppVolumeSlider"
                 visible: mediaRoot.mediaModel.appVolumeAvailable
-                width: 32.0
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.topMargin: mediaRoot.cardPadding
-                anchors.bottomMargin: mediaRoot.cardPadding
-                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.fill: parent
     
             Rectangle {
                 id: appVolumeTrack
                 objectName: "mediaAppVolumeTrack"
-                width: 18.0
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.topMargin: 6.0
-                anchors.bottomMargin: 6.0
-                anchors.horizontalCenter: parent.horizontalCenter
+                visible: appVolumeSlider.visible
+                property real customEditMappingDependency:
+                    (mediaRoot.appVolumeOnLeft ? 1.0 : 0.0) + appVolumeSlider.x + appVolumeSlider.y
+                x: (parent.width - mediaRoot.canonicalVolumeTrackWidth) / 2.0
+                    + mediaRoot.mediaModel.customVolumeXOffset
+                        * (mediaRoot.canonicalPreferredCardWidth
+                            + mediaRoot.canonicalVolumeAccessoryExtent)
+                y: mediaRoot.cardPadding + 6.0
+                    + mediaRoot.mediaModel.customVolumeYOffset
+                        * mediaRoot.canonicalPreferredHeight
+                width: mediaRoot.customVolumeTrackWidth
+                height: mediaRoot.customVolumeTrackHeight
                 radius: width / 2.0
                 color: mediaRoot.mediaModel.appVolumeTrackColor
                 border.width: mediaRoot.scaleAwareStrokeWidth(2.5)

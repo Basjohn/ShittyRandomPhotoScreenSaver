@@ -425,7 +425,7 @@ def test_qml_preserves_archive_shelf_age_stamp_and_two_column_ledger(tmp_path) -
         engine.deleteLater()
 
 
-def test_custom_content_extent_reflows_archive_spacing_without_new_size_owner(qt_app, tmp_path) -> None:
+def test_custom_content_extent_reflows_archive_right_rail_without_rebasing_dense_children(qt_app, tmp_path) -> None:
     model = _model()
     model.activate()
     model.on_abandonment_presentation(
@@ -439,12 +439,12 @@ def test_custom_content_extent_reflows_archive_spacing_without_new_size_owner(qt
         qt_app.processEvents()
         archive_tab = _find_visual_item(item, "abandonmentArchiveTab")
         age_stamp = _find_visual_item(item, "abandonmentAgeStamp")
-        ledger = _find_visual_item(item, "abandonmentLedgerShelf_playtime")
-        assert archive_tab is not None and age_stamp is not None and ledger is not None
+        ledger_group = _find_visual_item(item, "abandonmentLedgerGroup")
+        assert archive_tab is not None and age_stamp is not None and ledger_group is not None
         base_tab_x = archive_tab.x()
         base_age_y = age_stamp.y()
         base_age_width = age_stamp.width()
-        base_ledger_y = ledger.y()
+        base_ledger_y = ledger_group.y()
 
         assert model.set_content_extent(base_width + 200.0, base_height + 100.0) is True
         item.setWidth(model.authoredWidth)
@@ -453,9 +453,13 @@ def test_custom_content_extent_reflows_archive_spacing_without_new_size_owner(qt
 
         assert model.contentExtentActive is True
         assert archive_tab.x() == pytest.approx(base_tab_x + 200.0)
-        assert age_stamp.y() == pytest.approx(base_age_y + 20.0)
+        # Parent content extent may move a family-authored edge rail such as
+        # BACKLOG, but it must not become a new placement baseline for dense
+        # child roles. Otherwise child-driven containment can feed back into the
+        # same child's position and amplify outer growth.
+        assert age_stamp.y() == pytest.approx(base_age_y)
         assert age_stamp.width() >= base_age_width
-        assert ledger.y() == pytest.approx(base_ledger_y + 65.0)
+        assert ledger_group.y() == pytest.approx(base_ledger_y)
 
         assert model.clear_content_extent() is True
         item.setWidth(model.authoredWidth)
@@ -464,7 +468,223 @@ def test_custom_content_extent_reflows_archive_spacing_without_new_size_owner(qt
         assert model.contentExtentActive is False
         assert archive_tab.x() == pytest.approx(base_tab_x)
         assert age_stamp.y() == pytest.approx(base_age_y)
-        assert ledger.y() == pytest.approx(base_ledger_y)
+        assert ledger_group.y() == pytest.approx(base_ledger_y)
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+
+
+
+def test_detached_backlog_stays_put_when_parent_width_reclaims_space(qt_app, tmp_path) -> None:
+    """Free placement must outlive later parent right-edge reflow.
+
+    BACKLOG is authored against the parent's right rail while on-rail, but once
+    the user actually moves it the retained X position belongs to child_geometry.
+    Shrinking the parent from the right should therefore close empty space, not
+    keep dragging the detached child left until it escapes containment.
+    """
+
+    model = _model()
+    model.activate()
+    model.on_abandonment_presentation(
+        _presentation(tmp_path / "backlog-detached-parent-reflow.png"),
+        animate=False,
+    )
+    base_width = float(model.baseAuthoredWidth)
+    base_height = float(model.baseAuthoredHeight)
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        backlog = _find_visual_item(item, "abandonmentArchiveTab")
+        assert backlog is not None
+        base_x = backlog.x()
+
+        assert model.set_content_extent(base_width + 200.0, base_height) is True
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        qt_app.processEvents()
+
+        assert backlog.x() == pytest.approx(base_x + 200.0)
+        assert backlog.property("customEditPlacementCompensationX") == pytest.approx(200.0)
+
+        # Simulate the shared owner's first-real-move fold: the live +200 px
+        # authored-rail displacement becomes part of the stable normalized offset,
+        # then the user moves the role 100 px left.
+        moved_offset = 100.0 / base_width
+        assert model.set_custom_child_geometry(
+            {"backlog_block": {"x_offset": moved_offset}}
+        ) is True
+        qt_app.processEvents()
+        moved_x = backlog.x()
+        assert moved_x == pytest.approx(base_x + 100.0)
+        assert backlog.property("customEditPlacementCompensationX") == pytest.approx(0.0)
+
+        # Reclaim parent width down to the already-admitted child floor. The
+        # presentation model is deliberately not the resize-admission authority:
+        # the shared owner clamps a real parent-side gesture to the live child
+        # containment floor before publishing content_extent. This presentation
+        # test therefore supplies a legal admitted width and proves that the
+        # detached BACKLOG stays put while the parent closes empty space around it.
+        minimum_containing_width = moved_x + backlog.width()
+        assert minimum_containing_width < base_width + 200.0
+        assert model.set_content_extent(minimum_containing_width, base_height) is True
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        qt_app.processEvents()
+        assert backlog.x() == pytest.approx(moved_x)
+        assert backlog.x() >= 0.0
+        assert backlog.x() + backlog.width() <= model.authoredWidth + 1.0e-6
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+
+def test_custom_child_geometry_projects_dense_roles_without_distorting_artwork(qt_app, tmp_path) -> None:
+    model = _model()
+    model.activate()
+    model.on_abandonment_presentation(
+        _presentation(tmp_path / "child-geometry.png"),
+        animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        artwork = _find_visual_item(item, "abandonmentArtworkFrame")
+        backlog = _find_visual_item(item, "abandonmentArchiveTab")
+        title = _find_visual_item(item, "abandonmentGameTitle")
+        last_visit = _find_visual_item(item, "abandonmentAgeStamp")
+        shelves = _find_visual_item(item, "abandonmentLedgerGroup")
+        first = _find_visual_item(item, "abandonmentLedgerShelf_playtime")
+        second = _find_visual_item(item, "abandonmentLedgerShelf_recent")
+        assert all(value is not None for value in (artwork, backlog, title, last_visit, shelves, first, second))
+
+        base_art = (artwork.width(), artwork.height())
+        base_backlog_h = backlog.height()
+        base_title_h = title.height()
+        base_last_y = last_visit.y()
+        base_shelf_y = shelves.y()
+        base_first = (first.width(), first.height())
+        base_second = (second.width(), second.height())
+
+        assert model.set_custom_child_geometry(
+            {
+                "artwork": {"width_scale": 1.40, "height_scale": 0.70},
+                "backlog_block": {"width_scale": 1.10, "height_scale": 1.50},
+                "game_name": {"width_scale": 1.25, "height_scale": 1.40},
+                "last_visit": {"width_scale": 1.15, "height_scale": 1.20},
+                "shelf_group": {"width_scale": 1.30, "height_scale": 1.35},
+            }
+        ) is True
+        qt_app.processEvents()
+
+        assert artwork.width() == pytest.approx(base_art[0] * 1.40)
+        assert artwork.height() == pytest.approx(base_art[1] * 0.70)
+        assert backlog.height() == pytest.approx(base_backlog_h * 1.50)
+        assert title.height() == pytest.approx(base_title_h * 1.40)
+        assert last_visit.y() > base_last_y
+        assert first.width() == pytest.approx(base_first[0] * 1.30)
+        assert second.width() == pytest.approx(base_second[0] * 1.30)
+        assert first.height() == pytest.approx(base_first[1] * 1.35)
+        assert second.height() == pytest.approx(base_second[1] * 1.35)
+
+        grown_last_y = last_visit.y()
+        grown_shelf_y = shelves.y()
+        assert model.set_custom_child_geometry(
+            {
+                "artwork": {"width_scale": 0.75, "height_scale": 0.80},
+                "backlog_block": {"width_scale": 0.85, "height_scale": 0.75},
+                "game_name": {"width_scale": 0.90, "height_scale": 0.70},
+                "last_visit": {"width_scale": 0.90, "height_scale": 0.75},
+                "shelf_group": {"width_scale": 0.90, "height_scale": 0.80},
+            }
+        ) is True
+        qt_app.processEvents()
+
+        # Dense child blocks reflow in both directions while the shared outer
+        # content_extent owner remains grow-only. Shrinking a child therefore
+        # reclaims internal space instead of leaving an ever-growing void.
+        assert last_visit.y() < base_last_y
+        assert shelves.y() < base_shelf_y
+        assert last_visit.y() < grown_last_y
+        assert shelves.y() < grown_shelf_y
+
+        qml = (QML_ROOT / "AbandonmentIssuesPresentation.qml").read_text(encoding="utf-8")
+        assert "fillMode: Image.PreserveAspectCrop" in qml
+        assert '"roleId": "shelf_group"' in qml
+        assert '"target": ledgerGroupFrame' in qml
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+
+
+def test_custom_child_placement_detaches_moved_role_from_authored_reflow_rail(qt_app, tmp_path) -> None:
+    model = _model()
+    model.activate()
+    model.on_abandonment_presentation(
+        _presentation(tmp_path / "child-placement.png"),
+        animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        backlog = _find_visual_item(item, "abandonmentArchiveTab")
+        artwork = _find_visual_item(item, "abandonmentArtworkFrame")
+        title = _find_visual_item(item, "abandonmentGameTitle")
+        flavour = _find_visual_item(item, "abandonmentRediscoveryText")
+        last_visit = _find_visual_item(item, "abandonmentAgeStamp")
+        shelves = _find_visual_item(item, "abandonmentLedgerGroup")
+        assert all(
+            value is not None
+            for value in (backlog, artwork, title, flavour, last_visit, shelves)
+        )
+
+        base_backlog = (backlog.x(), backlog.y())
+        base_downstream_y = (
+            artwork.y(), title.y(), flavour.y(), last_visit.y(), shelves.y()
+        )
+
+        # Once BACKLOG has an explicit placement displacement, it has left the
+        # authored rail. Enlarging it must not silently move unrelated siblings;
+        # Edit-time collision admission is responsible for keeping them apart.
+        assert model.set_custom_child_geometry(
+            {
+                "backlog_block": {
+                    "width_scale": 1.10,
+                    "height_scale": 1.50,
+                    "x_offset": -0.08,
+                    "y_offset": 0.07,
+                }
+            }
+        ) is True
+        qt_app.processEvents()
+
+        assert backlog.x() == pytest.approx(
+            base_backlog[0] - 0.08 * model.baseAuthoredWidth
+        )
+        assert backlog.y() == pytest.approx(
+            base_backlog[1] + 0.07 * model.baseAuthoredHeight
+        )
+        assert (artwork.y(), title.y(), flavour.y(), last_visit.y(), shelves.y()) == pytest.approx(
+            base_downstream_y
+        )
+
+        # Returning the role to its authored placement re-enables the family's
+        # signed rail reflow for the same size override.
+        assert model.set_custom_child_geometry(
+            {
+                "backlog_block": {
+                    "width_scale": 1.10,
+                    "height_scale": 1.50,
+                }
+            }
+        ) is True
+        qt_app.processEvents()
+        assert title.y() > base_downstream_y[1]
+        assert flavour.y() > base_downstream_y[2]
+        assert last_visit.y() > base_downstream_y[3]
+        assert shelves.y() > base_downstream_y[4]
     finally:
         item.deleteLater()
         component.deleteLater()
@@ -670,12 +890,32 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
         assert item.property("fadeOpacity") == pytest.approx(0.0)
 
         retained._apply_custom_layout_size_payload(
-            {"content_extent": [config.authored_size[0] + 120.0, config.authored_size[1] + 80.0]}
+            {
+                "content_extent": [config.authored_size[0] + 120.0, config.authored_size[1] + 80.0],
+                "child_geometry": {
+                    "artwork": {"width_scale": 1.30, "height_scale": 0.75},
+                    "backlog_block": {"width_scale": 1.10, "height_scale": 1.25},
+                    "game_name": {"width_scale": 1.20, "height_scale": 1.35},
+                    "last_visit": {"width_scale": 0.80, "height_scale": 1.15},
+                    "shelf_group": {"width_scale": 1.25, "height_scale": 1.40},
+                },
+            }
         )
         assert model.contentExtentActive is True
         assert model.authoredWidth == pytest.approx(config.authored_size[0] + 120.0)
+        assert model.customArtworkWidthScale == pytest.approx(1.30)
+        assert model.customArtworkHeightScale == pytest.approx(0.75)
+        assert model.customBacklogHeightScale == pytest.approx(1.25)
+        assert model.customGameNameHeightScale == pytest.approx(1.35)
+        assert model.customLastVisitWidthScale == pytest.approx(0.80)
+        assert model.customShelfGroupHeightScale == pytest.approx(1.40)
         retained._apply_custom_layout_size_payload({})
         assert model.contentExtentActive is False
+        assert model.customArtworkWidthScale == pytest.approx(1.0)
+        assert model.customBacklogWidthScale == pytest.approx(1.0)
+        assert model.customGameNameHeightScale == pytest.approx(1.0)
+        assert model.customLastVisitHeightScale == pytest.approx(1.0)
+        assert model.customShelfGroupWidthScale == pytest.approx(1.0)
 
         assert retained.activate(manager) is True
         qt_app.processEvents()

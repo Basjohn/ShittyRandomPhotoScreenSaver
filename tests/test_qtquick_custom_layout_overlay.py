@@ -55,6 +55,7 @@ def _item(
     baseline_content_extent: tuple[float, float] | None = None,
     size_reset_capable: bool = False,
     authored_reference_size: tuple[float, float] | None = None,
+    child_collision_enabled: bool = True,
 ) -> CustomLayoutSessionItem:
     return CustomLayoutSessionItem(
         source_key=CustomLayoutKey(widget_id, display_identity),
@@ -74,7 +75,33 @@ def _item(
         baseline_content_extent=baseline_content_extent,
         size_reset_capable=size_reset_capable,
         authored_reference_size=authored_reference_size,
+        child_collision_enabled=child_collision_enabled,
     )
+
+
+def test_overlay_model_exposes_widget_scoped_child_collision_preference() -> None:
+    session = CustomLayoutSession()
+    item = _item(
+        "abandonment_issues",
+        "display:a",
+        QRect(100, 100, 600, 330),
+        child_collision_enabled=False,
+    )
+    session.add_item(item)
+
+    model = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+    )
+    roles = {bytes(name).decode(): role for role, name in model.roleNames().items()}
+    index = model.index(0, 0)
+
+    assert "childCollisionEnabled" in roles
+    assert model.data(index, roles["childCollisionEnabled"]) is False
+
+    item.child_collision_enabled = True
+    session.notify_item_changed(item)
+    assert model.data(index, roles["childCollisionEnabled"]) is True
 
 
 def test_overlay_model_mutates_shared_session_items_without_copying_authority() -> None:

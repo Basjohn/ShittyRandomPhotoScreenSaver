@@ -182,6 +182,21 @@ class QuickInputController(RuntimeInputOwner):
             self.widget_glow_pressed.emit(state, event.position())
         return handled
 
+    def handle_custom_layout_context_press(self, event: QMouseEvent) -> bool:
+        """Open the normal retained context menu while CUSTOM owns pointer input.
+
+        CUSTOM suppresses ordinary runtime pointer semantics at the native window
+        boundary, but the product context menu remains an editor command surface.
+        Keep this path deliberately narrower than ``handle_mouse_press``: no exit
+        gesture, widget-glow publication, family action, or other runtime semantic
+        is admitted here.
+        """
+
+        if not self._state.admission_open or event.button() != Qt.MouseButton.RightButton:
+            return False
+        self.context_menu_requested.emit(self._global_mouse_point(event))
+        return True
+
     def handle_mouse_move(
         self,
         event: QMouseEvent,

@@ -19,6 +19,11 @@ from rendering.custom_layout_contract import (
     get_widget_layout_variant_payload,
     load_custom_layout_map,
 )
+from rendering.custom_child_geometry import (
+    CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY,
+    CustomChildSize,
+    freeform_artwork_child_role,
+)
 from rendering.custom_layout_session import (
     CustomLayoutKey,
     CustomLayoutSession,
@@ -38,6 +43,7 @@ from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
 from rendering.quick.widgets.family_binder import ClockFamilyAdapter
 from rendering.quick.widgets.host import OverlayWidgetGeometry
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 from widgets.spotify_visualizer.presentation_geometry import (
     resolve_visualizer_presentation,
 )
@@ -1602,6 +1608,340 @@ def test_content_extent_diagonal_corner_reflows_both_axes_without_repurposing_un
     ) is True
     assert item.resize_scale > scale_before
     assert item.current_content_extent == box_before
+
+
+def _child_edit_item(*, role_handle: str = "bottom_right") -> CustomLayoutSessionItem:
+    return CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("abandonment_issues", "display:a"),
+        model_identity="abandonment_issues",
+        baseline_global_rect=QRect(100, 100, 700, 400),
+        current_global_rect=QRect(100, 100, 700, 400),
+        baseline_size_payload={},
+        current_size_payload={},
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+        content_extent_axes=frozenset({"vertical", "horizontal"}),
+        baseline_content_extent=(700.0, 400.0),
+        custom_child_roles=(
+            freeform_artwork_child_role(
+                resize_handles=(role_handle,),
+                movable=True,
+            ),
+        ),
+    )
+
+
+def test_movable_child_repeat_move_uses_current_geometry_and_cancel_retires_origin() -> None:
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    item = _child_edit_item()
+
+    assert owner.begin_child_move(item, "artwork", QPoint(100, 100), 700.0, 400.0)
+    assert owner.update_child_move(item, "artwork", QPoint(170, 140), True)
+    first = item.child_size("artwork")
+    assert first.x_offset == pytest.approx(0.1)
+    assert first.y_offset == pytest.approx(0.1)
+
+    # A second gesture must begin from the currently committed placement rather
+    # than replaying the first press origin.
+    assert owner.begin_child_move(item, "artwork", QPoint(300, 200), 700.0, 400.0)
+    assert owner.update_child_move(item, "artwork", QPoint(335, 220), True)
+    second = item.child_size("artwork")
+    assert second.x_offset == pytest.approx(0.15)
+    assert second.y_offset == pytest.approx(0.15)
+
+    assert owner.begin_child_move(item, "artwork", QPoint(10, 10), 700.0, 400.0)
+    owner.cancel_child_gesture(item)
+    assert owner.update_child_move(item, "artwork", QPoint(200, 200), True) is False
+    assert item.child_size("artwork") == second
+
+
+def test_child_move_folds_reflow_compensation_once_and_zero_motion_is_noop() -> None:
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    item = _child_edit_item()
+
+    # Merely pressing/releasing an on-rail role must not detach it or manufacture
+    # persisted placement just because its family currently has sibling reflow.
+    assert owner.begin_child_move(
+        item, "artwork", QPoint(100, 100), 700.0, 400.0, 70.0, 40.0
+    )
+    assert owner.update_child_move(
+        item, "artwork", QPoint(100, 100), True
+    ) is False
+    assert item.child_size("artwork").x_offset == pytest.approx(0.0)
+    assert item.child_size("artwork").y_offset == pytest.approx(0.0)
+
+    # The first real move folds the current logical family displacement into the
+    # authored-relative offset, then adds the pointer delta. When the retained
+    # family gate drops its reflow contribution, the child therefore stays under
+    # the pointer rather than jumping back to its canonical anchor.
+    assert owner.begin_child_move(
+        item, "artwork", QPoint(100, 100), 700.0, 400.0, 70.0, 40.0
+    )
+    assert owner.update_child_move(
+        item, "artwork", QPoint(107, 104), True
+    )
+    first = item.child_size("artwork")
+    assert first.x_offset == pytest.approx(0.11)
+    assert first.y_offset == pytest.approx(0.11)
+
+    # Once detached, the family supplies zero compensation. A later gesture is a
+    # normal delta from the committed geometry and must not add the old reflow a
+    # second time.
+    assert owner.begin_child_move(
+        item, "artwork", QPoint(300, 200), 700.0, 400.0, 0.0, 0.0
+    )
+    assert owner.update_child_move(
+        item, "artwork", QPoint(307, 204), True
+    )
+    second = item.child_size("artwork")
+    assert second.x_offset == pytest.approx(0.12)
+    assert second.y_offset == pytest.approx(0.12)
+
+
+def test_left_child_resize_persists_origin_shift_so_opposite_edge_stays_fixed() -> None:
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    item = _child_edit_item(role_handle="bottom_left")
+
+    assert owner.begin_child_resize(
+        item, "artwork", "bottom_left", QPoint(500, 500),
+        200.0, 100.0, 1000.0, 500.0,
+    )
+    # Drag the left edge right by 40px while keeping bottom unchanged. Width
+    # becomes 80% and the authored-relative origin advances by exactly 40/1000.
+    assert owner.update_child_resize(
+        item, "artwork", "bottom_left", QPoint(540, 500), True
+    )
+    geometry = item.child_size("artwork")
+    assert geometry.width_scale == pytest.approx(0.8)
+    assert geometry.height_scale == pytest.approx(1.0)
+    assert geometry.x_offset == pytest.approx(0.04)
+    assert geometry.y_offset == pytest.approx(0.0)
+
+
+def test_top_child_resize_persists_origin_shift_and_cancel_cannot_replay() -> None:
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    item = _child_edit_item(role_handle="top_right")
+
+    assert owner.begin_child_resize(
+        item, "artwork", "top_right", QPoint(500, 500),
+        200.0, 100.0, 1000.0, 500.0,
+    )
+    assert owner.update_child_resize(
+        item, "artwork", "top_right", QPoint(500, 520), False
+    )
+    geometry = item.child_size("artwork")
+    assert geometry.height_scale == pytest.approx(0.8)
+    assert geometry.y_offset == pytest.approx(0.04)
+
+    owner.cancel_child_gesture(item)
+    assert owner.update_child_resize(
+        item, "artwork", "top_right", QPoint(500, 550), True
+    ) is False
+    assert item.child_size("artwork") == geometry
+
+
+def test_restore_size_clears_child_size_placement_and_floor_but_preserves_parent_xy() -> None:
+    descriptor = get_widget_runtime_descriptor("abandonment_issues")
+    assert descriptor is not None
+    roles = descriptor.custom_child_roles
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("abandonment_issues", "display:a"),
+        model_identity="abandonment_issues",
+        baseline_global_rect=QRect(310, 260, 900, 550),
+        current_global_rect=QRect(310, 260, 900, 550),
+        baseline_size_payload={},
+        current_size_payload={
+            CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY: {
+                "artwork": {
+                    "width_scale": 1.8,
+                    "height_scale": 1.4,
+                    "x_offset": 0.22,
+                    "y_offset": 0.11,
+                }
+            },
+            "content_extent": [900.0, 550.0],
+        },
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+        content_extent_axes=frozenset({"vertical", "horizontal"}),
+        baseline_content_extent=(700.0, 400.0),
+        current_content_extent=(900.0, 550.0),
+        custom_child_roles=roles,
+        current_child_sizes={
+            "artwork": CustomChildSize(1.8, 1.4, 0.22, 0.11)
+        },
+        child_content_requirement=(900.0, 550.0),
+        size_reset_capable=True,
+        authored_reference_size=(700.0, 400.0),
+        authored_size_payload={},
+    )
+    session = CustomLayoutSession()
+    session.add_item(item)
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    owner._active = True
+    owner._session = session
+    owner._bindings = {
+        "display:a": _DisplayBinding(
+            identity="display:a", monitor_route="1", unit=SimpleNamespace(),
+            screen=None, geometry=QRect(0, 0, 3840, 2160),
+        )
+    }
+    owner._descriptors = {item.source_key: descriptor}
+
+    assert owner.restore_item_size(item) is True
+    assert (item.current_global_rect.x(), item.current_global_rect.y()) == (310, 260)
+    assert (item.current_global_rect.width(), item.current_global_rect.height()) == (700, 400)
+    assert CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY not in item.current_size_payload
+    assert item.current_child_sizes == {}
+    assert item.child_content_requirement is None
+
+
+def test_child_requirement_is_live_parent_content_floor_without_auto_shrink() -> None:
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    owner._bindings = {
+        "display:a": _DisplayBinding(
+            identity="display:a",
+            monitor_route="1",
+            unit=SimpleNamespace(),
+            screen=None,
+            geometry=QRect(0, 0, 3840, 2160),
+        )
+    }
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("abandonment_issues", "display:a"),
+        model_identity="abandonment_issues",
+        baseline_global_rect=QRect(100, 100, 700, 400),
+        current_global_rect=QRect(100, 100, 700, 400),
+        baseline_size_payload={},
+        current_size_payload={},
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+        content_extent_axes=frozenset({"vertical", "horizontal"}),
+        baseline_content_extent=(700.0, 400.0),
+        custom_child_roles=(
+            freeform_artwork_child_role(
+                resize_handles=("bottom_right",),
+            ),
+        ),
+    )
+
+    # A retained child requirement may grow the parent immediately.
+    assert owner.ensure_child_content_extent(item, 900.0, 550.0) is True
+    assert item.child_content_requirement == (900.0, 550.0)
+    assert item.current_content_extent == pytest.approx((900.0, 550.0))
+
+    # When children later need less room, update the transient floor but do not
+    # auto-collapse the parent. The user still owns reclaiming outer space.
+    assert owner.ensure_child_content_extent(item, 760.0, 460.0) is False
+    assert item.child_content_requirement == (760.0, 460.0)
+    assert item.current_content_extent == pytest.approx((900.0, 550.0))
+
+    # The floor is selected-Edit transient state. Retiring the child layer clears
+    # it without changing the user's current outer/content geometry.
+    assert owner.clear_child_content_extent(item) is True
+    assert item.child_content_requirement is None
+    assert item.current_content_extent == pytest.approx((900.0, 550.0))
+    assert owner.clear_child_content_extent(item) is False
+
+    # Re-derived selected-child geometry may establish the current floor again.
+    assert owner.ensure_child_content_extent(item, 760.0, 460.0) is False
+    assert item.child_content_requirement == (760.0, 460.0)
+
+    # Parent content controls may now shrink, but never through the current child
+    # requirement. This closes the child-overflow path exposed by physical edit.
+    start = QPoint(item.current_global_rect.center())
+    assert owner.begin_resize(item, "content_bottom_right", start) is True
+    assert owner.update_resize(
+        item,
+        "content_bottom_right",
+        QPoint(start.x() - 500, start.y() - 500),
+        True,
+    ) is True
+    assert item.current_content_extent[0] == pytest.approx(760.0, abs=1.0)
+    assert item.current_content_extent[1] == pytest.approx(460.0, abs=1.0)
+
+
+def test_child_edit_selection_change_retires_previous_transient_state_by_object_identity() -> None:
+    role = freeform_artwork_child_role(
+        resize_handles=("bottom_right",),
+        movable=True,
+    )
+    first = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("abandonment_issues", "display:a"),
+        model_identity="abandonment_issues",
+        baseline_global_rect=QRect(100, 100, 700, 400),
+        current_global_rect=QRect(100, 100, 700, 400),
+        baseline_size_payload={},
+        current_size_payload={},
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+        custom_child_roles=(role,),
+        child_content_requirement=(760.0, 460.0),
+    )
+    second = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("media", "display:a"),
+        model_identity="media",
+        baseline_global_rect=QRect(900, 100, 700, 400),
+        current_global_rect=QRect(900, 100, 700, 400),
+        baseline_size_payload={},
+        current_size_payload={},
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+        custom_child_roles=(role,),
+    )
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+
+    owner._selected_child_edit_item = first
+    assert owner.begin_child_move(
+        first, "artwork", QPoint(500, 500), 700.0, 400.0
+    ) is True
+    assert first.source_key in owner._child_move_origins
+
+    owner._on_child_edit_selection_changed(second)
+
+    assert first.source_key not in owner._child_move_origins
+    assert first.child_content_requirement is None
+    assert owner._selected_child_edit_item is second
 
 
 def test_resize_side_drag_snaps_and_wheel_only_publishes_guides() -> None:

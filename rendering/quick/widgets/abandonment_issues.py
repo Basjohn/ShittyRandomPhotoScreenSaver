@@ -17,6 +17,12 @@ from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
 from core.steam.abandonment_issues import AbandonmentSelection, parse_appid_list
+from rendering.custom_child_geometry import (
+    CustomChildSize,
+    child_role_map,
+    clamp_child_geometry,
+)
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 from widgets.steam_abandonment_preparation import (
     AbandonmentPreparedPresentation,
     AbandonmentRuntimeConfig,
@@ -429,6 +435,7 @@ class AbandonmentIssuesPresentationModel(QObject):
     """Stable retained state for one archival Abandonment card."""
 
     stateChanged = Signal()
+    customGeometryChanged = Signal()
     fadeRequested = Signal()
     contentTransitionRequested = Signal()
 
@@ -455,6 +462,27 @@ class AbandonmentIssuesPresentationModel(QObject):
         # CUSTOM-only logical canvas; Settings-authored geometry remains the
         # baseline and corner/wheel scaling remains one shared outer transform.
         self._content_extent: tuple[int, int] | None = None
+        # CUSTOM child geometry stays presentation-local. The shared CUSTOM
+        # session owns normalized persistence in size_payload.child_geometry;
+        # Abandonment only projects descriptor-admitted retained presentation state.
+        self._custom_header_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_header_alignment = "left"
+        self._custom_header_anchor = ""
+        self._custom_artwork_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_backlog_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_backlog_alignment = "right"
+        self._custom_game_name_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_game_name_alignment = "left"
+        self._custom_flavour_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_flavour_alignment = "left"
+        self._custom_last_visit_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_last_visit_alignment = "left"
+        self._custom_shelf_group_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_shelf_group_alignment = "left"
+        descriptor = get_widget_runtime_descriptor("abandonment_issues")
+        if descriptor is None or not descriptor.custom_child_roles:
+            raise RuntimeError("Abandonment CUSTOM child-role descriptor is missing")
+        self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
         self._pending_manual_refresh = False
         self._pending_rotation = False
 
@@ -651,6 +679,91 @@ class AbandonmentIssuesPresentationModel(QObject):
         self.stateChanged.emit()
         return True
 
+    def set_custom_child_geometry(self, child_geometry: object) -> bool:
+        """Project descriptor-normalized dense-card child factors.
+
+        No provider/runtime/settings ownership crosses this boundary. One narrow
+        signal updates the retained geometry/presentation consumers while the shared
+        CUSTOM session remains the sole persistence and gesture owner.
+        """
+
+        raw = child_geometry if isinstance(child_geometry, Mapping) else {}
+
+        def _resolved(role_id: str) -> CustomChildSize:
+            role = self._custom_child_roles[role_id]
+            value = raw.get(role_id) if isinstance(raw, Mapping) else None
+            if not isinstance(value, Mapping):
+                return CustomChildSize()
+            return clamp_child_geometry(
+                role,
+                value.get("width_scale", 1.0),
+                value.get("height_scale", 1.0),
+                value.get("x_offset", 0.0),
+                value.get("y_offset", 0.0),
+                value.get("alignment"),
+                value.get("anchor"),
+            )
+
+        header = _resolved("header")
+        artwork = _resolved("artwork")
+        backlog = _resolved("backlog_block")
+        game_name = _resolved("game_name")
+        flavour = _resolved("flavour_text")
+        last_visit = _resolved("last_visit")
+        shelf_group = _resolved("shelf_group")
+        next_values = (
+            (header.width_scale, header.height_scale, header.x_offset, header.y_offset),
+            header.alignment or self._custom_child_roles["header"].authored_alignment,
+            str(header.anchor or ""),
+            (artwork.width_scale, artwork.height_scale, artwork.x_offset, artwork.y_offset),
+            (backlog.width_scale, backlog.height_scale, backlog.x_offset, backlog.y_offset),
+            backlog.alignment or self._custom_child_roles["backlog_block"].authored_alignment,
+            (game_name.width_scale, game_name.height_scale, game_name.x_offset, game_name.y_offset),
+            game_name.alignment or self._custom_child_roles["game_name"].authored_alignment,
+            (flavour.width_scale, flavour.height_scale, flavour.x_offset, flavour.y_offset),
+            flavour.alignment or self._custom_child_roles["flavour_text"].authored_alignment,
+            (last_visit.width_scale, last_visit.height_scale, last_visit.x_offset, last_visit.y_offset),
+            last_visit.alignment or self._custom_child_roles["last_visit"].authored_alignment,
+            (shelf_group.width_scale, shelf_group.height_scale, shelf_group.x_offset, shelf_group.y_offset),
+            shelf_group.alignment or self._custom_child_roles["shelf_group"].authored_alignment,
+        )
+        current_values = (
+            self._custom_header_geometry,
+            self._custom_header_alignment,
+            self._custom_header_anchor,
+            self._custom_artwork_geometry,
+            self._custom_backlog_geometry,
+            self._custom_backlog_alignment,
+            self._custom_game_name_geometry,
+            self._custom_game_name_alignment,
+            self._custom_flavour_geometry,
+            self._custom_flavour_alignment,
+            self._custom_last_visit_geometry,
+            self._custom_last_visit_alignment,
+            self._custom_shelf_group_geometry,
+            self._custom_shelf_group_alignment,
+        )
+        if next_values == current_values:
+            return False
+        (
+            self._custom_header_geometry,
+            self._custom_header_alignment,
+            self._custom_header_anchor,
+            self._custom_artwork_geometry,
+            self._custom_backlog_geometry,
+            self._custom_backlog_alignment,
+            self._custom_game_name_geometry,
+            self._custom_game_name_alignment,
+            self._custom_flavour_geometry,
+            self._custom_flavour_alignment,
+            self._custom_last_visit_geometry,
+            self._custom_last_visit_alignment,
+            self._custom_shelf_group_geometry,
+            self._custom_shelf_group_alignment,
+        ) = next_values
+        self.customGeometryChanged.emit()
+        return True
+
     def store_action_target(self) -> str | None:
         appid = self.card.appid
         if not self.is_active or not self._snapshot.interaction_enabled:
@@ -774,6 +887,146 @@ class AbandonmentIssuesPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def artworkSize(self) -> float:
         return float(self.config.artwork_size)
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderWidthScale(self) -> float:
+        return float(self._custom_header_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderHeightScale(self) -> float:
+        return float(self._custom_header_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderXOffset(self) -> float:
+        return float(self._custom_header_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderYOffset(self) -> float:
+        return float(self._custom_header_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customHeaderAlignment(self) -> str:
+        return str(self._custom_header_alignment)
+
+    @Property(str, notify=customGeometryChanged)
+    def customHeaderAnchor(self) -> str:
+        return str(self._custom_header_anchor)
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkWidthScale(self) -> float:
+        return float(self._custom_artwork_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkHeightScale(self) -> float:
+        return float(self._custom_artwork_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkXOffset(self) -> float:
+        return float(self._custom_artwork_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkYOffset(self) -> float:
+        return float(self._custom_artwork_geometry[3])
+
+    @Property(float, notify=customGeometryChanged)
+    def customBacklogWidthScale(self) -> float:
+        return float(self._custom_backlog_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customBacklogHeightScale(self) -> float:
+        return float(self._custom_backlog_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customBacklogXOffset(self) -> float:
+        return float(self._custom_backlog_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customBacklogYOffset(self) -> float:
+        return float(self._custom_backlog_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customBacklogAlignment(self) -> str:
+        return str(self._custom_backlog_alignment)
+
+    @Property(float, notify=customGeometryChanged)
+    def customGameNameWidthScale(self) -> float:
+        return float(self._custom_game_name_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customGameNameHeightScale(self) -> float:
+        return float(self._custom_game_name_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customGameNameXOffset(self) -> float:
+        return float(self._custom_game_name_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customGameNameYOffset(self) -> float:
+        return float(self._custom_game_name_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customGameNameAlignment(self) -> str:
+        return str(self._custom_game_name_alignment)
+
+    @Property(float, notify=customGeometryChanged)
+    def customFlavourWidthScale(self) -> float:
+        return float(self._custom_flavour_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFlavourHeightScale(self) -> float:
+        return float(self._custom_flavour_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFlavourXOffset(self) -> float:
+        return float(self._custom_flavour_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFlavourYOffset(self) -> float:
+        return float(self._custom_flavour_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customFlavourAlignment(self) -> str:
+        return str(self._custom_flavour_alignment)
+
+    @Property(float, notify=customGeometryChanged)
+    def customLastVisitWidthScale(self) -> float:
+        return float(self._custom_last_visit_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customLastVisitHeightScale(self) -> float:
+        return float(self._custom_last_visit_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customLastVisitXOffset(self) -> float:
+        return float(self._custom_last_visit_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customLastVisitYOffset(self) -> float:
+        return float(self._custom_last_visit_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customLastVisitAlignment(self) -> str:
+        return str(self._custom_last_visit_alignment)
+
+    @Property(float, notify=customGeometryChanged)
+    def customShelfGroupWidthScale(self) -> float:
+        return float(self._custom_shelf_group_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customShelfGroupHeightScale(self) -> float:
+        return float(self._custom_shelf_group_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customShelfGroupXOffset(self) -> float:
+        return float(self._custom_shelf_group_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customShelfGroupYOffset(self) -> float:
+        return float(self._custom_shelf_group_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customShelfGroupAlignment(self) -> str:
+        return str(self._custom_shelf_group_alignment)
 
     @Property(QColor, notify=stateChanged)
     def steamInfoSurfaceColor(self) -> QColor:
@@ -976,13 +1229,16 @@ class RetainedAbandonmentIssuesPresentation:
         self,
         payload: Mapping[str, Any],
     ) -> None:
-        # Side handles may carry one logical content box. Historical per-value
-        # artwork/font keys remain ignored: Settings still owns authored values.
+        # Side handles may carry one logical content box. Authored Settings
+        # values remain the reset/non-CUSTOM baseline; descriptor-admitted child
+        # geometry is projected from the same canonical CUSTOM size payload.
         extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
         if isinstance(extent, (tuple, list)) and len(extent) == 2:
             self._model.set_content_extent(extent[0], extent[1])
         else:
             self._model.clear_content_extent()
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
+        self._model.set_custom_child_geometry(child_geometry)
 
     def apply_input_state(self, input_state: object) -> bool:
         if isinstance(input_state, Mapping):
