@@ -39,8 +39,15 @@ from .context_menu import (
     QuickContextMenuShadowStyle,
 )
 from .custom_layout_overlay import (
+    ChildContentExtentClearHandler,
     ChildContentExtentHandler,
+    ChildGestureCancelHandler,
+    ChildMoveBeginHandler,
+    ChildMoveUpdateHandler,
+    ChildAlignmentFlipHandler,
+    ChildSemanticAnchorHandler,
     ChildResizeBeginHandler,
+    ChildResizePreviewHandler,
     ChildResizeUpdateHandler,
     ContentRotationHandler,
     CustomLayoutOverlayModel,
@@ -371,6 +378,7 @@ class QuickSceneController(QObject):
 
     readiness_changed = Signal(object)
     jedi_mode_requested = Signal(str, str)
+    custom_layout_save_requested = Signal()
 
     def __init__(
         self,
@@ -726,6 +734,8 @@ class QuickSceneController(QObject):
     def apply_widget_glow_press(self, state: QuickInputState, scene_position: Any) -> bool:
         """Observe an admitted discrete press without participating in actions."""
 
+        if self._custom_layout_session is not None:
+            return False
         if (
             not isinstance(state, QuickInputState)
             or not self._readiness.admission_open
@@ -774,6 +784,8 @@ class QuickSceneController(QObject):
         anywhere outside an open Gmail three-dot menu closes it. No timer/poll.
         """
 
+        if self._custom_layout_session is not None:
+            return False
         if (
             not isinstance(state, QuickInputState)
             or not self._readiness.admission_open
@@ -879,8 +891,15 @@ class QuickSceneController(QObject):
         size_reset_handler: SizeResetHandler | None = None,
         content_rotation_handler: ContentRotationHandler | None = None,
         child_resize_begin_handler: ChildResizeBeginHandler | None = None,
+        child_resize_preview_handler: ChildResizePreviewHandler | None = None,
         child_resize_update_handler: ChildResizeUpdateHandler | None = None,
+        child_move_begin_handler: ChildMoveBeginHandler | None = None,
+        child_move_update_handler: ChildMoveUpdateHandler | None = None,
+        child_alignment_flip_handler: ChildAlignmentFlipHandler | None = None,
+        child_semantic_anchor_handler: ChildSemanticAnchorHandler | None = None,
+        child_gesture_cancel_handler: ChildGestureCancelHandler | None = None,
         child_content_extent_handler: ChildContentExtentHandler | None = None,
+        child_content_extent_clear_handler: ChildContentExtentClearHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind this display's retained pixels to shared CUSTOM working state."""
 
@@ -890,6 +909,15 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = identity
         self._custom_layout_display_origin = QPoint(display_origin or QPoint())
         self._custom_layout_session = session
+        # Keep native runtime pointer semantics out of CUSTOM before enabling the
+        # edit overlay. QML still receives the pointer through QQuickWindow.
+        self._window.set_custom_layout_input_blocked(True)
+        # CUSTOM Edit owns the pointer. Suppress every ordinary widget's normal
+        # semantic input at the retained host boundary so clicking artwork,
+        # headers, buttons, rows, etc. can never activate product behavior under
+        # the edit chrome. The host carries this state to late-created/transferred
+        # roots and restores the cached live input snapshot on exit.
+        self.ordinary_widget_host.set_custom_layout_input_blocked(True)
         media_overlay = self.ordinary_widget_host.presentation_for_model_identity("media")
         if media_overlay is not None:
             media_overlay.item.setProperty("volumeWheelEnabled", False)
@@ -917,9 +945,17 @@ class QuickSceneController(QObject):
             content_rotation_handler=content_rotation_handler,
             presentation_item_resolver=self._custom_layout_presentation_item,
             child_resize_begin_handler=child_resize_begin_handler,
+            child_resize_preview_handler=child_resize_preview_handler,
             child_resize_update_handler=child_resize_update_handler,
+            child_move_begin_handler=child_move_begin_handler,
+            child_move_update_handler=child_move_update_handler,
+            child_alignment_flip_handler=child_alignment_flip_handler,
+            child_semantic_anchor_handler=child_semantic_anchor_handler,
+            child_gesture_cancel_handler=child_gesture_cancel_handler,
             child_content_extent_handler=child_content_extent_handler,
+            child_content_extent_clear_handler=child_content_extent_clear_handler,
         )
+        model.save_requested.connect(self.custom_layout_save_requested.emit)
         underlay = self._custom_layout_guide_underlay
         if underlay is not None:
             underlay.setProperty("verticalCenterGuides", [])
@@ -1069,6 +1105,16 @@ class QuickSceneController(QObject):
         overlay = self._custom_layout_overlay
         if overlay is not None and not overlay.clear_session():
             corrupt.append("custom_layout_overlay")
+        # Restore ordinary semantic input only after the edit overlay/session has
+        # been cleared, preventing the terminating pointer event from leaking
+        # through and triggering the widget underneath.
+        try:
+            host.set_custom_layout_input_blocked(False)
+        except (RuntimeError, TypeError):
+            corrupt.append("ordinary:input_gate")
+        # Restore native runtime pointer semantics only after both the retained
+        # edit overlay and ordinary-family blocker have been retired.
+        self._window.set_custom_layout_input_blocked(False)
         item = self._visualizer_item
         if item is not None:
             if _qobject_is_alive(item):
@@ -1430,6 +1476,8 @@ class QuickSceneController(QObject):
         region cycles the visualizer mode and consumes the event.
         """
 
+        if self._custom_layout_session is not None:
+            return True
         if self._ordinary_widget_host.handles_semantic_double_click_at(scene_position):
             return True
         admission = self._visualizer_double_click_admission
@@ -1451,6 +1499,8 @@ class QuickSceneController(QObject):
     def _semantic_middle_click_hit_test(self, scene_position: Any) -> bool:
         """Admit the Visualizer-only middle-click preset gesture."""
 
+        if self._custom_layout_session is not None:
+            return True
         admission = self._visualizer_middle_click_admission
         if admission is None:
             return False

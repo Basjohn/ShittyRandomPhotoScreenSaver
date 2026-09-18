@@ -16,7 +16,7 @@ into each item's content area.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from PySide6.QtCore import QObject, QPointF
 from PySide6.QtGui import QColor
@@ -346,6 +346,11 @@ class OrdinaryWidgetPresentationHost:
         self._live: list[RetainedOverlayWidget] = []
         self._by_model_identity: dict[str, RetainedOverlayWidget] = {}
         self._input_state: object | None = None
+        # CUSTOM Edit is a presentation/input mode, not permission for the
+        # underlying widget to keep firing its normal semantic actions. This
+        # host-level gate is inherited by current, newly-created and transferred
+        # ordinary roots so families do not each reinvent edit suppression.
+        self._custom_layout_input_blocked = False
         # Event-bound corruption ledger. An unexpectedly destroyed C++ root is
         # removed immediately from the live maps; CUSTOM close consumes this list
         # and requests one reconstruction from committed truth.
@@ -485,6 +490,13 @@ class OrdinaryWidgetPresentationHost:
             if not item.setProperty("fadeOpacity", initial_fade):
                 item.deleteLater()
                 raise RuntimeError("OverlayWidget.qml rejected fadeOpacity projection")
+        if not item.setProperty(
+            "customLayoutInputBlocked", bool(self._custom_layout_input_blocked)
+        ):
+            item.deleteLater()
+            raise RuntimeError(
+                "OverlayWidget.qml rejected customLayoutInputBlocked projection"
+            )
         item.setParentItem(host_item)
         item.setParent(host_item)
 
@@ -536,7 +548,7 @@ class OrdinaryWidgetPresentationHost:
             widget.set_card_style(card_style)
         widget._host = self
         if self._input_state is not None:
-            widget._apply_input_state(self._input_state)
+            widget._apply_input_state(self._effective_input_state(self._input_state))
         self._live.append(widget)
         if normalized_identity:
             self._by_model_identity[normalized_identity] = widget
@@ -644,6 +656,8 @@ class OrdinaryWidgetPresentationHost:
     def handles_semantic_double_click_at(self, scene_position: QPointF) -> bool:
         """Return whether the topmost retained item owns this double click."""
 
+        if self._custom_layout_input_blocked:
+            return False
         point = QPointF(scene_position)
         for widget in reversed(self._live):
             item = widget.item
@@ -668,7 +682,7 @@ class OrdinaryWidgetPresentationHost:
             raise ValueError("input-state target is not owned by this host")
         widget._set_input_state_handler(handler)
         if handler is not None and self._input_state is not None:
-            handler(self._input_state)
+            handler(self._effective_input_state(self._input_state))
 
     def _emit_jedi_mode_event(self, trigger: str, model_identity: str) -> None:
         """Forward one finite hover/click edge; no polling or queued repeat owner."""
@@ -677,15 +691,70 @@ class OrdinaryWidgetPresentationHost:
         if handler is not None:
             handler(str(trigger), str(model_identity or "ordinary_widget"))
 
+    def _effective_input_state(self, input_state: object) -> object:
+        """Return the family-facing input state after host-level Edit suppression."""
+
+        if not self._custom_layout_input_blocked:
+            return input_state
+        from rendering.quick.state import QuickInputState
+
+        if isinstance(input_state, QuickInputState):
+            return replace(
+                input_state,
+                interaction_mode_enabled=False,
+                ctrl_held=False,
+            )
+        if isinstance(input_state, Mapping):
+            blocked = dict(input_state)
+            blocked["interaction_mode_enabled"] = False
+            blocked["ctrl_held"] = False
+            return blocked
+        # Production crosses this seam with QuickInputState. Unknown test/tool
+        # objects are left untouched rather than inventing a second state type.
+        return input_state
+
+    def set_custom_layout_input_blocked(self, blocked: bool) -> bool:
+        """Suppress ordinary semantic input while CUSTOM Edit owns the pointer.
+
+        The raw display input snapshot remains cached unchanged so leaving Edit
+        can restore the exact current interaction admission in one event-driven
+        projection. No family-local flag, timer or polling path is introduced.
+        """
+
+        if self._retired:
+            return False
+        normalized = bool(blocked)
+        changed = normalized != self._custom_layout_input_blocked
+        self._custom_layout_input_blocked = normalized
+        effective = (
+            None
+            if self._input_state is None
+            else self._effective_input_state(self._input_state)
+        )
+        for widget in tuple(self._live):
+            if not widget.is_qt_alive:
+                continue
+            item = widget.item
+            if bool(item.property("customLayoutInputBlocked")) != normalized:
+                if not item.setProperty("customLayoutInputBlocked", normalized):
+                    raise RuntimeError(
+                        "OverlayWidget.qml rejected customLayoutInputBlocked projection"
+                    )
+                changed = True
+            if effective is not None:
+                changed = widget._apply_input_state(effective) or changed
+        return changed
+
     def apply_input_state(self, input_state: object) -> bool:
         """Project one display-local input state onto all interactive families."""
 
         if self._retired:
             return False
         self._input_state = input_state
+        effective = self._effective_input_state(input_state)
         changed = False
         for widget in tuple(self._live):
-            changed = widget._apply_input_state(input_state) or changed
+            changed = widget._apply_input_state(effective) or changed
         return changed
 
     def retire_widget(self, widget: RetainedOverlayWidget) -> bool:
@@ -831,8 +900,16 @@ class OrdinaryWidgetPresentationHost:
         ):
             raise RuntimeError("retained ordinary shadow has no transfer host")
         item.setProperty("widgetGlowAdmitted", False)
+        if not item.setProperty(
+            "customLayoutInputBlocked", bool(target._custom_layout_input_blocked)
+        ):
+            raise RuntimeError(
+                "OverlayWidget.qml rejected customLayoutInputBlocked transfer projection"
+            )
         if target._input_state is not None:
-            widget._apply_input_state(target._input_state)
+            widget._apply_input_state(
+                target._effective_input_state(target._input_state)
+            )
         try:
             item.setParentItem(target_item)
             item.setParent(target_item)
@@ -862,6 +939,7 @@ class OrdinaryWidgetPresentationHost:
         self._live = []
         self._by_model_identity = {}
         self._input_state = None
+        self._custom_layout_input_blocked = False
         self._unexpected_qt_deaths = []
         self._retired = True
         for widget in live:

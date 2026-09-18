@@ -108,10 +108,20 @@ def test_steam_descriptors_are_complete_with_journey_scaffold_gate() -> None:
         assert resize_sections["steam_achievement_pulse"].widget_ids == ("achievement_pulse",)
         assert resize_sections["steam_abandonment_issues"].widget_ids == ("abandonment_issues",)
         assert resize_sections["steam_friend_pulse"].widget_ids == ("friend_pulse",)
+        assert {
+            resize_sections["steam_achievement_pulse"].settings_section_id,
+            resize_sections["steam_abandonment_issues"].settings_section_id,
+            resize_sections["steam_friend_pulse"].settings_section_id,
+        } == {"steam"}
         assert set(resize_sections["steam_achievement_pulse"].control_attrs) == {
             "achievement_pulse_font_size",
             "achievement_pulse_artwork_shape",
             "achievement_pulse_square_artwork_size",
+        }
+        assert set(resize_sections["steam_abandonment_issues"].control_attrs) == {
+            "abandonment_issues_font_size",
+            "abandonment_issues_artwork_shape",
+            "abandonment_issues_artwork_size",
         }
         assert "friend_pulse_font_size" not in resize_sections["steam_achievement_pulse"].control_attrs
     finally:
@@ -234,6 +244,8 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.steam_progress_font_family.setCurrentFont(QFont("Jost"))
             tab.steam_progress_font_size.setValue(18)
             tab.achievement_pulse_selection_mode.setCurrentIndex(5)
+            assert tab.achievement_pulse_child_collision_enabled.property("circleIndicator") is True
+            tab.achievement_pulse_child_collision_enabled.setChecked(False)
             tab.achievement_pulse_custom_appid.setValue(367520)
             tab.achievement_pulse_show_artwork.setChecked(False)
             tab.achievement_pulse_artwork_shape.setCurrentIndex(1)
@@ -251,6 +263,8 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.achievement_pulse_capsule_fill_color_btn.color_changed.emit(QColor(12, 34, 56, 78))
             tab.achievement_pulse_capsule_border_color_btn.color_changed.emit(QColor(90, 87, 65, 43))
             tab.abandonment_issues_selection_mode.setCurrentIndex(1)
+            assert tab.abandonment_issues_child_collision_enabled.property("circleIndicator") is True
+            tab.abandonment_issues_child_collision_enabled.setChecked(False)
             tab.abandonment_issues_pinned_game.addItem("Fixture Game", 101)
             tab.abandonment_issues_pinned_game.setCurrentIndex(
                 tab.abandonment_issues_pinned_game.count() - 1
@@ -296,6 +310,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert "api_key" not in steam_payload
             assert "profile_identifier" not in steam_payload
             achievement_payload = collect_widget_section_save_result(tab, "steam")[2]
+            assert achievement_payload["child_collision_enabled"] is False
             assert achievement_payload["selection_mode"] == "custom"
             assert achievement_payload["custom_appid"] == 367520
             assert achievement_payload["show_artwork"] is False
@@ -314,6 +329,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert achievement_payload["capsule_fill_color"] == [12, 34, 56, 78]
             assert achievement_payload["capsule_border_color"] == [90, 87, 65, 43]
             abandonment_payload = collect_widget_section_save_result(tab, "steam")[3]
+            assert abandonment_payload["child_collision_enabled"] is False
             assert abandonment_payload["selection_mode"] == "pinned_game"
             assert abandonment_payload["pinned_appid"] == 101
             assert "minimum_playtime_hours" not in abandonment_payload

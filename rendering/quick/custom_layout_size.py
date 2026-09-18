@@ -113,24 +113,35 @@ def quick_custom_minimum_size(item: CustomLayoutSessionItem) -> QSize:
 def quick_custom_content_extent_minimum_size(
     item: CustomLayoutSessionItem,
 ) -> QSize:
-    """Return the physical floor for one direct content-extent side gesture.
+    """Return the physical floor for one direct content-extent gesture.
 
-    ``content_extent_minimum_size`` is family-owned *logical* geometry.  A
-    content-extent widget may already be uniformly scaled, so direct side
-    handles must project that logical floor through the current uniform scale.
-    Corner/wheel uniform resize deliberately does not consume this floor: its
-    existing ordinary whole-widget scale contract remains independent.
+    ``content_extent_minimum_size`` is the family-authored logical floor.  A
+    selected child-edit presentation may additionally report a transient logical
+    requirement implied by its *current* customized children.  Direct side and
+    two-axis content handles must respect the larger value on each axis so the
+    parent cannot be reflowed back through a child that already needs that room.
+
+    The transient requirement is never persisted and never drives a background
+    cadence: the retained family re-reports it only while the edit overlay is
+    observing that selected parent.  Corner/wheel uniform resize deliberately
+    does not consume this floor because it scales the existing logical box as a
+    whole rather than changing the box itself.
     """
 
-    minimum = item.content_extent_minimum_size
-    if minimum is None:
+    authored = item.content_extent_minimum_size
+    child = item.child_content_requirement
+    if authored is None and child is None:
         return quick_custom_minimum_size(item)
+
+    authored_width, authored_height = authored or (0.0, 0.0)
+    child_width, child_height = child or (0.0, 0.0)
+    logical_width = max(float(authored_width), float(child_width))
+    logical_height = max(float(authored_height), float(child_height))
     scale = max(1.0e-6, float(item.resize_scale))
-    width, height = minimum
     generic_floor = quick_custom_minimum_size(item)
     return QSize(
-        max(generic_floor.width(), int(round(float(width) * scale))),
-        max(generic_floor.height(), int(round(float(height) * scale))),
+        max(generic_floor.width(), int(round(logical_width * scale))),
+        max(generic_floor.height(), int(round(logical_height * scale))),
     )
 
 

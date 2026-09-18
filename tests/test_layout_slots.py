@@ -430,3 +430,75 @@ def test_visualizer_layout_slot_round_trips_active_mode_without_copying_mode_tun
     # authority for per-mode presets/tuning.
     assert widgets["spotify_visualizer"]["sphere_deformation"] == 1.25
     assert widgets["spotify_visualizer"]["bubble_big_count"] == 4
+
+
+def test_layout_slot_round_trips_custom_child_size_and_placement_without_aliasing():
+    """Nested child_geometry stays inside the existing CUSTOM layout carrier."""
+
+    child_geometry = {
+        "artwork": {
+            "width_scale": 1.35,
+            "height_scale": 0.82,
+            "x_offset": 0.17,
+            "y_offset": -0.08,
+        },
+        "game_name": {
+            "width_scale": 0.76,
+            "height_scale": 1.28,
+            "x_offset": -0.11,
+            "y_offset": 0.14,
+        },
+    }
+    widgets = {
+        "abandonment_issues": {"enabled": True, "position": "Custom"},
+        "custom_layout": {
+            "version": 2,
+            "displays": {
+                "serial:A": {
+                    "abandonment_issues": {
+                        "default": {
+                            "rect": {"x": 0.1, "y": 0.2, "w": 0.4, "h": 0.5},
+                            "size_payload": {"child_geometry": deepcopy(child_geometry)},
+                        }
+                    }
+                }
+            },
+        },
+        "custom_layout_restore": {"widgets": {}},
+    }
+
+    assert save_layout_slot(widgets, "1") is True
+
+    # Mutate both the live carrier and the original fixture after capture. The
+    # saved slot must be a deep snapshot rather than a nested alias.
+    live_geometry = widgets["custom_layout"]["displays"]["serial:A"][
+        "abandonment_issues"
+    ]["default"]["size_payload"]["child_geometry"]
+    live_geometry["artwork"]["x_offset"] = 0.91
+    child_geometry["game_name"]["width_scale"] = 2.0
+
+    assert apply_layout_slot(widgets, "1") is True
+    restored = widgets["custom_layout"]["displays"]["serial:A"][
+        "abandonment_issues"
+    ]["default"]["size_payload"]["child_geometry"]
+    assert restored == {
+        "artwork": {
+            "width_scale": 1.35,
+            "height_scale": 0.82,
+            "x_offset": 0.17,
+            "y_offset": -0.08,
+        },
+        "game_name": {
+            "width_scale": 0.76,
+            "height_scale": 1.28,
+            "x_offset": -0.11,
+            "y_offset": 0.14,
+        },
+    }
+
+    restored["artwork"]["y_offset"] = 0.77
+    saved = get_layout_slot_payload(widgets, "1")
+    assert saved is not None
+    assert saved["custom_layout"]["displays"]["serial:A"][
+        "abandonment_issues"
+    ]["default"]["size_payload"]["child_geometry"]["artwork"]["y_offset"] == -0.08

@@ -19,6 +19,10 @@ Item {
     property bool logoTintEnabled: false
     property color logoTintColor: "white"
     property bool interactionEnabled: false
+    // CUSTOM child alignment may mirror the logo/label order without forking
+    // this shared presentation primitive. The authored/default order remains
+    // logo-left, label-right for every existing consumer.
+    property bool contentReversed: false
 
     property color fillColor: "transparent"
     property color borderColor: "white"
@@ -94,6 +98,7 @@ Item {
         id: headerRow
         anchors.centerIn: parent
         spacing: header.contentGap
+        layoutDirection: header.contentReversed ? Qt.RightToLeft : Qt.LeftToRight
 
         Item {
             id: logoBox

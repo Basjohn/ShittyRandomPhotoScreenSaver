@@ -18,6 +18,7 @@ from core.settings.defaults import get_default_settings
 from rendering.custom_child_geometry import (
     CustomChildRoleDescriptor,
     freeform_artwork_child_role,
+    freeform_layout_block_child_role,
 )
 from core.settings.widget_family_catalog import (
     WIDGET_FAMILY_DESCRIPTORS,  # noqa: F401 - compatibility re-export
@@ -290,9 +291,16 @@ GMAIL_SIGNAL_BLOCK_ATTRS: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class WidgetCustomResizeLockDescriptor:
-    """Descriptor-owned WidgetsTab lock metadata for CUSTOM-derived size controls."""
+    """Descriptor-owned WidgetsTab lock metadata for CUSTOM-derived size controls.
+
+    ``section_id`` is the unique lock/notice scope. ``settings_section_id`` is
+    the physical lazy Settings page that owns the referenced QObjects. Steam
+    deliberately has several independent widget lock scopes inside one shared
+    Settings page, so those identities must never be conflated.
+    """
 
     section_id: str
+    settings_section_id: str
     widget_ids: tuple[str, ...]
     position_combo_attrs: tuple[str, ...]
     control_attrs: tuple[str, ...]
@@ -659,6 +667,7 @@ def _get_active_widget_settings_section_descriptors(
 WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, ...] = (
     WidgetCustomResizeLockDescriptor(
         section_id="clock",
+        settings_section_id="clock",
         widget_ids=("clock", "clock2", "clock3"),
         position_combo_attrs=("clock_position", "clock2_position", "clock3_position"),
         control_attrs=("clock_font_size", "clock_calendar_font_size"),
@@ -666,6 +675,7 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="weather",
+        settings_section_id="weather",
         widget_ids=("weather",),
         position_combo_attrs=("weather_position",),
         control_attrs=("weather_font_size", "weather_icon_size"),
@@ -673,13 +683,19 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="media",
+        settings_section_id="media",
         widget_ids=("media",),
         position_combo_attrs=("media_position",),
-        control_attrs=("media_font_size", "media_artwork_size"),
+        control_attrs=(
+            "media_font_size",
+            "media_artwork_size",
+            "media_playback_progress_height",
+        ),
         anchor_attr="media_font_size",
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="reddit",
+        settings_section_id="reddit",
         widget_ids=("reddit", "reddit2"),
         position_combo_attrs=("reddit_position", "reddit2_position"),
         control_attrs=("reddit_font_size",),
@@ -687,6 +703,7 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="gmail",
+        settings_section_id="gmail",
         widget_ids=("gmail",),
         position_combo_attrs=("gmail_position",),
         control_attrs=("gmail_font_size",),
@@ -699,6 +716,7 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
     # here rather than expanding a section-wide lock.
     WidgetCustomResizeLockDescriptor(
         section_id="steam_achievement_pulse",
+        settings_section_id="steam",
         widget_ids=("achievement_pulse",),
         position_combo_attrs=("achievement_pulse_position",),
         control_attrs=(
@@ -710,13 +728,19 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="steam_abandonment_issues",
+        settings_section_id="steam",
         widget_ids=("abandonment_issues",),
         position_combo_attrs=("abandonment_issues_position",),
-        control_attrs=("abandonment_issues_font_size",),
+        control_attrs=(
+            "abandonment_issues_font_size",
+            "abandonment_issues_artwork_shape",
+            "abandonment_issues_artwork_size",
+        ),
         anchor_attr="abandonment_issues_font_size",
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="steam_friend_pulse",
+        settings_section_id="steam",
         widget_ids=("friend_pulse",),
         position_combo_attrs=("friend_pulse_position",),
         control_attrs=(
@@ -728,6 +752,7 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="system_stats",
+        settings_section_id="system_stats",
         widget_ids=("system_stats",),
         position_combo_attrs=("system_stats_position",),
         control_attrs=("system_stats_font_size",),
@@ -760,11 +785,16 @@ def get_widget_custom_resize_lock_descriptors() -> tuple[WidgetCustomResizeLockD
 def _get_active_widget_custom_resize_lock_descriptors(
     _env_signature: tuple[tuple[str, str | None], ...],
 ) -> tuple[WidgetCustomResizeLockDescriptor, ...]:
-    active_sections = {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
+    # Lock scopes are widget/family-owned, not Settings-page-owned. Steam is one
+    # lazy Settings section but intentionally exposes independent Achievement /
+    # Abandonment / Friend Pulse CUSTOM lock descriptors. Filtering by section_id
+    # therefore drops those valid widget-scoped descriptors. Admit a lock whenever
+    # at least one widget it protects is an active runtime descriptor instead.
+    active_widget_ids = {descriptor.widget_id for descriptor in get_widget_runtime_descriptors()}
     return tuple(
         descriptor
         for descriptor in WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS
-        if descriptor.section_id in active_sections
+        if any(widget_id in active_widget_ids for widget_id in descriptor.widget_ids)
     )
 
 
@@ -1506,6 +1536,35 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         custom_layout_resize_mode="media_scale",
         content_extent_axes=("horizontal", "vertical"),
         content_extent_minimum_size=(520, 210),
+        custom_child_roles=(
+            freeform_artwork_child_role(
+                movable=True,
+            ),
+            CustomChildRoleDescriptor(
+                "seek_bar",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.35, 0.50),
+                maximum_scale=(2.00, 3.00),
+                uniform_scale=False,
+                movable=True,
+            ),
+            CustomChildRoleDescriptor(
+                "volume_bar",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.55, 0.40),
+                maximum_scale=(2.50, 2.50),
+                uniform_scale=False,
+                movable=True,
+            ),
+            CustomChildRoleDescriptor(
+                "transport_controls",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.50, 0.60),
+                maximum_scale=(1.75, 2.00),
+                uniform_scale=False,
+                movable=True,
+            ),
+        ),
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit",
@@ -1602,6 +1661,11 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
             # Artwork frames are freeform X/Y; the retained image itself keeps
             # native aspect via PreserveAspectCrop. Intrinsic-shape roles stay
             # uniform so circles/square badges cannot be distorted.
+            # These three Achievement roles remain authored-rail size-only until
+            # that family reaches the post-header placement rollout. Left/top
+            # handles would otherwise imply persisted translation that the family
+            # does not yet consume. The shared default is still four corners for
+            # placement-capable roles; this is the concrete semantic exception.
             freeform_artwork_child_role(
                 resize_handles=("bottom_left",),
             ),
@@ -1640,6 +1704,66 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         content_extent_axes=("horizontal", "vertical"),
         content_extent_minimum_size=(600, 300),
         content_extent_floor_at_authored_size=True,
+        custom_child_roles=(
+            CustomChildRoleDescriptor(
+                "header",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.65, 0.65),
+                maximum_scale=(1.85, 1.85),
+                uniform_scale=True,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+                semantic_corner_anchor=True,
+            ),
+            freeform_artwork_child_role(
+                movable=True,
+            ),
+            freeform_layout_block_child_role(
+                "backlog_block",
+                minimum_scale=(0.65, 0.65),
+                maximum_scale=(1.75, 2.00),
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="right",
+            ),
+            CustomChildRoleDescriptor(
+                "game_name",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.50, 0.60),
+                maximum_scale=(2.25, 2.50),
+                uniform_scale=False,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+            CustomChildRoleDescriptor(
+                "flavour_text",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.55, 0.60),
+                maximum_scale=(2.25, 2.25),
+                uniform_scale=False,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+            freeform_layout_block_child_role(
+                "last_visit",
+                minimum_scale=(0.55, 0.60),
+                maximum_scale=(2.00, 2.25),
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+            freeform_layout_block_child_role(
+                "shelf_group",
+                minimum_scale=(0.55, 0.60),
+                maximum_scale=(2.00, 2.25),
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+        ),
     ),
     WidgetRuntimeDescriptor(
         widget_id="friend_pulse",
@@ -1668,6 +1792,10 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         custom_child_roles=(
             # One grouped intrinsic role: every visible avatar consumes the same
             # scalar, preserving shape/alignment without per-avatar state.
+            # Group avatar scaling is still size-only authored reflow. Keep its
+            # existing anchor handle until Friend Pulse joins the later placement
+            # rollout; four-corner resize requires a role that can persist the
+            # corresponding left/top translation.
             CustomChildRoleDescriptor(
                 "avatars",
                 axes=("horizontal", "vertical"),

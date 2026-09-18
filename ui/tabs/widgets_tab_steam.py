@@ -52,7 +52,10 @@ from core.steam.models import SteamResultStatus
 from core.steam.openid import SteamOpenIdLinkSession
 from core.threading.manager import ThreadManager
 from core.windows.secure_url_launcher import open_url
-from rendering.widget_descriptors import get_widget_position_option_labels
+from rendering.widget_descriptors import (
+    get_widget_position_option_labels,
+    get_widget_runtime_descriptor,
+)
 from ui.styled_popup import ColorSwatchButton, StyledPopup
 from ui.settings_theme_runtime import get_active_settings_theme
 from ui.tabs import shared_styles
@@ -756,9 +759,9 @@ def _update_abandonment_controls(tab: "WidgetsTab") -> None:
         pinned.setEnabled(pinned_mode)
     artwork_enabled = bool(show_artwork is not None and show_artwork.isChecked())
     if shape is not None:
-        shape.setEnabled(artwork_enabled)
+        tab._set_custom_lock_aware_enabled(shape, artwork_enabled)
     if artwork_size is not None:
-        artwork_size.setEnabled(artwork_enabled)
+        tab._set_custom_lock_aware_enabled(artwork_size, artwork_enabled)
     if guilt is not None:
         guilt.setEnabled(artwork_enabled)
     if guilt_strength is not None:
@@ -872,11 +875,13 @@ def _update_achievement_artwork_controls(tab: "WidgetsTab") -> None:
     size = getattr(tab, "achievement_pulse_square_artwork_size", None)
     visible = getattr(tab, "achievement_pulse_show_artwork", None)
     if shape is not None and visible is not None:
-        shape.setEnabled(visible.isChecked())
+        artwork_enabled = bool(visible.isChecked())
+        tab._set_custom_lock_aware_enabled(shape, artwork_enabled)
         if size is not None:
-            size.setEnabled(
-                visible.isChecked()
-                and str(tab._combo_data_or_widget_default("achievement_pulse", "artwork_shape", shape)) in {"square", "portrait"}
+            tab._set_custom_lock_aware_enabled(
+                size,
+                artwork_enabled
+                and str(tab._combo_data_or_widget_default("achievement_pulse", "artwork_shape", shape)) in {"square", "portrait"},
             )
 
 
@@ -995,6 +1000,20 @@ def _build_card_group(
     setattr(tab, monitor_attr, monitor)
     display_row.addWidget(monitor)
     display_row.addStretch()
+
+    runtime_descriptor = get_widget_runtime_descriptor(key)
+    if runtime_descriptor is not None and len(runtime_descriptor.custom_child_roles) > 1:
+        child_collision = QCheckBox("Child Collision")
+        child_collision.setProperty("circleIndicator", True)
+        child_collision.setChecked(tab._default_bool(key, "child_collision_enabled"))
+        child_collision.setToolTip(
+            f"Prevent editable {label} child elements from overlapping each other in CUSTOM Edit. "
+            "Turn this off to let children overlap and pass through one another; snapping, "
+            "alignment guides and the parent boundary remain active."
+        )
+        child_collision.stateChanged.connect(tab._save_settings)
+        setattr(tab, f"{key}_child_collision_enabled", child_collision)
+        layout.addWidget(child_collision)
 
     if key == "friend_pulse":
         view_row = _aligned_row(layout, "View:")
@@ -1765,6 +1784,16 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             )
         except Exception:
             getattr(tab, f"{key}_font_size").setValue(tab._default_int(key, "font_size"))
+        collision_control = getattr(tab, f"{key}_child_collision_enabled", None)
+        if collision_control is not None:
+            collision_control.setChecked(
+                bool(
+                    config.get(
+                        "child_collision_enabled",
+                        tab._default_bool(key, "child_collision_enabled"),
+                    )
+                )
+            )
         if key == "friend_pulse":
             _set_combo_data(
                 tab.friend_pulse_view_mode,
@@ -2069,6 +2098,9 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         "font_family": getattr(tab, f"{key}_font_family").currentFont().family(),
         "font_size": int(getattr(tab, f"{key}_font_size").value()),
     })
+    collision_control = getattr(tab, f"{key}_child_collision_enabled", None)
+    if collision_control is not None:
+        payload["child_collision_enabled"] = bool(collision_control.isChecked())
     if key in {"achievement_pulse", "abandonment_issues"}:
         payload["header_fill_color"] = _rgba_payload(
             getattr(tab, f"_{key}_header_fill_color")

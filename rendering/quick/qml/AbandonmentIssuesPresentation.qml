@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Effects
-import QtQuick.Shapes
 
 OverlayWidget {
     id: abandonmentRoot
@@ -20,6 +19,246 @@ OverlayWidget {
     readonly property real extraContentHeight: Math.max(0.0, authoredHeight - baseAuthoredHeight)
     uniformScaleTransform: true
 
+    // Dense CUSTOM child roles deliberately use stable authored baselines.
+    // Outer content_extent may grow around them, but must never become a new
+    // baseline that compounds the next child drag. Individual blocks can move
+    // as neighbours grow while only their own handle changes their dimensions.
+    readonly property bool canonicalPortraitArtwork:
+        abandonmentModel.artworkShape === "portrait"
+    readonly property real canonicalArtworkWidth: canonicalPortraitArtwork
+        ? abandonmentModel.artworkSize
+        : Math.min(238.0, abandonmentModel.artworkSize * 1.45)
+    readonly property real canonicalArtworkHeight: canonicalPortraitArtwork
+        ? abandonmentModel.artworkSize * 1.4
+        : Math.max(78.0, abandonmentModel.artworkSize * 0.66)
+    readonly property real canonicalArtworkY: canonicalPortraitArtwork ? 76.0 : 82.0
+    readonly property real canonicalTextLeft: abandonmentModel.showArtwork
+        ? 22.0 + canonicalArtworkWidth + 24.0 : 24.0
+    readonly property real canonicalTextWidth: Math.max(
+        150.0, baseAuthoredWidth - 22.0 - canonicalTextLeft
+    )
+    readonly property real headerSafeInsetX: 18.0
+    readonly property real headerSafeInsetY: 14.0
+    readonly property real canonicalBacklogWidth: 135.0
+    readonly property real canonicalBacklogHeight: 30.0
+    readonly property real canonicalGameNameWidth: canonicalTextWidth
+    readonly property real canonicalGameNameHeight: 46.0
+    readonly property real canonicalFlavourWidth: canonicalTextWidth
+    readonly property real canonicalFlavourHeight: 34.0
+    readonly property real canonicalLastVisitWidth: Math.min(300.0, canonicalTextWidth)
+    readonly property real canonicalLastVisitHeight: 54.0
+    readonly property real canonicalShelfWidth: Math.max(
+        110.0, (canonicalTextWidth - 12.0) * 0.5
+    )
+    readonly property real canonicalShelfHeight: 25.0
+    readonly property real canonicalShelfGap: 6.0
+    readonly property real childReflowPlacementEpsilon: 0.0001
+
+    function childAxisOnAuthoredResizeRail(offset, scale, scalableExtent, normalizationExtent) {
+        const normalizedOffset = Number(offset || 0.0)
+        const resizeCompensation = Number(scalableExtent || 0.0)
+            * (1.0 - Number(scale || 1.0))
+            / Math.max(1.0, Number(normalizationExtent || 1.0))
+        // A right/bottom resize leaves the authored anchor offset at zero. A
+        // left/top resize must persist exactly the opposite-edge compensation.
+        // Both are still authored-rail *resize* state, not free placement.
+        return Math.abs(normalizedOffset) <= childReflowPlacementEpsilon
+            || Math.abs(normalizedOffset - resizeCompensation)
+                <= childReflowPlacementEpsilon
+    }
+
+    function childOnAuthoredResizeRail(
+            xOffset, yOffset, widthScale, heightScale,
+            scalableWidth, scalableHeight) {
+        return childAxisOnAuthoredResizeRail(
+                    xOffset, widthScale, scalableWidth, baseAuthoredWidth)
+            && childAxisOnAuthoredResizeRail(
+                    yOffset, heightScale, scalableHeight, baseAuthoredHeight)
+    }
+
+    // A role that has been explicitly moved is no longer part of the authored
+    // reflow rail. This is the key separation between family-authored layout and
+    // user-authored placement: resizing an on-rail role may push downstream
+    // siblings, while an off-rail role is collision-admitted instead of silently
+    // dragging unrelated children around. These bindings are pure retained data
+    // and add no runtime cadence outside Edit.
+    // Placement-capable roles can now resize from any truthful edge/corner.
+    // Left/top resize therefore creates normalized X/Y compensation while still
+    // remaining on the family's authored reflow rail. Accept both zero-offset
+    // right/bottom resize and exact opposite-edge compensation; only a genuine
+    // free-move displacement detaches the role from authored sibling reflow.
+    readonly property bool artworkOnAuthoredRail: childOnAuthoredResizeRail(
+        abandonmentModel.customArtworkXOffset, abandonmentModel.customArtworkYOffset,
+        abandonmentModel.customArtworkWidthScale, abandonmentModel.customArtworkHeightScale,
+        canonicalArtworkWidth, canonicalArtworkHeight
+    )
+    readonly property bool backlogOnAuthoredRail: childOnAuthoredResizeRail(
+        abandonmentModel.customBacklogXOffset, abandonmentModel.customBacklogYOffset,
+        abandonmentModel.customBacklogWidthScale, abandonmentModel.customBacklogHeightScale,
+        canonicalBacklogWidth, canonicalBacklogHeight
+    )
+    readonly property bool gameNameOnAuthoredRail: childOnAuthoredResizeRail(
+        abandonmentModel.customGameNameXOffset, abandonmentModel.customGameNameYOffset,
+        abandonmentModel.customGameNameWidthScale, abandonmentModel.customGameNameHeightScale,
+        canonicalGameNameWidth, canonicalGameNameHeight
+    )
+    readonly property bool flavourOnAuthoredRail: childOnAuthoredResizeRail(
+        abandonmentModel.customFlavourXOffset, abandonmentModel.customFlavourYOffset,
+        abandonmentModel.customFlavourWidthScale, abandonmentModel.customFlavourHeightScale,
+        canonicalFlavourWidth, canonicalFlavourHeight
+    )
+    readonly property bool lastVisitOnAuthoredRail: childOnAuthoredResizeRail(
+        abandonmentModel.customLastVisitXOffset, abandonmentModel.customLastVisitYOffset,
+        abandonmentModel.customLastVisitWidthScale, abandonmentModel.customLastVisitHeightScale,
+        canonicalLastVisitWidth, canonicalLastVisitHeight
+    )
+    readonly property real shelfGroupScalableWidth:
+        ledgerGroupFrame.columnCount * canonicalShelfWidth
+    readonly property real shelfGroupScalableHeight:
+        ledgerGroupFrame.rowCount * canonicalShelfHeight
+    readonly property bool shelfGroupOnAuthoredRail: childOnAuthoredResizeRail(
+        abandonmentModel.customShelfGroupXOffset, abandonmentModel.customShelfGroupYOffset,
+        abandonmentModel.customShelfGroupWidthScale, abandonmentModel.customShelfGroupHeightScale,
+        shelfGroupScalableWidth, shelfGroupScalableHeight
+    )
+    readonly property real artworkLayoutWidthDelta: artworkOnAuthoredRail
+        ? canonicalArtworkWidth * (abandonmentModel.customArtworkWidthScale - 1.0)
+        : 0.0
+    readonly property real backlogLayoutHeightDelta: backlogOnAuthoredRail
+        ? canonicalBacklogHeight * (abandonmentModel.customBacklogHeightScale - 1.0)
+        : 0.0
+    // Horizontal parent reflow is family-authored motion, not placement. Keep
+    // BACKLOG on the live right rail only while it is still authored *and* its
+    // own width is canonical. A horizontal child resize must not feed admitted
+    // parent growth back into the same child's X position. The first real free
+    // move folds any live parent displacement into child_geometry through the
+    // existing placement-compensation hook; after detachment, later parent
+    // resize closes space around the placed child instead of dragging it.
+    readonly property bool backlogFollowsParentRightRail:
+        backlogOnAuthoredRail
+            && Math.abs(abandonmentModel.customBacklogWidthScale - 1.0)
+                <= childReflowPlacementEpsilon
+    readonly property real backlogParentReflowX: backlogFollowsParentRightRail
+        ? extraContentWidth : 0.0
+    readonly property real gameNameLayoutHeightDelta: gameNameOnAuthoredRail
+        ? canonicalGameNameHeight * (abandonmentModel.customGameNameHeightScale - 1.0)
+        : 0.0
+    readonly property real flavourLayoutHeightDelta: flavourOnAuthoredRail
+        ? canonicalFlavourHeight * (abandonmentModel.customFlavourHeightScale - 1.0)
+        : 0.0
+    readonly property real lastVisitLayoutHeightDelta: lastVisitOnAuthoredRail
+        ? canonicalLastVisitHeight * (abandonmentModel.customLastVisitHeightScale - 1.0)
+        : 0.0
+
+    // Signed on-rail deltas drive internal reflow in both directions so
+    // shrinking a child can reclaim space. Once a role is explicitly moved off
+    // its authored rail, its size stops displacing unrelated siblings and the
+    // edit-only collision gate becomes the authority for separation instead.
+
+    customEditableChildRoles: {
+        const roles = []
+        const normW = abandonmentRoot.baseAuthoredWidth
+        const normH = abandonmentRoot.baseAuthoredHeight
+        roles.push({
+            "roleId": "header",
+            "target": headerFrame,
+            "geometryDependencies": [authoredCanvas],
+            "normalizationWidth": normW,
+            "normalizationHeight": normH,
+            // Snap targets are expressed in the edit-frame coordinate space,
+            // including uniform-scale letterboxing. The header itself remains
+            // authored in logical card coordinates.
+            "semanticCornerInsetX":
+                (abandonmentRoot.width
+                    - abandonmentRoot.authoredWidth * abandonmentRoot.presentationScale) / 2.0
+                    + abandonmentRoot.headerSafeInsetX * abandonmentRoot.presentationScale,
+            "semanticCornerInsetY":
+                (abandonmentRoot.height
+                    - abandonmentRoot.authoredHeight * abandonmentRoot.presentationScale) / 2.0
+                    + abandonmentRoot.headerSafeInsetY * abandonmentRoot.presentationScale,
+            "requirementTarget": customChildRequirement
+        })
+        if (normalContent.visible && artworkFrame.visible) {
+            roles.push({
+                "roleId": "artwork",
+                "target": artworkFrame,
+                "occupiedTarget": artworkShelf,
+                "geometryDependencies": [authoredCanvas, archiveContent, normalContent, artworkShelf],
+                "resizeReflowRoleIds": ["game_name", "flavour_text", "last_visit", "shelf_group"],
+                "resizeReflowAxes": ["horizontal"],
+                "resizeReflowGate": artworkFrame,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        roles.push({
+            "roleId": "backlog_block",
+            "target": archiveTab,
+            "geometryDependencies": [authoredCanvas, archiveContent],
+            "resizeReflowRoleIds": ["artwork", "game_name", "flavour_text", "last_visit", "shelf_group"],
+            "resizeReflowAxes": ["vertical"],
+            "resizeReflowGate": archiveTab,
+            "normalizationWidth": normW,
+            "normalizationHeight": normH,
+            "requirementTarget": customChildRequirement
+        })
+        if (normalContent.visible) {
+            roles.push({
+                "roleId": "game_name",
+                "target": gameTitle,
+                "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
+                "resizeReflowRoleIds": ["flavour_text", "last_visit", "shelf_group"],
+                "resizeReflowAxes": ["vertical"],
+                "resizeReflowGate": gameTitle,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+            if (flavourText.visible) {
+                roles.push({
+                    "roleId": "flavour_text",
+                    "target": flavourText,
+                    "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
+                    "resizeReflowRoleIds": ["last_visit", "shelf_group"],
+                    "resizeReflowAxes": ["vertical"],
+                    "resizeReflowGate": flavourText,
+                    "normalizationWidth": normW,
+                    "normalizationHeight": normH,
+                    "requirementTarget": customChildRequirement
+                })
+            }
+            roles.push({
+                "roleId": "last_visit",
+                "target": ageStamp,
+                "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
+                "resizeReflowRoleIds": ["shelf_group"],
+                "resizeReflowAxes": ["vertical"],
+                "resizeReflowGate": ageStamp,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+            if (ledgerRepeater.count > 0) {
+                roles.push({
+                    "roleId": "shelf_group",
+                    "target": ledgerGroupFrame,
+                    "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
+                    "resizeReflowGate": ledgerGroupFrame,
+                    "normalizationWidth": normW,
+                    "normalizationHeight": normH,
+                    "requirementTarget": customChildRequirement
+                })
+            }
+        }
+        return roles
+    }
+    // Non-editable chrome remains selected-Edit-only collision truth. The header
+    // itself is now a descriptor-backed role and therefore participates as a
+    // normal child collision surface instead of a fixed obstacle.
+    customEditableChildObstacles: [connectionInfo]
+    customEditableChildRequirementTarget: customChildRequirement
+
     // Rotation fades only data that actually changes. Archive chrome, shelves,
     // separators, labels (including LAST VISIT), and artwork framing remain stable;
     // artwork owns its independent readiness-gated crossfade.
@@ -31,6 +270,127 @@ OverlayWidget {
     // anchor/clamp/outer rect.
     preferredContentWidth: abandonmentRoot.authoredWidth
     preferredContentHeight: abandonmentRoot.authoredHeight
+
+    // One stable grow-only requirement object for every dense role. The formulas
+    // use authored baselines plus rail-aware child geometry, never the already-grown
+    // parent as a new child baseline. The selected edit overlay observes this
+    // retained object live and coalesces requirement changes without polling.
+    QtObject {
+        id: customChildRequirement
+
+        // Derive a stable logical bounding box from authored anchors, child
+        // factors and authored-relative placement offsets. Never use the already
+        // grown parent as a baseline: outer growth therefore cannot feed itself.
+        readonly property real artworkRight: artworkFrame.visible
+            ? 17.0
+                + abandonmentRoot.abandonmentModel.customArtworkXOffset
+                    * abandonmentRoot.baseAuthoredWidth
+                + artworkShelf.width
+            : 0.0
+        readonly property real artworkBottom: artworkFrame.visible
+            ? abandonmentRoot.canonicalArtworkY - 4.0
+                + (abandonmentRoot.artworkOnAuthoredRail
+                    ? abandonmentRoot.backlogLayoutHeightDelta : 0.0)
+                + abandonmentRoot.abandonmentModel.customArtworkYOffset
+                    * abandonmentRoot.baseAuthoredHeight
+                + artworkShelf.height
+            : 0.0
+        readonly property real backlogRight:
+            abandonmentRoot.baseAuthoredWidth
+                - abandonmentRoot.canonicalBacklogWidth - 18.0
+                + abandonmentRoot.backlogParentReflowX
+                + abandonmentRoot.abandonmentModel.customBacklogXOffset
+                    * abandonmentRoot.baseAuthoredWidth
+                + archiveTab.width
+        readonly property real backlogBottom: 19.0
+            + abandonmentRoot.abandonmentModel.customBacklogYOffset
+                * abandonmentRoot.baseAuthoredHeight
+            + archiveTab.height
+        readonly property real gameRight: normalContent.visible
+            ? abandonmentRoot.canonicalTextLeft
+                + (abandonmentRoot.gameNameOnAuthoredRail
+                    ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                + abandonmentRoot.abandonmentModel.customGameNameXOffset
+                    * abandonmentRoot.baseAuthoredWidth
+                + gameTitle.width
+            : 0.0
+        readonly property real gameBottom: normalContent.visible
+            ? 74.0
+                + (abandonmentRoot.gameNameOnAuthoredRail
+                    ? abandonmentRoot.backlogLayoutHeightDelta : 0.0)
+                + abandonmentRoot.abandonmentModel.customGameNameYOffset
+                    * abandonmentRoot.baseAuthoredHeight
+                + gameTitle.height
+            : 0.0
+        readonly property real flavourRight: flavourText.visible
+            ? abandonmentRoot.canonicalTextLeft
+                + (abandonmentRoot.flavourOnAuthoredRail
+                    ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                + abandonmentRoot.abandonmentModel.customFlavourXOffset
+                    * abandonmentRoot.baseAuthoredWidth
+                + flavourText.width
+            : 0.0
+        readonly property real flavourBottom: flavourText.visible
+            ? 119.0
+                + (abandonmentRoot.flavourOnAuthoredRail
+                    ? abandonmentRoot.backlogLayoutHeightDelta
+                        + abandonmentRoot.gameNameLayoutHeightDelta
+                    : 0.0)
+                + abandonmentRoot.abandonmentModel.customFlavourYOffset
+                    * abandonmentRoot.baseAuthoredHeight
+                + flavourText.height
+            : 0.0
+        readonly property real lastVisitRight: normalContent.visible
+            ? abandonmentRoot.canonicalTextLeft
+                + (abandonmentRoot.lastVisitOnAuthoredRail
+                    ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                + abandonmentRoot.abandonmentModel.customLastVisitXOffset
+                    * abandonmentRoot.baseAuthoredWidth
+                + ageStamp.width
+            : 0.0
+        readonly property real lastVisitBottom: normalContent.visible
+            ? 160.0
+                + (abandonmentRoot.lastVisitOnAuthoredRail
+                    ? abandonmentRoot.backlogLayoutHeightDelta
+                        + abandonmentRoot.gameNameLayoutHeightDelta
+                        + abandonmentRoot.flavourLayoutHeightDelta
+                    : 0.0)
+                + abandonmentRoot.abandonmentModel.customLastVisitYOffset
+                    * abandonmentRoot.baseAuthoredHeight
+                + ageStamp.height
+            : 0.0
+        readonly property real shelfRight: normalContent.visible && ledgerGroupFrame.visible
+            ? abandonmentRoot.canonicalTextLeft
+                + (abandonmentRoot.shelfGroupOnAuthoredRail
+                    ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                + abandonmentRoot.abandonmentModel.customShelfGroupXOffset
+                    * abandonmentRoot.baseAuthoredWidth
+                + ledgerGroupFrame.width
+            : 0.0
+        readonly property real shelfBottom: normalContent.visible && ledgerGroupFrame.visible
+            ? 226.0
+                + (abandonmentRoot.shelfGroupOnAuthoredRail
+                    ? abandonmentRoot.backlogLayoutHeightDelta
+                        + abandonmentRoot.gameNameLayoutHeightDelta
+                        + abandonmentRoot.flavourLayoutHeightDelta
+                        + abandonmentRoot.lastVisitLayoutHeightDelta
+                    : 0.0)
+                + abandonmentRoot.abandonmentModel.customShelfGroupYOffset
+                    * abandonmentRoot.baseAuthoredHeight
+                + ledgerGroupFrame.height
+            : 0.0
+
+        readonly property real requiredContentWidth: Math.max(
+            abandonmentRoot.baseAuthoredWidth,
+            artworkRight, backlogRight, gameRight, flavourRight,
+            lastVisitRight, shelfRight
+        )
+        readonly property real requiredContentHeight: Math.max(
+            abandonmentRoot.baseAuthoredHeight,
+            artworkBottom, backlogBottom, gameBottom, flavourBottom,
+            lastVisitBottom, shelfBottom
+        )
+    }
 
     TapHandler {
         enabled: abandonmentRoot.abandonmentModel.interactionEnabled
@@ -58,8 +418,37 @@ OverlayWidget {
             frameObjectName: "abandonmentHeaderFrame"
             logoObjectName: "abandonmentSteamLogo"
             textObjectName: "abandonmentHeaderText"
-            x: 18.0
-            y: 14.0
+            property real customEditPlacementCompensationX:
+                abandonmentRoot.abandonmentModel.customHeaderAnchor.length > 0
+                    ? x - (abandonmentRoot.headerSafeInsetX
+                        + abandonmentRoot.abandonmentModel.customHeaderXOffset
+                            * abandonmentRoot.baseAuthoredWidth)
+                    : 0.0
+            property real customEditPlacementCompensationY:
+                abandonmentRoot.abandonmentModel.customHeaderAnchor.length > 0
+                    ? y - (abandonmentRoot.headerSafeInsetY
+                        + abandonmentRoot.abandonmentModel.customHeaderYOffset
+                            * abandonmentRoot.baseAuthoredHeight)
+                    : 0.0
+            transformOrigin: Item.TopLeft
+            scale: abandonmentRoot.abandonmentModel.customHeaderWidthScale
+            x: abandonmentRoot.abandonmentModel.customHeaderAnchor.endsWith("right")
+                ? abandonmentRoot.authoredWidth - abandonmentRoot.headerSafeInsetX
+                    - width * scale
+                : (abandonmentRoot.abandonmentModel.customHeaderAnchor.endsWith("left")
+                    ? abandonmentRoot.headerSafeInsetX
+                    : abandonmentRoot.headerSafeInsetX
+                        + abandonmentRoot.abandonmentModel.customHeaderXOffset
+                            * abandonmentRoot.baseAuthoredWidth)
+            y: abandonmentRoot.abandonmentModel.customHeaderAnchor.startsWith("bottom")
+                ? abandonmentRoot.authoredHeight - abandonmentRoot.headerSafeInsetY
+                    - height * scale
+                : (abandonmentRoot.abandonmentModel.customHeaderAnchor.startsWith("top")
+                    ? abandonmentRoot.headerSafeInsetY
+                    : abandonmentRoot.headerSafeInsetY
+                        + abandonmentRoot.abandonmentModel.customHeaderYOffset
+                            * abandonmentRoot.baseAuthoredHeight)
+            contentReversed: abandonmentRoot.abandonmentModel.customHeaderAlignment === "right"
             label: abandonmentRoot.abandonmentModel.headerText
             logoSource: abandonmentRoot.abandonmentModel.logoSource
             fillColor: abandonmentRoot.abandonmentModel.headerFillColor
@@ -183,42 +572,50 @@ OverlayWidget {
                 }
             }
 
-            Shape {
+            Rectangle {
                 id: archiveTab
                 objectName: "abandonmentArchiveTab"
-                x: authoredCanvas.width - width - 18.0
+                property bool customEditReflowEnabled: abandonmentRoot.backlogOnAuthoredRail
+                property real customEditPlacementCompensationX:
+                    abandonmentRoot.backlogParentReflowX
+                property real customEditPlacementCompensationY: 0.0
+                // The authored BACKLOG rail follows horizontal parent content extent
+                // only while still authored. Once freely moved, its normalized
+                // placement is stable and a later right-edge parent shrink closes
+                // the gap instead of pushing BACKLOG through the left boundary.
+                x: abandonmentRoot.baseAuthoredWidth
+                    - abandonmentRoot.canonicalBacklogWidth - 18.0
+                    + abandonmentRoot.backlogParentReflowX
+                    + abandonmentRoot.abandonmentModel.customBacklogXOffset
+                        * abandonmentRoot.baseAuthoredWidth
                 y: 19.0
-                width: 135.0
-                height: 30.0
-
-                ShapePath {
-                    strokeColor: Qt.rgba(
-                        abandonmentRoot.abandonmentModel.accentColor.r,
-                        abandonmentRoot.abandonmentModel.accentColor.g,
-                        abandonmentRoot.abandonmentModel.accentColor.b,
-                        0.80
-                    )
-                    strokeWidth: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                        1.0, abandonmentRoot.presentationScale
-                    )
-                    fillColor: Qt.rgba(
-                        abandonmentRoot.abandonmentModel.accentColor.r,
-                        abandonmentRoot.abandonmentModel.accentColor.g,
-                        abandonmentRoot.abandonmentModel.accentColor.b,
-                        0.36
-                    )
-                    startX: 10.0
-                    startY: 0.0
-                    PathLine { x: archiveTab.width; y: 0.0 }
-                    PathLine { x: archiveTab.width; y: archiveTab.height }
-                    PathLine { x: 0.0; y: archiveTab.height }
-                    PathLine { x: 10.0; y: 0.0 }
-                }
+                    + abandonmentRoot.abandonmentModel.customBacklogYOffset
+                        * abandonmentRoot.baseAuthoredHeight
+                width: abandonmentRoot.canonicalBacklogWidth
+                    * abandonmentRoot.abandonmentModel.customBacklogWidthScale
+                height: abandonmentRoot.canonicalBacklogHeight
+                    * abandonmentRoot.abandonmentModel.customBacklogHeightScale
+                radius: 6.0
+                color: Qt.rgba(
+                    abandonmentRoot.abandonmentModel.accentColor.r,
+                    abandonmentRoot.abandonmentModel.accentColor.g,
+                    abandonmentRoot.abandonmentModel.accentColor.b,
+                    0.36
+                )
+                border.color: Qt.rgba(
+                    abandonmentRoot.abandonmentModel.accentColor.r,
+                    abandonmentRoot.abandonmentModel.accentColor.g,
+                    abandonmentRoot.abandonmentModel.accentColor.b,
+                    0.80
+                )
+                border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                    1.0, abandonmentRoot.presentationScale
+                )
 
                 ShadowedText {
                     anchors.fill: parent
                     anchors.leftMargin: 10.0
-                    anchors.rightMargin: 6.0
+                    anchors.rightMargin: 10.0
                     text: abandonmentRoot.abandonmentModel.statusText.length > 0
                         ? abandonmentRoot.abandonmentModel.statusText
                         : "CURATED SHELF"
@@ -229,11 +626,15 @@ OverlayWidget {
                     color: abandonmentRoot.abandonmentModel.textColor
                     font.family: abandonmentRoot.abandonmentModel.fontFamily
                     font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.66
+                        * abandonmentRoot.abandonmentModel.customBacklogHeightScale
                     font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
+                    horizontalAlignment:
+                        abandonmentRoot.abandonmentModel.customBacklogAlignment === "right"
+                            ? Text.AlignRight : Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
                     fontSizeMode: Text.HorizontalFit
-                    minimumPointSize: 6.0
+                    minimumPointSize: Math.max(5.0, 6.0
+                        * abandonmentRoot.abandonmentModel.customBacklogHeightScale)
                     shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
                     shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                     shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
@@ -247,27 +648,33 @@ OverlayWidget {
                 visible: abandonmentRoot.abandonmentModel.viewState !== "connect_required"
                 anchors.fill: parent
 
-                readonly property bool portraitArtwork:
-                    abandonmentRoot.abandonmentModel.artworkShape === "portrait"
-                readonly property real artworkWidth: portraitArtwork
-                    ? abandonmentRoot.abandonmentModel.artworkSize
-                    : Math.min(238.0, abandonmentRoot.abandonmentModel.artworkSize * 1.45)
-                readonly property real artworkHeight: portraitArtwork
-                    ? abandonmentRoot.abandonmentModel.artworkSize * 1.4
-                    : Math.max(78.0, abandonmentRoot.abandonmentModel.artworkSize * 0.66)
-                readonly property real artworkY: portraitArtwork ? 76.0 : 82.0
+                readonly property real artworkWidth:
+                    abandonmentRoot.canonicalArtworkWidth
+                        * abandonmentRoot.abandonmentModel.customArtworkWidthScale
+                readonly property real artworkHeight:
+                    abandonmentRoot.canonicalArtworkHeight
+                        * abandonmentRoot.abandonmentModel.customArtworkHeightScale
+                readonly property real artworkY:
+                    abandonmentRoot.canonicalArtworkY
+                        + abandonmentRoot.backlogLayoutHeightDelta
                 readonly property real textLeft:
-                    abandonmentRoot.abandonmentModel.showArtwork
-                    ? 22.0 + artworkWidth + 24.0 : 24.0
-                readonly property real textWidth: Math.max(150.0,
-                    authoredCanvas.width - 22.0 - textLeft)
+                    abandonmentRoot.canonicalTextLeft
+                        + (abandonmentRoot.abandonmentModel.showArtwork
+                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                readonly property real textWidth: abandonmentRoot.canonicalTextWidth
 
                 Item {
                     id: artworkShelf
                     objectName: "abandonmentArtworkShelf"
                     visible: abandonmentRoot.abandonmentModel.showArtwork
                     x: 17.0
-                    y: normalContent.artworkY - 4.0
+                        + abandonmentRoot.abandonmentModel.customArtworkXOffset
+                            * abandonmentRoot.baseAuthoredWidth
+                    y: abandonmentRoot.canonicalArtworkY - 4.0
+                        + (abandonmentRoot.artworkOnAuthoredRail
+                            ? abandonmentRoot.backlogLayoutHeightDelta : 0.0)
+                        + abandonmentRoot.abandonmentModel.customArtworkYOffset
+                            * abandonmentRoot.baseAuthoredHeight
                     width: normalContent.artworkWidth + 13.0
                     height: normalContent.artworkHeight + 13.0
 
@@ -298,6 +705,11 @@ OverlayWidget {
                     Item {
                         id: artworkFrame
                         objectName: "abandonmentArtworkFrame"
+                        property bool customEditReflowEnabled: abandonmentRoot.artworkOnAuthoredRail
+                        property real customEditPlacementCompensationX: 0.0
+                        property real customEditPlacementCompensationY:
+                            abandonmentRoot.artworkOnAuthoredRail
+                                ? abandonmentRoot.backlogLayoutHeightDelta : 0.0
                         readonly property real artworkStrokeWidth:
                             abandonmentRoot.scaleAwareStrokeWidthForScale(
                                 2.25, abandonmentRoot.presentationScale
@@ -316,11 +728,23 @@ OverlayWidget {
                             color: abandonmentRoot.abandonmentModel.steamArtworkSurfaceColor
                         }
 
+                        // Keep the decorative stripe node count stable while CUSTOM
+                        // artwork is dragged. Spacing stretches with the freeform
+                        // frame, but delegate creation remains authored-baseline work
+                        // rather than pointer-sample churn.
+                        readonly property int stripeCount: Math.max(
+                            1,
+                            Math.ceil((abandonmentRoot.canonicalArtworkWidth
+                                + abandonmentRoot.canonicalArtworkHeight) / 12.0)
+                        )
+                        readonly property real stripeStep:
+                            (artworkFrame.width + artworkFrame.height) / stripeCount
+
                         Repeater {
-                            model: Math.ceil((artworkFrame.width + artworkFrame.height) / 12.0)
+                            model: artworkFrame.stripeCount
                             delegate: Rectangle {
                                 required property int index
-                                x: index * 12.0 - artworkFrame.height
+                                x: index * artworkFrame.stripeStep - artworkFrame.height
                                 y: artworkFrame.height
                                 width: artworkFrame.height * 1.45
                                 height: abandonmentRoot.scaleAwareStrokeWidthForScale(
@@ -387,21 +811,48 @@ OverlayWidget {
                 }
 
                 ShadowedText {
+                    id: gameTitle
                     objectName: "abandonmentGameTitle"
-                    x: normalContent.textLeft
+                    property bool customEditReflowEnabled: abandonmentRoot.gameNameOnAuthoredRail
+                    property real customEditPlacementCompensationX:
+                        abandonmentRoot.gameNameOnAuthoredRail
+                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0
+                    property real customEditPlacementCompensationY:
+                        abandonmentRoot.gameNameOnAuthoredRail
+                            ? abandonmentRoot.backlogLayoutHeightDelta : 0.0
+                    x: abandonmentRoot.canonicalTextLeft
+                        + (abandonmentRoot.gameNameOnAuthoredRail
+                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                        + abandonmentRoot.abandonmentModel.customGameNameXOffset
+                            * abandonmentRoot.baseAuthoredWidth
                     y: 74.0
-                    width: normalContent.textWidth
-                    height: 46.0
+                        + (abandonmentRoot.gameNameOnAuthoredRail
+                            ? abandonmentRoot.backlogLayoutHeightDelta : 0.0)
+                        + abandonmentRoot.abandonmentModel.customGameNameYOffset
+                            * abandonmentRoot.baseAuthoredHeight
+                    width: abandonmentRoot.canonicalGameNameWidth
+                        * abandonmentRoot.abandonmentModel.customGameNameWidthScale
+                    height: abandonmentRoot.canonicalGameNameHeight
+                        * abandonmentRoot.abandonmentModel.customGameNameHeightScale
                     text: abandonmentRoot.abandonmentModel.title
                     opacity: abandonmentRoot.dynamicContentOpacity
                     color: abandonmentRoot.abandonmentModel.textColor
                     font.family: abandonmentRoot.abandonmentModel.fontFamily
                     font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 1.45
+                        * abandonmentRoot.abandonmentModel.customGameNameHeightScale
                     font.bold: true
+                    horizontalAlignment: abandonmentRoot.abandonmentModel.customGameNameAlignment === "right"
+                        ? Text.AlignRight : Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
-                    fontSizeMode: Text.HorizontalFit
-                    minimumPointSize: abandonmentRoot.abandonmentModel.fontSize * 0.75
-                    elide: Text.ElideRight
+                    wrap: true
+                    maximumLineCount: 2
+                    fontSizeMode: Text.Fit
+                    minimumPointSize: abandonmentRoot.abandonmentModel.fontSize * 0.58
+                        * abandonmentRoot.abandonmentModel.customGameNameHeightScale
+                    // Dense CUSTOM widths must preserve the title rather than
+                    // silently amputating it. Fit may shrink first and use a
+                    // second line when the resized role has enough height.
+                    elide: Text.ElideNone
                     shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
                     shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                     shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
@@ -409,11 +860,33 @@ OverlayWidget {
                 }
 
                 ShadowedText {
+                    id: flavourText
                     objectName: "abandonmentRediscoveryText"
-                    x: normalContent.textLeft
+                    property bool customEditReflowEnabled: abandonmentRoot.flavourOnAuthoredRail
+                    property real customEditPlacementCompensationX:
+                        abandonmentRoot.flavourOnAuthoredRail
+                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0
+                    property real customEditPlacementCompensationY:
+                        abandonmentRoot.flavourOnAuthoredRail
+                            ? abandonmentRoot.backlogLayoutHeightDelta
+                                + abandonmentRoot.gameNameLayoutHeightDelta
+                            : 0.0
+                    x: abandonmentRoot.canonicalTextLeft
+                        + (abandonmentRoot.flavourOnAuthoredRail
+                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                        + abandonmentRoot.abandonmentModel.customFlavourXOffset
+                            * abandonmentRoot.baseAuthoredWidth
                     y: 119.0
-                    width: normalContent.textWidth
-                    height: 34.0
+                        + (abandonmentRoot.flavourOnAuthoredRail
+                            ? abandonmentRoot.backlogLayoutHeightDelta
+                                + abandonmentRoot.gameNameLayoutHeightDelta
+                            : 0.0)
+                        + abandonmentRoot.abandonmentModel.customFlavourYOffset
+                            * abandonmentRoot.baseAuthoredHeight
+                    width: abandonmentRoot.canonicalFlavourWidth
+                        * abandonmentRoot.abandonmentModel.customFlavourWidthScale
+                    height: abandonmentRoot.canonicalFlavourHeight
+                        * abandonmentRoot.abandonmentModel.customFlavourHeightScale
                     text: abandonmentRoot.abandonmentModel.subtitle
                     opacity: abandonmentRoot.dynamicContentOpacity
                     color: Qt.rgba(
@@ -424,12 +897,16 @@ OverlayWidget {
                     )
                     font.family: abandonmentRoot.abandonmentModel.fontFamily
                     font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.88
+                        * abandonmentRoot.abandonmentModel.customFlavourHeightScale
                     font.bold: true
+                    horizontalAlignment: abandonmentRoot.abandonmentModel.customFlavourAlignment === "right"
+                        ? Text.AlignRight : Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
                     wrap: true
                     maximumLineCount: 2
                     fontSizeMode: Text.Fit
                     minimumPointSize: 6.0
+                    elide: Text.ElideNone
                     shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
                     shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                     shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
@@ -439,13 +916,33 @@ OverlayWidget {
                 Rectangle {
                     id: ageStamp
                     objectName: "abandonmentAgeStamp"
-                    x: normalContent.textLeft
-                    y: 160.0 + abandonmentRoot.extraContentHeight * 0.20
-                    width: Math.min(
-                        300.0 + abandonmentRoot.extraContentWidth * 0.30,
-                        normalContent.textWidth
-                    )
-                    height: 54.0
+                    property bool customEditReflowEnabled: abandonmentRoot.lastVisitOnAuthoredRail
+                    property real customEditPlacementCompensationX:
+                        abandonmentRoot.lastVisitOnAuthoredRail
+                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0
+                    property real customEditPlacementCompensationY:
+                        abandonmentRoot.lastVisitOnAuthoredRail
+                            ? abandonmentRoot.backlogLayoutHeightDelta
+                                + abandonmentRoot.gameNameLayoutHeightDelta
+                                + abandonmentRoot.flavourLayoutHeightDelta
+                            : 0.0
+                    x: abandonmentRoot.canonicalTextLeft
+                        + (abandonmentRoot.lastVisitOnAuthoredRail
+                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                        + abandonmentRoot.abandonmentModel.customLastVisitXOffset
+                            * abandonmentRoot.baseAuthoredWidth
+                    y: 160.0
+                        + (abandonmentRoot.lastVisitOnAuthoredRail
+                            ? abandonmentRoot.backlogLayoutHeightDelta
+                                + abandonmentRoot.gameNameLayoutHeightDelta
+                                + abandonmentRoot.flavourLayoutHeightDelta
+                            : 0.0)
+                        + abandonmentRoot.abandonmentModel.customLastVisitYOffset
+                            * abandonmentRoot.baseAuthoredHeight
+                    width: abandonmentRoot.canonicalLastVisitWidth
+                        * abandonmentRoot.abandonmentModel.customLastVisitWidthScale
+                    height: abandonmentRoot.canonicalLastVisitHeight
+                        * abandonmentRoot.abandonmentModel.customLastVisitHeightScale
                     radius: 6.0
                     color: abandonmentRoot.abandonmentModel.steamMetricSurfaceColor
                     border.color: abandonmentRoot.abandonmentModel.steamMetricBorderColor
@@ -465,7 +962,8 @@ OverlayWidget {
                     }
 
                     ShadowedText {
-                        x: 11.0
+                        x: abandonmentRoot.abandonmentModel.customLastVisitAlignment === "left"
+                            ? 11.0 : parent.width - 11.0 - parent.width * 0.36
                         width: parent.width * 0.36
                         height: parent.height
                         text: abandonmentRoot.abandonmentModel.metricLabel.toUpperCase()
@@ -477,7 +975,11 @@ OverlayWidget {
                         )
                         font.family: abandonmentRoot.abandonmentModel.fontFamily
                         font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.68
+                            * abandonmentRoot.abandonmentModel.customLastVisitHeightScale
                         font.bold: true
+                        horizontalAlignment:
+                            abandonmentRoot.abandonmentModel.customLastVisitAlignment === "left"
+                                ? Text.AlignLeft : Text.AlignRight
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
                         shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
@@ -487,7 +989,8 @@ OverlayWidget {
                     }
 
                     ShadowedText {
-                        x: parent.width * 0.40
+                        x: abandonmentRoot.abandonmentModel.customLastVisitAlignment === "left"
+                            ? parent.width * 0.40 : 7.0
                         width: parent.width * 0.56 - 7.0
                         height: parent.height
                         text: abandonmentRoot.abandonmentModel.metricValue
@@ -495,8 +998,11 @@ OverlayWidget {
                         color: abandonmentRoot.abandonmentModel.textColor
                         font.family: abandonmentRoot.abandonmentModel.fontFamily
                         font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.95
+                            * abandonmentRoot.abandonmentModel.customLastVisitHeightScale
                         font.bold: true
-                        horizontalAlignment: Text.AlignRight
+                        horizontalAlignment:
+                            abandonmentRoot.abandonmentModel.customLastVisitAlignment === "left"
+                                ? Text.AlignRight : Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
                         fontSizeMode: Text.HorizontalFit
                         minimumPointSize: 7.0
@@ -507,98 +1013,153 @@ OverlayWidget {
                     }
                 }
 
-                Repeater {
-                    id: ledgerRepeater
-                    model: abandonmentRoot.abandonmentModel.fieldModel
+                Item {
+                    id: ledgerGroupFrame
+                    objectName: "abandonmentLedgerGroup"
+                    readonly property int rowCount: Math.max(1, Math.ceil(ledgerRepeater.count / 2.0))
+                    readonly property int columnCount: Math.max(1, Math.min(2, ledgerRepeater.count))
+                    readonly property real canonicalWidth: columnCount
+                        * abandonmentRoot.canonicalShelfWidth
+                        + Math.max(0, columnCount - 1) * 12.0
+                    readonly property real canonicalHeight: rowCount
+                        * abandonmentRoot.canonicalShelfHeight
+                        + Math.max(0, rowCount - 1) * abandonmentRoot.canonicalShelfGap
+                    readonly property real shelfWidth: abandonmentRoot.canonicalShelfWidth
+                        * abandonmentRoot.abandonmentModel.customShelfGroupWidthScale
+                    readonly property real shelfHeight: abandonmentRoot.canonicalShelfHeight
+                        * abandonmentRoot.abandonmentModel.customShelfGroupHeightScale
+                    property bool customEditReflowEnabled: abandonmentRoot.shelfGroupOnAuthoredRail
+                    property real customEditPlacementCompensationX:
+                        abandonmentRoot.shelfGroupOnAuthoredRail
+                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0
+                    property real customEditPlacementCompensationY:
+                        abandonmentRoot.shelfGroupOnAuthoredRail
+                            ? abandonmentRoot.backlogLayoutHeightDelta
+                                + abandonmentRoot.gameNameLayoutHeightDelta
+                                + abandonmentRoot.flavourLayoutHeightDelta
+                                + abandonmentRoot.lastVisitLayoutHeightDelta
+                            : 0.0
+                    visible: ledgerRepeater.count > 0
+                    x: abandonmentRoot.canonicalTextLeft
+                        + (abandonmentRoot.shelfGroupOnAuthoredRail
+                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                        + abandonmentRoot.abandonmentModel.customShelfGroupXOffset
+                            * abandonmentRoot.baseAuthoredWidth
+                    y: 226.0
+                        + (abandonmentRoot.shelfGroupOnAuthoredRail
+                            ? abandonmentRoot.backlogLayoutHeightDelta
+                                + abandonmentRoot.gameNameLayoutHeightDelta
+                                + abandonmentRoot.flavourLayoutHeightDelta
+                                + abandonmentRoot.lastVisitLayoutHeightDelta
+                            : 0.0)
+                        + abandonmentRoot.abandonmentModel.customShelfGroupYOffset
+                            * abandonmentRoot.baseAuthoredHeight
+                    width: columnCount * shelfWidth
+                        + Math.max(0, columnCount - 1) * 12.0
+                    height: rowCount * shelfHeight
+                        + Math.max(0, rowCount - 1) * abandonmentRoot.canonicalShelfGap
 
-                    delegate: Item {
-                        required property string fieldId
-                        required property string fieldLabel
-                        required property string fieldValue
-                        required property int index
-                        objectName: "abandonmentLedgerShelf_" + fieldId
-                        readonly property int row: Math.floor(index / 2)
-                        readonly property int column: index % 2
-                        readonly property real shelfWidth: Math.max(
-                            110.0,
-                            (normalContent.textWidth - 12.0) * 0.5
-                        )
-                        x: normalContent.textLeft + column * (shelfWidth + 12.0)
-                        y: 226.0 + abandonmentRoot.extraContentHeight * 0.65
-                            + row * 31.0
-                        width: shelfWidth
-                        height: 25.0
+                    Repeater {
+                        id: ledgerRepeater
+                        model: abandonmentRoot.abandonmentModel.fieldModel
 
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            height: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                                1.0, abandonmentRoot.presentationScale
-                            )
-                            color: abandonmentRoot.abandonmentModel.steamMetricSeparatorColor
-                        }
+                        delegate: Item {
+                            required property string fieldId
+                            required property string fieldLabel
+                            required property string fieldValue
+                            required property int index
+                            objectName: "abandonmentLedgerShelf_" + fieldId
+                            readonly property int row: Math.floor(index / 2)
+                            readonly property int column: index % 2
+                            x: column * (ledgerGroupFrame.shelfWidth + 12.0)
+                            y: row * (ledgerGroupFrame.shelfHeight
+                                + abandonmentRoot.canonicalShelfGap)
+                            width: ledgerGroupFrame.shelfWidth
+                            height: ledgerGroupFrame.shelfHeight
 
-                        Rectangle {
-                            x: 0.0
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 4.0
-                            height: 4.0
-                            radius: 2.0
-                            color: Qt.rgba(
-                                abandonmentRoot.abandonmentModel.accentColor.r,
-                                abandonmentRoot.abandonmentModel.accentColor.g,
-                                abandonmentRoot.abandonmentModel.accentColor.b,
-                                0.76
-                            )
-                        }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: abandonmentRoot.scaleAwareStrokeWidthForScale(
+                                    1.0, abandonmentRoot.presentationScale
+                                )
+                                color: abandonmentRoot.abandonmentModel.steamMetricSeparatorColor
+                            }
 
-                        ShadowedText {
-                            x: 9.0
-                            width: (parent.width - 13.0) * 0.53
-                            height: parent.height
-                            text: fieldLabel.toUpperCase()
-                            color: Qt.rgba(
-                                abandonmentRoot.abandonmentModel.textColor.r,
-                                abandonmentRoot.abandonmentModel.textColor.g,
-                                abandonmentRoot.abandonmentModel.textColor.b,
-                                Math.max(0.47, abandonmentRoot.abandonmentModel.textColor.a * 0.72)
-                            )
-                            font.family: abandonmentRoot.abandonmentModel.fontFamily
-                            font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.68
-                            font.bold: true
-                            verticalAlignment: Text.AlignVCenter
-                            fontSizeMode: Text.HorizontalFit
-                            minimumPointSize: 6.0
-                            elide: Text.ElideRight
-                            shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
-                            shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
-                            shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
-                            shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
-                        }
+                            Rectangle {
+                                x: abandonmentRoot.abandonmentModel.customShelfGroupAlignment === "left"
+                                    ? 0.0 : Math.max(0.0, parent.width - width)
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 4.0
+                                height: 4.0
+                                radius: 2.0
+                                color: Qt.rgba(
+                                    abandonmentRoot.abandonmentModel.accentColor.r,
+                                    abandonmentRoot.abandonmentModel.accentColor.g,
+                                    abandonmentRoot.abandonmentModel.accentColor.b,
+                                    0.76
+                                )
+                            }
 
-                        ShadowedText {
-                            x: 9.0 + (parent.width - 13.0) * 0.55
-                            width: (parent.width - 13.0) * 0.45
-                            height: parent.height
-                            text: fieldValue.toUpperCase()
-                            opacity: abandonmentRoot.dynamicContentOpacity
-                            color: abandonmentRoot.abandonmentModel.textColor
-                            font.family: abandonmentRoot.abandonmentModel.fontFamily
-                            font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.68
-                            font.bold: true
-                            horizontalAlignment: Text.AlignRight
-                            verticalAlignment: Text.AlignVCenter
-                            fontSizeMode: Text.HorizontalFit
-                            minimumPointSize: 6.0
-                            elide: Text.ElideRight
-                            shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
-                            shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
-                            shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
-                            shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
+                            ShadowedText {
+                                x: abandonmentRoot.abandonmentModel.customShelfGroupAlignment === "left"
+                                    ? 9.0
+                                    : 9.0 + (parent.width - 13.0) * 0.47
+                                width: (parent.width - 13.0) * 0.53
+                                height: parent.height
+                                text: fieldLabel.toUpperCase()
+                                color: Qt.rgba(
+                                    abandonmentRoot.abandonmentModel.textColor.r,
+                                    abandonmentRoot.abandonmentModel.textColor.g,
+                                    abandonmentRoot.abandonmentModel.textColor.b,
+                                    Math.max(0.47, abandonmentRoot.abandonmentModel.textColor.a * 0.72)
+                                )
+                                font.family: abandonmentRoot.abandonmentModel.fontFamily
+                                font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.68
+                                    * abandonmentRoot.abandonmentModel.customShelfGroupHeightScale
+                                font.bold: true
+                                horizontalAlignment:
+                                    abandonmentRoot.abandonmentModel.customShelfGroupAlignment === "left"
+                                        ? Text.AlignLeft : Text.AlignRight
+                                verticalAlignment: Text.AlignVCenter
+                                fontSizeMode: Text.HorizontalFit
+                                minimumPointSize: 6.0
+                                elide: Text.ElideRight
+                                shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                                shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
+                                shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
+                                shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
+                            }
+
+                            ShadowedText {
+                                x: abandonmentRoot.abandonmentModel.customShelfGroupAlignment === "left"
+                                    ? 9.0 + (parent.width - 13.0) * 0.55 : 9.0
+                                width: (parent.width - 13.0) * 0.45
+                                height: parent.height
+                                text: fieldValue.toUpperCase()
+                                opacity: abandonmentRoot.dynamicContentOpacity
+                                color: abandonmentRoot.abandonmentModel.textColor
+                                font.family: abandonmentRoot.abandonmentModel.fontFamily
+                                font.pointSize: abandonmentRoot.abandonmentModel.fontSize * 0.68
+                                    * abandonmentRoot.abandonmentModel.customShelfGroupHeightScale
+                                font.bold: true
+                                horizontalAlignment:
+                                    abandonmentRoot.abandonmentModel.customShelfGroupAlignment === "left"
+                                        ? Text.AlignRight : Text.AlignLeft
+                                verticalAlignment: Text.AlignVCenter
+                                fontSizeMode: Text.HorizontalFit
+                                minimumPointSize: 6.0
+                                elide: Text.ElideRight
+                                shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                                shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
+                                shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
+                                shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
+                            }
                         }
                     }
                 }
+
             }
 
             Item {

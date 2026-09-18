@@ -57,36 +57,48 @@ class TestWidgetsTab:
 
 
     @pytest.mark.parametrize(
-        "section_id",
-        [descriptor.section_id for descriptor in get_widget_custom_resize_lock_descriptors()],
+        "settings_section_id",
+        sorted(
+            {
+                descriptor.settings_section_id
+                for descriptor in get_widget_custom_resize_lock_descriptors()
+            }
+        ),
     )
     def test_lazy_widget_family_retire_rebuild_is_qobject_safe(
         self,
         qt_app,
         settings_manager,
-        section_id,
+        settings_section_id,
     ):
-        """Every retireable family must drop dead child refs before delayed saves."""
+        """Every physical Settings page drops all owned CUSTOM-lock QObjects."""
+
+        owned_lock_scopes = {
+            descriptor.section_id
+            for descriptor in get_widget_custom_resize_lock_descriptors()
+            if descriptor.settings_section_id == settings_section_id
+        }
+        assert owned_lock_scopes
 
         tab = WidgetsTab(settings_manager, lazy_sections=True)
         try:
-            idx = tab._widget_section_index(section_id)
+            idx = tab._widget_section_index(settings_section_id)
             assert idx >= 0
             tab._build_lazy_subtab_content(idx)
             assert idx in tab._subtab_content_built
 
-            # Populate any family-owned CUSTOM-lock notice side reference. The
-            # production regression was a QLabel retained here after its family
-            # container had been deleteLater()'d.
+            # Populate every widget-scoped CUSTOM-lock notice owned by this
+            # physical page. Steam intentionally owns three independent scopes
+            # inside its single lazy section.
             tab._refresh_custom_resize_lock_state()
-            assert section_id in tab._custom_resize_lock_notice_labels
+            assert owned_lock_scopes <= set(tab._custom_resize_lock_notice_labels)
 
-            tab._retire_widget_section(section_id)
+            tab._retire_widget_section(settings_section_id)
             qt_app.processEvents()
 
             assert idx not in tab._subtab_content_built
             assert idx not in tab._subtab_content_building
-            assert section_id not in tab._custom_resize_lock_notice_labels
+            assert owned_lock_scopes.isdisjoint(tab._custom_resize_lock_notice_labels)
 
             # Match the activation-toggle path: saving after retirement must be
             # safe even after Qt has processed the child deletions.
@@ -100,6 +112,7 @@ class TestWidgetsTab:
             qt_app.processEvents()
             assert idx in tab._subtab_content_built
             tab._refresh_custom_resize_lock_state()
+            assert owned_lock_scopes <= set(tab._custom_resize_lock_notice_labels)
         finally:
             tab.deleteLater()
             qt_app.processEvents()
@@ -230,6 +243,7 @@ class TestWidgetsTab:
         settings_manager.set("widgets", {
             "media": {
                 "enabled": True,
+                "child_collision_enabled": False,
                 "show_controls": True,
                 "playback_progress_enabled": True,
                 "playback_progress_height": 11,
@@ -248,6 +262,8 @@ class TestWidgetsTab:
         )
         try:
             assert tab.media_playback_progress_enabled.isChecked() is True
+            assert tab.media_child_collision_enabled.property("circleIndicator") is True
+            assert tab.media_child_collision_enabled.isChecked() is False
             assert tab.media_playback_progress_height.value() == 11
             assert tab._media_progress_fill_color.getRgb() == (15, 125, 235, 210)
             assert tab.media_playback_progress_shadow_enabled.isChecked() is True
@@ -257,6 +273,7 @@ class TestWidgetsTab:
             assert tab.media_playback_progress_glow_color_btn.isEnabled() is True
 
             saved = save_media_settings(tab)
+            assert saved["child_collision_enabled"] is False
             assert saved["playback_progress_enabled"] is True
             assert saved["playback_progress_height"] == 11
             assert saved["playback_progress_fill_color"] == [15, 125, 235, 210]
@@ -616,7 +633,7 @@ class TestWidgetsTab:
             assert tab.media_font_combo.isEnabled() is True
             assert tab.media_show_controls.isEnabled() is True
             assert tab.media_playback_progress_enabled.isEnabled() is True
-            assert tab.media_playback_progress_height.isEnabled() is True
+            assert tab.media_playback_progress_height.isEnabled() is False
             assert tab.media_playback_progress_shadow_enabled.isEnabled() is True
             assert tab.media_playback_progress_glow_enabled.isEnabled() is True
             assert tab.media_playback_progress_glow_color_btn.isEnabled() is True
@@ -663,6 +680,37 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_steam_custom_lock_is_additional_to_family_dependency_state(
+        self, qt_app, settings_manager
+    ):
+        """CUSTOM unlock must not resurrect Steam controls their family disables."""
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._set_combo_text(tab.achievement_pulse_position, "Custom")
+            tab._refresh_custom_resize_lock_state()
+            assert tab.achievement_pulse_font_size.isEnabled() is False
+            assert tab.achievement_pulse_artwork_shape.isEnabled() is False
+            assert tab.achievement_pulse_square_artwork_size.isEnabled() is False
+
+            # Content controls remain usable in CUSTOM. Changing one while the
+            # geometry lock is active must update the authored/dependency base
+            # state without punching through the lock.
+            tab.achievement_pulse_show_artwork.setChecked(False)
+            assert tab.achievement_pulse_artwork_shape.isEnabled() is False
+            assert tab.achievement_pulse_square_artwork_size.isEnabled() is False
+
+            tab._set_combo_text(tab.achievement_pulse_position, "Top Left")
+            tab._refresh_custom_resize_lock_state()
+            assert tab.achievement_pulse_font_size.isEnabled() is True
+            assert tab.achievement_pulse_artwork_shape.isEnabled() is False
+            assert tab.achievement_pulse_square_artwork_size.isEnabled() is False
+
+            tab.achievement_pulse_show_artwork.setChecked(True)
+            assert tab.achievement_pulse_artwork_shape.isEnabled() is True
+        finally:
+            tab.deleteLater()
+
     def test_widgets_tab_disable_custom_mode_link_restores_authored_layout(self, qt_app, settings_manager, monkeypatch):
         settings_manager.set("widgets", {
             "media": {"enabled": True, "position": "Custom", "monitor": "1"},
@@ -706,13 +754,15 @@ class TestWidgetsTab:
             widgets_cfg = settings_manager.get("widgets", {})
             assert widgets_cfg["media"]["position"] == "Bottom Left"
             assert widgets_cfg["media"]["monitor"] == "ALL"
-            assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Left"
-            assert widgets_cfg["spotify_visualizer"]["monitor"] == "ALL"
+            # CUSTOM lock notices are widget/family scoped. Media owns its
+            # accessory volume/mute geometry, but not Visualizer CUSTOM state.
+            assert widgets_cfg["spotify_visualizer"]["position"] == "Custom"
+            assert widgets_cfg["spotify_visualizer"]["monitor"] == "2"
             displays = widgets_cfg["custom_layout"]["displays"]
             layouts = displays.get("screen:test", {})
             assert "media" not in layouts
             assert "spotify_volume" not in layouts
-            assert "spotify_visualizer" not in layouts
+            assert "spotify_visualizer" in layouts
             assert tab.media_font_size.isEnabled() is True
             assert tab.media_artwork_size.isEnabled() is True
             assert tab._custom_resize_lock_notice_labels["media"].isHidden() is True
@@ -794,13 +844,13 @@ class TestWidgetsTab:
 
             widgets_cfg = settings_manager.get("widgets", {})
             assert widgets_cfg["media"]["position"] == "Bottom Left"
-            assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Left"
+            assert widgets_cfg["spotify_visualizer"]["position"] == "Custom"
 
             tab._save_settings_now(5)
 
             widgets_cfg = settings_manager.get("widgets", {})
             assert widgets_cfg["media"]["position"] == "Bottom Left"
-            assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Left"
+            assert widgets_cfg["spotify_visualizer"]["position"] == "Custom"
         finally:
             tab.deleteLater()
 
@@ -845,7 +895,7 @@ class TestWidgetsTab:
             assert all(key != "widgets" for key, _value in received)
             widgets_cfg = settings_manager.get("widgets", {})
             assert widgets_cfg["media"]["position"] == "Bottom Left"
-            assert widgets_cfg["gmail"]["position"] == "Top Left"
+            assert widgets_cfg["gmail"]["position"] == "Custom"
         finally:
             tab.deleteLater()
 

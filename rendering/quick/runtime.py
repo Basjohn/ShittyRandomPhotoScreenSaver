@@ -174,6 +174,9 @@ class QuickDisplayRuntime(QObject):
         self._window.visibleChanged.connect(self._on_visibility_changed)
         self._window.destroyed.connect(self._on_window_destroyed)
         self._scene.readiness_changed.connect(self._on_scene_readiness_changed)
+        self._scene.custom_layout_save_requested.connect(
+            self.custom_layout_save_requested.emit
+        )
         self._auxiliary.state_changed.connect(self._scene.apply_auxiliary_state)
         self._scene.apply_auxiliary_state(self._auxiliary.state)
         self._auxiliary.state_changed.connect(self._cursor.apply_auxiliary_state)

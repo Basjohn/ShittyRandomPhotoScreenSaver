@@ -64,6 +64,7 @@ class QuickDisplayWindow(QQuickWindow):
         self._cursor_controller: QuickCursorController | None = None
         self._semantic_double_click_hit_test: Callable[[QPointF], bool] | None = None
         self._semantic_middle_click_hit_test: Callable[[QPointF], bool] | None = None
+        self._custom_layout_input_blocked = False
         self._desired_visible = False
         self._close_queued = False
 
@@ -149,6 +150,18 @@ class QuickDisplayWindow(QQuickWindow):
         hit_test: Callable[[QPointF], bool] | None,
     ) -> None:
         self._semantic_middle_click_hit_test = hit_test
+
+    def set_custom_layout_input_blocked(self, blocked: bool) -> None:
+        """Let CUSTOM Edit own pointer delivery without runtime semantic leakage.
+
+        The window still forwards pointer events to QQuickWindow/QML so the
+        editor overlay can drag/resize normally. While blocked, native runtime
+        semantics (next-image double click, visualizer middle click, exit
+        gestures) are deliberately bypassed. Right-click remains routed to the
+        editor/global context-menu authority rather than leaking into family QML.
+        """
+
+        self._custom_layout_input_blocked = bool(blocked)
 
     def show_on_screen(self) -> None:
         """Commit exact physical-screen placement before making the window visible."""
@@ -260,6 +273,20 @@ class QuickDisplayWindow(QQuickWindow):
         super().keyReleaseEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        # CUSTOM is an explicit pointer owner. The short-lived runtime-recreation
+        # guard suppresses product actions, not editor chrome; checking it first
+        # can swallow a resize-handle press before QML receives it.
+        if self._custom_layout_input_blocked:
+            controller = self._input_controller
+            if (
+                event.button() == Qt.MouseButton.RightButton
+                and controller is not None
+                and controller.handle_custom_layout_context_press(event)
+            ):
+                event.accept()
+                return
+            super().mousePressEvent(event)
+            return
         if self._runtime_discrete_pointer_event_is_suppressed("mousePressEvent"):
             event.accept()
             return
@@ -282,6 +309,10 @@ class QuickDisplayWindow(QQuickWindow):
         if cursor is not None and cursor.tracks_pointer_motion:
             cursor.note_pointer_motion()
 
+        if self._custom_layout_input_blocked:
+            super().mouseMoveEvent(event)
+            return
+
         controller = self._input_controller
         if (
             controller is not None
@@ -293,6 +324,15 @@ class QuickDisplayWindow(QQuickWindow):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if self._custom_layout_input_blocked:
+            # Right-click press already opened the retained context menu. Consume
+            # its release here so it cannot fall through to family QML; there is
+            # no separate press-timestamp/position lifecycle to retire in Edit.
+            if event.button() == Qt.MouseButton.RightButton:
+                event.accept()
+                return
+            super().mouseReleaseEvent(event)
+            return
         if self._runtime_discrete_pointer_event_is_suppressed("mouseReleaseEvent"):
             event.accept()
             return
@@ -303,6 +343,9 @@ class QuickDisplayWindow(QQuickWindow):
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        if self._custom_layout_input_blocked:
+            super().mouseDoubleClickEvent(event)
+            return
         if self._runtime_discrete_pointer_event_is_suppressed("mouseDoubleClickEvent"):
             event.accept()
             return

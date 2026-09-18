@@ -17,11 +17,26 @@ Item {
     property real startupRevealOpacity: 1.0
     property bool workingVisible: true
     property bool semanticDoubleClickEnabled: false
+    // CUSTOM Edit owns pointer semantics while active. Families must never fire
+    // their ordinary click/double-click/action behavior underneath the edit
+    // chrome. The presentation host toggles this once at Edit enter/exit; the
+    // blocker itself is loader-gated so normal runtime has no live input item.
+    property bool customLayoutInputBlocked: false
     // Optional edit-only observation surface for the shared CUSTOM child-role
     // overlay. Families expose only descriptor-admitted major visual targets.
     // The list is retained presentation data only; Python/session remains the
     // geometry and persistence owner.
     property var customEditableChildRoles: []
+    // Optional selected-parent-only collision surfaces that are not themselves
+    // editable roles (for example Media metadata or its separate mute control).
+    // The edit overlay reads these only while this parent is selected. Normal
+    // runtime pays no timer/poller/scene-scan cost merely because they exist.
+    property var customEditableChildObstacles: []
+    // Optional edit-only family-wide logical minimum implied by the currently
+    // resolved customized children.  This is a retained observation surface,
+    // not a second geometry owner: only the selected CUSTOM edit overlay reads
+    // it, and Python/session remains authoritative for parent geometry.
+    property var customEditableChildRequirementTarget: null
     // Resolved once at admission/Settings/input edges; no pointer-time reads.
     property bool widgetGlowAdmitted: false
     property bool widgetGlowOnHover: false
@@ -200,6 +215,29 @@ Item {
     property real interactionGlowWidth: authoredCardWidth
     property real interactionGlowHeight: authoredRoot.height
     property real interactionGlowCornerRadius: cardCornerRadius
+
+    Loader {
+        id: customLayoutInputBlockerLoader
+        objectName: "customLayoutInputBlockerLoader"
+        anchors.fill: parent
+        z: 100000
+        active: overlayWidget.customLayoutInputBlocked && overlayWidget.visible
+        sourceComponent: Component {
+            MouseArea {
+                objectName: "customLayoutInputBlocker"
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+                hoverEnabled: false
+                preventStealing: true
+                propagateComposedEvents: false
+                onPressed: function(mouse) { mouse.accepted = true }
+                onReleased: function(mouse) { mouse.accepted = true }
+                onClicked: function(mouse) { mouse.accepted = true }
+                onDoubleClicked: function(mouse) { mouse.accepted = true }
+                onWheel: function(wheel) { wheel.accepted = true }
+            }
+        }
+    }
 
     Item {
         id: authoredRoot

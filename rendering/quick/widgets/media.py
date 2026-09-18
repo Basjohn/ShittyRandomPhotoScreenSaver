@@ -23,6 +23,12 @@ from core.settings.shadow_direction import (
 )
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 from rendering.quick.media_artwork import MediaArtworkImageProvider
+from rendering.custom_child_geometry import (
+    CustomChildSize,
+    child_role_map,
+    clamp_child_geometry,
+)
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 
 if TYPE_CHECKING:
     from widgets.media_runtime import MediaRuntimeSnapshot
@@ -165,7 +171,6 @@ class MediaPresentationConfig:
     show_playback_state: bool
     artwork_size: int
     rounded_artwork_border: bool
-    allow_landscape_artwork: bool
     show_controls: bool
     playback_progress_enabled: bool
     playback_progress_height: int
@@ -224,7 +229,6 @@ class MediaPresentationConfig:
             show_playback_state=_as_bool(merged["show_playback_state"], bool(defaults["show_playback_state"])),
             artwork_size=_bounded_int(merged["artwork_size"], int(defaults["artwork_size"]), 48, 512),
             rounded_artwork_border=_as_bool(merged["rounded_artwork_border"], bool(defaults["rounded_artwork_border"])),
-            allow_landscape_artwork=_as_bool(merged["allow_landscape_artwork"], bool(defaults["allow_landscape_artwork"])),
             show_controls=_as_bool(merged["show_controls"], bool(defaults["show_controls"])),
             playback_progress_enabled=_as_bool(
                 merged["playback_progress_enabled"], bool(defaults["playback_progress_enabled"])
@@ -551,6 +555,7 @@ class MediaPresentationModel(QObject):
     """Stable coherent snapshot consumer for one retained Media card."""
 
     stateChanged = Signal()
+    customGeometryChanged = Signal()
     volumeTargetChanged = Signal(str, str)
 
     def __init__(
@@ -584,6 +589,17 @@ class MediaPresentationModel(QObject):
         # Settings remain the sole authority for font/artwork values; corner/
         # wheel resize continues to apply the retained root's uniform transform.
         self._content_extent: tuple[int, int] | None = None
+        # CUSTOM child geometry is presentation-only retained state. The shared
+        # session owns normalized persistence in size_payload.child_geometry;
+        # Media only projects the four descriptor-admitted role factors.
+        self._custom_artwork_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_seek_bar_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_volume_bar_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_transport_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        descriptor = get_widget_runtime_descriptor("media")
+        if descriptor is None or not descriptor.custom_child_roles:
+            raise RuntimeError("Media CUSTOM child-role descriptor is missing")
+        self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
         self._active = False
         self._retired = False
 
@@ -733,9 +749,10 @@ class MediaPresentationModel(QObject):
         """Apply one CUSTOM-only Media reflow box.
 
         The shared CUSTOM owner supplies the logical *outer* retained footprint,
-        including the optional fixed-width volume accessory.  QML consumes this
-        box to reflow the card while keeping Settings-owned font/artwork values
-        untouched.  No source/runtime ownership changes here.
+        including the optional fixed-width volume accessory. QML consumes this
+        box to reflow the card while keeping Settings-owned style/runtime values
+        untouched; admitted child geometry remains a sibling CUSTOM payload. No
+        source/runtime ownership changes here.
         """
 
         if width is None or height is None:
@@ -761,6 +778,57 @@ class MediaPresentationModel(QObject):
             return False
         self._content_extent = None
         self.stateChanged.emit()
+        return True
+
+    def set_custom_child_geometry(self, child_geometry: object) -> bool:
+        """Project descriptor-normalized Media child factors into retained state.
+
+        This is called only at CUSTOM hydration/edit payload boundaries. It does
+        not touch GSMTC, artwork decoding, volume ownership, or Settings. One
+        narrow signal updates the four retained geometry consumers without
+        waking unrelated Media state bindings on every drag sample.
+        """
+
+        raw = child_geometry if isinstance(child_geometry, Mapping) else {}
+
+        def _resolved(role_id: str) -> CustomChildSize:
+            role = self._custom_child_roles[role_id]
+            value = raw.get(role_id) if isinstance(raw, Mapping) else None
+            if not isinstance(value, Mapping):
+                return CustomChildSize()
+            return clamp_child_geometry(
+                role,
+                value.get("width_scale", 1.0),
+                value.get("height_scale", 1.0),
+                value.get("x_offset", 0.0),
+                value.get("y_offset", 0.0),
+            )
+
+        artwork = _resolved("artwork")
+        seek = _resolved("seek_bar")
+        volume = _resolved("volume_bar")
+        transport = _resolved("transport_controls")
+        next_values = (
+            (artwork.width_scale, artwork.height_scale, artwork.x_offset, artwork.y_offset),
+            (seek.width_scale, seek.height_scale, seek.x_offset, seek.y_offset),
+            (volume.width_scale, volume.height_scale, volume.x_offset, volume.y_offset),
+            (transport.width_scale, transport.height_scale, transport.x_offset, transport.y_offset),
+        )
+        current_values = (
+            self._custom_artwork_geometry,
+            self._custom_seek_bar_geometry,
+            self._custom_volume_bar_geometry,
+            self._custom_transport_geometry,
+        )
+        if next_values == current_values:
+            return False
+        (
+            self._custom_artwork_geometry,
+            self._custom_seek_bar_geometry,
+            self._custom_volume_bar_geometry,
+            self._custom_transport_geometry,
+        ) = next_values
+        self.customGeometryChanged.emit()
         return True
 
     def request_transport(self, key: str) -> bool:
@@ -1341,9 +1409,69 @@ class MediaPresentationModel(QObject):
     def roundedArtwork(self) -> bool:
         return self.config.rounded_artwork_border
 
-    @Property(bool, notify=stateChanged)
-    def allowLandscapeArtwork(self) -> bool:
-        return self.config.allow_landscape_artwork
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkWidthScale(self) -> float:
+        return float(self._custom_artwork_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkHeightScale(self) -> float:
+        return float(self._custom_artwork_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkXOffset(self) -> float:
+        return float(self._custom_artwork_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkYOffset(self) -> float:
+        return float(self._custom_artwork_geometry[3])
+
+    @Property(float, notify=customGeometryChanged)
+    def customSeekWidthScale(self) -> float:
+        return float(self._custom_seek_bar_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customSeekHeightScale(self) -> float:
+        return float(self._custom_seek_bar_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customSeekXOffset(self) -> float:
+        return float(self._custom_seek_bar_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customSeekYOffset(self) -> float:
+        return float(self._custom_seek_bar_geometry[3])
+
+    @Property(float, notify=customGeometryChanged)
+    def customVolumeWidthScale(self) -> float:
+        return float(self._custom_volume_bar_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customVolumeHeightScale(self) -> float:
+        return float(self._custom_volume_bar_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customVolumeXOffset(self) -> float:
+        return float(self._custom_volume_bar_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customVolumeYOffset(self) -> float:
+        return float(self._custom_volume_bar_geometry[3])
+
+    @Property(float, notify=customGeometryChanged)
+    def customTransportWidthScale(self) -> float:
+        return float(self._custom_transport_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customTransportHeightScale(self) -> float:
+        return float(self._custom_transport_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customTransportXOffset(self) -> float:
+        return float(self._custom_transport_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customTransportYOffset(self) -> float:
+        return float(self._custom_transport_geometry[3])
 
     @Property(QColor, notify=stateChanged)
     def artworkBorderColor(self) -> QColor:
@@ -1512,13 +1640,16 @@ class RetainedMediaPresentation:
     ) -> None:
         # Media keeps H9's one uniform retained transform for corner/wheel
         # resize, while side handles may additionally carry one CUSTOM-only
-        # logical content box.  Stale pre-H9 per-value font/artwork payloads are
-        # still ignored: Settings remains their sole authority.
+        # logical content box. Admitted child geometry is nested in the same
+        # size_payload authority; stale pre-H9 per-value font/artwork payloads
+        # remain ignored rather than becoming a second Settings owner.
         extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
         if isinstance(extent, (tuple, list)) and len(extent) == 2:
             self._model.set_content_extent(extent[0], extent[1])
         else:
             self._model.clear_content_extent()
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
+        self._model.set_custom_child_geometry(child_geometry)
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

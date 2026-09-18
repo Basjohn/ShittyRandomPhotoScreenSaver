@@ -190,12 +190,21 @@ def test_widget_custom_resize_lock_descriptors_follow_section_contract():
     media = next(item for item in descriptors if item.section_id == "media")
     assert media.widget_ids == ("media",)
     assert media.position_combo_attrs == ("media_position",)
-    assert media.control_attrs == ("media_font_size", "media_artwork_size")
+    assert media.control_attrs == (
+        "media_font_size",
+        "media_artwork_size",
+        "media_playback_progress_height",
+    )
     assert media.anchor_attr == "media_font_size"
 
-    steam = next(item for item in descriptors if item.section_id == "steam")
-    assert "achievement_pulse_artwork_shape" in steam.control_attrs
-    assert "achievement_pulse_square_artwork_size" in steam.control_attrs
+    achievement = next(
+        item for item in descriptors if item.section_id == "steam_achievement_pulse"
+    )
+    assert "achievement_pulse_artwork_shape" in achievement.control_attrs
+    assert "achievement_pulse_square_artwork_size" in achievement.control_attrs
+    assert next(
+        item for item in descriptors if item.section_id == "steam_friend_pulse"
+    ).widget_ids == ("friend_pulse",)
 
 
 def test_widget_custom_position_option_descriptors_follow_section_contract():

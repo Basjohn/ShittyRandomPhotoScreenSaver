@@ -55,11 +55,15 @@ def test_achievement_declares_and_projects_all_three_custom_child_roles():
     assert 'freeform_artwork_child_role(' in descriptor
     assert 'CustomChildRoleDescriptor(\n                "badge"' in descriptor
     assert 'CustomChildRoleDescriptor(\n                "progress_circle"' in descriptor
-    assert 'freeform_artwork_child_role(\n                resize_handles=("bottom_left",),' in descriptor
     helper = (ROOT / "rendering/custom_child_geometry.py").read_text(encoding="utf-8")
     assert "uniform_scale=False" in helper
     assert descriptor.count("uniform_scale=True") >= 2
-    assert 'resize_handles=("bottom_left",)' in descriptor
+    # Four corners are the shared default for placement-capable roles. Achievement
+    # remains a size-only authored-rail family until its later placement rollout,
+    # so its existing anchor handles are a deliberate semantic exception rather
+    # than fake top/left handles whose translation it cannot yet consume.
+    assert 'CHILD_RESIZE_HANDLES = ("top_left", "top_right", "bottom_left", "bottom_right")' in helper
+    assert 'freeform_artwork_child_role(\n                resize_handles=("bottom_left",),' in descriptor
     assert 'resize_handles=("bottom_right",)' in descriptor
     assert 'resize_handles=("top_right",)' in descriptor
     assert 'artwork = _role("artwork")' in model

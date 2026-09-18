@@ -324,6 +324,7 @@
           255
         ],
         "border_opacity": 1.0,
+        "child_collision_enabled": false,
         "color": [
           255,
           255,
@@ -407,6 +408,7 @@
           38
         ],
         "capsule_font_size": 15,
+        "child_collision_enabled": false,
         "color": [
           255,
           255,
@@ -712,7 +714,6 @@
         "version": 1
       },
       "media": {
-        "allow_landscape_artwork": false,
         "artwork_size": 250,
         "bg_color": [
           35,
@@ -728,6 +729,7 @@
           255
         ],
         "border_opacity": 1.0,
+        "child_collision_enabled": false,
         "color": [
           255,
           255,
