@@ -17,6 +17,11 @@ Item {
     property real startupRevealOpacity: 1.0
     property bool workingVisible: true
     property bool semanticDoubleClickEnabled: false
+    // Optional edit-only observation surface for the shared CUSTOM child-role
+    // overlay. Families expose only descriptor-admitted major visual targets.
+    // The list is retained presentation data only; Python/session remains the
+    // geometry and persistence owner.
+    property var customEditableChildRoles: []
     // Resolved once at admission/Settings/input edges; no pointer-time reads.
     property bool widgetGlowAdmitted: false
     property bool widgetGlowOnHover: false

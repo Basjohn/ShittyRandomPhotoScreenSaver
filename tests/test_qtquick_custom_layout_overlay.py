@@ -365,6 +365,71 @@ def test_overlay_exposes_viewport_capability_and_gates_edges_from_uniform_widget
     assert {edge for widget, edge, _ in updates} == {"left", "right", "top", "bottom"}
 
 
+def test_overlay_selection_and_content_corner_gating_share_one_session_owner() -> None:
+    session = CustomLayoutSession()
+    media = _item(
+        "media",
+        "display:a",
+        QRect(110, 220, 520, 210),
+        resizable=True,
+        content_extent_axes=frozenset({"horizontal", "vertical"}),
+        baseline_content_extent=(520.0, 210.0),
+    )
+    visualizer = _item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(700, 240, 630, 420),
+        resizable=True,
+        viewport_capable=True,
+        baseline_viewport_extent=(420.0, 280.0),
+    )
+    session.add_item(media)
+    session.add_item(visualizer)
+    begins: list[tuple[str, str]] = []
+
+    model = CustomLayoutOverlayModel(
+        session=session,
+        display_identity="display:a",
+        resize_begin_handler=lambda item, handle, cursor: (
+            begins.append((item.source_key.widget_id, handle)) or True
+        ),
+    )
+    roles = {bytes(v).decode(): k for k, v in model.roleNames().items()}
+    assert "selectedForChildEdit" in roles
+    media_row = next(
+        row for row in range(model.rowCount())
+        if model.data(model.index(row, 0), roles["widgetId"]) == "media"
+    )
+    vis_row = next(
+        row for row in range(model.rowCount())
+        if model.data(model.index(row, 0), roles["widgetId"]) == "spotify_visualizer"
+    )
+
+    assert model.selectItem(media_row) is True
+    assert model.data(
+        model.index(media_row, 0), roles["selectedForChildEdit"]
+    ) is True
+    assert model.data(
+        model.index(vis_row, 0), roles["selectedForChildEdit"]
+    ) is False
+
+    for corner in (
+        "content_top_left",
+        "content_top_right",
+        "content_bottom_left",
+        "content_bottom_right",
+    ):
+        assert model.beginResize(media_row, corner, 1.0, 1.0) is True
+        assert model.beginResize(vis_row, corner, 1.0, 1.0) is False
+
+    assert {handle for widget, handle in begins if widget == "media"} == {
+        "content_top_left",
+        "content_top_right",
+        "content_bottom_left",
+        "content_bottom_right",
+    }
+
+
 def test_shared_session_transfer_moves_frame_between_display_models_and_cancel_restores() -> None:
     session = CustomLayoutSession()
     clock = _item("clock", "display:a", QRect(120, 80, 180, 80))

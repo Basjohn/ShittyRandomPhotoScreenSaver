@@ -193,6 +193,10 @@ def test_widget_custom_resize_lock_descriptors_follow_section_contract():
     assert media.control_attrs == ("media_font_size", "media_artwork_size")
     assert media.anchor_attr == "media_font_size"
 
+    steam = next(item for item in descriptors if item.section_id == "steam")
+    assert "achievement_pulse_artwork_shape" in steam.control_attrs
+    assert "achievement_pulse_square_artwork_size" in steam.control_attrs
+
 
 def test_widget_custom_position_option_descriptors_follow_section_contract():
     descriptors = get_widget_custom_position_option_descriptors()

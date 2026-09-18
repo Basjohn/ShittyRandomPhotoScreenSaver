@@ -298,6 +298,59 @@ def test_custom_content_extent_grows_logical_canvas_and_reflows_major_rails(qt_a
         engine.deleteLater()
 
 
+def test_custom_child_geometry_freeforms_artwork_and_scales_intrinsic_progress_as_one_shape(qt_app) -> None:
+    model = _model()
+    model.activate()
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=build_mock_steam_view_model("achievement_pulse")
+        ),
+        animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        artwork = _find_visual_item(item, "achievementArtworkFrame")
+        metric = _find_visual_item(item, "achievementMetric")
+        progress = _find_visual_item(item, "achievementProgressPulse")
+        rarity = _find_visual_item(item, "achievementField_rarity")
+        assert artwork is not None and metric is not None
+        assert progress is not None and rarity is not None
+        base_artwork_width = artwork.width()
+        base_artwork_height = artwork.height()
+        base_metric_y = metric.y()
+
+        spy = QSignalSpy(model.customGeometryChanged)
+        assert model.set_custom_child_geometry(
+            {
+                "artwork": {"width_scale": 1.35, "height_scale": 0.75},
+                # Deliberately mismatched persisted axes: intrinsic roles must
+                # canonicalize to one scale before presentation.
+                "progress_circle": {"width_scale": 1.40, "height_scale": 0.70},
+            }
+        ) is True
+        qt_app.processEvents()
+
+        assert len(spy) == 1
+        assert artwork.width() == pytest.approx(base_artwork_width * 1.35)
+        assert artwork.height() == pytest.approx(base_artwork_height * 0.75)
+        assert metric.y() == pytest.approx(
+            base_metric_y + base_artwork_height * (0.75 - 1.0)
+        )
+        assert progress.width() == pytest.approx(108.0)
+        assert progress.height() == pytest.approx(108.0)
+        assert progress.scale() == pytest.approx(1.40)
+        assert rarity.x() == pytest.approx(51.0 + 108.0 * 1.40 + 49.0)
+
+        assert model.customArtworkWidthScale == pytest.approx(1.35)
+        assert model.customArtworkHeightScale == pytest.approx(0.75)
+        assert model.customProgressCircleScale == pytest.approx(1.40)
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+
+
 def test_latest_unlock_visibility_does_not_allocate_bottom_capsule_rails() -> None:
     default = _config(artwork_shape="portrait", double_capsules=True)
     no_latest = replace(

@@ -18,6 +18,13 @@ from PySide6.QtCore import QPoint, QRect
 
 from core.logging.logger import get_logger
 from core.settings.default_contract import require_canonical_default
+from rendering.custom_child_geometry import (
+    CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY,
+    CustomChildSize,
+    clamp_child_size,
+    normalize_child_geometry,
+    update_child_geometry_payload,
+)
 from rendering.custom_layout_contract import (
     CustomLayoutEntry,
     canonicalize_screen_layout_bucket,
@@ -121,6 +128,16 @@ class _ResizeOrigin:
     visualizer_uniform_scale: float | None
 
 
+@dataclass(frozen=True, slots=True)
+class _ChildResizeOrigin:
+    role_id: str
+    handle: str
+    cursor: QPoint
+    visible_width: float
+    visible_height: float
+    size: CustomChildSize
+
+
 class QuickCustomLayoutOwner:
     """Own one global retained CUSTOM edit transaction for a Quick generation."""
 
@@ -147,6 +164,7 @@ class QuickCustomLayoutOwner:
         self._bindings: dict[str, _DisplayBinding] = {}
         self._descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         self._resize_origins: dict[CustomLayoutKey, _ResizeOrigin] = {}
+        self._child_resize_origins: dict[CustomLayoutKey, _ChildResizeOrigin] = {}
         # One Edit session owns one stable pixels-per-world authority for the
         # Visualizer viewport. Retained presentation publications may refresh
         # style/content while editing, but may not silently replace this geometry
@@ -231,6 +249,9 @@ class QuickCustomLayoutOwner:
                     display_transfer_handler=self.transfer_display,
                     size_reset_handler=self.restore_item_size,
                     content_rotation_handler=self.rotate_visualizer_content,
+                    child_resize_begin_handler=self.begin_child_resize,
+                    child_resize_update_handler=self.update_child_resize,
+                    child_content_extent_handler=self.ensure_child_content_extent,
                 )
         except Exception:
             for binding in bindings.values():
@@ -748,6 +769,12 @@ class QuickCustomLayoutOwner:
             "left", "right", "top", "bottom",
             "top_left", "top_right", "bottom_left", "bottom_right",
         }
+        content_corner_handles = {
+            "content_top_left",
+            "content_top_right",
+            "content_bottom_left",
+            "content_bottom_right",
+        }
         is_viewport_handle = (
             item.viewport_resize_capable and handle_id in viewport_handles
         )
@@ -756,6 +783,13 @@ class QuickCustomLayoutOwner:
             if not (
                 item.viewport_resize_capable
                 or axis in item.content_extent_axes
+            ):
+                return False
+        elif handle_id in content_corner_handles:
+            if (
+                not item.resize_capable
+                or item.viewport_resize_capable
+                or not {"horizontal", "vertical"}.issubset(item.content_extent_axes)
             ):
                 return False
         elif not item.resize_capable:
@@ -798,6 +832,8 @@ class QuickCustomLayoutOwner:
                 changed = self._resize_viewport_edge(item, origin, handle_id, cursor)
             else:
                 changed = self._resize_content_edge(item, origin, handle_id, cursor)
+        elif handle_id.startswith("content_"):
+            changed = self._resize_content_corner(item, origin, handle_id, cursor)
         elif (
             item.viewport_resize_capable
             and handle_id in {
@@ -813,6 +849,196 @@ class QuickCustomLayoutOwner:
             # live resize samples published (same boundary as move's finishMove).
             self._clear_all_guides()
         return changed
+
+    def begin_child_resize(
+        self,
+        item: CustomLayoutSessionItem,
+        role_id: str,
+        handle: str,
+        cursor: QPoint,
+        visible_width: float,
+        visible_height: float,
+    ) -> bool:
+        """Begin one descriptor-gated child-size gesture.
+
+        QML reports only the currently rendered child dimensions so pointer
+        deltas remain correct through outer uniform transforms. Python owns the
+        normalized factor math and persistence.
+        """
+
+        role = item.child_role(role_id)
+        handle_id = str(handle or "")
+        if role is None or handle_id not in role.resize_handles:
+            return False
+        try:
+            width = float(visible_width)
+            height = float(visible_height)
+        except (TypeError, ValueError):
+            return False
+        if not (
+            math.isfinite(width)
+            and math.isfinite(height)
+            and width > 1.0
+            and height > 1.0
+        ):
+            return False
+        self._child_resize_origins[item.source_key] = _ChildResizeOrigin(
+            role_id=role.role_id,
+            handle=handle_id,
+            cursor=QPoint(cursor),
+            visible_width=width,
+            visible_height=height,
+            size=item.child_size(role.role_id),
+        )
+        return True
+
+    def update_child_resize(
+        self,
+        item: CustomLayoutSessionItem,
+        role_id: str,
+        handle: str,
+        cursor: QPoint,
+        finalize: bool,
+    ) -> bool:
+        origin = self._child_resize_origins.get(item.source_key)
+        role = item.child_role(role_id)
+        handle_id = str(handle or "")
+        if (
+            origin is None
+            or role is None
+            or origin.role_id != role.role_id
+            or origin.handle != handle_id
+            or handle_id not in role.resize_handles
+        ):
+            return False
+
+        dx = float(cursor.x() - origin.cursor.x())
+        dy = float(cursor.y() - origin.cursor.y())
+        if handle_id.endswith("left"):
+            dx = -dx
+        if handle_id.startswith("top_"):
+            dy = -dy
+
+        width_ratio = max(1.0e-6, origin.visible_width + dx) / origin.visible_width
+        height_ratio = max(1.0e-6, origin.visible_height + dy) / origin.visible_height
+        if role.uniform_scale:
+            # A corner can lead with either axis. Pick the larger proportional
+            # departure from the press point and apply it to both dimensions,
+            # preserving the authored child aspect without QML geometry math.
+            width_departure = abs(math.log(max(1.0e-6, width_ratio)))
+            height_departure = abs(math.log(max(1.0e-6, height_ratio)))
+            ratio = width_ratio if width_departure >= height_departure else height_ratio
+            next_size = clamp_child_size(
+                role,
+                origin.size.width_scale * ratio,
+                origin.size.height_scale * ratio,
+            )
+        else:
+            next_size = clamp_child_size(
+                role,
+                origin.size.width_scale * width_ratio,
+                origin.size.height_scale * height_ratio,
+            )
+        changed = item.set_child_size(role.role_id, next_size)
+        if changed:
+            item.current_size_payload = update_child_geometry_payload(
+                item.current_size_payload,
+                item.custom_child_roles,
+                item.current_child_sizes,
+            )
+        if finalize:
+            self._child_resize_origins.pop(item.source_key, None)
+        return changed
+
+    def ensure_child_content_extent(
+        self,
+        item: CustomLayoutSessionItem,
+        required_width: float,
+        required_height: float,
+    ) -> bool:
+        """Grow the shared ordinary content box to satisfy a child requirement.
+
+        The family reports only a logical minimum after its normal layout has
+        resolved the committed child size.  This owner alone mutates outer
+        geometry.  Requirements may grow the box, never shrink it.
+        """
+
+        if (
+            item.viewport_resize_capable
+            or not item.content_extent_capable
+            or not item.child_geometry_capable
+        ):
+            return False
+        try:
+            requested_width = float(required_width)
+            requested_height = float(required_height)
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(requested_width):
+            requested_width = 0.0
+        if not math.isfinite(requested_height):
+            requested_height = 0.0
+
+        scale = max(1.0e-6, float(item.resize_scale))
+        current_box = item.current_content_extent
+        if current_box is None:
+            current_box = (
+                float(item.current_global_rect.width()) / scale,
+                float(item.current_global_rect.height()) / scale,
+            )
+        next_width = float(current_box[0])
+        next_height = float(current_box[1])
+        if "horizontal" in item.content_extent_axes and requested_width > next_width:
+            next_width = requested_width
+        if "vertical" in item.content_extent_axes and requested_height > next_height:
+            next_height = requested_height
+        if (
+            next_width <= float(current_box[0]) + 1.0e-4
+            and next_height <= float(current_box[1]) + 1.0e-4
+        ):
+            return False
+
+        binding = self._bindings.get(item.current_display_identity)
+        if binding is None:
+            return False
+        minimum = quick_custom_content_extent_minimum_size(item)
+        target_width = max(minimum.width(), int(round(next_width * scale)))
+        target_height = max(minimum.height(), int(round(next_height * scale)))
+        current = item.current_global_rect
+        local = clamp_local_rect_to_bounds(
+            QRect(
+                current.x() - binding.geometry.x(),
+                current.y() - binding.geometry.y(),
+                target_width,
+                target_height,
+            ),
+            binding.geometry.size(),
+            min_size=minimum,
+        )
+        # If the display cannot physically admit the requested growth, persist
+        # only the logical box represented by the clamped physical rectangle.
+        # This keeps content_extent and rendered outer geometry truthful.
+        admitted_box = (
+            float(local.width()) / scale,
+            float(local.height()) / scale,
+        )
+        payload = dict(item.current_size_payload)
+        payload.update(
+            width=local.width(),
+            height=local.height(),
+            content_extent=[admitted_box[0], admitted_box[1]],
+        )
+        item.set_geometry(
+            QRect(
+                binding.geometry.x() + local.x(),
+                binding.geometry.y() + local.y(),
+                local.width(),
+                local.height(),
+            ),
+            size_payload=payload,
+            content_extent=admitted_box,
+        )
+        return True
 
     def resize_wheel(
         self,
@@ -959,6 +1185,20 @@ class QuickCustomLayoutOwner:
                 committed_content_extent = _parse_content_extent(
                     committed_entry.size_payload.get("content_extent")
                 )
+
+            committed_child_sizes: dict[str, CustomChildSize] = {}
+            if descriptor.custom_child_roles and committed_entry is not None:
+                raw_child_geometry = committed_entry.size_payload.get(
+                    CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY
+                )
+                committed_child_sizes = normalize_child_geometry(
+                    raw_child_geometry, descriptor.custom_child_roles
+                )
+                if isinstance(raw_child_geometry, Mapping):
+                    payload = dict(payload)
+                    payload[CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY] = dict(
+                        raw_child_geometry
+                    )
 
             # For retained uniform-transform families, the QML preferred size
             # is the exact authored reference on every admission. Derive the
@@ -1110,6 +1350,9 @@ class QuickCustomLayoutOwner:
                 content_extent_axes=content_axes,
                 content_extent_minimum_size=content_extent_minimum_size,
                 baseline_content_extent=committed_content_extent,
+                custom_child_roles=descriptor.custom_child_roles,
+                baseline_child_sizes=committed_child_sizes,
+                current_child_sizes=committed_child_sizes,
                 size_reset_capable=descriptor.requires_size_reset_affordance,
                 authored_reference_size=(authored_width, authored_height),
                 authored_size_payload=authored_payload,
@@ -1307,6 +1550,10 @@ class QuickCustomLayoutOwner:
                 fit_scale,
             )
             payload.pop("content_extent", None)
+            if item.child_geometry_capable:
+                payload = update_child_geometry_payload(
+                    payload, item.custom_child_roles, item.current_child_sizes
+                )
             item.restore_authored_size(
                 rect,
                 size_payload=payload,
@@ -1743,6 +1990,34 @@ class QuickCustomLayoutOwner:
             change_height=True,
         )
 
+    def _commit_content_extent_resize_geometry(
+        self,
+        item: CustomLayoutSessionItem,
+        origin: _ResizeOrigin,
+        rect: QRect,
+        *,
+        change_width: bool,
+        change_height: bool,
+    ) -> bool:
+        """Commit an ordinary logical content-box resize at constant scale."""
+
+        scale = max(1.0e-6, float(origin.scale))
+        box = item.current_content_extent
+        if box is None:
+            box = (float(rect.width()) / scale, float(rect.height()) / scale)
+        next_box = (
+            float(rect.width()) / scale if change_width else float(box[0]),
+            float(rect.height()) / scale if change_height else float(box[1]),
+        )
+        payload = dict(item.current_size_payload)
+        payload.update(
+            width=rect.width(),
+            height=rect.height(),
+            content_extent=[next_box[0], next_box[1]],
+        )
+        item.set_geometry(rect, size_payload=payload, content_extent=next_box)
+        return True
+
     def _resize_content_edge(
         self,
         item: CustomLayoutSessionItem,
@@ -1777,24 +2052,57 @@ class QuickCustomLayoutOwner:
             vertical_edge=edge if edge in {"top", "bottom"} else None,
             min_size=minimum,
         )
-        scale = max(1.0e-6, float(origin.scale))
-        change_width = edge in {"left", "right"}
-        change_height = edge in {"top", "bottom"}
-        box = item.current_content_extent
-        if box is None:
-            box = (float(rect.width()) / scale, float(rect.height()) / scale)
-        next_box = (
-            float(rect.width()) / scale if change_width else float(box[0]),
-            float(rect.height()) / scale if change_height else float(box[1]),
+        return self._commit_content_extent_resize_geometry(
+            item,
+            origin,
+            rect,
+            change_width=edge in {"left", "right"},
+            change_height=edge in {"top", "bottom"},
         )
-        payload = dict(item.current_size_payload)
-        payload.update(
-            width=rect.width(),
-            height=rect.height(),
-            content_extent=[next_box[0], next_box[1]],
+
+    def _resize_content_corner(
+        self,
+        item: CustomLayoutSessionItem,
+        origin: _ResizeOrigin,
+        handle: str,
+        cursor: QPoint,
+    ) -> bool:
+        """Reflow both ordinary content axes through a distinct diagonal handle.
+
+        Existing square corner handles intentionally retain uniform whole-widget
+        scale.  ``content_*`` handles move the corresponding two outer edges at
+        constant scale and therefore adjust the logical content width + height
+        together without creating a second sizing authority.
+        """
+
+        corner = str(handle).removeprefix("content_")
+        horizontal_edge = "left" if corner.endswith("left") else "right"
+        vertical_edge = "top" if corner.startswith("top_") else "bottom"
+        binding = self._bindings[item.current_display_identity]
+        minimum = quick_custom_content_extent_minimum_size(item)
+        rect = self._viewport_resize_rect(
+            origin,
+            binding,
+            minimum,
+            cursor,
+            horizontal_edge=horizontal_edge,
+            vertical_edge=vertical_edge,
         )
-        item.set_geometry(rect, size_payload=payload, content_extent=next_box)
-        return True
+        rect = self._snap_resize_edges(
+            item,
+            binding,
+            rect,
+            horizontal_edge=horizontal_edge,
+            vertical_edge=vertical_edge,
+            min_size=minimum,
+        )
+        return self._commit_content_extent_resize_geometry(
+            item,
+            origin,
+            rect,
+            change_width=True,
+            change_height=True,
+        )
 
     def _apply_content_extent_uniform_scale(
         self,
@@ -2265,6 +2573,7 @@ class QuickCustomLayoutOwner:
             self._bindings = {}
             self._descriptors = {}
             self._resize_origins = {}
+            self._child_resize_origins = {}
             self._visualizer_pixels_per_world.clear()
             self._visualizer_move_transfer_latch.clear()
             self._active = False

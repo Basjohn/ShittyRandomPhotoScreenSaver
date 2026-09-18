@@ -17,6 +17,10 @@ OverlayWidget {
     uniformScaleTransform: true
     preferredContentWidth: friendPulseModel.authoredWidth
     preferredContentHeight: friendPulseModel.authoredHeight
+    readonly property real customAvatarScale: friendPulseModel.customAvatarScale
+    customEditableChildRoles: [
+        { "roleId": "avatars", "target": customAvatarRoleTarget }
+    ]
 
     signal refreshRequested()
     signal friendActionRequested(int rowIndex)
@@ -296,7 +300,10 @@ OverlayWidget {
             required property int index
             property real eventGlowLevel: 0.0
             objectName: "friendPulseRow_" + index
-            x: 6.0; width: activityRowsView.width - 12.0; height: 50.0; radius: 9.0
+            x: 6.0
+            width: activityRowsView.width - 12.0
+            height: Math.max(50.0, 36.0 * friendRoot.customAvatarScale + 14.0)
+            radius: 9.0
             color: friendRoot.friendPulseModel.rowSurfaceColor
             border.color: friendRoot.friendPulseModel.rowBorderColor
             border.width: friendRoot.friendStrokeWidth(1.0)
@@ -356,7 +363,9 @@ OverlayWidget {
                 id: rowAvatarFrame
                 objectName: "friendPulseRowAvatar_" + index
                 x: 7.0; anchors.verticalCenter: parent.verticalCenter
-                width: 36.0; height: width; radius: 8.0
+                width: 36.0 * friendRoot.customAvatarScale
+                height: width
+                radius: Math.min(width / 2.0, 8.0 * friendRoot.customAvatarScale)
                 color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g,
                                friendRoot.friendPulseModel.accentColor.b, rowAvatarHover.hovered ? 0.38 : 0.22)
                 border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true
@@ -388,13 +397,16 @@ OverlayWidget {
                         layer.enabled: true
                     }
                 }
-                Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.1; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.1 * friendRoot.customAvatarScale; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true; z: 2 }
                 HoverHandler { id: rowAvatarHover; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
                 TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendActionRequested(index) }
             }
             Item {
-                x: 54.0; y: 5.0; width: parent.width - x - 65.0; height: 40.0
+                x: rowAvatarFrame.x + rowAvatarFrame.width + 11.0
+                y: Math.max(5.0, (parent.height - 40.0) / 2.0)
+                width: parent.width - x - 65.0
+                height: 40.0
                 ShadowedText { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 23.0; text: primaryText; color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize; font.bold: true; verticalAlignment: Text.AlignVCenter; wrap: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 7.0; elide: Text.ElideNone; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
                 ShadowedText {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 18.0
@@ -456,8 +468,11 @@ OverlayWidget {
         property int rosterCapacity: Math.max(1, friendRoot.friendPulseModel.visibleCapacity)
         property real tileGap: 10.0
         cellWidth: width / activeColumns
-        cellHeight: Math.max(120.0, Math.min(154.0,
-                                              height / Math.max(1, Math.ceil(rosterCapacity / activeColumns))))
+        readonly property real baselineCellHeight: Math.max(120.0, Math.min(154.0,
+            height / Math.max(1, Math.ceil(rosterCapacity / activeColumns))))
+        cellHeight: baselineCellHeight + Math.max(
+            0.0, 58.0 * (friendRoot.customAvatarScale - 1.0)
+        )
         onMovementEnded: friendRoot.reportVisibleRange()
         onMovementStarted: friendRoot.pendingChangeRows = ({})
         onMovingChanged: {
@@ -574,7 +589,10 @@ OverlayWidget {
                 Rectangle {
                     id: gridAvatarFrame
                     anchors.horizontalCenter: parent.horizontalCenter; y: 12.0
-                    width: Math.min(58.0, Math.max(38.0, parent.width * 0.42)); height: width; radius: 12.0
+                    width: Math.min(58.0, Math.max(38.0, parent.width * 0.42))
+                        * friendRoot.customAvatarScale
+                    height: width
+                    radius: Math.min(width / 2.0, 12.0 * friendRoot.customAvatarScale)
                     color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, gridAvatarHover.hovered ? 0.38 : 0.22)
                     border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true
                     Item {
@@ -605,7 +623,7 @@ OverlayWidget {
                             layer.enabled: true
                         }
                     }
-                    Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.28; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.28 * friendRoot.customAvatarScale; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true; z: 2 }
                     HoverHandler { id: gridAvatarHover; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendActionRequested(index) }
@@ -670,6 +688,39 @@ OverlayWidget {
                 }
             }
         }
+    }
+
+    // One retained proxy represents the grouped avatar role to CUSTOM edit
+    // chrome. Every real avatar consumes the same scalar; no delegate owns
+    // persistence and no per-avatar edit state is created.
+    Item {
+        id: customAvatarRoleTarget
+        objectName: "friendPulseCustomAvatarRoleTarget"
+        visible: friendRoot.friendPulseModel.hasRows
+            && (friendRoot.friendPulseModel.viewState === "ready"
+                || friendRoot.friendPulseModel.viewState === "stale")
+        enabled: false
+        readonly property bool rowsMode: friendRoot.friendPulseModel.viewMode === "rows"
+        readonly property real rowAvatarSize: 36.0 * friendRoot.customAvatarScale
+        readonly property real gridTileWidth: Math.max(72.0, activityGridView.cellWidth - 12.0)
+        readonly property real gridAvatarSize: Math.min(
+            58.0, Math.max(38.0, gridTileWidth * 0.42)
+        ) * friendRoot.customAvatarScale
+        readonly property real gridIncompleteShift: activityGridView.count > 0
+            && activityGridView.count < activityGridView.activeColumns
+            ? (activityGridView.activeColumns - activityGridView.count)
+                * activityGridView.cellWidth / 2.0
+            : 0.0
+        width: rowsMode ? rowAvatarSize : gridAvatarSize
+        height: width
+        x: rowsMode
+            ? activityRowsView.x + 13.0
+            : activityGridView.x + gridIncompleteShift
+                + activityGridView.cellWidth / 2.0 - width / 2.0
+        y: rowsMode
+            ? activityRowsView.y
+                + (Math.max(50.0, rowAvatarSize + 14.0) - rowAvatarSize) / 2.0
+            : activityGridView.y + 14.0
     }
 
     Rectangle {

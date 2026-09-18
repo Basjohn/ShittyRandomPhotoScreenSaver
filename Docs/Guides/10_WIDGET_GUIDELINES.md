@@ -291,8 +291,9 @@ remains the explicit variant-aware sizing exception; Visualizer owns its separat
 
 Contract:
 
-- side handle -> logical content width and/or height at the current uniform scale;
-- corner/wheel -> whole retained presentation scales uniformly;
+- side handle -> one logical content axis at the current uniform scale;
+- selected-parent lighter-blue diagonal corner -> both admitted logical content axes together;
+- existing square corner/wheel -> whole retained presentation scales uniformly;
 - family model/QML reflows only presentation (columns, rows, spacing, metadata, artwork, etc.);
 - family may provide bounded **logical side-drag floors** through the shared policy, but those floors do not replace the
   generic uniform whole-card floor; dense authored cards may request the shared owner to resolve that logical floor

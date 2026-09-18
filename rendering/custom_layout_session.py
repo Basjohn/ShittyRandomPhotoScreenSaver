@@ -7,6 +7,12 @@ from typing import Any, Mapping
 
 from PySide6.QtCore import QRect
 
+from rendering.custom_child_geometry import (
+    CustomChildRoleDescriptor,
+    CustomChildSize,
+    child_role_map,
+)
+
 
 DEFAULT_GEOMETRY_VARIANT = "default"
 
@@ -109,14 +115,23 @@ class CustomLayoutSessionItem:
     content_rotation_capable: bool = False
     # Ordinary content-extent resize working state (distinct from the visualizer
     # viewport above). ``content_extent_axes`` names which side axes reflow the
-    # widget's logical content box ("horizontal" and/or "vertical"); corners stay
-    # uniform enlarge/shrink. The box is a pre-uniform-scale content size the
+    # widget's logical content box ("horizontal" and/or "vertical"). The existing
+    # square corners/wheel remain uniform enlarge/shrink; a distinct diagonal edit
+    # affordance may reflow both admitted content axes together. The box is a
+    # pre-uniform-scale content size the
     # widget consumes to reflow (more rows / column reflow / less truncation)
     # instead of letterboxing. ``None`` means the canonical config-derived size.
     content_extent_axes: frozenset[str] = frozenset()
     content_extent_minimum_size: ViewportExtent | None = None
     baseline_content_extent: ViewportExtent | None = None
     current_content_extent: ViewportExtent | None = None
+    # Descriptor-admitted major visual children may carry authored-relative
+    # normalized size factors inside the parent's existing CUSTOM payload.
+    # Keeping a normalized working map here avoids reparsing/allocating the
+    # persisted payload on every pointer move.
+    custom_child_roles: tuple[CustomChildRoleDescriptor, ...] = ()
+    baseline_child_sizes: dict[str, CustomChildSize] = field(default_factory=dict)
+    current_child_sizes: dict[str, CustomChildSize] = field(default_factory=dict)
     # Per-widget Restore Size authority.  This is deliberately distinct from
     # the admission baseline above: baseline may already be a committed CUSTOM
     # shape/scale, while authored_reference_size is the current non-CUSTOM
@@ -170,6 +185,20 @@ class CustomLayoutSessionItem:
             if self.current_content_extent is not None
             else self.baseline_content_extent
         )
+        role_map = child_role_map(self.custom_child_roles)
+        self.custom_child_roles = tuple(role_map.values())
+        self.baseline_child_sizes = {
+            str(role_id): size
+            for role_id, size in self.baseline_child_sizes.items()
+            if str(role_id) in role_map and isinstance(size, CustomChildSize)
+        }
+        self.current_child_sizes = {
+            str(role_id): size
+            for role_id, size in (
+                self.current_child_sizes or self.baseline_child_sizes
+            ).items()
+            if str(role_id) in role_map and isinstance(size, CustomChildSize)
+        }
         self.size_reset_capable = bool(self.size_reset_capable)
         self.authored_reference_size = normalize_viewport_extent(
             self.authored_reference_size
@@ -199,6 +228,34 @@ class CustomLayoutSessionItem:
     @property
     def content_extent_capable(self) -> bool:
         return bool(self.content_extent_axes)
+
+    @property
+    def child_geometry_capable(self) -> bool:
+        return bool(self.custom_child_roles)
+
+    def child_role(self, role_id: str) -> CustomChildRoleDescriptor | None:
+        normalized = str(role_id or "").strip()
+        return next(
+            (role for role in self.custom_child_roles if role.role_id == normalized),
+            None,
+        )
+
+    def child_size(self, role_id: str) -> CustomChildSize:
+        return self.current_child_sizes.get(str(role_id), CustomChildSize())
+
+    def set_child_size(self, role_id: str, size: CustomChildSize) -> bool:
+        role = self.child_role(role_id)
+        if role is None:
+            return False
+        normalized_id = role.role_id
+        prior = self.current_child_sizes.get(normalized_id, CustomChildSize())
+        if prior == size:
+            return False
+        if size.is_authored:
+            self.current_child_sizes.pop(normalized_id, None)
+        else:
+            self.current_child_sizes[normalized_id] = size
+        return True
 
     def set_geometry(
         self,
@@ -258,6 +315,7 @@ class CustomLayoutSessionItem:
         self.resize_scale = self.baseline_resize_scale
         self.current_viewport_extent = self.baseline_viewport_extent
         self.current_content_extent = self.baseline_content_extent
+        self.current_child_sizes = dict(self.baseline_child_sizes)
         self.removed = False
 
     def restore_authored_size(
@@ -290,6 +348,10 @@ class CustomLayoutSession:
         self._change_listeners: list[
             Callable[[CustomLayoutSessionItem], None]
         ] = []
+        self._selected_key: CustomLayoutKey | None = None
+        self._selection_listeners: list[
+            Callable[[CustomLayoutSessionItem | None], None]
+        ] = []
 
     def add_item(self, item: CustomLayoutSessionItem) -> None:
         if item.source_key in self._items:
@@ -304,6 +366,47 @@ class CustomLayoutSession:
 
     def active_items(self) -> tuple[CustomLayoutSessionItem, ...]:
         return tuple(item for item in self._items.values() if not item.removed)
+
+    def selected_item(self) -> CustomLayoutSessionItem | None:
+        """Return the transient parent selected for child/edit-chrome focus."""
+
+        if self._selected_key is None:
+            return None
+        return self._items.get(self._selected_key)
+
+    def select_item(self, item: CustomLayoutSessionItem | None) -> bool:
+        """Select one session-owned parent without creating persisted state.
+
+        Selection is global to the CUSTOM edit transaction so multiple display
+        overlays cannot each expose child/edit affordances independently. It is
+        event-owned UI state only and is never written into layout persistence.
+        """
+
+        if item is not None and self._items.get(item.source_key) is not item:
+            raise ValueError("selected item is not owned by this CUSTOM session")
+        next_key = item.source_key if item is not None else None
+        if next_key == self._selected_key:
+            return False
+        self._selected_key = next_key
+        selected = self.selected_item()
+        for listener in tuple(self._selection_listeners):
+            listener(selected)
+        return True
+
+    def subscribe_selection(
+        self,
+        listener: Callable[[CustomLayoutSessionItem | None], None],
+    ) -> None:
+        if listener not in self._selection_listeners:
+            self._selection_listeners.append(listener)
+
+    def unsubscribe_selection(
+        self,
+        listener: Callable[[CustomLayoutSessionItem | None], None],
+    ) -> None:
+        self._selection_listeners = [
+            entry for entry in self._selection_listeners if entry != listener
+        ]
 
     def subscribe_changes(
         self,
@@ -323,6 +426,10 @@ class CustomLayoutSession:
     def notify_item_changed(self, item: CustomLayoutSessionItem) -> None:
         if self._items.get(item.source_key) is not item:
             raise ValueError("changed item is not owned by this CUSTOM session")
+        if self._selected_key == item.source_key and (
+            item.removed or not item.current_enabled
+        ):
+            self.select_item(None)
         for listener in tuple(self._change_listeners):
             listener(item)
 
@@ -345,6 +452,7 @@ class CustomLayoutSession:
             )
 
     def restore_baseline(self) -> None:
+        self.select_item(None)
         for item in self._items.values():
             item.restore_baseline()
         self.refresh_duplicate_state()

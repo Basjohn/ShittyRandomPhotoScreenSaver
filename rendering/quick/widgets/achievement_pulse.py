@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
+import math
 from pathlib import Path
 from typing import Any
 
@@ -520,6 +521,7 @@ class AchievementPulsePresentationModel(QObject):
     """Stable retained state for one Achievement Pulse card."""
 
     stateChanged = Signal()
+    customGeometryChanged = Signal()
     fadeRequested = Signal()
     progressPulseRequested = Signal()
 
@@ -548,6 +550,13 @@ class AchievementPulsePresentationModel(QObject):
         # CUSTOM-only logical content box used by side-axis reflow.  The
         # authored config remains immutable Settings truth underneath.
         self._content_extent: tuple[int, int] | None = None
+        # CUSTOM editable-child factors remain presentation-local while the
+        # parent session owns persistence. Keep all admitted child roles in one
+        # retained model state so one payload application emits at most one
+        # geometry-only notification during active editing.
+        self._custom_artwork_size: tuple[float, float] = (1.0, 1.0)
+        self._custom_badge_size: tuple[float, float] = (1.0, 1.0)
+        self._custom_progress_circle_size: tuple[float, float] = (1.0, 1.0)
 
     @property
     def config(self) -> AchievementPulsePresentationConfig:
@@ -754,6 +763,85 @@ class AchievementPulsePresentationModel(QObject):
         self.stateChanged.emit()
         return True
 
+    @staticmethod
+    def _normalized_custom_size(
+        width_scale: object,
+        height_scale: object,
+        *,
+        minimum: float,
+        maximum: float,
+        uniform: bool,
+    ) -> tuple[float, float]:
+        try:
+            width = float(width_scale)
+            height = float(height_scale)
+        except (TypeError, ValueError):
+            width = height = 1.0
+        if not math.isfinite(width) or width <= 0.0:
+            width = 1.0
+        if not math.isfinite(height) or height <= 0.0:
+            height = 1.0
+        resolved_width = max(float(minimum), min(float(maximum), width))
+        resolved_height = max(float(minimum), min(float(maximum), height))
+        if uniform:
+            # Persisted/session input for intrinsic shapes is canonicalized to
+            # one scalar before QML sees it. This keeps a square badge square and
+            # the progress role circular even if an old/hand-edited payload has
+            # mismatched width/height values.
+            resolved_height = resolved_width
+        return resolved_width, resolved_height
+
+    def set_custom_child_geometry(self, child_geometry: object) -> bool:
+        """Apply all Achievement child-role factors as one retained update.
+
+        The shared CUSTOM session remains the persistence/math owner. This
+        family boundary merely projects the already-normalized role payload into
+        retained presentation state, batching the notification so a drag sample
+        does not wake unrelated model bindings multiple times.
+        """
+
+        raw = child_geometry if isinstance(child_geometry, Mapping) else {}
+
+        def _role(role_id: str) -> Mapping[str, object]:
+            value = raw.get(role_id)
+            return value if isinstance(value, Mapping) else {}
+
+        artwork = _role("artwork")
+        badge = _role("badge")
+        progress = _role("progress_circle")
+        next_artwork = self._normalized_custom_size(
+            artwork.get("width_scale", 1.0),
+            artwork.get("height_scale", 1.0),
+            minimum=0.40,
+            maximum=3.00,
+            uniform=False,
+        )
+        next_badge = self._normalized_custom_size(
+            badge.get("width_scale", 1.0),
+            badge.get("height_scale", 1.0),
+            minimum=0.55,
+            maximum=2.50,
+            uniform=True,
+        )
+        next_progress = self._normalized_custom_size(
+            progress.get("width_scale", 1.0),
+            progress.get("height_scale", 1.0),
+            minimum=0.60,
+            maximum=2.25,
+            uniform=True,
+        )
+        if (
+            next_artwork == self._custom_artwork_size
+            and next_badge == self._custom_badge_size
+            and next_progress == self._custom_progress_circle_size
+        ):
+            return False
+        self._custom_artwork_size = next_artwork
+        self._custom_badge_size = next_badge
+        self._custom_progress_circle_size = next_progress
+        self.customGeometryChanged.emit()
+        return True
+
     def apply_style(self, style: AchievementPulsePresentationStyle) -> bool:
         if self._retired or style == self.style:
             return False
@@ -874,6 +962,26 @@ class AchievementPulsePresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def squareArtworkSize(self) -> float:
         return float(self.config.square_artwork_size)
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkWidthScale(self) -> float:
+        return float(self._custom_artwork_size[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkHeightScale(self) -> float:
+        return float(self._custom_artwork_size[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customBadgeWidthScale(self) -> float:
+        return float(self._custom_badge_size[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customBadgeHeightScale(self) -> float:
+        return float(self._custom_badge_size[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customProgressCircleScale(self) -> float:
+        return float(self._custom_progress_circle_size[0])
 
     @Property(bool, notify=stateChanged)
     def doubleCapsules(self) -> bool:
@@ -1104,12 +1212,17 @@ class RetainedAchievementPulsePresentation:
         payload: Mapping[str, Any],
     ) -> None:
         # Side handles may carry one logical content box. Historical per-value
-        # artwork/font keys remain ignored: Settings still owns authored values.
+        # artwork/font keys remain ignored. In CUSTOM the shared child_geometry
+        # payload owns admitted child rectangles while preserved Settings values
+        # remain the non-CUSTOM/reset baseline.
         extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
         if isinstance(extent, (tuple, list)) and len(extent) == 2:
             self._model.set_content_extent(extent[0], extent[1])
         else:
             self._model.clear_content_extent()
+
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
+        self._model.set_custom_child_geometry(child_geometry)
 
     def apply_input_state(self, input_state: object) -> bool:
         if isinstance(input_state, Mapping):

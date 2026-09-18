@@ -22,26 +22,40 @@ Bubble remains the strongest protected reaction canary. Any future production ch
 Accepted next builds, with the first slice now in validation. The full decomposition stays in the linked doc; do not
 duplicate that spec here.
 
-- [~] **CUSTOM Visualizer quarter-turn orientation glyph.** Implementation checkpoint 2026-09-17 is
-  in-tree and the 2026-09-18 follow-up makes orientation **per canonical carded mode**: one sparse
-  `content_rotation_quarters_by_mode` map rides the existing CUSTOM `size_payload` (the former global
-  scalar remains read-only compatibility input and expands across all capable carded modes);
-  the persisted/edited viewport stays physical while the shared Visualizer presentation/render contract
-  derives the effective logical world and common quad coordinate turn. The five accepted carded modes
-  consume that seam; Sphere neither exposes nor renders the turn, while its selection cannot erase a
-  dormant carded-mode token. Save/Cancel, layout slots, cross-display state and Restore Size ownership
-  stay on their existing carriers. Local static/contract probes pass, but this container has no PySide6,
-  so the focused Qt/QML tests, maintained destination profile, real-GL shader path and installed eyes-on
-  gate remain **NEEDS RUN** before this item is accepted/closed. General performance self-audit also
-  tightened the steady-state path: retained publication snapshots extent/orientation/override under one
-  existing controller lock, and the GL rotation uniform is cached so it uploads only on first use or an
-  actual turn rather than on every draw. No timer, polling, provider wake, alternate cadence, runtime
-  rebuild or per-frame Settings read was added. Operator reports the installed turn behavior is working well;
-  the edit glyph has since been moved from the header/upper-left area to an inset **bottom-right** slot that
-  stays clear of the right/bottom edge-resize strips and corner handle. A requested live-hover rotate glyph is
-  **not admitted yet**: mutating persisted CUSTOM layout outside the edit transaction needs a proper shared live
-  layout-action owner; do not let QML write persistence or bolt a second orientation authority onto the live card.
-  Full suite/complete per-mode acceptance remains pending. Full spec + golden-proof gate: `Future_Work.md` §8.1.
+- [x] **CUSTOM Visualizer quarter-turn orientation — operator validated 2026-09-18.** The shared logical
+  viewport/presentation transform, per-canonical-mode sparse persistence, Sphere exclusion, Save/Cancel/layout-slot
+  ownership and bottom-right Edit glyph are accepted in installed physical use. Keep the existing implementation and
+  its performance guardrails; reopen only for a reproduced regression. The proposed live-hover rotate affordance is
+  intentionally **not admitted** because it would require a new live persistence/action authority for convenience.
+- [~] **CUSTOM editable child geometry — active after validated content-extent rollout.** Add one shared role-based edit
+  primitive for a deliberately small set of major visual children, not arbitrary QML elements. CUSTOM becomes
+  the sole active size authority for an overridden child while its authored Settings value remains preserved
+  underneath; normalize/reuse the existing **“Disable Custom To Adjust!”** disabled-settings treatment wherever
+  those authorities would otherwise fight. Initial candidates are Media artwork + seek/volume bars + one grouped playback-controls role, Steam artwork, Achievement Pulse artwork + badge + progress circle,
+  Friend Pulse's grouped avatar role, optional Weather hero icon, and Clock **analogue-only** grouped separator /
+  Roman-numeral roles. The first shared foundation is now in-tree: parent selection is transient state owned by the
+  global CUSTOM session, so only one parent across displays can expose focused edit chrome/child handles. Parent
+  selection in global Edit mode reveals the smaller child-role handles for only that widget; do not carpet the whole
+  scene with child handles. Selection-driven controls may use a short event-triggered QML opacity animation; no timer,
+  polling or idle hover scan is admitted.
+  Existing white square corners/wheel retain uniform whole-widget scaling. The first foundation also implements a
+  distinct lighter-blue diagonal corner affordance that reflows both admitted `content_extent` axes together through
+  the same Python owner; it is loaded only for the selected ordinary
+  parent and draws inside the corner wedge between the two blue side strips; it suppresses itself when that inward
+  hit wedge would overlap another widget/edit-control exclusion. The diagonal's collision check is edit-event/geometry-driven only and its 110 ms opacity fade
+  runs only when a parent is selected. Child overflow feeds the existing `content_extent` owner; growth may request outer expansion, while shrinking
+  never auto-collapses the outer widget. Persist normalized logical geometry, keep Save/Cancel/slots/reset on the
+  shared CUSTOM owner, and add no recurring runtime work outside real edit/state events. Artwork size commits may
+  request an appropriately higher-quality source through the existing artwork/image owner and crossfade only once
+  the replacement is ready, preserving original-aspect/crop rules and never refetching on drag ticks. Detailed
+  architecture + build order: `Docs/Future_Work/Custom_Child_Geometry.md`. Artwork child rectangles are explicitly freeform X/Y while their images preserve native aspect via the existing fill/crop/zoom policy; intrinsic shapes such as Pulse circles/square badges remain uniformly constrained.
+  **Achievement Pulse proof slice is now implemented and awaiting operator/Qt validation:** artwork, latest-achievement badge and progress circle are all live targets on the shared owner. Artwork can change X/Y independently while `PreserveAspectCrop` protects the source image; badge/circle resize as intact intrinsic shapes. Family reflow preserves the authored rails and reports one grow-only outer minimum, and descriptor-owned handle admission exposes only the corner that matches each role's retained anchor so no child-position persistence is needed. Achievement artwork shape/size Settings controls join the existing CUSTOM lock while CUSTOM owns that geometry. General runtime remains event-driven; no new timer/poller/provider/cadence was added.
+  **Settings/second-family continuation now implemented, awaiting Qt/physical validation:** the old Steam section-wide CUSTOM settings lock is split into widget-scoped Achievement / Abandonment / Friend Pulse locks, and its revert action restores only the affected family rather than all CUSTOM widgets. Friend Pulse now consumes one grouped `avatars` child role in Rows and Grid; one scalar sizes every avatar, layout/column admission yields space to the new footprint, and no per-avatar persistence/provider state exists. Artwork geometry declarations now reuse the shared `freeform_artwork_child_role(...)` constructor so later Steam/Media artwork can share frame semantics without sharing provider ownership or disturbing dormancy. Next significant consumer is Media; keep its provider/image lifecycle isolated while reusing the geometry primitive.
+- [ ] **Weather five-day reveal defect — keep high.** The shared ordinary `content_extent` rollout is now
+  operator-validated, but the intended five-day forecast section did **not** appear during that validation. Treat
+  this as a focused Weather presentation/data-admission defect, not as evidence that the outer sizing contract is
+  still unvalidated. Keep it near the top of the queue while CUSTOM child geometry proceeds; do not solve it with
+  another provider cadence, geometry owner or drag-triggered request.
 - [ ] **Games You Follow.** Next retained Steam family member — currently owned only by the `--devsteam`
   scaffold. Feasibility-gated: only after the existing-key `GetGamesFollowed` route is live/fixture-proved.
   Its first retained implementation must consume both shared `content_extent` axes and reuse the Friend
@@ -55,30 +69,6 @@ duplicate that spec here.
   customization — font/size; text position = left of bar / inside bar / right of bar / no text / numbers-only;
   and bar thickness. Theme semantics inherited (may match media volume). Disabled ⇒ fully dormant (no shell,
   no item, no endpoint, no callback). Full spec + COM/threading/dormancy traps: `Future_Work.md` §10.2.
-- [~] **Achievement Pulse / Abandonment Issues / Weather — presentation hor-only & vert-only sizing.**
-  **Implemented in-tree 2026-09-18; Windows/PySide/QML acceptance still NEEDS RUN.** All current resizable
-  ordinary non-Clock families now declare the shared horizontal+vertical `content_extent` contract. Achievement
-  Pulse and Abandonment Issues preserve their dense authored canvas as the side-drag floor while redistributing
-  added room through their existing layout; the shared CUSTOM owner resolves that floor once at edit admission so
-  persisted/session geometry cannot disagree with QML. Weather reflows on both axes and reveals its retained five-day
-  forecast only when the CUSTOM vertical box has enough room beyond the compact intrinsic presentation. The Weather
-  provider widens its existing single request from 2 to 6 daily rows (today + five future days); no second fetch, timer,
-  provider or cadence was added. Corner/wheel scale remains the existing uniform outer transform. Focused family +
-  owner tests were updated alongside the implementation; full intended-environment validation remains the acceptance gate.
-- [ ] **CUSTOM editable child geometry — after the content-extent rollout.** Add one shared role-based edit
-  primitive for a deliberately small set of major visual children, not arbitrary QML elements. CUSTOM becomes
-  the sole active size authority for an overridden child while its authored Settings value remains preserved
-  underneath; normalize/reuse the existing **“Disable Custom To Adjust!”** disabled-settings treatment wherever
-  those authorities would otherwise fight. Initial candidates are Media artwork + seek/volume bars + one grouped playback-controls role, Steam artwork, Achievement Pulse badge,
-  Friend Pulse's grouped avatar role, optional Weather hero icon, and Clock **analogue-only** grouped separator /
-  Roman-numeral roles. Parent selection in global Edit mode reveals the smaller child-role handles for only that
-  widget; do not carpet the whole scene with child handles.
-  Child overflow feeds the existing `content_extent` owner; growth may request outer expansion, while shrinking
-  never auto-collapses the outer widget. Persist normalized logical geometry, keep Save/Cancel/slots/reset on the
-  shared CUSTOM owner, and add no recurring runtime work outside real edit/state events. Artwork size commits may
-  request an appropriately higher-quality source through the existing artwork/image owner and crossfade only once
-  the replacement is ready, preserving original-aspect/crop rules and never refetching on drag ticks. Detailed
-  architecture + build order: `Docs/Future_Work/Custom_Child_Geometry.md`.
 
 **Build constraint for the widget work in this section:** maintain widget normalization and reuse the shared
 widget aspects — `content_extent` side-reflow + uniform scale, the CUSTOM Edit shell/overlay, Restore Size,

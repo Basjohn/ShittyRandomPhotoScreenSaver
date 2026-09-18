@@ -209,8 +209,7 @@ Presentation destruction does not automatically mean backend destruction; shared
 
 `ordinary_uniform` is the default new-family contract: one authored outer rectangle, one session-owned uniform transform,
 shared 40% whole-card normalization floor and no family-local geometry persistence. Families with a proven presentation
-benefit may opt into the shared `content_extent_axes` descriptor/session/owner path. Side handles then mutate a logical
-content box at constant uniform scale; corners/wheel remain whole-card uniform. Family models/QML may reflow presentation
+benefit may opt into the shared `content_extent_axes` descriptor/session/owner path. Side handles then mutate one logical content axis at constant uniform scale; an optional selected-parent diagonal corner may mutate both admitted content axes through the same owner; **square** corners/wheel remain whole-card uniform. Family models/QML may reflow presentation
 inside that box and may declare bounded logical direct-axis floors through shared policy, but may not create another
 placement solver, timer/debounce, Settings-backed geometry value or payload owner.
 

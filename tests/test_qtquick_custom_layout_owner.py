@@ -1544,6 +1544,66 @@ def test_content_extent_side_drag_and_uniform_scale_math() -> None:
     assert item.current_content_extent[1] == pytest.approx(box_before[1])
 
 
+def test_content_extent_diagonal_corner_reflows_both_axes_without_repurposing_uniform_corner() -> None:
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}),
+        participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: None,
+    )
+    owner._bindings = {
+        "display:a": _DisplayBinding(
+            identity="display:a",
+            monitor_route="1",
+            unit=SimpleNamespace(),
+            screen=None,
+            geometry=QRect(0, 0, 3840, 2160),
+        )
+    }
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("media", "display:a"),
+        model_identity="media",
+        baseline_global_rect=QRect(100, 100, 520, 210),
+        current_global_rect=QRect(100, 100, 520, 210),
+        baseline_size_payload={},
+        current_size_payload={},
+        baseline_enabled=True,
+        current_enabled=True,
+        resize_capable=True,
+        content_extent_axes=frozenset({"vertical", "horizontal"}),
+        baseline_content_extent=(520.0, 210.0),
+    )
+
+    start = QPoint(item.current_global_rect.center())
+    assert owner.begin_resize(item, "content_bottom_right", start) is True
+    assert owner.update_resize(
+        item,
+        "content_bottom_right",
+        QPoint(start.x() + 120, start.y() + 80),
+        True,
+    ) is True
+    assert item.resize_scale == pytest.approx(1.0)
+    assert item.current_global_rect.width() == pytest.approx(640, abs=1)
+    assert item.current_global_rect.height() == pytest.approx(290, abs=1)
+    assert item.current_content_extent[0] == pytest.approx(640.0, abs=1)
+    assert item.current_content_extent[1] == pytest.approx(290.0, abs=1)
+
+    # The established white square corner remains the uniform whole-widget
+    # gesture. It must not become another content-extent corner by accident.
+    box_before = item.current_content_extent
+    scale_before = item.resize_scale
+    start2 = QPoint(item.current_global_rect.center())
+    assert owner.begin_resize(item, "bottom_right", start2) is True
+    assert owner.update_resize(
+        item,
+        "bottom_right",
+        QPoint(start2.x() + 50, start2.y() + 50),
+        True,
+    ) is True
+    assert item.resize_scale > scale_before
+    assert item.current_content_extent == box_before
+
+
 def test_resize_side_drag_snaps_and_wheel_only_publishes_guides() -> None:
     class _GuideScene:
         def __init__(self) -> None:

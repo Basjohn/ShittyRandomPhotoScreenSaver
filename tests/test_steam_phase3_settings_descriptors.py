@@ -105,11 +105,15 @@ def test_steam_descriptors_are_complete_with_journey_scaffold_gate() -> None:
         assert section.builder_module == "ui.tabs.widgets_tab_steam"
         assert section.loader_name == "load_steam_settings"
         assert section.saver_name == "save_steam_settings"
-        assert resize_sections["steam"].widget_ids == (
-            "achievement_pulse",
-            "abandonment_issues",
-            "friend_pulse",
-        )
+        assert resize_sections["steam_achievement_pulse"].widget_ids == ("achievement_pulse",)
+        assert resize_sections["steam_abandonment_issues"].widget_ids == ("abandonment_issues",)
+        assert resize_sections["steam_friend_pulse"].widget_ids == ("friend_pulse",)
+        assert set(resize_sections["steam_achievement_pulse"].control_attrs) == {
+            "achievement_pulse_font_size",
+            "achievement_pulse_artwork_shape",
+            "achievement_pulse_square_artwork_size",
+        }
+        assert "friend_pulse_font_size" not in resize_sections["steam_achievement_pulse"].control_attrs
     finally:
         _restore_steam_gate(prior)
 

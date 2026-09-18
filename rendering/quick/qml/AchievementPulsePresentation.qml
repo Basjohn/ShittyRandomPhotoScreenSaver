@@ -11,6 +11,38 @@ OverlayWidget {
     signal settingsRequested(string target)
     signal storeRequested()
 
+    // CUSTOM child editing observes only descriptor-admitted major visual
+    // targets. The shared edit overlay owns handles; Python/session owns the
+    // normalized factor and persistence. Every role reports the *family-wide*
+    // minimum content box implied by the current three-role layout so releasing
+    // any one child can admit grow-only outer content_extent once, without a
+    // geometry feedback loop or family-owned parent resize.
+    customEditableChildRoles: {
+        const roles = []
+        if (artworkFrame.visible) {
+            roles.push({
+                "roleId": "artwork",
+                "target": artworkFrame,
+                "requirementTarget": normalContent
+            })
+        }
+        if (latestArtworkFrame.visible) {
+            roles.push({
+                "roleId": "badge",
+                "target": latestArtworkFrame,
+                "requirementTarget": normalContent
+            })
+        }
+        if (progressPulse.visible) {
+            roles.push({
+                "roleId": "progress_circle",
+                "target": progressPulse,
+                "requirementTarget": normalContent
+            })
+        }
+        return roles
+    }
+
     readonly property real authoredWidth: achievementModel.authoredWidth
     readonly property real authoredHeight: achievementModel.authoredHeight
     readonly property real baseAuthoredWidth: achievementModel.baseAuthoredWidth
@@ -162,26 +194,61 @@ OverlayWidget {
             visible: achievementRoot.achievementModel.viewState !== "connect_required"
             anchors.fill: parent
 
-            readonly property bool verticalArtwork:
+            readonly property bool authoredVerticalArtwork:
                 achievementRoot.achievementModel.showArtwork
                 && (achievementRoot.achievementModel.artworkShape === "square"
                     || achievementRoot.achievementModel.artworkShape === "portrait")
-            readonly property real artworkWidth: verticalArtwork
+            readonly property real authoredArtworkWidth: authoredVerticalArtwork
                 ? achievementRoot.achievementModel.squareArtworkSize : 180.0
-            readonly property real artworkHeight:
+            readonly property real authoredArtworkHeight:
                 achievementRoot.achievementModel.artworkShape === "portrait"
-                    ? artworkWidth * 1.4
-                    : (verticalArtwork ? artworkWidth : 86.0)
+                    ? authoredArtworkWidth * 1.4
+                    : (authoredVerticalArtwork ? authoredArtworkWidth : 86.0)
+            readonly property real artworkWidth: authoredArtworkWidth
+                * achievementRoot.achievementModel.customArtworkWidthScale
+            readonly property real artworkHeight: authoredArtworkHeight
+                * achievementRoot.achievementModel.customArtworkHeightScale
+            readonly property real authoredArtworkX: authoredVerticalArtwork
+                ? 491.0 - authoredArtworkWidth / 2.0 : 402.0
             // Preserve the accepted 600px authored anchors exactly, then move
-            // the major artwork rail right by only the added CUSTOM width. This
-            // turns extra horizontal extent into title/field breathing room
-            // without changing the baseline composition by a pixel.
-            readonly property real artworkX: (verticalArtwork
-                ? 491.0 - artworkWidth / 2.0 : 402.0)
+            // the major artwork rail right by added CUSTOM width. Freeform
+            // artwork growth initially consumes that breathing room from the
+            // left; once the shared owner admits the required outer growth on
+            // release, the accepted authored rail is restored without changing
+            // the image's native-aspect PreserveAspectCrop policy.
+            readonly property real artworkX: authoredArtworkX
                 + achievementRoot.extraContentWidth
+                - (artworkWidth - authoredArtworkWidth)
+            readonly property real authoredMetricY: authoredVerticalArtwork
+                ? 14.0 + authoredArtworkHeight + 6.0 : 108.0
+            readonly property real metricY: authoredMetricY
+                + (artworkHeight - authoredArtworkHeight)
             readonly property real titleWidth: !achievementRoot.achievementModel.showArtwork
                 ? Math.max(120.0, authoredCanvas.width - 36.0)
                 : Math.max(120.0, artworkX - 32.0)
+
+            // One family-wide grow-only requirement. Width/height expansion is
+            // the maximum extra envelope demanded by any admitted child, not a
+            // sum: the same outer growth restores the authored clearance for
+            // the right artwork rail, bottom-left progress role and unlock badge.
+            readonly property real artworkExtraWidth: artworkFrame.visible
+                ? Math.max(0.0, artworkWidth - authoredArtworkWidth) : 0.0
+            readonly property real artworkExtraHeight: artworkFrame.visible
+                ? Math.max(0.0, artworkHeight - authoredArtworkHeight) : 0.0
+            readonly property real badgeExtraWidth: latestArtworkFrame.visible
+                ? Math.max(0.0, latestArtworkFrame.visualWidth - 40.0) : 0.0
+            readonly property real badgeExtraHeight: latestArtworkFrame.visible
+                ? Math.max(0.0, latestArtworkFrame.visualHeight - 40.0) : 0.0
+            readonly property real progressExtraSize: progressPulse.visible
+                ? Math.max(0.0, progressPulse.visualSize - 108.0) : 0.0
+            readonly property real requiredContentWidth:
+                achievementRoot.baseAuthoredWidth + Math.max(
+                    artworkExtraWidth, badgeExtraWidth, progressExtraSize
+                )
+            readonly property real requiredContentHeight:
+                achievementRoot.baseAuthoredHeight + Math.max(
+                    artworkExtraHeight, badgeExtraHeight, progressExtraSize
+                )
 
             Item {
                 id: artworkFrame
@@ -380,6 +447,11 @@ OverlayWidget {
                     }
                     return Math.min(
                         required,
+                        // Preserve the authored left anchor while CUSTOM scales
+                        // the intrinsic badge from its bottom-right handle. The
+                        // shared grow-only outer requirement supplies extra room
+                        // after release rather than sliding the badge away from
+                        // the pointer during the gesture.
                         Math.max(18.0, normalContent.titleWidth - width)
                     )
                 }
@@ -387,6 +459,10 @@ OverlayWidget {
                 y: 130.0
                 width: 40.0
                 height: 40.0
+                scale: achievementRoot.achievementModel.customBadgeWidthScale
+                transformOrigin: Item.TopLeft
+                readonly property real visualWidth: width * scale
+                readonly property real visualHeight: height * scale
 
                 // The Steam achievement icon already contains its ornate frame.
                 // Do not put it inside a second dark rounded panel/border: that
@@ -431,8 +507,7 @@ OverlayWidget {
                 objectName: "achievementMetric"
                 visible: achievementRoot.achievementModel.metricValue.length > 0
                 x: normalContent.artworkX - 10.0
-                y: normalContent.verticalArtwork
-                    ? 14.0 + normalContent.artworkHeight + 6.0 : 108.0
+                y: normalContent.metricY
                 width: normalContent.artworkWidth + 20.0
                 height: 28.0
                 text: achievementRoot.achievementModel.metricLabel
@@ -461,12 +536,15 @@ OverlayWidget {
                     && achievementRoot.achievementModel.totalFieldEnabled
                     && achievementRoot.achievementModel.viewState === "content"
                 x: 51.0
-                y: authoredCanvas.height - height - 20.0
+                y: authoredCanvas.height - visualSize - 20.0
                 width: 108.0
                 height: 108.0
+                scale: achievementRoot.achievementModel.customProgressCircleScale
+                transformOrigin: Item.TopLeft
                 z: 2
 
                 property real pulseLevel: 0.0
+                readonly property real visualSize: width * scale
                 // Apply the requested percentage reduction after HorizontalFit.
                 // Changing only font.pointSize is not sufficient because fitted text
                 // may already be below that ceiling.  This is presentation-only:
@@ -635,7 +713,9 @@ OverlayWidget {
                     readonly property int compactRow: Math.floor(index / columnCount)
                     readonly property int column: index % columnCount
                     readonly property real columnGap: 9.0
-                    readonly property real fieldAreaLeft: progressPulse.visible ? 208.0 : 18.0
+                    readonly property real fieldAreaLeft: progressPulse.visible
+                        ? progressPulse.x + progressPulse.visualSize + 49.0
+                        : 18.0
                     readonly property real fieldAreaWidth: Math.max(
                         1.0, authoredCanvas.width - fieldAreaLeft
                             - (progressPulse.visible ? 19.0 : 18.0)
