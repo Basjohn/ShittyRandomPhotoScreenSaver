@@ -28,10 +28,7 @@ from core.settings.visualizer_presets import (
     resolve_preset_index_from_mapping,
 )
 from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
-from rendering.widget_descriptors import (
-    get_widget_position_option_labels,
-    get_widget_runtime_descriptor,
-)
+from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs import shared_styles
@@ -467,21 +464,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_monitor_default = tab._widget_default('media', 'monitor')
     tab._set_combo_text(tab.media_monitor_combo, str(media_monitor_default))
     media_disp_row.addStretch()
-
-    media_descriptor = get_widget_runtime_descriptor("media")
-    if media_descriptor is not None and len(media_descriptor.custom_child_roles) > 1:
-        tab.media_child_collision_enabled = QCheckBox("Child Collision")
-        tab.media_child_collision_enabled.setProperty("circleIndicator", True)
-        tab.media_child_collision_enabled.setChecked(
-            tab._default_bool("media", "child_collision_enabled")
-        )
-        tab.media_child_collision_enabled.setToolTip(
-            "Prevent editable Media child elements from overlapping each other in CUSTOM Edit. "
-            "Turn this off to let children overlap and pass through one another; snapping, "
-            "alignment guides and the parent boundary remain active."
-        )
-        tab.media_child_collision_enabled.stateChanged.connect(tab._save_settings)
-        provider_layout.addWidget(tab.media_child_collision_enabled)
 
     media_font_family_row = _aligned_row(provider_layout, "Font:")
     tab.media_font_combo = StyledFontComboBox(size_variant="hero")
@@ -1079,10 +1061,6 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.media_font_combo.setCurrentFont(QFont(tab._config_str('media', media_config, 'font_family')))
     tab.media_font_size.setValue(tab._config_int('media', media_config, 'font_size'))
     tab.media_margin.setValue(tab._config_int('media', media_config, 'margin'))
-    if hasattr(tab, "media_child_collision_enabled"):
-        tab.media_child_collision_enabled.setChecked(
-            tab._config_bool('media', media_config, 'child_collision_enabled')
-        )
     tab.media_show_background.setChecked(tab._config_bool('media', media_config, 'show_background'))
     media_opacity_pct = int(tab._config_float('media', media_config, 'bg_opacity') * 100)
     tab.media_bg_opacity.setValue(media_opacity_pct)
@@ -1408,11 +1386,6 @@ def save_media_settings(tab: WidgetsTab) -> dict:
         'font_family': tab.media_font_combo.currentFont().family(),
         'font_size': tab.media_font_size.value(),
         'margin': tab.media_margin.value(),
-        'child_collision_enabled': (
-            tab.media_child_collision_enabled.isChecked()
-            if hasattr(tab, 'media_child_collision_enabled')
-            else tab._default_bool('media', 'child_collision_enabled')
-        ),
         'show_background': tab.media_show_background.isChecked(),
         'bg_opacity': tab.media_bg_opacity.value() / 100.0,
         'color': [tab._media_color.red(), tab._media_color.green(),

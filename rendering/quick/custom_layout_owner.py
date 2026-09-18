@@ -224,34 +224,30 @@ class QuickCustomLayoutOwner:
     @staticmethod
     def _resolve_child_collision_enabled(
         widgets: Mapping[str, Any],
-        widget_id: str,
         descriptor: WidgetRuntimeDescriptor,
     ) -> bool:
-        """Resolve the widget-scoped child/child collision preference.
+        """Resolve the one global child/child collision preference.
 
-        A single editable child cannot collide with a sibling, so no product
-        setting is required for those families yet.  As soon as a descriptor
-        exposes multiple editable roles the canonical Settings default becomes
-        mandatory.  This makes rollout failures loud instead of quietly growing
-        another shadow fallback.
+        Families with only one editable child have no peer collision to resolve,
+        so they stay trivially enabled. Multi-role families all consume the same
+        ``widgets.global.child_collision_enabled`` preference. Keeping the switch
+        global prevents rollout slices from growing family-local shadow settings.
         """
 
         if len(descriptor.custom_child_roles) <= 1:
             return True
         default = bool(
-            require_canonical_default(
-                f"widgets.{widget_id}.child_collision_enabled"
-            )
+            require_canonical_default("widgets.global.child_collision_enabled")
         )
-        section = widgets.get(widget_id, {})
-        if not isinstance(section, Mapping):
+        global_config = widgets.get("global", {})
+        if not isinstance(global_config, Mapping):
             return default
-        return bool(section.get("child_collision_enabled", default))
+        return bool(global_config.get("child_collision_enabled", default))
 
     def _on_settings_changed(self, key: str, value: object) -> None:
-        """Live-refresh the Edit-only peer collision preference.
+        """Live-refresh the global Edit-only peer collision preference.
 
-        WidgetsTab writes the structured ``widgets`` root.  Updating an active
+        WidgetsTab writes the structured ``widgets`` root. Updating an active
         CUSTOM session here is event-driven and mutates only the session flag;
         no geometry or CUSTOM payload is rewritten, and nothing runs on render
         cadence or outside a Settings change event.
@@ -266,7 +262,6 @@ class QuickCustomLayoutOwner:
                 continue
             enabled = self._resolve_child_collision_enabled(
                 widgets,
-                item.source_key.widget_id,
                 descriptor,
             )
             if item.child_collision_enabled == enabled:
@@ -1707,7 +1702,6 @@ class QuickCustomLayoutOwner:
                 custom_child_roles=descriptor.custom_child_roles,
                 child_collision_enabled=self._resolve_child_collision_enabled(
                     widgets,
-                    widget_id,
                     descriptor,
                 ),
                 baseline_child_sizes=committed_child_sizes,

@@ -184,6 +184,8 @@ def _fake_general_tab(existing_shadows: dict) -> SimpleNamespace:
     tab.widget_text_shadows_enabled = QCheckBox()
     tab.widget_header_shadows_enabled = QCheckBox()
     tab.widget_stacking_enabled = QCheckBox()
+    tab.widget_child_collision_enabled = QCheckBox()
+    tab.widget_child_collision_enabled.setChecked(False)
     for name, value in (
         (
             "widget_shadow_darkness_spin",

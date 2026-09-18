@@ -324,7 +324,6 @@
           255
         ],
         "border_opacity": 1.0,
-        "child_collision_enabled": false,
         "color": [
           255,
           255,
@@ -408,7 +407,6 @@
           38
         ],
         "capsule_font_size": 15,
-        "child_collision_enabled": false,
         "color": [
           255,
           255,
@@ -621,6 +619,7 @@
       },
       "global": {
         "card_border_width_px": 4,
+        "child_collision_enabled": false,
         "stacking_enabled": true
       },
       "gmail": {
@@ -729,7 +728,6 @@
           255
         ],
         "border_opacity": 1.0,
-        "child_collision_enabled": false,
         "color": [
           255,
           255,

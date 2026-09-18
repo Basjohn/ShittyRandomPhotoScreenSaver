@@ -123,6 +123,10 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     achievement_qml = _text("rendering/quick/qml/AchievementPulsePresentation.qml")
     media_qml = _text("rendering/quick/qml/MediaPresentation.qml")
     abandonment_qml = _text("rendering/quick/qml/AbandonmentIssuesPresentation.qml")
+    general_settings = _text("ui/tabs/widgets_tab_defaults.py")
+    media_settings = _text("ui/tabs/widgets_tab_media.py")
+    steam_settings = _text("ui/tabs/widgets_tab_steam.py")
+    canonical_defaults = _text("core/settings/default_settings.py")
 
     assert 'CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY = "child_geometry"' in child
     assert "class CustomChildRoleDescriptor" in child
@@ -153,8 +157,14 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert "height - next_visible_height" in child
     assert 'QByteArray(b"presentationItem")' in overlay_model
     assert 'QByteArray(b"childCollisionEnabled")' in overlay_model
-    assert "child_collision_enabled: bool = True" in session
-    assert 'f"widgets.{widget_id}.child_collision_enabled"' in owner
+    assert "child_collision_enabled: bool = False" in session
+    assert '"widgets.global.child_collision_enabled"' in owner
+    assert 'f"widgets.{widget_id}.child_collision_enabled"' not in owner
+    assert 'QCheckBox("Enable Child Widget Collisions")' in general_settings
+    assert 'tab._default_bool("global", "child_collision_enabled")' in general_settings
+    assert "media_child_collision_enabled" not in media_settings
+    assert 'f"{key}_child_collision_enabled"' not in steam_settings
+    assert canonical_defaults.count("'child_collision_enabled': False") == 1
     assert "if (editFrame.childCollisionEnabled)" in qml
     # Disabling peer collision must not disable sibling alignment discovery or
     # fixed family obstacles.  The peer-collision gate belongs only to
