@@ -93,9 +93,18 @@ class TestWidgetsTab:
             tab._refresh_custom_resize_lock_state()
             assert owned_lock_scopes <= set(tab._custom_resize_lock_notice_labels)
 
+            # A queued save captured while this page was built must be
+            # invalidated by retirement, not allowed to access deleted controls.
+            tab._save_coalesce_pending = True
+            pending_token = tab._save_coalesce_token
             tab._retire_widget_section(settings_section_id)
             qt_app.processEvents()
 
+            assert tab._save_coalesce_token == pending_token + 1
+            assert tab._save_coalesce_pending is False
+            tab._save_settings_now(pending_token)
+            assert tab._save_coalesce_token == pending_token + 1
+            assert tab._save_coalesce_pending is False
             assert idx not in tab._subtab_content_built
             assert idx not in tab._subtab_content_building
             assert owned_lock_scopes.isdisjoint(tab._custom_resize_lock_notice_labels)

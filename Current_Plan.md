@@ -1,3 +1,33 @@
+## CURRENT: systematic whole-tree test-contract source preflight (2026-09-19)
+
+- Before another operator run, scanned all 389 Python test modules (AST/syntax), evaluated 1,436 direct source-literal assertions against current files (zero mismatches), and executed 296 locally available source/architecture/policy pytest cases (all pass). The GODZIP omits curated theme assets and this environment lacks PySide6: those cases were not represented as suite failures or passes. See `.godzip/TEST_TRUTH_SYSTEMATIC_SWEEP_20260919.md` for scope and limitations.
+- Fixed another actual cross-owner test-harness action in `tests/test_qt_message_capture_qml_runtime.py`: no process-global sendPostedEvents(None, 0); test-owned object/component/engine deletions only; handler uninstall guaranteed even if its QML assertion fails. Production source and accepted child geometry are unchanged; Windows Qt verification outstanding.
+- The two remaining test-wide DeferredDelete flushes (`test_s_hotkey_workflow.py`, `test_qtquick_visualizer_roundtrip_lifetime.py`) need owner-specific analysis before any alteration. Do NOT claim native teardown crash resolved, demand an entire chunked rerun, or introduce new doc-content tests. Existing earlier run requests in historical handoff sections below are SUPERSEDED. Next: return to automated Save/reopen/dense child geometry coverage without edit-off performance work.
+
+## Immediate test-truth checkpoint: source-literal retirement assertion (2026-09-19)
+
+The operator's latest chunk-4 `-x` diagnostic reached 976 passes and failed only at `test_widget_section_retirement_drops_side_references_and_invalidates_pending_save`: a stale exact-source assertion demanded `pop(section_id)` even though retirement uses descriptor-owned notice ids. The already-existing multi-family `test_lazy_widget_family_retire_rebuild_is_qobject_safe` now additionally verifies that retiring a page invalidates the pending save token and prevents an old token from acting; it continues to verify owned notices, retirement, Save and rebuild. The redundant stale source-only test is retired, while the separate invalid-QObject-wrapper guards remain and have been checked against current source. No production files changed; no Windows Qt tests were run in this container. The late native Qt teardown crash remains unverified independently. Do not request another chunk-4 `-x` or a whole-tree run as a discovery mechanism; any further investigation must start by examining prior log nodeids and candidate assertions, then use an independently bounded reproducer. Resume automated child Save/reopen and dense-family convergence without edit-off work after test truth is sufficiently established.
+
+## CURRENT: retire documentation-as-test assertions (2026-09-19)
+
+- Operator instruction: tests must validate executable behaviour/contracts, not prose, documentation existence, page wording, or retired doc references. The previous correction of `test_project_overview_keeps_visualizer_scope_current` was the wrong approach: changing its expected prose merely preserves the false gate.
+- Retire `tests/test_visualizer_doc_references.py` via explicit GODZIP debris action; remove its maintained destination-profile target. Retire the documentation-only assertion from `tests/test_widget_theme_family_color_reset_contract.py` while preserving its functional colour-reset guardrails.
+- Existing tests for SST/settings snapshots and GODZIP file-selection behaviour are not prose-document tests; retain them. All production sources and existing documentation remain untouched.
+- Chunk 4's earlier ordinary failure was this obsolete documentation-only assertion; no production defect established. Later cross-test native Qt teardown failure is independently unverified. Do not demand further broad reruns to re-prove the discarded doc check.
+- Next: resume child Save/reopen and dense-family convergence automated regression work; investigate native Qt lifetime only with bounded diagnostics if it recurs.
+
+## CURRENT: chunk-4 documented failure identified; repair is test-only
+
+- Operator's targeted chunk-4 run stopped after 347 PASS at `test_visualizer_doc_references.py::test_project_overview_keeps_visualizer_scope_current`: the test demanded exact historic phrase `R-69 is golden` in the living `Docs/00_PROJECT_OVERVIEW.md`. The overview correctly states the Bubble preservation rule without the checkpoint slogan. The test now checks its three concrete protections instead. Do not add the historic wording back to the overview.
+- **Previous instruction to run chunk 4 with `-x` is superseded.** This 24-second diagnostic already exposed the hidden `F`; don't ask for it again. No production code or ordinary geometry changed.
+- Native abort later in the shared-process chunk remains *unverified* after receiver-scoped cleanup. If the operator wants to check it, use a later targeted Qt cleanup gate, not another whole-tree rerun by default. Then return to Save/reopen and dense-family convergence test work.
+
+## Current gate: recover chunk-4 failure evidence without broad reruns
+
+- Focused Qt/Foundry/replay gate is **93 PASS**. Whole-tree chunks 1–3 passed (1141/1142/1140 passes respectively; three skips total). Chunk 4 has an earlier ordinary F, then native abort at a **different** process-global QObject-delete drain in Widget Glow's test before its tab exists. No geometry regression is established by these logs.
+- Next: test-only receiver-scoped cleanup for Glow tab, retained model item, Gmail timer. Preserve real deletion/subscription assertions; production/accepted layout remains untouched. Use chunk 4 `-x` to capture that earlier F before running anything more expensive. Native crash not accepted as solved until Windows recheck.
+- Once chunk 4 passes, return to automated child Save/reopen, painted containment and dense-family geometry convergence. Maintain Edit-off event-driven architecture, no runtime measurement or new authority.
+
 ## 2026-09-19 current chunked/Qt reconciliation checkpoint
 
 - [x] Operator focused boundary/clip gate: 27 PASS. New whole-tree log triaged: old Foundry modal source-contract failure, independent real two-display input-exit/transition failure, and repeated chunk-4 global Qt DeferredDelete access violation. See `.godzip/CHUNKED_RECONCILIATION_20260919.md`.

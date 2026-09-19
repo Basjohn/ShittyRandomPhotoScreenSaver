@@ -375,7 +375,9 @@ def test_reconstruction_destroys_shared_timer_and_resource_record(qt_app):
         assert owner.is_retired()
         assert shared_gmail_owner_count() == 0
         assert not timer.isActive()
-        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        # Only the retired generation's timer belongs to this assertion.
+        # A process-global delete drain can also retire unrelated Qt scenes.
+        QCoreApplication.sendPostedEvents(timer, QEvent.Type.DeferredDelete)
         assert not shiboken6.isValid(timer)
         assert resources.get_all_resources() == []
         manager.tasks.clear()

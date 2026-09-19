@@ -62,6 +62,7 @@ DESTINATION_PROFILE = (
     "test_qtquick_child_clip_scene.py",  # real Qt card/accessory clip ancestry through reflow and Edit
     "test_qtquick_child_edit_off_dependency_contract.py",  # edit-off observer/feedback ownership guards
     "test_visualizer_replay_cleanup_contract.py",  # offline replay drains only its own QObject
+    "test_qt_test_deferred_delete_ownership_contract.py",  # test-owned Qt deletion only
     "test_visualizer_replay.py",  # file-isolated replay floors and deterministic playback
     "test_godzip_foundry_script_runner.py",  # current in-editor command review, not old modal
     "test_qtquick_edit_pointer_source_contract.py",
@@ -146,7 +147,6 @@ DESTINATION_PROFILE = (
     "test_visualizer_playback_gating.py",
     "test_p2_analysis_freshness.py",
     "test_visualizer_viewport_scaling_contracts.py",
-    "test_visualizer_doc_references.py",
     "test_runtime_perf_policy_contracts.py",
     "test_tooling_ownership.py",
     "test_widgets_tab_current.py::TestWidgetsTab::test_widgets_tab_disables_media_size_controls_when_custom_is_active",
