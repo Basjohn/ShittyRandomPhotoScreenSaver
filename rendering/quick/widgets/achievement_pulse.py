@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
-import math
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +24,12 @@ from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
 from core.steam.achievement_pulse import AchievementPulseSelection
+from rendering.custom_child_geometry import (
+    CustomChildSize,
+    child_role_map,
+    clamp_child_geometry,
+)
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 from widgets.steam_achievement_preparation import (
     AchievementPulsePreparedPresentation,
     AchievementPulseRuntimeConfig,
@@ -554,9 +559,21 @@ class AchievementPulsePresentationModel(QObject):
         # parent session owns persistence. Keep all admitted child roles in one
         # retained model state so one payload application emits at most one
         # geometry-only notification during active editing.
-        self._custom_artwork_size: tuple[float, float] = (1.0, 1.0)
-        self._custom_badge_size: tuple[float, float] = (1.0, 1.0)
-        self._custom_progress_circle_size: tuple[float, float] = (1.0, 1.0)
+        self._custom_header_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_header_alignment = "left"
+        self._custom_header_anchor = ""
+        self._custom_artwork_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_badge_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_progress_circle_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_game_name_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_game_name_alignment = "left"
+        self._custom_achievement_list_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_achievement_list_alignment = "left"
+        self._custom_field_group_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        descriptor = get_widget_runtime_descriptor("achievement_pulse")
+        if descriptor is None or not descriptor.custom_child_roles:
+            raise RuntimeError("Achievement Pulse CUSTOM child-role descriptor is missing")
+        self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
 
     @property
     def config(self) -> AchievementPulsePresentationConfig:
@@ -763,82 +780,80 @@ class AchievementPulsePresentationModel(QObject):
         self.stateChanged.emit()
         return True
 
-    @staticmethod
-    def _normalized_custom_size(
-        width_scale: object,
-        height_scale: object,
-        *,
-        minimum: float,
-        maximum: float,
-        uniform: bool,
-    ) -> tuple[float, float]:
-        try:
-            width = float(width_scale)
-            height = float(height_scale)
-        except (TypeError, ValueError):
-            width = height = 1.0
-        if not math.isfinite(width) or width <= 0.0:
-            width = 1.0
-        if not math.isfinite(height) or height <= 0.0:
-            height = 1.0
-        resolved_width = max(float(minimum), min(float(maximum), width))
-        resolved_height = max(float(minimum), min(float(maximum), height))
-        if uniform:
-            # Persisted/session input for intrinsic shapes is canonicalized to
-            # one scalar before QML sees it. This keeps a square badge square and
-            # the progress role circular even if an old/hand-edited payload has
-            # mismatched width/height values.
-            resolved_height = resolved_width
-        return resolved_width, resolved_height
-
     def set_custom_child_geometry(self, child_geometry: object) -> bool:
-        """Apply all Achievement child-role factors as one retained update.
+        """Project descriptor-normalized dense-card child geometry.
 
-        The shared CUSTOM session remains the persistence/math owner. This
-        family boundary merely projects the already-normalized role payload into
-        retained presentation state, batching the notification so a drag sample
-        does not wake unrelated model bindings multiple times.
+        The shared CUSTOM owner remains authoritative for gesture math and
+        persistence. Achievement Pulse only projects the retained result, using
+        one geometry-only signal so pointer samples do not wake provider/state
+        bindings or create a family-local transaction path.
         """
 
         raw = child_geometry if isinstance(child_geometry, Mapping) else {}
 
-        def _role(role_id: str) -> Mapping[str, object]:
-            value = raw.get(role_id)
-            return value if isinstance(value, Mapping) else {}
+        def _resolved(role_id: str) -> CustomChildSize:
+            role = self._custom_child_roles[role_id]
+            value = raw.get(role_id) if isinstance(raw, Mapping) else None
+            if not isinstance(value, Mapping):
+                return CustomChildSize()
+            return clamp_child_geometry(
+                role,
+                value.get("width_scale", 1.0),
+                value.get("height_scale", 1.0),
+                value.get("x_offset", 0.0),
+                value.get("y_offset", 0.0),
+                value.get("alignment"),
+                value.get("anchor"),
+            )
 
-        artwork = _role("artwork")
-        badge = _role("badge")
-        progress = _role("progress_circle")
-        next_artwork = self._normalized_custom_size(
-            artwork.get("width_scale", 1.0),
-            artwork.get("height_scale", 1.0),
-            minimum=0.40,
-            maximum=3.00,
-            uniform=False,
+        header = _resolved("header")
+        artwork = _resolved("artwork")
+        badge = _resolved("badge")
+        progress = _resolved("progress_circle")
+        game_name = _resolved("game_name")
+        achievement_list = _resolved("achievement_list")
+        field_group = _resolved("field_group")
+        next_values = (
+            (header.width_scale, header.height_scale, header.x_offset, header.y_offset),
+            header.alignment or self._custom_child_roles["header"].authored_alignment,
+            str(header.anchor or ""),
+            (artwork.width_scale, artwork.height_scale, artwork.x_offset, artwork.y_offset),
+            (badge.width_scale, badge.height_scale, badge.x_offset, badge.y_offset),
+            (progress.width_scale, progress.height_scale, progress.x_offset, progress.y_offset),
+            (game_name.width_scale, game_name.height_scale, game_name.x_offset, game_name.y_offset),
+            game_name.alignment or self._custom_child_roles["game_name"].authored_alignment,
+            (achievement_list.width_scale, achievement_list.height_scale, achievement_list.x_offset, achievement_list.y_offset),
+            achievement_list.alignment or self._custom_child_roles["achievement_list"].authored_alignment,
+            (field_group.width_scale, field_group.height_scale, field_group.x_offset, field_group.y_offset),
         )
-        next_badge = self._normalized_custom_size(
-            badge.get("width_scale", 1.0),
-            badge.get("height_scale", 1.0),
-            minimum=0.55,
-            maximum=2.50,
-            uniform=True,
+        current_values = (
+            self._custom_header_geometry,
+            self._custom_header_alignment,
+            self._custom_header_anchor,
+            self._custom_artwork_geometry,
+            self._custom_badge_geometry,
+            self._custom_progress_circle_geometry,
+            self._custom_game_name_geometry,
+            self._custom_game_name_alignment,
+            self._custom_achievement_list_geometry,
+            self._custom_achievement_list_alignment,
+            self._custom_field_group_geometry,
         )
-        next_progress = self._normalized_custom_size(
-            progress.get("width_scale", 1.0),
-            progress.get("height_scale", 1.0),
-            minimum=0.60,
-            maximum=2.25,
-            uniform=True,
-        )
-        if (
-            next_artwork == self._custom_artwork_size
-            and next_badge == self._custom_badge_size
-            and next_progress == self._custom_progress_circle_size
-        ):
+        if next_values == current_values:
             return False
-        self._custom_artwork_size = next_artwork
-        self._custom_badge_size = next_badge
-        self._custom_progress_circle_size = next_progress
+        (
+            self._custom_header_geometry,
+            self._custom_header_alignment,
+            self._custom_header_anchor,
+            self._custom_artwork_geometry,
+            self._custom_badge_geometry,
+            self._custom_progress_circle_geometry,
+            self._custom_game_name_geometry,
+            self._custom_game_name_alignment,
+            self._custom_achievement_list_geometry,
+            self._custom_achievement_list_alignment,
+            self._custom_field_group_geometry,
+        ) = next_values
         self.customGeometryChanged.emit()
         return True
 
@@ -964,24 +979,128 @@ class AchievementPulsePresentationModel(QObject):
         return float(self.config.square_artwork_size)
 
     @Property(float, notify=customGeometryChanged)
+    def customHeaderWidthScale(self) -> float:
+        return float(self._custom_header_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderHeightScale(self) -> float:
+        return float(self._custom_header_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderXOffset(self) -> float:
+        return float(self._custom_header_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderYOffset(self) -> float:
+        return float(self._custom_header_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customHeaderAlignment(self) -> str:
+        return self._custom_header_alignment
+
+    @Property(str, notify=customGeometryChanged)
+    def customHeaderAnchor(self) -> str:
+        return self._custom_header_anchor
+
+    @Property(float, notify=customGeometryChanged)
     def customArtworkWidthScale(self) -> float:
-        return float(self._custom_artwork_size[0])
+        return float(self._custom_artwork_geometry[0])
 
     @Property(float, notify=customGeometryChanged)
     def customArtworkHeightScale(self) -> float:
-        return float(self._custom_artwork_size[1])
+        return float(self._custom_artwork_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkXOffset(self) -> float:
+        return float(self._custom_artwork_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customArtworkYOffset(self) -> float:
+        return float(self._custom_artwork_geometry[3])
 
     @Property(float, notify=customGeometryChanged)
     def customBadgeWidthScale(self) -> float:
-        return float(self._custom_badge_size[0])
+        return float(self._custom_badge_geometry[0])
 
     @Property(float, notify=customGeometryChanged)
     def customBadgeHeightScale(self) -> float:
-        return float(self._custom_badge_size[1])
+        return float(self._custom_badge_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customBadgeXOffset(self) -> float:
+        return float(self._custom_badge_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customBadgeYOffset(self) -> float:
+        return float(self._custom_badge_geometry[3])
 
     @Property(float, notify=customGeometryChanged)
     def customProgressCircleScale(self) -> float:
-        return float(self._custom_progress_circle_size[0])
+        return float(self._custom_progress_circle_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customProgressCircleXOffset(self) -> float:
+        return float(self._custom_progress_circle_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customProgressCircleYOffset(self) -> float:
+        return float(self._custom_progress_circle_geometry[3])
+
+    @Property(float, notify=customGeometryChanged)
+    def customGameNameWidthScale(self) -> float:
+        return float(self._custom_game_name_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customGameNameHeightScale(self) -> float:
+        return float(self._custom_game_name_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customGameNameXOffset(self) -> float:
+        return float(self._custom_game_name_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customGameNameYOffset(self) -> float:
+        return float(self._custom_game_name_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customGameNameAlignment(self) -> str:
+        return self._custom_game_name_alignment
+
+    @Property(float, notify=customGeometryChanged)
+    def customAchievementListWidthScale(self) -> float:
+        return float(self._custom_achievement_list_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customAchievementListHeightScale(self) -> float:
+        return float(self._custom_achievement_list_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customAchievementListXOffset(self) -> float:
+        return float(self._custom_achievement_list_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customAchievementListYOffset(self) -> float:
+        return float(self._custom_achievement_list_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customAchievementListAlignment(self) -> str:
+        return self._custom_achievement_list_alignment
+
+    @Property(float, notify=customGeometryChanged)
+    def customFieldGroupWidthScale(self) -> float:
+        return float(self._custom_field_group_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFieldGroupHeightScale(self) -> float:
+        return float(self._custom_field_group_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFieldGroupXOffset(self) -> float:
+        return float(self._custom_field_group_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFieldGroupYOffset(self) -> float:
+        return float(self._custom_field_group_geometry[3])
 
     @Property(bool, notify=stateChanged)
     def doubleCapsules(self) -> bool:

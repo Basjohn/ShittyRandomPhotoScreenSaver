@@ -19,6 +19,30 @@ Item {
     // childrenRect stays intrinsic (it does not depend on the assigned width).
     readonly property real preferredContentHeight: contentColumn.childrenRect.height
 
+    readonly property var childGeometry: clockModel.customChildGeometry
+    function childWidthScale(roleId) {
+        const value = childGeometry ? childGeometry[roleId] : null
+        return value && value.width_scale !== undefined ? Number(value.width_scale) : 1.0
+    }
+    function childHeightScale(roleId) {
+        const value = childGeometry ? childGeometry[roleId] : null
+        return value && value.height_scale !== undefined ? Number(value.height_scale) : 1.0
+    }
+    function childOffsetX(roleId) {
+        const value = childGeometry ? childGeometry[roleId] : null
+        return (value && value.x_offset !== undefined ? Number(value.x_offset) : 0.0)
+            * Math.max(160.0, preferredContentWidth)
+    }
+    function childOffsetY(roleId) {
+        const value = childGeometry ? childGeometry[roleId] : null
+        return (value && value.y_offset !== undefined ? Number(value.y_offset) : 0.0)
+            * Math.max(72.0, preferredContentHeight)
+    }
+    property alias customTimeTarget: timeText
+    property alias customSeparatorTarget: digitalSeparator
+    property alias customCalendarTarget: calendarText
+    property alias customTimezoneTarget: timezoneText
+
     Column {
         id: contentColumn
         objectName: "clockDigitalContent"
@@ -29,6 +53,10 @@ Item {
         ShadowedText {
             id: timeText
             objectName: "clockDigitalTime"
+            transform: [
+                Scale { origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("time_text"); yScale: digitalFace.childHeightScale("time_text") },
+                Translate { x: digitalFace.childOffsetX("time_text"); y: digitalFace.childOffsetY("time_text") }
+            ]
             width: contentColumn.width
             height: implicitHeight
             text: digitalFace.clockModel.timeText
@@ -53,7 +81,12 @@ Item {
             visible: digitalFace.clockModel.showSeparator
 
             Separator {
+                id: digitalSeparator
                 objectName: "clockDigitalSeparator"
+                transform: [
+                    Scale { origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("separator"); yScale: digitalFace.childHeightScale("separator") },
+                    Translate { x: digitalFace.childOffsetX("separator"); y: digitalFace.childOffsetY("separator") }
+                ]
                 width: separatorBand.width * 0.77
                 height: digitalFace.clockModel.separatorThickness
                 anchors.centerIn: parent
@@ -69,6 +102,10 @@ Item {
         ShadowedText {
             id: calendarText
             objectName: "clockDigitalCalendar"
+            transform: [
+                Scale { origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("calendar_text"); yScale: digitalFace.childHeightScale("calendar_text") },
+                Translate { x: digitalFace.childOffsetX("calendar_text"); y: digitalFace.childOffsetY("calendar_text") }
+            ]
             width: contentColumn.width
             height: visible ? implicitHeight : 0.0
             visible: text.length > 0
@@ -88,6 +125,10 @@ Item {
         ShadowedText {
             id: timezoneText
             objectName: "clockDigitalTimezone"
+            transform: [
+                Scale { origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("timezone_text"); yScale: digitalFace.childHeightScale("timezone_text") },
+                Translate { x: digitalFace.childOffsetX("timezone_text"); y: digitalFace.childOffsetY("timezone_text") }
+            ]
             width: contentColumn.width
             height: visible ? implicitHeight : 0.0
             visible: text.length > 0

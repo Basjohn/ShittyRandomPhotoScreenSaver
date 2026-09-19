@@ -11,39 +11,6 @@ OverlayWidget {
     signal settingsRequested(string target)
     signal storeRequested()
 
-    // CUSTOM child editing observes only descriptor-admitted major visual
-    // targets. The shared edit overlay owns handles; Python/session owns the
-    // normalized factor and persistence. Every role reports the *family-wide*
-    // minimum content box implied by the current three-role layout so releasing
-    // any one child can admit grow-only outer content_extent once, without a
-    // geometry feedback loop or family-owned parent resize.
-    customEditableChildRoles: {
-        const roles = []
-        if (artworkFrame.visible) {
-            roles.push({
-                "roleId": "artwork",
-                "target": artworkFrame,
-                "requirementTarget": normalContent
-            })
-        }
-        if (latestArtworkFrame.visible) {
-            roles.push({
-                "roleId": "badge",
-                "target": latestArtworkFrame,
-                "requirementTarget": normalContent
-            })
-        }
-        if (progressPulse.visible) {
-            roles.push({
-                "roleId": "progress_circle",
-                "target": progressPulse,
-                "requirementTarget": normalContent
-            })
-        }
-        return roles
-    }
-    customEditableChildRequirementTarget: normalContent
-
     readonly property real authoredWidth: achievementModel.authoredWidth
     readonly property real authoredHeight: achievementModel.authoredHeight
     readonly property real baseAuthoredWidth: achievementModel.baseAuthoredWidth
@@ -54,6 +21,216 @@ OverlayWidget {
         0.05,
         Math.min(width / authoredWidth, height / authoredHeight)
     )
+
+    // Dense child editing follows the same authored-rail contract proven by
+    // Abandonment Issues. Stable baselines are always derived from the base
+    // authored canvas; parent content_extent and sibling reflow are never fed
+    // back into the next child-size baseline.
+    readonly property real headerSafeInsetX: 18.0
+    readonly property real headerSafeInsetY: 14.0
+    readonly property real canonicalGameNameX: 18.0
+    readonly property real canonicalGameNameY: 62.0
+    readonly property real canonicalGameNameHeight: 34.0
+    readonly property real canonicalAchievementListX: 18.0
+    readonly property real canonicalAchievementListY: 100.0
+    readonly property real canonicalAchievementListHeight: 88.0
+    readonly property real canonicalBadgeWidth: 40.0
+    readonly property real canonicalBadgeHeight: 40.0
+    readonly property real canonicalBadgeY: 130.0
+    readonly property real canonicalProgressX: 51.0
+    readonly property real canonicalProgressSize: 108.0
+    readonly property real childReflowPlacementEpsilon: 0.0001
+    readonly property bool canonicalVerticalArtwork:
+        achievementModel.showArtwork
+            && (achievementModel.artworkShape === "square"
+                || achievementModel.artworkShape === "portrait")
+    readonly property real canonicalArtworkWidth: canonicalVerticalArtwork
+        ? achievementModel.squareArtworkSize : 180.0
+    readonly property real canonicalArtworkHeight:
+        achievementModel.artworkShape === "portrait"
+            ? canonicalArtworkWidth * 1.4
+            : (canonicalVerticalArtwork ? canonicalArtworkWidth : 86.0)
+    readonly property real canonicalArtworkX: canonicalVerticalArtwork
+        ? 491.0 - canonicalArtworkWidth / 2.0 : 402.0
+    readonly property real canonicalArtworkY: 14.0
+    readonly property real canonicalMetricY: canonicalVerticalArtwork
+        ? canonicalArtworkY + canonicalArtworkHeight + 6.0 : 108.0
+    readonly property real canonicalTitleWidth: !achievementModel.showArtwork
+        ? Math.max(120.0, baseAuthoredWidth - 36.0)
+        : Math.max(120.0, canonicalArtworkX - 32.0)
+
+    function childAxisOnAuthoredResizeRail(offset, scale, scalableExtent, normalizationExtent) {
+        const normalizedOffset = Number(offset || 0.0)
+        const resizeCompensation = Number(scalableExtent || 0.0)
+            * (1.0 - Number(scale || 1.0))
+            / Math.max(1.0, Number(normalizationExtent || 1.0))
+        return Math.abs(normalizedOffset) <= childReflowPlacementEpsilon
+            || Math.abs(normalizedOffset - resizeCompensation)
+                <= childReflowPlacementEpsilon
+    }
+
+    function childOnAuthoredResizeRail(
+            xOffset, yOffset, widthScale, heightScale,
+            scalableWidth, scalableHeight) {
+        return childAxisOnAuthoredResizeRail(
+                    xOffset, widthScale, scalableWidth, baseAuthoredWidth)
+            && childAxisOnAuthoredResizeRail(
+                    yOffset, heightScale, scalableHeight, baseAuthoredHeight)
+    }
+
+    readonly property bool artworkOnAuthoredRail: childOnAuthoredResizeRail(
+        achievementModel.customArtworkXOffset, achievementModel.customArtworkYOffset,
+        achievementModel.customArtworkWidthScale, achievementModel.customArtworkHeightScale,
+        canonicalArtworkWidth, canonicalArtworkHeight
+    )
+    readonly property bool badgeOnAuthoredRail: childOnAuthoredResizeRail(
+        achievementModel.customBadgeXOffset, achievementModel.customBadgeYOffset,
+        achievementModel.customBadgeWidthScale, achievementModel.customBadgeHeightScale,
+        canonicalBadgeWidth, canonicalBadgeHeight
+    )
+    readonly property bool progressOnAuthoredRail: childOnAuthoredResizeRail(
+        achievementModel.customProgressCircleXOffset, achievementModel.customProgressCircleYOffset,
+        achievementModel.customProgressCircleScale, achievementModel.customProgressCircleScale,
+        canonicalProgressSize, canonicalProgressSize
+    )
+    readonly property bool gameNameOnAuthoredRail: childOnAuthoredResizeRail(
+        achievementModel.customGameNameXOffset, achievementModel.customGameNameYOffset,
+        achievementModel.customGameNameWidthScale, achievementModel.customGameNameHeightScale,
+        canonicalTitleWidth, canonicalGameNameHeight
+    )
+    readonly property bool achievementListOnAuthoredRail: childOnAuthoredResizeRail(
+        achievementModel.customAchievementListXOffset, achievementModel.customAchievementListYOffset,
+        achievementModel.customAchievementListWidthScale, achievementModel.customAchievementListHeightScale,
+        canonicalTitleWidth, canonicalAchievementListHeight
+    )
+    readonly property bool fieldGroupOnAuthoredRail: childOnAuthoredResizeRail(
+        achievementModel.customFieldGroupXOffset, achievementModel.customFieldGroupYOffset,
+        achievementModel.customFieldGroupWidthScale, achievementModel.customFieldGroupHeightScale,
+        fieldGroupFrame.canonicalWidth, fieldGroupFrame.canonicalHeight
+    )
+
+    readonly property real gameNameLayoutHeightDelta: gameNameOnAuthoredRail
+        ? canonicalGameNameHeight * (achievementModel.customGameNameHeightScale - 1.0)
+        : 0.0
+    readonly property real progressLayoutWidthDelta: progressOnAuthoredRail
+        ? canonicalProgressSize * (achievementModel.customProgressCircleScale - 1.0)
+        : 0.0
+    // Right/bottom parent rails stay live only for canonical-size authored roles.
+    // This mirrors Abandonment's repaired BACKLOG rule and prevents child-driven
+    // containment growth from translating the same child again.
+    readonly property bool artworkFollowsParentRightRail: artworkOnAuthoredRail
+        && Math.abs(achievementModel.customArtworkWidthScale - 1.0)
+            <= childReflowPlacementEpsilon
+    readonly property real artworkParentReflowX: artworkFollowsParentRightRail
+        ? extraContentWidth : 0.0
+    readonly property bool progressFollowsParentBottomRail: progressOnAuthoredRail
+        && Math.abs(achievementModel.customProgressCircleScale - 1.0)
+            <= childReflowPlacementEpsilon
+    readonly property real progressParentReflowY: progressFollowsParentBottomRail
+        ? extraContentHeight : 0.0
+    readonly property bool fieldGroupFollowsParentBottomRail: fieldGroupOnAuthoredRail
+        && Math.abs(achievementModel.customFieldGroupHeightScale - 1.0)
+            <= childReflowPlacementEpsilon
+    readonly property real fieldGroupParentReflowY: fieldGroupFollowsParentBottomRail
+        ? extraContentHeight : 0.0
+
+    // CUSTOM child editing is descriptor admission only. The shared overlay owns
+    // handles, snapping/collision and gestures; this family supplies retained
+    // targets, authored reflow relationships and one stable requirement surface.
+    customEditableChildRoles: {
+        const roles = []
+        const normW = achievementRoot.baseAuthoredWidth
+        const normH = achievementRoot.baseAuthoredHeight
+        roles.push({
+            "roleId": "header",
+            "target": headerFrame,
+            "geometryDependencies": [authoredCanvas],
+            "normalizationWidth": normW,
+            "normalizationHeight": normH,
+            "semanticCornerInsetX":
+                (achievementRoot.width
+                    - achievementRoot.authoredWidth * achievementRoot.presentationScale) / 2.0
+                    + achievementRoot.headerSafeInsetX * achievementRoot.presentationScale,
+            "semanticCornerInsetY":
+                (achievementRoot.height
+                    - achievementRoot.authoredHeight * achievementRoot.presentationScale) / 2.0
+                    + achievementRoot.headerSafeInsetY * achievementRoot.presentationScale,
+            "requirementTarget": customChildRequirement
+        })
+        if (normalContent.visible && artworkFrame.visible) {
+            roles.push({
+                "roleId": "artwork",
+                "target": artworkFrame,
+                "occupiedTarget": artworkOccupiedFrame,
+                "geometryDependencies": [authoredCanvas, normalContent, artworkOccupiedFrame],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (normalContent.visible && gameTitle.visible) {
+            roles.push({
+                "roleId": "game_name",
+                "target": gameTitle,
+                "geometryDependencies": [authoredCanvas, normalContent],
+                "resizeReflowRoleIds": ["achievement_list", "badge"],
+                "resizeReflowAxes": ["vertical"],
+                "resizeReflowGate": gameTitle,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (normalContent.visible && achievementListFrame.visible) {
+            roles.push({
+                "roleId": "achievement_list",
+                "target": achievementListFrame,
+                "geometryDependencies": [authoredCanvas, normalContent],
+                "resizeReflowGate": achievementListFrame,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (normalContent.visible && latestArtworkFrame.visible) {
+            roles.push({
+                "roleId": "badge",
+                "target": latestArtworkFrame,
+                "geometryDependencies": [authoredCanvas, normalContent, achievementListFrame],
+                "resizeReflowGate": latestArtworkFrame,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (normalContent.visible && progressPulse.visible) {
+            roles.push({
+                "roleId": "progress_circle",
+                "target": progressPulse,
+                "geometryDependencies": [authoredCanvas, normalContent],
+                "resizeReflowRoleIds": ["field_group"],
+                "resizeReflowAxes": ["horizontal"],
+                "resizeReflowGate": progressPulse,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (normalContent.visible && fieldGroupFrame.visible) {
+            roles.push({
+                "roleId": "field_group",
+                "target": fieldGroupFrame,
+                "geometryDependencies": [authoredCanvas, normalContent],
+                "resizeReflowGate": fieldGroupFrame,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        return roles
+    }
+    customEditableChildObstacles: [connectionInfo]
+    customEditableChildRequirementTarget: customChildRequirement
 
     // Content-driven outer size (H option A): this card is a self-contained
     // authored canvas, so its preferred content size is the authored dimension
@@ -67,6 +244,79 @@ OverlayWidget {
     // committed CUSTOM rectangle leaves spare space *outside* the card rather
     // than stretching the shell around a shorter authored canvas.
     uniformScaleTransform: true
+
+    // One stable grow-only logical requirement for every dense role. Live
+    // parent-right/bottom rail displacement is subtracted back out so admitted
+    // outer growth cannot feed itself. This is observed only by selected Edit.
+    QtObject {
+        id: customChildRequirement
+
+        readonly property real headerVisualWidth: headerFrame.width
+            * achievementRoot.achievementModel.customHeaderWidthScale
+        readonly property real headerVisualHeight: headerFrame.height
+            * achievementRoot.achievementModel.customHeaderHeightScale
+        readonly property real headerStableRight:
+            achievementRoot.achievementModel.customHeaderAnchor.endsWith("right")
+                ? achievementRoot.baseAuthoredWidth - achievementRoot.headerSafeInsetX
+                : achievementRoot.headerSafeInsetX
+                    + achievementRoot.achievementModel.customHeaderXOffset
+                        * achievementRoot.baseAuthoredWidth
+                    + headerVisualWidth
+        readonly property real headerStableBottom:
+            achievementRoot.achievementModel.customHeaderAnchor.startsWith("bottom")
+                ? achievementRoot.baseAuthoredHeight - achievementRoot.headerSafeInsetY
+                : achievementRoot.headerSafeInsetY
+                    + achievementRoot.achievementModel.customHeaderYOffset
+                        * achievementRoot.baseAuthoredHeight
+                    + headerVisualHeight
+        readonly property real artworkRight: artworkFrame.visible
+            ? artworkFrame.x - achievementRoot.artworkParentReflowX
+                + artworkFrame.width
+            : 0.0
+        readonly property real artworkBottom: artworkFrame.visible
+            ? artworkFrame.y + artworkFrame.height : 0.0
+        readonly property real metricRight: metricText.visible
+            ? metricText.x - achievementRoot.artworkParentReflowX
+                + metricText.width
+            : 0.0
+        readonly property real metricBottom: metricText.visible
+            ? metricText.y + metricText.height : 0.0
+        readonly property real gameRight: gameTitle.visible
+            ? gameTitle.x + gameTitle.width : 0.0
+        readonly property real gameBottom: gameTitle.visible
+            ? gameTitle.y + gameTitle.height : 0.0
+        readonly property real listRight: achievementListFrame.visible
+            ? achievementListFrame.x + achievementListFrame.width : 0.0
+        readonly property real listBottom: achievementListFrame.visible
+            ? achievementListFrame.y + achievementListFrame.height : 0.0
+        readonly property real badgeRight: latestArtworkFrame.visible
+            ? latestArtworkFrame.x + latestArtworkFrame.visualWidth : 0.0
+        readonly property real badgeBottom: latestArtworkFrame.visible
+            ? latestArtworkFrame.y + latestArtworkFrame.visualHeight : 0.0
+        readonly property real progressRight: progressPulse.visible
+            ? progressPulse.x + progressPulse.visualSize : 0.0
+        readonly property real progressBottom: progressPulse.visible
+            ? progressPulse.y - achievementRoot.progressParentReflowY
+                + progressPulse.visualSize
+            : 0.0
+        readonly property real fieldRight: fieldGroupFrame.visible
+            ? fieldGroupFrame.x + fieldGroupFrame.width : 0.0
+        readonly property real fieldBottom: fieldGroupFrame.visible
+            ? fieldGroupFrame.y - achievementRoot.fieldGroupParentReflowY
+                + fieldGroupFrame.height
+            : 0.0
+
+        readonly property real requiredContentWidth: Math.max(
+            achievementRoot.baseAuthoredWidth,
+            headerStableRight, artworkRight, metricRight, gameRight, listRight,
+            badgeRight, progressRight, fieldRight
+        )
+        readonly property real requiredContentHeight: Math.max(
+            achievementRoot.baseAuthoredHeight,
+            headerStableBottom, artworkBottom, metricBottom, gameBottom, listBottom,
+            badgeBottom, progressBottom, fieldBottom
+        )
+    }
 
     TapHandler {
         enabled: achievementRoot.achievementModel.interactionEnabled
@@ -93,8 +343,37 @@ OverlayWidget {
             frameObjectName: "achievementHeaderFrame"
             logoObjectName: "achievementSteamLogo"
             textObjectName: "achievementHeaderText"
-            x: 18.0
-            y: 14.0
+            property real customEditPlacementCompensationX:
+                achievementRoot.achievementModel.customHeaderAnchor.length > 0
+                    ? x - (achievementRoot.headerSafeInsetX
+                        + achievementRoot.achievementModel.customHeaderXOffset
+                            * achievementRoot.baseAuthoredWidth)
+                    : 0.0
+            property real customEditPlacementCompensationY:
+                achievementRoot.achievementModel.customHeaderAnchor.length > 0
+                    ? y - (achievementRoot.headerSafeInsetY
+                        + achievementRoot.achievementModel.customHeaderYOffset
+                            * achievementRoot.baseAuthoredHeight)
+                    : 0.0
+            transformOrigin: Item.TopLeft
+            scale: achievementRoot.achievementModel.customHeaderWidthScale
+            x: achievementRoot.achievementModel.customHeaderAnchor.endsWith("right")
+                ? achievementRoot.authoredWidth - achievementRoot.headerSafeInsetX
+                    - width * scale
+                : (achievementRoot.achievementModel.customHeaderAnchor.endsWith("left")
+                    ? achievementRoot.headerSafeInsetX
+                    : achievementRoot.headerSafeInsetX
+                        + achievementRoot.achievementModel.customHeaderXOffset
+                            * achievementRoot.baseAuthoredWidth)
+            y: achievementRoot.achievementModel.customHeaderAnchor.startsWith("bottom")
+                ? achievementRoot.authoredHeight - achievementRoot.headerSafeInsetY
+                    - height * scale
+                : (achievementRoot.achievementModel.customHeaderAnchor.startsWith("top")
+                    ? achievementRoot.headerSafeInsetY
+                    : achievementRoot.headerSafeInsetY
+                        + achievementRoot.achievementModel.customHeaderYOffset
+                            * achievementRoot.baseAuthoredHeight)
+            contentReversed: achievementRoot.achievementModel.customHeaderAlignment === "right"
             label: achievementRoot.achievementModel.headerText
             logoSource: achievementRoot.achievementModel.logoSource
             fillColor: achievementRoot.achievementModel.headerFillColor
@@ -195,68 +474,31 @@ OverlayWidget {
             visible: achievementRoot.achievementModel.viewState !== "connect_required"
             anchors.fill: parent
 
-            readonly property bool authoredVerticalArtwork:
-                achievementRoot.achievementModel.showArtwork
-                && (achievementRoot.achievementModel.artworkShape === "square"
-                    || achievementRoot.achievementModel.artworkShape === "portrait")
-            readonly property real authoredArtworkWidth: authoredVerticalArtwork
-                ? achievementRoot.achievementModel.squareArtworkSize : 180.0
-            readonly property real authoredArtworkHeight:
-                achievementRoot.achievementModel.artworkShape === "portrait"
-                    ? authoredArtworkWidth * 1.4
-                    : (authoredVerticalArtwork ? authoredArtworkWidth : 86.0)
-            readonly property real artworkWidth: authoredArtworkWidth
+            readonly property real artworkWidth: achievementRoot.canonicalArtworkWidth
                 * achievementRoot.achievementModel.customArtworkWidthScale
-            readonly property real artworkHeight: authoredArtworkHeight
+            readonly property real artworkHeight: achievementRoot.canonicalArtworkHeight
                 * achievementRoot.achievementModel.customArtworkHeightScale
-            readonly property real authoredArtworkX: authoredVerticalArtwork
-                ? 491.0 - authoredArtworkWidth / 2.0 : 402.0
-            // Preserve the accepted 600px authored anchors exactly, then move
-            // the major artwork rail right by added CUSTOM width. Freeform
-            // artwork growth initially consumes that breathing room from the
-            // left; once the shared owner admits the required outer growth on
-            // release, the accepted authored rail is restored without changing
-            // the image's native-aspect PreserveAspectCrop policy.
-            readonly property real artworkX: authoredArtworkX
-                + achievementRoot.extraContentWidth
-                - (artworkWidth - authoredArtworkWidth)
-            readonly property real authoredMetricY: authoredVerticalArtwork
-                ? 14.0 + authoredArtworkHeight + 6.0 : 108.0
-            readonly property real metricY: authoredMetricY
-                + (artworkHeight - authoredArtworkHeight)
-            readonly property real titleWidth: !achievementRoot.achievementModel.showArtwork
-                ? Math.max(120.0, authoredCanvas.width - 36.0)
-                : Math.max(120.0, artworkX - 32.0)
+            readonly property real artworkX: achievementRoot.canonicalArtworkX
+                + achievementRoot.artworkParentReflowX
+                + achievementRoot.achievementModel.customArtworkXOffset
+                    * achievementRoot.baseAuthoredWidth
+            readonly property real artworkY: achievementRoot.canonicalArtworkY
+                + achievementRoot.achievementModel.customArtworkYOffset
+                    * achievementRoot.baseAuthoredHeight
+            readonly property real metricY: artworkY + artworkHeight + 6.0
+            readonly property real titleWidth: achievementRoot.canonicalTitleWidth
 
-            // One family-wide grow-only requirement. Width/height expansion is
-            // the maximum extra envelope demanded by any admitted child, not a
-            // sum: the same outer growth restores the authored clearance for
-            // the right artwork rail, bottom-left progress role and unlock badge.
-            readonly property real artworkExtraWidth: artworkFrame.visible
-                ? Math.max(0.0, artworkWidth - authoredArtworkWidth) : 0.0
-            readonly property real artworkExtraHeight: artworkFrame.visible
-                ? Math.max(0.0, artworkHeight - authoredArtworkHeight) : 0.0
-            readonly property real badgeExtraWidth: latestArtworkFrame.visible
-                ? Math.max(0.0, latestArtworkFrame.visualWidth - 40.0) : 0.0
-            readonly property real badgeExtraHeight: latestArtworkFrame.visible
-                ? Math.max(0.0, latestArtworkFrame.visualHeight - 40.0) : 0.0
-            readonly property real progressExtraSize: progressPulse.visible
-                ? Math.max(0.0, progressPulse.visualSize - 108.0) : 0.0
-            readonly property real requiredContentWidth:
-                achievementRoot.baseAuthoredWidth + Math.max(
-                    artworkExtraWidth, badgeExtraWidth, progressExtraSize
-                )
-            readonly property real requiredContentHeight:
-                achievementRoot.baseAuthoredHeight + Math.max(
-                    artworkExtraHeight, badgeExtraHeight, progressExtraSize
-                )
 
             Item {
                 id: artworkFrame
                 objectName: "achievementArtworkFrame"
                 visible: achievementRoot.achievementModel.showArtwork
+                property bool customEditReflowEnabled: achievementRoot.artworkOnAuthoredRail
+                property real customEditPlacementCompensationX:
+                    achievementRoot.artworkParentReflowX
+                property real customEditPlacementCompensationY: 0.0
                 x: normalContent.artworkX
-                y: 14.0
+                y: normalContent.artworkY
                 width: normalContent.artworkWidth
                 height: normalContent.artworkHeight
                 readonly property real artworkStrokeWidth:
@@ -343,80 +585,141 @@ OverlayWidget {
             ShadowedText {
                 id: gameTitle
                 objectName: "achievementGameTitle"
-                x: 18.0
-                y: 62.0
-                width: normalContent.titleWidth
-                height: 34.0
+                property bool customEditReflowEnabled: achievementRoot.gameNameOnAuthoredRail
+                property real customEditPlacementCompensationX: 0.0
+                property real customEditPlacementCompensationY: 0.0
+                x: achievementRoot.canonicalGameNameX
+                    + achievementRoot.achievementModel.customGameNameXOffset
+                        * achievementRoot.baseAuthoredWidth
+                y: achievementRoot.canonicalGameNameY
+                    + achievementRoot.achievementModel.customGameNameYOffset
+                        * achievementRoot.baseAuthoredHeight
+                width: achievementRoot.canonicalTitleWidth
+                    * achievementRoot.achievementModel.customGameNameWidthScale
+                height: achievementRoot.canonicalGameNameHeight
+                    * achievementRoot.achievementModel.customGameNameHeightScale
                 text: achievementRoot.achievementModel.title
                 color: achievementRoot.achievementModel.textColor
                 font.family: achievementRoot.achievementModel.fontFamily
-                font.pointSize: achievementRoot.achievementModel.fontSize + 5.0
+                font.pointSize: (achievementRoot.achievementModel.fontSize + 5.0)
+                    * achievementRoot.achievementModel.customGameNameHeightScale
                 font.bold: true
+                horizontalAlignment:
+                    achievementRoot.achievementModel.customGameNameAlignment === "right"
+                        ? Text.AlignRight : Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
+                readonly property bool customGeometryActive:
+                    Math.abs(achievementRoot.achievementModel.customGameNameWidthScale - 1.0)
+                        > achievementRoot.childReflowPlacementEpsilon
+                    || Math.abs(achievementRoot.achievementModel.customGameNameHeightScale - 1.0)
+                        > achievementRoot.childReflowPlacementEpsilon
+                // Preserve the authored title renderer exactly until the user
+                // actually resizes this role. Fitting is editor geometry behavior,
+                // not a normal-presentation restyle.
+                fontSizeMode: customGeometryActive ? Text.Fit : Text.FixedSize
+                minimumPointSize: Math.max(
+                    8.0,
+                    achievementRoot.achievementModel.fontSize * 0.58
+                        * achievementRoot.achievementModel.customGameNameHeightScale
+                )
+                elide: customGeometryActive ? Text.ElideNone : Text.ElideRight
                 shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
                 shadowColor: achievementRoot.achievementModel.textShadowColor
                 shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                 shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
             }
 
-            ShadowedText {
-                objectName: "achievementSubtitle"
-                // The legacy presenter treated the latest-unlock stack as the
-                // subtitle area's content, rather than painting both layers.
-                visible: text.length > 0 && unlockRepeater.count === 0
-                x: 18.0
-                y: 100.0
-                width: normalContent.titleWidth
-                height: 88.0
-                text: achievementRoot.achievementModel.subtitle
-                color: achievementRoot.achievementModel.textColor
-                font.family: achievementRoot.achievementModel.fontFamily
-                font.pointSize: achievementRoot.achievementModel.fontSize * 0.78
-                wrap: true
-                elide: Text.ElideRight
-                shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
-                shadowColor: achievementRoot.achievementModel.textShadowColor
-                shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
-                shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
-            }
+            Item {
+                id: achievementListFrame
+                objectName: "achievementListGroup"
+                property bool customEditReflowEnabled:
+                    achievementRoot.achievementListOnAuthoredRail
+                property real customEditPlacementCompensationX: 0.0
+                property real customEditPlacementCompensationY:
+                    achievementRoot.achievementListOnAuthoredRail
+                        ? achievementRoot.gameNameLayoutHeightDelta : 0.0
+                visible: achievementRoot.achievementModel.subtitle.length > 0
+                    || unlockRepeater.count > 0
+                x: achievementRoot.canonicalAchievementListX
+                    + achievementRoot.achievementModel.customAchievementListXOffset
+                        * achievementRoot.baseAuthoredWidth
+                y: achievementRoot.canonicalAchievementListY
+                    + (achievementRoot.achievementListOnAuthoredRail
+                        ? achievementRoot.gameNameLayoutHeightDelta : 0.0)
+                    + achievementRoot.achievementModel.customAchievementListYOffset
+                        * achievementRoot.baseAuthoredHeight
+                width: achievementRoot.canonicalTitleWidth
+                    * achievementRoot.achievementModel.customAchievementListWidthScale
+                height: achievementRoot.canonicalAchievementListHeight
+                    * achievementRoot.achievementModel.customAchievementListHeightScale
 
-            Repeater {
-                id: unlockRepeater
-                model: achievementRoot.achievementModel.unlockModel
-
-                delegate: ShadowedText {
-                    required property string unlockIdentity
-                    required property string unlockText
-                    required property int index
-                    objectName: "achievementUnlock_" + index
-                    x: 18.0
-                    y: index === 0 ? 100.0 : 130.0 + (index - 1) * 14.0
-                    // The first, larger unlock owns the full title rail.  The
-                    // recent-achievement badge begins below it and therefore must
-                    // not steal horizontal/vertical space from that first line.
-                    // Smaller lines stop just before the badge only when it is
-                    // actually present, avoiding text painting underneath it.
-                    width: index === 0 || !latestArtworkFrame.visible
-                        ? normalContent.titleWidth
-                        : Math.min(
-                            normalContent.titleWidth,
-                            Math.max(0.0, latestArtworkFrame.x - 24.0)
-                        )
-                    height: index === 0 ? 26.0 : 13.0
-                    text: unlockText
+                ShadowedText {
+                    objectName: "achievementSubtitle"
+                    // The legacy presenter treated the latest-unlock stack as the
+                    // subtitle area's content, rather than painting both layers.
+                    visible: text.length > 0 && unlockRepeater.count === 0
+                    anchors.fill: parent
+                    text: achievementRoot.achievementModel.subtitle
                     color: achievementRoot.achievementModel.textColor
                     font.family: achievementRoot.achievementModel.fontFamily
-                    font.pointSize: index === 0
-                        ? achievementRoot.achievementModel.fontSize * 0.72
-                        : achievementRoot.achievementModel.fontSize * 0.48
-                    font.bold: index === 0
-                    verticalAlignment: Text.AlignVCenter
+                    font.pointSize: achievementRoot.achievementModel.fontSize * 0.78
+                        * achievementRoot.achievementModel.customAchievementListHeightScale
+                    horizontalAlignment:
+                        achievementRoot.achievementModel.customAchievementListAlignment === "right"
+                            ? Text.AlignRight : Text.AlignLeft
+                    verticalAlignment: Text.AlignTop
+                    wrap: true
                     elide: Text.ElideRight
                     shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
                     shadowColor: achievementRoot.achievementModel.textShadowColor
                     shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                     shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
+                }
+
+                Repeater {
+                    id: unlockRepeater
+                    model: achievementRoot.achievementModel.unlockModel
+
+                    delegate: ShadowedText {
+                        required property string unlockIdentity
+                        required property string unlockText
+                        required property int index
+                        objectName: "achievementUnlock_" + index
+                        x: 0.0
+                        y: (index === 0 ? 0.0 : 30.0 + (index - 1) * 14.0)
+                            * achievementRoot.achievementModel.customAchievementListHeightScale
+                        // The first, larger unlock owns the full title rail. The
+                        // recent-achievement badge begins below it and therefore
+                        // only the smaller lines yield horizontal room to it.
+                        width: index === 0 || !latestArtworkFrame.visible
+                            ? achievementListFrame.width
+                            : Math.min(
+                                achievementListFrame.width,
+                                Math.max(
+                                    0.0,
+                                    latestArtworkFrame.x - achievementListFrame.x - 6.0
+                                )
+                            )
+                        height: (index === 0 ? 26.0 : 13.0)
+                            * achievementRoot.achievementModel.customAchievementListHeightScale
+                        text: unlockText
+                        color: achievementRoot.achievementModel.textColor
+                        font.family: achievementRoot.achievementModel.fontFamily
+                        font.pointSize: (index === 0
+                            ? achievementRoot.achievementModel.fontSize * 0.72
+                            : achievementRoot.achievementModel.fontSize * 0.48)
+                            * achievementRoot.achievementModel.customAchievementListHeightScale
+                        font.bold: index === 0
+                        horizontalAlignment:
+                            achievementRoot.achievementModel.customAchievementListAlignment === "right"
+                                ? Text.AlignRight : Text.AlignLeft
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                        shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                        shadowColor: achievementRoot.achievementModel.textShadowColor
+                        shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
+                        shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
+                    }
                 }
             }
 
@@ -436,6 +739,11 @@ OverlayWidget {
                 // badge to the unrelated game-cover/artwork column.
                 readonly property real baseRailX: 102.0
                 readonly property real textClearance: 8.0
+                property bool customEditReflowEnabled: achievementRoot.badgeOnAuthoredRail
+                property real customEditPlacementCompensationX: 0.0
+                property real customEditPlacementCompensationY:
+                    achievementRoot.badgeOnAuthoredRail
+                        ? achievementRoot.gameNameLayoutHeightDelta : 0.0
                 function resolvedRailX() {
                     let required = baseRailX
                     for (let row = 1; row < unlockRepeater.count; ++row) {
@@ -443,23 +751,27 @@ OverlayWidget {
                         if (unlockItem !== null)
                             required = Math.max(
                                 required,
-                                unlockItem.x + unlockItem.implicitWidth + textClearance
+                                achievementRoot.canonicalAchievementListX
+                                    + unlockItem.x + unlockItem.implicitWidth
+                                    + textClearance
                             )
                     }
                     return Math.min(
                         required,
-                        // Preserve the authored left anchor while CUSTOM scales
-                        // the intrinsic badge from its bottom-right handle. The
-                        // shared grow-only outer requirement supplies extra room
-                        // after release rather than sliding the badge away from
-                        // the pointer during the gesture.
-                        Math.max(18.0, normalContent.titleWidth - width)
+                        Math.max(18.0,
+                            achievementRoot.canonicalTitleWidth - width)
                     )
                 }
                 x: resolvedRailX()
-                y: 130.0
-                width: 40.0
-                height: 40.0
+                    + achievementRoot.achievementModel.customBadgeXOffset
+                        * achievementRoot.baseAuthoredWidth
+                y: achievementRoot.canonicalBadgeY
+                    + (achievementRoot.badgeOnAuthoredRail
+                        ? achievementRoot.gameNameLayoutHeightDelta : 0.0)
+                    + achievementRoot.achievementModel.customBadgeYOffset
+                        * achievementRoot.baseAuthoredHeight
+                width: achievementRoot.canonicalBadgeWidth
+                height: achievementRoot.canonicalBadgeHeight
                 scale: achievementRoot.achievementModel.customBadgeWidthScale
                 transformOrigin: Item.TopLeft
                 readonly property real visualWidth: width * scale
@@ -530,16 +842,44 @@ OverlayWidget {
                 shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
             }
 
+            // Edit-only occupied geometry for the artwork role includes the
+            // retained metric rail that follows the image. It paints nothing.
+            Item {
+                id: artworkOccupiedFrame
+                objectName: "achievementArtworkOccupiedFrame"
+                visible: artworkFrame.visible
+                x: metricText.visible ? Math.min(artworkFrame.x, metricText.x) : artworkFrame.x
+                y: metricText.visible ? Math.min(artworkFrame.y, metricText.y) : artworkFrame.y
+                width: (metricText.visible
+                    ? Math.max(artworkFrame.x + artworkFrame.width,
+                        metricText.x + metricText.width)
+                    : artworkFrame.x + artworkFrame.width) - x
+                height: (metricText.visible
+                    ? Math.max(artworkFrame.y + artworkFrame.height,
+                        metricText.y + metricText.height)
+                    : artworkFrame.y + artworkFrame.height) - y
+            }
+
             Item {
                 id: progressPulse
                 objectName: "achievementProgressPulse"
                 visible: achievementRoot.achievementModel.progressPulseEnabled
                     && achievementRoot.achievementModel.totalFieldEnabled
                     && achievementRoot.achievementModel.viewState === "content"
-                x: 51.0
-                y: authoredCanvas.height - visualSize - 20.0
-                width: 108.0
-                height: 108.0
+                property bool customEditReflowEnabled: achievementRoot.progressOnAuthoredRail
+                property real customEditPlacementCompensationX: 0.0
+                property real customEditPlacementCompensationY:
+                    achievementRoot.progressParentReflowY
+                x: achievementRoot.canonicalProgressX
+                    + achievementRoot.achievementModel.customProgressCircleXOffset
+                        * achievementRoot.baseAuthoredWidth
+                y: achievementRoot.baseAuthoredHeight
+                    - achievementRoot.canonicalProgressSize - 20.0
+                    + achievementRoot.progressParentReflowY
+                    + achievementRoot.achievementModel.customProgressCircleYOffset
+                        * achievementRoot.baseAuthoredHeight
+                width: achievementRoot.canonicalProgressSize
+                height: achievementRoot.canonicalProgressSize
                 scale: achievementRoot.achievementModel.customProgressCircleScale
                 transformOrigin: Item.TopLeft
                 z: 2
@@ -700,76 +1040,119 @@ OverlayWidget {
                 }
             }
 
-            Repeater {
-                id: fieldRepeater
-                model: achievementRoot.achievementModel.fieldModel
-
-                delegate: Item {
-                    required property string fieldId
-                    required property string fieldLabel
-                    required property string fieldValue
-                    required property int index
-                    objectName: "achievementField_" + fieldId
-                    readonly property int columnCount: progressPulse.visible ? 2 : 3
-                    readonly property int compactRow: Math.floor(index / columnCount)
-                    readonly property int column: index % columnCount
-                    readonly property real columnGap: 9.0
-                    readonly property real fieldAreaLeft: progressPulse.visible
-                        ? progressPulse.x + progressPulse.visualSize + 49.0
-                        : 18.0
-                    readonly property real fieldAreaWidth: Math.max(
-                        1.0, authoredCanvas.width - fieldAreaLeft
-                            - (progressPulse.visible ? 19.0 : 18.0)
-                    )
-                    readonly property real columnWidth: Math.max(
-                        120.0,
-                        (fieldAreaWidth - columnGap * (columnCount - 1)) / columnCount
-                    )
-                    readonly property int railStride:
-                        achievementRoot.achievementModel.shelfStyle
+            Item {
+                id: fieldGroupFrame
+                objectName: "achievementFieldGroup"
+                readonly property int columnCount: progressPulse.visible ? 2 : 3
+                readonly property int railStride:
+                    achievementRoot.achievementModel.shelfStyle
                         ? 1
                         : (achievementRoot.achievementModel.doubleCapsules ? 2 : 1)
-                    readonly property int railCount: Math.max(
-                        1,
-                        Math.ceil(fieldRepeater.count / columnCount) * railStride
-                    )
-                    readonly property real railStep:
-                        achievementRoot.achievementModel.capsuleHeight
-                        + achievementRoot.achievementModel.capsuleGap
-                    readonly property real firstRailY:
-                        authoredCanvas.height - 16.0
-                        - achievementRoot.achievementModel.capsuleHeight
-                        - (railCount - 1) * railStep
-                    x: fieldAreaLeft + column * (columnWidth + columnGap)
-                    y: firstRailY + compactRow * railStride * railStep
-                    width: columnWidth
-                    height: achievementRoot.achievementModel.shelfStyle
-                        ? achievementRoot.achievementModel.capsuleHeight
-                        : (achievementRoot.achievementModel.doubleCapsules
-                            ? achievementRoot.achievementModel.capsuleHeight * 2.0
-                                + achievementRoot.achievementModel.capsuleGap
-                            : achievementRoot.achievementModel.capsuleHeight)
+                readonly property int railCount: Math.max(
+                    1,
+                    Math.ceil(fieldRepeater.count / columnCount) * railStride
+                )
+                readonly property real canonicalX: progressPulse.visible
+                    ? achievementRoot.canonicalProgressX
+                        + achievementRoot.canonicalProgressSize + 49.0
+                    : 18.0
+                readonly property real canonicalWidth: Math.max(
+                    1.0,
+                    achievementRoot.baseAuthoredWidth - canonicalX
+                        - (progressPulse.visible ? 19.0 : 18.0)
+                )
+                readonly property real canonicalCapsuleHeight:
+                    achievementRoot.achievementModel.capsuleHeight
+                readonly property real canonicalGap:
+                    achievementRoot.achievementModel.capsuleGap
+                readonly property real canonicalHeight:
+                    railCount * canonicalCapsuleHeight
+                        + Math.max(0, railCount - 1) * canonicalGap
+                readonly property real canonicalY:
+                    achievementRoot.baseAuthoredHeight - 16.0 - canonicalHeight
+                readonly property real capsuleHeight: canonicalCapsuleHeight
+                    * achievementRoot.achievementModel.customFieldGroupHeightScale
+                readonly property real capsuleGap: canonicalGap
+                    * achievementRoot.achievementModel.customFieldGroupHeightScale
+                readonly property real columnGap: 9.0
+                    * achievementRoot.achievementModel.customFieldGroupWidthScale
+                readonly property real columnWidth: Math.max(
+                    1.0,
+                    (width - columnGap * (columnCount - 1)) / columnCount
+                )
+                property bool customEditReflowEnabled:
+                    achievementRoot.fieldGroupOnAuthoredRail
+                property real customEditPlacementCompensationX:
+                    achievementRoot.fieldGroupOnAuthoredRail
+                            && achievementRoot.progressOnAuthoredRail
+                        ? achievementRoot.progressLayoutWidthDelta : 0.0
+                property real customEditPlacementCompensationY:
+                    achievementRoot.fieldGroupParentReflowY
+                visible: fieldRepeater.count > 0
+                x: canonicalX
+                    + (achievementRoot.fieldGroupOnAuthoredRail
+                            && achievementRoot.progressOnAuthoredRail
+                        ? achievementRoot.progressLayoutWidthDelta : 0.0)
+                    + achievementRoot.achievementModel.customFieldGroupXOffset
+                        * achievementRoot.baseAuthoredWidth
+                y: canonicalY
+                    + achievementRoot.fieldGroupParentReflowY
+                    + achievementRoot.achievementModel.customFieldGroupYOffset
+                        * achievementRoot.baseAuthoredHeight
+                width: canonicalWidth
+                    * achievementRoot.achievementModel.customFieldGroupWidthScale
+                height: canonicalHeight
+                    * achievementRoot.achievementModel.customFieldGroupHeightScale
 
-                    AchievementCapsule {
-                        anchors.fill: parent
-                        fieldId: parent.fieldId
-                        fieldLabel: parent.fieldLabel
-                        fieldValue: parent.fieldValue
-                        doubled: achievementRoot.achievementModel.doubleCapsules
-                        shelfStyle: achievementRoot.achievementModel.shelfStyle
-                        capsuleHeight: achievementRoot.achievementModel.capsuleHeight
-                        capsuleGap: achievementRoot.achievementModel.capsuleGap
-                        capsuleFontSize: achievementRoot.achievementModel.capsuleFontSize
-                        fontFamily: achievementRoot.achievementModel.fontFamily
-                        fillColor: achievementRoot.achievementModel.capsuleFillColor
-                        borderColor: achievementRoot.achievementModel.capsuleBorderColor
-                        shelfSeparatorColor: achievementRoot.achievementModel.steamMetricSeparatorColor
-                        shelfAccentColor: achievementRoot.achievementModel.accentColor
-                        textColor: achievementRoot.achievementModel.textColor
-                        textShadowEnabled: achievementRoot.achievementModel.textShadowEnabled
-                        textShadowColor: achievementRoot.achievementModel.textShadowColor
-                        textShadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
-                        textShadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
+                Repeater {
+                    id: fieldRepeater
+                    model: achievementRoot.achievementModel.fieldModel
+
+                    delegate: Item {
+                        required property string fieldId
+                        required property string fieldLabel
+                        required property string fieldValue
+                        required property int index
+                        objectName: "achievementField_" + fieldId
+                        readonly property int compactRow:
+                            Math.floor(index / fieldGroupFrame.columnCount)
+                        readonly property int column:
+                            index % fieldGroupFrame.columnCount
+                        readonly property real railStep:
+                            fieldGroupFrame.capsuleHeight + fieldGroupFrame.capsuleGap
+                        x: column * (fieldGroupFrame.columnWidth + fieldGroupFrame.columnGap)
+                        y: compactRow * fieldGroupFrame.railStride * railStep
+                        width: fieldGroupFrame.columnWidth
+                        height: achievementRoot.achievementModel.shelfStyle
+                            ? fieldGroupFrame.capsuleHeight
+                            : (achievementRoot.achievementModel.doubleCapsules
+                                ? fieldGroupFrame.capsuleHeight * 2.0
+                                    + fieldGroupFrame.capsuleGap
+                                : fieldGroupFrame.capsuleHeight)
+
+                        AchievementCapsule {
+                            anchors.fill: parent
+                            fieldId: parent.fieldId
+                            fieldLabel: parent.fieldLabel
+                            fieldValue: parent.fieldValue
+                            doubled: achievementRoot.achievementModel.doubleCapsules
+                            shelfStyle: achievementRoot.achievementModel.shelfStyle
+                            capsuleHeight: fieldGroupFrame.capsuleHeight
+                            capsuleGap: fieldGroupFrame.capsuleGap
+                            capsuleFontSize:
+                                achievementRoot.achievementModel.capsuleFontSize
+                                    * achievementRoot.achievementModel.customFieldGroupHeightScale
+                            fontFamily: achievementRoot.achievementModel.fontFamily
+                            fillColor: achievementRoot.achievementModel.capsuleFillColor
+                            borderColor: achievementRoot.achievementModel.capsuleBorderColor
+                            shelfSeparatorColor: achievementRoot.achievementModel.steamMetricSeparatorColor
+                            shelfAccentColor: achievementRoot.achievementModel.accentColor
+                            textColor: achievementRoot.achievementModel.textColor
+                            textShadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                            textShadowColor: achievementRoot.achievementModel.textShadowColor
+                            textShadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
+                            textShadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
+                        }
                     }
                 }
             }

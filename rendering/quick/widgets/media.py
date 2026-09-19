@@ -591,15 +591,15 @@ class MediaPresentationModel(QObject):
         self._content_extent: tuple[int, int] | None = None
         # CUSTOM child geometry is presentation-only retained state. The shared
         # session owns normalized persistence in size_payload.child_geometry;
-        # Media only projects the four descriptor-admitted role factors.
-        self._custom_artwork_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
-        self._custom_seek_bar_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
-        self._custom_volume_bar_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
-        self._custom_transport_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        # Media projects the descriptor map as one constant-size retained value,
+        # never one Python field/schema branch per newly admitted child role.
         descriptor = get_widget_runtime_descriptor("media")
         if descriptor is None or not descriptor.custom_child_roles:
             raise RuntimeError("Media CUSTOM child-role descriptor is missing")
         self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
+        self._custom_child_geometry: dict[str, CustomChildSize] = {
+            role_id: CustomChildSize() for role_id in self._custom_child_roles
+        }
         self._active = False
         self._retired = False
 
@@ -781,55 +781,46 @@ class MediaPresentationModel(QObject):
         return True
 
     def set_custom_child_geometry(self, child_geometry: object) -> bool:
-        """Project descriptor-normalized Media child factors into retained state.
+        """Project descriptor-normalized Media child geometry into retained state.
 
         This is called only at CUSTOM hydration/edit payload boundaries. It does
-        not touch GSMTC, artwork decoding, volume ownership, or Settings. One
-        narrow signal updates the four retained geometry consumers without
+        not touch GSMTC, artwork decoding, volume ownership, mute ownership or
+        Settings. One narrow signal updates retained geometry consumers without
         waking unrelated Media state bindings on every drag sample.
         """
 
         raw = child_geometry if isinstance(child_geometry, Mapping) else {}
-
-        def _resolved(role_id: str) -> CustomChildSize:
-            role = self._custom_child_roles[role_id]
+        resolved: dict[str, CustomChildSize] = {}
+        for role_id, role in self._custom_child_roles.items():
             value = raw.get(role_id) if isinstance(raw, Mapping) else None
             if not isinstance(value, Mapping):
-                return CustomChildSize()
-            return clamp_child_geometry(
+                resolved[role_id] = CustomChildSize()
+                continue
+            resolved[role_id] = clamp_child_geometry(
                 role,
                 value.get("width_scale", 1.0),
                 value.get("height_scale", 1.0),
                 value.get("x_offset", 0.0),
                 value.get("y_offset", 0.0),
+                value.get("alignment"),
+                value.get("anchor"),
             )
-
-        artwork = _resolved("artwork")
-        seek = _resolved("seek_bar")
-        volume = _resolved("volume_bar")
-        transport = _resolved("transport_controls")
-        next_values = (
-            (artwork.width_scale, artwork.height_scale, artwork.x_offset, artwork.y_offset),
-            (seek.width_scale, seek.height_scale, seek.x_offset, seek.y_offset),
-            (volume.width_scale, volume.height_scale, volume.x_offset, volume.y_offset),
-            (transport.width_scale, transport.height_scale, transport.x_offset, transport.y_offset),
-        )
-        current_values = (
-            self._custom_artwork_geometry,
-            self._custom_seek_bar_geometry,
-            self._custom_volume_bar_geometry,
-            self._custom_transport_geometry,
-        )
-        if next_values == current_values:
+        if resolved == self._custom_child_geometry:
             return False
-        (
-            self._custom_artwork_geometry,
-            self._custom_seek_bar_geometry,
-            self._custom_volume_bar_geometry,
-            self._custom_transport_geometry,
-        ) = next_values
+        self._custom_child_geometry = resolved
         self.customGeometryChanged.emit()
         return True
+
+    def _custom_geometry_for(self, role_id: str) -> CustomChildSize:
+        return self._custom_child_geometry.get(role_id, CustomChildSize())
+
+    @Property("QVariantMap", notify=customGeometryChanged)
+    def customChildGeometry(self) -> dict[str, dict[str, object]]:
+        return {
+            role_id: geometry.to_mapping()
+            for role_id, geometry in self._custom_child_geometry.items()
+            if not geometry.is_authored
+        }
 
     def request_transport(self, key: str) -> bool:
         """Route one admitted semantic transport action to the existing owner."""
@@ -1411,67 +1402,67 @@ class MediaPresentationModel(QObject):
 
     @Property(float, notify=customGeometryChanged)
     def customArtworkWidthScale(self) -> float:
-        return float(self._custom_artwork_geometry[0])
+        return float(self._custom_geometry_for("artwork").width_scale)
 
     @Property(float, notify=customGeometryChanged)
     def customArtworkHeightScale(self) -> float:
-        return float(self._custom_artwork_geometry[1])
+        return float(self._custom_geometry_for("artwork").height_scale)
 
     @Property(float, notify=customGeometryChanged)
     def customArtworkXOffset(self) -> float:
-        return float(self._custom_artwork_geometry[2])
+        return float(self._custom_geometry_for("artwork").x_offset)
 
     @Property(float, notify=customGeometryChanged)
     def customArtworkYOffset(self) -> float:
-        return float(self._custom_artwork_geometry[3])
+        return float(self._custom_geometry_for("artwork").y_offset)
 
     @Property(float, notify=customGeometryChanged)
     def customSeekWidthScale(self) -> float:
-        return float(self._custom_seek_bar_geometry[0])
+        return float(self._custom_geometry_for("seek_bar").width_scale)
 
     @Property(float, notify=customGeometryChanged)
     def customSeekHeightScale(self) -> float:
-        return float(self._custom_seek_bar_geometry[1])
+        return float(self._custom_geometry_for("seek_bar").height_scale)
 
     @Property(float, notify=customGeometryChanged)
     def customSeekXOffset(self) -> float:
-        return float(self._custom_seek_bar_geometry[2])
+        return float(self._custom_geometry_for("seek_bar").x_offset)
 
     @Property(float, notify=customGeometryChanged)
     def customSeekYOffset(self) -> float:
-        return float(self._custom_seek_bar_geometry[3])
+        return float(self._custom_geometry_for("seek_bar").y_offset)
 
     @Property(float, notify=customGeometryChanged)
     def customVolumeWidthScale(self) -> float:
-        return float(self._custom_volume_bar_geometry[0])
+        return float(self._custom_geometry_for("volume_bar").width_scale)
 
     @Property(float, notify=customGeometryChanged)
     def customVolumeHeightScale(self) -> float:
-        return float(self._custom_volume_bar_geometry[1])
+        return float(self._custom_geometry_for("volume_bar").height_scale)
 
     @Property(float, notify=customGeometryChanged)
     def customVolumeXOffset(self) -> float:
-        return float(self._custom_volume_bar_geometry[2])
+        return float(self._custom_geometry_for("volume_bar").x_offset)
 
     @Property(float, notify=customGeometryChanged)
     def customVolumeYOffset(self) -> float:
-        return float(self._custom_volume_bar_geometry[3])
+        return float(self._custom_geometry_for("volume_bar").y_offset)
 
     @Property(float, notify=customGeometryChanged)
     def customTransportWidthScale(self) -> float:
-        return float(self._custom_transport_geometry[0])
+        return float(self._custom_geometry_for("transport_controls").width_scale)
 
     @Property(float, notify=customGeometryChanged)
     def customTransportHeightScale(self) -> float:
-        return float(self._custom_transport_geometry[1])
+        return float(self._custom_geometry_for("transport_controls").height_scale)
 
     @Property(float, notify=customGeometryChanged)
     def customTransportXOffset(self) -> float:
-        return float(self._custom_transport_geometry[2])
+        return float(self._custom_geometry_for("transport_controls").x_offset)
 
     @Property(float, notify=customGeometryChanged)
     def customTransportYOffset(self) -> float:
-        return float(self._custom_transport_geometry[3])
+        return float(self._custom_geometry_for("transport_controls").y_offset)
 
     @Property(QColor, notify=stateChanged)
     def artworkBorderColor(self) -> QColor:

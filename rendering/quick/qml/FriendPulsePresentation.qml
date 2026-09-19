@@ -17,10 +17,112 @@ OverlayWidget {
     uniformScaleTransform: true
     preferredContentWidth: friendPulseModel.authoredWidth
     preferredContentHeight: friendPulseModel.authoredHeight
+
+    // Abandonment-style CUSTOM child geometry uses stable authored baselines.
+    // Repeated friend primitives consume one grouped record each; no delegate
+    // ever owns persistence or its own editable-child state.
+    readonly property real baseAuthoredWidth: friendPulseModel.baseAuthoredWidth
+    readonly property real baseAuthoredHeight: friendPulseModel.baseAuthoredHeight
     readonly property real customAvatarScale: friendPulseModel.customAvatarScale
-    customEditableChildRoles: [
-        { "roleId": "avatars", "target": customAvatarRoleTarget }
-    ]
+    readonly property real headerSafeInsetX: 18.0
+    readonly property real headerSafeInsetY: 14.0
+    readonly property real canonicalOnlineCountX: 296.0
+    readonly property real canonicalOnlineCountY: 13.0
+    readonly property real canonicalOnlineCountWidth: Math.max(48.0, baseAuthoredWidth - 314.0)
+    readonly property real canonicalOnlineCountHeight: 56.0
+    readonly property real canonicalSeparatorX: 18.0
+    readonly property real canonicalSeparatorY: 81.0
+    readonly property real canonicalSeparatorWidth: Math.max(1.0, baseAuthoredWidth - 36.0)
+    readonly property real canonicalSeparatorHeight: friendStrokeWidth(1.0)
+    readonly property real canonicalRowFrameWidth: Math.max(72.0, baseAuthoredWidth - 48.0)
+    readonly property real canonicalRowFrameHeight: 50.0
+    readonly property real canonicalRowAvatarSize: 36.0
+    readonly property real canonicalGridViewportHeight: Math.max(1.0, baseAuthoredHeight - 110.0)
+    readonly property int canonicalGridRows: Math.max(
+        1, Math.ceil(friendPulseModel.visibleCapacity / Math.max(1, friendPulseModel.baseGridColumns))
+    )
+    readonly property real canonicalGridCellWidth: Math.max(1.0,
+        (baseAuthoredWidth - 36.0) / Math.max(1, friendPulseModel.baseGridColumns)
+    )
+    readonly property real canonicalGridCellHeight: Math.max(120.0, Math.min(
+        154.0, canonicalGridViewportHeight / canonicalGridRows
+    ))
+    readonly property real canonicalGridTileWidth: Math.max(72.0, canonicalGridCellWidth - 12.0)
+    readonly property real canonicalGridTileHeight: canonicalGridCellHeight - 12.0
+    readonly property real canonicalGridAvatarSize: Math.min(
+        58.0, Math.max(38.0, canonicalGridTileWidth * 0.42)
+    )
+    readonly property real rowFrameHeight: Math.max(
+        canonicalRowFrameHeight * friendPulseModel.customFriendFrameHeightScale,
+        canonicalRowAvatarSize * customAvatarScale + 14.0
+    )
+    readonly property real gridTileHeight: Math.max(
+        canonicalGridTileHeight * friendPulseModel.customFriendFrameHeightScale,
+        canonicalGridAvatarSize * customAvatarScale + 60.0
+    )
+
+    customEditableChildRoles: {
+        const roles = []
+        const normW = friendRoot.baseAuthoredWidth
+        const normH = friendRoot.baseAuthoredHeight
+        roles.push({
+            "roleId": "header",
+            "target": headerFrame,
+            "normalizationWidth": normW,
+            "normalizationHeight": normH,
+            "semanticCornerInsetX":
+                (friendRoot.width - friendRoot.friendPulseModel.authoredWidth
+                    * friendRoot.presentationScale) / 2.0
+                    + friendRoot.headerSafeInsetX * friendRoot.presentationScale,
+            "semanticCornerInsetY":
+                (friendRoot.height - friendRoot.friendPulseModel.authoredHeight
+                    * friendRoot.presentationScale) / 2.0
+                    + friendRoot.headerSafeInsetY * friendRoot.presentationScale
+        })
+        if (activitySummary.visible) {
+            roles.push({
+                "roleId": "online_count",
+                "target": activitySummary,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH
+            })
+        }
+        roles.push({
+            "roleId": "separator",
+            "target": headerSeparator,
+            "normalizationWidth": normW,
+            "normalizationHeight": normH
+        })
+        if (customFriendFrameRoleTarget.visible) {
+            roles.push({
+                "roleId": "friend_frames",
+                "target": customFriendFrameRoleTarget,
+                "collisionIgnoreRoleIds": ["avatars", "usernames"],
+                "geometryDependencies": [activityRowsView, activityGridView],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH
+            })
+            roles.push({
+                "roleId": "avatars",
+                "target": customAvatarRoleTarget,
+                "collisionIgnoreRoleIds": ["friend_frames"],
+                "geometryDependencies": [customFriendFrameRoleTarget, activityRowsView, activityGridView],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH
+            })
+            if (friendPulseModel.viewMode === "rows" || friendPulseModel.showNames) {
+                roles.push({
+                    "roleId": "usernames",
+                    "target": customUsernameRoleTarget,
+                    "collisionIgnoreRoleIds": ["friend_frames"],
+                    "geometryDependencies": [customFriendFrameRoleTarget, customAvatarRoleTarget],
+                    "normalizationWidth": normW,
+                    "normalizationHeight": normH
+                })
+            }
+        }
+        return roles
+    }
 
     signal refreshRequested()
     signal friendActionRequested(int rowIndex)
@@ -87,7 +189,7 @@ OverlayWidget {
         var first
         var last
         if (friendPulseModel.viewMode === "rows") {
-            var rowStride = 58.0
+            var rowStride = friendRoot.rowFrameHeight + activityRowsView.spacing
             first = Math.max(0, Math.floor(view.contentY / rowStride))
             last = Math.min(
                 view.count - 1,
@@ -196,7 +298,37 @@ OverlayWidget {
         frameObjectName: "friendPulseHeaderFrame"
         logoObjectName: "friendPulseSteamLogo"
         textObjectName: "friendPulseHeaderText"
-        x: 18.0; y: 14.0
+        property real customEditPlacementCompensationX:
+            friendRoot.friendPulseModel.customHeaderAnchor.length > 0
+                ? x - (friendRoot.headerSafeInsetX
+                    + friendRoot.friendPulseModel.customHeaderXOffset
+                        * friendRoot.baseAuthoredWidth)
+                : 0.0
+        property real customEditPlacementCompensationY:
+            friendRoot.friendPulseModel.customHeaderAnchor.length > 0
+                ? y - (friendRoot.headerSafeInsetY
+                    + friendRoot.friendPulseModel.customHeaderYOffset
+                        * friendRoot.baseAuthoredHeight)
+                : 0.0
+        transformOrigin: Item.TopLeft
+        scale: friendRoot.friendPulseModel.customHeaderWidthScale
+        x: friendRoot.friendPulseModel.customHeaderAnchor.endsWith("right")
+            ? friendRoot.friendPulseModel.authoredWidth - friendRoot.headerSafeInsetX
+                - width * scale
+            : (friendRoot.friendPulseModel.customHeaderAnchor.endsWith("left")
+                ? friendRoot.headerSafeInsetX
+                : friendRoot.headerSafeInsetX
+                    + friendRoot.friendPulseModel.customHeaderXOffset
+                        * friendRoot.baseAuthoredWidth)
+        y: friendRoot.friendPulseModel.customHeaderAnchor.startsWith("bottom")
+            ? friendRoot.friendPulseModel.authoredHeight - friendRoot.headerSafeInsetY
+                - height * scale
+            : (friendRoot.friendPulseModel.customHeaderAnchor.startsWith("top")
+                ? friendRoot.headerSafeInsetY
+                : friendRoot.headerSafeInsetY
+                    + friendRoot.friendPulseModel.customHeaderYOffset
+                        * friendRoot.baseAuthoredHeight)
+        contentReversed: friendRoot.friendPulseModel.customHeaderAlignment === "right"
         label: friendRoot.friendPulseModel.headerText
         logoSource: friendRoot.friendPulseModel.logoSource
         fillColor: friendRoot.friendPulseModel.headerFillColor
@@ -219,13 +351,22 @@ OverlayWidget {
     Item {
         id: activitySummary
         objectName: "friendPulseSummary"
-        x: 296.0; y: 13.0
-        width: friendRoot.friendPulseModel.authoredWidth - x - 18.0; height: 56.0
+        visible: friendRoot.friendPulseModel.showOnlineCount
+            && friendRoot.friendPulseModel.onlineFriendsText.length > 0
+        x: friendRoot.canonicalOnlineCountX
+            + friendRoot.friendPulseModel.customOnlineCountXOffset
+                * friendRoot.baseAuthoredWidth
+        y: friendRoot.canonicalOnlineCountY
+            + friendRoot.friendPulseModel.customOnlineCountYOffset
+                * friendRoot.baseAuthoredHeight
+        width: friendRoot.canonicalOnlineCountWidth
+            * friendRoot.friendPulseModel.customOnlineCountWidthScale
+        height: friendRoot.canonicalOnlineCountHeight
+            * friendRoot.friendPulseModel.customOnlineCountHeightScale
 
         ShadowedText {
             anchors.fill: parent
-            visible: friendRoot.friendPulseModel.showOnlineCount
-                && friendRoot.friendPulseModel.onlineFriendsText.length > 0
+            visible: true
             text: friendRoot.friendPulseModel.onlineFriendsText
             color: friendRoot.friendPulseModel.mutedTextColor
             font.family: friendRoot.friendPulseModel.fontFamily
@@ -233,7 +374,8 @@ OverlayWidget {
             font.bold: true
             fontSizeMode: Text.HorizontalFit
             minimumPointSize: 8.0
-            horizontalAlignment: Text.AlignRight
+            horizontalAlignment: friendRoot.friendPulseModel.customOnlineCountAlignment === "left"
+                ? Text.AlignLeft : Text.AlignRight
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
@@ -244,14 +386,29 @@ OverlayWidget {
     }
 
     Rectangle {
-        x: 18.0; y: 81.0; width: friendRoot.friendPulseModel.authoredWidth - 36.0
-        height: friendRoot.friendStrokeWidth(1.0); color: friendRoot.friendPulseModel.rowInnerBorderColor
+        id: headerSeparator
+        objectName: "friendPulseHeaderSeparator"
+        x: friendRoot.canonicalSeparatorX
+            + friendRoot.friendPulseModel.customSeparatorXOffset
+                * friendRoot.baseAuthoredWidth
+        y: friendRoot.canonicalSeparatorY
+            + friendRoot.friendPulseModel.customSeparatorYOffset
+                * friendRoot.baseAuthoredHeight
+        width: friendRoot.canonicalSeparatorWidth
+            * friendRoot.friendPulseModel.customSeparatorWidthScale
+        height: friendRoot.canonicalSeparatorHeight
+            * friendRoot.friendPulseModel.customSeparatorHeightScale
+        color: friendRoot.friendPulseModel.rowInnerBorderColor
     }
 
     ListView {
         id: activityRowsView
         objectName: "friendPulseRowsView"
-        onContentHeightChanged: friendRoot.clampScrollToBounds(activityRowsView)
+        onContentHeightChanged: {
+            friendRoot.clampScrollToBounds(activityRowsView)
+            if (!moving)
+                friendRoot.reportVisibleRange(true)
+        }
         visible: friendRoot.friendPulseModel.viewMode === "rows" && friendRoot.friendPulseModel.hasRows
                  && (friendRoot.friendPulseModel.viewState === "ready" || friendRoot.friendPulseModel.viewState === "stale")
         x: 18.0; y: 91.0; width: friendRoot.friendPulseModel.authoredWidth - 36.0
@@ -300,9 +457,10 @@ OverlayWidget {
             required property int index
             property real eventGlowLevel: 0.0
             objectName: "friendPulseRow_" + index
-            x: 6.0
-            width: activityRowsView.width - 12.0
-            height: Math.max(50.0, 36.0 * friendRoot.customAvatarScale + 14.0)
+            width: friendRoot.canonicalRowFrameWidth
+                * friendRoot.friendPulseModel.customFriendFrameWidthScale
+            x: (activityRowsView.width - width) / 2.0
+            height: friendRoot.rowFrameHeight
             radius: 9.0
             color: friendRoot.friendPulseModel.rowSurfaceColor
             border.color: friendRoot.friendPulseModel.rowBorderColor
@@ -362,8 +520,12 @@ OverlayWidget {
             Rectangle {
                 id: rowAvatarFrame
                 objectName: "friendPulseRowAvatar_" + index
-                x: 7.0; anchors.verticalCenter: parent.verticalCenter
-                width: 36.0 * friendRoot.customAvatarScale
+                x: 7.0 + friendRoot.friendPulseModel.customAvatarXOffset
+                    * friendRoot.baseAuthoredWidth
+                y: (parent.height - height) / 2.0
+                    + friendRoot.friendPulseModel.customAvatarYOffset
+                        * friendRoot.baseAuthoredHeight
+                width: friendRoot.canonicalRowAvatarSize * friendRoot.customAvatarScale
                 height: width
                 radius: Math.min(width / 2.0, 8.0 * friendRoot.customAvatarScale)
                 color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g,
@@ -403,11 +565,38 @@ OverlayWidget {
                 TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendActionRequested(index) }
             }
             Item {
+                id: rowTextBlock
                 x: rowAvatarFrame.x + rowAvatarFrame.width + 11.0
                 y: Math.max(5.0, (parent.height - 40.0) / 2.0)
-                width: parent.width - x - 65.0
+                width: Math.max(24.0, parent.width - x - 65.0)
                 height: 40.0
-                ShadowedText { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 23.0; text: primaryText; color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize; font.bold: true; verticalAlignment: Text.AlignVCenter; wrap: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 7.0; elide: Text.ElideNone; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
+                ShadowedText {
+                    id: rowNameText
+                    objectName: "friendPulseRowName_" + index
+                    x: friendRoot.friendPulseModel.customUsernameXOffset
+                        * friendRoot.baseAuthoredWidth
+                    y: friendRoot.friendPulseModel.customUsernameYOffset
+                        * friendRoot.baseAuthoredHeight
+                    width: rowTextBlock.width
+                        * friendRoot.friendPulseModel.customUsernameWidthScale
+                    height: 23.0 * friendRoot.friendPulseModel.customUsernameHeightScale
+                    text: primaryText
+                    color: friendRoot.friendPulseModel.textColor
+                    font.family: friendRoot.friendPulseModel.fontFamily
+                    font.pointSize: friendRoot.friendPulseModel.fontSize
+                        * friendRoot.friendPulseModel.customUsernameHeightScale
+                    font.bold: true
+                    verticalAlignment: Text.AlignVCenter
+                    wrap: true
+                    maximumLineCount: 2
+                    fontSizeMode: Text.Fit
+                    minimumPointSize: 7.0
+                    elide: Text.ElideNone
+                    shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
+                    shadowColor: friendRoot.friendPulseModel.textShadowColor
+                    shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
+                    shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
+                }
                 ShadowedText {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 18.0
                     text: (secondaryText.length > 0
@@ -454,7 +643,11 @@ OverlayWidget {
     GridView {
         id: activityGridView
         objectName: "friendPulseGridView"
-        onContentHeightChanged: friendRoot.clampScrollToBounds(activityGridView)
+        onContentHeightChanged: {
+            friendRoot.clampScrollToBounds(activityGridView)
+            if (!moving)
+                friendRoot.reportVisibleRange(true)
+        }
         visible: friendRoot.friendPulseModel.viewMode === "grid" && friendRoot.friendPulseModel.hasRows
                  && (friendRoot.friendPulseModel.viewState === "ready" || friendRoot.friendPulseModel.viewState === "stale")
         x: 18.0; y: 91.0; width: friendRoot.friendPulseModel.authoredWidth - 36.0
@@ -468,11 +661,11 @@ OverlayWidget {
         property int rosterCapacity: Math.max(1, friendRoot.friendPulseModel.visibleCapacity)
         property real tileGap: 10.0
         cellWidth: width / activeColumns
-        readonly property real baselineCellHeight: Math.max(120.0, Math.min(154.0,
-            height / Math.max(1, Math.ceil(rosterCapacity / activeColumns))))
-        cellHeight: baselineCellHeight + Math.max(
-            0.0, 58.0 * (friendRoot.customAvatarScale - 1.0)
-        )
+        cellHeight: friendRoot.gridTileHeight + 12.0
+        onCellHeightChanged: {
+            if (!moving)
+                friendRoot.reportVisibleRange(true)
+        }
         onMovementEnded: friendRoot.reportVisibleRange()
         onMovementStarted: friendRoot.pendingChangeRows = ({})
         onMovingChanged: {
@@ -530,7 +723,10 @@ OverlayWidget {
                 id: gridTile
                 objectName: "friendPulseGridTile_" + index
                 x: (parent.width - width) / 2.0 + gridCell.incompleteRowShift
-                y: 2.0; width: Math.max(72.0, parent.width - 12.0); height: parent.height - 12.0
+                y: 2.0
+                width: friendRoot.canonicalGridTileWidth
+                    * friendRoot.friendPulseModel.customFriendFrameWidthScale
+                height: friendRoot.gridTileHeight
                 property real eventGlowLevel: 0.0
                 radius: 11.0; color: friendRoot.friendPulseModel.rowSurfaceColor
                 border.color: friendRoot.friendPulseModel.rowBorderColor
@@ -588,8 +784,12 @@ OverlayWidget {
                 }
                 Rectangle {
                     id: gridAvatarFrame
-                    anchors.horizontalCenter: parent.horizontalCenter; y: 12.0
-                    width: Math.min(58.0, Math.max(38.0, parent.width * 0.42))
+                    x: (parent.width - width) / 2.0
+                        + friendRoot.friendPulseModel.customAvatarXOffset
+                            * friendRoot.baseAuthoredWidth
+                    y: 12.0 + friendRoot.friendPulseModel.customAvatarYOffset
+                        * friendRoot.baseAuthoredHeight
+                    width: friendRoot.canonicalGridAvatarSize
                         * friendRoot.customAvatarScale
                     height: width
                     radius: Math.min(width / 2.0, 12.0 * friendRoot.customAvatarScale)
@@ -631,13 +831,26 @@ OverlayWidget {
                 ShadowedText {
                     id: gridNameText
                     objectName: "friendPulseGridName_" + index
-                    anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 7.0; anchors.rightMargin: 7.0
-                    y: gridAvatarFrame.y + gridAvatarFrame.height + 5.0
+                    readonly property real canonicalWidth: Math.max(20.0,
+                        friendRoot.canonicalGridTileWidth - 14.0
+                    )
+                    readonly property real canonicalHeight: Math.max(
+                        19.0, friendRoot.friendPulseModel.nameFontSize * 1.3
+                    )
+                    x: (parent.width - width) / 2.0
+                        + friendRoot.friendPulseModel.customUsernameXOffset
+                            * friendRoot.baseAuthoredWidth
+                    y: 12.0 + friendRoot.canonicalGridAvatarSize + 5.0
+                        + friendRoot.friendPulseModel.customUsernameYOffset
+                            * friendRoot.baseAuthoredHeight
+                    width: canonicalWidth
+                        * friendRoot.friendPulseModel.customUsernameWidthScale
                     height: friendRoot.friendPulseModel.showNames
-                        ? Math.max(19.0, friendRoot.friendPulseModel.nameFontSize * 1.3)
+                        ? canonicalHeight
+                            * friendRoot.friendPulseModel.customUsernameHeightScale
                         : 0.0
                     visible: friendRoot.friendPulseModel.showNames; text: primaryText; color: friendRoot.friendPulseModel.textColor
-                    font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.nameFontSize; font.bold: true
+                    font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.nameFontSize * friendRoot.friendPulseModel.customUsernameHeightScale; font.bold: true
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                     wrap: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 7.0; elide: Text.ElideNone
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
@@ -646,7 +859,7 @@ OverlayWidget {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 7.0; anchors.rightMargin: 7.0
                     y: friendRoot.friendPulseModel.showNames
                         ? gridNameText.y + gridNameText.height + 2.0
-                        : gridAvatarFrame.y + gridAvatarFrame.height + 5.0
+                        : 12.0 + friendRoot.canonicalGridAvatarSize + 5.0
                     height: 30.0
                     text: (secondaryText.length > 0
                         ? presenceText + "  " + secondaryText
@@ -690,37 +903,103 @@ OverlayWidget {
         }
     }
 
-    // One retained proxy represents the grouped avatar role to CUSTOM edit
-    // chrome. Every real avatar consumes the same scalar; no delegate owns
-    // persistence and no per-avatar edit state is created.
+    // Retained proxies expose one representative geometry surface for each
+    // repeated role. The actual delegates all consume the same model factors,
+    // so edit cost/state is constant regardless of roster size.
     Item {
-        id: customAvatarRoleTarget
-        objectName: "friendPulseCustomAvatarRoleTarget"
+        id: customFriendFrameRoleTarget
+        objectName: "friendPulseCustomFriendFrameRoleTarget"
         visible: friendRoot.friendPulseModel.hasRows
             && (friendRoot.friendPulseModel.viewState === "ready"
                 || friendRoot.friendPulseModel.viewState === "stale")
         enabled: false
         readonly property bool rowsMode: friendRoot.friendPulseModel.viewMode === "rows"
-        readonly property real rowAvatarSize: 36.0 * friendRoot.customAvatarScale
-        readonly property real gridTileWidth: Math.max(72.0, activityGridView.cellWidth - 12.0)
-        readonly property real gridAvatarSize: Math.min(
-            58.0, Math.max(38.0, gridTileWidth * 0.42)
-        ) * friendRoot.customAvatarScale
         readonly property real gridIncompleteShift: activityGridView.count > 0
             && activityGridView.count < activityGridView.activeColumns
             ? (activityGridView.activeColumns - activityGridView.count)
                 * activityGridView.cellWidth / 2.0
             : 0.0
-        width: rowsMode ? rowAvatarSize : gridAvatarSize
-        height: width
+        width: rowsMode
+            ? friendRoot.canonicalRowFrameWidth
+                * friendRoot.friendPulseModel.customFriendFrameWidthScale
+            : friendRoot.canonicalGridTileWidth
+                * friendRoot.friendPulseModel.customFriendFrameWidthScale
+        height: rowsMode ? friendRoot.rowFrameHeight : friendRoot.gridTileHeight
         x: rowsMode
-            ? activityRowsView.x + 13.0
+            ? activityRowsView.x + (activityRowsView.width - width) / 2.0
             : activityGridView.x + gridIncompleteShift
                 + activityGridView.cellWidth / 2.0 - width / 2.0
+        y: rowsMode ? activityRowsView.y : activityGridView.y + 2.0
+    }
+
+    Item {
+        id: customAvatarRoleTarget
+        objectName: "friendPulseCustomAvatarRoleTarget"
+        visible: customFriendFrameRoleTarget.visible
+        enabled: false
+        readonly property bool rowsMode: customFriendFrameRoleTarget.rowsMode
+        width: (rowsMode ? friendRoot.canonicalRowAvatarSize
+            : friendRoot.canonicalGridAvatarSize) * friendRoot.customAvatarScale
+        height: width
+        x: rowsMode
+            ? customFriendFrameRoleTarget.x + 7.0
+                + friendRoot.friendPulseModel.customAvatarXOffset
+                    * friendRoot.baseAuthoredWidth
+            : customFriendFrameRoleTarget.x
+                + (customFriendFrameRoleTarget.width - width) / 2.0
+                + friendRoot.friendPulseModel.customAvatarXOffset
+                    * friendRoot.baseAuthoredWidth
         y: rowsMode
-            ? activityRowsView.y
-                + (Math.max(50.0, rowAvatarSize + 14.0) - rowAvatarSize) / 2.0
-            : activityGridView.y + 14.0
+            ? customFriendFrameRoleTarget.y
+                + (customFriendFrameRoleTarget.height - height) / 2.0
+                + friendRoot.friendPulseModel.customAvatarYOffset
+                    * friendRoot.baseAuthoredHeight
+            : customFriendFrameRoleTarget.y + 12.0
+                + friendRoot.friendPulseModel.customAvatarYOffset
+                    * friendRoot.baseAuthoredHeight
+    }
+
+    Item {
+        id: customUsernameRoleTarget
+        objectName: "friendPulseCustomUsernameRoleTarget"
+        visible: customFriendFrameRoleTarget.visible
+            && (friendRoot.friendPulseModel.viewMode === "rows"
+                || friendRoot.friendPulseModel.showNames)
+        enabled: false
+        readonly property bool rowsMode: customFriendFrameRoleTarget.rowsMode
+        readonly property real rowTextBaseX:
+            customAvatarRoleTarget.x + customAvatarRoleTarget.width + 11.0
+        readonly property real rowTextBaseWidth: Math.max(24.0,
+            customFriendFrameRoleTarget.x + customFriendFrameRoleTarget.width
+                - rowTextBaseX - 65.0
+        )
+        readonly property real gridBaseWidth: Math.max(20.0,
+            friendRoot.canonicalGridTileWidth - 14.0
+        )
+        readonly property real gridBaseHeight: Math.max(
+            19.0, friendRoot.friendPulseModel.nameFontSize * 1.3
+        )
+        width: (rowsMode ? rowTextBaseWidth : gridBaseWidth)
+            * friendRoot.friendPulseModel.customUsernameWidthScale
+        height: (rowsMode ? 23.0 : gridBaseHeight)
+            * friendRoot.friendPulseModel.customUsernameHeightScale
+        x: rowsMode
+            ? rowTextBaseX
+                + friendRoot.friendPulseModel.customUsernameXOffset
+                    * friendRoot.baseAuthoredWidth
+            : customFriendFrameRoleTarget.x
+                + (customFriendFrameRoleTarget.width - width) / 2.0
+                + friendRoot.friendPulseModel.customUsernameXOffset
+                    * friendRoot.baseAuthoredWidth
+        y: rowsMode
+            ? customFriendFrameRoleTarget.y
+                + Math.max(5.0, (customFriendFrameRoleTarget.height - 40.0) / 2.0)
+                + friendRoot.friendPulseModel.customUsernameYOffset
+                    * friendRoot.baseAuthoredHeight
+            : customFriendFrameRoleTarget.y + 12.0
+                + friendRoot.canonicalGridAvatarSize + 5.0
+                + friendRoot.friendPulseModel.customUsernameYOffset
+                    * friendRoot.baseAuthoredHeight
     }
 
     Rectangle {

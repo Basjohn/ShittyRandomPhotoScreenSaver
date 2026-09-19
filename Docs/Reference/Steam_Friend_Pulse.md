@@ -328,6 +328,8 @@ Friend Pulse inherits the ordinary-widget contract, including:
 - shared hover/click glow behavior;
 - shared edit-mode X / duplicate / Save / Cancel ownership;
 - no family-local geometry persistence or theme cascade.
+- CUSTOM child geometry is roster-shared, not delegate-owned: singleton Header / Online Count / Separator plus one shared Friend Frames, Avatars and Usernames record each. Repeated roles affect every row/tile consistently and never create per-friend persistence. The shared frame remains family-positioned and exposes size only; avatar/username placement is a shared offset applied uniformly across repeated items.
+- selected-Edit collision may ignore only the structural frame↔avatar/username containment pairs so a containing frame does not block its own children; snapping/guides and collision against unrelated roles remain active.
 
 The default `420x180` scaffold geometry is only a starting authoring hint; eyes-on Quick layout may revise canonical
 preferred dimensions if the actual useful row design needs it. Normalization contracts, not old pixels, are binding.

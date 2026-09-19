@@ -1,7 +1,7 @@
 # Steam Games You Follow — Feasibility-First Product Decomposition
 
 Status: **NEAR-FUTURE / DEV-GATED / NOT IMPLEMENTED**  
-Last updated: 2026-09-13  
+Last updated: 2026-09-19  
 Current sequencing authority: `Current_Plan.md`  
 Stable compatibility id: `steam_progress`  
 Product name: **Games You Follow**
@@ -238,7 +238,74 @@ direct browser attempt or exit.
 
 - Add one retained `GamesYouFollowPresentation.qml` under the existing ordinary
 widget registry/binder path, with a presentation model owned in Python and one
-stable list-model identity.
+stable list-model identity. **Child-role editing is part of v1 admission, not a
+follow-up rollout.** The first descriptor/QML/model slice must declare the
+semantic child surface below and consume the existing shared CUSTOM owner.
+
+### 5.1 Child-role contract from first implementation
+
+Games You Follow must be born on the ordinary-widget child editor contract. Do
+not ship an outer-card-only version and plan a later geometry retrofit. The
+retained role vocabulary is fixed around repeated *semantics*, never story
+identity:
+
+```text
+singleton roles
+    header
+    refresh
+    overflow_summary        # only when the truthful N-more summary is visible
+
+shared repeated-story roles
+    story_rows
+    story_artwork
+    story_game_labels
+    story_headlines
+    story_source_time
+    story_separators
+```
+
+- Persist at most one `child_geometry` record for each role above. Never emit
+  `story_rows_0`, AppID/item-id keyed geometry, delegate-index geometry, or any
+  other state whose cardinality grows with the accepted feed. `single_row` and
+  `double_row` remain the only visible-story-count authorities.
+- The active row variant owns row **placement/count**. `story_rows` may adjust
+  the shared row frame size/offset within that variant, but child editing cannot
+  reveal a third story, hide a configured row by mutating source count, switch
+  view variants, or teach the provider/model a layout-derived population limit.
+- Artwork, game label, headline and source/time are nested repeated semantics.
+  Their one retained geometry record projects identically through every visible
+  row. The row frame may declare those nested roles as structural containment
+  collision exemptions, matching Friend Pulse/System Stats; nested peers still
+  collide with one another and unrelated chrome when the one global Child
+  Collision preference is ON.
+- `story_separators` is one shared thin-line role. Its Edit target may be thicker
+  than the painted line for usability, but the truthful occupied/collision rect
+  remains the actual separator geometry.
+- Header uses the existing shared `BrandedHeader` semantics: placement, uniform
+  sizing, alignment flip where admitted, and semantic corner anchor behavior.
+  Refresh is a separate singleton placement/size role and must not be baked into
+  header geometry. The optional overflow summary is likewise a singleton role,
+  present only when the model truthfully exposes overflow.
+- Descriptor metadata must declare each role's truthful resize axes, intrinsic
+  versus non-uniform sizing, alignment capability, min/max scales, edit proxy,
+  containment/collision relationships and any authored-rail reflow. QML must not
+  smuggle a second role schema or hidden clamp alongside that descriptor.
+- Authored geometry is the identity mapping. With empty `child_geometry`, both
+  row variants must render at their exact canonical v1 positions/sizes. First
+  real free movement detaches only the affected authored rail through the shared
+  placement-compensation path; later parent `content_extent` changes must not
+  drag a detached child or create a child->parent->child growth loop.
+- Shared Restore Size clears Games You Follow `child_geometry` together with the
+  ordinary CUSTOM size/`content_extent` state back to the active authored
+  variant while preserving X/Y/display. It does not reset follow/source/cache
+  state, credentials, ranking, or the selected `single_row`/`double_row` product
+  setting. Save/Cancel/re-entry/layout slots use the existing ordinary owner; no
+  family-local reset target or persistence root is allowed.
+- Child gestures are presentation-only. They may emit the existing narrow
+  geometry/session notifications, but must never request Steam data, rebuild the
+  accepted snapshot, restart cadence, hydrate images, rewrite Settings per drag,
+  or make provider/model work proportional to pointer events.
+
 - `single_row` and `double_row` are configuration-owned, complete-card geometry
 variants. Source count never changes ordinary-card height; excess accepted items
 are represented truthfully (for example “N more followed updates”) rather than
@@ -352,6 +419,12 @@ only index plus semantic action.
 - [ ] Python action admission rejects stale index, unavailable art/article,
 unapproved URL, and helper failure; Store/source routes use the established
 diagnostic versus normal-screensaver behavior.
+- [ ] Descriptor/retained-presentation tests prove the v1 child schema is
+  constant-size: singleton header/refresh/overflow plus one shared record per
+  repeated story semantic, with no AppID/item/index-derived `child_geometry`
+  keys; nested-row collision exemptions are structural only; authored empty
+  geometry is exact identity; Restore/Save/Cancel/slot replay uses the shared
+  owner and child dragging produces no provider/cache/image/cadence work.
 - [ ] Predictor/descriptor/normalisation tests prove normal stacking, global
   CUSTOM dormancy, horizontal-only `content_extent`, vertical-only
   `content_extent`, corner/wheel whole-card uniform scaling, direct-axis logical

@@ -8,7 +8,6 @@ local image sources only.
 
 from __future__ import annotations
 
-import math
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -32,6 +31,12 @@ from core.steam.friend_pulse import (
     FriendPulseSnapshot,
 )
 from core.steam.models import SteamResultStatus
+from rendering.custom_child_geometry import (
+    CustomChildSize,
+    child_role_map,
+    clamp_child_geometry,
+)
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 
 from .host import (
     OrdinaryWidgetPresentationHost,
@@ -98,6 +103,8 @@ def _grid_columns_for(
     *,
     custom_horizontal_extent: bool = False,
     avatar_scale: float = 1.0,
+    frame_width_scale: float = 1.0,
+    frame_baseline_width: float = 108.0,
 ) -> int:
     """Fit readable avatar cells to the current logical card width.
 
@@ -114,12 +121,49 @@ def _grid_columns_for(
         resolved_avatar_scale = float(avatar_scale)
     except (TypeError, ValueError):
         resolved_avatar_scale = 1.0
-    if not math.isfinite(resolved_avatar_scale) or resolved_avatar_scale <= 0.0:
+    if (
+        resolved_avatar_scale != resolved_avatar_scale
+        or resolved_avatar_scale <= 0.0
+        or resolved_avatar_scale == float("inf")
+    ):
         resolved_avatar_scale = 1.0
     resolved_avatar_scale = max(0.55, min(2.00, resolved_avatar_scale))
-    # Avatar customization changes the readable cell footprint, not the source
-    # roster or provider. Baseline scale=1.0 retains the existing 110px fit.
-    minimum_cell_width = max(72.0, 110.0 * resolved_avatar_scale)
+    try:
+        resolved_frame_scale = float(frame_width_scale)
+    except (TypeError, ValueError):
+        resolved_frame_scale = 1.0
+    if (
+        resolved_frame_scale != resolved_frame_scale
+        or resolved_frame_scale <= 0.0
+        or resolved_frame_scale == float("inf")
+    ):
+        resolved_frame_scale = 1.0
+    resolved_frame_scale = max(0.60, min(1.80, resolved_frame_scale))
+    # Shared avatar/frame customization changes only the retained cell footprint,
+    # never roster/provider admission. The frame term keeps widened grouped tiles
+    # from overlapping by allowing CUSTOM width to trade columns for room.
+    try:
+        resolved_frame_baseline = float(frame_baseline_width)
+    except (TypeError, ValueError):
+        resolved_frame_baseline = 108.0
+    if (
+        resolved_frame_baseline != resolved_frame_baseline
+        or resolved_frame_baseline <= 0.0
+        or resolved_frame_baseline == float("inf")
+    ):
+        resolved_frame_baseline = 108.0
+    # Identity must be the exact pre-editor authored fit.  The shared frame role
+    # may trade columns for room only by its *delta* from authored width; charging
+    # the full frame width again at scale 1.0 made narrow authored grids lose a
+    # column before the user had customized anything.
+    frame_width_from_authored = 110.0 + (
+        resolved_frame_baseline * (resolved_frame_scale - 1.0)
+    )
+    minimum_cell_width = max(
+        72.0,
+        110.0 * resolved_avatar_scale,
+        frame_width_from_authored,
+    )
     fitted = max(
         1, int((content_width + _GRID_GAP) // (minimum_cell_width + _GRID_GAP))
     )
@@ -495,10 +539,24 @@ class FriendPulsePresentationModel(QObject):
         # This is presentation-only session/layout state; it never mutates the
         # normalized ``visible_row_capacity``/``preferred_width`` settings.
         self._content_extent: tuple[int, int] | None = None
-        # One grouped CUSTOM avatar role. The shared layout session owns the
-        # persisted factor; every row/grid avatar consumes this single scalar so
-        # no per-friend geometry state or provider activity is introduced.
-        self._custom_avatar_scale = 1.0
+        # CUSTOM child geometry is still persisted only by the shared layout
+        # session. Friend Pulse projects six descriptor-backed role records into
+        # retained presentation state. Repeated roles are deliberately *grouped*:
+        # every friend frame/avatar/username consumes the same record, so roster
+        # size never creates per-friend settings, I/O, or provider work.
+        self._custom_header_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_header_alignment = "left"
+        self._custom_header_anchor = ""
+        self._custom_online_count_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_online_count_alignment = "right"
+        self._custom_separator_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_friend_frame_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_avatar_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_username_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        descriptor = get_widget_runtime_descriptor("friend_pulse")
+        if descriptor is None or not descriptor.custom_child_roles:
+            raise RuntimeError("Friend Pulse CUSTOM child-role descriptor is missing")
+        self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
 
     @property
     def is_active(self) -> bool:
@@ -820,25 +878,72 @@ class FriendPulsePresentationModel(QObject):
         return True
 
     def set_custom_child_geometry(self, child_geometry: object) -> bool:
-        """Project the grouped CUSTOM avatar role into retained presentation state."""
+        """Project grouped Friend Pulse CUSTOM child geometry.
+
+        The shared CUSTOM owner remains the only gesture/persistence authority.
+        Repeated roster primitives intentionally consume one role record each;
+        this method therefore stays O(role-count), independent of friend count,
+        and emits one narrow geometry signal for an applied payload.
+        """
 
         raw = child_geometry if isinstance(child_geometry, Mapping) else {}
-        avatar = raw.get("avatars") if isinstance(raw, Mapping) else None
-        if not isinstance(avatar, Mapping):
-            avatar = {}
-        try:
-            scale = float(avatar.get("width_scale", 1.0))
-        except (TypeError, ValueError):
-            scale = 1.0
-        if not math.isfinite(scale) or scale <= 0.0:
-            scale = 1.0
-        scale = max(0.55, min(2.00, scale))
-        if abs(scale - self._custom_avatar_scale) <= 1.0e-4:
+
+        def _resolved(role_id: str) -> CustomChildSize:
+            role = self._custom_child_roles[role_id]
+            value = raw.get(role_id) if isinstance(raw, Mapping) else None
+            if not isinstance(value, Mapping):
+                return CustomChildSize()
+            return clamp_child_geometry(
+                role,
+                value.get("width_scale", 1.0),
+                value.get("height_scale", 1.0),
+                value.get("x_offset", 0.0),
+                value.get("y_offset", 0.0),
+                value.get("alignment"),
+                value.get("anchor"),
+            )
+
+        header = _resolved("header")
+        online_count = _resolved("online_count")
+        separator = _resolved("separator")
+        friend_frames = _resolved("friend_frames")
+        avatars = _resolved("avatars")
+        usernames = _resolved("usernames")
+        next_values = (
+            (header.width_scale, header.height_scale, header.x_offset, header.y_offset),
+            header.alignment or self._custom_child_roles["header"].authored_alignment,
+            str(header.anchor or ""),
+            (online_count.width_scale, online_count.height_scale, online_count.x_offset, online_count.y_offset),
+            online_count.alignment or self._custom_child_roles["online_count"].authored_alignment,
+            (separator.width_scale, separator.height_scale, separator.x_offset, separator.y_offset),
+            (friend_frames.width_scale, friend_frames.height_scale, friend_frames.x_offset, friend_frames.y_offset),
+            (avatars.width_scale, avatars.height_scale, avatars.x_offset, avatars.y_offset),
+            (usernames.width_scale, usernames.height_scale, usernames.x_offset, usernames.y_offset),
+        )
+        current_values = (
+            self._custom_header_geometry,
+            self._custom_header_alignment,
+            self._custom_header_anchor,
+            self._custom_online_count_geometry,
+            self._custom_online_count_alignment,
+            self._custom_separator_geometry,
+            self._custom_friend_frame_geometry,
+            self._custom_avatar_geometry,
+            self._custom_username_geometry,
+        )
+        if next_values == current_values:
             return False
-        self._custom_avatar_scale = scale
-        # Avatar size and grid-column admission share one narrow geometry signal
-        # so a drag sample neither wakes unrelated state bindings nor emits two
-        # separate geometry notifications.
+        (
+            self._custom_header_geometry,
+            self._custom_header_alignment,
+            self._custom_header_anchor,
+            self._custom_online_count_geometry,
+            self._custom_online_count_alignment,
+            self._custom_separator_geometry,
+            self._custom_friend_frame_geometry,
+            self._custom_avatar_geometry,
+            self._custom_username_geometry,
+        ) = next_values
         self.customGeometryChanged.emit()
         return True
 
@@ -918,16 +1023,132 @@ class FriendPulsePresentationModel(QObject):
             if custom_extent
             else self.config.authored_width
         )
+        base_columns = _grid_columns_for(
+            self.config.capacity,
+            self.config.authored_width,
+            custom_horizontal_extent=False,
+            avatar_scale=1.0,
+            frame_width_scale=1.0,
+        )
+        base_tile_width = max(
+            72.0,
+            (max(420, self.config.authored_width) - 36.0) / max(1, base_columns)
+                - 12.0,
+        )
         return _grid_columns_for(
             self.config.capacity,
             width,
             custom_horizontal_extent=custom_extent,
-            avatar_scale=self._custom_avatar_scale,
+            avatar_scale=float(self._custom_avatar_geometry[0]),
+            frame_width_scale=float(self._custom_friend_frame_geometry[0]),
+            frame_baseline_width=base_tile_width,
+        )
+
+    @Property(int, constant=True)
+    def baseGridColumns(self) -> int:
+        return _grid_columns_for(
+            self.config.capacity,
+            self.config.authored_width,
+            custom_horizontal_extent=False,
+            avatar_scale=1.0,
+            frame_width_scale=1.0,
         )
 
     @Property(float, notify=customGeometryChanged)
     def customAvatarScale(self) -> float:
-        return float(self._custom_avatar_scale)
+        return float(self._custom_avatar_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customAvatarXOffset(self) -> float:
+        return float(self._custom_avatar_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customAvatarYOffset(self) -> float:
+        return float(self._custom_avatar_geometry[3])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFriendFrameWidthScale(self) -> float:
+        return float(self._custom_friend_frame_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFriendFrameHeightScale(self) -> float:
+        return float(self._custom_friend_frame_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customUsernameWidthScale(self) -> float:
+        return float(self._custom_username_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customUsernameHeightScale(self) -> float:
+        return float(self._custom_username_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customUsernameXOffset(self) -> float:
+        return float(self._custom_username_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customUsernameYOffset(self) -> float:
+        return float(self._custom_username_geometry[3])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderWidthScale(self) -> float:
+        return float(self._custom_header_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderHeightScale(self) -> float:
+        return float(self._custom_header_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderXOffset(self) -> float:
+        return float(self._custom_header_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customHeaderYOffset(self) -> float:
+        return float(self._custom_header_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customHeaderAlignment(self) -> str:
+        return self._custom_header_alignment
+
+    @Property(str, notify=customGeometryChanged)
+    def customHeaderAnchor(self) -> str:
+        return self._custom_header_anchor
+
+    @Property(float, notify=customGeometryChanged)
+    def customOnlineCountWidthScale(self) -> float:
+        return float(self._custom_online_count_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customOnlineCountHeightScale(self) -> float:
+        return float(self._custom_online_count_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customOnlineCountXOffset(self) -> float:
+        return float(self._custom_online_count_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customOnlineCountYOffset(self) -> float:
+        return float(self._custom_online_count_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customOnlineCountAlignment(self) -> str:
+        return self._custom_online_count_alignment
+
+    @Property(float, notify=customGeometryChanged)
+    def customSeparatorWidthScale(self) -> float:
+        return float(self._custom_separator_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customSeparatorHeightScale(self) -> float:
+        return float(self._custom_separator_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customSeparatorXOffset(self) -> float:
+        return float(self._custom_separator_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customSeparatorYOffset(self) -> float:
+        return float(self._custom_separator_geometry[3])
 
     @Property(int, constant=True)
     def visibleCapacity(self) -> int:
@@ -1011,6 +1232,14 @@ class FriendPulsePresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def textShadowOffsetY(self) -> float:
         return self.style.text_shadow_offset_y
+
+    @Property(float, constant=True)
+    def baseAuthoredWidth(self) -> float:
+        return float(self.config.authored_width)
+
+    @Property(float, constant=True)
+    def baseAuthoredHeight(self) -> float:
+        return float(self.config.authored_height)
 
     @Property(float, notify=stateChanged)
     def authoredWidth(self) -> float:

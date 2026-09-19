@@ -9,27 +9,170 @@ OverlayWidget {
     preferredContentWidth: systemStatsModel.authoredWidth
     preferredContentHeight: systemStatsModel.authoredHeight
 
+    // CUSTOM child state is one shared descriptor-backed payload. System Stats
+    // deliberately shares each metric semantic across CPU/RAM/Uptime/Network,
+    // so enabled metric count never multiplies persistence or edit-state cost.
+    readonly property real childNormalizationWidth: systemStatsModel.baseAuthoredWidth
+    readonly property real childNormalizationHeight: systemStatsModel.baseAuthoredHeight
+    readonly property var childGeometry: systemStatsModel.customChildGeometry
+    function childRecord(roleId) {
+        return childGeometry ? childGeometry[roleId] : null
+    }
+    function childWidthScale(roleId) {
+        const value = childRecord(roleId)
+        return value && value.width_scale !== undefined ? Number(value.width_scale) : 1.0
+    }
+    function childHeightScale(roleId) {
+        const value = childRecord(roleId)
+        return value && value.height_scale !== undefined ? Number(value.height_scale) : 1.0
+    }
+    function childOffsetX(roleId) {
+        const value = childRecord(roleId)
+        return (value && value.x_offset !== undefined ? Number(value.x_offset) : 0.0)
+            * childNormalizationWidth
+    }
+    function childOffsetY(roleId) {
+        const value = childRecord(roleId)
+        return (value && value.y_offset !== undefined ? Number(value.y_offset) : 0.0)
+            * childNormalizationHeight
+    }
+    function childAlignment(roleId, fallback) {
+        const value = childRecord(roleId)
+        return value && value.alignment !== undefined
+            ? String(value.alignment) : String(fallback || "left")
+    }
+    function childAnchor(roleId) {
+        const value = childRecord(roleId)
+        return value && value.anchor !== undefined ? String(value.anchor) : ""
+    }
+
     readonly property int visibleMetricCount: systemStatsModel.enabledMetricCount
     readonly property real metricAreaTop: 88.0
     readonly property real metricAreaBottomMargin: 18.0
     readonly property real metricGap: visibleMetricCount > 1
         ? Math.min(16.0, 9.0 + Math.max(0.0, statsRoot.systemStatsModel.authoredHeight - 430.0) * 0.018)
         : 0.0
-    readonly property real metricPanelHeight: visibleMetricCount > 0
+    readonly property real canonicalMetricPanelWidth: Math.max(
+        1.0, statsRoot.systemStatsModel.authoredWidth - 32.0
+    )
+    readonly property real canonicalMetricPanelHeight: visibleMetricCount > 0
         ? Math.max(58.0, (statsRoot.systemStatsModel.authoredHeight - metricAreaTop - metricAreaBottomMargin
             - metricGap * (visibleMetricCount - 1)) / visibleMetricCount)
         : 0.0
+    readonly property real metricPanelWidth: canonicalMetricPanelWidth
+        * childWidthScale("metric_panels")
+    readonly property real metricPanelHeight: canonicalMetricPanelHeight
+        * childHeightScale("metric_panels")
+    readonly property real metricPanelX: 16.0 + childOffsetX("metric_panels")
+    readonly property real metricPanelYOffset: childOffsetY("metric_panels")
     readonly property real metricStep: metricPanelHeight + metricGap
-    readonly property real valueLaneWidth: Math.min(190.0,
-        118.0 + Math.max(0.0, statsRoot.systemStatsModel.authoredWidth - 520.0) * 0.20)
+    readonly property real valueLaneWidth: Math.min(
+        190.0,
+        118.0 + Math.max(0.0, metricPanelWidth + 32.0 - 520.0) * 0.20
+    )
+    readonly property real representativePanelY: metricAreaTop + metricPanelYOffset
+
+    customEditableChildRoles: {
+        const roles = []
+        const normW = childNormalizationWidth
+        const normH = childNormalizationHeight
+        roles.push({
+            "roleId": "header",
+            "target": headerFrame,
+            "normalizationWidth": normW,
+            "normalizationHeight": normH,
+            "semanticCornerInsetX":
+                (statsRoot.width - statsRoot.systemStatsModel.authoredWidth
+                    * statsRoot.presentationScale) / 2.0
+                    + 16.0 * statsRoot.presentationScale,
+            "semanticCornerInsetY":
+                (statsRoot.height - statsRoot.systemStatsModel.authoredHeight
+                    * statsRoot.presentationScale) / 2.0
+                    + 14.0 * statsRoot.presentationScale
+        })
+        roles.push({
+            "roleId": "header_separator",
+            "target": headerSeparatorEditTarget,
+            "occupiedTarget": headerSeparator,
+            "normalizationWidth": normW,
+            "normalizationHeight": normH
+        })
+        if (visibleMetricCount > 0) {
+            const nested = [
+                "metric_accents", "metric_labels", "metric_details",
+                "metric_values", "metric_tracks"
+            ]
+            roles.push({
+                "roleId": "metric_panels",
+                "target": customMetricPanelRoleTarget,
+                "collisionIgnoreRoleIds": nested,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH
+            })
+            roles.push({
+                "roleId": "metric_accents",
+                "target": customMetricAccentRoleTarget,
+                "collisionIgnoreRoleIds": ["metric_panels"],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH
+            })
+            roles.push({
+                "roleId": "metric_labels",
+                "target": customMetricLabelRoleTarget,
+                "collisionIgnoreRoleIds": ["metric_panels"],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH
+            })
+            roles.push({
+                "roleId": "metric_details",
+                "target": customMetricDetailRoleTarget,
+                "collisionIgnoreRoleIds": ["metric_panels"],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH
+            })
+            roles.push({
+                "roleId": "metric_values",
+                "target": customMetricValueRoleTarget,
+                "collisionIgnoreRoleIds": ["metric_panels"],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH
+            })
+            // Tracks are rendered only for CPU/RAM today, but the geometry
+            // contract is still one shared semantic record, not one per metric.
+            if (systemStatsModel.showCpu || systemStatsModel.showMemory) {
+                roles.push({
+                    "roleId": "metric_tracks",
+                    "target": customMetricTrackRoleTarget,
+                    "collisionIgnoreRoleIds": ["metric_panels"],
+                    "normalizationWidth": normW,
+                    "normalizationHeight": normH
+                })
+            }
+        }
+        return roles
+    }
 
     BrandedHeader {
         id: headerFrame
         frameObjectName: "systemStatsHeaderFrame"
         logoObjectName: "systemStatsToolsIcon"
         textObjectName: "systemStatsHeaderText"
-        x: 16.0
-        y: 14.0
+        transformOrigin: Item.TopLeft
+        scale: statsRoot.childWidthScale("header")
+        readonly property string customAnchor: statsRoot.childAnchor("header")
+        property real customEditPlacementCompensationX: customAnchor.length > 0
+            ? x - (16.0 + statsRoot.childOffsetX("header")) : 0.0
+        property real customEditPlacementCompensationY: customAnchor.length > 0
+            ? y - (14.0 + statsRoot.childOffsetY("header")) : 0.0
+        x: customAnchor.endsWith("right")
+            ? statsRoot.systemStatsModel.authoredWidth - 16.0 - width * scale
+            : (customAnchor.endsWith("left")
+                ? 16.0 : 16.0 + statsRoot.childOffsetX("header"))
+        y: customAnchor.startsWith("bottom")
+            ? statsRoot.systemStatsModel.authoredHeight - 14.0 - height * scale
+            : (customAnchor.startsWith("top")
+                ? 14.0 : 14.0 + statsRoot.childOffsetY("header"))
+        contentReversed: statsRoot.childAlignment("header", "left") === "right"
         label: statsRoot.systemStatsModel.headerText
         logoSource: statsRoot.systemStatsModel.iconSource
         logoTintEnabled: true
@@ -58,11 +201,26 @@ OverlayWidget {
     }
 
     Rectangle {
-        x: 16.0
-        y: 75.0
-        width: statsRoot.systemStatsModel.authoredWidth - 32.0
-        height: statsRoot.scaleAwareStrokeWidth(1.0)
+        id: headerSeparator
+        objectName: "systemStatsHeaderSeparator"
+        x: 16.0 + statsRoot.childOffsetX("header_separator")
+        y: 75.0 + statsRoot.childOffsetY("header_separator")
+        width: Math.max(1.0, (statsRoot.systemStatsModel.authoredWidth - 32.0)
+            * statsRoot.childWidthScale("header_separator"))
+        height: Math.max(0.5, statsRoot.scaleAwareStrokeWidth(1.0)
+            * statsRoot.childHeightScale("header_separator"))
         color: statsRoot.systemStatsModel.metricBorderColor
+    }
+
+    Item {
+        id: headerSeparatorEditTarget
+        objectName: "systemStatsHeaderSeparatorEditTarget"
+        visible: headerSeparator.visible
+        enabled: false
+        x: headerSeparator.x
+        y: headerSeparator.y - (height - headerSeparator.height) / 2.0
+        width: headerSeparator.width
+        height: Math.max(6.0, headerSeparator.height)
     }
 
     component MetricPanel: Rectangle {
@@ -75,7 +233,7 @@ OverlayWidget {
         required property color accentColor
         property bool showTrack: true
 
-        width: statsRoot.systemStatsModel.authoredWidth - 32.0
+        width: statsRoot.metricPanelWidth
         height: statsRoot.metricPanelHeight
         radius: 10.0
         color: statsRoot.systemStatsModel.metricSurfaceColor
@@ -85,25 +243,37 @@ OverlayWidget {
         border.width: statsRoot.scaleAwareStrokeWidth(1.25)
 
         Rectangle {
-            x: 0.0
-            y: 0.0
-            width: 5.0
-            height: parent.height
-            radius: 2.5
+            objectName: panel.objectPrefix + "Accent"
+            x: statsRoot.childOffsetX("metric_accents")
+            y: statsRoot.childOffsetY("metric_accents")
+            width: Math.max(1.0, 5.0 * statsRoot.childWidthScale("metric_accents"))
+            height: Math.max(1.0, panel.height * statsRoot.childHeightScale("metric_accents"))
+            radius: Math.min(width / 2.0, 2.5)
             color: panel.accentColor
         }
 
         ShadowedText {
-            x: 18.0
-            y: Math.min(18.0, 9.0 + Math.max(0.0, panel.height - 72.0) * 0.10)
-            width: Math.max(180.0, parent.width - statsRoot.valueLaneWidth - 54.0)
-            height: 22.0
+            objectName: panel.objectPrefix + "Label"
+            readonly property real baseY: Math.min(
+                18.0, 9.0 + Math.max(0.0, panel.height - 72.0) * 0.10
+            )
+            readonly property real baseWidth: Math.max(
+                180.0, parent.width - statsRoot.valueLaneWidth - 54.0
+            )
+            x: 18.0 + statsRoot.childOffsetX("metric_labels")
+            y: baseY + statsRoot.childOffsetY("metric_labels")
+            width: Math.max(1.0, baseWidth * statsRoot.childWidthScale("metric_labels"))
+            height: Math.max(1.0, 22.0 * statsRoot.childHeightScale("metric_labels"))
             text: panel.metricLabel
             color: panel.accentColor
             font.family: statsRoot.systemStatsModel.fontFamily
             font.pointSize: statsRoot.systemStatsModel.fontSize * 0.80
+                * statsRoot.childHeightScale("metric_labels")
             font.bold: true
+            horizontalAlignment: statsRoot.childAlignment("metric_labels", "left") === "right"
+                ? Text.AlignRight : Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
             shadowEnabled: statsRoot.systemStatsModel.textShadowEnabled
             shadowColor: statsRoot.systemStatsModel.textShadowColor
             shadowOffsetX: statsRoot.systemStatsModel.textShadowOffsetX
@@ -112,15 +282,24 @@ OverlayWidget {
 
         ShadowedText {
             objectName: panel.objectPrefix + "Detail"
-            x: 18.0
-            y: Math.min(parent.height - 31.0,
-                31.0 + Math.max(0.0, panel.height - 72.0) * 0.30)
-            width: Math.max(100.0, parent.width - statsRoot.valueLaneWidth - 54.0)
-            height: 22.0
+            readonly property real baseY: Math.min(
+                parent.height - 31.0,
+                31.0 + Math.max(0.0, panel.height - 72.0) * 0.30
+            )
+            readonly property real baseWidth: Math.max(
+                100.0, parent.width - statsRoot.valueLaneWidth - 54.0
+            )
+            x: 18.0 + statsRoot.childOffsetX("metric_details")
+            y: baseY + statsRoot.childOffsetY("metric_details")
+            width: Math.max(1.0, baseWidth * statsRoot.childWidthScale("metric_details"))
+            height: Math.max(1.0, 22.0 * statsRoot.childHeightScale("metric_details"))
             text: panel.metricDetail
             color: statsRoot.systemStatsModel.mutedTextColor
             font.family: statsRoot.systemStatsModel.fontFamily
             font.pointSize: statsRoot.systemStatsModel.fontSize * 0.70
+                * statsRoot.childHeightScale("metric_details")
+            horizontalAlignment: statsRoot.childAlignment("metric_details", "left") === "right"
+                ? Text.AlignRight : Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             shadowEnabled: statsRoot.systemStatsModel.textShadowEnabled
@@ -131,17 +310,23 @@ OverlayWidget {
 
         ShadowedText {
             objectName: panel.objectPrefix + "Value"
-            anchors.right: parent.right
-            anchors.rightMargin: 16.0
-            y: Math.min(17.0, 8.0 + Math.max(0.0, panel.height - 72.0) * 0.10)
-            width: statsRoot.valueLaneWidth
-            height: 37.0
+            readonly property real baseX: panel.width - 16.0 - statsRoot.valueLaneWidth
+            readonly property real baseY: Math.min(
+                17.0, 8.0 + Math.max(0.0, panel.height - 72.0) * 0.10
+            )
+            x: baseX + statsRoot.childOffsetX("metric_values")
+            y: baseY + statsRoot.childOffsetY("metric_values")
+            width: Math.max(1.0, statsRoot.valueLaneWidth
+                * statsRoot.childWidthScale("metric_values"))
+            height: Math.max(1.0, 37.0 * statsRoot.childHeightScale("metric_values"))
             text: panel.metricValue
             color: statsRoot.systemStatsModel.textColor
             font.family: statsRoot.systemStatsModel.fontFamily
             font.pointSize: statsRoot.systemStatsModel.fontSize * 1.58
+                * statsRoot.childHeightScale("metric_values")
             font.bold: true
-            horizontalAlignment: Text.AlignRight
+            horizontalAlignment: statsRoot.childAlignment("metric_values", "right") === "right"
+                ? Text.AlignRight : Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
             fontSizeMode: Text.HorizontalFit
             minimumPointSize: 9.0
@@ -152,14 +337,19 @@ OverlayWidget {
         }
 
         Rectangle {
-            x: 18.0
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Math.min(14.0,
-                8.0 + Math.max(0.0, panel.height - 72.0) * 0.08)
+            id: metricTrack
+            objectName: panel.objectPrefix + "Track"
+            readonly property real baseBottomMargin: Math.min(
+                14.0, 8.0 + Math.max(0.0, panel.height - 72.0) * 0.08
+            )
+            readonly property real baseY: panel.height - baseBottomMargin - 6.0
             visible: panel.showTrack
-            width: parent.width - 34.0
-            height: 6.0
-            radius: 3.0
+            x: 18.0 + statsRoot.childOffsetX("metric_tracks")
+            y: baseY + statsRoot.childOffsetY("metric_tracks")
+            width: Math.max(1.0, (parent.width - 34.0)
+                * statsRoot.childWidthScale("metric_tracks"))
+            height: Math.max(1.0, 6.0 * statsRoot.childHeightScale("metric_tracks"))
+            radius: height / 2.0
             color: statsRoot.systemStatsModel.trackColor
             border.color: statsRoot.systemStatsModel.metricBorderColor
             border.width: statsRoot.scaleAwareStrokeWidth(1.0)
@@ -184,10 +374,11 @@ OverlayWidget {
     }
 
     MetricPanel {
+        id: cpuPanel
         objectName: "systemStatsCpuPanel"
         objectPrefix: "systemStatsCpu"
-        x: 16.0
-        y: statsRoot.metricAreaTop
+        x: statsRoot.metricPanelX
+        y: statsRoot.metricAreaTop + statsRoot.metricPanelYOffset
         visible: statsRoot.systemStatsModel.showCpu
         metricLabel: "CPU LOAD"
         metricValue: statsRoot.systemStatsModel.cpuValue
@@ -197,10 +388,11 @@ OverlayWidget {
     }
 
     MetricPanel {
+        id: ramPanel
         objectName: "systemStatsRamPanel"
         objectPrefix: "systemStatsRam"
-        x: 16.0
-        y: statsRoot.metricAreaTop
+        x: statsRoot.metricPanelX
+        y: statsRoot.metricAreaTop + statsRoot.metricPanelYOffset
             + (statsRoot.systemStatsModel.showCpu ? statsRoot.metricStep : 0.0)
         visible: statsRoot.systemStatsModel.showMemory
         metricLabel: "MEMORY"
@@ -211,10 +403,11 @@ OverlayWidget {
     }
 
     MetricPanel {
+        id: uptimePanel
         objectName: "systemStatsUptimePanel"
         objectPrefix: "systemStatsUptime"
-        x: 16.0
-        y: statsRoot.metricAreaTop + (
+        x: statsRoot.metricPanelX
+        y: statsRoot.metricAreaTop + statsRoot.metricPanelYOffset + (
             (statsRoot.systemStatsModel.showCpu ? 1 : 0)
             + (statsRoot.systemStatsModel.showMemory ? 1 : 0)
         ) * statsRoot.metricStep
@@ -228,10 +421,11 @@ OverlayWidget {
     }
 
     MetricPanel {
+        id: networkPanel
         objectName: "systemStatsNetworkPanel"
         objectPrefix: "systemStatsNetwork"
-        x: 16.0
-        y: statsRoot.metricAreaTop + (
+        x: statsRoot.metricPanelX
+        y: statsRoot.metricAreaTop + statsRoot.metricPanelYOffset + (
             (statsRoot.systemStatsModel.showCpu ? 1 : 0)
             + (statsRoot.systemStatsModel.showMemory ? 1 : 0)
             + (statsRoot.systemStatsModel.showUptime ? 1 : 0)
@@ -245,5 +439,100 @@ OverlayWidget {
         showTrack: false
     }
 
+    // Constant-cost representative targets for repeated semantics. These are
+    // not a second layout/persistence owner: actual panels consume the same
+    // child factors and these Items only let the shared Edit overlay observe one
+    // truthful instance regardless of metric count.
+    Item {
+        id: customMetricPanelRoleTarget
+        objectName: "systemStatsCustomMetricPanelRoleTarget"
+        visible: statsRoot.visibleMetricCount > 0
+        enabled: false
+        x: statsRoot.metricPanelX
+        y: statsRoot.representativePanelY
+        width: statsRoot.metricPanelWidth
+        height: statsRoot.metricPanelHeight
+    }
 
+    Item {
+        id: customMetricAccentRoleTarget
+        objectName: "systemStatsCustomMetricAccentRoleTarget"
+        visible: customMetricPanelRoleTarget.visible
+        enabled: false
+        x: customMetricPanelRoleTarget.x + statsRoot.childOffsetX("metric_accents")
+        y: customMetricPanelRoleTarget.y + statsRoot.childOffsetY("metric_accents")
+        width: Math.max(1.0, 5.0 * statsRoot.childWidthScale("metric_accents"))
+        height: Math.max(1.0, customMetricPanelRoleTarget.height
+            * statsRoot.childHeightScale("metric_accents"))
+    }
+
+    Item {
+        id: customMetricLabelRoleTarget
+        objectName: "systemStatsCustomMetricLabelRoleTarget"
+        visible: customMetricPanelRoleTarget.visible
+        enabled: false
+        readonly property real baseY: Math.min(
+            18.0, 9.0 + Math.max(0.0, customMetricPanelRoleTarget.height - 72.0) * 0.10
+        )
+        readonly property real baseWidth: Math.max(
+            180.0, customMetricPanelRoleTarget.width - statsRoot.valueLaneWidth - 54.0
+        )
+        x: customMetricPanelRoleTarget.x + 18.0 + statsRoot.childOffsetX("metric_labels")
+        y: customMetricPanelRoleTarget.y + baseY + statsRoot.childOffsetY("metric_labels")
+        width: Math.max(1.0, baseWidth * statsRoot.childWidthScale("metric_labels"))
+        height: Math.max(1.0, 22.0 * statsRoot.childHeightScale("metric_labels"))
+    }
+
+    Item {
+        id: customMetricDetailRoleTarget
+        objectName: "systemStatsCustomMetricDetailRoleTarget"
+        visible: customMetricPanelRoleTarget.visible
+        enabled: false
+        readonly property real baseY: Math.min(
+            customMetricPanelRoleTarget.height - 31.0,
+            31.0 + Math.max(0.0, customMetricPanelRoleTarget.height - 72.0) * 0.30
+        )
+        readonly property real baseWidth: Math.max(
+            100.0, customMetricPanelRoleTarget.width - statsRoot.valueLaneWidth - 54.0
+        )
+        x: customMetricPanelRoleTarget.x + 18.0 + statsRoot.childOffsetX("metric_details")
+        y: customMetricPanelRoleTarget.y + baseY + statsRoot.childOffsetY("metric_details")
+        width: Math.max(1.0, baseWidth * statsRoot.childWidthScale("metric_details"))
+        height: Math.max(1.0, 22.0 * statsRoot.childHeightScale("metric_details"))
+    }
+
+    Item {
+        id: customMetricValueRoleTarget
+        objectName: "systemStatsCustomMetricValueRoleTarget"
+        visible: customMetricPanelRoleTarget.visible
+        enabled: false
+        readonly property real baseX: customMetricPanelRoleTarget.width
+            - 16.0 - statsRoot.valueLaneWidth
+        readonly property real baseY: Math.min(
+            17.0, 8.0 + Math.max(0.0, customMetricPanelRoleTarget.height - 72.0) * 0.10
+        )
+        x: customMetricPanelRoleTarget.x + baseX + statsRoot.childOffsetX("metric_values")
+        y: customMetricPanelRoleTarget.y + baseY + statsRoot.childOffsetY("metric_values")
+        width: Math.max(1.0, statsRoot.valueLaneWidth
+            * statsRoot.childWidthScale("metric_values"))
+        height: Math.max(1.0, 37.0 * statsRoot.childHeightScale("metric_values"))
+    }
+
+    Item {
+        id: customMetricTrackRoleTarget
+        objectName: "systemStatsCustomMetricTrackRoleTarget"
+        visible: customMetricPanelRoleTarget.visible
+            && (statsRoot.systemStatsModel.showCpu || statsRoot.systemStatsModel.showMemory)
+        enabled: false
+        readonly property real baseBottomMargin: Math.min(
+            14.0, 8.0 + Math.max(0.0, customMetricPanelRoleTarget.height - 72.0) * 0.08
+        )
+        readonly property real baseY: customMetricPanelRoleTarget.height
+            - baseBottomMargin - 6.0
+        x: customMetricPanelRoleTarget.x + 18.0 + statsRoot.childOffsetX("metric_tracks")
+        y: customMetricPanelRoleTarget.y + baseY + statsRoot.childOffsetY("metric_tracks")
+        width: Math.max(1.0, (customMetricPanelRoleTarget.width - 34.0)
+            * statsRoot.childWidthScale("metric_tracks"))
+        height: Math.max(1.0, 6.0 * statsRoot.childHeightScale("metric_tracks"))
+    }
 }

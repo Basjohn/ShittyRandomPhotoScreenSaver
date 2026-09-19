@@ -469,7 +469,7 @@ def test_weather_family_uses_current_scene_host_and_mutates_without_recreation(q
         assert extended is not None and extended.isVisible() is False
         assert model.contentExtentActive is True
         assert model.contentExtentWidth == pytest.approx(760.0)
-        assert model.contentExtentHeight == pytest.approx(compact_height)
+        assert model.contentExtentHeight == pytest.approx(max(220.0, compact_height))
 
         expanded_height = compact_height + 320.0
         presentation._apply_custom_layout_size_payload(

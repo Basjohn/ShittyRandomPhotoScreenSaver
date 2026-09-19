@@ -25,6 +25,8 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
+from rendering.custom_child_geometry import CustomChildSize, child_role_map, clamp_child_geometry
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
 from rendering.quick.widgets.theme_projection import (
     configured_rgba_override,
@@ -483,6 +485,7 @@ _MAX_HELD_EMAILS = LIST_WIDGET_MAX_CAPACITY
 
 class GmailPresentationModel(QObject):
     stateChanged = Signal()
+    customGeometryChanged = Signal()
 
     _ACTIONS = frozenset({"mark_read", "mark_unread", "archive", "spam", "trash"})
 
@@ -512,6 +515,13 @@ class GmailPresentationModel(QObject):
         # CUSTOM content-extent override (logical content box, pre-uniform-scale).
         # None on every non-CUSTOM path -> authored size + ``limit`` govern.
         self._content_extent: tuple[int, int] | None = None
+        descriptor = get_widget_runtime_descriptor("gmail")
+        if descriptor is None:
+            raise RuntimeError("Missing runtime descriptor for 'gmail'")
+        self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
+        self._custom_child_geometry: dict[str, CustomChildSize] = {
+            role_id: CustomChildSize() for role_id in self._custom_child_roles
+        }
 
     @property
     def config(self) -> GmailPresentationConfig:
@@ -757,12 +767,17 @@ class GmailPresentationModel(QObject):
         materialized = min(held_count, max(1, int(self.config.limit)))
         if self._content_extent is not None:
             natural_row_height = max(28.0, float(self.config.font_size) * 1.65)
+            row_role = self._custom_child_roles.get("message_rows")
+            minimum_row_scale = (
+                float(row_role.minimum_scale[1]) if row_role is not None else 1.0
+            )
+            conservative_row_height = max(1.0, natural_row_height * minimum_row_scale)
             conservative_fit = max(
                 1,
                 int(
                     math.ceil(
                         float(self._content_extent[1])
-                        / max(1.0, natural_row_height + 4.0)
+                        / max(1.0, conservative_row_height + 4.0)
                     )
                 ),
             )
@@ -771,6 +786,40 @@ class GmailPresentationModel(QObject):
                 max(materialized, conservative_fit),
             )
         return self._row_model.replace_rows(self._held_rows[:materialized])
+
+
+    def set_custom_child_geometry(self, child_geometry: object) -> bool:
+        """Project shared Gmail child-role geometry without touching mail runtime state."""
+
+        raw = child_geometry if isinstance(child_geometry, Mapping) else {}
+        resolved: dict[str, CustomChildSize] = {}
+        for role_id, role in self._custom_child_roles.items():
+            value = raw.get(role_id) if isinstance(raw, Mapping) else None
+            if not isinstance(value, Mapping):
+                resolved[role_id] = CustomChildSize()
+                continue
+            resolved[role_id] = clamp_child_geometry(
+                role,
+                value.get("width_scale", 1.0),
+                value.get("height_scale", 1.0),
+                value.get("x_offset", 0.0),
+                value.get("y_offset", 0.0),
+                value.get("alignment"),
+                value.get("anchor"),
+            )
+        if resolved == self._custom_child_geometry:
+            return False
+        self._custom_child_geometry = resolved
+        self.customGeometryChanged.emit()
+        return True
+
+    @Property("QVariantMap", notify=customGeometryChanged)
+    def customChildGeometry(self) -> dict[str, dict[str, object]]:
+        return {
+            role_id: geometry.to_mapping()
+            for role_id, geometry in self._custom_child_geometry.items()
+            if not geometry.is_authored
+        }
 
     def retire(self) -> None:
         if self._retired:
@@ -903,6 +952,14 @@ class GmailPresentationModel(QObject):
     @Property(QColor, notify=stateChanged)
     def actionPopupTextColor(self) -> QColor:
         return QColor(*self.config.action_popup_text_color)
+
+    @Property(bool, notify=stateChanged)
+    def showSender(self) -> bool:
+        return self.config.show_sender
+
+    @Property(bool, notify=stateChanged)
+    def showSubject(self) -> bool:
+        return self.config.show_subject
 
     @Property(bool, notify=stateChanged)
     def showEnvelopeIcon(self) -> bool:
@@ -1096,6 +1153,8 @@ class RetainedGmailPresentation:
             self._model.set_content_extent(extent[0], extent[1])
         else:
             self._model.clear_content_extent()
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
+        self._model.set_custom_child_geometry(child_geometry)
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

@@ -266,10 +266,14 @@ def test_custom_content_extent_grows_logical_canvas_and_reflows_major_rails(qt_a
         qt_app.processEvents()
         artwork = _find_visual_item(item, "achievementArtworkFrame")
         rarity = _find_visual_item(item, "achievementField_rarity")
+        field_group = _find_visual_item(item, "achievementFieldGroup")
         pulse = _find_visual_item(item, "achievementProgressPulse")
-        assert artwork is not None and rarity is not None and pulse is not None
+        assert artwork is not None and rarity is not None and field_group is not None
+        assert pulse is not None
         base_artwork_x = artwork.x()
         base_rarity_width = rarity.width()
+        base_field_group_width = field_group.width()
+        base_field_group_y = field_group.y()
         base_pulse_y = pulse.y()
 
         assert model.set_content_extent(base_width + 220.0, base_height + 120.0) is True
@@ -281,7 +285,11 @@ def test_custom_content_extent_grows_logical_canvas_and_reflows_major_rails(qt_a
         assert model.authoredWidth == pytest.approx(base_width + 220.0)
         assert model.authoredHeight == pytest.approx(base_height + 120.0)
         assert artwork.x() == pytest.approx(base_artwork_x + 220.0)
-        assert rarity.width() > base_rarity_width
+        # Stable child baselines do not stretch a role merely because the parent
+        # content_extent grew. Authored bottom-rail roles translate as a group.
+        assert rarity.width() == pytest.approx(base_rarity_width)
+        assert field_group.width() == pytest.approx(base_field_group_width)
+        assert field_group.y() == pytest.approx(base_field_group_y + 120.0)
         assert pulse.y() == pytest.approx(base_pulse_y + 120.0)
 
         assert model.clear_content_extent() is True
@@ -314,8 +322,9 @@ def test_custom_child_geometry_freeforms_artwork_and_scales_intrinsic_progress_a
         metric = _find_visual_item(item, "achievementMetric")
         progress = _find_visual_item(item, "achievementProgressPulse")
         rarity = _find_visual_item(item, "achievementField_rarity")
+        field_group = _find_visual_item(item, "achievementFieldGroup")
         assert artwork is not None and metric is not None
-        assert progress is not None and rarity is not None
+        assert progress is not None and rarity is not None and field_group is not None
         base_artwork_width = artwork.width()
         base_artwork_height = artwork.height()
         base_metric_y = metric.y()
@@ -331,7 +340,7 @@ def test_custom_child_geometry_freeforms_artwork_and_scales_intrinsic_progress_a
         ) is True
         qt_app.processEvents()
 
-        assert len(spy) == 1
+        assert spy.count() == 1
         assert artwork.width() == pytest.approx(base_artwork_width * 1.35)
         assert artwork.height() == pytest.approx(base_artwork_height * 0.75)
         assert metric.y() == pytest.approx(
@@ -340,7 +349,9 @@ def test_custom_child_geometry_freeforms_artwork_and_scales_intrinsic_progress_a
         assert progress.width() == pytest.approx(108.0)
         assert progress.height() == pytest.approx(108.0)
         assert progress.scale() == pytest.approx(1.40)
-        assert rarity.x() == pytest.approx(51.0 + 108.0 * 1.40 + 49.0)
+        # Progress growth reflows the still-authored field group, without
+        # rewriting the nested capsule delegates themselves.
+        assert field_group.x() == pytest.approx(51.0 + 108.0 * 1.40 + 49.0)
 
         assert model.customArtworkWidthScale == pytest.approx(1.35)
         assert model.customArtworkHeightScale == pytest.approx(0.75)
@@ -349,6 +360,63 @@ def test_custom_child_geometry_freeforms_artwork_and_scales_intrinsic_progress_a
         item.deleteLater()
         component.deleteLater()
         engine.deleteLater()
+
+
+def test_dense_custom_child_geometry_projects_offsets_alignment_and_header_anchor(qt_app) -> None:
+    model = _model()
+    spy = QSignalSpy(model.customGeometryChanged)
+
+    assert model.set_custom_child_geometry(
+        {
+            "header": {
+                "width_scale": 1.20,
+                "height_scale": 0.80,
+                "x_offset": 0.10,
+                "y_offset": -0.05,
+                "alignment": "right",
+                "anchor": "bottom_right",
+            },
+            "game_name": {
+                "width_scale": 1.30,
+                "height_scale": 1.15,
+                "x_offset": 0.08,
+                "y_offset": 0.04,
+                "alignment": "right",
+            },
+            "achievement_list": {
+                "width_scale": 0.80,
+                "height_scale": 1.25,
+                "x_offset": -0.03,
+                "y_offset": 0.07,
+                "alignment": "right",
+            },
+            "field_group": {
+                "width_scale": 1.10,
+                "height_scale": 0.90,
+                "x_offset": 0.02,
+                "y_offset": -0.06,
+            },
+        }
+    ) is True
+
+    assert spy.count() == 1
+    # Uniform header geometry canonicalizes mismatched persisted axes.
+    assert model.customHeaderWidthScale == pytest.approx(1.20)
+    assert model.customHeaderHeightScale == pytest.approx(1.20)
+    assert model.customHeaderAlignment == "right"
+    assert model.customHeaderAnchor == "bottom_right"
+    assert model.customGameNameWidthScale == pytest.approx(1.30)
+    assert model.customGameNameHeightScale == pytest.approx(1.15)
+    assert model.customGameNameXOffset == pytest.approx(0.08)
+    assert model.customGameNameYOffset == pytest.approx(0.04)
+    assert model.customGameNameAlignment == "right"
+    assert model.customAchievementListWidthScale == pytest.approx(0.80)
+    assert model.customAchievementListHeightScale == pytest.approx(1.25)
+    assert model.customAchievementListAlignment == "right"
+    assert model.customFieldGroupWidthScale == pytest.approx(1.10)
+    assert model.customFieldGroupHeightScale == pytest.approx(0.90)
+    assert model.customFieldGroupXOffset == pytest.approx(0.02)
+    assert model.customFieldGroupYOffset == pytest.approx(-0.06)
 
 
 def test_latest_unlock_visibility_does_not_allocate_bottom_capsule_rails() -> None:
@@ -616,6 +684,7 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         )
         card = _find_visual_item(item, "overlayWidgetCard")
         rarity = _find_visual_item(item, "achievementField_rarity")
+        field_group = _find_visual_item(item, "achievementFieldGroup")
         rarity_detail = _find_visual_item(
             item, "achievementCapsuleDetail_rarity"
         )
@@ -632,13 +701,17 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         assert latest_badge_border is not None
         assert card is not None
         assert rarity is not None
+        assert field_group is not None
         assert rarity_detail is not None
         assert progress_pulse is not None
         assert progress_pulse.isVisible() is True
         assert (progress_pulse.x(), progress_pulse.width(), progress_pulse.height()) == (51.0, 108.0, 108.0)
         assert str(model.progressText) == "67%"
         assert _find_visual_item(item, "achievementField_total") is None
-        assert rarity.x() == pytest.approx(208.0)
+        # Dense rollout groups the repeated capsules under one shared editable
+        # field-group target.  Delegate-local X is therefore zero for the first
+        # field; its authored scene X is preserved by the group itself.
+        assert field_group.x() + rarity.x() == pytest.approx(208.0)
         assert float(item.property("contentScale")) == pytest.approx(1.0)
         # The shared BrandedHeader owns content-driven dimensions; the named
         # frame fills that owner, which sits at the family-authored anchor.
@@ -782,7 +855,8 @@ def test_qml_is_presentation_only_and_keeps_family_authored_capsule_shadow() -> 
     assert 'objectName: "achievementArtworkBorder"' in qml
     assert 'objectName: "achievementLatestArtworkBorder"' in qml
     assert 'uniformScaleTransform: true' in qml
-    assert 'thirdFieldColumnCenter - artworkWidth / 2.0' in qml
+    assert 'id: fieldGroupFrame' in qml
+    assert 'readonly property real canonicalX: progressPulse.visible' in qml
     assert 'x: resolvedRailX()' in qml
     assert 'fontSizeMode: Text.HorizontalFit' in qml
     assert '+ ": " + achievementRoot.achievementModel.metricValue' in qml

@@ -126,6 +126,46 @@ def test_system_stats_sample_edge_invalidates_only_dynamic_metric_properties() -
     model.retire()
 
 
+def test_system_stats_custom_child_geometry_is_constant_semantic_state() -> None:
+    model = _model()
+    custom_edges: list[None] = []
+    state_edges: list[None] = []
+    sample_edges: list[None] = []
+    model.customGeometryChanged.connect(lambda: custom_edges.append(None))
+    model.stateChanged.connect(lambda: state_edges.append(None))
+    model.sampleChanged.connect(lambda: sample_edges.append(None))
+
+    assert model.set_custom_child_geometry(
+        {
+            "metric_panels": {
+                "width_scale": 1.2,
+                "height_scale": 0.8,
+                "x_offset": 0.05,
+                "y_offset": 0.04,
+            },
+            "metric_values": {
+                "width_scale": 0.9,
+                "height_scale": 1.15,
+                "alignment": "left",
+            },
+        }
+    ) is True
+    assert custom_edges == [None]
+    assert state_edges == []
+    assert sample_edges == []
+    assert set(model.customChildGeometry) == {"metric_panels", "metric_values"}
+    assert model.customChildGeometry["metric_panels"]["width_scale"] == pytest.approx(1.2)
+    assert model.customChildGeometry["metric_values"]["alignment"] == "left"
+
+    # Resetting to authored state clears the sparse projection without touching
+    # Settings, sample state or the enabled-metric identities.
+    assert model.set_custom_child_geometry({}) is True
+    assert model.customChildGeometry == {}
+    assert custom_edges == [None, None]
+    assert state_edges == []
+    assert sample_edges == []
+
+
 def test_system_stats_metric_selection_and_custom_extent_are_presentation_only() -> None:
     config = SystemStatsPresentationConfig.from_widgets_mapping(
         {
@@ -163,6 +203,21 @@ def test_system_stats_family_is_public_and_default_leaves_are_explicit() -> None
     assert descriptor is not None
     assert descriptor.custom_layout_resize_mode == "ordinary_uniform"
     assert descriptor.content_extent_axes == ("horizontal", "vertical")
+    assert tuple(role.role_id for role in descriptor.custom_child_roles) == (
+        "header",
+        "header_separator",
+        "metric_panels",
+        "metric_accents",
+        "metric_labels",
+        "metric_details",
+        "metric_values",
+        "metric_tracks",
+    )
+    assert not any(
+        metric in role.role_id
+        for role in descriptor.custom_child_roles
+        for metric in ("cpu", "ram", "uptime", "network")
+    )
     assert descriptor.service_backed is True
     assert section is not None and section.persisted_widget_keys == (
         "system_stats",
@@ -194,6 +249,81 @@ def test_system_stats_registry_icon_and_qml_are_presentation_only() -> None:
         assert forbidden not in qml
     assert "uniformScaleTransform: true" in qml
     assert "Behavior on width" in qml
+    assert "customEditableChildRoles" in qml
+    assert '"roleId": "metric_panels"' in qml
+    assert '"roleId": "metric_values"' in qml
+    assert "systemStatsCustomMetricPanelRoleTarget" in qml
+
+
+@pytest.mark.qt
+def test_system_stats_shared_metric_geometry_projects_to_every_panel(qt_app) -> None:
+    service = _RuntimeService()
+    model = _model(service)
+    model.activate(object())
+    assert model.set_custom_child_geometry(
+        {
+            "metric_panels": {
+                "width_scale": 0.82,
+                "height_scale": 0.76,
+                "x_offset": 0.03,
+                "y_offset": 0.02,
+            },
+            "metric_values": {
+                "width_scale": 0.88,
+                "height_scale": 1.10,
+                "x_offset": -0.01,
+                "alignment": "left",
+            },
+        }
+    ) is True
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "SystemStatsPresentation.qml"))
+    )
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
+    item = component.createWithInitialProperties({"systemStatsModel": model})
+    assert isinstance(item, QQuickItem), [
+        error.toString() for error in component.errors()
+    ]
+    item.setWidth(model.authoredWidth)
+    item.setHeight(model.authoredHeight)
+    try:
+        qt_app.processEvents()
+        panels = [
+            item.findChild(QObject, name)
+            for name in (
+                "systemStatsCpuPanel",
+                "systemStatsRamPanel",
+                "systemStatsUptimePanel",
+                "systemStatsNetworkPanel",
+            )
+        ]
+        assert all(panel is not None for panel in panels)
+        widths = {round(float(panel.property("width")), 3) for panel in panels}
+        heights = {round(float(panel.property("height")), 3) for panel in panels}
+        xs = {round(float(panel.property("x")), 3) for panel in panels}
+        assert len(widths) == len(heights) == len(xs) == 1
+
+        cpu_value = item.findChild(QObject, "systemStatsCpuValue")
+        ram_value = item.findChild(QObject, "systemStatsRamValue")
+        assert cpu_value is not None and ram_value is not None
+        assert float(cpu_value.property("width")) == pytest.approx(
+            float(ram_value.property("width"))
+        )
+        assert int(cpu_value.property("horizontalAlignment")) == int(
+            ram_value.property("horizontalAlignment")
+        )
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        model.retire()
+        qt_app.processEvents()
 
 
 @pytest.mark.qt
