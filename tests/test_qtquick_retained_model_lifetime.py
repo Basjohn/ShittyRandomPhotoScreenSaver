@@ -128,7 +128,9 @@ def test_retiring_item_destroys_both_item_and_bound_model(qt_app) -> None:
     # deleteLater() posts a DeferredDelete event; flush it explicitly (plain
     # processEvents does not drain DeferredDelete at the top event-loop level).
     qt_app.processEvents()
-    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    # Retire only the item owned by this test. Draining every pending QObject
+    # can tear down an unrelated test's still-referenced QQuick scene.
+    QCoreApplication.sendPostedEvents(item, QEvent.Type.DeferredDelete)
     qt_app.processEvents()
     gc.collect()
 

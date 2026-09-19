@@ -148,13 +148,14 @@ def test_display_tab_use_theme_clears_override_and_refreshes_swatch(qt_app, tmp_
 
 def test_display_tab_widget_theme_subscription_unsubscribes_on_destroy(qt_app, tmp_path):
     settings = _settings(tmp_path, "WidgetGlowLifecycle")
-    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    qt_app.processEvents()
+    # Do not process unrelated Qt objects' pending deletions to establish this
+    # test's baseline. Earlier tests can own retired QQuick scenes in this same
+    # whole-tree pytest process; only this tab's destruction belongs to us.
     before = len(widget_theme_active._listeners)
     tab = DisplayTab(settings)
     assert len(widget_theme_active._listeners) == before + 1
 
     tab.deleteLater()
-    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    QCoreApplication.sendPostedEvents(tab, QEvent.Type.DeferredDelete)
     qt_app.processEvents()
     assert len(widget_theme_active._listeners) == before

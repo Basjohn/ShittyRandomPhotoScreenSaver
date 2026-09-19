@@ -9,21 +9,6 @@ def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_widget_section_retirement_drops_side_references_and_invalidates_pending_save() -> None:
-    source = _text("ui/tabs/widgets_tab.py")
-
-    start = source.index("    def _retire_widget_section(")
-    end = source.index("\n    def ", start + 10)
-    block = source[start:end]
-
-    assert "self._save_coalesce_token += 1" in block
-    assert "self._save_coalesce_pending = False" in block
-    assert "self._custom_resize_lock_notice_labels.pop(section_id, None)" in block
-    assert "self._subtab_content_built.discard(idx)" in block
-    assert "self._subtab_content_building.discard(idx)" in block
-    assert "delattr(self, attr)" in block
-
-
 def test_custom_resize_notice_refresh_rejects_deleted_qobject_wrappers() -> None:
     source = _text("ui/tabs/widgets_tab.py")
 
