@@ -246,55 +246,42 @@ semantic child surface below and consume the existing shared CUSTOM owner.
 
 Games You Follow must be born on the ordinary-widget child editor contract. Do
 not ship an outer-card-only version and plan a later geometry retrofit. The
-retained role vocabulary is fixed around repeated *semantics*, never story
-identity:
+v1 edit surface is deliberately restricted to singleton chrome. The product
+still uses reusable, shared *authored* row semantics, but **none of the repeated
+story internals are child geometry roles**. Reddit/Gmail physical feedback showed
+that freely editable feed siblings break the user-facing layout contract.
 
 ```text
-singleton roles
+singleton editable roles
     header
     refresh
-    overflow_summary        # only when the truthful N-more summary is visible
+    overflow_summary       # only when truthful N-more summary is visible
 
-shared repeated-story roles
-    story_rows
-    story_artwork
-    story_game_labels
-    story_headlines
-    story_source_time
-    story_separators
+fixed authored repeated-story layout (not editable child roles)
+    story row / artwork / game / headline / source / time / separators
 ```
 
-- Persist at most one `child_geometry` record for each role above. Never emit
-  `story_rows_0`, AppID/item-id keyed geometry, delegate-index geometry, or any
-  other state whose cardinality grows with the accepted feed. `single_row` and
-  `double_row` remain the only visible-story-count authorities.
-- The active row variant owns row **placement/count**. `story_rows` may adjust
-  the shared row frame size/offset within that variant, but child editing cannot
-  reveal a third story, hide a configured row by mutating source count, switch
-  view variants, or teach the provider/model a layout-derived population limit.
-- Artwork, game label, headline and source/time are nested repeated semantics.
-  Their one retained geometry record projects identically through every visible
-  row. The row frame may declare those nested roles as structural containment
-  collision exemptions, matching Friend Pulse/System Stats; nested peers still
-  collide with one another and unrelated chrome when the one global Child
-  Collision preference is ON.
-- `story_separators` is one shared thin-line role. Its Edit target may be thicker
-  than the painted line for usability, but the truthful occupied/collision rect
-  remains the actual separator geometry.
+- Story rows preserve one authored sibling/layout chain, aligned as a coherent
+  unit by Header's alignment setting. No per-story or shared repeated child
+  geometry is persisted. `single_row` / `double_row` and outer Y own count and
+  reflow. Never introduce child-driven materialization, provider work, or a
+  second list-rail position/count owner.
+- Repeated separators keep the same authored visual geometry; no repeated
+  editor proxy is created. Richer list editing requires a later separately
+  tested/physically approved contract, not an implicit v1 default.
 - Header uses the existing shared `BrandedHeader` semantics: placement, uniform
   sizing, alignment flip where admitted, and semantic corner anchor behavior.
   Refresh is a separate singleton placement/size role and must not be baked into
   header geometry. The optional overflow summary is likewise a singleton role,
   present only when the model truthfully exposes overflow.
-- Descriptor metadata must declare each role's truthful resize axes, intrinsic
+- Descriptor metadata must declare each editable singleton role's truthful resize axes, intrinsic
   versus non-uniform sizing, alignment capability, min/max scales, edit proxy,
   containment/collision relationships and any authored-rail reflow. QML must not
   smuggle a second role schema or hidden clamp alongside that descriptor.
 - Authored geometry is the identity mapping. With empty `child_geometry`, both
-  row variants must render at their exact canonical v1 positions/sizes. First
-  real free movement detaches only the affected authored rail through the shared
-  placement-compensation path; later parent `content_extent` changes must not
-  drag a detached child or create a child->parent->child growth loop.
+  row variants must render at their exact canonical v1 positions/sizes. The
+  repeated story rail remains authored and never detaches into a CUSTOM child
+  geometry record. Parent reflow cannot loop through child-owned population.
 - Shared Restore Size clears Games You Follow `child_geometry` together with the
   ordinary CUSTOM size/`content_extent` state back to the active authored
   variant while preserving X/Y/display. It does not reset follow/source/cache

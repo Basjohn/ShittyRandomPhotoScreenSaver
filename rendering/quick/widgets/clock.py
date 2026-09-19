@@ -538,6 +538,11 @@ class ClockPresentationModel(QObject):
         self._active = False
         self._timezone = _parse_timezone(config.timezone_name)
         self._snapshot = self._build_snapshot(config, style)
+        # A read-only reference to the Settings-authored primary font, not an
+        # additional size/persistence authority. The existing clock_font payload
+        # changes only the primary font; QML uses its ratio to keep authored
+        # calendar/footer/face chrome proportional during CUSTOM wheel/corner.
+        self._authored_font_size = max(8, int(config.font_size))
         descriptor = get_widget_runtime_descriptor(config.widget_id)
         if descriptor is None:
             raise RuntimeError(f"Missing runtime descriptor for {config.widget_id!r}")
@@ -758,6 +763,17 @@ class ClockPresentationModel(QObject):
     @Property(float, notify=stateChanged)
     def fontSize(self) -> float:
         return float(self._snapshot.config.font_size)
+
+    @Property(float, notify=stateChanged)
+    def fontResizeFactor(self) -> float:
+        return float(max(8, self._snapshot.config.font_size)) / float(self._authored_font_size)
+
+    def update_authored_font_reference(self, font_size: int) -> None:
+        """Rebase the transient proportional reference on an actual Settings edit."""
+        resolved = max(8, int(font_size))
+        if self._authored_font_size != resolved:
+            self._authored_font_size = resolved
+            self.stateChanged.emit()
 
     @Property(float, notify=stateChanged)
     def calendarFontSize(self) -> float:
@@ -1172,6 +1188,7 @@ class RetainedClockPresentation:
     ) -> None:
         target_mode = config.display_mode
         current_mode = self._model.config.display_mode
+        self._model.update_authored_font_reference(config.font_size)
         self._model.apply_config(replace(config, display_mode=current_mode))
         style = ClockPresentationStyle.project(
             self._model.config,

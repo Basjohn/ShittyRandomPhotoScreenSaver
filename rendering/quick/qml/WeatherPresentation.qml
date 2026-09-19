@@ -3,6 +3,7 @@ import QtQuick
 OverlayWidget {
     id: weatherRoot
     objectName: "weatherPresentation"
+
     uniformScaleTransform: true
 
     required property var weatherModel
@@ -87,6 +88,15 @@ OverlayWidget {
             roles.push({ "roleId": "condition_text", "target": statusAction })
         }
         for (let i = 0; i < roles.length; ++i) {
+            // The ready presentation is centered and uniformly fitted. Its
+            // ancestor transforms must invalidate edit-box mapping on reflow.
+            // A child gesture cannot claim outer/screen growth; the outer card
+            // controls are the only authority for Weather content extent.
+            roles[i].geometryDependencies = [weatherContent, readyColumn,
+                primaryRow, primaryText, detailsBand, forecastBand,
+                extendedForecastBand]
+            roles[i].containmentTarget = weatherContent
+            roles[i].allowParentGrowth = false
             roles[i].normalizationWidth = childNormalizationWidth
             roles[i].normalizationHeight = childNormalizationHeight
         }

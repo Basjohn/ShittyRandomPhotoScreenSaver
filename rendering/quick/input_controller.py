@@ -21,6 +21,8 @@ class QuickInputController(RuntimeInputOwner):
     admitted_pointer_pressed = Signal(object, object)
     custom_layout_save_requested = Signal()
     custom_layout_cancel_requested = Signal()
+    custom_layout_undo_requested = Signal()
+    custom_layout_lock_requested = Signal()
 
     def __init__(
         self,
@@ -144,6 +146,19 @@ class QuickInputController(RuntimeInputOwner):
             return True
         provider = self._custom_layout_active_provider
         custom_active = bool(provider is not None and provider())
+        if (custom_active and event.key() == Qt.Key.Key_Z
+                and event.modifiers() == Qt.KeyboardModifier.ControlModifier):
+            # One physical press, never auto-repeat a one-level undo. Outside
+            # Edit, the existing plain-Z previous-image shortcut is untouched.
+            if not event.isAutoRepeat():
+                self.custom_layout_undo_requested.emit()
+            return True
+        if (custom_active and event.key() == Qt.Key.Key_L
+                and event.modifiers() == Qt.KeyboardModifier.NoModifier):
+            # Edit chrome only; never toggle ordinary widget enabled/visible state.
+            if not event.isAutoRepeat():
+                self.custom_layout_lock_requested.emit()
+            return True
         if custom_active and event.key() in (
             Qt.Key.Key_Return,
             Qt.Key.Key_Enter,

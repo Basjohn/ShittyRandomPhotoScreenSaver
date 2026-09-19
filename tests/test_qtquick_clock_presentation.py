@@ -801,7 +801,7 @@ def test_clock_qml_contract_has_retained_two_pass_analogue_shadows_and_no_effect
     assert "width: separatorBand.width * 0.77" in digital
     assert "thickness: digitalFace.clockModel.separatorThickness" in digital
     assert "thickness: analogueFace.clockModel.separatorThickness" in analogue
-    assert "height: visible ? 10.0 : 0.0" in analogue
+    assert "height: visible ? 10.0 * analogueFace.fontResizeFactor : 0.0" in analogue
     assert "clockAnalogueSeparator" in analogue
     for source, prefix in ((digital, "digitalFace"), (analogue, "analogueFace")):
         assert f"shadowEnabled: {prefix}.clockModel.textShadowEnabled" in source
@@ -835,3 +835,87 @@ def test_static_registry_maps_clock_family_without_member_duplication() -> None:
     ).read_text(encoding="utf-8")
     assert "clock2" not in registry_source
     assert "clock3" not in registry_source
+
+
+@pytest.mark.qt
+def test_clock_custom_font_resizes_footer_and_analogue_ink_proportionally(qt_app) -> None:
+    """A parent wheel/corner payload must not leave the calendar/footer at its old size.
+
+    All three Clock identities use this same retained family/model and distinct
+    variant payloads. This checks actual QML scene dimensions, not source text.
+    """
+    for variant, base_size in (("digital", (450.0, 220.0)), ("analog", (420.0, 540.0))):
+        owner = QObject()
+        factory = QuickSceneFactory()
+        context, root, host = _create_host(factory, owner)
+        model = _model(
+            [datetime(2026, 9, 19, 13, 24, 30)],
+            _FakeTicker(),
+            config=_clock_config(display_mode=variant),
+        )
+        presentation = RetainedClockPresentation(
+            host=host,
+            model=model,
+            geometry=OverlayWidgetGeometry(100.0, 80.0, *base_size),
+            display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1920.0, 1080.0),
+            display_identity="screen:a",
+        )
+        try:
+            item = presentation.item
+            qt_app.processEvents()
+            calendar = _find_visual_item(
+                item, "clockDigitalCalendar" if variant == "digital" else "clockAnalogueCalendar"
+            )
+            separator = _find_visual_item(
+                item, "clockDigitalSeparatorBand" if variant == "digital" else "clockAnalogueSeparator"
+            )
+            assert calendar is not None and separator is not None
+            base_font = float(calendar.property("font").pointSizeF())
+            base_separator = float(separator.height())
+            if variant == "analog":
+                ring = _find_visual_item(item, "clockAnalogueRing")
+                assert ring is not None
+                base_ring = float(ring.width())
+            assert model.fontResizeFactor == pytest.approx(1.0)
+
+            # The existing clock_font owner scales only its variant-local font
+            # payload. The QML family must project the same factor onto its
+            # remaining authored content, without a second persisted font.
+            retained = host.presentation_for_model_identity(model.config.widget_id)
+            assert retained is not None
+            retained.apply_custom_layout_size_payload({"font_size": 72})
+            item.setWidth(base_size[0] * 1.5)
+            item.setHeight(base_size[1] * 1.5)
+            qt_app.processEvents()
+            assert model.fontResizeFactor == pytest.approx(1.5)
+            assert float(calendar.property("font").pointSizeF()) == pytest.approx(
+                base_font * 1.5, abs=1.0
+            )
+            assert float(separator.height()) == pytest.approx(
+                base_separator * 1.5, abs=1.5
+            )
+            if variant == "analog":
+                # The analogue ring is derived from the painted face's
+                # actual remaining footprint after its independently scaled
+                # calendar/timezone footer is reserved. The `min(width,
+                # height-footer)` transition can legitimately move its
+                # ratio slightly without deforming the face. Require a near-
+                # uniform ring and the exact calendar/separator ratios above.
+                assert float(ring.width()) == pytest.approx(base_ring * 1.5, rel=0.025)
+                assert float(ring.height()) == pytest.approx(float(ring.width()), abs=0.01)
+
+            # A real Settings font edit rebases only the transient reference;
+            # it does not manufacture another variant/persistence size owner.
+            new_config = replace(model.config, font_size=60)
+            presentation.apply_config(new_config, _shadow_values())
+            qt_app.processEvents()
+            assert model.fontResizeFactor == pytest.approx(1.0)
+        finally:
+            host.retire_all()
+            root.setParentItem(None)
+            root.setParent(None)
+            root.deleteLater()
+            context.deleteLater()
+            factory.deleteLater()
+            owner.deleteLater()
+            qt_app.processEvents()

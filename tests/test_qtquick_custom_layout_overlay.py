@@ -1288,7 +1288,7 @@ def test_quick_custom_layout_overlay_is_presentation_only() -> None:
     close_block = qml[qml.index("id: closeControl"):qml.index("id: rotateContentControl")]
     assert "x: Math.max(1.0, editFrame.width - width - 10.0)" in close_block
     assert "y: Math.max(1.0, Math.min(10.0, editFrame.height - height - 1.0))" in close_block
-    assert "z: 80" in close_block
+    assert "z: 120" in close_block
     assert "width: closeControl.width * 0.484" in close_block
     assert "propagateComposedEvents: false" in close_block
     assert "onPressed: function(mouse) { mouse.accepted = true }" in close_block
@@ -1371,3 +1371,39 @@ def test_overlay_gates_content_extent_edges_per_axis_and_exposes_axes() -> None:
     for edge in ("left", "right", "top", "bottom"):
         assert model.beginResize(clock_row, edge, 0.0, 0.0) is False
     assert model.beginResize(clock_row, "bottom_right", 0.0, 0.0) is True
+
+@pytest.mark.qt
+def test_parent_resize_and_floor_do_not_advance_child_edit_revision(qt_app) -> None:
+    """Only a real normalized child edit may invalidate the child revision.
+
+    The old model incremented this on *every* parent rect/extent broadcast.
+    In QML that turned a child-content growth publication into another child
+    measurement pass, which could feed the same already-grown parent again.
+    """
+    from rendering.custom_child_geometry import CustomChildSize
+
+    session = CustomLayoutSession()
+    child = _item("abandonment_issues", "display:revision", QRect(30, 40, 600, 330))
+    session.add_item(child)
+    model = CustomLayoutOverlayModel(session=session, display_identity="display:revision")
+    roles = {bytes(name).decode(): role for role, name in model.roleNames().items()}
+    idx = model.index(0, 0)
+    revision = model.data(idx, roles["childStateRevision"])
+
+    child.current_global_rect = QRect(30, 40, 750, 440)
+    child.current_content_extent = (750.0, 440.0)
+    child.child_content_requirement = (810.0, 460.0)
+    session.notify_item_changed(child)
+    assert model.data(idx, roles["childStateRevision"]) == revision
+
+    child.current_child_sizes["backlog_block"] = CustomChildSize(x_offset=0.125)
+    session.notify_item_changed(child)
+    revision += 1
+    assert model.data(idx, roles["childStateRevision"]) == revision
+
+    # Re-publishing identical child records is not a new edit either.
+    session.notify_item_changed(child)
+    assert model.data(idx, roles["childStateRevision"]) == revision
+    child.current_child_sizes["backlog_block"] = CustomChildSize(x_offset=0.20)
+    session.notify_item_changed(child)
+    assert model.data(idx, roles["childStateRevision"]) == revision + 1

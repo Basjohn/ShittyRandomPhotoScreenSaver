@@ -88,7 +88,7 @@ for _import_root in (_SCRIPT_DIR, _REPO_IMPORT_ROOT):
         sys.path.insert(0, str(_import_root))
 
 try:
-    from PySide6.QtCore import QObject, QPoint, Qt, QTimer, QUrl, Signal
+    from PySide6.QtCore import QObject, QPoint, QProcess, Qt, QTimer, QUrl, Signal
     from PySide6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication, QIcon
     from PySide6.QtWidgets import (
         QAbstractItemView,
@@ -107,6 +107,7 @@ try:
         QMainWindow,
         QPlainTextEdit,
         QProgressBar,
+        QScrollArea,
         QPushButton,
         QSplitter,
         QTabWidget,
@@ -120,6 +121,10 @@ except ImportError as exc:  # pragma: no cover - user environment contract
         "GODZIP Foundry requires PySide6. Run it from the same SRPSS environment "
         "that runs the other PySide6 Foundries."
     ) from exc
+
+from godzip_script_runner import (  # noqa: E402
+    ScriptRunError, create_script_results_zip, normalize_script_paste, snapshot_loose_logs,
+)
 
 from godzip_foundry_core import (  # noqa: E402
     ArchiveInspection,
@@ -2929,12 +2934,30 @@ class CommandTab(QWidget):
         super().__init__(window)
         self.window = window
         self.repo_root = window.repo_root
+        self._process: QProcess | None = None
+        self._running = False
+        self._run_dir: Path | None = None
+        self._run_log = None
+        self._run_output_bytes = 0
+        self._run_truncated = False
+        self._run_initial_logs: dict[str, tuple[int, int]] = {}
+        self._finished_status = ""
+        self._run_stopped = False
+        self._run_final_logs: dict[str, tuple[int, int]] = {}
         self._build_ui()
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scrolling = QScrollArea(self)
+        scrolling.setWidgetResizable(True)
+        scrolling.setFrameShape(QFrame.Shape.NoFrame)
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 12, 0, 0)
         layout.setSpacing(10)
+        scrolling.setWidget(content)
+        outer.addWidget(scrolling)
 
         intro = Panel()
         intro_l = QVBoxLayout(intro)
@@ -2994,7 +3017,375 @@ class CommandTab(QWidget):
         panel_l.addLayout(utility)
 
         layout.addWidget(panel)
+        self._build_script_runner(layout)
         layout.addStretch(1)
+
+    def _build_script_runner(self, layout: QVBoxLayout) -> None:
+        panel = Panel()
+        body = QVBoxLayout(panel)
+        body.setContentsMargins(16, 14, 16, 14)
+        body.setSpacing(8)
+        title = QLabel("RUN SCRIPT  ·  PASTE → REVIEW → RUN")
+        title.setObjectName("sectionTitle")
+        body.addWidget(title)
+        note = QLabel(
+            "Paste a whole PowerShell/CMD command, even one copied with a PS prompt or Markdown fence. "
+            "Only unambiguous formatting is removed; the exact corrected script is shown before execution. "
+            "Runs with Foundry's current account privileges from this repository, never on paste or with an elevation request."
+        )
+        note.setWordWrap(True)
+        note.setObjectName("muted")
+        body.addWidget(note)
+        self.script_input = QPlainTextEdit()
+        self.script_input.setPlaceholderText(
+            "PS F:\\repo> python -m pytest tests\\test_custom_child_geometry.py -q; "
+            "if ($LASTEXITCODE -eq 0) { python tests\\run_chunked.py --chunks 4 --log }"
+        )
+        self.script_input.setMinimumHeight(100)
+        self.script_input.setMaximumHeight(175)
+        body.addWidget(self.script_input)
+        options = QHBoxLayout()
+        options.addWidget(QLabel("SHELL"))
+        self.script_shell = QComboBox()
+        self.script_shell.addItem("Auto (PowerShell by default)", "auto")
+        self.script_shell.addItem("PowerShell", "powershell")
+        self.script_shell.addItem("CMD", "cmd")
+        options.addWidget(self.script_shell)
+        self.script_external = QCheckBox("External terminal (keep open)")
+        self.script_external.setToolTip(
+            "For interactive runs. Opens a persistent external window; captured copy/results ZIP "
+            "are available only in the default captured mode."
+        )
+        self.script_external.toggled.connect(self._external_mode_changed)
+        options.addWidget(self.script_external)
+        options.addStretch(1)
+        body.addLayout(options)
+        actions = QHBoxLayout()
+        self.script_run_button = QPushButton("REVIEW & RUN")
+        self.script_run_button.setObjectName("primaryButton")
+        self.script_run_button.clicked.connect(self._review_and_run)
+        self.script_stop_button = QPushButton("STOP RUN")
+        self.script_stop_button.setEnabled(False)
+        self.script_stop_button.clicked.connect(self._stop_run)
+        actions.addWidget(self.script_run_button)
+        actions.addWidget(self.script_stop_button)
+        actions.addStretch(1)
+        body.addLayout(actions)
+        self.script_status = QLabel("No script running")
+        self.script_status.setObjectName("muted")
+        self.script_status.setWordWrap(True)
+        body.addWidget(self.script_status)
+        self.script_output = QPlainTextEdit()
+        self.script_output.setReadOnly(True)
+        self.script_output.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.script_output.document().setMaximumBlockCount(3000)
+        self.script_output.setMinimumHeight(165)
+        self.script_output.setPlaceholderText("Captured terminal output appears here; the capped transcript is saved under .godzip_foundry/runs/.")
+        body.addWidget(self.script_output)
+        results = QHBoxLayout()
+        self.script_copy = QPushButton("COPY RESULTS")
+        self.script_copy.setEnabled(False)
+        self.script_copy.clicked.connect(self._copy_results)
+        self.script_show_results = QPushButton("OPEN RESULTS")
+        self.script_show_results.setEnabled(False)
+        self.script_show_results.clicked.connect(self._show_results)
+        self.script_zip = QPushButton("ZIP RUN + NEW LOGS")
+        self.script_zip.setEnabled(False)
+        self.script_zip.clicked.connect(self._zip_results)
+        results.addWidget(self.script_copy)
+        results.addWidget(self.script_show_results)
+        results.addWidget(self.script_zip)
+        body.addLayout(results)
+        hint = QLabel("Captured mode: exit code + scrollable output + Copy Results. ZIP includes the pasted command, transcript and this run's new/changed loose /logs files (50 MB cap). Review for secrets before sharing. Interactive commands: choose External terminal.")
+        hint.setWordWrap(True)
+        hint.setObjectName("faint")
+        body.addWidget(hint)
+        layout.addWidget(panel)
+
+    def _external_mode_changed(self, enabled: bool) -> None:
+        if enabled:
+            self.script_status.setText("External mode keeps a separate terminal open. Foundry cannot capture/copy its output or auto-ZIP its logs; use LOGZIP afterward.")
+        elif not self._running:
+            self.script_status.setText("Captured mode: results remain in this tab after the command exits")
+
+    def _review_and_run(self) -> None:
+        if self._running:
+            return
+        try:
+            preview = normalize_script_paste(
+                self.script_input.toPlainText(),
+                shell=str(self.script_shell.currentData()),
+            )
+        except ScriptRunError as exc:
+            self.window.show_error("Cannot prepare pasted script", exc)
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Review exact script before running")
+        dialog.resize(850, 540)
+        body = QVBoxLayout(dialog)
+        body.addWidget(QLabel(
+            f"RUN AS CURRENT USER · {preview.shell.upper()} · cwd: {self.repo_root}"
+            + (" · EXTERNAL WINDOW" if self.script_external.isChecked() else " · CAPTURED OUTPUT")
+        ))
+        detail = QLabel(
+            ("Normalization: " + "; ".join(preview.changes) if preview.changes else "No formatting changes needed")
+            + ("\nREVIEW: " + "; ".join(preview.warnings) if preview.warnings else "")
+        )
+        detail.setWordWrap(True)
+        body.addWidget(detail)
+        exact = QPlainTextEdit(preview.script)
+        exact.setReadOnly(True)
+        exact.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        body.addWidget(exact, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("RUN THIS SCRIPT")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        body.addWidget(buttons)
+        # This is the only route from a paste to execution. Editing the paste
+        # while the preview is open cannot change what was approved.
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._start_script(preview.shell, preview.script, external=self.script_external.isChecked())
+        except Exception as exc:
+            self.window.show_error("Run Script failed", exc)
+
+    def _start_script(self, shell: str, script: str, *, external: bool) -> None:
+        import uuid
+        run_root = self.repo_root / ".godzip_foundry" / "runs"
+        run_dir = run_root / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8])
+        run_dir.mkdir(parents=True, exist_ok=False)
+        extension = ".ps1" if shell == "powershell" else ".cmd"
+        script_path = run_dir / ("script" + extension)
+        if shell == "powershell":
+            # Native external commands need an explicit exit-code propagation;
+            # otherwise PowerShell -File can return zero after a false `if` gate.
+            script_path.write_text(
+                script + "\nif ($null -ne $LASTEXITCODE) { exit [int]$LASTEXITCODE }\n",
+                encoding="utf-8-sig",
+            )
+        else:
+            script_path.write_text(script + "\n", encoding="utf-8")
+        (run_dir / "command.txt").write_text(
+            f"SHELL: {shell}\nCWD: {self.repo_root}\n\n{script}\n",
+            encoding="utf-8",
+        )
+        self._run_dir = run_dir
+        self._run_initial_logs = snapshot_loose_logs(self.repo_root)
+        self._run_final_logs = {}
+        self._run_stopped = False
+        self._finished_status = ""
+        self.script_output.clear()
+        self.script_copy.setEnabled(False)
+        self.script_show_results.setEnabled(False)
+        self.script_zip.setEnabled(False)
+        if external:
+            if os.name != "nt":
+                raise ScriptRunError("Persistent external terminals currently require Windows")
+            cmd = shutil.which("cmd.exe") or r"C:\Windows\System32\cmd.exe"
+            if shell == "powershell":
+                executable = shutil.which("pwsh.exe") or shutil.which("powershell.exe")
+                if not executable:
+                    raise ScriptRunError("PowerShell was not found on PATH")
+                launch = subprocess.list2cmdline([
+                    executable, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script_path),
+                ])
+            else:
+                launch = "call " + subprocess.list2cmdline([str(script_path)])
+            launcher = run_dir / "keep_open.cmd"
+            launcher.write_text(
+                "@echo off\ncd /d " + subprocess.list2cmdline([str(self.repo_root)])
+                + "\n" + launch + "\n"
+                + "echo.\necho [GODZIP] Script finished. Terminal remains open.\n",
+                encoding="utf-8",
+            )
+            subprocess.Popen([cmd, "/k", str(launcher)], cwd=str(self.repo_root), creationflags=subprocess.CREATE_NEW_CONSOLE)
+            self.script_status.setText(f"External terminal launched from repo. Run script: {script_path}")
+            self.window.set_status("External Run Script terminal launched; results stay in that window")
+            return
+        if shell == "powershell":
+            executable = shutil.which("pwsh.exe") or shutil.which("powershell.exe") or shutil.which("pwsh")
+            if not executable:
+                raise ScriptRunError("PowerShell is not installed or not on PATH")
+            args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script_path)]
+        else:
+            executable = shutil.which("cmd.exe") or (r"C:\Windows\System32\cmd.exe" if os.name == "nt" else None)
+            if not executable:
+                raise ScriptRunError("CMD scripts can only run on Windows")
+            args = ["/D", "/C", str(script_path)]
+        self._run_log = (run_dir / "output.txt").open("wb")
+        self._run_output_bytes = 0
+        self._run_truncated = False
+        process = QProcess(self)
+        process.setWorkingDirectory(str(self.repo_root))
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        process.readyReadStandardOutput.connect(self._read_script_output)
+        process.finished.connect(self._script_finished)
+        process.errorOccurred.connect(self._script_error)
+        self._process = process
+        self._running = True
+        self.script_run_button.setEnabled(False)
+        self.script_stop_button.setEnabled(True)
+        self.script_stop_button.setText("STOP RUN")
+        self.script_status.setText(f"Running {shell} in {self.repo_root}. Transcript: {run_dir / 'output.txt'}")
+        process.start(str(executable), args)
+
+    def _read_script_output(self) -> None:
+        process = self._process
+        if process is None:
+            return
+        data = bytes(process.readAllStandardOutput())
+        if not data:
+            return
+        remaining = max(0, 32 * 1024 * 1024 - self._run_output_bytes)
+        if self._run_log is not None and remaining:
+            portion = data[:remaining]
+            self._run_log.write(portion)
+            self._run_output_bytes += len(portion)
+        if len(data) > remaining and not self._run_truncated:
+            self._run_truncated = True
+            self.script_output.appendPlainText("[GODZIP] Full transcript reached 32 MB; later output is displayed but not saved.")
+        # The widget retains only a bounded tail; high-volume terminal output
+        # cannot accumulate unlimited QTextDocument blocks in Foundry.
+        if len(data) > 64 * 1024:
+            data = data[-64 * 1024:]
+            self.script_output.appendPlainText("[GODZIP] High-volume output: showing the newest 64 KB of this update")
+        self.script_output.appendPlainText(data.decode("utf-8", errors="replace").rstrip("\n"))
+
+    def _script_error(self, error) -> None:
+        process = self._process
+        if process is not None and error == QProcess.ProcessError.FailedToStart and self._running:
+            self._finish_script(-1, "FAILED TO START")
+
+    def _script_finished(self, exit_code: int, status) -> None:
+        if not self._running:
+            return
+        self._read_script_output()
+        detail = "CRASHED" if status == QProcess.ExitStatus.CrashExit else "COMPLETED"
+        self._finish_script(int(exit_code), detail)
+
+    def _finish_script(self, exit_code: int, detail: str) -> None:
+        if not self._running:
+            return
+        self._running = False
+        if self._run_log is not None:
+            self._run_log.close()
+            self._run_log = None
+        run_dir = self._run_dir
+        if self._run_stopped:
+            detail = "STOPPED BY USER"
+        self._finished_status = f"{detail} · exit code {exit_code}"
+        self._run_final_logs = snapshot_loose_logs(self.repo_root)
+        if run_dir is not None:
+            (run_dir / "result.json").write_text(json.dumps({
+                "status": detail, "exit_code": exit_code,
+                "truncated": self._run_truncated,
+                "captured_bytes": self._run_output_bytes,
+            }, indent=2) + "\n", encoding="utf-8")
+        self.script_status.setText(self._finished_status + (f" · {run_dir}" if run_dir else ""))
+        self.window.set_status("Run Script: " + self._finished_status)
+        self.script_run_button.setEnabled(True)
+        self.script_stop_button.setEnabled(False)
+        self.script_copy.setEnabled(run_dir is not None)
+        self.script_show_results.setEnabled(run_dir is not None)
+        self.script_zip.setEnabled(run_dir is not None)
+        if self._process is not None:
+            self._process.deleteLater()
+            self._process = None
+
+    def _stop_run(self) -> None:
+        if self._process is None or not self._running:
+            return
+        if self._process.state() == QProcess.ProcessState.NotRunning:
+            return
+        self._run_stopped = True
+        if os.name == "nt":
+            # Terminating just the PowerShell host leaves pytest/chunk children
+            # alive. taskkill /T /F targets the full run tree, asynchronously.
+            pid = int(self._process.processId())
+            if pid > 0:
+                subprocess.Popen(
+                    ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+                self.script_status.setText("Stopping the script and its subprocess tree…")
+                self.script_stop_button.setEnabled(False)
+                return
+        if self.script_stop_button.text() == "KILL RUN":
+            self._process.kill()
+        else:
+            self._process.terminate()
+            self.script_stop_button.setText("KILL RUN")
+            self.script_status.setText("Stop requested. If the command does not exit, press KILL RUN.")
+
+    def has_active_capture(self) -> bool:
+        return self._running
+
+    def _result_text(self) -> str:
+        if self._run_dir is None:
+            return ""
+        log = self._run_dir / "output.txt"
+        if not log.is_file():
+            return self._finished_status
+        with log.open("rb") as stream:
+            stream.seek(max(0, log.stat().st_size - 2 * 1024 * 1024))
+            text = stream.read().decode("utf-8", errors="replace")
+        return self._finished_status + "\nRUN: " + str(self._run_dir) + "\n" + text
+
+    def _copy_results(self) -> None:
+        if self._run_dir is None or self._running:
+            return
+        QApplication.clipboard().setText(self._result_text())
+        self.window.set_status("Run results (up to last 2 MB) copied; full capped transcript remains saved")
+
+    def _show_results(self) -> None:
+        if self._run_dir is None or self._running:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Run Script results")
+        dialog.resize(900, 620)
+        body = QVBoxLayout(dialog)
+        body.addWidget(QLabel(self._finished_status + " · " + str(self._run_dir / "output.txt")))
+        output = QPlainTextEdit(self._result_text())
+        output.setReadOnly(True)
+        output.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        body.addWidget(output, 1)
+        buttons = QHBoxLayout()
+        copy = QPushButton("COPY RESULTS")
+        copy.clicked.connect(self._copy_results)
+        close = QPushButton("CLOSE")
+        close.clicked.connect(dialog.accept)
+        buttons.addWidget(copy)
+        buttons.addStretch(1)
+        buttons.addWidget(close)
+        body.addLayout(buttons)
+        dialog.exec()
+
+    def _zip_results(self) -> None:
+        run_dir = self._run_dir
+        if run_dir is None or self._running:
+            return
+        initial_logs = dict(self._run_initial_logs)
+        final_logs = dict(self._run_final_logs)
+        output_dir = self.window.logzip_tab._output_dir()
+        def completed(result) -> None:
+            path, included = result
+            self.window.set_status(f"Run results ZIP: {path} ({len(included)} files)")
+            self.script_status.setText(self._finished_status + f" · ZIP: {path}")
+            self.window.logzip_tab.refresh()
+        self.window.run_task(
+            "Packaging run transcript and new/changed loose logs…",
+            lambda: create_script_results_zip(
+                self.repo_root, run_dir, initial_logs=initial_logs,
+                final_logs=final_logs, output_dir=output_dir,
+            ),
+            completed,
+            error_title="Run results ZIP failed",
+        )
 
     def _copy_path(self) -> None:
         QApplication.clipboard().setText(str(self.repo_root))
@@ -3247,6 +3638,11 @@ class GodzipFoundryWindow(QMainWindow):
             return
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
+        if self.command_tab.has_active_capture():
+            event.ignore()
+            self.set_status("A script is still running. Use STOP RUN (then KILL RUN if needed) before closing Foundry.")
+            QApplication.beep()
+            return
         if self._task_active:
             # Core mutations run on a daemon worker. Letting the GUI process exit
             # mid-apply/pull/create could terminate that worker in the middle of

@@ -56,6 +56,7 @@ ChildSemanticAnchorHandler = Callable[[CustomLayoutSessionItem, str, str | None]
 ChildGestureCancelHandler = Callable[[CustomLayoutSessionItem], None]
 ChildContentExtentHandler = Callable[[CustomLayoutSessionItem, float, float], bool]
 ChildContentExtentClearHandler = Callable[[CustomLayoutSessionItem], bool]
+CloseItemHandler = Callable[[CustomLayoutSessionItem], None]
 
 # Semantic handle ids for the shared edit chrome. Side edges are one-axis
 # viewport/content-extent gestures. Ordinary square corners retain uniform scale;
@@ -85,6 +86,13 @@ class CustomLayoutOverlayModel(QAbstractListModel):
 
     item_closed = Signal(str, bool, bool)
     save_requested = Signal()
+    toggleSelectedChildEditLockRequested = Signal()
+
+    @Slot()
+    def requestToggleSelectedChildEditLock(self) -> None:
+        """Ask the retained selected frame to toggle its existing chrome state."""
+        if self._session is not None and self._session.selected_item() is not None:
+            self.toggleSelectedChildEditLockRequested.emit()
 
     _WIDGET_ID_ROLE = int(Qt.ItemDataRole.UserRole) + 1
     _GEOMETRY_X_ROLE = _WIDGET_ID_ROLE + 1
@@ -132,6 +140,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         child_gesture_cancel_handler: ChildGestureCancelHandler | None = None,
         child_content_extent_handler: ChildContentExtentHandler | None = None,
         child_content_extent_clear_handler: ChildContentExtentClearHandler | None = None,
+        close_item_handler: CloseItemHandler | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -161,11 +170,17 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._child_gesture_cancel_handler = child_gesture_cancel_handler
         self._child_content_extent_handler = child_content_extent_handler
         self._child_content_extent_clear_handler = child_content_extent_clear_handler
+        self._close_item_handler = close_item_handler
         self._items: list[CustomLayoutSessionItem] = []
         # Edit-only monotonic revision used by QML invokable-backed child state
         # (for example semantic anchors). It avoids a second per-role QObject
         # model while still giving bindings an explicit invalidation dependency.
         self._item_revisions: dict[int, int] = {}
+        # A child revision is a change of the normalized child records, NOT a
+        # parent-rectangle/extent update.  The latter must not invalidate child
+        # occupancy and ask the parent to resize itself again.  These lightweight
+        # immutable snapshots belong only to this edit model, never persistence.
+        self._child_state_snapshots: dict[int, tuple[tuple[str, object], ...]] = {}
         session.subscribe_changes(self._on_session_item_changed)
         session.subscribe_selection(self._on_session_selection_changed)
         self.refresh()
@@ -267,8 +282,16 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._item_revisions = {
             key: value for key, value in self._item_revisions.items() if key in active_ids
         }
+        self._child_state_snapshots = {
+            key: value for key, value in self._child_state_snapshots.items()
+            if key in active_ids
+        }
         for item in next_items:
-            self._item_revisions.setdefault(id(item), 0)
+            key = id(item)
+            self._item_revisions.setdefault(key, 0)
+            self._child_state_snapshots.setdefault(
+                key, tuple(sorted(item.current_child_sizes.items()))
+            )
         self.endResetModel()
         for item in session.items():
             self._publish_item_change(item)
@@ -394,7 +417,11 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         if handler is not None:
             handler(item)
         widget_id = item.source_key.widget_id
-        item.apply_remove_action()
+        close_handler = self._close_item_handler
+        if close_handler is not None:
+            close_handler(item)
+        else:
+            item.apply_remove_action()
         removed = item.removed
         enabled = item.current_enabled
         session.refresh_duplicate_state()
@@ -762,6 +789,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._child_gesture_cancel_handler = None
         self._child_content_extent_handler = None
         self._child_content_extent_clear_handler = None
+        self._close_item_handler = None
         self.endResetModel()
 
     def _resizable_item(self, row: int) -> CustomLayoutSessionItem | None:
@@ -840,13 +868,14 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         if prior_row is None:
             return
         item_key = id(item)
-        self._item_revisions[item_key] = self._item_revisions.get(item_key, 0) + 1
+        child_snapshot = tuple(sorted(item.current_child_sizes.items()))
+        child_changed = self._child_state_snapshots.get(item_key) != child_snapshot
+        if child_changed:
+            self._child_state_snapshots[item_key] = child_snapshot
+            self._item_revisions[item_key] = self._item_revisions.get(item_key, 0) + 1
         self._publish_item_change(item)
         model_index = self.index(prior_row, 0)
-        self.dataChanged.emit(
-            model_index,
-            model_index,
-            [
+        roles = [
                 self._GEOMETRY_X_ROLE,
                 self._GEOMETRY_Y_ROLE,
                 self._GEOMETRY_WIDTH_ROLE,
@@ -860,10 +889,11 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 self._CONTENT_EXTENT_AXES_ROLE,
                 self._SIZE_RESET_CAPABLE_ROLE,
                 self._CONTENT_ROTATION_CAPABLE_ROLE,
-                self._CHILD_STATE_REVISION_ROLE,
                 self._CHILD_COLLISION_ENABLED_ROLE,
-            ],
-        )
+        ]
+        if child_changed:
+            roles.append(self._CHILD_STATE_REVISION_ROLE)
+        self.dataChanged.emit(model_index, model_index, roles)
 
     def _on_session_selection_changed(
         self,
@@ -933,6 +963,7 @@ class RetainedCustomLayoutOverlay:
         child_gesture_cancel_handler: ChildGestureCancelHandler | None = None,
         child_content_extent_handler: ChildContentExtentHandler | None = None,
         child_content_extent_clear_handler: ChildContentExtentClearHandler | None = None,
+        close_item_handler: CloseItemHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         self.clear_session()
         model = CustomLayoutOverlayModel(
@@ -960,6 +991,7 @@ class RetainedCustomLayoutOverlay:
             child_gesture_cancel_handler=child_gesture_cancel_handler,
             child_content_extent_handler=child_content_extent_handler,
             child_content_extent_clear_handler=child_content_extent_clear_handler,
+            close_item_handler=close_item_handler,
             parent=self.item,
         )
         self._model = model

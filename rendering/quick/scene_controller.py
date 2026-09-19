@@ -40,6 +40,7 @@ from .context_menu import (
 )
 from .custom_layout_overlay import (
     ChildContentExtentClearHandler,
+    CloseItemHandler,
     ChildContentExtentHandler,
     ChildGestureCancelHandler,
     ChildMoveBeginHandler,
@@ -900,6 +901,7 @@ class QuickSceneController(QObject):
         child_gesture_cancel_handler: ChildGestureCancelHandler | None = None,
         child_content_extent_handler: ChildContentExtentHandler | None = None,
         child_content_extent_clear_handler: ChildContentExtentClearHandler | None = None,
+        close_item_handler: CloseItemHandler | None = None,
     ) -> CustomLayoutOverlayModel:
         """Bind this display's retained pixels to shared CUSTOM working state."""
 
@@ -954,6 +956,7 @@ class QuickSceneController(QObject):
             child_gesture_cancel_handler=child_gesture_cancel_handler,
             child_content_extent_handler=child_content_extent_handler,
             child_content_extent_clear_handler=child_content_extent_clear_handler,
+            close_item_handler=close_item_handler,
         )
         model.save_requested.connect(self.custom_layout_save_requested.emit)
         underlay = self._custom_layout_guide_underlay
@@ -988,6 +991,11 @@ class QuickSceneController(QObject):
         """Reproject current session state onto the same retained items."""
 
         self.custom_layout_overlay.model.refresh()
+
+    def toggle_selected_child_edit_lock(self) -> None:
+        """Route edit-only L into the existing display-local lock glyph."""
+        if self._custom_layout_session is not None and self._custom_layout_overlay is not None:
+            self._custom_layout_overlay.model.requestToggleSelectedChildEditLock()
 
     def set_custom_layout_guides(
         self,

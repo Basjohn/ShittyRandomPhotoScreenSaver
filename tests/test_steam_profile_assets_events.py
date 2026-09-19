@@ -254,3 +254,36 @@ def test_steam_data_ready_event_uses_non_secret_payload() -> None:
             "attempted_sources": ["app_news"],
         }
     ]
+
+
+def test_wide_steam_artwork_prefers_hero_and_uses_one_bounded_header_fallback(tmp_path: Path) -> None:
+    requests: list[str] = []
+    def _source(url: str) -> bytes:
+        requests.append(url)
+        if url.endswith("library_hero.jpg"):
+            raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+        assert url.endswith("header.jpg")
+        return b"\xff\xd8\xffheader-jpeg"
+
+    first = fetch_steam_app_artwork(
+        cache_dir=tmp_path, appid=730, artwork_shape="wide", fetcher=_source,
+    )
+    assert isinstance(first, SteamAssetRecord)
+    assert len(requests) == 2
+    assert requests[0].endswith("/library_hero.jpg")
+    assert requests[1].endswith("/header.jpg")
+    second = fetch_steam_app_artwork(
+        cache_dir=tmp_path, appid=730, artwork_shape="wide",
+        fetcher=lambda _url: pytest.fail("repeated fetch instead of cached header"),
+    )
+    assert isinstance(second, SteamAssetRecord) and second.path == first.path
+
+
+def test_wide_steam_artwork_cached_hero_requires_no_fallback(tmp_path: Path) -> None:
+    urls: list[str] = []
+    record = fetch_steam_app_artwork(
+        cache_dir=tmp_path, appid=730, artwork_shape="wide",
+        fetcher=lambda url: urls.append(url) or b"\xff\xd8\xffhero-jpeg",
+    )
+    assert isinstance(record, SteamAssetRecord)
+    assert len(urls) == 1 and urls[0].endswith("/library_hero.jpg")

@@ -10,13 +10,14 @@ second presentation, service, visualizer, input router, or cadence owner.
 from __future__ import annotations
 
 import math
+from copy import deepcopy
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from PySide6.QtCore import QPoint, QRect
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_geometry_logging_enabled
 from core.settings.default_contract import require_canonical_default
 from rendering.custom_child_geometry import (
     CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY,
@@ -29,6 +30,23 @@ from rendering.custom_child_geometry import (
     set_child_semantic_anchor,
     update_child_geometry_payload,
 )
+# The experimental repeated-feed editor was operator-rejected. Retire only
+# these known transient role ids at normal CUSTOM admission; never strip
+# unknown/future roles and never write Settings during hydration.
+_RETIRED_CHILD_ROLE_IDS: dict[str, frozenset[str]] = {
+    "reddit": frozenset(("post_rows", "post_time", "post_titles", "post_separators")),
+    "reddit2": frozenset(("post_rows", "post_time", "post_titles", "post_separators")),
+    "gmail": frozenset(("message_rows", "envelopes", "timestamps", "senders",
+                         "subjects", "message_actions", "message_separators",
+                         "boundary_separators")),
+    # The independent numeral editor was operator-rejected. Face/markers/
+    # numerals/hands now use a single center-owned analogue size contract.
+    "clock": frozenset(("numerals",)),
+    "clock2": frozenset(("numerals",)),
+    "clock3": frozenset(("numerals",)),
+}
+
+
 from rendering.custom_layout_contract import (
     CustomLayoutEntry,
     canonicalize_screen_layout_bucket,
@@ -155,6 +173,29 @@ class _ChildMoveOrigin:
     geometry: CustomChildSize
 
 
+@dataclass(frozen=True, slots=True)
+class _EditUndoSnapshot:
+    """One pre-action value of the EXISTING shared session item, not another owner.
+
+    Captured at editor action boundaries, never from QML/render/pointer samples.
+    The edit session remains the only mutable geometry/payload authority.
+    """
+
+    item: CustomLayoutSessionItem
+    display_identity: str
+    monitor_route: str
+    rect: QRect
+    size_payload: dict[str, Any]
+    resize_scale: float
+    viewport_extent: tuple[float, float] | None
+    content_extent: tuple[float, float] | None
+    child_sizes: dict[str, CustomChildSize]
+    child_requirement: tuple[float, float] | None
+    enabled: bool
+    removed: bool
+    visualizer_pixels_per_world: float | None
+
+
 class QuickCustomLayoutOwner:
     """Own one global retained CUSTOM edit transaction for a Quick generation."""
 
@@ -201,6 +242,10 @@ class QuickCustomLayoutOwner:
         # same drag, producing duplicate/dead target admissions. Release clears it.
         self._visualizer_move_transfer_latch: set[CustomLayoutKey] = set()
         self._deferred_topology_reconciliation_reason: str | None = None
+        # One-level, Edit-only, event-driven undo. Gesture candidates are
+        # captured once and promoted only if the completed action changed state.
+        self._undo_last: _EditUndoSnapshot | None = None
+        self._undo_pending: tuple[str, _EditUndoSnapshot] | None = None
         self._active = False
         self._retired = False
         self._settings_change_signal = getattr(settings_manager, "settings_changed", None)
@@ -220,6 +265,90 @@ class QuickCustomLayoutOwner:
     @property
     def session(self) -> CustomLayoutSession | None:
         return self._session
+
+    def _capture_undo(self, item: CustomLayoutSessionItem) -> _EditUndoSnapshot:
+        return _EditUndoSnapshot(
+            item=item,
+            display_identity=item.current_display_identity,
+            monitor_route=item.current_monitor_route,
+            rect=QRect(item.current_global_rect),
+            size_payload=deepcopy(item.current_size_payload),
+            resize_scale=float(item.resize_scale),
+            viewport_extent=item.current_viewport_extent,
+            content_extent=item.current_content_extent,
+            child_sizes=dict(item.current_child_sizes),
+            child_requirement=item.child_content_requirement,
+            enabled=item.current_enabled,
+            removed=item.removed,
+            visualizer_pixels_per_world=self._visualizer_pixels_per_world.get(item.source_key),
+        )
+
+    def _undo_state_changed(self, before: _EditUndoSnapshot) -> bool:
+        return self._capture_undo(before.item) != before
+
+    def _begin_undo_gesture(self, item: CustomLayoutSessionItem, kind: str) -> None:
+        pending = self._undo_pending
+        if pending is not None and pending[0] == kind and pending[1].item is item:
+            return
+        self._finish_undo_gesture()
+        self._undo_pending = (kind, self._capture_undo(item))
+
+    def _finish_undo_gesture(self, kind: str | None = None) -> None:
+        pending = self._undo_pending
+        if pending is None or (kind is not None and pending[0] != kind):
+            return
+        self._undo_pending = None
+        before = pending[1]
+        if self._undo_state_changed(before):
+            self._undo_last = before
+
+    def _commit_discrete_undo(self, before: _EditUndoSnapshot) -> None:
+        self._finish_undo_gesture()
+        if self._undo_state_changed(before):
+            self._undo_last = before
+
+    def undo_last_change(self) -> bool:
+        """Consume only the last completed Edit action; never write Settings.
+
+        No undo during an active pointer gesture: a later release must not be
+        permitted to replay the held cursor against restored geometry.
+        """
+        session = self._session
+        if not self._active or session is None:
+            return False
+        if (self._undo_pending is not None or self._resize_origins
+                or self._child_resize_origins or self._child_move_origins):
+            return False
+        self._finish_undo_gesture()
+        before = self._undo_last
+        if before is None or not any(entry is before.item for entry in session.items()):
+            return False
+        item = before.item
+        self._undo_last = None
+        self._visualizer_move_transfer_latch.clear()
+        self._clear_all_guides()
+        item.set_current_display(before.display_identity, monitor_route=before.monitor_route)
+        item.set_geometry(before.rect)
+        item.current_size_payload = deepcopy(before.size_payload)
+        item.resize_scale = before.resize_scale
+        item.current_viewport_extent = before.viewport_extent
+        item.current_content_extent = before.content_extent
+        item.current_child_sizes = dict(before.child_sizes)
+        item.child_content_requirement = before.child_requirement
+        item.current_enabled = before.enabled
+        item.removed = before.removed
+        if before.visualizer_pixels_per_world is not None:
+            self._visualizer_pixels_per_world[item.source_key] = before.visualizer_pixels_per_world
+        session.refresh_duplicate_state()
+        session.notify_all_items_changed()
+        logger.info("[CUSTOM_LAYOUT] Undo last Edit action widget=%s", item.model_identity)
+        return True
+
+    def close_item(self, item: CustomLayoutSessionItem) -> None:
+        """Keep edit-mode close inside the existing session mutation seam."""
+        before = self._capture_undo(item)
+        item.apply_remove_action()
+        self._commit_discrete_undo(before)
 
     @staticmethod
     def _resolve_child_collision_enabled(
@@ -331,6 +460,7 @@ class QuickCustomLayoutOwner:
                     child_move_begin_handler=self.begin_child_move,
                     child_move_update_handler=self.update_child_move,
                     child_alignment_flip_handler=self.flip_child_alignment,
+                    close_item_handler=self.close_item,
                     child_semantic_anchor_handler=self.set_child_semantic_anchor,
                     child_gesture_cancel_handler=self.cancel_child_gesture,
                     child_content_extent_handler=self.ensure_child_content_extent,
@@ -413,9 +543,82 @@ class QuickCustomLayoutOwner:
         logger.info("[CUSTOM_LAYOUT] Cancelled Quick session")
         return True
 
+    def _log_selected_child_geometry_boundary(
+        self, phase: str, item: CustomLayoutSessionItem | None,
+    ) -> None:
+        """Event-only --geo snapshot; never a layout/readback authority.
+
+        Sample the selected retained targets only at Save/Restore boundaries,
+        not at pointer/render/parent-geometry cadence. This exposes a target
+        whose mapped rectangle differs before/after retained Save while keeping
+        all provider text, artwork URLs and user data out of the sidecar.
+        Geometry observation must not alter persistence or Edit failure policy.
+        """
+        if not is_geometry_logging_enabled() or item is None:
+            return
+        carrier = item.current_size_payload.get(CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY)
+        logger.info(
+            "[CUSTOM_LAYOUT] [GEO_CHILD] %s widget=%s parent=%s scale=%.5f "
+            "extent=%s roles=%s carrier_roles=%s",
+            phase, item.source_key.widget_id,
+            item.current_global_rect.getRect(), item.resize_scale,
+            item.current_content_extent, tuple(sorted(item.current_child_sizes)),
+            tuple(sorted(carrier)) if isinstance(carrier, dict) else (),
+        )
+        binding = self._bindings.get(item.current_display_identity)
+        if binding is None or item.model_identity == "spotify_visualizer":
+            return
+        presenter = getattr(binding.unit, "presenter", None)
+        family_lookup = getattr(presenter, "presentation_for_widget_id", None)
+        if not callable(family_lookup):
+            return
+        presentation = family_lookup(item.model_identity)
+        root = getattr(presentation, "item", None)
+        if root is None:
+            return
+        # These are existing family-declared target references; never walk a
+        # scene subtree or construct a new list of role identities at runtime.
+        try:
+            role_models = root.property("customEditableChildRoles")
+            if hasattr(role_models, "toVariant"):
+                role_models = role_models.toVariant()
+        except (AttributeError, RuntimeError, TypeError):
+            return
+        if not isinstance(role_models, (list, tuple)):
+            return
+        for entry in role_models:
+            if not isinstance(entry, dict):
+                continue
+            role_id = str(entry.get("roleId", ""))
+            if not role_id:
+                continue
+            target = entry.get("target")
+            if target is None:
+                continue
+            try:
+                mapped = target.mapRectToItem(root, target.boundingRect())
+                logger.info(
+                    "[CUSTOM_LAYOUT] [GEO_CHILD] %s_target widget=%s role=%s "
+                    "root_rect=(%.2f,%.2f,%.2f,%.2f) visible=%s",
+                    phase, item.source_key.widget_id, role_id,
+                    mapped.x(), mapped.y(), mapped.width(), mapped.height(),
+                    bool(target.isVisible()),
+                )
+            except (AttributeError, RuntimeError, TypeError):
+                # A target may retire at a Save/Restore boundary. Diagnostic
+                # observation must never turn a healthy Save into a fault.
+                logger.info(
+                    "[CUSTOM_LAYOUT] [GEO_CHILD] %s_target_retired widget=%s role=%s",
+                    phase, item.source_key.widget_id, role_id,
+                )
+
     def save(self, *, defer_topology_reconciliation: bool = False) -> bool:
         if not self._active or self._session is None:
             return False
+        # Observe the SAME session item and retained QML target on either side
+        # of the existing Save promotion; do not initiate a layout publication.
+        selected_geo_item = self._session.selected_item() if is_geometry_logging_enabled() else None
+        self._log_selected_child_geometry_boundary("save_before", selected_geo_item)
         widgets = self._settings_manager.get_widgets_map()
         sync_custom_layout_restore_routes(widgets)
         custom_map = load_custom_layout_map(widgets)
@@ -522,6 +725,7 @@ class QuickCustomLayoutOwner:
                 "[CUSTOM_LAYOUT] Save retains generation reconciliation reason=%s",
                 topology_reason,
             )
+        self._log_selected_child_geometry_boundary("save_after_commit_attempt", selected_geo_item)
         cleanup_corruption = self._finish()
         # Geometry-only / coherent live commits remain in this retained
         # generation. A layout-slot transaction can explicitly defer topology
@@ -607,6 +811,7 @@ class QuickCustomLayoutOwner:
         proposed: QRect,
         cursor: QPoint,
     ) -> QRect:
+        self._begin_undo_gesture(item, "parent_move")
         binding = self._bindings[item.current_display_identity]
         target = binding
         transfer_latched = (
@@ -666,6 +871,7 @@ class QuickCustomLayoutOwner:
     def clear_move_guides(self) -> None:
         """Clear transient alignment guides and end the current move gesture."""
 
+        self._finish_undo_gesture("parent_move")
         self._visualizer_move_transfer_latch.clear()
         self._clear_all_guides()
 
@@ -776,6 +982,7 @@ class QuickCustomLayoutOwner:
         source = self._bindings.get(item.current_display_identity)
         if target is None or source is None:
             return False
+        before_undo = self._capture_undo(item)
         rect = QRect(item.current_global_rect)
         source_width = max(1.0, float(source.geometry.width()))
         source_height = max(1.0, float(source.geometry.height()))
@@ -820,6 +1027,7 @@ class QuickCustomLayoutOwner:
         self._visualizer_move_transfer_latch.clear()
         item.set_current_display(target.identity, monitor_route=target.monitor_route)
         item.set_geometry(projected)
+        self._commit_discrete_undo(before_undo)
         logger.info(
             "[CUSTOM_LAYOUT] Visualizer display hop direction=%s source=%s target=%s rect=%s",
             direction,
@@ -938,6 +1146,7 @@ class QuickCustomLayoutOwner:
             viewport_extent=item.current_viewport_extent,
             visualizer_uniform_scale=uniform_scale,
         )
+        self._begin_undo_gesture(item, "parent_resize")
         return True
 
     def update_resize(
@@ -969,6 +1178,7 @@ class QuickCustomLayoutOwner:
             changed = self._resize_uniform_drag(item, origin, handle_id, cursor)
         if finalize:
             self._resize_origins.pop(item.source_key, None)
+            self._finish_undo_gesture("parent_resize")
             # Release ends the gesture: retire the transient alignment guides the
             # live resize samples published (same boundary as move's finishMove).
             self._clear_all_guides()
@@ -1029,6 +1239,7 @@ class QuickCustomLayoutOwner:
             normalization_height=norm_height,
             size=item.child_size(role.role_id),
         )
+        self._begin_undo_gesture(item, "child_resize")
         return True
 
     def update_child_resize(
@@ -1075,6 +1286,7 @@ class QuickCustomLayoutOwner:
             )
         if finalize:
             self._child_resize_origins.pop(item.source_key, None)
+            self._finish_undo_gesture("child_resize")
         return changed
 
     def preview_child_resize(
@@ -1117,6 +1329,9 @@ class QuickCustomLayoutOwner:
         )
         width_delta = resolved.visible_width - origin.visible_width
         height_delta = resolved.visible_height - origin.visible_height
+        if role.centered_resize:
+            width_delta *= 0.5
+            height_delta *= 0.5
         return QPoint(
             origin.cursor.x()
             + int(round(-width_delta if handle_id.endswith("left") else width_delta)),
@@ -1171,6 +1386,20 @@ class QuickCustomLayoutOwner:
             placement_compensation_y=compensation_y,
             geometry=item.child_size(role.role_id),
         )
+        self._begin_undo_gesture(item, "child_move")
+        # --geo is an opt-in, event-boundary diagnostic. Do not log pointer
+        # samples, render frames, provider content or mutable user data.
+        if is_geometry_logging_enabled():
+            starting = item.child_size(role.role_id)
+            logger.info(
+                "[CUSTOM_LAYOUT] [GEO_CHILD] begin widget=%s role=%s "
+                "parent=%s cursor=(%s,%s) offset=(%.6f,%.6f) "
+                "compensation=(%.2f,%.2f) norm=(%.1f,%.1f) scale=%.4f",
+                item.source_key.widget_id, role.role_id,
+                item.current_global_rect.getRect(), cursor.x(), cursor.y(),
+                starting.x_offset, starting.y_offset, compensation_x,
+                compensation_y, norm_width, norm_height, item.resize_scale,
+            )
         return True
 
     def update_child_move(
@@ -1212,6 +1441,20 @@ class QuickCustomLayoutOwner:
             )
         if finalize:
             self._child_move_origins.pop(item.source_key, None)
+            self._finish_undo_gesture("child_move")
+            if is_geometry_logging_enabled():
+                logger.info(
+                    "[CUSTOM_LAYOUT] [GEO_CHILD] end widget=%s role=%s "
+                    "parent=%s cursor_delta=(%s,%s) offset=(%.6f,%.6f) "
+                    "compensation=(%.2f,%.2f) changed=%s",
+                    item.source_key.widget_id, role.role_id,
+                    item.current_global_rect.getRect(),
+                    cursor.x() - origin.cursor.x(),
+                    cursor.y() - origin.cursor.y(),
+                    next_geometry.x_offset, next_geometry.y_offset,
+                    origin.placement_compensation_x,
+                    origin.placement_compensation_y, changed,
+                )
         return changed
 
     def flip_child_alignment(
@@ -1227,14 +1470,23 @@ class QuickCustomLayoutOwner:
         role = item.child_role(role_id)
         if role is None or not role.alignment_flip:
             return False
+        before_undo = self._capture_undo(item)
         next_geometry = flip_child_alignment(role, item.child_size(role.role_id))
         changed = item.set_child_size(role.role_id, next_geometry)
         if changed:
+            self._commit_discrete_undo(before_undo)
             item.current_size_payload = update_child_geometry_payload(
                 item.current_size_payload,
                 item.custom_child_roles,
                 item.current_child_sizes,
             )
+            if is_geometry_logging_enabled():
+                logger.info(
+                    "[CUSTOM_LAYOUT] [GEO_CHILD] flip widget=%s role=%s "
+                    "alignment=%s parent=%s",
+                    item.source_key.widget_id, role.role_id,
+                    next_geometry.alignment, item.current_global_rect.getRect(),
+                )
         return changed
 
     def set_child_semantic_anchor(
@@ -1248,6 +1500,7 @@ class QuickCustomLayoutOwner:
         role = item.child_role(role_id)
         if role is None or not role.semantic_corner_anchor:
             return False
+        before_undo = self._capture_undo(item)
         next_geometry = set_child_semantic_anchor(
             role, item.child_size(role.role_id), anchor
         )
@@ -1258,6 +1511,7 @@ class QuickCustomLayoutOwner:
                 item.custom_child_roles,
                 item.current_child_sizes,
             )
+            self._commit_discrete_undo(before_undo)
         return changed
 
     def cancel_child_gesture(self, item: CustomLayoutSessionItem) -> None:
@@ -1265,6 +1519,8 @@ class QuickCustomLayoutOwner:
 
         self._child_resize_origins.pop(item.source_key, None)
         self._child_move_origins.pop(item.source_key, None)
+        if self._undo_pending is not None and self._undo_pending[1].item is item:
+            self._finish_undo_gesture()
 
     def clear_child_content_extent(self, item: CustomLayoutSessionItem) -> bool:
         """Retire selected-Edit-only containment without changing outer geometry."""
@@ -1396,6 +1652,7 @@ class QuickCustomLayoutOwner:
     ) -> bool:
         if not item.resize_capable:
             return False
+        before_undo = self._capture_undo(item)
         steps = int(angle_delta_y / 120) if angle_delta_y else 0
         if steps == 0:
             steps = 1 if angle_delta_y > 0 else -1
@@ -1407,6 +1664,7 @@ class QuickCustomLayoutOwner:
             ),
             QRect(item.current_global_rect),
         )
+        self._commit_discrete_undo(before_undo)
         # Wheel resize is intentionally free of magnetic snapping, but nearby peer
         # alignment is still useful visual feedback.  Resolve the same peer-line
         # metadata against the already-applied free geometry and publish only its
@@ -1544,10 +1802,30 @@ class QuickCustomLayoutOwner:
                     raw_child_geometry, descriptor.custom_child_roles
                 )
                 if isinstance(raw_child_geometry, Mapping):
+                    # Preserve future/unknown role records exactly, but drop the
+                    # explicitly rejected feed experiment in the in-memory edit
+                    # transaction. Only a normal Save/slot commit persists it.
+                    retired = _RETIRED_CHILD_ROLE_IDS.get(widget_id, frozenset())
+                    admitted = {
+                        role_id: value for role_id, value in raw_child_geometry.items()
+                        if str(role_id) not in retired
+                    }
+                    if widget_id in {"clock", "clock2", "clock3"}:
+                        # The face is now center-fixed. Retire only its old
+                        # experimental placement keys on normal CUSTOM admission;
+                        # preserve its authored-relative scale and every unknown
+                        # future field until the existing Save/slot transaction.
+                        face = admitted.get("clock_face")
+                        if isinstance(face, Mapping):
+                            centered_face = dict(face)
+                            centered_face.pop("x_offset", None)
+                            centered_face.pop("y_offset", None)
+                            admitted["clock_face"] = centered_face
                     payload = dict(payload)
-                    payload[CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY] = dict(
-                        raw_child_geometry
-                    )
+                    if admitted:
+                        payload[CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY] = admitted
+                    else:
+                        payload.pop(CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY, None)
 
             # For retained uniform-transform families, the QML preferred size
             # is the exact authored reference on every admission. Derive the
@@ -1812,6 +2090,7 @@ class QuickCustomLayoutOwner:
         # Edit is open can never route a stale rotate click into Sphere.
         if not owner.controller.presentation_policy.content_rotation_capable:
             return False
+        before_undo = self._capture_undo(item)
         mode_id = owner.controller.mode_id
         rotations = normalize_content_rotation_by_mode(
             item.current_size_payload.get(CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, {})
@@ -1832,6 +2111,7 @@ class QuickCustomLayoutOwner:
         else:
             payload.pop(CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY, None)
         item.current_size_payload = payload
+        self._commit_discrete_undo(before_undo)
         self._session.notify_item_changed(item)
         return True
 
@@ -1874,6 +2154,7 @@ class QuickCustomLayoutOwner:
         descriptor = self._descriptors.get(item.source_key)
         if descriptor is None:
             return False
+        before_undo = self._capture_undo(item)
 
         if descriptor.custom_layout_resize_mode == "visualizer_rect":
             viewport = (
@@ -1921,6 +2202,16 @@ class QuickCustomLayoutOwner:
             )
 
         self._session.notify_item_changed(item)
+        self._commit_discrete_undo(before_undo)
+        self._log_selected_child_geometry_boundary("restore_projected", item)
+        if is_geometry_logging_enabled():
+            logger.info(
+                "[CUSTOM_LAYOUT] [GEO_CHILD] restore widget=%s parent=%s "
+                "child_roles=%s extent=%s fit=%.4f",
+                item.source_key.widget_id, rect.getRect(),
+                tuple(sorted(item.current_child_sizes)), item.current_content_extent,
+                fit_scale,
+            )
         logger.info(
             "[CUSTOM_LAYOUT] Restored widget authored size widget=%s display=%s "
             "size=%sx%s emergency_fit=%.4f position_preserved=(%s,%s)",
@@ -2051,6 +2342,15 @@ class QuickCustomLayoutOwner:
             item.baseline_size_payload,
             payload_scale,
         )
+        if item.child_geometry_capable:
+            # Baseline payloads are an absolute *size* reference, never a
+            # snapshot of the currently edited children. A wheel/corner gesture
+            # must project the live child records into the very same payload
+            # transaction, including an unsaved Header orientation flip. Do not
+            # mutate those records or add a second orientation owner here.
+            payload = update_child_geometry_payload(
+                payload, item.custom_child_roles, item.current_child_sizes
+            )
         if visualizer_world:
             payload.update(
                 width=local.width(),
@@ -2942,6 +3242,8 @@ class QuickCustomLayoutOwner:
             self._resize_origins = {}
             self._child_resize_origins = {}
             self._child_move_origins = {}
+            self._undo_last = None
+            self._undo_pending = None
             self._selected_child_edit_item = None
             self._visualizer_pixels_per_world.clear()
             self._visualizer_move_transfer_latch.clear()

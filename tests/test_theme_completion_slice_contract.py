@@ -22,7 +22,7 @@ def test_abandonment_backlog_accent_inherits_widget_accent_with_explicit_overrid
     presentation = _text("rendering/quick/qml/AbandonmentIssuesPresentation.qml")
     # The archive/BACKLOG block owns the accent. The label must remain on the
     # ordinary theme text semantic so accent-on-accent themes stay readable.
-    assert "fillColor: Qt.rgba(" in presentation
+    assert "color: Qt.rgba(" in presentation
     assert "abandonmentRoot.abandonmentModel.accentColor.r" in presentation
     assert "color: abandonmentRoot.abandonmentModel.textColor" in presentation
 
@@ -34,13 +34,15 @@ def test_reddit_age_column_aligns_first_value_digit_and_fixed_ago_suffix() -> No
     assert 'objectName: "redditPostAgeAgo_" + postRow.index' in reddit
     assert 'text: "AGO"' in reddit
     assert "horizontalAlignment: Text.AlignLeft" in reddit
-    assert "horizontalAlignment: Text.AlignRight" in reddit
+    assert "horizontalAlignment: redditRoot.headerFlipped" in reddit
+    assert "? Text.AlignLeft : Text.AlignRight" in reddit
     assert "anchors.left: parent.left" in reddit
     assert "anchors.right: parent.right" in reddit
-    # Keep the AGO suffixes mutually aligned while nudging the whole suffix
-    # column left from the age-field edge (17 px after the +14 px column shift).
-    assert "anchors.rightMargin: 17.0" in reddit
-    assert "anchors.leftMargin: 4.0" in reddit
+    # The flipped timestamp occupies the same right rail for both long and
+    # short titles; 01HR / AGO remain close with no mirrored glyphs.
+    assert 'ageValueText.width + redditRoot.ageValueAgoGap' in reddit
+    assert 'x: redditRoot.headerFlipped ? parent.width - width : 0.0' in reddit
+    assert 'parent.width - ageText.width - redditRoot.flippedTitleAgeGap' in reddit
 
 
 def test_context_submenu_has_event_driven_pointer_corridor_without_timer_owner() -> None:

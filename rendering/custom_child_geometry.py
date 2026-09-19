@@ -42,6 +42,9 @@ class CustomChildRoleDescriptor:
     minimum_scale: tuple[float, float] = (0.40, 0.40)
     maximum_scale: tuple[float, float] = (3.00, 3.00)
     uniform_scale: bool = False
+    # Center-owned roles grow equally on both sides of the touched edge.
+    # The existing normalized size remains the sole persisted authority.
+    centered_resize: bool = False
     movable: bool = False
     resize_handles: tuple[str, ...] = CHILD_RESIZE_HANDLES
     alignment_flip: bool = False
@@ -77,6 +80,12 @@ class CustomChildRoleDescriptor:
         object.__setattr__(self, "minimum_scale", (min_w, min_h))
         object.__setattr__(self, "maximum_scale", (max_w, max_h))
         object.__setattr__(self, "uniform_scale", bool(self.uniform_scale))
+        if self.centered_resize and (not self.uniform_scale or self.movable):
+            raise ValueError(
+                f"CUSTOM child role {role_id!r} centered resize requires "
+                "uniform scaling and fixed center"
+            )
+        object.__setattr__(self, "centered_resize", bool(self.centered_resize))
         alignment = str(self.authored_alignment or "left").strip().lower()
         if alignment not in {"left", "right"}:
             raise ValueError(
@@ -285,6 +294,12 @@ def resolve_child_resize_geometry(
     top_side = handle_id == "top" or handle_id.startswith("top_")
     if top_side:
         dy = -dy
+    if role.centered_resize:
+        # The physical pointer moves one radius, while the full box changes
+        # by two radii. Uniform intrinsic geometry stays centered without
+        # saving artificial X/Y offsets that would fight the authored center.
+        dx *= 2.0
+        dy *= 2.0
 
     width_ratio = max(1.0e-6, width + dx) / width
     height_ratio = max(1.0e-6, height + dy) / height

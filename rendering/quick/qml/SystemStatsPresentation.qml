@@ -4,6 +4,7 @@ OverlayWidget {
     id: statsRoot
     objectName: "systemStatsPresentation"
 
+
     required property var systemStatsModel
     uniformScaleTransform: true
     preferredContentWidth: systemStatsModel.authoredWidth
@@ -40,6 +41,10 @@ OverlayWidget {
         const value = childRecord(roleId)
         return value && value.alignment !== undefined
             ? String(value.alignment) : String(fallback || "left")
+    }
+    readonly property bool headerFlipped: childAlignment("header", "left") === "right"
+    function semanticTextRight(roleId, authored) {
+        return (childAlignment(roleId, authored) === "right") !== headerFlipped
     }
     function childAnchor(roleId) {
         const value = childRecord(roleId)
@@ -81,14 +86,11 @@ OverlayWidget {
             "target": headerFrame,
             "normalizationWidth": normW,
             "normalizationHeight": normH,
-            "semanticCornerInsetX":
-                (statsRoot.width - statsRoot.systemStatsModel.authoredWidth
-                    * statsRoot.presentationScale) / 2.0
-                    + 16.0 * statsRoot.presentationScale,
-            "semanticCornerInsetY":
-                (statsRoot.height - statsRoot.systemStatsModel.authoredHeight
-                    * statsRoot.presentationScale) / 2.0
-                    + 14.0 * statsRoot.presentationScale
+            // The live letterbox is resolved by the stable shared role frame,
+            // not inside this role-array binding. The inset itself is authored.
+            "semanticCornerInsetX": 16.0,
+            "semanticCornerInsetY": 14.0,
+            "semanticInsetUsesUniformCard": true
         })
         roles.push({
             "roleId": "header_separator",
@@ -161,13 +163,17 @@ OverlayWidget {
         scale: statsRoot.childWidthScale("header")
         readonly property string customAnchor: statsRoot.childAnchor("header")
         property real customEditPlacementCompensationX: customAnchor.length > 0
+                || statsRoot.headerFlipped
             ? x - (16.0 + statsRoot.childOffsetX("header")) : 0.0
         property real customEditPlacementCompensationY: customAnchor.length > 0
             ? y - (14.0 + statsRoot.childOffsetY("header")) : 0.0
         x: customAnchor.endsWith("right")
             ? statsRoot.systemStatsModel.authoredWidth - 16.0 - width * scale
             : (customAnchor.endsWith("left")
-                ? 16.0 : 16.0 + statsRoot.childOffsetX("header"))
+                ? 16.0
+                : (statsRoot.headerFlipped
+                    ? statsRoot.systemStatsModel.authoredWidth - 16.0 - width * scale
+                    : 16.0) + statsRoot.childOffsetX("header"))
         y: customAnchor.startsWith("bottom")
             ? statsRoot.systemStatsModel.authoredHeight - 14.0 - height * scale
             : (customAnchor.startsWith("top")
@@ -244,7 +250,8 @@ OverlayWidget {
 
         Rectangle {
             objectName: panel.objectPrefix + "Accent"
-            x: statsRoot.childOffsetX("metric_accents")
+            x: (statsRoot.headerFlipped ? parent.width - width : 0.0)
+                + statsRoot.childOffsetX("metric_accents")
             y: statsRoot.childOffsetY("metric_accents")
             width: Math.max(1.0, 5.0 * statsRoot.childWidthScale("metric_accents"))
             height: Math.max(1.0, panel.height * statsRoot.childHeightScale("metric_accents"))
@@ -260,7 +267,8 @@ OverlayWidget {
             readonly property real baseWidth: Math.max(
                 180.0, parent.width - statsRoot.valueLaneWidth - 54.0
             )
-            x: 18.0 + statsRoot.childOffsetX("metric_labels")
+            x: (statsRoot.headerFlipped ? panel.width - 18.0 - width : 18.0)
+                + statsRoot.childOffsetX("metric_labels")
             y: baseY + statsRoot.childOffsetY("metric_labels")
             width: Math.max(1.0, baseWidth * statsRoot.childWidthScale("metric_labels"))
             height: Math.max(1.0, 22.0 * statsRoot.childHeightScale("metric_labels"))
@@ -270,7 +278,7 @@ OverlayWidget {
             font.pointSize: statsRoot.systemStatsModel.fontSize * 0.80
                 * statsRoot.childHeightScale("metric_labels")
             font.bold: true
-            horizontalAlignment: statsRoot.childAlignment("metric_labels", "left") === "right"
+            horizontalAlignment: statsRoot.semanticTextRight("metric_labels", "left")
                 ? Text.AlignRight : Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
@@ -289,7 +297,8 @@ OverlayWidget {
             readonly property real baseWidth: Math.max(
                 100.0, parent.width - statsRoot.valueLaneWidth - 54.0
             )
-            x: 18.0 + statsRoot.childOffsetX("metric_details")
+            x: (statsRoot.headerFlipped ? panel.width - 18.0 - width : 18.0)
+                + statsRoot.childOffsetX("metric_details")
             y: baseY + statsRoot.childOffsetY("metric_details")
             width: Math.max(1.0, baseWidth * statsRoot.childWidthScale("metric_details"))
             height: Math.max(1.0, 22.0 * statsRoot.childHeightScale("metric_details"))
@@ -298,7 +307,7 @@ OverlayWidget {
             font.family: statsRoot.systemStatsModel.fontFamily
             font.pointSize: statsRoot.systemStatsModel.fontSize * 0.70
                 * statsRoot.childHeightScale("metric_details")
-            horizontalAlignment: statsRoot.childAlignment("metric_details", "left") === "right"
+            horizontalAlignment: statsRoot.semanticTextRight("metric_details", "left")
                 ? Text.AlignRight : Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
@@ -314,7 +323,8 @@ OverlayWidget {
             readonly property real baseY: Math.min(
                 17.0, 8.0 + Math.max(0.0, panel.height - 72.0) * 0.10
             )
-            x: baseX + statsRoot.childOffsetX("metric_values")
+            x: (statsRoot.headerFlipped ? 16.0 : baseX)
+                + statsRoot.childOffsetX("metric_values")
             y: baseY + statsRoot.childOffsetY("metric_values")
             width: Math.max(1.0, statsRoot.valueLaneWidth
                 * statsRoot.childWidthScale("metric_values"))
@@ -325,7 +335,7 @@ OverlayWidget {
             font.pointSize: statsRoot.systemStatsModel.fontSize * 1.58
                 * statsRoot.childHeightScale("metric_values")
             font.bold: true
-            horizontalAlignment: statsRoot.childAlignment("metric_values", "right") === "right"
+            horizontalAlignment: statsRoot.semanticTextRight("metric_values", "right")
                 ? Text.AlignRight : Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
             fontSizeMode: Text.HorizontalFit

@@ -4,6 +4,7 @@ OverlayWidget {
     id: gmailRoot
     objectName: "gmailPresentation"
 
+
     required property var gmailModel
     semanticDoubleClickEnabled: gmailModel.interactionEnabled
     // CUSTOM resize uses the same retained whole-card scale as Reddit/Media.
@@ -18,15 +19,27 @@ OverlayWidget {
     property real actionPopupY: 0.0
     readonly property real committedContentHeight: gmailModel.contentHeight
 
-    // Gmail retains the authored fixed-width/list-population contract. CUSTOM
-    // child geometry is additive and normalized against one stable authored box;
-    // repeated message roles share one record regardless of message count.
+    // Content-driven outer size (H option A): Gmail is a fixed-width list card;
+    // its preferred width is the authored width setting (via the model) and its
+    // height is the model-computed content height. Both are size-only model
+    // reports independent of the assigned width - no width<->preferredWidth
+    // feedback. J refines exact insets against eyes-on parity.
+    // Gmail model width is already the authored outer-card width.  Height is
+    // row/content-derived and excludes the shell inset, so only height needs
+    // compensation for recreation containment.  Adding shellInset to width
+    // lies to CUSTOM about the editable outer rect and breaks alignment.
+    // CUSTOM content-extent box (0 = none). Vertical drives the effective visible
+    // email count then row/separator spread; horizontal widens the card so more
+    // sender/subject text shows before width-elide. `limit` stays the SSOT
+    // default visible count when no extent is active.
     readonly property real cExtentW: gmailModel.contentExtentWidth
     readonly property real cExtentH: gmailModel.contentExtentHeight
     readonly property real naturalRowHeight: Math.max(28.0, gmailModel.fontSize * 1.65)
     readonly property real baseRowSpacing: 4.0
     readonly property var childGeometry: gmailModel.customChildGeometry
-    readonly property real childPlacementEpsilon: 0.0001
+    // Header alignment is the existing widget-wide semantic flip intent.
+    // Project structural rails, NEVER mirror glyphs or text alignment.
+    readonly property bool headerFlipped: childAlignment("header", "left") === "right"
 
     function childRecord(roleId) {
         return childGeometry ? childGeometry[roleId] : null
@@ -75,62 +88,45 @@ OverlayWidget {
     readonly property real childNormalizationWidth: canonicalPreferredWidth
     readonly property real childNormalizationHeight: canonicalAuthoredHeight
 
+
     readonly property int heldEmailCount: messageRepeater.count
-    readonly property real messageRowWidthScale: childWidthScale("message_rows")
-    readonly property real messageRowHeightScale: childHeightScale("message_rows")
-    readonly property real messageRowsXOffset: childOffsetX("message_rows")
-    readonly property real messageRowsYOffset: childOffsetY("message_rows")
-    readonly property real effectiveBaseRowHeight: naturalRowHeight * messageRowHeightScale
-    readonly property bool messageVerticalGeometryActive:
-        Math.abs(messageRowHeightScale - 1.0) > childPlacementEpsilon
-        || Math.abs(messageRowsYOffset) > childPlacementEpsilon
     readonly property real chromeHeight: headerArea.height
         + (statusArea.visible ? statusArea.height + baseRowSpacing : 0.0)
         + gmailRoot.shellInset
-    // The repeated rail remains attached to the authored top flow. Moving the
-    // shared rail downward consumes available list height; it never becomes a
-    // second population authority and never requests parent growth on its own.
-    readonly property real layoutHeightForRows: cExtentH > 0.0
-        ? cExtentH : canonicalAuthoredHeight
-    readonly property real emailRailBudget: Math.max(
-        0.0,
-        layoutHeightForRows - chromeHeight - Math.max(0.0, messageRowsYOffset)
-    )
+    readonly property real emailRailBudget: Math.max(0.0, cExtentH - chromeHeight)
     readonly property int effectiveVisibleCount: {
         var held = Math.max(0, heldEmailCount)
         if (held === 0)
             return 0
-        if (cExtentH <= 0.0 && !messageVerticalGeometryActive)
-            return Math.min(held, gmailModel.emailLimit)
-        var fit = Math.floor(emailRailBudget / (effectiveBaseRowHeight + baseRowSpacing))
-        return Math.max(1, Math.min(held, fit))
+        if (cExtentH <= 0.0)
+            return Math.min(held, gmailModel.emailLimit)   // SSOT default count
+        var fit = Math.floor(emailRailBudget / (naturalRowHeight + baseRowSpacing))
+        return Math.max(1, Math.min(held, fit))            // CUSTOM: 1..held (<=cap)
     }
-    // Once visible count caps, spare outer-Y extent remains row breathing room.
-    // Shared row height can raise/lower density, but outer Y still decides count.
+    // Rows grow to fill the box once the count caps (past-limit vertical padding).
     readonly property real extentRowHeight: {
-        if ((cExtentH <= 0.0 && !messageVerticalGeometryActive) || effectiveVisibleCount <= 0)
-            return effectiveBaseRowHeight
+        if (cExtentH <= 0.0 || effectiveVisibleCount <= 0)
+            return naturalRowHeight
         var gaps = Math.max(0, effectiveVisibleCount - 1)
         return Math.max(
-            effectiveBaseRowHeight,
+            naturalRowHeight,
             (emailRailBudget - gaps * baseRowSpacing) / effectiveVisibleCount
         )
     }
+    // Separator thicknesses stay the authored settings by default and scale up
+    // with the row spread in CUSTOM (setting = default, extent = override).
     readonly property real extentSeparatorScale: cExtentH > 0.0
-        ? Math.max(1.0, Math.min(2.5, extentRowHeight / Math.max(1.0, naturalRowHeight)))
+        ? Math.max(1.0, Math.min(2.5, extentRowHeight / naturalRowHeight))
         : 1.0
-    readonly property bool hasVisibleBoundarySeparator: {
-        if (!gmailModel.showSeparators || effectiveVisibleCount <= 0)
-            return false
-        for (let i = 0; i < effectiveVisibleCount; ++i) {
-            const row = messageRepeater.itemAt(i)
-            if (row && row.boundaryBefore)
-                return true
-        }
-        return false
-    }
 
-    preferredContentWidth: cExtentW > 0.0 ? cExtentW : canonicalPreferredWidth
+    // A preferred width must use *intrinsic authored* inputs only.  The live
+    // refresh glyph width belongs to a header-bounded edit target, and reading
+    // it here creates a cycle: preferred width -> authored card/header width
+    // -> refresh target width -> glyph width -> preferred width.  The existing
+    // canonical width already includes the intrinsic (unclamped) refresh slot.
+    // Parent side-reflow remains owned solely by content_extent.
+    preferredContentWidth: cExtentW > 0.0
+        ? cExtentW : canonicalPreferredWidth
     preferredContentHeight: cExtentH > 0.0
         ? cExtentH
         : gmailModel.contentHeight + gmailRoot.shellInset
@@ -200,105 +196,6 @@ OverlayWidget {
         }
     }
 
-    customEditableChildRoles: {
-        const roles = []
-        const normW = childNormalizationWidth
-        const normH = childNormalizationHeight
-        roles.push({
-            "roleId": "header",
-            "target": headerFrame,
-            "normalizationWidth": normW,
-            "normalizationHeight": normH,
-            "semanticCornerInsetX": 0.0,
-            "semanticCornerInsetY": 0.0
-        })
-        if (refreshTarget.visible) {
-            roles.push({
-                "roleId": "refresh",
-                "target": refreshTarget,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-        }
-        if (gmailModel.viewState === "ready" && effectiveVisibleCount > 0) {
-            const nestedRoles = [
-                "envelopes", "timestamps", "senders", "subjects",
-                "message_actions", "message_separators", "boundary_separators"
-            ]
-            roles.push({
-                "roleId": "message_rows",
-                "target": customMessageRowRoleTarget,
-                "collisionIgnoreRoleIds": nestedRoles,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-            if (customEnvelopeRoleTarget.visible) {
-                roles.push({
-                    "roleId": "envelopes",
-                    "target": customEnvelopeRoleTarget,
-                    "collisionIgnoreRoleIds": ["message_rows"],
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH
-                })
-            }
-            roles.push({
-                "roleId": "timestamps",
-                "target": customTimestampRoleTarget,
-                "collisionIgnoreRoleIds": ["message_rows"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-            if (customSenderRoleTarget.visible) {
-                roles.push({
-                    "roleId": "senders",
-                    "target": customSenderRoleTarget,
-                    "collisionIgnoreRoleIds": ["message_rows"],
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH
-                })
-            }
-            if (customSubjectRoleTarget.visible) {
-                roles.push({
-                    "roleId": "subjects",
-                    "target": customSubjectRoleTarget,
-                    "collisionIgnoreRoleIds": ["message_rows"],
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH
-                })
-            }
-            if (customMessageActionRoleTarget.visible) {
-                roles.push({
-                    "roleId": "message_actions",
-                    "target": customMessageActionRoleTarget,
-                    "collisionIgnoreRoleIds": ["message_rows"],
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH
-                })
-            }
-            if (customMessageSeparatorRoleTarget.visible) {
-                roles.push({
-                    "roleId": "message_separators",
-                    "target": customMessageSeparatorRoleTarget,
-                    "occupiedTarget": customMessageSeparatorOccupiedTarget,
-                    "collisionIgnoreRoleIds": ["message_rows"],
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH
-                })
-            }
-            if (customBoundarySeparatorRoleTarget.visible) {
-                roles.push({
-                    "roleId": "boundary_separators",
-                    "target": customBoundarySeparatorRoleTarget,
-                    "occupiedTarget": customBoundarySeparatorOccupiedTarget,
-                    "collisionIgnoreRoleIds": ["message_rows"],
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH
-                })
-            }
-        }
-        return roles
-    }
-
     Item {
         id: blankRefreshArea
         objectName: "gmailBlankRefreshArea"
@@ -310,6 +207,31 @@ OverlayWidget {
             acceptedButtons: Qt.LeftButton
             onDoubleTapped: gmailRoot.refreshRequested()
         }
+    }
+
+    customEditableChildRoles: {
+        const roles = []
+        const normW = childNormalizationWidth
+        const normH = childNormalizationHeight
+        roles.push({
+            "roleId": "header",
+            "target": headerFrame,
+            "allowParentGrowth": false,
+            "normalizationWidth": normW,
+            "normalizationHeight": normH,
+            "semanticCornerInsetX": 0.0,
+            "semanticCornerInsetY": 0.0
+        })
+        if (refreshTarget.visible) {
+            roles.push({
+                "roleId": "refresh",
+                "target": refreshTarget,
+                "allowParentGrowth": false,
+                "normalizationWidth": normW,
+                "normalizationHeight": normH
+            })
+        }
+        return roles
     }
 
     Column {
@@ -331,19 +253,22 @@ OverlayWidget {
                 textObjectName: "gmailHeaderText"
                 readonly property string customAnchor: gmailRoot.childAnchor("header")
                 readonly property real customScale: gmailRoot.childWidthScale("header")
-                property real customEditPlacementCompensationX: customAnchor.length > 0
-                    ? x - gmailRoot.childOffsetX("header") : 0.0
+                property real customEditPlacementCompensationX:
+                    customAnchor.length > 0 || gmailRoot.headerFlipped
+                        ? x - gmailRoot.childOffsetX("header") : 0.0
                 property real customEditPlacementCompensationY: customAnchor.length > 0
                     ? y - gmailRoot.childOffsetY("header") : 0.0
                 transformOrigin: Item.TopLeft
                 scale: customScale
                 x: customAnchor.endsWith("right")
                     ? headerArea.width - width * scale
-                    : (customAnchor.endsWith("left") ? 0.0 : gmailRoot.childOffsetX("header"))
+                    : (customAnchor.endsWith("left") ? 0.0
+                        : (gmailRoot.headerFlipped ? headerArea.width - width * scale : 0.0)
+                            + gmailRoot.childOffsetX("header"))
                 y: customAnchor.startsWith("bottom")
                     ? headerArea.height - height * scale
                     : (customAnchor.startsWith("top") ? 0.0 : gmailRoot.childOffsetY("header"))
-                contentReversed: gmailRoot.childAlignment("header", "left") === "right"
+                contentReversed: gmailRoot.headerFlipped
                 label: gmailRoot.gmailModel.headerText
                 logoSource: gmailRoot.gmailModel.logoSource
                 logoDesaturated: gmailRoot.gmailModel.desaturateLogo
@@ -374,12 +299,23 @@ OverlayWidget {
             Item {
                 id: refreshTarget
                 objectName: "gmailRefreshTarget"
+                // The glyph and shadow must stay inside their bounded edit
+                // target, not merely rely on the outer card to conceal escape.
+                clip: true
                 readonly property real implicitWidth: Math.max(24.0, refreshGlyph.implicitWidth + 4.0)
                 visible: gmailRoot.gmailModel.showRefreshSpiral
-                width: implicitWidth * gmailRoot.childWidthScale("refresh")
-                height: headerArea.height * gmailRoot.childHeightScale("refresh")
-                x: headerArea.width - width + gmailRoot.childOffsetX("refresh")
-                y: (headerArea.height - height) / 2.0 + gmailRoot.childOffsetY("refresh")
+                // Saved offsets are REQUESTS, not permission to escape the
+                // header's actual bounded accessory slot. Keep the edit target
+                // and painted glyph in exactly the same admitted rectangle.
+                width: Math.min(Math.max(1.0, headerArea.width),
+                    implicitWidth * gmailRoot.childWidthScale("refresh"))
+                height: Math.min(Math.max(1.0, headerArea.height),
+                    headerArea.height * gmailRoot.childHeightScale("refresh"))
+                x: Math.max(0.0, Math.min(headerArea.width - width,
+                    (gmailRoot.headerFlipped ? 0.0 : headerArea.width - width)
+                        + gmailRoot.childOffsetX("refresh")))
+                y: Math.max(0.0, Math.min(headerArea.height - height,
+                    (headerArea.height - height) / 2.0 + gmailRoot.childOffsetY("refresh")))
 
                 ShadowedText {
                     id: refreshGlyph
@@ -472,68 +408,32 @@ OverlayWidget {
                 required property bool boundaryBefore
                 required property int index
 
-                readonly property real authoredBoundaryHeight:
-                    gmailRoot.gmailModel.showSeparators && boundaryBefore
-                        ? gmailRoot.scaleAwareStrokeWidth(
-                            gmailRoot.gmailModel.boundarySeparatorThickness
-                                * gmailRoot.extentSeparatorScale
-                        )
-                        : 0.0
-                readonly property real authoredEnvelopeWidth:
-                    gmailRoot.gmailModel.showEnvelopeIcon ? 16.0 : 0.0
-                readonly property real authoredEnvelopeGap:
-                    gmailRoot.gmailModel.showEnvelopeIcon ? 6.0 : 0.0
-                readonly property real authoredMenuWidth:
-                    gmailRoot.gmailModel.showThreeDotMenu ? 24.0 : 0.0
-                readonly property real authoredOpenX: authoredEnvelopeWidth + authoredEnvelopeGap
-                readonly property real authoredOpenRightInset: authoredMenuWidth + 6.0
-                readonly property real authoredOpenWidth: Math.max(
-                    24.0, width - authoredOpenX - authoredOpenRightInset
+                readonly property real baseRowHeight: Math.max(
+                    28.0, gmailRoot.gmailModel.fontSize * 1.65
                 )
-                readonly property real authoredTimestampWidth: messageTimestamp.length > 0
-                    ? Math.max(52.0, dateMetrics.width + 6.0) : 0.0
-                readonly property real authoredTimestampGap: messageTimestamp.length > 0 ? 8.0 : 0.0
-                readonly property real authoredTextX:
-                    authoredOpenX + authoredTimestampWidth + authoredTimestampGap
-                readonly property real authoredTextWidth: Math.max(
-                    24.0, width - authoredTextX - authoredOpenRightInset
-                )
-                readonly property real authoredSenderWidth: messageSender.length > 0
-                    ? authoredTextWidth * gmailRoot.gmailModel.senderSubjectRatio : 0.0
-                readonly property real authoredSubjectGap: authoredSenderWidth > 0.0 ? 8.0 : 0.0
-                readonly property real authoredSubjectX:
-                    authoredTextX + authoredSenderWidth + authoredSubjectGap
-                readonly property real authoredSubjectWidth: Math.max(
-                    0.0, width - authoredSubjectX - authoredOpenRightInset
-                )
-
                 objectName: "gmailMessageRow_" + index
-                width: contentColumn.width * gmailRoot.messageRowWidthScale
-                x: gmailRoot.messageRowsXOffset
+                width: contentColumn.width
                 visible: index < gmailRoot.effectiveVisibleCount
-                height: visible ? authoredBoundaryHeight + gmailRoot.extentRowHeight : 0.0
-                transform: Translate { y: gmailRoot.messageRowsYOffset }
+                height: visible ? boundary.height + gmailRoot.extentRowHeight : 0.0
 
                 Rectangle {
                     id: boundary
                     objectName: "gmailBoundary_" + messageRow.index
+                    anchors.top: parent.top
+                    width: parent.width
+                    height: visible ? gmailRoot.scaleAwareStrokeWidth(
+                        gmailRoot.gmailModel.boundarySeparatorThickness
+                            * gmailRoot.extentSeparatorScale
+                    ) : 0.0
                     visible: gmailRoot.gmailModel.showSeparators
                         && messageRow.boundaryBefore
                         && messageRow.index < gmailRoot.effectiveVisibleCount
-                    x: gmailRoot.childOffsetX("boundary_separators")
-                    y: gmailRoot.childOffsetY("boundary_separators")
-                    width: parent.width * gmailRoot.childWidthScale("boundary_separators")
-                    height: visible
-                        ? messageRow.authoredBoundaryHeight
-                            * gmailRoot.childHeightScale("boundary_separators")
-                        : 0.0
                     color: gmailRoot.gmailModel.boundarySeparatorColor
                 }
 
                 Item {
                     id: rowContent
-                    x: 0.0
-                    y: messageRow.authoredBoundaryHeight
+                    anchors.top: boundary.bottom
                     width: parent.width
                     height: gmailRoot.extentRowHeight
 
@@ -541,10 +441,10 @@ OverlayWidget {
                         id: envelope
                         objectName: "gmailEnvelope_" + messageRow.index
                         visible: gmailRoot.gmailModel.showEnvelopeIcon
-                        x: gmailRoot.childOffsetX("envelopes")
-                        y: (parent.height - height) / 2.0 + gmailRoot.childOffsetY("envelopes")
-                        width: visible ? 16.0 * gmailRoot.childWidthScale("envelopes") : 0.0
-                        height: visible ? 16.0 * gmailRoot.childHeightScale("envelopes") : 0.0
+                        x: gmailRoot.headerFlipped ? parent.width - width : 0.0
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: visible ? 16.0 : 0.0
+                        height: 16.0
                         source: messageRow.messageUnread
                             ? gmailRoot.gmailModel.unreadEnvelopeSource
                             : gmailRoot.gmailModel.readEnvelopeSource
@@ -556,9 +456,103 @@ OverlayWidget {
 
                     Item {
                         id: openArea
-                        x: messageRow.authoredOpenX
-                        width: messageRow.authoredOpenWidth
+                        // Explicit semantic rails avoid carrying a stale pair
+                        // of opposite anchors across repeated flip/resize/reset.
+                        // Both orientations reserve exactly the same space.
+                        readonly property real envelopeGap: envelope.visible ? 6.0 : 0.0
+                        x: gmailRoot.headerFlipped
+                            ? menuButton.width + 6.0 : envelope.width + envelopeGap
+                        width: Math.max(1.0, parent.width - menuButton.width
+                            - envelope.width - envelopeGap - 6.0)
                         height: parent.height
+
+                        ShadowedText {
+                            id: timestampText
+                            objectName: "gmailTimestamp_" + messageRow.index
+                            x: gmailRoot.headerFlipped ? parent.width - width : 0.0
+                            anchors.verticalCenter: parent.verticalCenter
+                            horizontalAlignment: gmailRoot.headerFlipped
+                                ? Text.AlignRight : Text.AlignLeft
+                            // Fixed column sized to the widest date (measured, not
+                            // guessed) so full dates never elide; kept constant across
+                            // rows to align the sender edge.
+                            width: messageRow.messageTimestamp.length > 0
+                                ? Math.max(52.0, dateMetrics.width + 6.0)
+                                : 0.0
+                            height: parent.height
+                            text: messageRow.messageTimestamp
+                            color: gmailRoot.gmailModel.timestampColor
+                            font.family: gmailRoot.gmailModel.fontFamily
+                            font.pointSize: gmailRoot.gmailModel.timestampFontSize
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                            shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                            shadowColor: gmailRoot.gmailModel.textShadowColor
+                            shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
+                            shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
+                        }
+
+                        Item {
+                            id: messageTextArea
+                            // Text remains in reading order on the *opposite*
+                            // side of the timestamp. Width cannot inherit a
+                            // stale anchor when the header flip reverses twice.
+                            readonly property real stampGap:
+                                messageRow.messageTimestamp.length > 0 ? 8.0 : 0.0
+                            x: gmailRoot.headerFlipped
+                                ? 0.0 : timestampText.width + stampGap
+                            width: Math.max(1.0, parent.width - timestampText.width - stampGap)
+                            height: parent.height
+
+                            ShadowedText {
+                                id: senderText
+                                objectName: "gmailSender_" + messageRow.index
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: messageRow.messageSender.length > 0
+                                    ? parent.width * gmailRoot.gmailModel.senderSubjectRatio
+                                    : 0.0
+                                height: parent.height
+                                text: messageRow.messageSender
+                                    + (messageRow.messageCount > 1
+                                        ? " (" + messageRow.messageCount + ")" : "")
+                                color: messageRow.messageUnread
+                                    ? gmailRoot.gmailModel.senderColor
+                                    : gmailRoot.gmailModel.readSenderColor
+                                font.family: gmailRoot.gmailModel.fontFamily
+                                font.pointSize: gmailRoot.gmailModel.fontSize
+                                font.weight: messageRow.messageUnread ? Font.Bold : Font.DemiBold
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                                shadowColor: gmailRoot.gmailModel.textShadowColor
+                                shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
+                                shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
+                            }
+
+                            ShadowedText {
+                                id: subjectText
+                                objectName: "gmailSubject_" + messageRow.index
+                                anchors.left: senderText.right
+                                anchors.leftMargin: senderText.width > 0.0 ? 8.0 : 0.0
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                height: parent.height
+                                text: messageRow.messageSubject
+                                color: messageRow.messageUnread
+                                    ? gmailRoot.gmailModel.textColor
+                                    : gmailRoot.gmailModel.readSubjectColor
+                                font.family: gmailRoot.gmailModel.fontFamily
+                                font.pointSize: gmailRoot.gmailModel.fontSize
+                                font.weight: messageRow.messageUnread ? Font.DemiBold : Font.Normal
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                                shadowColor: gmailRoot.gmailModel.textShadowColor
+                                shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
+                                shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
+                            }
+                        }
 
                         TapHandler {
                             enabled: gmailRoot.gmailModel.interactionEnabled
@@ -567,98 +561,20 @@ OverlayWidget {
                         }
                     }
 
-                    ShadowedText {
-                        id: timestampText
-                        objectName: "gmailTimestamp_" + messageRow.index
-                        x: messageRow.authoredOpenX + gmailRoot.childOffsetX("timestamps")
-                        y: (parent.height - height) / 2.0 + gmailRoot.childOffsetY("timestamps")
-                        width: messageRow.authoredTimestampWidth
-                            * gmailRoot.childWidthScale("timestamps")
-                        height: parent.height * gmailRoot.childHeightScale("timestamps")
-                        text: messageRow.messageTimestamp
-                        color: gmailRoot.gmailModel.timestampColor
-                        font.family: gmailRoot.gmailModel.fontFamily
-                        font.pointSize: gmailRoot.gmailModel.timestampFontSize
-                            * gmailRoot.childHeightScale("timestamps")
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                        shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
-                        shadowColor: gmailRoot.gmailModel.textShadowColor
-                        shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
-                        shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
-                    }
-
-                    ShadowedText {
-                        id: senderText
-                        objectName: "gmailSender_" + messageRow.index
-                        visible: gmailRoot.gmailModel.showSender
-                        x: messageRow.authoredTextX + gmailRoot.childOffsetX("senders")
-                        y: (parent.height - height) / 2.0 + gmailRoot.childOffsetY("senders")
-                        width: visible
-                            ? messageRow.authoredSenderWidth * gmailRoot.childWidthScale("senders")
-                            : 0.0
-                        height: parent.height * gmailRoot.childHeightScale("senders")
-                        text: messageRow.messageSender
-                            + (messageRow.messageCount > 1
-                                ? " (" + messageRow.messageCount + ")" : "")
-                        color: messageRow.messageUnread
-                            ? gmailRoot.gmailModel.senderColor
-                            : gmailRoot.gmailModel.readSenderColor
-                        font.family: gmailRoot.gmailModel.fontFamily
-                        font.pointSize: gmailRoot.gmailModel.fontSize
-                            * gmailRoot.childHeightScale("senders")
-                        font.weight: messageRow.messageUnread ? Font.Bold : Font.DemiBold
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                        shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
-                        shadowColor: gmailRoot.gmailModel.textShadowColor
-                        shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
-                        shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
-                    }
-
-                    ShadowedText {
-                        id: subjectText
-                        objectName: "gmailSubject_" + messageRow.index
-                        visible: gmailRoot.gmailModel.showSubject
-                        x: messageRow.authoredSubjectX + gmailRoot.childOffsetX("subjects")
-                        y: (parent.height - height) / 2.0 + gmailRoot.childOffsetY("subjects")
-                        width: visible
-                            ? messageRow.authoredSubjectWidth * gmailRoot.childWidthScale("subjects")
-                            : 0.0
-                        height: parent.height * gmailRoot.childHeightScale("subjects")
-                        text: messageRow.messageSubject
-                        color: messageRow.messageUnread
-                            ? gmailRoot.gmailModel.textColor
-                            : gmailRoot.gmailModel.readSubjectColor
-                        font.family: gmailRoot.gmailModel.fontFamily
-                        font.pointSize: gmailRoot.gmailModel.fontSize
-                            * gmailRoot.childHeightScale("subjects")
-                        font.weight: messageRow.messageUnread ? Font.DemiBold : Font.Normal
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                        shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
-                        shadowColor: gmailRoot.gmailModel.textShadowColor
-                        shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
-                        shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
-                    }
-
                     Item {
                         id: menuButton
                         objectName: "gmailMenuButton_" + messageRow.index
                         visible: gmailRoot.gmailModel.showThreeDotMenu
-                        x: parent.width - 24.0 + gmailRoot.childOffsetX("message_actions")
-                        y: (parent.height - height) / 2.0
-                            + gmailRoot.childOffsetY("message_actions")
-                        width: visible ? 24.0 * gmailRoot.childWidthScale("message_actions") : 0.0
-                        height: parent.height * gmailRoot.childHeightScale("message_actions")
+                        x: gmailRoot.headerFlipped ? 0.0 : parent.width - width
+                        width: visible ? 24.0 : 0.0
+                        height: parent.height
 
                         ShadowedText {
                             anchors.fill: parent
                             text: "⋮"
                             color: gmailRoot.gmailModel.timestampColor
                             font.family: gmailRoot.gmailModel.fontFamily
-                            font.pointSize: (gmailRoot.gmailModel.fontSize + 2.0)
-                                * gmailRoot.childHeightScale("message_actions")
+                            font.pointSize: gmailRoot.gmailModel.fontSize + 2.0
                             font.bold: true
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -683,161 +599,20 @@ OverlayWidget {
                 }
 
                 Rectangle {
-                    id: messageSeparator
                     objectName: "gmailSeparator_" + messageRow.index
                     visible: gmailRoot.gmailModel.showSeparators
                         && messageRow.index < gmailRoot.effectiveVisibleCount - 1
-                    x: gmailRoot.childOffsetX("message_separators")
-                    y: parent.height - height + gmailRoot.childOffsetY("message_separators")
-                    width: parent.width * gmailRoot.childWidthScale("message_separators")
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
                     height: visible ? gmailRoot.scaleAwareStrokeWidth(
                         gmailRoot.gmailModel.separatorThickness
                             * gmailRoot.extentSeparatorScale
-                    ) * gmailRoot.childHeightScale("message_separators") : 0.0
+                    ) : 0.0
                     color: gmailRoot.gmailModel.separatorColor
                 }
             }
         }
-    }
-
-    // Representative edit surfaces for repeated semantic roles. Every delegate
-    // consumes the same retained geometry record, so edit/persistence cost is
-    // constant with mailbox size and never keys geometry by message identity.
-    Item {
-        id: customMessageRowRoleTarget
-        objectName: "gmailCustomMessageRowRoleTarget"
-        visible: gmailModel.viewState === "ready" && effectiveVisibleCount > 0
-        enabled: false
-        x: gmailRoot.messageRowsXOffset
-        y: headerArea.height + baseRowSpacing + gmailRoot.messageRowsYOffset
-        width: contentColumn.width * gmailRoot.messageRowWidthScale
-        height: gmailRoot.extentRowHeight
-    }
-    Item {
-        id: customEnvelopeRoleTarget
-        objectName: "gmailCustomEnvelopeRoleTarget"
-        visible: customMessageRowRoleTarget.visible && gmailModel.showEnvelopeIcon
-        enabled: false
-        x: customMessageRowRoleTarget.x + gmailRoot.childOffsetX("envelopes")
-        y: customMessageRowRoleTarget.y
-            + (customMessageRowRoleTarget.height - height) / 2.0
-            + gmailRoot.childOffsetY("envelopes")
-        width: 16.0 * gmailRoot.childWidthScale("envelopes")
-        height: 16.0 * gmailRoot.childHeightScale("envelopes")
-    }
-    Item {
-        id: customTimestampRoleTarget
-        objectName: "gmailCustomTimestampRoleTarget"
-        visible: customMessageRowRoleTarget.visible
-        enabled: false
-        readonly property real authoredOpenX: gmailModel.showEnvelopeIcon ? 22.0 : 0.0
-        readonly property real authoredWidth: Math.max(52.0, dateMetrics.width + 6.0)
-        x: customMessageRowRoleTarget.x + authoredOpenX
-            + gmailRoot.childOffsetX("timestamps")
-        y: customMessageRowRoleTarget.y
-            + (customMessageRowRoleTarget.height - height) / 2.0
-            + gmailRoot.childOffsetY("timestamps")
-        width: authoredWidth * gmailRoot.childWidthScale("timestamps")
-        height: customMessageRowRoleTarget.height * gmailRoot.childHeightScale("timestamps")
-    }
-    Item {
-        id: customSenderRoleTarget
-        objectName: "gmailCustomSenderRoleTarget"
-        visible: customMessageRowRoleTarget.visible && gmailModel.showSender
-        enabled: false
-        readonly property real authoredMenuInset: gmailModel.showThreeDotMenu ? 30.0 : 6.0
-        readonly property real authoredTextX: customTimestampRoleTarget.authoredOpenX
-            + customTimestampRoleTarget.authoredWidth + 8.0
-        readonly property real authoredTextWidth: Math.max(
-            24.0, customMessageRowRoleTarget.width - authoredTextX - authoredMenuInset
-        )
-        readonly property real authoredWidth: authoredTextWidth * gmailModel.senderSubjectRatio
-        x: customMessageRowRoleTarget.x + authoredTextX + gmailRoot.childOffsetX("senders")
-        y: customMessageRowRoleTarget.y
-            + (customMessageRowRoleTarget.height - height) / 2.0
-            + gmailRoot.childOffsetY("senders")
-        width: authoredWidth * gmailRoot.childWidthScale("senders")
-        height: customMessageRowRoleTarget.height * gmailRoot.childHeightScale("senders")
-    }
-    Item {
-        id: customSubjectRoleTarget
-        objectName: "gmailCustomSubjectRoleTarget"
-        visible: customMessageRowRoleTarget.visible && gmailModel.showSubject
-        enabled: false
-        readonly property real authoredMenuInset: gmailModel.showThreeDotMenu ? 30.0 : 6.0
-        readonly property real authoredX: customSenderRoleTarget.authoredTextX
-            + customSenderRoleTarget.authoredWidth
-            + (customSenderRoleTarget.authoredWidth > 0.0 ? 8.0 : 0.0)
-        readonly property real authoredWidth: Math.max(
-            0.0, customMessageRowRoleTarget.width - authoredX - authoredMenuInset
-        )
-        x: customMessageRowRoleTarget.x + authoredX + gmailRoot.childOffsetX("subjects")
-        y: customMessageRowRoleTarget.y
-            + (customMessageRowRoleTarget.height - height) / 2.0
-            + gmailRoot.childOffsetY("subjects")
-        width: authoredWidth * gmailRoot.childWidthScale("subjects")
-        height: customMessageRowRoleTarget.height * gmailRoot.childHeightScale("subjects")
-    }
-    Item {
-        id: customMessageActionRoleTarget
-        objectName: "gmailCustomMessageActionRoleTarget"
-        visible: customMessageRowRoleTarget.visible && gmailModel.showThreeDotMenu
-        enabled: false
-        x: customMessageRowRoleTarget.x + customMessageRowRoleTarget.width - 24.0
-            + gmailRoot.childOffsetX("message_actions")
-        y: customMessageRowRoleTarget.y
-            + (customMessageRowRoleTarget.height - height) / 2.0
-            + gmailRoot.childOffsetY("message_actions")
-        width: 24.0 * gmailRoot.childWidthScale("message_actions")
-        height: customMessageRowRoleTarget.height * gmailRoot.childHeightScale("message_actions")
-    }
-    Item {
-        id: customMessageSeparatorOccupiedTarget
-        objectName: "gmailCustomMessageSeparatorOccupiedTarget"
-        visible: customMessageRowRoleTarget.visible
-            && gmailModel.showSeparators && effectiveVisibleCount > 1
-        enabled: false
-        x: customMessageRowRoleTarget.x + gmailRoot.childOffsetX("message_separators")
-        y: customMessageRowRoleTarget.y + customMessageRowRoleTarget.height - height
-            + gmailRoot.childOffsetY("message_separators")
-        width: customMessageRowRoleTarget.width * gmailRoot.childWidthScale("message_separators")
-        height: gmailRoot.scaleAwareStrokeWidth(
-            gmailModel.separatorThickness * gmailRoot.extentSeparatorScale
-        ) * gmailRoot.childHeightScale("message_separators")
-    }
-    Item {
-        id: customMessageSeparatorRoleTarget
-        objectName: "gmailCustomMessageSeparatorRoleTarget"
-        visible: customMessageSeparatorOccupiedTarget.visible
-        enabled: false
-        readonly property real occupiedHeight: customMessageSeparatorOccupiedTarget.height
-        x: customMessageSeparatorOccupiedTarget.x
-        y: customMessageSeparatorOccupiedTarget.y - (height - occupiedHeight) / 2.0
-        width: customMessageSeparatorOccupiedTarget.width
-        height: 6.0 * gmailRoot.childHeightScale("message_separators")
-    }
-    Item {
-        id: customBoundarySeparatorOccupiedTarget
-        objectName: "gmailCustomBoundarySeparatorOccupiedTarget"
-        visible: customMessageRowRoleTarget.visible && gmailRoot.hasVisibleBoundarySeparator
-        enabled: false
-        x: customMessageRowRoleTarget.x + gmailRoot.childOffsetX("boundary_separators")
-        y: customMessageRowRoleTarget.y + gmailRoot.childOffsetY("boundary_separators")
-        width: customMessageRowRoleTarget.width * gmailRoot.childWidthScale("boundary_separators")
-        height: gmailRoot.scaleAwareStrokeWidth(
-            gmailModel.boundarySeparatorThickness * gmailRoot.extentSeparatorScale
-        ) * gmailRoot.childHeightScale("boundary_separators")
-    }
-    Item {
-        id: customBoundarySeparatorRoleTarget
-        objectName: "gmailCustomBoundarySeparatorRoleTarget"
-        visible: customBoundarySeparatorOccupiedTarget.visible
-        enabled: false
-        readonly property real occupiedHeight: customBoundarySeparatorOccupiedTarget.height
-        x: customBoundarySeparatorOccupiedTarget.x
-        y: customBoundarySeparatorOccupiedTarget.y - (height - occupiedHeight) / 2.0
-        width: customBoundarySeparatorOccupiedTarget.width
-        height: 6.0 * gmailRoot.childHeightScale("boundary_separators")
     }
 
     Item {

@@ -5,6 +5,7 @@ OverlayWidget {
     id: friendRoot
     objectName: "friendPulsePresentation"
 
+
     required property var friendPulseModel
     semanticDoubleClickEnabled: friendPulseModel.interactionEnabled
 
@@ -25,6 +26,8 @@ OverlayWidget {
     readonly property real baseAuthoredHeight: friendPulseModel.baseAuthoredHeight
     readonly property real customAvatarScale: friendPulseModel.customAvatarScale
     readonly property real headerSafeInsetX: 18.0
+    readonly property bool headerFlipped:
+        friendPulseModel.customHeaderAlignment === "right"
     readonly property real headerSafeInsetY: 14.0
     readonly property real canonicalOnlineCountX: 296.0
     readonly property real canonicalOnlineCountY: 13.0
@@ -32,7 +35,11 @@ OverlayWidget {
     readonly property real canonicalOnlineCountHeight: 56.0
     readonly property real canonicalSeparatorX: 18.0
     readonly property real canonicalSeparatorY: 81.0
-    readonly property real canonicalSeparatorWidth: Math.max(1.0, baseAuthoredWidth - 36.0)
+    // Follow the SAME live content-extent width as the card. The base authored
+    // width is only the edit-offset normalization authority, not a live rail.
+    // A user's separator width_scale continues to apply to this natural span.
+    readonly property real canonicalSeparatorWidth: Math.max(1.0,
+        friendPulseModel.authoredWidth - 2.0 * canonicalSeparatorX)
     readonly property real canonicalSeparatorHeight: friendStrokeWidth(1.0)
     readonly property real canonicalRowFrameWidth: Math.max(72.0, baseAuthoredWidth - 48.0)
     readonly property real canonicalRowFrameHeight: 50.0
@@ -70,14 +77,11 @@ OverlayWidget {
             "target": headerFrame,
             "normalizationWidth": normW,
             "normalizationHeight": normH,
-            "semanticCornerInsetX":
-                (friendRoot.width - friendRoot.friendPulseModel.authoredWidth
-                    * friendRoot.presentationScale) / 2.0
-                    + friendRoot.headerSafeInsetX * friendRoot.presentationScale,
-            "semanticCornerInsetY":
-                (friendRoot.height - friendRoot.friendPulseModel.authoredHeight
-                    * friendRoot.presentationScale) / 2.0
-                    + friendRoot.headerSafeInsetY * friendRoot.presentationScale
+            // Keep model identity stable during parent X/Y reflow. The shared
+            // edit frame projects these authored insets into live letterboxing.
+            "semanticCornerInsetX": friendRoot.headerSafeInsetX,
+            "semanticCornerInsetY": friendRoot.headerSafeInsetY,
+            "semanticInsetUsesUniformCard": true
         })
         if (activitySummary.visible) {
             roles.push({
@@ -90,6 +94,9 @@ OverlayWidget {
         roles.push({
             "roleId": "separator",
             "target": headerSeparator,
+            // This width follows the parent. It cannot also demand parent
+            // growth or an edited >1 width_scale would form a reflow loop.
+            "allowParentGrowth": false,
             "normalizationWidth": normW,
             "normalizationHeight": normH
         })
@@ -300,6 +307,7 @@ OverlayWidget {
         textObjectName: "friendPulseHeaderText"
         property real customEditPlacementCompensationX:
             friendRoot.friendPulseModel.customHeaderAnchor.length > 0
+                    || friendRoot.headerFlipped
                 ? x - (friendRoot.headerSafeInsetX
                     + friendRoot.friendPulseModel.customHeaderXOffset
                         * friendRoot.baseAuthoredWidth)
@@ -317,7 +325,10 @@ OverlayWidget {
                 - width * scale
             : (friendRoot.friendPulseModel.customHeaderAnchor.endsWith("left")
                 ? friendRoot.headerSafeInsetX
-                : friendRoot.headerSafeInsetX
+                : (friendRoot.headerFlipped
+                    ? friendRoot.friendPulseModel.authoredWidth
+                        - friendRoot.headerSafeInsetX - width * scale
+                    : friendRoot.headerSafeInsetX)
                     + friendRoot.friendPulseModel.customHeaderXOffset
                         * friendRoot.baseAuthoredWidth)
         y: friendRoot.friendPulseModel.customHeaderAnchor.startsWith("bottom")
@@ -353,7 +364,23 @@ OverlayWidget {
         objectName: "friendPulseSummary"
         visible: friendRoot.friendPulseModel.showOnlineCount
             && friendRoot.friendPulseModel.onlineFriendsText.length > 0
-        x: friendRoot.canonicalOnlineCountX
+        // On the unedited authored rail, the summary follows the actual
+        // parent right edge on X reflow; the baseline 296px was only correct
+        // at baseline width. An explicitly moved summary is independent of
+        // parent growth. Global header flip swaps the structural rail; its
+        // individual text alignment remains an independent child edit.
+        readonly property bool onAuthoredRightRail:
+            Math.abs(friendRoot.friendPulseModel.customOnlineCountXOffset) < 0.0001
+        property real customEditPlacementCompensationX: x - (
+            friendRoot.canonicalOnlineCountX
+                + friendRoot.friendPulseModel.customOnlineCountXOffset
+                    * friendRoot.baseAuthoredWidth)
+        x: (friendRoot.headerFlipped
+                ? friendRoot.headerSafeInsetX
+                : (onAuthoredRightRail
+                    ? friendRoot.friendPulseModel.authoredWidth
+                        - friendRoot.headerSafeInsetX - width
+                    : friendRoot.canonicalOnlineCountX))
             + friendRoot.friendPulseModel.customOnlineCountXOffset
                 * friendRoot.baseAuthoredWidth
         y: friendRoot.canonicalOnlineCountY
@@ -374,8 +401,8 @@ OverlayWidget {
             font.bold: true
             fontSizeMode: Text.HorizontalFit
             minimumPointSize: 8.0
-            horizontalAlignment: friendRoot.friendPulseModel.customOnlineCountAlignment === "left"
-                ? Text.AlignLeft : Text.AlignRight
+            horizontalAlignment: (friendRoot.friendPulseModel.customOnlineCountAlignment === "right")
+                !== friendRoot.headerFlipped ? Text.AlignRight : Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
@@ -457,7 +484,10 @@ OverlayWidget {
             required property int index
             property real eventGlowLevel: 0.0
             objectName: "friendPulseRow_" + index
-            width: friendRoot.canonicalRowFrameWidth
+            // Authored rows fill the LIVE viewport, just as before child editing.
+            // The one shared frame scale is applied over that changing rail;
+            // widening the parent must not leave baseline-sized orphan rows.
+            width: Math.max(72.0, activityRowsView.width - 12.0)
                 * friendRoot.friendPulseModel.customFriendFrameWidthScale
             x: (activityRowsView.width - width) / 2.0
             height: friendRoot.rowFrameHeight
@@ -724,7 +754,9 @@ OverlayWidget {
                 objectName: "friendPulseGridTile_" + index
                 x: (parent.width - width) / 2.0 + gridCell.incompleteRowShift
                 y: 2.0
-                width: friendRoot.canonicalGridTileWidth
+                // Authored grid tiles use their live cell, not a frozen
+                // base-width column count (the latter broke parent X reflow).
+                width: Math.max(72.0, gridCell.width - 12.0)
                     * friendRoot.friendPulseModel.customFriendFrameWidthScale
                 height: friendRoot.gridTileHeight
                 property real eventGlowLevel: 0.0
@@ -789,7 +821,7 @@ OverlayWidget {
                             * friendRoot.baseAuthoredWidth
                     y: 12.0 + friendRoot.friendPulseModel.customAvatarYOffset
                         * friendRoot.baseAuthoredHeight
-                    width: friendRoot.canonicalGridAvatarSize
+                    width: Math.min(58.0, Math.max(38.0, gridTile.width * 0.42))
                         * friendRoot.customAvatarScale
                     height: width
                     radius: Math.min(width / 2.0, 12.0 * friendRoot.customAvatarScale)
@@ -832,7 +864,7 @@ OverlayWidget {
                     id: gridNameText
                     objectName: "friendPulseGridName_" + index
                     readonly property real canonicalWidth: Math.max(20.0,
-                        friendRoot.canonicalGridTileWidth - 14.0
+                        parent.width - 14.0
                     )
                     readonly property real canonicalHeight: Math.max(
                         19.0, friendRoot.friendPulseModel.nameFontSize * 1.3
@@ -840,7 +872,10 @@ OverlayWidget {
                     x: (parent.width - width) / 2.0
                         + friendRoot.friendPulseModel.customUsernameXOffset
                             * friendRoot.baseAuthoredWidth
-                    y: 12.0 + friendRoot.canonicalGridAvatarSize + 5.0
+                    // Resize-driven authored reflow follows the shared avatar
+                    // size; avatar CUSTOM movement remains a separate role.
+                    y: 12.0 + Math.min(58.0, Math.max(38.0,
+                        gridTile.width * 0.42)) * friendRoot.customAvatarScale + 5.0
                         + friendRoot.friendPulseModel.customUsernameYOffset
                             * friendRoot.baseAuthoredHeight
                     width: canonicalWidth
@@ -859,7 +894,8 @@ OverlayWidget {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 7.0; anchors.rightMargin: 7.0
                     y: friendRoot.friendPulseModel.showNames
                         ? gridNameText.y + gridNameText.height + 2.0
-                        : 12.0 + friendRoot.canonicalGridAvatarSize + 5.0
+                        : 12.0 + Math.min(58.0, Math.max(38.0,
+                            gridTile.width * 0.42)) * friendRoot.customAvatarScale + 5.0
                     height: 30.0
                     text: (secondaryText.length > 0
                         ? presenceText + "  " + secondaryText
@@ -920,9 +956,9 @@ OverlayWidget {
                 * activityGridView.cellWidth / 2.0
             : 0.0
         width: rowsMode
-            ? friendRoot.canonicalRowFrameWidth
+            ? Math.max(72.0, activityRowsView.width - 12.0)
                 * friendRoot.friendPulseModel.customFriendFrameWidthScale
-            : friendRoot.canonicalGridTileWidth
+            : Math.max(72.0, activityGridView.cellWidth - 12.0)
                 * friendRoot.friendPulseModel.customFriendFrameWidthScale
         height: rowsMode ? friendRoot.rowFrameHeight : friendRoot.gridTileHeight
         x: rowsMode
@@ -939,7 +975,9 @@ OverlayWidget {
         enabled: false
         readonly property bool rowsMode: customFriendFrameRoleTarget.rowsMode
         width: (rowsMode ? friendRoot.canonicalRowAvatarSize
-            : friendRoot.canonicalGridAvatarSize) * friendRoot.customAvatarScale
+            : Math.min(58.0, Math.max(38.0,
+                customFriendFrameRoleTarget.width * 0.42)))
+            * friendRoot.customAvatarScale
         height: width
         x: rowsMode
             ? customFriendFrameRoleTarget.x + 7.0
@@ -974,7 +1012,7 @@ OverlayWidget {
                 - rowTextBaseX - 65.0
         )
         readonly property real gridBaseWidth: Math.max(20.0,
-            friendRoot.canonicalGridTileWidth - 14.0
+            customFriendFrameRoleTarget.width - 14.0
         )
         readonly property real gridBaseHeight: Math.max(
             19.0, friendRoot.friendPulseModel.nameFontSize * 1.3
@@ -997,7 +1035,9 @@ OverlayWidget {
                 + friendRoot.friendPulseModel.customUsernameYOffset
                     * friendRoot.baseAuthoredHeight
             : customFriendFrameRoleTarget.y + 12.0
-                + friendRoot.canonicalGridAvatarSize + 5.0
+                + Math.min(58.0, Math.max(38.0,
+                    customFriendFrameRoleTarget.width * 0.42))
+                    * friendRoot.customAvatarScale + 5.0
                 + friendRoot.friendPulseModel.customUsernameYOffset
                     * friendRoot.baseAuthoredHeight
     }

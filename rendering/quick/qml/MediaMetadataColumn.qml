@@ -11,6 +11,15 @@ Item {
 
     required property var mediaModel
     property real rowSpacing: 7.0
+    property string textAlignment: "left"
+    // One artist-line child record projects onto BOTH crossfade snapshots.
+    // The Column still owns the authored row slot; moving the artist never
+    // becomes another metadata layout, provider or persistence authority.
+    property real artistOffsetX: 0.0
+    property real artistOffsetY: 0.0
+    property real artistScale: 1.0
+    property string artistAlignment: textAlignment
+    property alias artistEditTarget: currentArtistText
 
     property string _currentTitle: ""
     property string _currentArtist: ""
@@ -88,6 +97,8 @@ Item {
         ShadowedText {
             objectName: "mediaTitle"
             width: currentColumn.width
+            horizontalAlignment: metadataFade.textAlignment === "right"
+                ? Text.AlignRight : Text.AlignLeft
             height: implicitHeight
             text: metadataFade._currentTitle
             color: metadataFade.mediaModel.textColor
@@ -105,32 +116,48 @@ Item {
             shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
         }
 
-        ShadowedText {
-            objectName: "mediaArtist"
-            visible: text.length > 0
+        Item {
+            id: currentArtistSlot
             width: currentColumn.width
-            height: visible ? implicitHeight : 0.0
-            text: metadataFade._currentArtist
-            color: metadataFade.mediaModel.textColor
-            opacity: 0.92
-            font.family: metadataFade.mediaModel.fontFamily
-            font.pointSize: metadataFade.mediaModel.fontSize
-            font.bold: true
-            wrap: false
-            fontSizeMode: Text.HorizontalFit
-            minimumPointSize: 6.0
-            maximumLineCount: 1
-            elide: Text.ElideRight
-            shadowEnabled: metadataFade.mediaModel.textShadowEnabled
-            shadowColor: metadataFade.mediaModel.textShadowColor
-            shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
-            shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
+            visible: metadataFade._currentArtist.length > 0
+            height: visible ? currentArtistText.implicitHeight : 0.0
+
+            ShadowedText {
+                id: currentArtistText
+                objectName: "mediaArtist"
+                visible: currentArtistSlot.visible
+                width: parent.width
+                height: visible ? implicitHeight : 0.0
+                transformOrigin: Item.TopLeft
+                x: metadataFade.artistOffsetX
+                y: metadataFade.artistOffsetY
+                scale: metadataFade.artistScale
+                horizontalAlignment: metadataFade.artistAlignment === "right"
+                    ? Text.AlignRight : Text.AlignLeft
+                text: metadataFade._currentArtist
+                color: metadataFade.mediaModel.textColor
+                opacity: 0.92
+                font.family: metadataFade.mediaModel.fontFamily
+                font.pointSize: metadataFade.mediaModel.fontSize
+                font.bold: true
+                wrap: false
+                fontSizeMode: Text.HorizontalFit
+                minimumPointSize: 6.0
+                maximumLineCount: 1
+                elide: Text.ElideRight
+                shadowEnabled: metadataFade.mediaModel.textShadowEnabled
+                shadowColor: metadataFade.mediaModel.textShadowColor
+                shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
+                shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
+            }
         }
 
         ShadowedText {
             objectName: "mediaAlbum"
             visible: metadataFade.mediaModel.showAlbum && text.length > 0
             width: currentColumn.width
+            horizontalAlignment: metadataFade.textAlignment === "right"
+                ? Text.AlignRight : Text.AlignLeft
             height: visible ? implicitHeight : 0.0
             text: metadataFade._currentAlbum
             color: metadataFade.mediaModel.textColor
@@ -159,6 +186,8 @@ Item {
 
         ShadowedText {
             width: outgoingColumn.width
+            horizontalAlignment: metadataFade.textAlignment === "right"
+                ? Text.AlignRight : Text.AlignLeft
             height: implicitHeight
             text: metadataFade._outgoingTitle
             color: metadataFade.mediaModel.textColor
@@ -176,30 +205,47 @@ Item {
             shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
         }
 
-        ShadowedText {
-            visible: text.length > 0
+        Item {
+            id: outgoingArtistSlot
             width: outgoingColumn.width
-            height: visible ? implicitHeight : 0.0
-            text: metadataFade._outgoingArtist
-            color: metadataFade.mediaModel.textColor
-            opacity: 0.92
-            font.family: metadataFade.mediaModel.fontFamily
-            font.pointSize: metadataFade.mediaModel.fontSize
-            font.bold: true
-            wrap: false
-            fontSizeMode: Text.HorizontalFit
-            minimumPointSize: 6.0
-            maximumLineCount: 1
-            elide: Text.ElideRight
-            shadowEnabled: metadataFade.mediaModel.textShadowEnabled
-            shadowColor: metadataFade.mediaModel.textShadowColor
-            shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
-            shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
+            visible: metadataFade._outgoingArtist.length > 0
+            height: visible ? outgoingArtistText.implicitHeight : 0.0
+
+            ShadowedText {
+                id: outgoingArtistText
+                objectName: "mediaOutgoingArtist"
+                visible: outgoingArtistSlot.visible
+                width: parent.width
+                height: visible ? implicitHeight : 0.0
+                transformOrigin: Item.TopLeft
+                x: metadataFade.artistOffsetX
+                y: metadataFade.artistOffsetY
+                scale: metadataFade.artistScale
+                horizontalAlignment: metadataFade.artistAlignment === "right"
+                    ? Text.AlignRight : Text.AlignLeft
+                text: metadataFade._outgoingArtist
+                color: metadataFade.mediaModel.textColor
+                opacity: 0.92
+                font.family: metadataFade.mediaModel.fontFamily
+                font.pointSize: metadataFade.mediaModel.fontSize
+                font.bold: true
+                wrap: false
+                fontSizeMode: Text.HorizontalFit
+                minimumPointSize: 6.0
+                maximumLineCount: 1
+                elide: Text.ElideRight
+                shadowEnabled: metadataFade.mediaModel.textShadowEnabled
+                shadowColor: metadataFade.mediaModel.textShadowColor
+                shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
+                shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
+            }
         }
 
         ShadowedText {
             visible: metadataFade.mediaModel.showAlbum && text.length > 0
             width: outgoingColumn.width
+            horizontalAlignment: metadataFade.textAlignment === "right"
+                ? Text.AlignRight : Text.AlignLeft
             height: visible ? implicitHeight : 0.0
             text: metadataFade._outgoingAlbum
             color: metadataFade.mediaModel.textColor

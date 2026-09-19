@@ -64,6 +64,7 @@ class QuickDisplayRuntime(QObject):
     layout_slot_save_requested = Signal(str)
     custom_layout_save_requested = Signal()
     custom_layout_cancel_requested = Signal()
+    custom_layout_undo_requested = Signal()
 
     def __init__(
         self,
@@ -239,6 +240,14 @@ class QuickDisplayRuntime(QObject):
         )
         self._input.custom_layout_cancel_requested.connect(
             self.custom_layout_cancel_requested.emit
+        )
+        self._input.custom_layout_undo_requested.connect(
+            self.custom_layout_undo_requested.emit
+        )
+        # The child-lock glyph is display-local transient QML chrome, unlike
+        # session-owned geometry undo. Route L to the same on-screen control.
+        self._input.custom_layout_lock_requested.connect(
+            self._scene.toggle_selected_child_edit_lock
         )
 
     @property

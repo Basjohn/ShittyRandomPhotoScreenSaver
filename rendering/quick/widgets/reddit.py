@@ -735,11 +735,8 @@ class RedditPresentationModel(QObject):
         materialized = min(held_count, max(1, int(self.config.limit)))
         if self._content_extent is not None:
             natural_row_height = max(28.0, float(self.config.font_size) * 1.55)
-            row_role = self._custom_child_roles.get("post_rows")
-            minimum_row_scale = (
-                float(row_role.minimum_scale[1]) if row_role is not None else 1.0
-            )
-            conservative_row_height = max(1.0, natural_row_height * minimum_row_scale)
+            # No repeated child geometry: authored row height is the sole density baseline.
+            conservative_row_height = natural_row_height
             conservative_fit = max(
                 1,
                 int(

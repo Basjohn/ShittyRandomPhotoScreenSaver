@@ -769,3 +769,63 @@ def test_overlay_card_frame_extra_offset_is_directional_growth_not_full_translat
     factory.deleteLater()
     owner.deleteLater()
     qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_ordinary_card_and_external_accessory_always_clip_children_independently(qt_app) -> None:
+    """Edit/authoring state can never toggle the two paint boundaries.
+
+    This is a real QML Item.clip gate, not a claim that every family child has
+    correct geometry. The accessory represents Media's optional external lane.
+    """
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(
+        owner=owner, screen_index=0, runtime_generation=94
+    )
+    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
+    assert host_item is not None
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item,
+        context=context,
+        create_overlay_item=factory.create_overlay_widget,
+    )
+    try:
+        widget = host.create_widget(
+            geometry=OverlayWidgetGeometry(15.0, 25.0, 300.0, 200.0),
+            card_style=OverlayCardStyle(),
+        )
+        item = widget.item
+        assert item.setProperty("accessoryExtent", 48.0)
+        qt_app.processEvents()
+        boundary = item.findChild(QQuickItem, "overlayCardChildPaintBoundary")
+        accessory = item.findChild(QQuickItem, "overlayAccessoryLayer")
+        shadow = item.findChild(QQuickItem, "overlayCardShadow")
+        card = item.findChild(QQuickItem, "overlayWidgetCard")
+        assert boundary is not None and accessory is not None and card is not None
+        assert boundary.clip() is True
+        assert accessory.clip() is True
+        assert item.clip() is False
+        assert card.clip() is False
+        assert accessory.width() == pytest.approx(48.0)
+        assert card.width() == pytest.approx(252.0)
+        assert boundary.width() == pytest.approx(card.width())
+
+        # In both ordinary runtime and CUSTOM Edit, clipping is unconditional;
+        # moving/shrinking the parent must not place volume inside the card.
+        for editing in (True, False):
+            assert item.setProperty("customLayoutInputBlocked", editing)
+            widget.set_geometry(OverlayWidgetGeometry(15.0, 25.0, 250.0, 140.0))
+            qt_app.processEvents()
+            assert boundary.clip() is True and accessory.clip() is True
+            assert item.clip() is False and card.clip() is False
+            assert accessory.width() == pytest.approx(48.0)
+            assert card.width() == pytest.approx(202.0)
+            assert boundary.width() == pytest.approx(card.width())
+    finally:
+        host.retire_all()
+        context.deleteLater()
+        root.deleteLater()
+        factory.deleteLater()
+        owner.deleteLater()
+        qt_app.processEvents()

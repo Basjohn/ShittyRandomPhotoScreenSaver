@@ -1,6 +1,6 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-09-16
+Last updated: 2026-09-19
 
 ## Start here
 
@@ -27,6 +27,8 @@ exact current source
 
 Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite. The `.sst` files are generated/default evidence rather than prose documentation.
 
+`.godzip/CHECKPOINT_HANDOFF.md` and `.godzip/CHECKPOINT_LIVE_CHECKLIST.md` are untracked checkpoint orientation and open acceptance evidence, **not** competing architecture, product, persistence, or test authorities. Reconcile them against the current source, `Current_Plan.md`, `Docs/Contracts.md` and `Docs/TestSuite.md`.
+
 ## Current authority routing
 
 | Need | Read |
@@ -42,6 +44,8 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
+| ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Contracts.md` → Ordinary CUSTOM geometry / normalization |
+| current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Ordinary widgets, normalization and CUSTOM |
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
@@ -81,3 +85,6 @@ Any production change that touches Bubble reaction/timing requires active-music 
 ## Documentation hygiene
 
 Do not add another inventory/changelog/history layer. Closed decompositions are consolidated into current contracts or Historical Bugs and then deleted from the live docs tree. Persisted-input compatibility bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated — not a backlog); caller-dead residue is deleted outright, not tracked in a register. When paths move, update this router and all live cross-references in the same checkpoint.
+
+
+Current 2026-09-19 edit-input / Reddit paint checkpoint: the current GODZIP handoff and `.godzip/TEST_COMMANDS.md` identify new real-Qt pointer event and Reddit/Reddit2 retained-row rail regressions. Source-level green alone is not acceptance; use the focused automated Windows gate rather than an exhaustive operator gesture matrix.

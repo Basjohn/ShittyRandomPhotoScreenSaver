@@ -767,11 +767,8 @@ class GmailPresentationModel(QObject):
         materialized = min(held_count, max(1, int(self.config.limit)))
         if self._content_extent is not None:
             natural_row_height = max(28.0, float(self.config.font_size) * 1.65)
-            row_role = self._custom_child_roles.get("message_rows")
-            minimum_row_scale = (
-                float(row_role.minimum_scale[1]) if row_role is not None else 1.0
-            )
-            conservative_row_height = max(1.0, natural_row_height * minimum_row_scale)
+            # No repeated child geometry: authored row height is the sole density baseline.
+            conservative_row_height = natural_row_height
             conservative_fit = max(
                 1,
                 int(
@@ -1053,25 +1050,24 @@ class GmailPresentationModel(QObject):
 
     @Property(float, notify=stateChanged)
     def contentHeight(self) -> float:
-        header_height = 36.0
+        """Authored row capacity, never a measurement of current mail availability.
+
+        The Settings ``limit`` reserves the same natural height during loading,
+        empty, cached, and live states. The previous live-row/boundary count
+        changed the *parent* preferred height as messages arrived; entering
+        CUSTOM before the first refresh could then freeze a 110px reference,
+        making Reset collapse an otherwise full-height Gmail card. Actual row
+        population remains a presentation-only choice inside this fixed space.
+        """
+        slots = max(1, int(self.config.limit))
         row_height = max(28.0, self.fontSize * 1.65)
-        rows = self._row_model.rows
-        # The model retains a buffer up to the cache cap, but the authored height
-        # reflects only the SSOT ``limit`` visible rows. A CUSTOM content-extent
-        # overrides the preferred height in QML, so this stays the non-CUSTOM base.
-        visible = min(len(rows), int(self.config.limit))
-        if self._snapshot.view_state == "ready" and visible > 0:
-            shown = rows[:visible]
-            boundaries = sum(1 for row in shown if row.boundary_before)
-            body_height = (
-                row_height * visible
-                + self.config.boundary_separator_thickness * boundaries
-            )
-            gaps = visible
-        else:
-            body_height = max(42.0, self.fontSize * 1.8)
-            gaps = 1
-        return header_height + body_height + (4.0 * gaps)
+        # Boundaries are data-dependent. Reserve their maximum authored budget
+        # once, instead of letting incoming message grouping resize the card.
+        boundary_budget = (
+            max(0, slots - 1) * float(self.config.boundary_separator_thickness)
+            if self.config.show_separators else 0.0
+        )
+        return 36.0 + row_height * slots + 4.0 * slots + boundary_budget
 
     @Slot(str, result=str)
     def actionIconSource(self, action: str) -> str:

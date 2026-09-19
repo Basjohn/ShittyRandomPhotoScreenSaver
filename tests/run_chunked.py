@@ -55,6 +55,8 @@ DESTINATION_PROFILE = (
     "test_qtquick_custom_layout_owner.py",
     "test_qtquick_visualizer_roundtrip_lifetime.py",
     "test_qtquick_custom_layout_overlay.py",
+    "test_qtquick_edit_pointer_delivery.py",  # real QQuickWindow MouseArea click targeting
+    "test_qtquick_edit_pointer_source_contract.py",
     "test_qtquick_h9_uniform_resize.py",
     "test_qtquick_resize_normalization.py",
     "test_widget_auto_shrink.py",
@@ -66,6 +68,7 @@ DESTINATION_PROFILE = (
     "test_qtquick_weather_presentation.py",
     "test_qtquick_media_presentation.py",
     "test_qtquick_reddit_presentation.py",
+    "test_reddit_spacing_contract.py",
     "test_qtquick_gmail_presentation.py",
     "test_qtquick_achievement_pulse_presentation.py",
     "test_qtquick_abandonment_issues_presentation.py",

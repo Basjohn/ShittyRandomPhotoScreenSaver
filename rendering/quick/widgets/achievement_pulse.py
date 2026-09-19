@@ -567,6 +567,8 @@ class AchievementPulsePresentationModel(QObject):
         self._custom_progress_circle_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
         self._custom_game_name_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
         self._custom_game_name_alignment = "left"
+        self._custom_first_achievement_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
+        self._custom_first_achievement_alignment = "left"
         self._custom_achievement_list_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
         self._custom_achievement_list_alignment = "left"
         self._custom_field_group_geometry: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 0.0)
@@ -811,6 +813,7 @@ class AchievementPulsePresentationModel(QObject):
         badge = _resolved("badge")
         progress = _resolved("progress_circle")
         game_name = _resolved("game_name")
+        first_achievement = _resolved("first_achievement")
         achievement_list = _resolved("achievement_list")
         field_group = _resolved("field_group")
         next_values = (
@@ -822,6 +825,8 @@ class AchievementPulsePresentationModel(QObject):
             (progress.width_scale, progress.height_scale, progress.x_offset, progress.y_offset),
             (game_name.width_scale, game_name.height_scale, game_name.x_offset, game_name.y_offset),
             game_name.alignment or self._custom_child_roles["game_name"].authored_alignment,
+            (first_achievement.width_scale, first_achievement.height_scale, first_achievement.x_offset, first_achievement.y_offset),
+            first_achievement.alignment or self._custom_child_roles["first_achievement"].authored_alignment,
             (achievement_list.width_scale, achievement_list.height_scale, achievement_list.x_offset, achievement_list.y_offset),
             achievement_list.alignment or self._custom_child_roles["achievement_list"].authored_alignment,
             (field_group.width_scale, field_group.height_scale, field_group.x_offset, field_group.y_offset),
@@ -835,6 +840,8 @@ class AchievementPulsePresentationModel(QObject):
             self._custom_progress_circle_geometry,
             self._custom_game_name_geometry,
             self._custom_game_name_alignment,
+            self._custom_first_achievement_geometry,
+            self._custom_first_achievement_alignment,
             self._custom_achievement_list_geometry,
             self._custom_achievement_list_alignment,
             self._custom_field_group_geometry,
@@ -850,6 +857,8 @@ class AchievementPulsePresentationModel(QObject):
             self._custom_progress_circle_geometry,
             self._custom_game_name_geometry,
             self._custom_game_name_alignment,
+            self._custom_first_achievement_geometry,
+            self._custom_first_achievement_alignment,
             self._custom_achievement_list_geometry,
             self._custom_achievement_list_alignment,
             self._custom_field_group_geometry,
@@ -1065,6 +1074,26 @@ class AchievementPulsePresentationModel(QObject):
     @Property(str, notify=customGeometryChanged)
     def customGameNameAlignment(self) -> str:
         return self._custom_game_name_alignment
+
+    @Property(float, notify=customGeometryChanged)
+    def customFirstAchievementWidthScale(self) -> float:
+        return float(self._custom_first_achievement_geometry[0])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFirstAchievementHeightScale(self) -> float:
+        return float(self._custom_first_achievement_geometry[1])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFirstAchievementXOffset(self) -> float:
+        return float(self._custom_first_achievement_geometry[2])
+
+    @Property(float, notify=customGeometryChanged)
+    def customFirstAchievementYOffset(self) -> float:
+        return float(self._custom_first_achievement_geometry[3])
+
+    @Property(str, notify=customGeometryChanged)
+    def customFirstAchievementAlignment(self) -> str:
+        return self._custom_first_achievement_alignment
 
     @Property(float, notify=customGeometryChanged)
     def customAchievementListWidthScale(self) -> float:

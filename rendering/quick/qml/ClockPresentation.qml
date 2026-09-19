@@ -22,9 +22,9 @@ OverlayWidget {
         : analogueFace.preferredContentHeight
 
 
-    // Variant-aware child roles. Analogue keeps the clock face and hands as one
-    // alignment-preserving group while numerals remain independently editable.
-    // Digital exposes its time block in place of analogue-only face geometry.
+    // Analogue exposes one center-owned face: ring, markers, numerals and hands.
+    // The rejected independent numeral editor must never shadow face selection.
+    // Digital's text and the optional footer elements retain their own roles.
     customEditableChildRoles: {
         const roles = []
         const normW = Math.max(1.0, clockRoot.preferredContentWidth)
@@ -41,15 +41,11 @@ OverlayWidget {
             roles.push({
                 "roleId": "clock_face",
                 "target": analogueFace.customFaceTarget,
-                "collisionIgnoreRoleIds": ["numerals"]
+                "centeredResize": true,
+                "allowParentGrowth": false,
+                "containmentTarget": analogueFace,
+                "geometryDependencies": [analogueFace]
             })
-            if (clockRoot.clockModel.showNumerals) {
-                roles.push({
-                    "roleId": "numerals",
-                    "target": analogueFace.customNumeralsTarget,
-                    "collisionIgnoreRoleIds": ["clock_face"]
-                })
-            }
             if (clockRoot.clockModel.showSeparator)
                 roles.push({ "roleId": "separator", "target": analogueFace.customSeparatorTarget })
             if (clockRoot.clockModel.calendarText.length > 0)

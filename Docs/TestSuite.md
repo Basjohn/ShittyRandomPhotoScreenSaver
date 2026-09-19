@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
 
 This file is the **current test/acceptance authority** for SRPSS. It describes what deserves trust now, how to classify evidence, and which architecture contracts must stay guarded. It is not a checkpoint diary or migration changelog; source control and `Docs/Historical_Bugs/` preserve chronology.
 
@@ -14,15 +14,21 @@ Current-tree inventory at this checkpoint:
 
 ```text
 375 test_*.py modules
-133 maintained destination targets
+136 maintained destination targets
 0 missing destination target files
 ```
 
 The destination profile is **target-isolated**: each selected target runs in its own fresh pytest subprocess so queued Qt/QQuick teardown from one target cannot poison another target's result.
 
-The pre-orientation maintained destination profile last ran **132/132 GREEN on Windows + PySide6 + OpenGL (2026-09-17)**, after the broad-suite red reconciliation closed (all failures were test-side drift against current architecture; production was correct in every case). The current profile is now 133 targets because the CUSTOM Visualizer quarter-turn contract was added after that run. The subsequent 2026-09-18 ordinary-widget `content_extent` completion (Achievement Pulse / Abandonment Issues / Weather plus shared dense-floor policy) and the selected-parent / diagonal two-axis reflow foundation update existing maintained targets but do not add another destination target file. The operator has physically validated the shared `content_extent` resize behavior; Weather's intended five-day reveal did not appear and remains a separate active defect. The resulting 133-target profile is still **NEEDS RUN** until the post-change tree is executed on the intended environment. Do not misrepresent the earlier 132/132 pass as proof of later source changes. R-87/CHK26 performance acceptance is separately backed by focused source/static tests plus installed D1-heavy, mixed-display/lifecycle and operator visual evidence in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` and `Docs/Guardrails/Performance_Optimization_Contract.md`.
+The previously recorded maintained destination profile ran **132/132 GREEN on Windows + PySide6 + OpenGL on 2026-09-17**, before the later ordinary-widget CUSTOM/Visualizer changes. The current maintained profile lists 136 targets and remains **NEEDS RUN** on the present tree. The separate accepted R-87/CHK26 performance landmark is documented in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` and `Docs/Guardrails/Performance_Optimization_Contract.md`.
+
+**Most recent operator evidence, 2026-09-19:** the focused Media gate passed and a larger affected-family gate reported **153 passed, 3 failed**. All three failures stopped at an undefined `QSize` in the Reddit/Gmail/Media parametrizations of `test_flip_wheel_restore_repeatedly_returns_authored_shape_and_clears_stale_extent`. That module now imports `QSize`. This repairs the harness error, **not** the obligation to run all three actual geometry assertions on Windows. The initial Media seek shift on an older save stopped reproducing after Reset, but that does not prove every saved-geometry case. Reddit flipped spacing/order, Friend separator live width, edit-only `L`, and one-step `Ctrl+Z` are source candidates pending Windows scene and physical checks.
 
 The current agent/container may lack PySide6/OpenGL. In that environment, a collection failure caused by missing runtime dependencies is **ENVIRONMENT BLOCKED**, not a product RED and not a PASS.
+
+## 1.1 Qt delivery and painted-geometry evidence (2026-09-19)
+
+A green geometry owner/source suite does not verify which MouseArea receives a click or whether a short post headline makes a timestamp rail float. `tests/test_qtquick_edit_pointer_delivery.py` sends real press/release events into a QQuickWindow and verifies top-strip selection, header-gap selection, and that the flip target calls the existing flip authority instead of selecting/moving the parent. `tests/test_qtquick_reddit_presentation.py` asserts retained Reddit/Reddit2 title/age/AGO paint-item rectangles and common timestamp alignment across short and long titles, parent resize and semantic flips. Both are Windows/PySide6 **NEEDS RUN** for the new checkpoint. Only screen-pixel appearance/hardware-specific DPI, OS mouse routing, and real GPU dual-display behaviour require subsequent bounded physical sampling if these tests pass. The previous all-green suite predates these tests and does not retroactively pass them.
 
 ## 2. Status vocabulary
 
@@ -161,6 +167,8 @@ Required properties:
 - global CUSTOM suppresses ordinary stacking/adjacency authority as specified.
 
 Primary suites include `test_qtquick_resize_normalization.py`, `test_widget_auto_shrink.py`, `test_qtquick_family_size_policy.py`, `test_qtquick_geometry_resolver.py`, `test_qtquick_custom_layout_owner.py`, `test_qtquick_custom_layout_overlay.py` and capture/geometry tests.
+
+**Current Edit acceptance:** `test_qtquick_custom_layout_owner.py` exercises last-action-only undo, flips, wheel then reset; `test_qtquick_input_controller.py` exercises keyboard admission only in Edit without stealing non-Edit plain `Z`; `test_qtquick_child_lock_scene.py` checks keyboard and glyph signals against one retained lock frame. `test_qtquick_reddit_presentation.py` checks flipped title → age value → AGO order and compact live spacing; `test_qtquick_friend_pulse_presentation.py` checks separator growth/reset and edited width-scale preservation. Confirm these in the intended Windows Qt environment plus actual pointer/Save/Cancel/Restore interactions. Source tests cannot prove QML signal delivery, pointer grabs, render alignment or full paint/geometry parity.
 
 Clock face state is independent from its digital/analogue geometry variants. `test_layout_slots.py`, the real DisplayManager slot path, and Clock Settings preservation coverage must keep those authorities separate.
 

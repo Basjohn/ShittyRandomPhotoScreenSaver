@@ -1500,12 +1500,7 @@ CLOCK_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     CustomChildRoleDescriptor(
         "clock_face", axes=("horizontal", "vertical"),
         minimum_scale=(0.45, 0.45), maximum_scale=(2.50, 2.50),
-        uniform_scale=True, movable=True,
-    ),
-    CustomChildRoleDescriptor(
-        "numerals", axes=("horizontal", "vertical"),
-        minimum_scale=(0.45, 0.45), maximum_scale=(2.50, 2.50),
-        uniform_scale=True, movable=True,
+        uniform_scale=True, centered_resize=True, movable=False,
     ),
     freeform_layout_block_child_role(
         "separator", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
@@ -1533,20 +1528,7 @@ REDDIT_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
         minimum_scale=(0.55, 0.55), maximum_scale=(2.00, 2.00),
         uniform_scale=True, movable=True,
     ),
-    freeform_layout_block_child_role(
-        "post_rows", minimum_scale=(0.55, 0.65), maximum_scale=(1.80, 2.25), movable=True,
-    ),
-    freeform_layout_block_child_role(
-        "post_time", minimum_scale=(0.55, 0.60), maximum_scale=(2.00, 2.00), movable=True,
-    ),
-    freeform_layout_block_child_role(
-        "post_titles", minimum_scale=(0.45, 0.60), maximum_scale=(2.25, 2.00), movable=True,
-    ),
-    freeform_layout_block_child_role(
-        "post_separators", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
-    ),
 )
-
 GMAIL_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     CustomChildRoleDescriptor(
         "header", axes=("horizontal", "vertical"),
@@ -1559,34 +1541,7 @@ GMAIL_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
         minimum_scale=(0.55, 0.55), maximum_scale=(2.00, 2.00),
         uniform_scale=True, movable=True,
     ),
-    freeform_layout_block_child_role(
-        "message_rows", minimum_scale=(0.55, 0.65), maximum_scale=(1.80, 2.25), movable=True,
-    ),
-    CustomChildRoleDescriptor(
-        "envelopes", axes=("horizontal", "vertical"),
-        minimum_scale=(0.50, 0.50), maximum_scale=(2.25, 2.25),
-        uniform_scale=True, movable=True,
-    ),
-    freeform_layout_block_child_role(
-        "timestamps", minimum_scale=(0.55, 0.60), maximum_scale=(2.00, 2.00), movable=True,
-    ),
-    freeform_layout_block_child_role(
-        "senders", minimum_scale=(0.45, 0.60), maximum_scale=(2.25, 2.00), movable=True,
-    ),
-    freeform_layout_block_child_role(
-        "subjects", minimum_scale=(0.45, 0.60), maximum_scale=(2.25, 2.00), movable=True,
-    ),
-    freeform_layout_block_child_role(
-        "message_actions", minimum_scale=(0.55, 0.55), maximum_scale=(2.00, 2.00), movable=True,
-    ),
-    freeform_layout_block_child_role(
-        "message_separators", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
-    ),
-    freeform_layout_block_child_role(
-        "boundary_separators", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
-    ),
 )
-
 WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
     WidgetRuntimeDescriptor(
         widget_id="clock",
@@ -1688,6 +1643,18 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
                 maximum_scale=(1.90, 1.90),
                 uniform_scale=True,
                 movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+            CustomChildRoleDescriptor(
+                "artist",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.55, 0.55),
+                maximum_scale=(1.90, 1.90),
+                uniform_scale=True,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
             ),
             CustomChildRoleDescriptor(
                 "playback_state",
@@ -1696,6 +1663,8 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
                 maximum_scale=(1.90, 1.90),
                 uniform_scale=True,
                 movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
             ),
             freeform_artwork_child_role(
                 movable=True,
@@ -1865,6 +1834,14 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
                 minimum_scale=(0.50, 0.60),
                 maximum_scale=(2.25, 2.50),
                 uniform_scale=False,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+            freeform_layout_block_child_role(
+                "first_achievement",
+                minimum_scale=(0.50, 0.55),
+                maximum_scale=(2.25, 2.50),
                 movable=True,
                 alignment_flip=True,
                 authored_alignment="left",
