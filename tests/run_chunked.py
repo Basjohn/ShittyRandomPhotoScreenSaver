@@ -56,6 +56,14 @@ DESTINATION_PROFILE = (
     "test_qtquick_visualizer_roundtrip_lifetime.py",
     "test_qtquick_custom_layout_overlay.py",
     "test_qtquick_edit_pointer_delivery.py",  # real QQuickWindow MouseArea click targeting
+    "test_qtquick_child_mapped_geometry.py",  # thin targets + 4-corner QQuickItem mapped bounds
+    "test_qtquick_child_mapped_source_contract.py",  # selected-only mapping, no new runtime owner
+    "test_qtquick_child_edit_lifecycle.py",  # Edit OFF/unselected clears role delegates after rebind
+    "test_qtquick_child_clip_scene.py",  # real Qt card/accessory clip ancestry through reflow and Edit
+    "test_qtquick_child_edit_off_dependency_contract.py",  # edit-off observer/feedback ownership guards
+    "test_visualizer_replay_cleanup_contract.py",  # offline replay drains only its own QObject
+    "test_visualizer_replay.py",  # file-isolated replay floors and deterministic playback
+    "test_godzip_foundry_script_runner.py",  # current in-editor command review, not old modal
     "test_qtquick_edit_pointer_source_contract.py",
     "test_qtquick_h9_uniform_resize.py",
     "test_qtquick_resize_normalization.py",

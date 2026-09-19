@@ -292,14 +292,20 @@ def test_main_keeps_widget_ui_lazy_and_runtime_font_registration_qtgui_only() ->
 
 
 def test_startup_desktop_qpixmap_exception_has_one_production_callsite() -> None:
+    # Only production package roots are executable code. A local backup under
+    # `deleteme` must not masquerade as a second production callsite.
     occurrences: dict[str, int] = {}
-    for path in ROOT.rglob("*.py"):
-        if "tests" in path.parts:
-            continue
-        text = path.read_text(encoding="utf-8")
-        count = text.count("capture_startup_desktop_pixmap")
-        if count:
-            occurrences[path.relative_to(ROOT).as_posix()] = count
+    production_roots = (
+        ROOT / "engine", ROOT / "rendering", ROOT / "core",
+        ROOT / "widgets", ROOT / "ui", ROOT / "tools", ROOT / "main.py",
+    )
+    for subtree in production_roots:
+        paths = (subtree,) if subtree.is_file() else subtree.rglob("*.py")
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            count = text.count("capture_startup_desktop_pixmap")
+            if count:
+                occurrences[path.relative_to(ROOT).as_posix()] = count
     assert set(occurrences) == {
         "engine/display_manager.py",
         "rendering/quick/startup_desktop_capture.py",

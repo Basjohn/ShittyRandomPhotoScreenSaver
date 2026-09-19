@@ -5,24 +5,20 @@ import json
 import shutil
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent
 
 from tools.visualizer_replay.driver import FIXTURES, MODES, load_clips, replay_clip
 from tools.visualizer_replay.engine import ReplayBeatEngine
 from tools.visualizer_replay.floors import REFERENCE, check_floors
 
 CASES = tuple(json.loads(REFERENCE.read_text(encoding="utf-8"))["cases"])
+# The replay driver retires its own engine immediately; ensure a Qt app exists
+# even when this file is run by itself in the isolated destination profile.
+pytestmark = pytest.mark.usefixtures("qt_app")
 
 
 @pytest.fixture(scope="module")
 def clips():
     return load_clips()
-
-
-@pytest.fixture(autouse=True)
-def drain_retired_qobjects(qt_app):
-    yield
-    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 @pytest.mark.parametrize("case", CASES)

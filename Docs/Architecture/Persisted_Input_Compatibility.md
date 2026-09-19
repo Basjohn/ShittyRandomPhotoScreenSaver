@@ -1,7 +1,5 @@
 # Persisted-Input Compatibility Bridges
 
-Last updated: 2026-09-17
-
 ## What this is
 
 SRPSS accepts real old user data — profiles, presets, themes, layouts,

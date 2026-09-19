@@ -1,7 +1,6 @@
 # Steam Games You Follow — Feasibility-First Product Decomposition
 
 Status: **NEAR-FUTURE / DEV-GATED / NOT IMPLEMENTED**  
-Last updated: 2026-09-19  
 Current sequencing authority: `Current_Plan.md`  
 Stable compatibility id: `steam_progress`  
 Product name: **Games You Follow**

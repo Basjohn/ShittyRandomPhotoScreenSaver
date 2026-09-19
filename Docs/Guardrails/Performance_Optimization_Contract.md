@@ -1,7 +1,5 @@
 # Performance Optimization Contract
 
-Last updated: 2026-09-16
-
 This document is the canonical admission/acceptance contract for SRPSS performance work on the accepted Qt Quick runtime.
 
 Read it before changing cadence, scheduling, GC policy, resource lifetime, Quick presentation, Visualizer analysis, caching, or instrumentation in the name of performance.
@@ -213,7 +211,7 @@ After the change:
 
 ## 8. Reopen gate — performance is symptom-driven
 
-CHK26 is the current accepted performance/freshness architecture. CHK27-CHK29 then mapped the largest apparent residuals and closed them as either Qt frame/render-phase ownership or small distributed Bubble/driver work. There is **no active generic headroom campaign**.
+The accepted performance/freshness golden is the regression reference, not an invitation to reopen generic headroom work. Future optimization requires a reproduced, mechanism-specific symptom and the evidence/acceptance gates above; normal Qt render-phase activity alone does not establish a product defect.
 
 Reopen performance work only when normal use, a directly observed run, a soak, or a new feature exposes a **persistent, growing or otherwise traceable defect**, or when evidence reveals clearly duplicated/useless work with a bounded owner. Preserve that failing condition first. Do not schedule synthetic soak/probe campaigns merely to search for the next percentile. If a real defect is reproduced, use existing diagnostics before adding instrumentation, then add only the smallest missing measurement needed to localize it.
 

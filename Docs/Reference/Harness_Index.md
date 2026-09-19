@@ -1,7 +1,5 @@
 # Harness Index
 
-Last updated: 2026-09-16
-
 Compact routing for recurring regression, attribution and installed-acceptance commands.
 
 `Docs/TestSuite.md` is the canonical live test inventory/retirement ledger. This file routes useful
@@ -51,6 +49,10 @@ Do not treat a red whole-tree run as proof the active slice failed until the rel
 inspected. A completed pytest summary followed by a process that never exits strongly suggests shutdown/lifecycle ownership and
 should be isolated rather than hidden with a longer timeout.
 
+### GODZIP Foundry operator commands
+
+Launch `python tools\godzip_foundry.py` from the current repo environment. The CMD tab's **RUN CHUNKED SUITE** button enters and runs `python tests\run_chunked.py --chunks 4 --log` in captured PowerShell. It is a broad whole-tree reconciliation run, **not** the isolated `destination` product gate above. RUN SCRIPT accepts a deliberate pasted command, while CLEAR & PASTE only replaces the editor text. Captured mode provides Stop Run, a bounded transcript and results export; external-terminal mode does not capture results or report completion. The APPLY tab refreshes discovered ZIP locations on entry without re-inspecting the currently selected archive. These buttons do not change test authority or allow output to stand in for physical validation.
+
 ## 1A. Qt/QML sidecar evidence
 
 For any runtime-shaped or physical Quick/QML claim, collect and inspect both:
@@ -82,7 +84,7 @@ Current ImageWorker shared-memory lifecycle proof:
 python tools\image_worker_shm_lifecycle_harness.py --cycles 50 --width 3840 --height 2160
 ```
 
-`tests/run_chunked.py` is the sole maintained test-runner entrypoint; the former `tools/run_tests.py` convenience facade is retired.
+`tests/run_chunked.py` is the maintained test-runner entrypoint. Do not add a secondary test-runner facade or bypass the runner's profile-isolation policy.
 
 ### Retained Visualizer causal/lifecycle diagnostics — no active investigation
 

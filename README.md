@@ -11,7 +11,7 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
 ---
 
 ## Features 
-(An extremely out of date readme mostly, might as well skip to the credits, I'm not touching this like I'm not getting touched.)
+A look at the current features. Developer contracts and work-in-progress details live under `Docs/`.
 
 - **Random Image Slideshow**
   - Local folders (recursive) as primary source
@@ -38,9 +38,9 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
   - **Clock Widgets** (up to three): 12h/24h, multiple time zones, analogue or digital, with optional centred weekday/date rows
   - **Weather Widget** using Open‑Meteo (no API key) with location autodetect on first run
   - **Media Widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
-  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. 5 Distinct OpenGL modes with a full user friendly preset and custom system to make your own.
+  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. five established modes (Bubble, Spectrum, Oscilloscope, Curve/Dev Curve and Sine), with an optional isolated experimental Sphere and a preset/Custom system.
   - **Reddit Widgets** showing top posts from up to two configured subreddits, posts can be clicked to take you to their comments because no one reads the articles/links anyway.
-  - **STEAM Widgets** Achievement Pulse (Your glorious work.) and Abandonment Issues (Your backlog.)
+  - **STEAM Widgets** Achievement Pulse (Your glorious work.), Abandonment Issues (Your backlog.) and Friend Pulse (Your people).
   
 - **Custom Layouts**
 
@@ -149,7 +149,7 @@ Download a version, ideally the setup version if you want it to actually work.
 1. Yeah that's literally it.
 2. Really.
 
-- Note, all versions replace all visualizers every install because I do weird shit I cannot keep track of. If you have saved visualizer presets you want to preserve use export presets in about and then import them after the install. Your custom section visualizers are never touched.
+- Back up your own visualizer presets before reinstalling or resetting settings. Shipped presets and user-authored presets have separate ownership; do not assume a normal installer run will overwrite user files.
 
 ### 2. Set SRPSS as your screensaver
 
@@ -170,7 +170,7 @@ In the **Screen Saver Settings** dialog:
   - Weather does a really bad job of figuring out where you are but has awesome autocomplete so just start typing your City name and click the suggestion.
   - Reddit can be set to any kinky ass subreddit you want.
 
-- Note, you will need to rerun the application or screensaver after setting sources for the first time to start up properly, first sources dry run always closes for now.
+- If you change sources, apply the Settings changes and launch the screensaver normally; a first-run shutdown is not a supported setup step.
 
 ### 4. Layout
 

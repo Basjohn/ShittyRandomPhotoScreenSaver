@@ -1,7 +1,5 @@
 # Custom Style Implementation
 
-Last updated: 2026-09-14
-
 This document owns the durable relationship between Settings styling, runtime Widget Theme semantics, explicit family overrides and user-owned `Custom` state. Live sequencing remains in `Current_Plan.md`.
 
 ## Settings UI

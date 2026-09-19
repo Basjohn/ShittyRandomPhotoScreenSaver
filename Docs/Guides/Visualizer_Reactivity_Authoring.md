@@ -1,7 +1,5 @@
 # Visualizer Reactivity Authoring Guide
 
-Last updated: 2026-09-10
-
 Status: **binding authoring guidance for new/reactivity-changing Visualizer work**.
 
 This guide collects the signal-selection and response-shaping lessons that SRPSS modes repeatedly had to rediscover independently. It does **not** replace a mode's accepted goldens, Bubble Temporal Fidelity (BTF), the Visualizer Presentation guardrail, or an explicitly authored mode-specific contract. Those remain stronger when they are more specific.

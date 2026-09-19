@@ -1,7 +1,5 @@
 # Qt / QML Observability Contract
 
-Last updated: 2026-09-16
-
 ## Purpose
 
 SRPSS has more than one diagnostic plane. Python logging alone is not sufficient evidence for a Qt Quick application.

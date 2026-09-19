@@ -650,7 +650,10 @@ def test_achievement_refresh_probes_recent_candidates_before_selecting_schema(tm
 def test_achievement_pulse_unchanged_success_suppresses_immediate_display_follower(tmp_path) -> None:
     credential = SteamCredentialPayload(
         api_key="fake_steam_api_key_123456",
-        profile_identifier="76561197960265728",
+        # Use a profile not used by the preceding same-process refresh test.
+        # Request backoff is intentionally profile-scoped at runtime; sharing
+        # its key made this fixture inherit the earlier test's policy state.
+        profile_identifier="76561197960265729",
     )
     profile_key = derive_profile_cache_key(credential.profile_identifier)
     recent_payload = {"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}}

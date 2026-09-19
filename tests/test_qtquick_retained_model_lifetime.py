@@ -32,6 +32,7 @@ _FAMILY_ITEM_QML = (
     b"Item {\n"
     b"    property real startupRevealOpacity: 1.0\n"
     b"    property real fadeOpacity: 1.0\n"
+    b"    property bool customLayoutInputBlocked: false\n"
     b"    property bool externalCardShadow: false\n"
     b"}\n"
 )

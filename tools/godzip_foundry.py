@@ -15,6 +15,7 @@ from contextlib import contextmanager
 import ctypes
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -111,6 +112,7 @@ try:
         QPushButton,
         QSplitter,
         QTabWidget,
+        QToolButton,
         QTreeWidget,
         QTreeWidgetItem,
         QVBoxLayout,
@@ -175,6 +177,7 @@ from godzip_foundry_theme import (  # noqa: E402
 )
 
 APP_TITLE = "SRPSS GODZIP Foundry"
+CHUNKED_SUITE_COMMAND = r"python tests\run_chunked.py --chunks 4 --log"
 PERSONAL_GODZIP_DROP_DIR = Path(r"Z:\Torrents\Torrentfiles")
 
 ROLE_PAYLOAD = int(Qt.ItemDataRole.UserRole)
@@ -439,6 +442,38 @@ class Panel(QFrame):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("panel")
+
+
+class CollapsiblePanel(Panel):
+    """Small event-driven, repo-local section used by the CMD tab only."""
+
+    def __init__(self, repo_root: Path, key: str, title: str, *, initially_open: bool = True) -> None:
+        super().__init__()
+        self._repo_root = repo_root
+        self._setting_key = f"cmd_section_{key}_open"
+        column = QVBoxLayout(self)
+        column.setContentsMargins(12, 10, 12, 12)
+        column.setSpacing(8)
+        self.header = QToolButton(self)
+        self.header.setObjectName("cmdSectionHeader")
+        self.header.setText(title)
+        self.header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.header.setCheckable(True)
+        self.header.setChecked(initially_open)
+        self.header.setArrowType(Qt.ArrowType.DownArrow if initially_open else Qt.ArrowType.RightArrow)
+        column.addWidget(self.header)
+        self.content = QWidget(self)
+        self.body = QVBoxLayout(self.content)
+        self.body.setContentsMargins(4, 4, 4, 0)
+        self.body.setSpacing(9)
+        self.content.setVisible(initially_open)
+        column.addWidget(self.content)
+        self.header.toggled.connect(self._toggle)
+
+    def _toggle(self, opened: bool) -> None:
+        self.content.setVisible(opened)
+        self.header.setArrowType(Qt.ArrowType.DownArrow if opened else Qt.ArrowType.RightArrow)
+        _save_local_setting(self._repo_root, self._setting_key, opened)
 
 
 class FoundryHeaderFrame(QFrame):
@@ -916,6 +951,8 @@ class CreateTab(QWidget):
 
 
 class ApplyTab(QWidget):
+    zipDiscoveryFinished = Signal(object)
+
     def __init__(self, window: "GodzipFoundryWindow") -> None:
         super().__init__(window)
         self.window = window
@@ -924,6 +961,9 @@ class ApplyTab(QWidget):
         self.current_zip: Path | None = None
         self._discovery_loaded = False
         self._discovered_zips: list[Path] = []
+        self._zip_refresh_running = False
+        self._zip_refresh_pending = False
+        self.zipDiscoveryFinished.connect(self._zip_discovery_finished)
         self._browser_expanded = False
         self._main_items: dict[str, QTreeWidgetItem] = {}
         self._filter_timer = QTimer(self)
@@ -1167,16 +1207,83 @@ class ApplyTab(QWidget):
         return self.window.zip_search_dirs()
 
     def ensure_discovery_loaded(self) -> None:
-        if not self._discovery_loaded:
-            self.refresh_discovered_zips()
+        # An entry into APPLY is an explicit, shallow refresh request, including
+        # subsequent visits. Never inspect/apply/reload the selected archive here.
+        self.refresh_discovered_zips(force=True)
 
     def refresh_discovered_zips(self, *, force: bool = False) -> None:
         if self._discovery_loaded and not force:
             return
-        self._discovered_zips = self.window.discover_zips(
-            project_only=not self.show_all_zips.isChecked(),
-            force=force,
+        if self._zip_refresh_running:
+            # Coalesce repeated tab entries / filter changes into one follow-up.
+            self._zip_refresh_pending = True
+            return
+
+        project_only = not self.show_all_zips.isChecked()
+        directories = tuple(self._zip_search_dirs())
+        key = (
+            project_only,
+            tuple(os.path.normcase(os.path.abspath(str(path.expanduser()))) for path in directories),
         )
+        if not force:
+            cached = self.window._zip_discovery_cache.get(key)
+            if cached is not None:
+                self._show_discovered_zips(cached)
+                return
+
+        self._zip_refresh_running = True
+        generation = self.window._zip_discovery_generation
+        if not self._discovery_loaded and self.found_combo.count() == 0:
+            self.found_combo.addItem("Refreshing ZIP locations…")
+
+        def scan() -> None:
+            # The directory walk and bounded archive sniffing can touch mapped
+            # drives; keep both strictly off the GUI thread. No Qt or mutable
+            # widget/window state is accessed by this worker.
+            try:
+                paths = discover_zip_candidates(directories, limit=40, project_only=project_only)
+                # Even a per-row timestamp stat can stall on a mapped drive;
+                # collect display metadata on the same background pass.
+                stamps = {str(path): modified_stamp(path) for path in paths}
+                error = None
+            except Exception as exc:
+                paths, stamps, error = [], {}, str(exc)
+            try:
+                self.zipDiscoveryFinished.emit((key, generation, project_only, paths, stamps, error))
+            except RuntimeError:
+                pass  # Foundry was closed while the daemon scan was finishing.
+
+        threading.Thread(target=scan, name="godzip-zip-discovery", daemon=True).start()
+
+    def _zip_discovery_finished(self, result: object) -> None:
+        key, generation, project_only, paths, stamps, error = result
+        self._zip_refresh_running = False
+        # Creation and other cache invalidations can happen during a scan.
+        # Never publish an obsolete result back into the shared cache or chooser.
+        stale = (
+            generation != self.window._zip_discovery_generation
+            or project_only != (not self.show_all_zips.isChecked())
+            or key[1] != tuple(
+                os.path.normcase(os.path.abspath(str(path.expanduser())))
+                for path in self._zip_search_dirs()
+            )
+        )
+        rerun = self._zip_refresh_pending or stale
+        self._zip_refresh_pending = False
+        if not stale and error is None:
+            self.window._zip_discovery_cache[key] = tuple(paths)
+            self._show_discovered_zips(paths, stamps=stamps)
+        elif error is not None:
+            # Keep the existing dropdown and loaded archive intact on I/O errors.
+            self.window.set_status(f"ZIP discovery refresh failed: {error}")
+        if rerun and self.window.tabs.currentWidget() is self:
+            self.refresh_discovered_zips(force=True)
+
+    def _show_discovered_zips(
+        self, paths: Iterable[Path], *, stamps: dict[str, str] | None = None,
+    ) -> None:
+        self._discovered_zips = list(paths)
+        previous = self.found_combo.currentData()
         self.found_combo.blockSignals(True)
         try:
             self.found_combo.clear()
@@ -1193,7 +1300,7 @@ class ApplyTab(QWidget):
                 except Exception:
                     where = str(path.parent)
                 self.found_combo.addItem(
-                    f"{modified_stamp(path)}  —  {path.name}  —  {where}",
+                    f"{(stamps or {}).get(str(path), 'date unknown')}  —  {path.name}  —  {where}",
                     str(path),
                 )
                 self.found_combo.setItemData(
@@ -1203,6 +1310,10 @@ class ApplyTab(QWidget):
                 )
             if not self._discovered_zips:
                 self.found_combo.addItem("No ZIPs found in quick locations")
+            if previous:
+                index = self.found_combo.findData(previous)
+                if index > 0:
+                    self.found_combo.setCurrentIndex(index)
         finally:
             self.found_combo.blockSignals(False)
         self._discovery_loaded = True
@@ -2927,6 +3038,54 @@ class RunTab(QWidget):
         )
 
 
+def _script_outcome_label(
+    exit_code: int, detail: str, stopped: bool, transcript: Path | None,
+) -> tuple[str, str]:
+    """Give a conservative completion indicator from completed-run summaries."""
+    if stopped:
+        return "STOPPED", "stopped"
+    if detail != "COMPLETED":
+        return ("FAILED TO START" if detail == "FAILED TO START" else "CRASHED"), "failed"
+    if exit_code == 0:
+        return "PASSED", "passed"
+    # Inspect only the bounded final transcript tail, once after process exit.
+    # Distinguish a chunk/target failure count from the count of failed pytest
+    # tests; a generic nonzero exit does not establish either number.
+    if transcript is not None:
+        try:
+            with transcript.open("rb") as stream:
+                stream.seek(0, 2)
+                stream.seek(max(0, stream.tell() - 256 * 1024))
+                tail = stream.read().decode("utf-8", errors="replace")
+        except OSError:
+            tail = ""
+        tail = re.sub(r"\x1b\[[0-9;]*m", "", tail)
+        # Whole-tree chunk runs conclude with a *chunk* summary, not an
+        # aggregated pytest failure total. Never label the last chunk's
+        # individual pytest count as the total failed tests.
+        if re.search(r"(?m)^CHUNKED TEST SUMMARY\s*$", tail) and re.search(
+            r"(?m)^\s*Result: SOME CHUNKS FAILED\s*$", tail
+        ):
+            summary = tail.rsplit("CHUNKED TEST SUMMARY", 1)[-1]
+            failed_chunks = re.findall(r"(?m)^\s*Chunk\s+\d+:\s*(?:FAIL|TIMEOUT)\b", summary)
+            if failed_chunks:
+                count = len(failed_chunks)
+                return f"{count} CHUNK{'S' if count != 1 else ''} FAILED", "failed"
+        # Target-isolated profiles report failed targets, not failed tests.
+        targets = re.findall(r"(?m)^\s*Targets failed:\s*(\d+)\s*$", tail)
+        if targets and int(targets[-1]) > 0:
+            count = int(targets[-1])
+            return f"{count} TARGET{'S' if count != 1 else ''} FAILED", "failed"
+        summaries = re.findall(
+            r"(?im)^\s*(?:=+\s*)?(?:\d+\s+(?:passed|skipped|deselected|xfailed|xpassed|warnings?),?\s+)*"
+            r"(\d+)\s+failed\b[^\r\n]*(?:\bin\s+\d|=+\s*$)",
+            tail,
+        )
+        if summaries and int(summaries[-1]) > 0:
+            return f"{int(summaries[-1])} FAILED", "failed"
+    return f"FAILED (EXIT {exit_code})", "failed"
+
+
 class CommandTab(QWidget):
     """Repo-root shell launcher; elevation is explicit because it triggers UAC."""
 
@@ -2944,7 +3103,15 @@ class CommandTab(QWidget):
         self._finished_status = ""
         self._run_stopped = False
         self._run_final_logs: dict[str, tuple[int, int]] = {}
+        self._cmd_section_settings = _load_local_settings(self.repo_root)
         self._build_ui()
+
+    def _section(self, layout: QVBoxLayout, key: str, title: str) -> QVBoxLayout:
+        setting_key = f"cmd_section_{key}_open"
+        opened = self._cmd_section_settings.get(setting_key, True)
+        section = CollapsiblePanel(self.repo_root, key, title, initially_open=opened if isinstance(opened, bool) else True)
+        layout.addWidget(section)
+        return section.body
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -2959,24 +3126,13 @@ class CommandTab(QWidget):
         scrolling.setWidget(content)
         outer.addWidget(scrolling)
 
-        intro = Panel()
-        intro_l = QVBoxLayout(intro)
-        intro_l.setContentsMargins(16, 14, 16, 14)
-        title = QLabel("REPO COMMAND SHELLS")
-        title.setObjectName("sectionTitle")
-        intro_l.addWidget(title)
+        panel_l = self._section(layout, "shells", "REPO COMMAND SHELLS")
         desc = QLabel(
             "Open a terminal directly at the repository root. Administrator mode is opt-in because Windows will show UAC."
         )
         desc.setObjectName("muted")
         desc.setWordWrap(True)
-        intro_l.addWidget(desc)
-        layout.addWidget(intro)
-
-        panel = Panel()
-        panel_l = QVBoxLayout(panel)
-        panel_l.setContentsMargins(18, 18, 18, 18)
-        panel_l.setSpacing(14)
+        panel_l.addWidget(desc)
 
         path = QLabel(str(self.repo_root))
         path.setObjectName("repoPath")
@@ -3016,33 +3172,26 @@ class CommandTab(QWidget):
         utility.addStretch(1)
         panel_l.addLayout(utility)
 
-        layout.addWidget(panel)
         self._build_script_runner(layout)
         layout.addStretch(1)
 
     def _build_script_runner(self, layout: QVBoxLayout) -> None:
-        panel = Panel()
-        body = QVBoxLayout(panel)
-        body.setContentsMargins(16, 14, 16, 14)
-        body.setSpacing(8)
-        title = QLabel("RUN SCRIPT  ·  PASTE → REVIEW → RUN")
-        title.setObjectName("sectionTitle")
-        body.addWidget(title)
+        body = self._section(layout, "script", "RUN SCRIPT")
         note = QLabel(
-            "Paste a whole PowerShell/CMD command, even one copied with a PS prompt or Markdown fence. "
-            "Only unambiguous formatting is removed; the exact corrected script is shown before execution. "
-            "Runs with Foundry's current account privileges from this repository, never on paste or with an elevation request."
+            "Paste a PowerShell/CMD command, including a prompt or Markdown fence. "
+            "RUN SCRIPT removes only unambiguous display formatting and shows the exact command in the editor. "
+            "It runs only when clicked, with Foundry's current account privileges from this repository."
         )
         note.setWordWrap(True)
         note.setObjectName("muted")
         body.addWidget(note)
         self.script_input = QPlainTextEdit()
+        self.script_input.setObjectName("cmdScriptInput")
         self.script_input.setPlaceholderText(
             "PS F:\\repo> python -m pytest tests\\test_custom_child_geometry.py -q; "
             "if ($LASTEXITCODE -eq 0) { python tests\\run_chunked.py --chunks 4 --log }"
         )
-        self.script_input.setMinimumHeight(100)
-        self.script_input.setMaximumHeight(175)
+        self.script_input.setFixedHeight(92)
         body.addWidget(self.script_input)
         options = QHBoxLayout()
         options.addWidget(QLabel("SHELL"))
@@ -3061,27 +3210,45 @@ class CommandTab(QWidget):
         options.addStretch(1)
         body.addLayout(options)
         actions = QHBoxLayout()
-        self.script_run_button = QPushButton("REVIEW & RUN")
+        self.script_run_button = QPushButton("RUN SCRIPT")
         self.script_run_button.setObjectName("primaryButton")
-        self.script_run_button.clicked.connect(self._review_and_run)
+        self.script_run_button.clicked.connect(self._run_script)
+        self.script_paste_button = QPushButton("CLEAR & PASTE")
+        self.script_paste_button.setToolTip("Replace the script editor with plain text from the clipboard; never executes it")
+        self.script_paste_button.clicked.connect(self._clear_and_paste)
+        self.script_suite_button = QPushButton("RUN CHUNKED SUITE")
+        self.script_suite_button.setToolTip(
+            CHUNKED_SUITE_COMMAND + "\nOne click: run the whole chunked suite in captured PowerShell. "
+            "Replaces the editor contents with the exact command and uses the existing Stop Run/results flow."
+        )
+        self.script_suite_button.clicked.connect(self._run_chunked_suite)
         self.script_stop_button = QPushButton("STOP RUN")
         self.script_stop_button.setEnabled(False)
         self.script_stop_button.clicked.connect(self._stop_run)
+        self.script_result_badge = QLabel()
+        self.script_result_badge.setObjectName("cmdRunOutcome")
+        self.script_result_badge.hide()
         actions.addWidget(self.script_run_button)
+        actions.addWidget(self.script_paste_button)
+        actions.addWidget(self.script_suite_button)
         actions.addWidget(self.script_stop_button)
+        actions.addWidget(self.script_result_badge)
         actions.addStretch(1)
         body.addLayout(actions)
         self.script_status = QLabel("No script running")
         self.script_status.setObjectName("muted")
         self.script_status.setWordWrap(True)
         body.addWidget(self.script_status)
+
+        results_body = self._section(layout, "results", "SCRIPT RESULTS")
         self.script_output = QPlainTextEdit()
+        self.script_output.setObjectName("cmdScriptOutput")
         self.script_output.setReadOnly(True)
         self.script_output.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.script_output.document().setMaximumBlockCount(3000)
-        self.script_output.setMinimumHeight(165)
+        self.script_output.setFixedHeight(92)
         self.script_output.setPlaceholderText("Captured terminal output appears here; the capped transcript is saved under .godzip_foundry/runs/.")
-        body.addWidget(self.script_output)
+        results_body.addWidget(self.script_output)
         results = QHBoxLayout()
         self.script_copy = QPushButton("COPY RESULTS")
         self.script_copy.setEnabled(False)
@@ -3095,12 +3262,33 @@ class CommandTab(QWidget):
         results.addWidget(self.script_copy)
         results.addWidget(self.script_show_results)
         results.addWidget(self.script_zip)
-        body.addLayout(results)
+        results_body.addLayout(results)
         hint = QLabel("Captured mode: exit code + scrollable output + Copy Results. ZIP includes the pasted command, transcript and this run's new/changed loose /logs files (50 MB cap). Review for secrets before sharing. Interactive commands: choose External terminal.")
         hint.setWordWrap(True)
         hint.setObjectName("faint")
-        body.addWidget(hint)
-        layout.addWidget(panel)
+        results_body.addWidget(hint)
+
+    def _clear_and_paste(self) -> None:
+        # A clipboard action never invokes the runner. Plain text only, no rich MIME.
+        self.script_input.setPlainText(QApplication.clipboard().text())
+        self.script_input.setFocus()
+
+    def _run_chunked_suite(self) -> None:
+        if self._running:
+            return
+        # Keep the editor and controls truthful about what is actually running.
+        # Captured mode is required for Stop Run and the PASSED/FAILED badge.
+        self.script_input.setPlainText(CHUNKED_SUITE_COMMAND)
+        self.script_shell.setCurrentIndex(self.script_shell.findData("powershell"))
+        self.script_external.setChecked(False)
+        self._run_script()
+
+    def _set_run_outcome(self, text: str = "", outcome: str = "") -> None:
+        self.script_result_badge.setText(text)
+        self.script_result_badge.setProperty("outcome", outcome)
+        self.script_result_badge.style().unpolish(self.script_result_badge)
+        self.script_result_badge.style().polish(self.script_result_badge)
+        self.script_result_badge.setVisible(bool(text))
 
     def _external_mode_changed(self, enabled: bool) -> None:
         if enabled:
@@ -3108,7 +3296,7 @@ class CommandTab(QWidget):
         elif not self._running:
             self.script_status.setText("Captured mode: results remain in this tab after the command exits")
 
-    def _review_and_run(self) -> None:
+    def _run_script(self) -> None:
         if self._running:
             return
         try:
@@ -3117,39 +3305,21 @@ class CommandTab(QWidget):
                 shell=str(self.script_shell.currentData()),
             )
         except ScriptRunError as exc:
-            self.window.show_error("Cannot prepare pasted script", exc)
+            self.script_status.setText(f"Cannot run script: {exc}")
             return
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Review exact script before running")
-        dialog.resize(850, 540)
-        body = QVBoxLayout(dialog)
-        body.addWidget(QLabel(
-            f"RUN AS CURRENT USER · {preview.shell.upper()} · cwd: {self.repo_root}"
-            + (" · EXTERNAL WINDOW" if self.script_external.isChecked() else " · CAPTURED OUTPUT")
-        ))
-        detail = QLabel(
-            ("Normalization: " + "; ".join(preview.changes) if preview.changes else "No formatting changes needed")
-            + ("\nREVIEW: " + "; ".join(preview.warnings) if preview.warnings else "")
-        )
-        detail.setWordWrap(True)
-        body.addWidget(detail)
-        exact = QPlainTextEdit(preview.script)
-        exact.setReadOnly(True)
-        exact.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        body.addWidget(exact, 1)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("RUN THIS SCRIPT")
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        body.addWidget(buttons)
-        # This is the only route from a paste to execution. Editing the paste
-        # while the preview is open cannot change what was approved.
-        if dialog.exec() != QDialog.DialogCode.Accepted:
+        if preview.warnings:
+            self.script_status.setText("Check the selected shell before running: " + "; ".join(preview.warnings))
             return
+        # Make the exact normalized command visible in the editor itself; no
+        # review dialog or alternate command buffer is involved.
+        if self.script_input.toPlainText() != preview.script:
+            self.script_input.setPlainText(preview.script)
+        self._set_run_outcome()
         try:
             self._start_script(preview.shell, preview.script, external=self.script_external.isChecked())
         except Exception as exc:
-            self.window.show_error("Run Script failed", exc)
+            self.script_status.setText(f"Run Script failed: {exc}")
+            self._set_run_outcome("FAILED TO START", "failed")
 
     def _start_script(self, shell: str, script: str, *, external: bool) -> None:
         import uuid
@@ -3201,7 +3371,8 @@ class CommandTab(QWidget):
                 encoding="utf-8",
             )
             subprocess.Popen([cmd, "/k", str(launcher)], cwd=str(self.repo_root), creationflags=subprocess.CREATE_NEW_CONSOLE)
-            self.script_status.setText(f"External terminal launched from repo. Run script: {script_path}")
+            self.script_status.setText(f"External terminal launched from repo (completion not tracked). Run script: {script_path}")
+            self._set_run_outcome("EXTERNAL", "external")
             self.window.set_status("External Run Script terminal launched; results stay in that window")
             return
         if shell == "powershell":
@@ -3226,6 +3397,7 @@ class CommandTab(QWidget):
         self._process = process
         self._running = True
         self.script_run_button.setEnabled(False)
+        self.script_suite_button.setEnabled(False)
         self.script_stop_button.setEnabled(True)
         self.script_stop_button.setText("STOP RUN")
         self.script_status.setText(f"Running {shell} in {self.repo_root}. Transcript: {run_dir / 'output.txt'}")
@@ -3276,6 +3448,10 @@ class CommandTab(QWidget):
         if self._run_stopped:
             detail = "STOPPED BY USER"
         self._finished_status = f"{detail} · exit code {exit_code}"
+        outcome, outcome_kind = _script_outcome_label(
+            exit_code, detail, self._run_stopped, run_dir / "output.txt" if run_dir else None,
+        )
+        self._set_run_outcome(outcome, outcome_kind)
         self._run_final_logs = snapshot_loose_logs(self.repo_root)
         if run_dir is not None:
             (run_dir / "result.json").write_text(json.dumps({
@@ -3286,6 +3462,7 @@ class CommandTab(QWidget):
         self.script_status.setText(self._finished_status + (f" · {run_dir}" if run_dir else ""))
         self.window.set_status("Run Script: " + self._finished_status)
         self.script_run_button.setEnabled(True)
+        self.script_suite_button.setEnabled(True)
         self.script_stop_button.setEnabled(False)
         self.script_copy.setEnabled(run_dir is not None)
         self.script_show_results.setEnabled(run_dir is not None)
@@ -3550,6 +3727,7 @@ class GodzipFoundryWindow(QMainWindow):
         self._native_backdrop_mode: str | None = None
         self._backdrop_applied = False
         self._zip_discovery_cache: dict[tuple[bool, tuple[str, ...]], tuple[Path, ...]] = {}
+        self._zip_discovery_generation = 0
 
         self.setWindowTitle(APP_TITLE)
         self.setWindowFlags(
@@ -3700,6 +3878,7 @@ class GodzipFoundryWindow(QMainWindow):
         return found
 
     def invalidate_zip_discovery_cache(self) -> None:
+        self._zip_discovery_generation += 1
         self._zip_discovery_cache.clear()
         apply_tab = getattr(self, "apply_tab", None)
         if apply_tab is not None:

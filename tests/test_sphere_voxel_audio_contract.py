@@ -1395,8 +1395,7 @@ def test_particle_cohorts_are_bounded_independent_and_keep_progress_when_new_eve
 
 
 def test_particle_outtake_direction_is_captured_at_launch_and_replacement_crossfade_is_renderer_owned() -> None:
-    render_state, _sphere_runtime = _load_plain_visualizer_modules()
-    from widgets.spotify_visualizer import sphere_frame_runtime
+    render_state, sphere_frame_runtime = _load_plain_visualizer_modules()
 
     reactive = render_state.VisualizerEnergyState(bass=0.40, mid=0.56, high=0.33, overall=0.46)
     presence = render_state.VisualizerEnergyState(bass=1.1, mid=1.3, high=0.9, overall=1.1)

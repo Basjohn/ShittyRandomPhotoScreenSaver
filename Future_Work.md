@@ -1,7 +1,5 @@
 # Future Work
 
-Last updated: 2026-09-16
-
 Long-horizon feature / new-implementation backlog.
 
 The operator may promote selected backlog work into `Current_Plan.md`. `FWPlan.md` is the compact router/order for dormant implementation only; detailed active execution lives in `Current_Plan.md` or a focused decomposition.
@@ -480,9 +478,9 @@ implementation/descriptor rather than manufacturing a new transition identity.
 
 ---
 
-## 8.1 CUSTOM Visualizer quarter-turn orientation — accepted, promoted to `Current_Plan.md` up-and-coming
+## 8.1 CUSTOM Visualizer quarter-turn orientation — deferred design contract
 
-(This section remains the authoritative decomposition; `Current_Plan.md` §2 carries the active pointer.)
+This section owns design constraints only. If active work is admitted, its sequencing and acceptance status belong to the active plan.
 
 Feature request: while CUSTOM Edit mode is active, eligible Visualizers gain a small turn/flip glyph. Each click advances the
 content orientation by one clockwise quarter-turn: `0° -> 90° -> 180° -> 270° -> 0°`. Example: a tall Spectrum whose bars
@@ -554,7 +552,7 @@ This ranking contains dormant ideas only. Active/promoted work is deliberately a
 7. other 3D visualizer experiments;
 8. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use without changing ownership.
 
-(**Games You Follow** and the **System volume/mute OSD** were promoted out of this dormant ranking to `Current_Plan.md` §2; their decompositions remain at `Docs/Future_Work/Steam_Games_You_Follow.md` and §10.2 respectively.)
+Games You Follow and System volume/mute OSD have their own focused design contracts; active sequencing belongs only in the active plan.
 
 Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if their first prototypes are abandoned. Their intended identities should not collapse into generic `shatter`, `pixel dissolve`, or `audio sphere` effects.
 
@@ -568,9 +566,9 @@ Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a q
 
 Use FlowContainers in additional Settings sections only where they materially improve alignment and space usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct otherwise lazy bodies.
 
-## 10.2 System volume/mute OSD overlay [opt-in — promoted to `Current_Plan.md` §2]
+## 10.2 System volume/mute OSD overlay — opt-in design contract
 
-Now spec'd for build (see `Current_Plan.md` §2). A pure-Qt-Quick on-screen display that shows the current **system** (Windows master) volume level and mute state when they change — from the End/PgUp/PgDown faux media keys or from any external source (hardware keys, tray mixer, another app). It never becomes a second system-audio owner. Existing owners to reuse, not duplicate: the process-global endpoint `core/media/system_mute.py` (`IAudioEndpointVolume`, acquired once, on the UI thread, deliberately behind mute-widget admission) and the dormant lease `widgets/system_mute_runtime.py`.
+When explicitly admitted for implementation, provide a pure-Qt-Quick on-screen display that shows the current **system** (Windows master) volume level and mute state when they change — from the End/PgUp/PgDown faux media keys or from any external source (hardware keys, tray mixer, another app). It never becomes a second system-audio owner. Existing owners to reuse, not duplicate: the process-global endpoint `core/media/system_mute.py` (`IAudioEndpointVolume`, acquired once, on the UI thread, deliberately behind mute-widget admission) and the dormant lease `widgets/system_mute_runtime.py`.
 
 **Product / widget requirements.** The OSD is a positionable **widget with optional dormancy**, not just a flash overlay:
 

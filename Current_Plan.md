@@ -1,3 +1,47 @@
+## 2026-09-19 current chunked/Qt reconciliation checkpoint
+
+- [x] Operator focused boundary/clip gate: 27 PASS. New whole-tree log triaged: old Foundry modal source-contract failure, independent real two-display input-exit/transition failure, and repeated chunk-4 global Qt DeferredDelete access violation. See `.godzip/CHUNKED_RECONCILIATION_20260919.md`.
+- [x] Fix stale Foundry TEST expectation without changing supplied updated Foundry. Replace replay's global test teardown with engine-receiver-scoped delete processing in offline driver only; do not skip replay or change production renderer or child geometry. Add source guard and include replay+Foundry in destination isolated profile.
+- [ ] Windows: rerun focused Qt/Foundry/replay/smoke gate; full tree crash cause not conclusively proven by fixture fault location. Two-display smoke remains a true red until repeat or code-level resolution. Then maintained destination profile.
+- [ ] After those gates: test-only child Save/reopen geometry and dense-family convergence; production correction only for reproduced causal defect. No Edit-off polling, timers, live perf measurement, or second geometry authority.
+
+## 2026-09-19 checkpoint: docs/Foundry merge + containment scene test
+
+- Operator isolated Visualizer replay: 78 PASS. Whole-tree chunk-4 Qt crash remains unresolved; standalone pass narrows the investigation but is not proof of root cause or entire-suite safety.
+- Merged 34 user-supplied documentation/GODZIP Foundry files verbatim without editorial re-audit; widget production and active geometry source untouched.
+- Added real retained Qt Quick card/accessory clip-ancestry regression under width/height reflow and Edit on/off, including Media-only external volume lane; this is structural clip/scene evidence, **not GPU pixel acceptance**. Destination profile includes it.
+- Next: run focused containment and reconciled prior-red Windows checks, then target-isolated destination. Diagnose whole-tree crash separately if it recurs. Later extend Save/reopen and dense-family settled geometry tests; no timers, polling, measurement instrumentation, second owner or production change to force a green result.
+
+---
+
+## CURRENT 2026-09-19: FULL-SUITE DIAGNOSTIC RECONCILIATION (TEST/DOC ONLY)
+
+Operator's focused P1 geometry/lifecycle gate: **42 passed**. Subsequent `python tests\run_chunked.py --chunks 4 --log` is the **whole-tree diagnostic**, NOT maintained `--profile destination`: chunks 1-3 have 2+4+3 failed assertions/errors with 1138/1136/1135 passed and chunk 4 aborts in replay's global DeferredDelete fixture with Windows access violation. **DO NOT treat whole-tree as green, or mistake the settings writer wait-stack for crash root cause.** See `.godzip/CHUNKED_RECONCILIATION_20260919.md`.
+
+This checkpoint is **tests and docs only**. Corrected incomplete minimal QML fixture, two obsolete Achievement source string asserts, the production-root purity scan (user backup under `deleteme` is not executable production), Bubble GL test's incomplete frame object, Sphere test's inconsistent module/class reload, and Steam test request-state profile collision candidate. Added source-only `test_qtquick_child_edit_off_dependency_contract.py` to maintained destination and appended causal binding audit; no production QML/Python, renderer, settings, migration, schema or saved geometry change. Five directly importable affected source assertions pass locally and changed Python compiles; PySide6 absent, so **Windows Qt tests and crash resolution NOT verified**. Keep all nine original regressions and the replay file in normal collection. The next sequence is (1) isolated `tests/test_visualizer_replay.py` fresh-process crash diagnosis, (2) focused previously failing tests with new edit-off source guard, (3) maintained destination, (4) whole-tree re-run only after crash cause is established, (5) next rendered child containment/Save-reopen/convergence slices. All commands provided IN CHAT.
+
+---
+
+## CURRENT 2026-09-19: CHILD GEOMETRY P1 LIFECYCLE GATE CHECKPOINT
+
+Direct successor to P0 thin-role/four-corner mapper checkpoint, **no additional production changes**. P1 adds `tests/test_qtquick_child_edit_lifecycle.py`: 20 select/unselect/Edit-clear/rebind cycles on a real Qt scene, assert exactly one selected child delegate and no retained delegate/session frame once Edit is off, plus unchanged thin-target geometry. Included in maintained destination profile. No FPS measurement, runtime hook, Settings write, graphics scheduling or second owner. P0 geometry, Reddit, Ctrl+Z/L and all family presentations unchanged. New Qt tests are Windows-unverified (no PySide6 in packager); 36 selected import-free existing+new source tests pass and Python tests compile. Next: ONE focused Windows command followed by destination if green; remaining broader family paint pixels, Save/reopen and parent-floor tests are documented follow-ons, not falsely accepted by this first slice. The performance review is source-level `.godzip/EDIT_OFF_CAUSAL_REVIEW_20260919.md` only.
+
+---
+
+## CURRENT 2026-09-19: CHILD MAPPER P0 IMPLEMENTATION, SOURCE-ONLY PERF REVIEW
+
+This checkpoint continues the operator-accepted all-green Reddit/pointer worktree and the extensive child/geometry audit. **P0 source candidate:** thin positive mapped visual footprints now remain editable even when local height is below 1px; hidden/zero/nonfinite rectangles are excluded; one selected-Edit-only four-corner mapper covers target, occupied paint, obstacles and containment. Previously accepted family visual layouts, CTRL+Z/L, persistence and all Edit-OFF runtime/source remain unchanged. Real Qt geometry and occupied-paint tests plus import-free source guards are in the maintained destination profile; PySide6 unavailable here, so new Qt tests remain Windows-unverified.
+
+User requests **no performance measurements**. `.godzip/EDIT_OFF_CAUSAL_REVIEW_20260919.md` supersedes the older audit's G3/measurement/Gate-D/P2 request for this phase. In short, the changed mapper only exists inside the globally selected edit-role Loader; no added off-Edit watchers/work, renderer or Settings activity. Existing always-bound family role arrays can still reconstruct on family dependency changes, so do not claim globally zero pre-existing edit-off work. Next: the P1 test-only boundary slice and one Windows focused Qt gate, then maintained destination. **No operator widget-by-widget matrix.**
+
+---
+
+## 2026-09-19: extensive ordinary child/geometry audit COMPLETE (audit only)
+
+The operator reports the direct predecessor Windows suite **all green**, Reddit fixed, Ctrl+Z and L working. Detailed source findings, nine-family matrix, boundaries, severity, and test-first next slices: `.godzip/EXTENSIVE_CHILD_GEOMETRY_AUDIT_20260919.md`. Source-confirmed narrow-role editability edge (`targetReady` rejects painted sub-1px-local thin lines after uniform scale) and mathematically incomplete two-corner mapped bounds for transformed target/obstacle are the next bounded production/test slice. Edit-off retained role-binding and clip/effect costs are **measurement questions**, not established regressions. Then add parameterized real Qt scene/paint/pointer, Save/reopen, convergence and lifecycle tests, benchmark against matching CHK26 scenarios. No runtime/tests changed in the audit checkpoint. Existing accepted functionality remains accepted. Do NOT require a manual nine-family permutation matrix. Visualizer/Bubble/Settings/provider schedules out of scope.
+
+---
+
 # CURRENT 2026-09-19: REDDIT STABLE RAIL + TRUE QT EDIT POINTER DELIVERY
 
 **Use this entire worktree as current.** Direct successor of `GODZIP_REDDIT_FRIEND_UNDO_LOCK_AUDIT_CHK_2026-09-19.zip` and same-session audit; older checkpoints in this file are history, not current instructions. Supplied operator screenshot shows the prior flipped Reddit post rows had a floating timestamp: short titles placed `01HR` towards the middle, while long titles pushed it to the right. Supplied new Windows tests reported GREEN but did not exercise pointer delivery into live Qt Quick item surfaces; user reports hard-to-select widgets, full-width dead header space, and headers moving instead of flipping. Ctrl+Z and L are operator-accepted and unchanged.

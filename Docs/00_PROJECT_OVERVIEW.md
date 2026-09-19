@@ -1,7 +1,5 @@
 # Project Overview
 
-Last updated: 2026-09-16
-
 SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated transitions, a
 high-fidelity multi-mode visualizer, configurable runtime overlays and durable settings.
 
@@ -31,7 +29,7 @@ The Qt Quick runtime is operator-accepted and is the sole production presentatio
 - Durable failed-method and regression history lives in `Docs/Historical_Bugs/`.
 - Superseded implementation decompositions are source-control history, not live documentation.
 
-Performance/freshness authority is the operator-accepted CHK26 GOLDEN; the generic headroom campaign is closed and future performance work is symptom-driven.
+Performance/freshness changes are evidence-gated and symptom-driven. Treat the accepted golden as a regression reference and use `Docs/Guardrails/Performance_Optimization_Contract.md` for the current admission criteria; checkpoint sequencing belongs in the active plan and handoff.
 
 ## Visualizer geometry
 
@@ -45,7 +43,7 @@ top/bottom    -> viewport height
 
 Bubble is included and its capability policy is no longer an accepted place to hide a reflow defect. Committed runtime viewport truth is distinct from the temporary CUSTOM working override. Viewport changes reconfigure the spatial domain while preserving BTF; they never stretch finished pixels or redefine simulation cadence.
 
-**R-69 is golden:** wide/tall adaptation may not globally compress Bubble renderer-facing head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme full-expansion visual tail is too large, fix only that proven tail. Audio analysis remains one persistent newest-source serial lane with retained DSP state; performance work may not lower authored cadence or increase visible staleness.
+**Visualizer preservation rule:** wide/tall adaptation may not globally compress Bubble renderer-facing head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme full-expansion visual tail is too large, fix only that proven tail. Audio analysis remains one persistent newest-source serial lane with retained DSP state; performance work may not lower authored cadence or increase visible staleness.
 
 ## Ordinary widget pattern
 

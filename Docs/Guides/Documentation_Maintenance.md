@@ -1,7 +1,5 @@
 # Documentation Maintenance
 
-Last updated: 2026-09-16
-
 SRPSS documentation is organized by **current role**, not by the phase/checkpoint that created it. The repository should help a fresh agent find the present owner quickly; source control and Historical Bugs preserve archaeology.
 
 ## Roles
@@ -82,6 +80,10 @@ For Qt/QQuick-heavy profiles, subprocess isolation is a valid test-harness bound
 ## Import dormancy wording
 
 Capability dormancy includes import boundaries. Current docs must not teach common registries/packages to eagerly import inactive provider/runtime/backend trees. Cheap catalog/static metadata is fine; meaningful owned work/resources resolve at activation/caller boundaries.
+
+## Source-of-truth sweep boundaries
+
+A documentation/tool-only pass may read production source and existing evidence to verify contracts, but must not silently modify product runtime, settings, tests or frozen historical records. Route unresolved implementation/acceptance gaps to the appropriate active work owner; do not manufacture source truth or convert an unverified source inspection into operator acceptance. A sweep does not grant permission to overwrite a newer local Foundry with an older checkpoint copy. Prefer a narrow manifest ZIP of the changed docs/tools over replaying the entire source tree.
 
 ## Closure check
 

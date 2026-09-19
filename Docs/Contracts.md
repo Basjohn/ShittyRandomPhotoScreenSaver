@@ -1,7 +1,5 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-09-19
-
 `Current_Plan.md` owns work admission. This file owns fast current-owner routing.
 
 ## Physical presentation

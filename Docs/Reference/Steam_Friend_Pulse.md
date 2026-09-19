@@ -1,7 +1,6 @@
 # Steam Friend Pulse — Current Product Contract
 
 Status: **IMPLEMENTED / PUBLIC — CURRENT ARCHITECTURE REFERENCE**
-Last updated: 2026-09-16
 Current sequencing authority: `Current_Plan.md`  
 Stable widget id: `friend_pulse`
 
@@ -19,7 +18,7 @@ This implementation must not become a Steam social client, chat client, activity
 provider. It is a small, privacy-aware activity card fed by the same bounded Steam ownership used by the existing
 family.
 
-### 0.1 Landed implementation state
+### 0.1 Current runtime behavior
 
 The retained card defaults to a dynamically spaced and centred **Avatar Grid** with eight authored visible friend slots;
 a selectable compact **Activity Rows** view consumes the same stable row model and accepted snapshot. Both are virtualized
