@@ -94,9 +94,13 @@ def test_script_runner_ui_has_review_capture_and_explicit_no_admin():
     # Pure source contract: Qt runtime interactions receive a separate Windows gate.
     source = (Path(__file__).resolve().parents[1] / 'tools' / 'godzip_foundry.py').read_text(encoding='utf-8')
     klass = source.split('class CommandTab(QWidget):', 1)[1].split('class GodzipFoundryWindow(QMainWindow):', 1)[0]
-    for marker in ('normalize_script_paste(', 'if dialog.exec()', 'self._start_script(',
+    for marker in ('normalize_script_paste(', 'self.script_input.toPlainText() != preview.script',
+                   'self.script_input.setPlainText(preview.script)', 'if preview.warnings:',
+                   'self._start_script(',
                    'QProcess(self)', 'setWorkingDirectory(str(self.repo_root))',
                    'COPY RESULTS', 'ZIP RUN + NEW LOGS', 'External terminal (keep open)',
                    'create_script_results_zip(', 'self._run_final_logs = snapshot_loose_logs('):
         assert marker in klass
-    assert 'self.admin.isChecked()' not in klass.split('def _review_and_run', 1)[1].split('def _copy_path', 1)[0]
+    launch = klass.split('def _run_script(self)', 1)[1].split('def _start_script(', 1)[0]
+    assert 'if dialog.exec()' not in launch  # The actual editor is the reviewed command.
+    assert 'self.admin.isChecked()' not in launch  # No implicit elevation.

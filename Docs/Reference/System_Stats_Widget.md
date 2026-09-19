@@ -1,7 +1,6 @@
 # System Stats Widget — Current Product Contract
 
 Status: **CPU/MEMORY/UPTIME/NETWORK IMPLEMENTED / PUBLIC — CURRENT ARCHITECTURE REFERENCE**
-Last updated: 2026-09-16
 Current sequencing authority: `Current_Plan.md`
 Stable widget/family id: `system_stats`
 
@@ -15,7 +14,7 @@ must remain diagnostics-only; it is intentionally much broader than this product
 
 The admitted source set is intentionally small: CPU/RAM cleared the source-cost gate, while the persistent GPU/VRAM candidate did not. System uptime and aggregate network receive/transmit counters ride the **same** sampler pulse; no second cadence or hardware/provider layer exists.
 
-### 0.1 Landed implementation state
+### 0.1 Current runtime behavior and source-cost boundary
 
 Whole-system CPU/RAM source observations measured roughly 0.5–1.5 ms across idle and bounded CPU-contention runs. The persistent Windows GPU/VRAM candidate returned `query_error`, took about 363 ms on first setup, closed all query/counter state and is **not** in the product. No diagnostic or PID-scoped fallback was added.
 

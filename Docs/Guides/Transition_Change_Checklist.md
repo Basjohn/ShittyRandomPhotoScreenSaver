@@ -1,7 +1,5 @@
 # Transition Change Checklist
 
-Last updated: 2026-09-16
-
 Quick transition presentation is landed. Use this for future transition changes.
 
 ## Canonical flow

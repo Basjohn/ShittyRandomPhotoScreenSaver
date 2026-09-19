@@ -1,7 +1,5 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-09-16
-
 Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavior or presentation.
 
 ## 1. Read first

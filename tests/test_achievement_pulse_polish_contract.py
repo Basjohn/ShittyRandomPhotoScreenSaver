@@ -120,7 +120,8 @@ def test_achievement_live_parent_x_reflow_retains_authored_title_rail_without_gr
     # Child roles have stable canonical persistence baselines, but the displayed
     # text rail follows the old artwork-right/parent-right relation until moved.
     assert 'readonly property real titleParentReflowWidth:' in qml
-    assert '|| achievementRoot.artworkFollowsParentRightRail)' in qml
+    assert '|| achievementRoot.artworkFollowsParentRightRail' in qml
+    assert '|| achievementRoot.headerFlipped)' in qml
     assert 'achievementRoot.canonicalTitleWidth + titleParentReflowWidth' in qml
     assert '(achievementRoot.gameNameOnAuthoredRail\n                    ? normalContent.titleWidth' in qml
     assert '(achievementRoot.achievementListOnAuthoredRail\n                    ? normalContent.titleWidth' in qml

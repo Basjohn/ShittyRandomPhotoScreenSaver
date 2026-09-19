@@ -37,9 +37,10 @@ def test_progress_pulse_geometry_and_total_normalization_authority_are_unchanged
 
     # The earlier 4 px lift and canonical pulse diameter remain the geometry
     # authority; the text tweak must not resize or relocate the pulse/card.
-    assert "y: authoredCanvas.height - height - 20.0" in qml
-    assert "width: 108.0" in qml
-    assert "height: 108.0" in qml
+    assert "- achievementRoot.canonicalProgressSize - 20.0" in qml
+    assert "+ achievementRoot.progressParentReflowY" in qml
+    assert "width: achievementRoot.canonicalProgressSize" in qml
+    assert "height: achievementRoot.canonicalProgressSize" in qml
 
     # Progress Pulse still presents the existing authored Total field rather
     # than calculating or normalizing another percentage in QML.

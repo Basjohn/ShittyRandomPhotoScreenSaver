@@ -1272,17 +1272,38 @@ Item {
                             return false
                         }
 
+                        // A single edit-only projection for targets, occupied paint,
+                        // obstacles and containment. Two diagonal corners lose an
+                        // axis under rotation or an inherited negative scale.
+                        // This function is called only by the selected Edit layer;
+                        // it creates no normal-runtime observer or geometry owner.
+                        function mappedItemBounds(item) {
+                            if (!item || !item.visible
+                                    || !(item.width > 0.0) || !(item.height > 0.0)
+                                    || !isFinite(item.width) || !isFinite(item.height))
+                                return Qt.rect(0.0, 0.0, 0.0, 0.0)
+                            const a = item.mapToItem(editFrame, 0.0, 0.0)
+                            const b = item.mapToItem(editFrame, item.width, 0.0)
+                            const c = item.mapToItem(editFrame, 0.0, item.height)
+                            const d = item.mapToItem(editFrame, item.width, item.height)
+                            if (!isFinite(a.x) || !isFinite(a.y)
+                                    || !isFinite(b.x) || !isFinite(b.y)
+                                    || !isFinite(c.x) || !isFinite(c.y)
+                                    || !isFinite(d.x) || !isFinite(d.y))
+                                return Qt.rect(0.0, 0.0, 0.0, 0.0)
+                            const x0 = Math.min(a.x, b.x, c.x, d.x)
+                            const y0 = Math.min(a.y, b.y, c.y, d.y)
+                            return Qt.rect(x0, y0,
+                                Math.max(0.0, Math.max(a.x, b.x, c.x, d.x) - x0),
+                                Math.max(0.0, Math.max(a.y, b.y, c.y, d.y) - y0))
+                        }
+
                         function itemRectInFrame(item) {
-                            if (!item || !item.visible || item.width <= 0.0 || item.height <= 0.0)
-                                return null
-                            const topLeft = item.mapToItem(editFrame, 0.0, 0.0)
-                            const bottomRight = item.mapToItem(editFrame, item.width, item.height)
-                            return {
-                                "x": Math.min(topLeft.x, bottomRight.x),
-                                "y": Math.min(topLeft.y, bottomRight.y),
-                                "width": Math.abs(bottomRight.x - topLeft.x),
-                                "height": Math.abs(bottomRight.y - topLeft.y)
-                            }
+                            const bounds = mappedItemBounds(item)
+                            return bounds.width > 0.0 && bounds.height > 0.0
+                                ? {"x": bounds.x, "y": bounds.y,
+                                   "width": bounds.width, "height": bounds.height}
+                                : null
                         }
 
                         function rangesOverlap(a0, a1, b0, b1) {
@@ -1745,17 +1766,7 @@ Item {
                             const surface = frame.containmentTarget
                             if (!surface)
                                 return Qt.rect(0.0, 0.0, editFrame.width, editFrame.height)
-                            // All four corners are needed if an ancestor is
-                            // transformed. This is input-time work, not a listener.
-                            const a = surface.mapToItem(editFrame, 0.0, 0.0)
-                            const b = surface.mapToItem(editFrame, surface.width, 0.0)
-                            const c = surface.mapToItem(editFrame, 0.0, surface.height)
-                            const d = surface.mapToItem(editFrame, surface.width, surface.height)
-                            const x0 = Math.min(a.x, b.x, c.x, d.x)
-                            const y0 = Math.min(a.y, b.y, c.y, d.y)
-                            return Qt.rect(x0, y0,
-                                Math.max(0.0, Math.max(a.x, b.x, c.x, d.x) - x0),
-                                Math.max(0.0, Math.max(a.y, b.y, c.y, d.y) - y0))
+                            return mappedItemBounds(surface)
                         }
 
                         function admitChildMove(frame, desiredX, desiredY) {
@@ -2588,11 +2599,6 @@ Item {
                                     targetItem !== null
                                         ? Number(targetItem.customEditPlacementCompensationY || 0.0)
                                         : 0.0
-                                readonly property bool targetReady: targetItem !== null
-                                    && targetItem.visible
-                                    && targetItem.width > 1.0
-                                    && targetItem.height > 1.0
-
                                 // mapToItem itself does not expose ancestor geometry
                                 // as QML binding dependencies. Families therefore
                                 // declare only object references to the few retained
@@ -2636,46 +2642,27 @@ Item {
                                     }
                                     return value
                                 }
-                                readonly property point mappedTopLeft: {
+                                readonly property rect mappedTargetBounds: {
                                     const dependency = mappingDependency
-                                    return targetReady
-                                        ? targetItem.mapToItem(editFrame, 0.0, 0.0)
-                                        : Qt.point(0.0, 0.0)
+                                    return childRoleLayer.mappedItemBounds(targetItem)
                                 }
-                                readonly property point mappedBottomRight: {
-                                    const dependency = mappingDependency
-                                    return targetReady
-                                        ? targetItem.mapToItem(
-                                            editFrame, targetItem.width, targetItem.height
-                                        )
-                                        : Qt.point(0.0, 0.0)
-                                }
-                                readonly property point occupiedMappedTopLeft: {
+                                // A painted separator can have a positive screen
+                                // footprint while its inverse-scaled *local* stroke
+                                // is <1px. A zero/hidden/nonfinite target is not ready.
+                                readonly property bool targetReady:
+                                    mappedTargetBounds.width > 0.0
+                                        && mappedTargetBounds.height > 0.0
+                                readonly property rect mappedOccupiedBounds: {
                                     const dependency = mappingDependency
                                     return targetReady && occupiedItem !== null
-                                        ? occupiedItem.mapToItem(editFrame, 0.0, 0.0)
-                                        : mappedTopLeft
+                                            && occupiedItem !== targetItem
+                                        ? childRoleLayer.mappedItemBounds(occupiedItem)
+                                        : mappedTargetBounds
                                 }
-                                readonly property point occupiedMappedBottomRight: {
-                                    const dependency = mappingDependency
-                                    return targetReady && occupiedItem !== null
-                                        ? occupiedItem.mapToItem(
-                                            editFrame, occupiedItem.width, occupiedItem.height
-                                        )
-                                        : mappedBottomRight
-                                }
-                                readonly property real occupiedX: Math.min(
-                                    occupiedMappedTopLeft.x, occupiedMappedBottomRight.x
-                                )
-                                readonly property real occupiedY: Math.min(
-                                    occupiedMappedTopLeft.y, occupiedMappedBottomRight.y
-                                )
-                                readonly property real occupiedWidth: Math.abs(
-                                    occupiedMappedBottomRight.x - occupiedMappedTopLeft.x
-                                )
-                                readonly property real occupiedHeight: Math.abs(
-                                    occupiedMappedBottomRight.y - occupiedMappedTopLeft.y
-                                )
+                                readonly property real occupiedX: mappedOccupiedBounds.x
+                                readonly property real occupiedY: mappedOccupiedBounds.y
+                                readonly property real occupiedWidth: mappedOccupiedBounds.width
+                                readonly property real occupiedHeight: mappedOccupiedBounds.height
 
                                 property real moveStartX: 0.0
                                 property real moveStartY: 0.0
@@ -2718,10 +2705,10 @@ Item {
                                             editFrame.index
                                         )
                                 }
-                                x: Math.min(mappedTopLeft.x, mappedBottomRight.x)
-                                y: Math.min(mappedTopLeft.y, mappedBottomRight.y)
-                                width: Math.abs(mappedBottomRight.x - mappedTopLeft.x)
-                                height: Math.abs(mappedBottomRight.y - mappedTopLeft.y)
+                                x: mappedTargetBounds.x
+                                y: mappedTargetBounds.y
+                                width: mappedTargetBounds.width
+                                height: mappedTargetBounds.height
 
                                 // Mapped/occupied rectangles are paint and hit-test
                                 // observation ONLY.  Parent resizing moves authored

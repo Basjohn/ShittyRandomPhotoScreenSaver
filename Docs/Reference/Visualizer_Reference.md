@@ -1,7 +1,5 @@
 # Visualizer Reference
 
-Last updated: 2026-09-16
-
 Current visualizer behavior and accepted presentation architecture.
 
 ## 1. Modes
@@ -18,7 +16,7 @@ Canonical current mode ids remain owned by the settings/mode registry:
 The first five are the established carded technical modes. Sphere is a registered experimental mode with separate frameless presentation policy and no technical-controls profile. The mode registry may also own cheap presentation policy metadata. Do not put renderer objects or
 heavy implementation imports into it.
 
-## 1A. Registered modes vs enabled modes — landed admission boundary
+## 1A. Registered modes vs enabled modes
 
 Per-mode admission/dormancy is implemented. `core/settings/visualizer_mode_registry.py` owns all registered descriptors and lazy wiring; persisted `enabled_modes` owns user mode admission; the top-level Visualizers Settings tab builds mode bodies lazily and keeps disabled/unselected bodies dormant. The ownership distinction is:
 

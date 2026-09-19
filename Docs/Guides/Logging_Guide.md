@@ -1,7 +1,5 @@
 # Logging Guide
 
-Last updated: 2026-08-31
-
 ## Purpose
 
 Keep logs readable, attributable and cheap enough that diagnostics do not become the

@@ -14,6 +14,7 @@ from core.settings.visualizer_mode_registry import (
     get_visualizer_presentation_policy,
 )
 import rendering.quick.visualizer.implementations.bubble as quick_bubble_module
+from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
 from rendering.quick.visualizer.implementations.bubble import (
     QuickBubbleRenderer,
     compute_quick_bubble_layout,
@@ -669,7 +670,7 @@ def test_quick_bubble_bulk_uniforms_use_reused_float32_transport(monkeypatch) ->
     monkeypatch.setattr(quick_bubble_module.gl, "glUniform4fv", _uniform4)
     monkeypatch.setattr(quick_bubble_module.gl, "glUniform3fv", _uniform3)
 
-    frame = SimpleNamespace(
+    frame = QuickVisualizerRenderFrame(
         snapshot=_snapshot(
             trails=(
                 0.25, 0.50, 0.040,
@@ -679,8 +680,8 @@ def test_quick_bubble_bulk_uniforms_use_reused_float32_transport(monkeypatch) ->
         ),
         matrix_values=tuple(float(i == j) for i in range(4) for j in range(4)),
         logical_size=(420.0, 280.0),
+        viewport=(0, 0, 420, 280),
         quad_vao=1,
-        trace_context=None,
     )
 
     renderer.render(frame)

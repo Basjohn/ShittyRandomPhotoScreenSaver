@@ -1,7 +1,5 @@
 # Settings Theme Architecture
 
-Last updated: 2026-09-14
-
 Durable contract for the QWidget Settings theme system, native backdrop ownership and theme authoring. This document owns the current Settings-theme architecture. Historical investigation belongs under `Docs/Historical_Bugs/`; temporary theme migration notes do not override this contract.
 
 ## Product boundary

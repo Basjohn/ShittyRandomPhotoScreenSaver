@@ -1,7 +1,5 @@
 # SRPSS Specification
 
-Last updated: 2026-09-16
-
 Canonical durable architecture and product-behavior contracts. `Current_Plan.md` owns sequence; durable regression/failed-method history belongs under `Docs/Historical_Bugs/`, while ordinary chronology belongs in source control.
 
 Recurring service timer handles are terminal on stop: the owning handle stops and

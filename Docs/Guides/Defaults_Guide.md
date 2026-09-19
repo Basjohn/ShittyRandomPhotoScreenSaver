@@ -1,7 +1,5 @@
 # Defaults Guide
 
-Last updated: 2026-09-14
-
 Canonical guidance for defaults, reset behavior, snapshots, import safety and runtime application.
 
 ## Sources of truth

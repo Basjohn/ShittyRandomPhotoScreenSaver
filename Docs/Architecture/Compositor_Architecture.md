@@ -1,7 +1,5 @@
 # Runtime Presentation Architecture
 
-Last updated: 2026-09-16
-
 ## 1. Decision
 
 SRPSS's accepted runtime presentation architecture is:

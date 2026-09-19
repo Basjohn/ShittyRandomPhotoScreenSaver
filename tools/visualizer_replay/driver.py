@@ -14,6 +14,8 @@ import random
 import time
 from unittest.mock import patch
 
+from PySide6.QtCore import QCoreApplication, QEvent, QThread
+
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
@@ -182,7 +184,14 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1):
                     presentation_trace.append(index)
         finally:
             controller.close_render_admission()
+            # Offline replay owns this engine. Retire only its queued QObject
+            # deletion, not unrelated scenes/windows left by other Qt tests.
+            # A global DeferredDelete drain here can delete foreign QQuick
+            # objects while their Python wrappers remain live in the process.
             engine.deleteLater()
+            app = QCoreApplication.instance()
+            if app is not None and engine.thread() == QThread.currentThread():
+                QCoreApplication.sendPostedEvents(engine, QEvent.Type.DeferredDelete)
     return {
         "metrics": calculate_metrics(frames), "frames": frames,
         "mode_metrics": mode_metrics(logical_series),

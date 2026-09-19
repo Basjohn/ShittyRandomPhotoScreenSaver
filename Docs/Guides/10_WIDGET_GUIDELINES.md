@@ -1,7 +1,5 @@
 # Ordinary Widget Authoring Guide
 
-Last updated: 2026-09-18
-
 Canonical guide for adding or deeply refactoring a **non-Visualizer runtime widget** in the accepted Qt
 Quick architecture. This guide is based on the landed retained Quick families: Clock, Weather, Media, Reddit/Reddit2,
 Gmail, Achievement Pulse, Abandonment Issues, Friend Pulse and System Stats. It also incorporates the shared colour-only

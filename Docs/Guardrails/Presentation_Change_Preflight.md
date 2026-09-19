@@ -1,7 +1,5 @@
 # Presentation / Cadence Change Preflight
 
-Last updated: 2026-09-07
-
 Read before changing physical presentation, visualizer delivery, cadence or render-state ownership.
 
 ## Accepted architecture

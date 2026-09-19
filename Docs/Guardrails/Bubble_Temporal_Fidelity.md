@@ -1,7 +1,5 @@
 # Bubble Temporal Fidelity Contract
 
-Last updated: 2026-09-01
-
 Status: **durable focused guardrail / behavioural contract**
 
 Canonical path: `Docs/Guardrails/Bubble_Temporal_Fidelity.md`

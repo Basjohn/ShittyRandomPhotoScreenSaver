@@ -888,7 +888,7 @@ def test_selected_edit_role_containment_and_mapped_transform_contract() -> None:
     # Current role geometry must always depend on normalized CUSTOM revision
     # AND reflowing/scaled ancestors. mapToItem alone registers neither.
     dependency = editor.split("readonly property real mappingDependency:", 1)[1].split(
-        "readonly property point mappedTopLeft:", 1
+        "readonly property rect mappedTargetBounds:", 1
     )[0]
     assert "editFrame.childStateRevision" in dependency
     assert "dependency.scale + dependency.rotation" in dependency

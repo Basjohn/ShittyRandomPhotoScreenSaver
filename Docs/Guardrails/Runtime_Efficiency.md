@@ -1,7 +1,5 @@
 # Runtime Efficiency / Change Safety Guardrails
 
-Last updated: 2026-09-16
-
 Core principle:
 
 > SRPSS stays fast by removing useless work and bad ownership, not by reducing authored work.
@@ -56,7 +54,7 @@ R-71 is the accepted performance boundary: one persistent serial `visualizer.aud
 
 R-69 is the performance admission veto. A change is **not** an optimization if it improves GC/FPS/skip counters by weakening visible musical response, shrinking Bubble head/radius deltas with viewport extent, suppressing Ghost/history displacement, lowering authored cadence, increasing source/snapshot age, or coalescing away protected transient edges. Apply the same rule to all Visualizer modes.
 
-The generic performance campaign is closed at CHK26 / `a0bf70932c`. Historical GC attribution remains useful only if a future reproduced hitch points back to collection pauses: wall-clock inter-tick time plus GC callback duration/yield is the relevant seam, while raw collection count is not. Do not retune GC thresholds, forced-collection timing or Visualizer cadence without a current mechanism-specific failure. `Docs/Guardrails/Performance_Optimization_Contract.md` owns the reopen gate and accepted evidence.
+Performance work is symptom-driven against the accepted golden. GC attribution is useful only when a reproduced hitch implicates collection pauses: correlate wall-clock inter-tick gaps with GC callback duration/yield instead of inferring cost from collection count. Do not retune GC thresholds, forced-collection timing or Visualizer cadence without a current mechanism-specific failure. `Docs/Guardrails/Performance_Optimization_Contract.md` owns the admission and acceptance criteria.
 
 ## 4. Runtime overlays
 

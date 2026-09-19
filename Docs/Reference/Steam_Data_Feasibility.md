@@ -1,7 +1,5 @@
 # Steam Data Feasibility
 
-Last updated: 2026-09-13
-
 This document records the supported-source pass for the Steam widget family. Achievement Pulse, Abandonment Issues,
 and Friend Pulse are normally visible, disabled-by-default cards; this document remains the source gate for Games You
 Follow.

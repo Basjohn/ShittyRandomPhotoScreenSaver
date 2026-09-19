@@ -229,6 +229,12 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
         QLabel#scopePill {{ background: {tab_surface}; color: {popup_title}; border: 1px solid {border}; border-radius: 8px; padding: 5px 9px; font-weight: 700; }}
         QToolButton#collapsibleHeader {{ background: {tab_surface}; color: {primary}; border: 1px solid {border}; border-radius: 7px; padding: 6px 9px; font-weight: 700; text-align: left; }}
         QToolButton#collapsibleHeader:hover {{ background: {tab_hover}; }}
+        QToolButton#cmdSectionHeader {{ background: {tab_surface}; color: {primary}; border: 1px solid {border}; border-radius: 6px; padding: 6px 9px; font-size: 12pt; font-weight: 750; text-align: left; }}
+        QToolButton#cmdSectionHeader:hover {{ background: {tab_hover}; }}
+        QLabel#cmdRunOutcome {{ background: {tab_surface}; border: 1px solid {border}; border-radius: 6px; padding: 6px 9px; font-weight: 750; }}
+        QLabel#cmdRunOutcome[outcome="passed"] {{ color: {success}; border-color: {success}; }}
+        QLabel#cmdRunOutcome[outcome="failed"] {{ color: {error}; border-color: {error}; }}
+        QLabel#cmdRunOutcome[outcome="stopped"], QLabel#cmdRunOutcome[outcome="external"] {{ color: {warning}; border-color: {warning}; }}
         QLabel#scopeBanner, QLabel#descriptionBox, QLabel#stateBanner, QLabel#infoBox {{ background: {subsection}; border: 1px solid {border}; border-radius: 8px; padding: 8px; color: {primary}; }}
         QLabel#stateBanner, QLabel#previewLabel, QLabel#sectionHeading {{ color: {popup_title}; font-weight: 700; }}
         QLabel#defaultsFoundryStatus {{ color: {success}; }}
@@ -260,6 +266,8 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec) -> str:
 
         QLineEdit, QComboBox, QPlainTextEdit, QSpinBox, QDoubleSpinBox {{ background: {input_surface}; color: {input_text}; border: 1.25px solid {input_border}; border-radius: 7px; padding: 7px 9px; min-height: 20px; selection-background-color: {list_selected}; selection-color: {list_text}; }}
         QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ background: {input_focus}; border-color: {input_border}; }}
+        /* The CMD editor and transcript retain the same dark surface on focus. */
+        QPlainTextEdit#cmdScriptInput, QPlainTextEdit#cmdScriptInput:focus, QPlainTextEdit#cmdScriptOutput, QPlainTextEdit#cmdScriptOutput:focus {{ background: {input_surface}; color: {input_text}; border-color: {input_border}; }}
         QComboBox {{ padding-right: 30px; }}
         QComboBox::drop-down {{ subcontrol-origin: border; subcontrol-position: top right; width: 26px; background: {tab_surface}; border: none; border-left: 1px solid {input_border}; border-top-right-radius: 6px; border-bottom-right-radius: 6px; }}
         QComboBox QAbstractItemView {{ background: {list_surface}; color: {list_text}; border: 1.25px solid {list_border}; border-radius: 6px; padding: 3px; selection-background-color: {list_selected}; outline: none; }}
