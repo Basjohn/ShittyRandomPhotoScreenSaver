@@ -61,6 +61,7 @@ DESTINATION_PROFILE = (
     "test_qtquick_child_edit_lifecycle.py",  # Edit OFF/unselected clears role delegates after rebind
     "test_qtquick_child_clip_scene.py",  # real Qt card/accessory clip ancestry through reflow and Edit
     "test_qtquick_child_edit_off_dependency_contract.py",  # edit-off observer/feedback ownership guards
+    "test_qtquick_child_persist_floor_regression.py",  # real owner writer/reader + bounded child-floor fixed points
     "test_visualizer_replay_cleanup_contract.py",  # offline replay drains only its own QObject
     "test_qt_test_deferred_delete_ownership_contract.py",  # test-owned Qt deletion only
     "test_visualizer_replay.py",  # file-isolated replay floors and deterministic playback

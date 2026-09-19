@@ -930,12 +930,29 @@ def resolve_resize_edge_snap(
     peer_list = [QRect(peer) for peer in peer_rects if isinstance(peer, QRect)]
     width_bound = max(1, int(display_size.width()))
     height_bound = max(1, int(display_size.height()))
-    min_w = max(1, int(min_size.width()))
-    min_h = max(1, int(min_size.height()))
     left = int(rect.x())
     right = int(rect.x() + rect.width())
     top = int(rect.y())
     bottom = int(rect.y() + rect.height())
+    # A selected child can demand more space than the physical display has.
+    # A resize floor is admissible only up to the edge opposite the cursor:
+    # retaining a larger logical minimum would re-expand a physically bounded
+    # rect at the *snap* stage (even if the preceding edge clamp was correct).
+    # Keep the fixed edge fixed; the display boundary wins when both constraints
+    # cannot be satisfied.  This is still one geometry authority, not a second
+    # content-size state or a special-case release-time correction.
+    available_width = (right if horizontal_edge == "left"
+                       else width_bound - left if horizontal_edge == "right"
+                       else width_bound)
+    available_height = (bottom if vertical_edge == "top"
+                        else height_bound - top if vertical_edge == "bottom"
+                        else height_bound)
+    # An axis without a dragged edge must not acquire growth from the other
+    # axis's child requirement: side resize is strictly one-dimensional.
+    min_w = (min(max(1, int(min_size.width())), max(1, available_width))
+             if horizontal_edge is not None else max(1, right - left))
+    min_h = (min(max(1, int(min_size.height())), max(1, available_height))
+             if vertical_edge is not None else max(1, bottom - top))
     vertical_guides: tuple[SnapGuide, ...] = ()
     horizontal_guides: tuple[SnapGuide, ...] = ()
 

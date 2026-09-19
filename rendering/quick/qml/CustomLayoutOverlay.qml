@@ -2605,42 +2605,47 @@ Item {
                                 // ancestors that can reflow a role. Reading their
                                 // geometry here invalidates mapping event-by-event
                                 // without rebuilding the role model or polling.
-                                readonly property real mappingDependency: {
+                                readonly property string mappingDependency: {
                                     // mapToItem does not register ancestor transforms
                                     // or normalized CUSTOM-state reads as bindings.
-                                    // Force an event-driven remap on each admitted
-                                    // state change, without observing normal runtime.
-                                    let value = editFrame.width + editFrame.height
-                                        + editFrame.childStateRevision
+                                    // Keep the components separate: x + 10 and y - 10
+                                    // must not cancel and leave the Edit proxy at a
+                                    // stale position while the painted child moves.
+                                    // This exists only in the selected Edit delegate.
+                                    const values = [editFrame.width, editFrame.height,
+                                                    editFrame.childStateRevision]
                                     if (targetItem !== null) {
-                                        value += targetItem.x + targetItem.y
-                                            + targetItem.width + targetItem.height
-                                            + targetItem.scale + targetItem.rotation
-                                        value += Number(
+                                        values.push(targetItem.x, targetItem.y,
+                                            targetItem.width, targetItem.height,
+                                            targetItem.scale, targetItem.rotation)
+                                        values.push(Number(
                                             targetItem.customEditMappingDependency || 0.0
-                                        )
+                                        ))
                                     }
                                     if (occupiedItem !== null && occupiedItem !== targetItem) {
-                                        value += occupiedItem.x + occupiedItem.y
-                                            + occupiedItem.width + occupiedItem.height
-                                            + occupiedItem.scale + occupiedItem.rotation
-                                        value += Number(
+                                        values.push(occupiedItem.x, occupiedItem.y,
+                                            occupiedItem.width, occupiedItem.height,
+                                            occupiedItem.scale, occupiedItem.rotation)
+                                        values.push(Number(
                                             occupiedItem.customEditMappingDependency || 0.0
-                                        )
+                                        ))
                                     }
                                     if (containmentTarget !== null) {
-                                        value += containmentTarget.x + containmentTarget.y
-                                            + containmentTarget.width + containmentTarget.height
-                                            + containmentTarget.scale + containmentTarget.rotation
+                                        values.push(containmentTarget.x, containmentTarget.y,
+                                            containmentTarget.width, containmentTarget.height,
+                                            containmentTarget.scale, containmentTarget.rotation)
                                     }
                                     for (let i = 0; i < geometryDependencies.length; ++i) {
                                         const dependency = geometryDependencies[i]
                                         if (dependency)
-                                            value += dependency.x + dependency.y
-                                                + dependency.width + dependency.height
-                                                + dependency.scale + dependency.rotation
+                                            values.push(dependency.x, dependency.y,
+                                                dependency.width, dependency.height,
+                                                dependency.scale, dependency.rotation)
                                     }
-                                    return value
+                                    // String equality avoids an unnecessary remap
+                                    // for an unchanged dependency value. A fresh JS
+                                    // array would invalidate bindings on every read.
+                                    return values.join("|")
                                 }
                                 readonly property rect mappedTargetBounds: {
                                     const dependency = mappingDependency

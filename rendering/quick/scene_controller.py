@@ -61,6 +61,7 @@ from .custom_layout_overlay import (
     ResizeWheelHandler,
     SizeResetHandler,
     RetainedCustomLayoutOverlay,
+    guide_property_matches,
 )
 from .image_state import PresentationImage
 from .media_artwork import MediaArtworkImageProvider
@@ -1032,8 +1033,10 @@ class QuickSceneController(QObject):
         )
         underlay = self._custom_layout_guide_underlay
         if underlay is not None:
-            underlay.setProperty("verticalCenterGuides", vertical_centers)
-            underlay.setProperty("horizontalCenterGuides", horizontal_centers)
+            if not guide_property_matches(underlay, "verticalCenterGuides", vertical_centers):
+                underlay.setProperty("verticalCenterGuides", vertical_centers)
+            if not guide_property_matches(underlay, "horizontalCenterGuides", horizontal_centers):
+                underlay.setProperty("horizontalCenterGuides", horizontal_centers)
 
     def transfer_ordinary_widget_to(
         self,

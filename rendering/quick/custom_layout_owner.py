@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QPoint, QRect, QSize
 
 from core.logging.logger import get_logger, is_geometry_logging_enabled
 from core.settings.default_contract import require_canonical_default
@@ -1597,6 +1597,16 @@ class QuickCustomLayoutOwner:
         target_width = max(minimum.width(), int(math.ceil(next_width * scale)))
         target_height = max(minimum.height(), int(math.ceil(next_height * scale)))
         current = item.current_global_rect
+        # A transient child may request more room than the physical display.
+        # Its logical minimum must never override the hard screen containment
+        # bound: clamp_local_rect_to_bounds treats min_size as mandatory, so an
+        # unbounded child floor would otherwise manufacture an offscreen parent.
+        # Only this selected-Edit growth request needs a bounded minimum; the
+        # shared mapper, authored family baselines and runtime remain unchanged.
+        bounded_minimum = QSize(
+            min(minimum.width(), binding.geometry.width()),
+            min(minimum.height(), binding.geometry.height()),
+        )
         local = clamp_local_rect_to_bounds(
             QRect(
                 current.x() - binding.geometry.x(),
@@ -1605,7 +1615,7 @@ class QuickCustomLayoutOwner:
                 target_height,
             ),
             binding.geometry.size(),
-            min_size=minimum,
+            min_size=bounded_minimum,
         )
         # If the display cannot physically admit the requested growth, persist
         # only the logical box represented by the clamped physical rectangle.
@@ -2572,14 +2582,23 @@ class QuickCustomLayoutOwner:
             height=rect.height(),
             viewport_extent=[next_extent[0], next_extent[1]],
         )
+        # A saturated edge can generate indefinitely many pointer samples with
+        # exactly the same admitted rect and viewport. Compare the complete
+        # projected state, NOT cursor positions or rounded world extents alone:
+        # any genuine geometry/payload change must reach the retained scene.
+        # The cached gesture scalar is still maintained on a no-op sample.
+        self._visualizer_pixels_per_world[item.source_key] = pixels_per_world
+        if (
+            rect == item.current_global_rect
+            and item.current_viewport_extent == next_extent
+            and item.current_size_payload == payload
+        ):
+            return False
         item.set_geometry(
             rect,
             size_payload=payload,
             viewport_extent=next_extent,
         )
-        # The gesture consumed the cached scalar; keep it exact for the next
-        # side/corner gesture rather than reading a later presentation refresh.
-        self._visualizer_pixels_per_world[item.source_key] = pixels_per_world
         return True
 
     def _resize_viewport_edge(
@@ -2675,6 +2694,16 @@ class QuickCustomLayoutOwner:
             height=rect.height(),
             content_extent=[next_box[0], next_box[1]],
         )
+        # Once the moving edge reaches its physical bound, repeated cursor
+        # samples must not republish the same outer rect and content payload.
+        # Retain the existing gesture origin and let release clear its guides;
+        # neither the child minimum nor a display-limited drag adds a cadence.
+        if (
+            rect == item.current_global_rect
+            and item.current_content_extent == next_box
+            and item.current_size_payload == payload
+        ):
+            return False
         item.set_geometry(rect, size_payload=payload, content_extent=next_box)
         return True
 
