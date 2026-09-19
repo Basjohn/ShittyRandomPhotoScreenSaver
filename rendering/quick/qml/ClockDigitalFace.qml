@@ -3,6 +3,7 @@ import QtQuick
 Item {
     id: digitalFace
     required property var clockModel
+    readonly property real fontResizeFactor: clockModel.fontResizeFactor
 
     // Intrinsic preferred content size (H option A): the natural, unconstrained
     // text widths (implicitWidth) and the stacked column's natural height. These
@@ -48,7 +49,7 @@ Item {
         objectName: "clockDigitalContent"
         width: parent.width
         anchors.centerIn: parent
-        spacing: 4.0
+        spacing: 4.0 * digitalFace.fontResizeFactor
 
         ShadowedText {
             id: timeText
@@ -77,7 +78,7 @@ Item {
             id: separatorBand
             objectName: "clockDigitalSeparatorBand"
             width: contentColumn.width
-            height: visible ? 14.0 : 0.0
+            height: visible ? 14.0 * digitalFace.fontResizeFactor : 0.0
             visible: digitalFace.clockModel.showSeparator
 
             Separator {
@@ -88,9 +89,9 @@ Item {
                     Translate { x: digitalFace.childOffsetX("separator"); y: digitalFace.childOffsetY("separator") }
                 ]
                 width: separatorBand.width * 0.77
-                height: digitalFace.clockModel.separatorThickness
+                height: digitalFace.clockModel.separatorThickness * digitalFace.fontResizeFactor
                 anchors.centerIn: parent
-                thickness: digitalFace.clockModel.separatorThickness
+                thickness: digitalFace.clockModel.separatorThickness * digitalFace.fontResizeFactor
                 lineColor: digitalFace.clockModel.separatorColor
                 shadowEnabled: digitalFace.clockModel.textShadowEnabled
                 shadowColor: digitalFace.clockModel.textShadowColor
@@ -112,7 +113,7 @@ Item {
             text: digitalFace.clockModel.calendarText
             color: digitalFace.clockModel.textColor
             font.family: digitalFace.clockModel.fontFamily
-            font.pointSize: digitalFace.clockModel.calendarFontSize
+            font.pointSize: digitalFace.clockModel.calendarFontSize * digitalFace.fontResizeFactor
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
@@ -135,6 +136,9 @@ Item {
             text: digitalFace.clockModel.timezoneText
             color: digitalFace.clockModel.textColor
             font.family: digitalFace.clockModel.fontFamily
+            // secondaryFontSize already derives from the resized primary font
+            // in ClockPresentationModel. A second factor would square the
+            // parent-resize ratio and distort this line relative to the clock.
             font.pointSize: digitalFace.clockModel.secondaryFontSize
             font.bold: true
             horizontalAlignment: Text.AlignHCenter

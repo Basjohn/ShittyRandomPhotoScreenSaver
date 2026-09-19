@@ -41,6 +41,41 @@ def _key_release(key: Qt.Key) -> QKeyEvent:
     )
 
 
+def test_edit_only_undo_and_lock_hotkeys_preserve_plain_z_and_ignore_repeats() -> None:
+    edit_active = [False]
+    controller = QuickInputController(
+        screen_index=0, runtime_generation=1,
+        custom_layout_active_provider=lambda: edit_active[0],
+    )
+    routed: list[str] = []
+    controller.custom_layout_undo_requested.connect(lambda: routed.append("undo"))
+    controller.custom_layout_lock_requested.connect(lambda: routed.append("lock"))
+    controller.previous_image_requested.connect(lambda: routed.append("previous"))
+
+    def press(key: Qt.Key, modifiers=Qt.KeyboardModifier.NoModifier,
+              text: str = "", repeat: bool = False):
+        return controller.handle_key_press(QKeyEvent(
+            QEvent.Type.KeyPress, key, modifiers, text, repeat, 1,
+        ))
+
+    try:
+        assert press(Qt.Key.Key_Z, text="z")
+        assert routed == ["previous"]
+        press(Qt.Key.Key_L, text="l")
+        assert routed == ["previous"]
+        edit_active[0] = True
+        assert press(Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier, "z")
+        assert press(Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier, "z", True)
+        assert press(Qt.Key.Key_L, text="l")
+        assert press(Qt.Key.Key_L, text="l", repeat=True)
+        assert routed == ["previous", "undo", "lock"]
+        # Ctrl+L must not steal an unrelated shortcut or toggle child chrome.
+        press(Qt.Key.Key_L, Qt.KeyboardModifier.ControlModifier, "l")
+        assert routed == ["previous", "undo", "lock"]
+    finally:
+        controller.deleteLater()
+
+
 def test_quick_input_uses_the_single_neutral_policy_owner():
     assert issubclass(QuickInputController, RuntimeInputOwner)
 

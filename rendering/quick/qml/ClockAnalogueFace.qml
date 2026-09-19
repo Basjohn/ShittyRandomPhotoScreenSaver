@@ -3,23 +3,30 @@ import QtQuick
 Item {
     id: analogueFace
     required property var clockModel
+    readonly property real fontResizeFactor: clockModel.fontResizeFactor
 
     readonly property bool hasCalendar: clockModel.calendarText.length > 0
     readonly property bool hasTimezone: clockModel.timezoneText.length > 0
     readonly property real footerHeight:
-        (clockModel.showSeparator ? 10.0 : 0.0)
-        + (hasCalendar ? Math.max(20.0, clockModel.calendarFontSize * 1.4) : 0.0)
-        + (hasTimezone ? Math.max(18.0, clockModel.secondaryFontSize * 1.4) : 0.0)
-        + ((hasCalendar && hasTimezone) ? 6.0 : 0.0)
+        (clockModel.showSeparator ? 10.0 * fontResizeFactor : 0.0)
+        + (hasCalendar ? Math.max(20.0, clockModel.calendarFontSize * 1.4) * fontResizeFactor : 0.0)
+        + (hasTimezone ? Math.max(18.0 * fontResizeFactor, clockModel.secondaryFontSize * 1.4) : 0.0)
+        + ((hasCalendar && hasTimezone) ? 6.0 * fontResizeFactor : 0.0)
     readonly property real faceSide: Math.max(
         1.0,
-        Math.min(width, height - footerHeight - 8.0)
+        Math.min(width, height - footerHeight - 8.0 * fontResizeFactor)
     )
-    readonly property real faceRadius: Math.max(12.0, faceSide * 0.34)
-    readonly property real markerLength: Math.max(6.0, faceRadius * 0.10)
-    readonly property real markerWidth: Math.max(2.0, faceRadius / 60.0)
-    readonly property real numeralRadius: faceRadius + Math.max(12.0, faceSide * 0.055)
-    readonly property real numeralSize: Math.max(8.0, Math.min(clockModel.fontSize * 0.20, faceSide / 18.0))
+    readonly property real faceRadius: Math.max(12.0 * fontResizeFactor, faceSide * 0.34)
+    readonly property real markerLength: Math.max(6.0 * fontResizeFactor, faceRadius * 0.10)
+    readonly property real markerWidth: Math.max(2.0 * fontResizeFactor, faceRadius / 60.0)
+    readonly property real numeralRadius: faceRadius + Math.max(12.0 * fontResizeFactor, faceSide * 0.055)
+    readonly property real numeralSize: Math.max(8.0 * fontResizeFactor, Math.min(clockModel.fontSize * 0.20, faceSide / 18.0))
+    // The edit box should enclose the *painted* face, not the unused outer
+    // square. This preserves room for centered enlargement inside the card.
+    readonly property real faceInkRadius: Math.max(
+        faceRadius * 1.15,
+        clockModel.showNumerals ? numeralRadius + numeralSize * 1.35 : 0.0
+    )
 
     readonly property var childGeometry: clockModel.customChildGeometry
     function childWidthScale(roleId) {
@@ -41,7 +48,6 @@ Item {
             * preferredContentHeight
     }
     property alias customFaceTarget: faceCoreEditTarget
-    property alias customNumeralsTarget: numeralGroup
     property alias customSeparatorTarget: analogueSeparator
     property alias customCalendarTarget: analogueCalendar
     property alias customTimezoneTarget: analogueTimezone
@@ -67,17 +73,18 @@ Item {
         readonly property real centerX: width / 2.0
         readonly property real centerY: height / 2.0
 
-        // One alignment-preserving face contract: ring/markers and every hand
-        // consume identical CUSTOM geometry. Numerals remain a separate grouped
-        // ring and may be edited independently.
+        // The complete face is center-owned. One radius change must never
+        // detach numerals, markers or hands or move the authored center.
         Item {
             id: faceCoreEditTarget
             objectName: "clockAnalogueFaceCoreEditTarget"
-            anchors.fill: parent
+            width: Math.max(1.0, Math.min(staticFace.width, analogueFace.faceInkRadius * 2.0))
+            height: width
+            x: staticFace.centerX - width / 2.0
+            y: staticFace.centerY - height / 2.0
             opacity: 0.0
             transform: [
-                Scale { origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("clock_face"); yScale: analogueFace.childHeightScale("clock_face") },
-                Translate { x: analogueFace.childOffsetX("clock_face"); y: analogueFace.childOffsetY("clock_face") }
+                Scale { origin.x: faceCoreEditTarget.width / 2.0; origin.y: faceCoreEditTarget.height / 2.0; xScale: analogueFace.childWidthScale("clock_face"); yScale: analogueFace.childHeightScale("clock_face") }
             ]
         }
 
@@ -85,8 +92,7 @@ Item {
             id: faceCoreUnderlay
             anchors.fill: parent
             transform: [
-                Scale { origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("clock_face"); yScale: analogueFace.childHeightScale("clock_face") },
-                Translate { x: analogueFace.childOffsetX("clock_face"); y: analogueFace.childOffsetY("clock_face") }
+                Scale { origin.x: staticFace.centerX; origin.y: staticFace.centerY; xScale: analogueFace.childWidthScale("clock_face"); yScale: analogueFace.childHeightScale("clock_face") }
             ]
             Rectangle {
                 id: ringShadow
@@ -98,7 +104,7 @@ Item {
                 radius: width / 2.0
                 color: "transparent"
                 border.color: analogueFace.clockModel.analogShadowColor
-                border.width: Math.max(4.4, analogueFace.faceRadius * 0.0462)
+                border.width: Math.max(4.4 * analogueFace.fontResizeFactor, analogueFace.faceRadius * 0.0462)
                 visible: analogueFace.clockModel.analogFaceShadow
             }
 
@@ -113,7 +119,7 @@ Item {
                     visible: analogueFace.clockModel.analogFaceShadow
 
                     Rectangle {
-                        width: Math.max(2.2, analogueFace.faceRadius * 0.01584)
+                        width: Math.max(2.2 * analogueFace.fontResizeFactor, analogueFace.faceRadius * 0.01584)
                         height: analogueFace.markerLength
                         x: -width / 2.0
                         y: -analogueFace.faceRadius
@@ -132,7 +138,7 @@ Item {
                 radius: width / 2.0
                 color: "transparent"
                 border.color: analogueFace.clockModel.textColor
-                border.width: Math.max(2.0, analogueFace.faceRadius * 0.032)
+                border.width: Math.max(2.0 * analogueFace.fontResizeFactor, analogueFace.faceRadius * 0.032)
             }
 
             Repeater {
@@ -162,8 +168,7 @@ Item {
             objectName: "clockAnalogueNumeralGroup"
             anchors.fill: parent
             transform: [
-                Scale { origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("numerals"); yScale: analogueFace.childHeightScale("numerals") },
-                Translate { x: analogueFace.childOffsetX("numerals"); y: analogueFace.childOffsetY("numerals") }
+                Scale { origin.x: staticFace.centerX; origin.y: staticFace.centerY; xScale: analogueFace.childWidthScale("clock_face"); yScale: analogueFace.childHeightScale("clock_face") }
             ]
             Repeater {
                 id: numeralRepeater
@@ -231,15 +236,14 @@ Item {
             id: faceCoreHands
             anchors.fill: parent
             transform: [
-                Scale { origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("clock_face"); yScale: analogueFace.childHeightScale("clock_face") },
-                Translate { x: analogueFace.childOffsetX("clock_face"); y: analogueFace.childOffsetY("clock_face") }
+                Scale { origin.x: staticFace.centerX; origin.y: staticFace.centerY; xScale: analogueFace.childWidthScale("clock_face"); yScale: analogueFace.childHeightScale("clock_face") }
             ]
             ClockHand {
                 objectName: "clockAnalogueHourHand"
                 centerX: staticFace.centerX
                 centerY: staticFace.centerY
                 handLength: analogueFace.faceRadius * 0.52
-                handWidth: Math.max(3.0, analogueFace.faceRadius / 15.0)
+                handWidth: Math.max(3.0 * analogueFace.fontResizeFactor, analogueFace.faceRadius / 15.0)
                 handAngle: analogueFace.clockModel.hourAngle
                 handColor: analogueFace.clockModel.textColor
                 shadowEnabled: analogueFace.clockModel.analogFaceShadow
@@ -253,7 +257,7 @@ Item {
                 centerX: staticFace.centerX
                 centerY: staticFace.centerY
                 handLength: analogueFace.faceRadius * 0.72
-                handWidth: Math.max(2.0, analogueFace.faceRadius / 20.0)
+                handWidth: Math.max(2.0 * analogueFace.fontResizeFactor, analogueFace.faceRadius / 20.0)
                 handAngle: analogueFace.clockModel.minuteAngle
                 handColor: analogueFace.clockModel.textColor
                 shadowEnabled: analogueFace.clockModel.analogFaceShadow
@@ -267,7 +271,7 @@ Item {
                 centerX: staticFace.centerX
                 centerY: staticFace.centerY
                 handLength: analogueFace.faceRadius * 0.85
-                handWidth: 1.0
+                handWidth: 1.0 * analogueFace.fontResizeFactor
                 handAngle: analogueFace.clockModel.secondAngle
                 handColor: analogueFace.clockModel.textColor
                 shadowEnabled: analogueFace.clockModel.analogFaceShadow && analogueFace.clockModel.showSeconds
@@ -284,12 +288,12 @@ Item {
         id: footer
         objectName: "clockAnalogueFooter"
         width: parent.width
-        y: staticFace.height + 4.0
-        spacing: 4.0
+        y: staticFace.height + 4.0 * analogueFace.fontResizeFactor
+        spacing: 4.0 * analogueFace.fontResizeFactor
 
         Item {
             width: footer.width
-            height: visible ? 10.0 : 0.0
+            height: visible ? 10.0 * analogueFace.fontResizeFactor : 0.0
             visible: analogueFace.clockModel.showSeparator
 
             Separator {
@@ -300,9 +304,9 @@ Item {
                     Translate { x: analogueFace.childOffsetX("separator"); y: analogueFace.childOffsetY("separator") }
                 ]
                 width: parent.width * 0.77
-                height: analogueFace.clockModel.separatorThickness
+                height: analogueFace.clockModel.separatorThickness * analogueFace.fontResizeFactor
                 anchors.centerIn: parent
-                thickness: analogueFace.clockModel.separatorThickness
+                thickness: analogueFace.clockModel.separatorThickness * analogueFace.fontResizeFactor
                 lineColor: analogueFace.clockModel.separatorColor
                 shadowEnabled: analogueFace.clockModel.textShadowEnabled
                 shadowColor: analogueFace.clockModel.textShadowColor
@@ -324,7 +328,7 @@ Item {
             text: analogueFace.clockModel.calendarText
             color: analogueFace.clockModel.textColor
             font.family: analogueFace.clockModel.fontFamily
-            font.pointSize: analogueFace.clockModel.calendarFontSize
+            font.pointSize: analogueFace.clockModel.calendarFontSize * analogueFace.fontResizeFactor
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
@@ -347,6 +351,8 @@ Item {
             text: analogueFace.clockModel.timezoneText
             color: analogueFace.clockModel.textColor
             font.family: analogueFace.clockModel.fontFamily
+            // secondaryFontSize tracks the resized primary font already;
+            // multiplying again would double-apply the clock_font ratio.
             font.pointSize: analogueFace.clockModel.secondaryFontSize
             font.bold: true
             horizontalAlignment: Text.AlignHCenter

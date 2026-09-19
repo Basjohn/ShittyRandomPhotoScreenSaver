@@ -30,7 +30,7 @@ _ALLOWED_SUFFIX_BY_KIND = {
     "webp": b"RIFF",
 }
 _STEAM_APP_ARTWORK_URLS = {
-    "wide": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/header.jpg",
+    "wide": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/library_hero.jpg",
     "square": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/library_600x900.jpg",
     "portrait": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/library_600x900.jpg",
 }
@@ -79,6 +79,10 @@ def steam_app_artwork_variant_order(artwork_shape: str) -> tuple[str, str]:
     return primary, fallback
 
 
+def _steam_wide_header_fallback_url(appid: int) -> str:
+    return f"https://cdn.akamai.steamstatic.com/steam/apps/{max(1, int(appid))}/header.jpg"
+
+
 def find_cached_steam_app_artwork(
     *,
     cache_dir: Path,
@@ -87,7 +91,14 @@ def find_cached_steam_app_artwork(
 ) -> Path | None:
     """Return cached app artwork without allowing a rotation to cause network IO."""
 
-    return find_cached_asset(cache_dir, steam_app_artwork_url(appid, artwork_shape))
+    primary = find_cached_asset(cache_dir, steam_app_artwork_url(appid, artwork_shape))
+    if primary is not None:
+        return primary
+    if _normalize_steam_app_artwork_shape(artwork_shape) == "wide":
+        # Preserve existing header caches; editing artwork never initiates an
+        # upgrade fetch or invalidates established cache-first runtime policy.
+        return find_cached_asset(cache_dir, _steam_wide_header_fallback_url(appid))
+    return None
 
 
 def fetch_steam_app_header(
@@ -98,11 +109,17 @@ def fetch_steam_app_header(
 ) -> SteamAssetRecord | SteamResult:
     """Load or cache the selected app's public Steam header image."""
 
-    return fetch_steam_app_artwork(
-        cache_dir=cache_dir,
-        appid=appid,
-        artwork_shape="wide",
-        fetcher=fetcher,
+    url = _steam_wide_header_fallback_url(appid)
+    cached = find_cached_asset(cache_dir, url)
+    if cached is not None:
+        return SteamAssetRecord(
+            url_fingerprint=hashlib.sha256(url.encode("utf-8")).hexdigest()[:24],
+            path=cached, bytes_written=cached.stat().st_size,
+            image_kind=cached.suffix.lstrip("."),
+        )
+    return fetch_and_cache_asset(
+        cache_dir=cache_dir, url=url,
+        fetcher=fetcher or _default_fetch_asset,
     )
 
 
@@ -116,19 +133,32 @@ def fetch_steam_app_artwork(
     """Load the public header or portrait library capsule for one app."""
 
     url = steam_app_artwork_url(appid, artwork_shape)
-    cached = find_cached_asset(cache_dir, url)
+    cached = find_cached_steam_app_artwork(
+        cache_dir=cache_dir, appid=appid, artwork_shape=artwork_shape,
+    )
     if cached is not None:
+        cached_url = url
+        if _normalize_steam_app_artwork_shape(artwork_shape) == "wide":
+            if cached == find_cached_asset(cache_dir, _steam_wide_header_fallback_url(appid)):
+                cached_url = _steam_wide_header_fallback_url(appid)
         return SteamAssetRecord(
-            url_fingerprint=hashlib.sha256(url.encode("utf-8")).hexdigest()[:24],
-            path=cached,
-            bytes_written=cached.stat().st_size,
+            url_fingerprint=hashlib.sha256(cached_url.encode("utf-8")).hexdigest()[:24],
+            path=cached, bytes_written=cached.stat().st_size,
             image_kind=cached.suffix.lstrip("."),
         )
-    return fetch_and_cache_asset(
-        cache_dir=cache_dir,
-        url=url,
-        fetcher=fetcher or _default_fetch_asset,
+    selected_fetcher = fetcher or _default_fetch_asset
+    primary = fetch_and_cache_asset(
+        cache_dir=cache_dir, url=url, fetcher=selected_fetcher,
     )
+    if isinstance(primary, SteamAssetRecord) or _normalize_steam_app_artwork_shape(artwork_shape) != "wide":
+        return primary
+    # Hero is not available for every game. One bounded same-shape fallback,
+    # never tied to size/Save/drag, keeps older titles working without switching
+    # an authored wide panel to portrait.
+    fallback = fetch_steam_app_header(
+        cache_dir=cache_dir, appid=appid, fetcher=selected_fetcher,
+    )
+    return fallback if isinstance(fallback, SteamAssetRecord) else primary
 
 
 def abandonment_desaturation_bucket(

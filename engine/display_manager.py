@@ -1394,6 +1394,9 @@ class DisplayManager(QObject):
         runtime.custom_layout_cancel_requested.connect(
             self.cancel_custom_layout_session
         )
+        runtime.custom_layout_undo_requested.connect(
+            self._quick_custom_layout_owner.undo_last_change
+        )
         runtime.scene_controller.jedi_mode_requested.connect(
             self.jedi_mode_requested.emit
         )

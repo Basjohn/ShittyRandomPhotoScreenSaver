@@ -1,6 +1,6 @@
 # Contracts — Current Owner Map
 
-Last updated: 2026-09-16
+Last updated: 2026-09-19
 
 `Current_Plan.md` owns work admission. This file owns fast current-owner routing.
 
@@ -219,6 +219,12 @@ X/Y/display, stays in CUSTOM and bypasses stacking/ordinary auto-fit/shrink. Onl
 cannot fit the owning display may receive uniform emergency reduction. CUSTOM side reflow must never overwrite the
 authored restore target.
 
+**Edit-only controls and one-action undo:** the existing shared `CustomLayoutSession` remains the sole working parent/child geometry and payload owner. The retained edit overlay owns only selected-frame transient, default-locked child-handle visibility. Plain `L` during Edit and the existing 22 px lock glyph invoke the same toggle. Locking cancels any held child gesture before hiding handles; neither control changes the parent edit controls, child paint, ordinary widget enabled state, Settings, or the saved layout. The child-role observer remains alive while the chrome is locked.
+
+`Ctrl+Z` while Edit is active consumes **one** snapshot of the last completed parent or child edit action. A drag counts once at release, not per pointer sample; an admitted wheel step, child flip, reset, or other discrete editor change counts once. The snapshot records values of the existing item, not a competing state model. Undo republishes through the shared session, never writes Settings, has no redo stack, and is disabled outside Edit and during an active pointer gesture. Its snapshot is cleared at Edit teardown. Plain `Z` retains its normal previous-image behaviour outside Edit. The lock toggle changes transient QML chrome only, so it is not an undoable geometry action. No extra polling, timer, per-frame work, persisted schema, or input owner is introduced.
+
+**Family-local live rails:** Friend Pulse's unedited separator follows its existing live `authoredWidth`/content extent, while an explicitly edited `width_scale` multiplies that live span. The separator's own geometry cannot demand parent growth. Flipped Reddit reads `post title | age value (e.g. 01HR) | AGO`, with a compact title/time gap and no mirrored text or independently persisted post-row geometry. These are projections of existing family and normalized child values, not new ownership systems.
+
 ### Last-good cache / freshness
 
 For durable provider caches, freshness controls refresh admission and cached/stale labeling only. A coherent successful
@@ -415,3 +421,10 @@ recurring timer, polling loop, render callback, or worker.
 CUSTOM wheel resize remains free uniform scaling: it may publish the same nearby peer-alignment guides as drag resize, but it must never apply the guide resolver's suggested snap scale. Authored peer/centre/safe-gutter guide strokes are one pixel thicker than their former baseline; the generic edit grid remains 1 px.
 
 Ordinary uniform CUSTOM scale is absolute against stable authored/preferred geometry with a shared 40% floor; re-entering CUSTOM must not compound shrink. New ordinary cards default to the `ordinary_uniform` descriptor mode and whole-card scaling remains the stable outer transform even for families that additionally opt into shared side-axis `content_extent`. Every current resizable ordinary non-Clock family now uses admitted content-extent reflow: Weather, Media, Reddit/Reddit2, Gmail, Achievement Pulse, Abandonment Issues, Friend Pulse and System Stats. Dense authored families may resolve their side-axis logical floor against the live authored reference once at edit admission so working/persisted geometry cannot become smaller than the canvas QML actually renders. Clock alone retains variant-aware per-value sizing. Older current-format per-value payloads are inert for normalized families, and genuine product Settings remain authoritative. Media's preferred width may include a scene-local accessory extent; that extent scales as part of the same authored root while horizontal content extent reflows only the card lane, so external app volume does not become a second geometry owner. Gmail model width is already outer width; its row-derived preferred height alone receives shell inset. Weather may reveal its retained five-day forecast only when a CUSTOM vertical content extent has enough room for the compact card plus the extra section; the provider supplies those rows through the existing request/cadence rather than a second fetch owner. Visualizer is intentionally separate: `uniform_visual_scale` and `viewport_extent` remain independent intents.
+
+
+### Edit-mode hit targeting and semantic timestamp rails (2026-09-19)
+
+The shared edit parent MouseArea covers its entire parent footprint; only explicit higher-z chrome owns a restricted hit target. An entire top-strip exclusion is not a close-button collision solution. The child-alignment flip glyph may have a larger invisible event target than its painted disc, but both must route through the same child flip method, above the child move/resize target, without introducing a second alignment or geometry authority. Locked child handles must not disable selection of their parent.
+
+Reddit/Reddit2 flipped rows use a single bounded trailing age rail, with title before age value before AGO and explicit compact gaps; title text elides before reaching that rail. Timestamp X must not depend on a headline's intrinsic width. Real QQuickWindow pointer-delivery and real retained-item geometry tests are required to assert these behaviours; green source-string checks alone cannot establish them.

@@ -22,6 +22,9 @@ Item {
     // chrome. The presentation host toggles this once at Edit enter/exit; the
     // blocker itself is loader-gated so normal runtime has no live input item.
     property bool customLayoutInputBlocked: false
+    // Every ordinary card and accessory has an always-on paint boundary.
+    // The independently selectable child EDIT lock is only edit chrome; it
+    // cannot affect visibility, authored reflow, paint or saved geometry.
     // Optional edit-only observation surface for the shared CUSTOM child-role
     // overlay. Families expose only descriptor-admitted major visual targets.
     // The list is retained presentation data only; Python/session remains the
@@ -329,7 +332,9 @@ Item {
             anchors.bottom: parent.bottom
             width: Math.max(0.0, overlayWidget.accessoryExtent)
             x: overlayWidget.accessoryOnLeft ? 0.0 : parent.width - width
-            clip: false
+            // External volume owns this independent lane. Its paint never
+            // escapes that lane, even outside Edit or in authored mode.
+            clip: true
             z: 2
         }
     }

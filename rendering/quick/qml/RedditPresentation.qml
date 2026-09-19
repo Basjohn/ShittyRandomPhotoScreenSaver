@@ -4,21 +4,37 @@ OverlayWidget {
     id: redditRoot
     objectName: "redditPresentation"
 
-    // Whole-widget CUSTOM resize remains one uniform retained transform. Child
-    // roles below are additive authored-relative geometry only; provider/cache
-    // cadence and the Settings-owned font remain untouched.
+
+    // H9: CUSTOM wheel/corner resize is one uniform retained-presentation scale.
+    // The whole authored card (header, rows, spacing, chrome) scales together
+    // from the outer-rect / baseline-preferred ratio, so rows can no longer
+    // escape a shrunk card. CUSTOM resize is purely geometric here; font size
+    // stays Settings-owned (no per-value payload scaling).
     uniformScaleTransform: true
 
     required property var redditModel
     signal openPostRequested(string url)
     signal refreshRequested()
 
+    // Content-driven outer size (H option A). Width honours the historical
+    // ordinary-card minimum footprint (BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH =
+    // 600) and only enlarges above it when the intrinsic header content genuinely
+    // requires it - never shrinking below the authored floor. Height is content
+    // driven. Intrinsic sources only (no width<->preferredWidth feedback). J
+    // refines parity.
+    // CUSTOM content-extent box (0 = none). Vertical drives the effective visible
+    // post count then row/separator spread; horizontal relaxes width truncation.
+    // The `limit` setting stays the SSOT default when no extent is active.
     readonly property real cExtentW: redditModel.contentExtentWidth
     readonly property real cExtentH: redditModel.contentExtentHeight
     readonly property real naturalRowHeight: Math.max(28.0, redditModel.fontSize * 1.55)
     readonly property real baseRowSpacing: 4.0
+    readonly property real flippedTitleAgeGap: 4.0
+    readonly property real ageValueAgoGap: 4.0
     readonly property var childGeometry: redditModel.customChildGeometry
-    readonly property real childPlacementEpsilon: 0.0001
+    // Header alignment is the existing widget-wide semantic flip intent.
+    // Project structural rails, NEVER mirror glyphs or text alignment.
+    readonly property bool headerFlipped: childAlignment("header", "left") === "right"
 
     function childRecord(roleId) {
         return childGeometry ? childGeometry[roleId] : null
@@ -67,55 +83,46 @@ OverlayWidget {
     readonly property real childNormalizationWidth: canonicalPreferredWidth
     readonly property real childNormalizationHeight: canonicalAuthoredHeight
 
+
     readonly property int heldPostCount: postRepeater.count
-    readonly property real postRowWidthScale: childWidthScale("post_rows")
-    readonly property real postRowHeightScale: childHeightScale("post_rows")
-    readonly property real postRowsXOffset: childOffsetX("post_rows")
-    readonly property real postRowsYOffset: childOffsetY("post_rows")
-    readonly property real effectiveBaseRowHeight: naturalRowHeight * postRowHeightScale
-    readonly property bool postVerticalGeometryActive:
-        Math.abs(postRowHeightScale - 1.0) > childPlacementEpsilon
-        || Math.abs(postRowsYOffset) > childPlacementEpsilon
     readonly property real chromeHeight: headerArea.height
         + (statusArea.visible ? statusArea.height + baseRowSpacing : 0.0)
         + redditRoot.shellInset
-    // The repeated rail remains attached to the authored top flow. Positive
-    // shared Y placement consumes rail budget instead of asking the parent to
-    // grow. This preserves the long-standing outer-Y contract: parent height is
-    // still the sole authority that reveals/hides rows.
-    readonly property real layoutHeightForRows: cExtentH > 0.0
-        ? cExtentH : canonicalAuthoredHeight
-    readonly property real postRailBudget: Math.max(
-        0.0,
-        layoutHeightForRows - chromeHeight - Math.max(0.0, postRowsYOffset)
-    )
+    readonly property real postRailBudget: Math.max(0.0, cExtentH - chromeHeight)
     readonly property int effectiveVisibleCount: {
         var held = Math.max(0, heldPostCount)
         if (held === 0)
             return 0
-        if (cExtentH <= 0.0 && !postVerticalGeometryActive)
-            return Math.min(held, redditModel.postLimit)
-        var fit = Math.floor(postRailBudget / (effectiveBaseRowHeight + baseRowSpacing))
-        return Math.max(1, Math.min(held, fit))
+        if (cExtentH <= 0.0)
+            return Math.min(held, redditModel.postLimit)   // SSOT default count
+        var fit = Math.floor(postRailBudget / (naturalRowHeight + baseRowSpacing))
+        return Math.max(1, Math.min(held, fit))            // CUSTOM: 1..held (<=cache cap)
     }
-    // Once count caps, outer-Y growth still becomes row breathing room. Shared
-    // row height is the authored minimum for that calculation, never a second
-    // post-count setting.
+    // Rows grow to fill the box once the count caps (past-limit vertical padding).
     readonly property real extentRowHeight: {
-        if ((cExtentH <= 0.0 && !postVerticalGeometryActive) || effectiveVisibleCount <= 0)
-            return effectiveBaseRowHeight
+        if (cExtentH <= 0.0 || effectiveVisibleCount <= 0)
+            return naturalRowHeight
         var gaps = Math.max(0, effectiveVisibleCount - 1)
         return Math.max(
-            effectiveBaseRowHeight,
+            naturalRowHeight,
             (postRailBudget - gaps * baseRowSpacing) / effectiveVisibleCount
         )
     }
     readonly property real extentSeparatorThickness: cExtentH > 0.0
-        ? Math.max(1.0, Math.min(4.0, extentRowHeight / Math.max(1.0, naturalRowHeight)))
+        ? Math.max(1.0, Math.min(4.0, extentRowHeight / naturalRowHeight))
         : 1.0
 
-    preferredContentWidth: cExtentW > 0.0 ? cExtentW : canonicalPreferredWidth
-    preferredContentHeight: cExtentH > 0.0 ? cExtentH : canonicalAuthoredHeight
+    // A preferred width must use *intrinsic authored* inputs only.  The live
+    // refresh glyph width belongs to a header-bounded edit target, and reading
+    // it here creates a cycle: preferred width -> authored card/header width
+    // -> refresh target width -> glyph width -> preferred width.  The existing
+    // canonical width already includes the intrinsic (unclamped) refresh slot.
+    // Parent side-reflow remains owned solely by content_extent.
+    preferredContentWidth: cExtentW > 0.0
+        ? cExtentW : canonicalPreferredWidth
+    preferredContentHeight: cExtentH > 0.0
+        ? cExtentH
+        : Math.max(60.0, contentColumn.childrenRect.height) + redditRoot.shellInset
 
     customEditableChildRoles: {
         const roles = []
@@ -124,6 +131,9 @@ OverlayWidget {
         roles.push({
             "roleId": "header",
             "target": headerFrame,
+            // A semantic header relocation follows the already-admitted
+            // parent rail; it is not a new content-size requirement.
+            "allowParentGrowth": false,
             "normalizationWidth": normW,
             "normalizationHeight": normH,
             "semanticCornerInsetX": 0.0,
@@ -133,42 +143,10 @@ OverlayWidget {
             roles.push({
                 "roleId": "refresh",
                 "target": refreshTarget,
+                "allowParentGrowth": false,
                 "normalizationWidth": normW,
                 "normalizationHeight": normH
             })
-        }
-        if (redditModel.viewState === "ready" && effectiveVisibleCount > 0) {
-            roles.push({
-                "roleId": "post_rows",
-                "target": customPostRowRoleTarget,
-                "collisionIgnoreRoleIds": ["post_time", "post_titles", "post_separators"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-            roles.push({
-                "roleId": "post_time",
-                "target": customPostTimeRoleTarget,
-                "collisionIgnoreRoleIds": ["post_rows"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-            roles.push({
-                "roleId": "post_titles",
-                "target": customPostTitleRoleTarget,
-                "collisionIgnoreRoleIds": ["post_rows"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-            if (redditModel.showSeparators && effectiveVisibleCount > 1) {
-                roles.push({
-                    "roleId": "post_separators",
-                    "target": customPostSeparatorRoleTarget,
-                    "occupiedTarget": customPostSeparatorOccupiedTarget,
-                    "collisionIgnoreRoleIds": ["post_rows"],
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH
-                })
-            }
         }
         return roles
     }
@@ -177,7 +155,7 @@ OverlayWidget {
         id: contentColumn
         objectName: "redditContent"
         anchors.fill: parent
-        spacing: redditRoot.baseRowSpacing
+        spacing: 4.0
 
         Item {
             id: headerArea
@@ -192,19 +170,22 @@ OverlayWidget {
                 textObjectName: "redditSubredditLabel"
                 readonly property string customAnchor: redditRoot.childAnchor("header")
                 readonly property real customScale: redditRoot.childWidthScale("header")
-                property real customEditPlacementCompensationX: customAnchor.length > 0
-                    ? x - redditRoot.childOffsetX("header") : 0.0
+                property real customEditPlacementCompensationX:
+                    customAnchor.length > 0 || redditRoot.headerFlipped
+                        ? x - redditRoot.childOffsetX("header") : 0.0
                 property real customEditPlacementCompensationY: customAnchor.length > 0
                     ? y - redditRoot.childOffsetY("header") : 0.0
                 transformOrigin: Item.TopLeft
                 scale: customScale
                 x: customAnchor.endsWith("right")
                     ? headerArea.width - width * scale
-                    : (customAnchor.endsWith("left") ? 0.0 : redditRoot.childOffsetX("header"))
+                    : (customAnchor.endsWith("left") ? 0.0
+                        : (redditRoot.headerFlipped ? headerArea.width - width * scale : 0.0)
+                            + redditRoot.childOffsetX("header"))
                 y: customAnchor.startsWith("bottom")
                     ? headerArea.height - height * scale
                     : (customAnchor.startsWith("top") ? 0.0 : redditRoot.childOffsetY("header"))
-                contentReversed: redditRoot.childAlignment("header", "left") === "right"
+                contentReversed: redditRoot.headerFlipped
                 label: redditRoot.redditModel.subredditText
                 logoSource: redditRoot.redditModel.logoSource
                 interactionEnabled: redditRoot.redditModel.interactionEnabled
@@ -233,7 +214,8 @@ OverlayWidget {
                 visible: redditRoot.redditModel.showRefreshSpiral
                 width: implicitWidth * redditRoot.childWidthScale("refresh")
                 height: headerArea.height * redditRoot.childHeightScale("refresh")
-                x: headerArea.width - width + redditRoot.childOffsetX("refresh")
+                x: (redditRoot.headerFlipped ? 0.0 : headerArea.width - width)
+                    + redditRoot.childOffsetX("refresh")
                 y: (headerArea.height - height) / 2.0 + redditRoot.childOffsetY("refresh")
 
                 ShadowedText {
@@ -272,9 +254,12 @@ OverlayWidget {
                 id: statusText
                 anchors.fill: parent
                 text: {
-                    if (redditRoot.redditModel.viewState === "missing") return "Subreddit required"
-                    if (redditRoot.redditModel.viewState === "error") return redditRoot.redditModel.errorText
-                    if (redditRoot.redditModel.viewState === "empty") return "No posts available"
+                    if (redditRoot.redditModel.viewState === "missing")
+                        return "Subreddit required"
+                    if (redditRoot.redditModel.viewState === "error")
+                        return redditRoot.redditModel.errorText
+                    if (redditRoot.redditModel.viewState === "empty")
+                        return "No posts available"
                     return "Loading Reddit…"
                 }
                 color: redditRoot.redditModel.textColor
@@ -304,40 +289,47 @@ OverlayWidget {
                 required property string postUrl
                 required property int index
 
-                readonly property real canonicalAgeWidth: Math.max(88.0, redditRoot.redditModel.fontSize * 5.55)
-                readonly property real canonicalTitleX: canonicalAgeWidth + 4.0
                 objectName: "redditPostRow_" + index
-                width: contentColumn.width * redditRoot.postRowWidthScale
-                x: redditRoot.postRowsXOffset
+                width: contentColumn.width
                 visible: index < redditRoot.effectiveVisibleCount
                 height: visible ? redditRoot.extentRowHeight : 0.0
-                transform: Translate { y: redditRoot.postRowsYOffset }
 
                 Item {
                     id: ageText
                     objectName: "redditPostAge_" + postRow.index
-                    x: redditRoot.childOffsetX("post_time")
-                    y: (parent.height - height) / 2.0 + redditRoot.childOffsetY("post_time")
-                    width: postRow.canonicalAgeWidth * redditRoot.childWidthScale("post_time")
-                    height: parent.height * redditRoot.childHeightScale("post_time")
+                    // Keep the timestamp on the *same* end rail for every row.
+                    // Following each title's intrinsic width made short titles
+                    // pull 01HR/AGO towards the middle, while long titles pushed
+                    // them to the edge. The title elides against this stable
+                    // rail; the two timestamp glyphs stay adjacent.
+                    x: redditRoot.headerFlipped ? parent.width - width : 0.0
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(88.0, ageValueText.width
+                        + redditRoot.ageValueAgoGap + ageAgoText.width)
+                    height: parent.height
 
                     readonly property string valueText: {
                         const raw = String(postRow.postAge || "").trim()
-                        return raw.toUpperCase().endsWith(" AGO") ? raw.slice(0, -4).trim() : raw
+                        return raw.toUpperCase().endsWith(" AGO")
+                            ? raw.slice(0, -4).trim()
+                            : raw
                     }
 
                     ShadowedText {
                         id: ageValueText
                         objectName: "redditPostAgeValue_" + postRow.index
-                        anchors.left: parent.left
+                        x: 0.0
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(49.0, parent.width * 0.58)
+                        width: Math.max(49.0, implicitWidth)
                         height: parent.height
                         text: ageText.valueText
                         color: redditRoot.redditModel.ageColor
                         font.family: redditRoot.redditModel.fontFamily
-                        font.pointSize: redditRoot.redditModel.ageFontSize * redditRoot.childHeightScale("post_time")
+                        font.pointSize: redditRoot.redditModel.ageFontSize
                         font.bold: true
+                        // Fixed left edge guarantees the first digit aligns
+                        // vertically across 03D/02HR/etc. The sub-column itself
+                        // occupies the visual centre of the time field.
                         horizontalAlignment: Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
@@ -350,17 +342,21 @@ OverlayWidget {
                     ShadowedText {
                         id: ageAgoText
                         objectName: "redditPostAgeAgo_" + postRow.index
-                        anchors.right: parent.right
-                        anchors.rightMargin: 17.0
+                        // Flipped reading order is POST TITLE | 01HR | AGO.
+                        // Never mirror the actual text/glyphs.
+                        x: redditRoot.headerFlipped
+                            ? ageValueText.width + redditRoot.ageValueAgoGap
+                            : parent.width - width
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(30.0, parent.width * 0.36)
+                        width: Math.max(30.0, implicitWidth)
                         height: parent.height
                         text: "AGO"
                         color: redditRoot.redditModel.ageColor
                         font.family: redditRoot.redditModel.fontFamily
-                        font.pointSize: redditRoot.redditModel.ageFontSize * redditRoot.childHeightScale("post_time")
+                        font.pointSize: redditRoot.redditModel.ageFontSize
                         font.bold: true
-                        horizontalAlignment: Text.AlignRight
+                        horizontalAlignment: redditRoot.headerFlipped
+                            ? Text.AlignLeft : Text.AlignRight
                         verticalAlignment: Text.AlignVCenter
                         shadowEnabled: redditRoot.redditModel.textShadowEnabled
                         shadowColor: redditRoot.redditModel.textShadowColor
@@ -372,16 +368,19 @@ OverlayWidget {
                 ShadowedText {
                     id: titleText
                     objectName: "redditPostTitle_" + postRow.index
-                    readonly property real authoredBaseX: postRow.canonicalTitleX
-                    x: authoredBaseX + redditRoot.childOffsetX("post_titles")
-                    y: (parent.height - height) / 2.0 + redditRoot.childOffsetY("post_titles")
-                    width: Math.max(24.0, parent.width - authoredBaseX)
-                        * redditRoot.childWidthScale("post_titles")
-                    height: parent.height * redditRoot.childHeightScale("post_titles")
+                    x: redditRoot.headerFlipped ? 0.0 : ageText.width + 4.0
+                    width: Math.max(1.0, redditRoot.headerFlipped
+                        ? parent.width - ageText.width - redditRoot.flippedTitleAgeGap
+                        : parent.width - ageText.width - 4.0)
+                    anchors.verticalCenter: parent.verticalCenter
+                    // Post text remains left-aligned in both arrangements. The
+                    // timestamp occupies the opposite fixed-width semantic rail.
+                    horizontalAlignment: Text.AlignLeft
+                    height: parent.height
                     text: postRow.postTitle
                     color: redditRoot.redditModel.textColor
                     font.family: redditRoot.redditModel.fontFamily
-                    font.pointSize: redditRoot.redditModel.fontSize * redditRoot.childHeightScale("post_titles")
+                    font.pointSize: redditRoot.redditModel.fontSize
                     font.weight: Font.DemiBold
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
@@ -392,15 +391,15 @@ OverlayWidget {
                 }
 
                 Rectangle {
-                    id: postSeparator
                     objectName: "redditPostSeparator_" + postRow.index
                     visible: redditRoot.redditModel.showSeparators
                         && postRow.index < redditRoot.effectiveVisibleCount - 1
-                    x: redditRoot.childOffsetX("post_separators")
-                    y: parent.height - height + redditRoot.childOffsetY("post_separators")
-                    width: parent.width * redditRoot.childWidthScale("post_separators")
-                    height: redditRoot.scaleAwareStrokeWidth(redditRoot.extentSeparatorThickness)
-                        * redditRoot.childHeightScale("post_separators")
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: redditRoot.scaleAwareStrokeWidth(
+                        redditRoot.extentSeparatorThickness
+                    )
                     color: redditRoot.redditModel.separatorColor
                 }
 
@@ -411,70 +410,5 @@ OverlayWidget {
                 }
             }
         }
-    }
-
-    // One representative edit surface per repeated semantic role. Delegates all
-    // consume the same geometry record, so persistence/edit cost is independent
-    // of post count and never uses post identity/index as a key.
-    Item {
-        id: customPostRowRoleTarget
-        objectName: "redditCustomPostRowRoleTarget"
-        visible: redditModel.viewState === "ready" && effectiveVisibleCount > 0
-        enabled: false
-        x: redditRoot.postRowsXOffset
-        y: headerArea.height + baseRowSpacing + redditRoot.postRowsYOffset
-        width: contentColumn.width * redditRoot.postRowWidthScale
-        height: redditRoot.extentRowHeight
-    }
-    Item {
-        id: customPostTimeRoleTarget
-        objectName: "redditCustomPostTimeRoleTarget"
-        visible: customPostRowRoleTarget.visible
-        enabled: false
-        x: customPostRowRoleTarget.x + redditRoot.childOffsetX("post_time")
-        y: customPostRowRoleTarget.y
-            + (customPostRowRoleTarget.height - height) / 2.0
-            + redditRoot.childOffsetY("post_time")
-        width: Math.max(88.0, redditRoot.redditModel.fontSize * 5.55)
-            * redditRoot.childWidthScale("post_time")
-        height: customPostRowRoleTarget.height * redditRoot.childHeightScale("post_time")
-    }
-    Item {
-        id: customPostTitleRoleTarget
-        objectName: "redditCustomPostTitleRoleTarget"
-        visible: customPostRowRoleTarget.visible
-        enabled: false
-        readonly property real authoredBaseX: customPostRowRoleTarget.x
-            + Math.max(88.0, redditRoot.redditModel.fontSize * 5.55) + 4.0
-        x: authoredBaseX + redditRoot.childOffsetX("post_titles")
-        y: customPostRowRoleTarget.y
-            + (customPostRowRoleTarget.height - height) / 2.0
-            + redditRoot.childOffsetY("post_titles")
-        width: Math.max(24.0, customPostRowRoleTarget.x + customPostRowRoleTarget.width - authoredBaseX)
-            * redditRoot.childWidthScale("post_titles")
-        height: customPostRowRoleTarget.height * redditRoot.childHeightScale("post_titles")
-    }
-    Item {
-        id: customPostSeparatorOccupiedTarget
-        objectName: "redditCustomPostSeparatorOccupiedTarget"
-        visible: customPostRowRoleTarget.visible && redditModel.showSeparators && effectiveVisibleCount > 1
-        enabled: false
-        x: customPostRowRoleTarget.x + redditRoot.childOffsetX("post_separators")
-        y: customPostRowRoleTarget.y + customPostRowRoleTarget.height - height
-            + redditRoot.childOffsetY("post_separators")
-        width: customPostRowRoleTarget.width * redditRoot.childWidthScale("post_separators")
-        height: redditRoot.scaleAwareStrokeWidth(redditRoot.extentSeparatorThickness)
-            * redditRoot.childHeightScale("post_separators")
-    }
-    Item {
-        id: customPostSeparatorRoleTarget
-        objectName: "redditCustomPostSeparatorRoleTarget"
-        visible: customPostSeparatorOccupiedTarget.visible
-        enabled: false
-        readonly property real occupiedHeight: customPostSeparatorOccupiedTarget.height
-        x: customPostSeparatorOccupiedTarget.x
-        y: customPostSeparatorOccupiedTarget.y - (height - occupiedHeight) / 2.0
-        width: customPostSeparatorOccupiedTarget.width
-        height: 6.0 * redditRoot.childHeightScale("post_separators")
     }
 }

@@ -437,6 +437,38 @@ def test_gmail_grouping_setting_reprojects_accepted_snapshot_in_place() -> None:
     assert [row.identity for row in row_model.rows] == ["new", "old"]
 
 
+def test_gmail_authored_height_is_settings_owned_not_message_state() -> None:
+    """Reset cannot capture a transient loading/empty/live row-count envelope."""
+    config = _config(limit=4, group_threads=False)
+    model = GmailPresentationModel(config, _style(config))
+    model.activate()
+    authored_height = model.contentHeight
+    assert authored_height > 36.0 + 4.0 * max(28.0, model.fontSize * 1.65)
+
+    model.on_gmail_runtime_snapshot(_snapshot(1, (), refreshing=True, unread=0))
+    assert model.viewState == "loading"
+    assert model.contentHeight == pytest.approx(authored_height)
+
+    model.on_gmail_runtime_snapshot(_snapshot(2, (_email("one"),), unread=1))
+    assert model.viewState == "ready"
+    assert model.contentHeight == pytest.approx(authored_height)
+
+    model.on_gmail_runtime_snapshot(_snapshot(3, (), unread=0))
+    assert model.contentHeight == pytest.approx(authored_height)
+
+    model.on_gmail_runtime_snapshot(_snapshot(4, (_email("two"),), error="offline", unread=0))
+    assert model.contentHeight == pytest.approx(authored_height)
+
+    # Only an authored Settings change may replace the baseline, not a cache,
+    # unread-count, error or CUSTOM child-geometry edit.
+    assert model.set_content_extent(700.0, 400.0)
+    assert model.contentHeight == pytest.approx(authored_height)
+    assert model.clear_content_extent()
+    assert model.contentHeight == pytest.approx(authored_height)
+    assert model.apply_config(replace(config, limit=2))
+    assert model.contentHeight < authored_height
+
+
 def test_gmail_error_replaces_cached_rows_and_refreshing_empty_stays_loading() -> None:
     config = _config()
     model = GmailPresentationModel(config, _style(config))
@@ -660,6 +692,9 @@ def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_pl
         assert row_model.rowCount() == 2
         assert model.emailLimit == 2
         two_row_height = model.contentHeight
+        # The configured row capacity is the authored card height, independent
+        # of cache population, loading/empty state and message boundaries.
+        assert two_row_height == pytest.approx(model.contentHeight)
 
         presentation.apply_input_state(
             {
@@ -700,7 +735,7 @@ def test_real_gmail_runtime_drives_registered_scene_host_actions_and_state_in_pl
         assert QQmlEngine.contextForObject(item).engine() is engine
         assert _find_visual_item(item, "gmailMessageRow_0") is first_row
         assert row_model.rowCount() == 3
-        assert model.contentHeight > two_row_height
+        assert model.contentHeight > two_row_height  # Settings limit, not live count.
         assert item.x() == pytest.approx(40.0)
         assert item.y() == pytest.approx(50.0)
         assert item.width() == pytest.approx(580.0)
@@ -796,7 +831,8 @@ def test_gmail_qml_keeps_popup_and_dynamic_height_out_of_row_identity(qt_app) ->
         qt_app.processEvents()
         assert model.row_model is row_model
         assert _find_visual_item(item, "gmailMessageRow_0") is first_row
-        assert float(item.property("committedContentHeight")) > one_row_height
+        # Mail population changes the rows, never the authored parent height.
+        assert float(item.property("committedContentHeight")) == pytest.approx(one_row_height)
         assert QQmlEngine.contextForObject(item).engine() is engine
 
         model.on_gmail_runtime_snapshot(_snapshot(3, (_email("two"),), unread=0))
@@ -971,3 +1007,152 @@ def test_gmail_content_extent_override_is_ssot_safe() -> None:
     assert model.clear_content_extent() is True
     assert model.contentExtentHeight == 0.0
     assert model.emailLimit == 10
+
+
+def test_gmail_refresh_edit_target_is_bounded_during_parent_xy_and_child_offsets(qt_app) -> None:
+    """The glyph and its EDIT target must share the same legal header rectangle.
+
+    The September 19 logs contained a Gmail content-extent binding loop while
+    the operator saw Refresh escape. This test exercises real QML, including
+    saved out-of-bounds requests, instead of proving only that the card clips.
+    """
+    from PySide6.QtCore import qInstallMessageHandler
+
+    model = GmailPresentationModel(_config(), _style(_config()))
+    messages: list[str] = []
+
+    def collect(_level, _context, message):
+        messages.append(str(message))
+
+    previous = qInstallMessageHandler(collect)
+    engine = component = item = None
+    try:
+        engine, component, item = _create_qml_item(model)
+        qt_app.processEvents()
+        refresh = _find_visual_item(item, "gmailRefreshTarget")
+        header = _find_visual_item(item, "gmailHeaderArea")
+        assert refresh is not None and header is not None
+
+        def bounded():
+            assert 0.0 <= refresh.x() + 0.01
+            assert 0.0 <= refresh.y() + 0.01
+            assert refresh.width() > 0.0 and refresh.height() > 0.0
+            assert refresh.x() + refresh.width() <= header.width() + 0.01
+            assert refresh.y() + refresh.height() <= header.height() + 0.01
+
+        bounded()
+        assert model.set_custom_child_geometry({"refresh": {
+            "width_scale": 1.4, "height_scale": 0.6,
+            "x_offset": 0.18, "y_offset": 0.18,
+        }})
+        qt_app.processEvents()
+        bounded()
+        for extent in ((450.0, 600.0), (810.0, 870.0), (540.0, 390.0)):
+            assert model.set_content_extent(*extent)
+            item.setWidth(extent[0])
+            item.setHeight(extent[1])
+            qt_app.processEvents()
+            bounded()
+        assert model.set_custom_child_geometry({"refresh": {
+            "width_scale": 1.15, "height_scale": 0.65,
+            "x_offset": -0.18, "y_offset": -0.18,
+        }})
+        qt_app.processEvents()
+        bounded()
+        assert not [m for m in messages if "Binding loop" in m
+                    and "GmailPresentation.qml" in m], messages
+    finally:
+        if item is not None:
+            item.deleteLater()
+        if component is not None:
+            component.deleteLater()
+        if engine is not None:
+            engine.deleteLater()
+        qt_app.processEvents()
+        qInstallMessageHandler(previous)
+
+
+@pytest.mark.qt
+def test_gmail_header_flip_swaps_chrome_and_message_rails_without_text_mirroring(qt_app):
+    """Logical columns exchange sides, but sender/subject stay in reading order."""
+    config = _config(group_threads=False, limit=2)
+    model = GmailPresentationModel(config, _style(config))
+    model.activate()
+    model.on_gmail_runtime_snapshot(_snapshot(1, (_email("one"),), unread=1))
+    engine = component = item = None
+    try:
+        engine, component, item = _create_qml_item(model)
+        qt_app.processEvents()
+        find = lambda name: _find_visual_item(item, name)
+        header = find("brandedHeader")
+        refresh = find("gmailRefreshTarget")
+        header_area = find("gmailHeaderArea")
+        row = find("gmailMessageRow_0")
+        envelope = find("gmailEnvelope_0")
+        stamp = find("gmailTimestamp_0")
+        sender = find("gmailSender_0")
+        subject = find("gmailSubject_0")
+        menu = find("gmailMenuButton_0")
+        assert all(v is not None for v in
+                   (header, refresh, header_area, row, envelope, stamp, sender, subject, menu))
+        baseline = (header.x(), refresh.x(), envelope.x(), stamp.x(), sender.x(), menu.x())
+        assert header.x() < refresh.x() and envelope.x() < menu.x()
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        assert header.x() > refresh.x()
+        assert 0 <= refresh.x() and refresh.x() + refresh.width() <= header_area.width() + 0.1
+        assert envelope.x() > menu.x()
+        # The date is on the right of the sender + subject lane, not a mirrored
+        # text hierarchy. Compare in their own mapping space after the flip.
+        from PySide6.QtCore import QPointF
+        stamp_left = stamp.mapToItem(row, QPointF(0.0, 0.0)).x()
+        sender_left = sender.mapToItem(row, QPointF(0.0, 0.0)).x()
+        subject_left = subject.mapToItem(row, QPointF(0.0, 0.0)).x()
+        assert stamp_left > sender_left and sender_left < subject_left
+        preferred = (float(item.property("preferredContentWidth")),
+                     float(item.property("preferredContentHeight")))
+        assert preferred[0] > 100.0 and preferred[1] > 60.0
+        for width, height in ((740.0, 410.0), (500.0, 290.0), (620.0, 360.0)):
+            item.setWidth(width)
+            item.setHeight(height)
+            qt_app.processEvents()
+            assert item.isVisible() and row.isVisible(), (
+                "Gmail lost content after flipped parent resize", width, height,
+                item.property("preferredContentWidth"), item.property("preferredContentHeight"),
+                item.property("presentationScale"), row.width(), row.height(),
+            )
+            assert header.width() > 20.0 and header.height() > 20.0
+            assert row.width() > 100.0 and row.height() > 20.0
+            assert item.property("preferredContentWidth") == pytest.approx(preferred[0])
+            assert item.property("preferredContentHeight") == pytest.approx(preferred[1])
+            assert float(item.property("presentationScale")) > 0.0
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert (header.x(), refresh.x(), envelope.x(), stamp.x(), sender.x(), menu.x()) == pytest.approx(baseline)
+        assert item.isVisible() and row.isVisible()
+        assert row.width() > 100.0 and row.height() > 20.0
+        # Flip twice in the SAME scene and recheck real mapped text, not just
+        # parent visibility: the user's blank card retained row timestamps.
+        for cycle in range(3):
+            assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+            qt_app.processEvents()
+            assert bool(item.property("headerFlipped"))
+            assert row.isVisible() and row.width() > 100.0
+            for field in (sender, subject):
+                rect = field.mapRectToItem(row, field.boundingRect())
+                assert field.isVisible() and field.width() > 5.0
+                assert str(field.property("text")).strip()
+                assert rect.x() >= -1.0 and rect.right() <= row.width() + 1.0
+            assert model.set_custom_child_geometry({})
+            qt_app.processEvents()
+            assert not bool(item.property("headerFlipped"))
+            assert (header.x(), refresh.x(), envelope.x(), stamp.x(), sender.x(), menu.x()) == pytest.approx(baseline)
+            assert sender.isVisible() and subject.isVisible()
+    finally:
+        if item is not None:
+            item.deleteLater()
+        if component is not None:
+            component.deleteLater()
+        if engine is not None:
+            engine.deleteLater()
+        qt_app.processEvents()

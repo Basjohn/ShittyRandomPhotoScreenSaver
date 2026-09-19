@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from core.settings.default_contract import require_canonical_default
-from PySide6.QtCore import QEvent, QPoint, QRect, Qt
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt
 from PySide6.QtGui import QKeyEvent
 
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, resolve_effective_enabled_modes
@@ -1761,6 +1761,181 @@ def test_top_child_resize_persists_origin_shift_and_cancel_cannot_replay() -> No
     assert item.child_size("artwork") == geometry
 
 
+@pytest.mark.parametrize("content_box", (None, (700.0, 380.0)))
+@pytest.mark.parametrize("widget_id", (
+    "reddit", "gmail", "media", "friend_pulse", "system_stats",
+    "achievement_pulse", "abandonment_issues",
+))
+def test_unsaved_header_flip_and_independent_child_survive_wheel_and_corner_resize(widget_id, content_box) -> None:
+    """Uniform resizing may scale the shell, never rehydrate stale child payloads.
+
+    These are the real shared-owner operations used by every Header-editable
+    family. The child cache and published payload must agree before Save, after
+    wheel, after corner resize, and after flipping back without leaving Edit.
+    """
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    assert descriptor is not None
+    roles = {role.role_id: role for role in descriptor.custom_child_roles}
+    assert "header" in roles and roles["header"].alignment_flip
+    other = next((role.role_id for role in roles.values()
+                  if role.role_id != "header" and role.movable), None)
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey(widget_id, "display:a"),
+        model_identity=widget_id,
+        baseline_global_rect=QRect(140, 130, 700, 380),
+        current_global_rect=QRect(140, 130, 700, 380),
+        baseline_size_payload={"content_extent": list(content_box)} if content_box else {},
+        current_size_payload={"content_extent": list(content_box)} if content_box else {},
+        baseline_enabled=True, current_enabled=True, resize_capable=True,
+        content_extent_axes=frozenset(descriptor.content_extent_axes),
+        baseline_content_extent=content_box,
+        current_content_extent=content_box,
+        custom_child_roles=descriptor.custom_child_roles,
+        authored_reference_size=(700.0, 380.0),
+    )
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}), participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None), reload_request=lambda _: None,
+    )
+    owner._bindings = {"display:a": _DisplayBinding(
+        identity="display:a", monitor_route="1", unit=SimpleNamespace(),
+        screen=None, geometry=QRect(0, 0, 3840, 2160),
+    )}
+    owner._descriptors = {item.source_key: descriptor}
+    # Avoid unrelated visual guide plumbing; invoke the same actual owner path.
+    owner._publish_uniform_wheel_guides = lambda _item: None
+    assert owner.flip_child_alignment(item, "header")
+    assert item.child_size("header").alignment == "right"
+    if other:
+        custom = CustomChildSize(x_offset=0.11, y_offset=0.09)
+        assert item.set_child_size(other, custom)
+        item.current_size_payload = custom_owner_module.update_child_geometry_payload(
+            item.current_size_payload, item.custom_child_roles, item.current_child_sizes
+        )
+    assert owner.resize_wheel(item, 120)
+    if content_box:
+        assert item.current_size_payload["content_extent"] == list(content_box)
+    assert item.current_size_payload["child_geometry"]["header"]["alignment"] == "right"
+    if other:
+        assert item.current_size_payload["child_geometry"][other] == custom.to_mapping()
+    assert owner._apply_uniform_scale(item, 1.10, QRect(item.current_global_rect))
+    assert item.current_size_payload["child_geometry"]["header"]["alignment"] == "right"
+    if other:
+        assert item.current_size_payload["child_geometry"][other] == custom.to_mapping()
+    assert owner.flip_child_alignment(item, "header")
+    assert item.child_size("header").is_authored
+    assert owner.resize_wheel(item, -120)
+    assert "header" not in item.current_size_payload.get("child_geometry", {})
+    if other:
+        assert item.current_size_payload["child_geometry"][other] == custom.to_mapping()
+
+
+@pytest.mark.parametrize("widget_id", ("reddit", "gmail", "media"))
+def test_flip_wheel_restore_repeatedly_returns_authored_shape_and_clears_stale_extent(widget_id) -> None:
+    """Reset cannot replay an old flip, content extent, or transient child floor."""
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    assert descriptor is not None
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey(widget_id, "display:a"),
+        model_identity=widget_id,
+        baseline_global_rect=QRect(240, 170, 700, 380),
+        current_global_rect=QRect(240, 170, 700, 380),
+        baseline_size_payload={}, current_size_payload={},
+        baseline_enabled=True, current_enabled=True, resize_capable=True,
+        custom_child_roles=descriptor.custom_child_roles,
+        size_reset_capable=True,
+        authored_reference_size=(700.0, 380.0),
+        authored_size_payload={},
+    )
+    session = CustomLayoutSession()
+    session.add_item(item)
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}), participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None), reload_request=lambda _: None,
+    )
+    owner._active = True
+    owner._session = session
+    owner._bindings = {"display:a": _DisplayBinding(
+        identity="display:a", monitor_route="1", unit=SimpleNamespace(),
+        screen=None, geometry=QRect(0, 0, 3840, 2160),
+    )}
+    owner._descriptors = {item.source_key: descriptor}
+    owner._publish_uniform_wheel_guides = lambda _item: None
+    for _ in range(2):
+        assert owner.flip_child_alignment(item, "header")
+        assert owner.resize_wheel(item, 120)
+        assert item.current_size_payload["child_geometry"]["header"]["alignment"] == "right"
+        item.child_content_requirement = (760.0, 410.0)
+        position_before_reset = item.current_global_rect.topLeft()
+        assert owner.restore_item_size(item)
+        assert item.current_global_rect.topLeft() == position_before_reset
+        assert item.current_global_rect.size() == QSize(700, 380)
+        assert item.current_size_payload.get("child_geometry") is None
+        assert item.current_size_payload.get("content_extent") is None
+        assert item.current_child_sizes == {}
+        assert item.current_content_extent is None
+        assert item.child_content_requirement is None
+        assert item.resize_scale == pytest.approx(1.0)
+
+
+
+@pytest.mark.parametrize("widget_id", ("reddit", "gmail", "media"))
+def test_one_level_undo_restores_last_flip_or_wheel_only_in_active_edit(widget_id) -> None:
+    """The existing session is the only restored geometry and payload owner."""
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    assert descriptor is not None
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey(widget_id, "display:a"),
+        model_identity=widget_id,
+        baseline_global_rect=QRect(140, 130, 700, 380),
+        current_global_rect=QRect(140, 130, 700, 380),
+        baseline_size_payload={}, current_size_payload={},
+        baseline_enabled=True, current_enabled=True, resize_capable=True,
+        custom_child_roles=descriptor.custom_child_roles,
+        authored_reference_size=(700.0, 380.0),
+    )
+    session = CustomLayoutSession()
+    session.add_item(item)
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}), participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None), reload_request=lambda _: None,
+    )
+    owner._session = session
+    owner._active = True
+    owner._bindings = {"display:a": _DisplayBinding(
+        identity="display:a", monitor_route="1", unit=SimpleNamespace(),
+        screen=None, geometry=QRect(0, 0, 3840, 2160),
+    )}
+    owner._descriptors = {item.source_key: descriptor}
+    owner._publish_uniform_wheel_guides = lambda _item: None
+    original = QRect(item.current_global_rect)
+    assert owner.flip_child_alignment(item, "header")
+    assert item.child_size("header").alignment == "right"
+    assert owner.resize_wheel(item, 120)
+    enlarged = QRect(item.current_global_rect)
+    assert enlarged.size() != original.size()
+    assert owner.undo_last_change()
+    assert item.current_global_rect == original
+    assert item.child_size("header").alignment == "right", "Undo wheel must not undo older flip"
+    assert item.current_size_payload["child_geometry"]["header"]["alignment"] == "right"
+    assert not owner.undo_last_change(), "Only one completed edit action is retained"
+    assert owner.flip_child_alignment(item, "header")
+    assert item.child_size("header").is_authored
+    assert owner.undo_last_change()
+    assert item.child_size("header").alignment == "right"
+    assert item.current_size_payload["child_geometry"]["header"]["alignment"] == "right"
+    # An unfinished parent drag must not consume the previous completed flip
+    # while its held pointer would subsequently overwrite restored geometry.
+    assert owner.flip_child_alignment(item, "header")
+    owner._begin_undo_gesture(item, "parent_move")
+    assert not owner.undo_last_change()
+    owner._finish_undo_gesture("parent_move")
+    assert owner.undo_last_change()
+    assert item.child_size("header").alignment == "right"
+    owner._active = False
+    assert not owner.undo_last_change()
+
+
 def test_restore_size_clears_child_size_placement_and_floor_but_preserves_parent_xy() -> None:
     descriptor = get_widget_runtime_descriptor("abandonment_issues")
     assert descriptor is not None
@@ -2050,3 +2225,40 @@ def test_parse_content_extent_accepts_valid_pairs_only() -> None:
     assert _parse_content_extent([-1.0, 300.0]) is None
     assert _parse_content_extent(["x", "y"]) is None
     assert _parse_content_extent("610x300") is None
+
+
+def test_wheel_does_not_resurrect_saved_header_flip_after_unsaved_flip_back() -> None:
+    """The admitted baseline may already contain a saved orientation override."""
+    descriptor = get_widget_runtime_descriptor("system_stats")
+    assert descriptor is not None
+    saved = CustomChildSize(alignment="right")
+    baseline = {CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY: {"header": saved.to_mapping()}}
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("system_stats", "display:a"),
+        model_identity="system_stats",
+        baseline_global_rect=QRect(140, 130, 700, 380),
+        current_global_rect=QRect(140, 130, 700, 380),
+        baseline_size_payload=baseline, current_size_payload=dict(baseline),
+        baseline_enabled=True, current_enabled=True, resize_capable=True,
+        custom_child_roles=descriptor.custom_child_roles,
+        baseline_child_sizes={"header": saved},
+        current_child_sizes={"header": saved},
+        authored_reference_size=(700.0, 380.0),
+    )
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}), participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None), reload_request=lambda _: None,
+    )
+    owner._bindings = {"display:a": _DisplayBinding(
+        identity="display:a", monitor_route="1", unit=SimpleNamespace(),
+        screen=None, geometry=QRect(0, 0, 3840, 2160),
+    )}
+    owner._descriptors = {item.source_key: descriptor}
+    owner._publish_uniform_wheel_guides = lambda _item: None
+    assert owner.flip_child_alignment(item, "header")
+    assert item.child_size("header").is_authored
+    assert owner.resize_wheel(item, 120)
+    assert "header" not in item.current_size_payload.get(CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY, {})
+    assert owner.flip_child_alignment(item, "header")
+    assert owner.resize_wheel(item, 120)
+    assert item.current_size_payload[CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY]["header"]["alignment"] == "right"

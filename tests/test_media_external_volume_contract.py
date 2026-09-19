@@ -29,7 +29,11 @@ def test_media_volume_is_external_to_card_and_card_reclaims_old_width() -> None:
     assert "readonly property bool appVolumeOnLeft:" in qml
     assert 'accessorySide: appVolumeOnLeft ? "left" : "right"' in qml
     assert "accessoryExtent: volumeAccessoryExtent" in qml
-    assert "canonicalPreferredCardWidth + volumeAccessoryExtent" in qml
+    # The effective authored width adds the canonical accessory reservation;
+    # the public lane alias must resolve to that SAME value. Keep the card
+    # separate, not silently shortened when volume is enabled.
+    assert "readonly property real volumeAccessoryExtent: canonicalVolumeAccessoryExtent" in qml
+    assert "canonicalPreferredCardWidth + canonicalVolumeAccessoryExtent" in qml
     assert "preferredContentWidth: effectivePreferredWidth" in qml
     assert "accessoryContent:" in qml
     assert 'objectName: "mediaAppVolumeSlider"' in qml

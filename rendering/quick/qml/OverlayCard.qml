@@ -17,6 +17,8 @@ Item {
     property real borderWidth: 2.0
     property real cornerRadius: 8.0
     property real padding: 8.0
+    // Card CONTENT paints only within the card at every point in its lifecycle.
+    // Background, border and the external shadow remain separate/unclipped.
 
     property bool shadowEnabled: true
     property color shadowColor: "#96000000"
@@ -96,11 +98,18 @@ Item {
     }
 
     Item {
-        id: contentArea
-        objectName: "overlayCardContent"
+        id: contentPaintBoundary
+        objectName: "overlayCardChildPaintBoundary"
         anchors.fill: parent
-        anchors.margins: card.padding
-        clip: false
+        clip: true
         z: 1
+
+        Item {
+            id: contentArea
+            objectName: "overlayCardContent"
+            anchors.fill: parent
+            anchors.margins: card.padding
+            clip: false
+        }
     }
 }

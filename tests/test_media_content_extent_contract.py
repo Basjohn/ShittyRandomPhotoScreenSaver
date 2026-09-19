@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -76,19 +77,26 @@ def test_media_qml_reflows_width_height_and_projects_full_semantic_child_roles()
     assert "spacing: mediaRoot.sectionSpacing" in qml
     assert "rowSpacing: mediaRoot.metadataSpacing" in qml
     for role_id in (
-        "header", "metadata", "playback_state", "artwork", "seek_bar",
+        "header", "metadata", "artist", "playback_state", "artwork", "seek_bar",
         "volume_bar", "transport_controls", "mute_button",
     ):
         assert f'"roleId": "{role_id}"' in qml
     assert '"target": headerFrame' in qml
     assert '"target": trackMetadata' in qml
+    assert '"target": trackMetadata.artistEditTarget' in qml
     assert '"target": playbackState' in qml
     assert '"target": artworkFrame' in qml
     assert '"target": progressTrack' in qml
     assert '"target": appVolumeTrack' in qml
     assert '"target": controlsRow' in qml
     assert '"target": systemMuteButton' in qml
-    assert qml.count('"requirementTarget": customChildRequirement') == 8
+    # Role-local containment superseded the old Media child-driven content
+    # requirement. All nine roles remain editable without another outer-size
+    # authority, even when a child is moved off its authored flow rail.
+    assert qml.count('"requirementTarget": null') == 9
+    assert "customEditableChildRequirementTarget: null" in qml
+    assert "id: customChildRequirement" not in qml
+    assert 'roles[i].allowParentGrowth = false' in qml
     assert "canonicalArtworkWidth" in qml
     assert "canonicalProgressTrackWidth" in qml
     assert "canonicalControlsHeight" in qml
@@ -96,17 +104,16 @@ def test_media_qml_reflows_width_height_and_projects_full_semantic_child_roles()
     assert 'objectName: "mediaControlsBandSlot"' in qml
     assert "canonicalVolumeTrackWidth" in qml
     assert "Image.PreserveAspectCrop" in qml
-    # Family overflow uses stable authored baselines, ignores temporarily absent
-    # roles, and sums the two horizontal lanes that can otherwise collide.
+    # Visibility is family-authored; selected Edit may not derive a second
+    # content-extent requirement from those children or from absent roles.
     assert "artworkFrame.visible" in qml
     assert "progressBand.visible" in qml
     assert "controlsRow.visible" in qml
     assert "appVolumeSlider.visible" in qml
-    assert "artworkWidthExtra + seekWidthExtra" in qml
-    assert "transportWidthExtra" in qml
-    # Placement overflow is derived exactly by the selected Edit layer from
-    # mapped occupied rectangles. Media's family requirement remains size/reflow
-    # only so a harmless positive move inside the card cannot inflate its parent.
+    assert "artworkWidthExtra + seekWidthExtra" not in qml
+    assert "transportWidthExtra" not in qml
+    # Exact role-local containment, not a second family-side outer-extent
+    # calculator, must own free CUSTOM placement.
     assert "horizontalPlacementExtra" not in qml
     assert "verticalPlacementExtra" not in qml
     # Transport remains a grouped bar while mute is its own intrinsic child;
@@ -141,6 +148,96 @@ def test_media_qml_reflows_width_height_and_projects_full_semantic_child_roles()
 
 
 
+def test_media_authored_xy_reflow_survives_child_editor_and_visibility_gates() -> None:
+    qml = _text("rendering/quick/qml/MediaPresentation.qml")
+    # The pre-editor authored layout used available card width and remaining
+    # vertical flow space. X/Y must still respond to parent content extent;
+    # CUSTOM child geometry merely projects onto those existing rails.
+    assert "mediaRoot.authoredCardWidth - mediaRoot.shellInset" in qml
+    assert "canonicalProgressTrackWidth\n            + (authoredCardContentWidth - canonicalCardContentWidth) * 0.75" in qml
+    assert "width: mediaRoot.authoredProgressTrackWidth\n" in qml
+    assert "width: mediaRoot.authoredCardContentWidth\n" in qml
+    assert "baseArtworkWidth + extraHorizontalRoom * 0.35" in qml
+    assert "mediaRoot.authoredCardWidth - mediaRoot.canonicalPreferredCardWidth" in qml
+    assert "readonly property real normalBottomInColumn: controlsBandSlot.visible" in qml
+    assert "readonly property real bottomInColumn: seekWouldIntersectArtwork" in qml
+    assert "readonly property real referenceHeight: Math.max(" in qml
+    assert "width: visible\n                    ? authoredArtworkWidth" in qml
+    assert "height: visible\n                    ? referenceHeight" in qml
+    assert "mediaRoot.authoredCardContentWidth - authoredArtworkWidth" in qml
+    # The semantic flip has an independent left-side authored rail; neither
+    # orientation may derive its provisional seek overlap from final artwork.x.
+    assert "mediaRoot.headerFlipped && mediaRoot.artworkOnAuthoredRail" in qml
+    assert 'readonly property real unflippedAuthoredX:' in qml
+    assert 'mediaRoot.authoredCardContentWidth - authoredArtworkWidth' in qml
+    assert 'mediaRoot.headerFlipped && mediaRoot.artworkOnAuthoredRail' in qml
+    # The authored reference cannot follow the edited seek target. That was a
+    # child move/resize -> artwork reference -> child edit map feedback path.
+    assert 'authoredSeekX + mediaRoot.authoredProgressTrackWidth' in qml
+    artwork = qml.split('id: artworkFrame', 1)[1].split('id: progressBand', 1)[0]
+    assert 'progressTrack.x' not in artwork and 'progressTrack.width' not in artwork
+    # Visibility should not become a new persistence or parent-growth owner.
+    assert "visible: mediaRoot.mediaModel.progressAvailable" in qml
+    assert "visible: mediaRoot.mediaModel.controlsBandAvailable" in qml
+    assert '"requirementTarget": null' in qml
+    assert "customEditableChildRequirementTarget: null" in qml
+    assert "roles[i].allowParentGrowth = false" in qml
+
+
+def test_authored_metadata_lane_reserves_intrinsic_artwork_rail_independent_of_child_move() -> None:
+    qml = _text("rendering/quick/qml/MediaPresentation.qml")
+    lane = qml.split("id: metadata", 1)[1].split("MediaMetadataColumn {", 1)[0]
+    # The metadata reference must never consume the currently edited artwork
+    # X/Y/width. A first artwork drag may not rebuild the sibling's authored
+    # lane and then invalidate collision and pointer compensation mid-gesture.
+    assert "artworkFrame.authoredArtworkWidth + 16.0" in lane
+    assert "mediaRoot.authoredCardContentWidth" in lane
+    assert "artworkFrame.x" not in lane and "artworkFrame.width" not in lane
+    assert "mediaRoot.artworkOnAuthoredRail" not in lane
+    # Artwork's own provisional position is card-content relative, unaffected
+    # by optional external volume or independently moved seek and metadata.
+    assert "mediaRoot.authoredCardContentWidth - provisionalArtworkWidth" in qml
+    assert "artworkFrame.x" not in qml.split(
+        "readonly property real provisionalArtworkWidth:", 1
+    )[1].split("readonly property real provisionalArtworkX:", 1)[0]
+
+
+def test_media_artwork_rail_does_not_depend_on_positioner_polish_or_expand_a_lock_owner() -> None:
+    qml = _text("rendering/quick/qml/MediaPresentation.qml")
+    # Qt Quick Column y coordinates can lag a content-extent geometry change;
+    # the artwork must use authored band sizes and spacing directly.
+    for binding in (
+        "readonly property real mainRailTop:",
+        "readonly property real mainRailBottom: mainRailTop + mainBand.height",
+        "readonly property real progressRailTop: mainRailBottom",
+        "readonly property real controlsRailTop: mainRailBottom",
+        "? controlsRailTop - mediaColumn.spacing",
+        "? progressRailTop - mediaColumn.spacing",
+    ):
+        assert binding in qml
+    assert "? controlsBandSlot.y - mediaColumn.spacing" not in qml
+    assert "? progressBand.y - mediaColumn.spacing" not in qml
+    # Card and independent volume accessory are ALWAYS paint-bounded, including
+    # authored and non-edit runtime. Clipping must not become child editability
+    # or a second geometry, content-extent, or Settings owner.
+    # The shared card boundary clips unconditionally; Media does not install
+    # a competing content-extent-dependent clipping policy around its Column.
+    assert 'clip: mediaRoot.mediaModel.contentExtentActive' not in qml
+    assert "clip: true" in qml.split("id: appVolumeSlider", 1)[1].split("id: appVolumeTrack", 1)[0]
+    assert "childPaintContainmentActive" not in qml
+    overlay = _text("rendering/quick/qml/OverlayWidget.qml")
+    card = _text("rendering/quick/qml/OverlayCard.qml")
+    assert "paintContainmentActive" not in overlay
+    assert "clip: true" in overlay.split("id: accessoryLayer", 1)[1]
+    assert "clip: true" in card.split("id: contentPaintBoundary", 1)[1].split("id: contentArea", 1)[0]
+    assert "clip: false" in card  # shell/shadow must not be clipped
+    assert "readonly property real authoredVolumeTrackHeight:" in qml
+    assert "mediaRoot.authoredLayoutHeight - 2.0 * mediaRoot.cardPadding - 12.0" in qml
+    assert "authoredVolumeTrackHeight * mediaModel.customVolumeHeightScale" in qml
+    assert "customEditableChildRequirementTarget: null" in qml
+    assert "Timer {" not in qml
+
+
 def test_media_nested_seek_and_transport_detach_from_reflowing_bands_after_placement() -> None:
     qml = _text("rendering/quick/qml/MediaPresentation.qml")
 
@@ -167,14 +264,24 @@ def test_media_nested_seek_and_transport_detach_from_reflowing_bands_after_place
     # a fixed collision obstacle after seek becomes a freely placed role.
     assert '{"target": progressBand' not in qml
 
-    # Once nested children are manually placed, their invisible Column slots
-    # return to canonical authored reservations rather than continuing to grow
-    # from the detached child's edited size. Exact mapped containment then owns
-    # the free rectangle, preventing a ghost second layout authority.
-    assert "mediaRoot.seekOnAuthoredRail\n                    ? progressTrack.height + 8.0" in qml
+    # An editable seek must never determine the parent Column reservation,
+    # even during a size gesture on its original authored rail. The logical
+    # band is canonical in both states; rendered collision owns the edited
+    # target. No seek->Column->artwork feedback is admitted.
+    assert 'height: visible ? mediaRoot.canonicalProgressBandHeight : 0.0' in qml
+    artwork = qml.split('id: artworkFrame', 1)[1].split('id: progressBand', 1)[0]
+    assert 'readonly property real authoredSeekX:' in artwork
+    assert 'authoredSeekX + mediaRoot.authoredProgressTrackWidth' in artwork
+    assert 'progressTrack.x' not in artwork
+    assert 'progressTrack.width' not in artwork
     assert "mediaRoot.transportOnAuthoredRail\n                    ? Math.max(mediaRoot.canonicalControlsHeight, controlsRow.height)" in qml
-    assert "progressBand.visible\n                && mediaRoot.seekOnAuthoredRail" in qml
-    assert "controlsRow.visible\n                && mediaRoot.transportOnAuthoredRail" in qml
+    # The former family-wide child requirement and its on-rail gates were
+    # deliberately retired.  Reflow follows the two slot-height gates above;
+    # off-rail geometry is hard-contained by the card, not admitted as an outer
+    # extent requirement (which could otherwise feed back into slot reflow).
+    assert 'customEditableChildRequirementTarget: null' in qml
+    assert 'roles[i].containmentTarget = mediaColumn' in qml
+    assert 'roles[i].allowParentGrowth = false' in qml
 
     # Detachment is retained arithmetic only. Do not sneak a helper cadence into
     # ordinary CUSTOM runtime to keep nested placements stable.
@@ -182,10 +289,55 @@ def test_media_nested_seek_and_transport_detach_from_reflowing_bands_after_place
     assert "QTimer" not in qml
 
 
+def test_media_card_child_x_uses_card_only_normalization_even_with_volume_accessory() -> None:
+    qml = _text("rendering/quick/qml/MediaPresentation.qml")
+    # The edit owner projects all non-volume roles with card-only X
+    # normalization.  The displayed rectangle must use that SAME denominator:
+    # otherwise enabling the optional accessory jumps edited children despite
+    # no child gesture or saved-state change.
+    assert 'readonly property real childNormalizationWidth: canonicalPreferredCardWidth' in qml
+    for role_property in (
+        'customArtworkXOffset', 'customSeekXOffset', 'customTransportXOffset',
+    ):
+        assert re.search(
+            rf'mediaRoot\.mediaModel\.{role_property}\s*\*\s*'
+            r'mediaRoot\.childNormalizationWidth\b', qml,
+        ), role_property
+    # Only the external volume control preserves its legacy whole-widget X
+    # normalization; that is not the legal containment for ordinary card roles.
+    assert 'roleId": "volume_bar"' in qml
+    assert '"containmentTarget": appVolumeSlider' in qml
+    assert '"normalizationWidth": canonicalPreferredCardWidth\n                    + canonicalVolumeAccessoryExtent' in qml
+
+
 def test_media_metadata_crossfade_accepts_vertical_spacing_projection() -> None:
     qml = _text("rendering/quick/qml/MediaMetadataColumn.qml")
     assert "property real rowSpacing: 7.0" in qml
     assert qml.count("spacing: metadataFade.rowSpacing") == 2
+
+
+def test_media_artist_child_is_one_role_with_two_crossfade_projections() -> None:
+    descriptor = _text("rendering/widget_descriptors.py")
+    media = descriptor.split('widget_id="media"', 1)[1].split('widget_id="reddit"', 1)[0]
+    qml = _text("rendering/quick/qml/MediaPresentation.qml")
+    crossfade = _text("rendering/quick/qml/MediaMetadataColumn.qml")
+    assert '"artist"' in media
+    assert '"roleId": "artist"' in qml
+    assert '"collisionIgnoreRoleIds": ["metadata"]' in qml
+    assert '"collisionIgnoreRoleIds": ["artist"]' in qml
+    assert 'artistOffsetX: mediaRoot.childOffsetX("artist")' in qml
+    assert 'artistOffsetY: mediaRoot.childOffsetY("artist")' in qml
+    assert 'artistScale: mediaRoot.childWidthScale("artist")' in qml
+    assert 'property alias artistEditTarget: currentArtistText' in crossfade
+    assert crossfade.count('x: metadataFade.artistOffsetX') == 2
+    assert crossfade.count('y: metadataFade.artistOffsetY') == 2
+    assert crossfade.count('scale: metadataFade.artistScale') == 2
+    assert crossfade.count('horizontalAlignment: metadataFade.artistAlignment === "right"') == 2
+    # Both authored zero-offset/scale-1 lines retain a separate row slot in
+    # each crossfade Column; no new flow or global Settings authority.
+    assert crossfade.count('height: visible ? currentArtistText.implicitHeight : 0.0') == 1
+    assert crossfade.count('height: visible ? outgoingArtistText.implicitHeight : 0.0') == 1
+    assert 'Timer {' not in crossfade
 
 
 def test_media_landscape_permission_is_retired_and_custom_artwork_frame_is_freeform() -> None:

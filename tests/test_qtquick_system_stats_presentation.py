@@ -414,3 +414,61 @@ def test_system_stats_minimum_width_keeps_detail_clear_of_value(qt_app) -> None:
         engine.deleteLater()
         model.retire()
         qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_system_stats_header_flip_swaps_metric_rails_and_restores_authored_spacing(qt_app) -> None:
+    """Header flip is semantic orientation, not blanket mirroring of all text."""
+    model = _model()
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "SystemStatsPresentation.qml"))
+    )
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
+    item = component.createWithInitialProperties({"systemStatsModel": model})
+    assert isinstance(item, QQuickItem), [
+        error.toString() for error in component.errors()
+    ]
+    item.setWidth(model.authoredWidth)
+    item.setHeight(model.authoredHeight)
+    try:
+        qt_app.processEvents()
+        header = item.findChild(QObject, "systemStatsHeaderFrame")
+        label = item.findChild(QObject, "systemStatsCpuLabel")
+        value = item.findChild(QObject, "systemStatsCpuValue")
+        accent = item.findChild(QObject, "systemStatsCpuAccent")
+        assert all(obj is not None for obj in (header, label, value, accent))
+        baseline = (header.x(), label.x(), value.x(), accent.x())
+        assert label.x() < value.x()
+        assert accent.x() == pytest.approx(0.0)
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        assert bool(item.property("headerFlipped"))
+        assert header.parentItem().x() > baseline[0]
+        assert label.x() > value.x() + value.width() + 1.0
+        assert accent.x() > 0.0
+        # Independent role flip is still possible; it changes alignment only,
+        # never silently swaps the already flipped structural rails.
+        flipped_label_x = label.x()
+        flipped_text_alignment = int(label.property("horizontalAlignment"))
+        assert model.set_custom_child_geometry({
+            "header": {"alignment": "right"},
+            "metric_labels": {"alignment": "right"},
+        })
+        qt_app.processEvents()
+        assert label.x() == pytest.approx(flipped_label_x)
+        assert int(label.property("horizontalAlignment")) != flipped_text_alignment
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert not bool(item.property("headerFlipped"))
+        assert (header.x(), label.x(), value.x(), accent.x()) == pytest.approx(baseline)
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        qt_app.processEvents()

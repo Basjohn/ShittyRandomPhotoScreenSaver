@@ -980,3 +980,115 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
 
     assert retained is not None
     assert service.is_retired() is True
+
+
+def test_backlog_child_requirement_does_not_count_live_parent_rail_twice(qt_app, tmp_path) -> None:
+    """Parent-only X expansion may move BACKLOG but not grow its child floor."""
+    model = _model()
+    model.activate()
+    model.on_abandonment_presentation(
+        _presentation(tmp_path / "backlog-requirement.png"), animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        from PySide6.QtQml import QJSValue
+        target = item.property("customEditableChildRequirementTarget")
+        if isinstance(target, QJSValue):
+            target = target.toQObject()
+        assert target is not None
+        baseline_right = float(target.property("backlogRight"))
+        baseline_floor = float(target.property("requiredContentWidth"))
+        width, height = float(model.baseAuthoredWidth), float(model.baseAuthoredHeight)
+        for extra in (90.0, 220.0, 310.0):
+            assert model.set_content_extent(width + extra, height)
+            item.setWidth(model.authoredWidth)
+            item.setHeight(model.authoredHeight)
+            qt_app.processEvents()
+            assert float(target.property("backlogRight")) == pytest.approx(baseline_right)
+            assert float(target.property("requiredContentWidth")) == pytest.approx(baseline_floor)
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+
+
+@pytest.mark.qt
+def test_semantic_header_flip_exchanges_abandonment_rails_without_mirroring_artwork(qt_app, tmp_path) -> None:
+    """BACKLOG and artwork/text regions trade sides, but content does not flip.
+
+    Relocated right-rail artwork can follow parent growth in its PAINT
+    coordinates; that movement must not manufacture further parent growth.
+    """
+    model = _model()
+    model.activate()
+    model.on_abandonment_presentation(
+        _presentation(tmp_path / "semantic-flip.png"), animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        find = lambda name: _find_visual_item(item, name)
+        canvas = find("abandonmentAuthoredCanvas")
+        art = find("abandonmentArtworkFrame")
+        image = find("abandonmentArtworkImage")
+        title = find("abandonmentGameTitle")
+        flavour = find("abandonmentRediscoveryText")
+        age = find("abandonmentAgeStamp")
+        shelves = find("abandonmentLedgerGroup")
+        backlog = find("abandonmentArchiveTab")
+        assert all(obj is not None for obj in
+                   (canvas, art, image, title, flavour, age, shelves, backlog))
+        def pos(obj):
+            return obj.mapToItem(canvas, 0.0, 0.0).x()
+        text_roles = (title, flavour, age, shelves)
+        original_text = tuple(pos(obj) for obj in text_roles)
+        original_art = pos(art)
+        original_backlog = pos(backlog)
+        art_fill = image.property("fillMode")
+        title_align = title.property("horizontalAlignment")
+        base_width = float(model.baseAuthoredWidth)
+        base_height = float(model.baseAuthoredHeight)
+        assert original_art < original_text[0] < original_backlog
+
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        assert bool(item.property("headerFlipped"))
+        flipped_text_x = float(item.property("flippedTextX"))
+        for obj in text_roles:
+            assert pos(obj) == pytest.approx(flipped_text_x, abs=1.5)
+        assert pos(art) == pytest.approx(
+            float(item.property("flippedArtworkX")) + art.x(), abs=1.5
+        )
+        assert pos(backlog) < pos(title) < pos(art)
+        assert image.property("fillMode") == art_fill
+        assert title.property("horizontalAlignment") == title_align
+        req = item.property("customEditableChildRequirementTarget")
+        from PySide6.QtQml import QJSValue
+        if isinstance(req, QJSValue):
+            req = req.toQObject()
+        assert req is not None
+        required_before = float(req.property("requiredContentWidth"))
+        art_before = pos(art)
+        backlog_before = pos(backlog)
+        assert model.set_content_extent(base_width + 120.0, base_height)
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        qt_app.processEvents()
+        assert pos(art) == pytest.approx(art_before + 120.0)
+        assert pos(backlog) == pytest.approx(backlog_before)
+        assert float(req.property("requiredContentWidth")) == pytest.approx(required_before, abs=1.5)
+
+        assert model.clear_content_extent()
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert not bool(item.property("headerFlipped"))
+        assert tuple(pos(obj) for obj in text_roles) == pytest.approx(original_text)
+        assert pos(art) == pytest.approx(original_art)
+        assert pos(backlog) == pytest.approx(original_backlog)
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()

@@ -394,3 +394,37 @@ def test_one_axis_resize_changes_only_requested_axis_and_preserves_opposite_edge
     )
     assert vertical.geometry.width_scale == 1.0
     assert vertical.geometry.height_scale == 1.25
+
+
+def test_center_owned_uniform_child_resizes_equally_around_authored_center() -> None:
+    role = CustomChildRoleDescriptor(
+        "clock_face", minimum_scale=(0.45, 0.45),
+        maximum_scale=(2.5, 2.5), uniform_scale=True,
+        centered_resize=True, movable=False,
+    )
+    initial = CustomChildSize()
+    for handle, dx, dy in (
+        ("bottom_right", 20.0, 20.0),
+        ("top_left", -20.0, -20.0),
+        ("bottom_left", -20.0, 20.0),
+        ("top_right", 20.0, -20.0),
+    ):
+        result = resolve_child_resize_geometry(
+            role, initial, handle=handle, raw_dx=dx, raw_dy=dy,
+            visible_width=200.0, visible_height=200.0,
+            normalization_width=200.0, normalization_height=200.0,
+            outer_scale=1.0,
+        )
+        assert result.geometry.width_scale == result.geometry.height_scale == 1.2
+        assert result.geometry.x_offset == result.geometry.y_offset == 0.0
+        assert result.visible_width == result.visible_height == 240.0
+
+
+def test_center_owned_descriptor_rejects_second_resize_and_placement_authority() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="uniform scaling and fixed center"):
+        CustomChildRoleDescriptor("bad", centered_resize=True, uniform_scale=False)
+    with pytest.raises(ValueError, match="uniform scaling and fixed center"):
+        CustomChildRoleDescriptor("bad", centered_resize=True, uniform_scale=True,
+                                  movable=True)

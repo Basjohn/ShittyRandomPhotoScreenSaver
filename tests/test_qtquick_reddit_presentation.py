@@ -613,3 +613,169 @@ def test_reddit_content_extent_drives_visible_count_and_spread(qt_app) -> None:
         owner.deleteLater()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("family", ["reddit", "reddit2"])
+def test_header_flip_rearranges_reddit_rails_without_mirroring_post_text(qt_app, family):
+    """The one header flip swaps header/refresh and timestamp/title rails."""
+    owner = QObject()
+    factory = QuickSceneFactory(owner)
+    context, root, host = _create_host(factory, owner)
+    model = _model(widget_id=family, limit=2)
+    model.publish_posts((_post(1), _post(2)), now_ts=20_000.0)
+    presentation = RetainedRedditPresentation(
+        host=host, model=model,
+        geometry=OverlayWidgetGeometry(25.0, 30.0, 620.0, 300.0),
+        on_open_requested=lambda url: True,
+    )
+    item = presentation.item
+    try:
+        presentation.activate()
+        qt_app.processEvents()
+        header = _find_visual_item(item, "brandedHeader")
+        refresh = _find_visual_item(item, "redditRefreshTarget")
+        area = _find_visual_item(item, "redditHeaderArea")
+        row = _find_visual_item(item, "redditPostRow_0")
+        age = _find_visual_item(item, "redditPostAge_0")
+        age_value = _find_visual_item(item, "redditPostAgeValue_0")
+        age_ago = _find_visual_item(item, "redditPostAgeAgo_0")
+        title = _find_visual_item(item, "redditPostTitle_0")
+        assert all(v is not None for v in (header, refresh, area, row,
+                                           age, age_value, age_ago, title))
+        assert row.isVisible()
+        authored = (header.x(), refresh.x(), age.x(), title.x())
+        assert header.x() < refresh.x() and age.x() < title.x()
+        title_align = title.property("horizontalAlignment")
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        assert header.x() > refresh.x()
+        assert header.x() + header.width() * header.scale() <= area.width() + 0.1
+        assert age.x() > title.x() and title.x() >= -0.1
+        assert title.x() + title.width() <= age.x() - 3.0
+        assert age_value.x() < age_ago.x(), "flipped timestamp must read 01HR then AGO"
+        assert age_ago.x() - (age_value.x() + age_value.width()) == pytest.approx(4.0)
+        assert age.x() - (title.x() + title.width()) == pytest.approx(4.0)
+        assert age.x() + age.width() == pytest.approx(row.width())
+        assert title.property("horizontalAlignment") == title_align
+        assert bool(item.property("headerFlipped"))
+        preferred = (float(item.property("preferredContentWidth")),
+                     float(item.property("preferredContentHeight")))
+        assert preferred[0] > 100.0 and preferred[1] > 60.0
+        for width, height in ((740.0, 355.0), (500.0, 260.0), (620.0, 300.0)):
+            presentation.set_geometry(OverlayWidgetGeometry(25.0, 30.0, width, height))
+            qt_app.processEvents()
+            assert item.isVisible() and row.isVisible(), (
+                "Reddit lost content after flipped parent resize", family,
+                width, height, item.property("preferredContentWidth"),
+                item.property("preferredContentHeight"),
+                item.property("presentationScale"), row.width(), row.height(),
+            )
+            assert header.width() > 20.0 and header.height() > 20.0
+            assert row.width() > 100.0 and row.height() > 20.0
+            assert item.property("preferredContentWidth") == pytest.approx(preferred[0])
+            assert float(item.property("presentationScale")) > 0.0
+            assert bool(item.property("headerFlipped"))
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert (header.x(), refresh.x(), age.x(), title.x()) == pytest.approx(authored)
+        assert age_value.x() < age_ago.x()
+        assert item.isVisible() and row.isVisible()
+        assert row.width() > 100.0 and row.height() > 20.0
+        # Explicitly cover the user's two-consecutive-flips blank-state: the
+        # role record crosses authored -> flipped -> authored -> flipped
+        # without resetting its QQuick scene or remaking the row delegates.
+        for cycle in range(3):
+            assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+            qt_app.processEvents()
+            title_rect = title.mapRectToItem(row, title.boundingRect())
+            assert bool(item.property("headerFlipped")) and row.isVisible()
+            assert str(title.property("text")).strip()
+            assert title.width() > 30.0 and title_rect.x() >= -1.0
+            assert title_rect.right() <= row.width() + 1.0
+            assert float(item.property("preferredContentWidth")) > 100.0
+            assert model.set_custom_child_geometry({})
+            qt_app.processEvents()
+            assert not bool(item.property("headerFlipped"))
+            assert row.isVisible() and title.isVisible() and title.width() > 30.0
+            assert (header.x(), refresh.x(), age.x(), title.x()) == pytest.approx(authored)
+    finally:
+        host.retire_all()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        owner.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("family", ["reddit", "reddit2"])
+def test_flipped_reddit_long_and_short_titles_keep_one_legible_timestamp_rail(qt_app, family):
+    """Rendered row geometry regression for the operator's 19-post screenshot.
+
+    Source-string checks previously stayed green while short titles pulled the
+    timestamp rail to the middle. This asserts the actual retained delegates,
+    their text bounds, and their mapping after every width and flip cycle.
+    """
+    owner = QObject()
+    factory = QuickSceneFactory(owner)
+    context, root, host = _create_host(factory, owner)
+    model = _model(widget_id=family, limit=3)
+    model.publish_posts((
+        _post(1, title="Indeed"),
+        _post(2, title="A headline so long that it must be elided before the timestamp even on a very wide card"),
+        _post(3, title="PostForEverything"),
+    ), now_ts=20_000.0)
+    presentation = RetainedRedditPresentation(
+        host=host, model=model,
+        geometry=OverlayWidgetGeometry(25.0, 30.0, 620.0, 330.0),
+    )
+    item = presentation.item
+    try:
+        presentation.activate()
+        for width, flipped in ((620.0, True), (410.0, True),
+                               (770.0, True), (620.0, False),
+                               (620.0, True)):
+            presentation.set_geometry(OverlayWidgetGeometry(25.0, 30.0, width, 330.0))
+            model.set_custom_child_geometry(
+                {"header": {"alignment": "right"}} if flipped else {}
+            )
+            qt_app.processEvents()
+            rails = []
+            for i in range(3):
+                row = _find_visual_item(item, f"redditPostRow_{i}")
+                title = _find_visual_item(item, f"redditPostTitle_{i}")
+                age = _find_visual_item(item, f"redditPostAge_{i}")
+                value = _find_visual_item(item, f"redditPostAgeValue_{i}")
+                ago = _find_visual_item(item, f"redditPostAgeAgo_{i}")
+                assert all(v is not None and v.isVisible()
+                           for v in (row, title, age, value, ago))
+                assert title.width() > 1 and age.width() > 0
+                assert str(title.property("text")).strip()
+                assert str(value.property("text")).strip()
+                assert value.x() + value.width() <= ago.x() + 0.1
+                assert ago.x() + ago.width() <= age.width() + 0.1
+                mapped_age = age.mapRectToItem(row, age.boundingRect())
+                mapped_title = title.mapRectToItem(row, title.boundingRect())
+                assert mapped_age.left() >= -0.1
+                assert mapped_age.right() <= row.width() + 0.1
+                assert mapped_title.left() >= -0.1
+                assert mapped_title.right() <= row.width() + 0.1
+                if flipped:
+                    assert mapped_title.right() <= mapped_age.left() - 3.0
+                rails.append((round(age.x(), 2), round(age.width(), 2)))
+            if flipped:
+                assert rails[0] == rails[1] == rails[2], (
+                    "Timestamp shifts with post-title length", family, width, rails
+                )
+    finally:
+        host.retire_all()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        owner.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()

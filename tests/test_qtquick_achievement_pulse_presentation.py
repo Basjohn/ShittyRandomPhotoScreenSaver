@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from core.settings.default_contract import require_canonical_default
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QPointF, QUrl, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem
@@ -268,8 +268,12 @@ def test_custom_content_extent_grows_logical_canvas_and_reflows_major_rails(qt_a
         rarity = _find_visual_item(item, "achievementField_rarity")
         field_group = _find_visual_item(item, "achievementFieldGroup")
         pulse = _find_visual_item(item, "achievementProgressPulse")
+        game_title = _find_visual_item(item, "achievementGameTitle")
+        list_frame = _find_visual_item(item, "achievementListGroup")
         assert artwork is not None and rarity is not None and field_group is not None
-        assert pulse is not None
+        assert pulse is not None and game_title is not None and list_frame is not None
+        base_title_width = game_title.width()
+        base_list_width = list_frame.width()
         base_artwork_x = artwork.x()
         base_rarity_width = rarity.width()
         base_field_group_width = field_group.width()
@@ -285,8 +289,13 @@ def test_custom_content_extent_grows_logical_canvas_and_reflows_major_rails(qt_a
         assert model.authoredWidth == pytest.approx(base_width + 220.0)
         assert model.authoredHeight == pytest.approx(base_height + 120.0)
         assert artwork.x() == pytest.approx(base_artwork_x + 220.0)
-        # Stable child baselines do not stretch a role merely because the parent
-        # content_extent grew. Authored bottom-rail roles translate as a group.
+        # The authored text rail remains attached to the live artwork-left edge
+        # and widens with parent X. Persisted role baselines stay canonical.
+        assert game_title.width() == pytest.approx(base_title_width + 220.0)
+        assert list_frame.width() == pytest.approx(base_list_width + 220.0)
+        if artwork.isVisible():
+            assert game_title.x() + game_title.width() <= artwork.x() - 1.0
+        # Authored bottom-rail roles translate as a group.
         assert rarity.width() == pytest.approx(base_rarity_width)
         assert field_group.width() == pytest.approx(base_field_group_width)
         assert field_group.y() == pytest.approx(base_field_group_y + 120.0)
@@ -300,6 +309,8 @@ def test_custom_content_extent_grows_logical_canvas_and_reflows_major_rails(qt_a
         assert model.authoredWidth == pytest.approx(base_width)
         assert model.authoredHeight == pytest.approx(base_height)
         assert artwork.x() == pytest.approx(base_artwork_x)
+        assert game_title.width() == pytest.approx(base_title_width)
+        assert list_frame.width() == pytest.approx(base_list_width)
     finally:
         item.deleteLater()
         component.deleteLater()
@@ -857,7 +868,8 @@ def test_qml_is_presentation_only_and_keeps_family_authored_capsule_shadow() -> 
     assert 'uniformScaleTransform: true' in qml
     assert 'id: fieldGroupFrame' in qml
     assert 'readonly property real canonicalX: progressPulse.visible' in qml
-    assert 'x: resolvedRailX()' in qml
+    assert 'resolvedRailX()' in qml
+    assert 'headerFlipped' in qml
     assert 'fontSizeMode: Text.HorizontalFit' in qml
     assert '+ ": " + achievementRoot.achievementModel.metricValue' in qml
     assert "latestArtworkBackground" not in qml
@@ -1010,3 +1022,157 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
 
     assert presentation is not None
     assert service.is_retired() is True
+
+
+def test_first_achievement_child_role_is_independent_of_remainder_list() -> None:
+    model = _model()
+    assert model.set_custom_child_geometry({
+        "first_achievement": {
+            "width_scale": 1.35, "height_scale": 1.25,
+            "x_offset": 0.05, "y_offset": 0.06, "alignment": "right",
+        },
+        "achievement_list": {
+            "width_scale": 0.80, "height_scale": 0.75,
+            "x_offset": -0.04, "y_offset": 0.03, "alignment": "left",
+        },
+    })
+    assert model.customFirstAchievementWidthScale == pytest.approx(1.35)
+    assert model.customFirstAchievementHeightScale == pytest.approx(1.25)
+    assert model.customFirstAchievementAlignment == "right"
+    assert model.customAchievementListWidthScale == pytest.approx(0.80)
+    assert model.customAchievementListAlignment == "left"
+    qml = (QML_ROOT / "AchievementPulsePresentation.qml").read_text(encoding="utf-8")
+    assert '"collisionIgnoreRoleIds": ["achievement_list"]' in qml
+    assert '"collisionIgnoreRoleIds": ["first_achievement"]' in qml
+    assert 'customFirstAchievementXOffset\n                                - achievementRoot.achievementModel.customAchievementListXOffset' in qml
+
+
+@pytest.mark.qt
+def test_first_unlock_authored_empty_custom_and_remainder_edit_keep_scene_position(qt_app, tmp_path) -> None:
+    """A new child descriptor must not move unedited first-unlock glyphs."""
+    model = _model()
+    model.activate()
+    icon_path = tmp_path / "achievement-first-unlock.png"
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=build_mock_steam_view_model("achievement_pulse"),
+            latest_artwork=_image(icon_path),
+            latest_artwork_identity=str(icon_path),
+            latest_artwork_key="first-unlock-parity",
+        ),
+        animate=False,
+    )
+    engine, component, root = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        canvas = _find_visual_item(root, "achievementAuthoredCanvas")
+        first = _find_visual_item(root, "achievementUnlock_0")
+        remainder = _find_visual_item(root, "achievementUnlock_1")
+        assert canvas is not None and first is not None and remainder is not None
+
+        def scene_position(item):
+            point = item.mapToItem(canvas, QPointF(0.0, 0.0))
+            return (point.x(), point.y())
+
+        first_before = scene_position(first)
+        remainder_before = scene_position(remainder)
+        first_size = (first.width(), first.height())
+        assert model.set_custom_child_geometry({}) is False
+        qt_app.processEvents()
+        assert scene_position(first) == pytest.approx(first_before)
+        assert (first.width(), first.height()) == pytest.approx(first_size)
+
+        assert model.set_custom_child_geometry({
+            "achievement_list": {
+                "width_scale": 0.80, "height_scale": 1.25,
+                "x_offset": 0.09, "y_offset": 0.08, "alignment": "right",
+            }
+        }) is True
+        qt_app.processEvents()
+        assert scene_position(first) == pytest.approx(first_before)
+        assert (first.width(), first.height()) == pytest.approx(first_size)
+        assert scene_position(remainder) != pytest.approx(remainder_before)
+
+        assert model.set_custom_child_geometry({}) is True
+        qt_app.processEvents()
+        assert scene_position(first) == pytest.approx(first_before)
+        assert scene_position(remainder) == pytest.approx(remainder_before)
+    finally:
+        root.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+
+
+@pytest.mark.qt
+def test_semantic_header_flip_exchanges_achievement_regions_not_image_or_text_pixels(qt_app) -> None:
+    """Existing Header intent changes region positions, not their rendering.
+
+    A parent-width change must not make a mirrored child's logical requirement
+    grow in a self-reinforcing loop. The original authored positions must return
+    after removing the single normalized child-geometry flip record.
+    """
+    model = _model()
+    model.activate()
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=build_mock_steam_view_model("achievement_pulse")
+        ), animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        find = lambda name: _find_visual_item(item, name)
+        canvas = find("achievementAuthoredCanvas")
+        art = find("achievementArtworkFrame")
+        image = find("achievementArtworkImage")
+        title = find("achievementGameTitle")
+        unlocks = find("achievementListGroup")
+        progress = find("achievementProgressPulse")
+        fields = find("achievementFieldGroup")
+        requirement = item.property("customEditableChildRequirementTarget")
+        from PySide6.QtQml import QJSValue
+        if isinstance(requirement, QJSValue):
+            requirement = requirement.toQObject()
+        assert all(obj is not None for obj in
+                   (canvas, art, image, title, unlocks, progress, fields, requirement))
+        assert art.isVisible() and progress.isVisible() and fields.isVisible()
+        def pos(obj):
+            return obj.mapToItem(canvas, 0.0, 0.0).x()
+        roles = (art, title, unlocks, progress, fields)
+        original = tuple(pos(obj) for obj in roles)
+        art_fill = image.property("fillMode")
+        title_alignment = title.property("horizontalAlignment")
+        base_width = float(model.baseAuthoredWidth)
+        base_height = float(model.baseAuthoredHeight)
+        assert title.x() < art.x()
+
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        assert bool(item.property("headerFlipped"))
+        for obj, initial_x in zip(roles, original):
+            assert pos(obj) == pytest.approx(base_width - initial_x - obj.width(), abs=1.5)
+        assert art.x() < title.x() and progress.x() > fields.x()
+        assert image.property("fillMode") == art_fill
+        assert title.property("horizontalAlignment") == title_alignment
+        flipped_title_width = title.width()
+        flipped_art_x = art.x()
+        required_before = float(requirement.property("requiredContentWidth"))
+        assert model.set_content_extent(base_width + 140.0, base_height)
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        qt_app.processEvents()
+        assert art.x() == pytest.approx(flipped_art_x)
+        assert title.width() == pytest.approx(flipped_title_width + 140.0)
+        assert float(requirement.property("requiredContentWidth")) == pytest.approx(required_before, abs=1.5)
+
+        assert model.clear_content_extent()
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert not bool(item.property("headerFlipped"))
+        assert tuple(pos(obj) for obj in roles) == pytest.approx(original)
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()

@@ -12,6 +12,35 @@ Item {
     property var verticalGuides: []
     property var horizontalGuides: []
 
+    // Only actual child-state/role/logical-requirement events trigger this
+    // reconciliation, never a mapped child rectangle moving because its parent
+    // changed size. Separate the event from the QML binding evaluation using
+    // a root-owned callLater microtask on this stable display-local root, never
+    // a closure capturing a short-lived child Loader/delegate or an obsolete row.
+    // It is Edit-only, event-driven, and does not poll or create a timer.
+    property bool childRequirementSyncQueued: false
+    function queueSelectedChildRequirementSync() {
+        if (childRequirementSyncQueued || !editActive || !sessionModel)
+            return
+        childRequirementSyncQueued = true
+        Qt.callLater(customLayoutOverlay.flushSelectedChildRequirementSync)
+    }
+    function flushSelectedChildRequirementSync() {
+        childRequirementSyncQueued = false
+        if (!editActive || !sessionModel)
+            return
+        // Resolve the CURRENT selection after the retained reflow has settled.
+        // A role/model/selection retired in the intervening turn cannot publish
+        // a stale child floor onto a different row or a destroyed Loader.
+        for (let i = 0; i < editFrameRepeater.count; ++i) {
+            const frame = editFrameRepeater.itemAt(i)
+            if (frame && frame.selectedForChildEdit && frame.hasPresentationItem) {
+                frame.syncChildRequirementNow()
+                return
+            }
+        }
+    }
+
     // Theme-coloured edit-mode close (X) control. Default Dark = black circle,
     // white X, tiny white outline. Phase 1c binds these to the resolved Widget
     // Theme palette; the defaults here are the Default Dark appearance.
@@ -29,6 +58,26 @@ Item {
     visible: editActive
     enabled: editActive
     clip: false
+
+    // The shortcut and the pointer share the same selected-frame glyph action.
+    // No lock bit is added to the session payload or the family models.
+    function toggleSelectedChildEditLock() {
+        if (!editActive || !sessionModel)
+            return
+        for (let i = 0; i < editFrameRepeater.count; ++i) {
+            const frame = editFrameRepeater.itemAt(i)
+            if (frame && frame.selectedForChildEdit) {
+                frame.toggleChildEditLock()
+                return
+            }
+        }
+    }
+    Connections {
+        target: customLayoutOverlay.sessionModel || null
+        function onToggleSelectedChildEditLockRequested() {
+            customLayoutOverlay.toggleSelectedChildEditLock()
+        }
+    }
 
     // Empty-background double-click is an explicit Edit command: commit through
     // the same Python Save authority as Enter/context-menu Save. This surface is
@@ -173,6 +222,15 @@ Item {
             // starts with its parent glyph controls visible; the attached wedge
             // can hide/show them without persisting anything into CUSTOM state.
             property bool parentGlyphControlsHidden: false
+            // Session-local edit-chrome preference, per widget. Locking hides
+            // child handles/hit areas only; parent Edit remains fully usable.
+            // No saved geometry, authored rails, paint or Settings value changes.
+            property bool childEditingLocked: true
+            function toggleChildEditLock() {
+                if (!childEditingLocked && customLayoutOverlay.sessionModel)
+                    customLayoutOverlay.sessionModel.cancelChildGesture(index)
+                childEditingLocked = !childEditingLocked
+            }
             property real parentGlyphControlsOpacity: parentGlyphControlsHidden ? 0.0 : 1.0
             readonly property real controlsWedgeLeftSpace: Math.max(0.0, editFrame.x)
             readonly property real controlsWedgeRightSpace: Math.max(
@@ -268,6 +326,11 @@ Item {
             y: geometryY
             width: geometryWidth
             height: geometryHeight
+            // Only a normalized CHILD edit invalidates this revision.  Parent
+            // geometry/containment publication does not increment it, so an
+            // admitted outer growth cannot request itself again through remap.
+            onChildStateRevisionChanged:
+                customLayoutOverlay.queueSelectedChildRequirementSync()
 
             Rectangle {
                 anchors.fill: parent
@@ -288,7 +351,7 @@ Item {
                 // receive the same press.
                 x: Math.max(1.0, editFrame.width - width - 10.0)
                 y: Math.max(1.0, Math.min(10.0, editFrame.height - height - 1.0))
-                z: 80
+                z: 120
                 antialiasing: true
                 opacity: editFrame.parentGlyphControlsOpacity
                 enabled: !editFrame.parentGlyphControlsHidden && opacity > 0.05
@@ -384,7 +447,7 @@ Item {
                 radius: width / 2
                 x: 10
                 y: Math.max(1.0, editFrame.height - height - 10.0)
-                z: 40
+                z: 120
                 antialiasing: true
                 opacity: editFrame.parentGlyphControlsOpacity
                 enabled: !editFrame.parentGlyphControlsHidden && opacity > 0.05
@@ -408,6 +471,112 @@ Item {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: customLayoutOverlay.sessionModel.restoreSize(editFrame.index)
+                }
+            }
+
+            // Child editability, not paint containment. The reset-adjacent
+            // circle is stable; only its vector lock mark is 10% smaller.
+            // This chrome outranks child hit zones and handles, while the
+            // normal parent resize handles keep their existing priority.
+            Rectangle {
+                id: childEditLockControl
+                objectName: "customLayoutChildEditLock-" + editFrame.widgetId
+                visible: editFrame.selectedForChildEdit
+                    && editFrame.hasPresentationItem
+                    && (editFrame.presentationItem.customEditableChildRoles || []).length > 0
+                enabled: visible && !editFrame.parentGlyphControlsHidden
+                    && opacity > 0.05
+                width: 22
+                height: 22
+                radius: width / 2
+                x: restoreSizeControl.visible
+                    ? restoreSizeControl.x + restoreSizeControl.width + 6 : 10
+                y: restoreSizeControl.y
+                z: 121
+                antialiasing: true
+                opacity: editFrame.parentGlyphControlsOpacity
+                color: editFrame.childEditingLocked
+                    ? customLayoutOverlay.transferButtonHoverColor
+                    : customLayoutOverlay.closeButtonColor
+                border.width: 1
+                border.color: customLayoutOverlay.closeButtonBorderColor
+
+                Item {
+                    id: childEditLockMark
+                    objectName: "customLayoutChildEditLockMark-" + editFrame.widgetId
+                    anchors.centerIn: parent
+                    width: 22
+                    height: 22
+                    scale: 0.9
+                    // Closed: curved shackle. Open: deliberately angular, three
+                    // straight segments (up, right, short down), leaving a real
+                    // gap above the body. The 22px circle/hit area never scales;
+                    // only this mark uses the 90% glyph transform. Paint only
+                    // on initial display and the explicit lock toggle.
+                    Canvas {
+                        id: childEditLockShackle
+                        anchors.fill: parent
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.clearRect(0, 0, width, height)
+                            ctx.strokeStyle = String(customLayoutOverlay.closeButtonGlyphColor)
+                            ctx.lineWidth = 1.8
+                            // The open shackle is three straight segments,
+                            // with crisp 90-degree corners rather than a bent arc.
+                            ctx.lineCap = editFrame.childEditingLocked ? "round" : "butt"
+                            ctx.lineJoin = editFrame.childEditingLocked ? "round" : "miter"
+                            ctx.beginPath()
+                            if (editFrame.childEditingLocked) {
+                                ctx.moveTo(7, 11)
+                                ctx.lineTo(7, 7.2)
+                                ctx.bezierCurveTo(7, 2.7, 15, 2.7, 15, 7.2)
+                                ctx.lineTo(15, 11)
+                            } else {
+                                ctx.moveTo(6, 11)
+                                ctx.lineTo(6, 4.5)
+                                ctx.lineTo(15.2, 4.5)
+                                ctx.lineTo(15.2, 7.4)
+                            }
+                            ctx.stroke()
+                        }
+                        Connections {
+                            target: editFrame
+                            function onChildEditingLockedChanged() {
+                                childEditLockShackle.requestPaint()
+                            }
+                        }
+                    }
+                    Rectangle {
+                        x: 5
+                        y: 10
+                        width: 12
+                        height: 9
+                        radius: 2
+                        color: customLayoutOverlay.closeButtonGlyphColor
+                        antialiasing: true
+                        Rectangle {
+                            width: 2
+                            height: 3
+                            x: 5
+                            y: 3
+                            radius: 1
+                            color: childEditLockControl.color
+                        }
+                    }
+                }
+                MouseArea {
+                    objectName: "customLayoutChildEditLockHitArea-" + editFrame.widgetId
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    propagateComposedEvents: false
+                    onPressed: function(mouse) { mouse.accepted = true }
+                    onClicked: function(mouse) {
+                        mouse.accepted = true
+                        editFrame.toggleChildEditLock()
+                    }
+                    onWheel: function(wheel) {
+                        wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
+                    }
                 }
             }
 
@@ -485,12 +654,28 @@ Item {
                 }
             }
 
+            // Child editing overlays the original parent move zone. Every wheel
+            // path must still resize the selected PARENT through the same owner,
+            // including when the pointer is above a child or one of its handles.
+            // This function holds no independent scale/geometry state.
+            function resizeParentByWheel(deltaY) {
+                if (!editFrame.resizable || !customLayoutOverlay.sessionModel)
+                    return false
+                customLayoutOverlay.sessionModel.selectItem(editFrame.index)
+                editFrame.syncChildRequirementNow()
+                return customLayoutOverlay.sessionModel.resizeWheel(
+                    editFrame.index, deltaY
+                )
+            }
+
             MouseArea {
                 id: moveArea
+                objectName: "customLayoutParentMoveArea-" + editFrame.widgetId
                 anchors.fill: parent
-                // Keep the move zone clear of the top-right close control so its
-                // full circle stays clickable at every size.
-                anchors.topMargin: Math.max(32.0, closeControl.y + closeControl.height + 2.0)
+                // The former full-width 32px top exclusion made most headers
+                // and the gap beside a flipped header impossible to select.
+                // Chrome owns its own higher z; do not remove an entire row of
+                // parent hit area to protect one top-right close button.
                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 property real pressOffsetX: 0
                 property real pressOffsetY: 0
@@ -517,14 +702,7 @@ Item {
                 onReleased: customLayoutOverlay.sessionModel.finishMove()
                 onCanceled: customLayoutOverlay.sessionModel.finishMove()
                 onWheel: function(wheel) {
-                    if (!editFrame.resizable)
-                        return
-                    customLayoutOverlay.sessionModel.selectItem(editFrame.index)
-                    editFrame.syncChildRequirementNow()
-                    wheel.accepted = customLayoutOverlay.sessionModel.resizeWheel(
-                        editFrame.index,
-                        wheel.angleDelta.y
-                    )
+                    wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
                 }
             }
 
@@ -648,7 +826,10 @@ Item {
                     property bool topSide: corner.startsWith("top")
 
                     objectName: "customLayoutResize-" + editFrame.widgetId + "-" + corner
-                    z: 50
+                    // Parent corners must stay above selected child hit zones;
+                    // otherwise a large Clock face or artwork can intercept the
+                    // outer handle and turn a parent resize into a child resize.
+                    z: 70
                     width: 14
                     height: 14
                     radius: 3
@@ -733,7 +914,9 @@ Item {
                     property int edgeThickness: 10
 
                     objectName: "customLayoutViewportEdge-" + editFrame.widgetId + "-" + edge
-                    z: 20
+                    // The thin parent boundary also outranks child resize zones
+                    // precisely at the outer edge, without covering interior roles.
+                    z: 65
                     // Visualizer viewport edges keep the bright blue; ordinary
                     // content-extent side edges use a modestly darker blue so the
                     // two semantics read differently in edit mode.
@@ -806,7 +989,7 @@ Item {
                 }
             }
 
-            // Focused editable-child chrome. Only the globally selected parent
+            // Focused child geometry observer and optional EDIT chrome. Only the globally selected parent
             // loads this layer, and only families that expose descriptor-backed
             // retained targets through OverlayWidget.customEditableChildRoles
             // produce handles. Drawn child corners are deliberately smaller than
@@ -815,6 +998,9 @@ Item {
             Loader {
                 id: childRoleLoader
                 anchors.fill: parent
+                // The locked state must not retire the selected parent's
+                // existing occupied-child size observation. Only the layer's
+                // paint and hit-testing are locked, not its geometry bindings.
                 active: editFrame.selectedForChildEdit
                         && editFrame.hasPresentationItem
                         && ((editFrame.presentationItem.customEditableChildRoles || []).length > 0
@@ -824,7 +1010,9 @@ Item {
                 sourceComponent: Component {
                     Item {
                         id: childRoleLayer
+                        objectName: "customLayoutChildRoleLayer-" + editFrame.widgetId
                         anchors.fill: parent
+                        visible: !editFrame.childEditingLocked
                         opacity: 0.0
 
                         NumberAnimation on opacity {
@@ -888,8 +1076,6 @@ Item {
                             requirementTarget !== null
                                 ? Number(requirementTarget.requiredContentHeight || 0.0)
                                 : 0.0
-                        property bool requirementSyncQueued: false
-
                         function aggregateRequiredContentSize() {
                             // Family targets remain the authority for authored
                             // reflow/size requirements. Placement is different:
@@ -904,7 +1090,23 @@ Item {
                             if (childRoleRepeater) {
                                 for (let i = 0; i < childRoleRepeater.count; ++i) {
                                     const frame = childRoleRepeater.itemAt(i)
-                                    if (!frame || !frame.visible)
+                                    // The chrome may be locked (invisible),
+                                    // but the underlying painted target still
+                                    // contributes to its existing content floor.
+                                    if (!frame || !frame.targetReady || !frame.roleId.length)
+                                        continue
+                                    if (!frame.allowParentGrowth)
+                                        continue
+                                    // Dense families expose a stable logical
+                                    // child requirement. Their on-rail targets
+                                    // move WITH an already-grown parent; using
+                                    // those live mapped edges as a new parent
+                                    // minimum would count parent growth twice.
+                                    // An off-rail/free-placed role still needs
+                                    // the genuine mapped occupancy floor.
+                                    if (frame.requirementTarget !== null
+                                            && frame.targetItem !== null
+                                            && frame.targetItem.customEditReflowEnabled === true)
                                         continue
                                     width = Math.max(
                                         width,
@@ -944,22 +1146,13 @@ Item {
                         }
 
                         function scheduleRequirementSync() {
-                            if (requirementSyncQueued
-                                    || !customLayoutOverlay.sessionModel)
-                                return
-                            requirementSyncQueued = true
-                            const layer = childRoleLayer
-                            Qt.callLater(function() {
-                                // QML object lifetime may end between scheduling and
-                                // the next turn (selection switch, slot load,
-                                // Settings-driven role rebuild). A guarded reference
-                                // makes that cancellation boring instead of logging a
-                                // stale-object JS error or republishing old state.
-                                if (!layer)
-                                    return
-                                layer.requirementSyncQueued = false
-                                layer.syncRequirementNow()
-                            })
+                            // Only genuine child-state, family logical requirement,
+                            // or role-inventory events reach this coalescer. A
+                            // parent-driven mapped-rectangle change must NEVER
+                            // request a fresh parent-growth measurement.
+                            // The root resolves the current selected row on
+                            // flush; no stale child-layer closure is retained.
+                            customLayoutOverlay.queueSelectedChildRequirementSync()
                         }
 
                         function ensureImmediateChildOverflow(frame, candidateX, candidateY,
@@ -974,7 +1167,8 @@ Item {
                             // event-driven; the retained requirement immediately
                             // reconciles the conservative floor afterward.
                             if (!customLayoutOverlay.sessionModel
-                                    || editFrame.resizeScale <= 0.0)
+                                    || editFrame.resizeScale <= 0.0
+                                    || !frame.allowParentGrowth)
                                 return false
                             const occupied = occupiedRectAt(
                                 frame, candidateX, candidateY,
@@ -1207,7 +1401,9 @@ Item {
 
                         function childGuideTargets(frame, horizontal) {
                             const result = []
-                            const parentSize = horizontal ? editFrame.width : editFrame.height
+                            const surface = childContainmentRect(frame)
+                            const parentStart = horizontal ? surface.x : surface.y
+                            const parentSize = horizontal ? surface.width : surface.height
 
                             // Semantic header corners get their family-authored safe
                             // inset as a distinct, stronger target. Ordinary roles keep
@@ -1217,23 +1413,23 @@ Item {
                                     ? frame.semanticCornerInsetX : frame.semanticCornerInsetY
                                 if (semanticInset >= 0.0 && parentSize > semanticInset * 2.0 + 1.0) {
                                     result.push({
-                                        "position": semanticInset,
+                                        "position": parentStart + semanticInset,
                                         "kind": "semantic-margin-start"
                                     })
                                     result.push({
-                                        "position": parentSize - semanticInset,
+                                        "position": parentStart + parentSize - semanticInset,
                                         "kind": "semantic-margin-end"
                                     })
                                 }
                             }
 
                             const inset = Math.max(8.0, Math.min(18.0, 10.0 * editFrame.resizeScale))
-                            result.push({"position": 0.0, "kind": "parent-edge"})
-                            result.push({"position": parentSize / 2.0, "kind": "parent-center"})
-                            result.push({"position": parentSize, "kind": "parent-edge"})
+                            result.push({"position": parentStart, "kind": "parent-edge"})
+                            result.push({"position": parentStart + parentSize / 2.0, "kind": "parent-center"})
+                            result.push({"position": parentStart + parentSize, "kind": "parent-edge"})
                             if (parentSize > inset * 2.5) {
-                                result.push({"position": inset, "kind": "parent-margin"})
-                                result.push({"position": parentSize - inset, "kind": "parent-margin"})
+                                result.push({"position": parentStart + inset, "kind": "parent-margin"})
+                                result.push({"position": parentStart + parentSize - inset, "kind": "parent-margin"})
                             }
                             for (let i = 0; i < childRoleRepeater.count; ++i) {
                                 const peer = childRoleRepeater.itemAt(i)
@@ -1265,6 +1461,8 @@ Item {
                             if (frame) {
                                 frame.hasSnapX = false
                                 frame.hasSnapY = false
+                                frame.hasResizeSnapX = false
+                                frame.hasResizeSnapY = false
                             }
                         }
 
@@ -1357,6 +1555,93 @@ Item {
                             }
                             publishChildGuide(!horizontal, bestTarget, bestKind)
                             return bestTarget - bestFeature
+                        }
+
+                        // A resize changes the *active edge* (not the role's
+                        // origin). Reuse the move editor's parent/sibling guide
+                        // discovery, but keep independent resize hysteresis so
+                        // the move/semantic-corner state is never falsified.
+                        function snapChildResizeAxis(frame, edge, horizontal) {
+                            const active = horizontal
+                                ? frame.hasResizeSnapX : frame.hasResizeSnapY
+                            const prior = horizontal
+                                ? frame.resizeSnapXTarget : frame.resizeSnapYTarget
+                            const kind = horizontal
+                                ? frame.resizeSnapXKind : frame.resizeSnapYKind
+                            if (active && Math.abs(edge - prior) <= 11.0) {
+                                publishChildGuide(!horizontal, prior, kind)
+                                return prior
+                            }
+                            if (horizontal)
+                                frame.hasResizeSnapX = false
+                            else
+                                frame.hasResizeSnapY = false
+                            const targets = childGuideTargets(frame, horizontal)
+                            let nearest = null
+                            let distance = 6.001
+                            for (let i = 0; i < targets.length; ++i) {
+                                const target = targets[i]
+                                const diff = Math.abs(edge - Number(target.position))
+                                if (diff <= 6.0 && diff < distance) {
+                                    distance = diff
+                                    nearest = target
+                                }
+                            }
+                            if (nearest === null) {
+                                publishChildGuide(!horizontal, null, "")
+                                return edge
+                            }
+                            const selected = Number(nearest.position)
+                            if (horizontal) {
+                                frame.hasResizeSnapX = true
+                                frame.resizeSnapXTarget = selected
+                                frame.resizeSnapXKind = String(nearest.kind || "child")
+                            } else {
+                                frame.hasResizeSnapY = true
+                                frame.resizeSnapYTarget = selected
+                                frame.resizeSnapYKind = String(nearest.kind || "child")
+                            }
+                            publishChildGuide(!horizontal, selected, String(nearest.kind || "child"))
+                            return selected
+                        }
+
+                        function snapChildResizePointer(frame, handle, gesture, point) {
+                            const rect = resizeCandidateForPointer(frame, handle, gesture, point)
+                            let x = point.x
+                            let y = point.y
+                            if (rect.horizontalActive) {
+                                const edge = rect.leftSide ? rect.x : rect.x + rect.width
+                                const target = snapChildResizeAxis(frame, edge, true)
+                                // The active left/right edge advances one pixel
+                                // per pointer pixel, including centered-radius roles.
+                                x += target - edge
+                            }
+                            if (rect.verticalActive) {
+                                const edge = rect.topSide ? rect.y : rect.y + rect.height
+                                const target = snapChildResizeAxis(frame, edge, false)
+                                y += target - edge
+                            }
+                            return Qt.point(x, y)
+                        }
+
+                        function validateChildResizeGuides(frame, handle, rect) {
+                            const handleId = String(handle)
+                            const left = handleId.endsWith("left")
+                            const top = handleId === "top" || handleId.startsWith("top_")
+                            const horizontal = handleId !== "top" && handleId !== "bottom"
+                            const vertical = handleId !== "left" && handleId !== "right"
+                            const edgeX = left ? rect.x : rect.x + rect.width
+                            const edgeY = top ? rect.y : rect.y + rect.height
+                            if (frame.hasResizeSnapX && horizontal
+                                    && Math.abs(edgeX - frame.resizeSnapXTarget) > 1.0) {
+                                frame.hasResizeSnapX = false
+                                childVerticalGuides = []
+                            }
+                            if (frame.hasResizeSnapY && vertical
+                                    && Math.abs(edgeY - frame.resizeSnapYTarget) > 1.0) {
+                                frame.hasResizeSnapY = false
+                                childHorizontalGuides = []
+                            }
                         }
 
                         function semanticCornerFromSnaps(frame) {
@@ -1456,6 +1741,23 @@ Item {
                             return {"coordinate": passY, "rect": passCandidate}
                         }
 
+                        function childContainmentRect(frame) {
+                            const surface = frame.containmentTarget
+                            if (!surface)
+                                return Qt.rect(0.0, 0.0, editFrame.width, editFrame.height)
+                            // All four corners are needed if an ancestor is
+                            // transformed. This is input-time work, not a listener.
+                            const a = surface.mapToItem(editFrame, 0.0, 0.0)
+                            const b = surface.mapToItem(editFrame, surface.width, 0.0)
+                            const c = surface.mapToItem(editFrame, 0.0, surface.height)
+                            const d = surface.mapToItem(editFrame, surface.width, surface.height)
+                            const x0 = Math.min(a.x, b.x, c.x, d.x)
+                            const y0 = Math.min(a.y, b.y, c.y, d.y)
+                            return Qt.rect(x0, y0,
+                                Math.max(0.0, Math.max(a.x, b.x, c.x, d.x) - x0),
+                                Math.max(0.0, Math.max(a.y, b.y, c.y, d.y) - y0))
+                        }
+
                         function admitChildMove(frame, desiredX, desiredY) {
                             // Placement uses the entire *real* parent. Padding is
                             // not a boundary. The role's occupied painted rectangle
@@ -1463,15 +1765,16 @@ Item {
                             // mild magnetic hints.
                             const leftExtra = frame.occupiedX - frame.x
                             const topExtra = frame.occupiedY - frame.y
-                            const minX = -leftExtra
-                            const minY = -topExtra
+                            const bounds = childContainmentRect(frame)
+                            const minX = bounds.x - leftExtra
+                            const minY = bounds.y - topExtra
                             const maxX = Math.max(
                                 minX,
-                                editFrame.width - leftExtra - frame.occupiedWidth
+                                bounds.x + bounds.width - leftExtra - frame.occupiedWidth
                             )
                             const maxY = Math.max(
                                 minY,
-                                editFrame.height - topExtra - frame.occupiedHeight
+                                bounds.y + bounds.height - topExtra - frame.occupiedHeight
                             )
                             let x = Math.max(minX, Math.min(maxX, desiredX))
                             let y = Math.max(minY, Math.min(maxY, desiredY))
@@ -1916,16 +2219,21 @@ Item {
                             const verticalOnly = handleId === "top" || handleId === "bottom"
                             const dx = verticalOnly ? 0.0 : pointer.x - gesture.pressX
                             const dy = horizontalOnly ? 0.0 : pointer.y - gesture.pressY
-                            const x = leftSide ? gesture.startX + dx : gesture.startX
-                            const y = topSide ? gesture.startY + dy : gesture.startY
+                            const multiplier = frame.centeredResize ? 2.0 : 1.0
                             const width = Math.max(
                                 1.0,
-                                leftSide ? gesture.startWidth - dx : gesture.startWidth + dx
+                                gesture.startWidth + multiplier * (leftSide ? -dx : dx)
                             )
                             const height = Math.max(
                                 1.0,
-                                topSide ? gesture.startHeight - dy : gesture.startHeight + dy
+                                gesture.startHeight + multiplier * (topSide ? -dy : dy)
                             )
+                            const x = frame.centeredResize
+                                ? gesture.startX - (width - gesture.startWidth) / 2.0
+                                : (leftSide ? gesture.startX + dx : gesture.startX)
+                            const y = frame.centeredResize
+                                ? gesture.startY - (height - gesture.startHeight) / 2.0
+                                : (topSide ? gesture.startY + dy : gesture.startY)
                             return {
                                 "x": x,
                                 "y": y,
@@ -2008,6 +2316,62 @@ Item {
                             )
                         }
 
+                        function containChildResize(frame, handle, gesture, point) {
+                            const bounds = childContainmentRect(frame)
+                            function within(pointValue) {
+                                const rect = resizeCandidateForPointer(
+                                    frame, handle, gesture, pointValue
+                                )
+                                const occupied = occupiedRectAt(
+                                    frame, rect.x, rect.y, rect.width, rect.height
+                                )
+                                const inside = occupied.x >= bounds.x - 0.0001
+                                    && occupied.y >= bounds.y - 0.0001
+                                    && occupied.x + occupied.width <= bounds.x + bounds.width + 0.0001
+                                    && occupied.y + occupied.height <= bounds.y + bounds.height + 0.0001
+                                if (!inside || !frame.centeredResize)
+                                    return inside
+                                // The clock face grows on both sides at once.
+                                // An ordinary one-sided sweep cannot protect
+                                // peers when the opposite edge also advances.
+                                const initial = occupiedRectAt(
+                                    frame, gesture.startX, gesture.startY,
+                                    gesture.startWidth, gesture.startHeight
+                                )
+                                const peers = obstacleRects(frame, true, "")
+                                for (let i = 0; i < peers.length; ++i) {
+                                    if (overlapArea(occupied, peers[i])
+                                            > overlapArea(initial, peers[i]) + 0.01)
+                                        return false
+                                }
+                                return true
+                            }
+                            if (within(point))
+                                return point
+                            const start = Qt.point(gesture.pressX, gesture.pressY)
+                            // If an inherited saved layout already protrudes, allow
+                            // a contraction toward safety; never grow the parent.
+                            if (!within(start))
+                                return start
+                            let lo = 0.0
+                            let hi = 1.0
+                            for (let i = 0; i < 12; ++i) {
+                                const half = (lo + hi) / 2.0
+                                const candidate = Qt.point(
+                                    start.x + (point.x - start.x) * half,
+                                    start.y + (point.y - start.y) * half
+                                )
+                                if (within(candidate))
+                                    lo = half
+                                else
+                                    hi = half
+                            }
+                            return Qt.point(
+                                start.x + (point.x - start.x) * lo,
+                                start.y + (point.y - start.y) * lo
+                            )
+                        }
+
                         function updateChildResizeGesture(frame, gesture, handle, point, finalize) {
                             const bounded = customLayoutOverlay.sessionModel.previewChildResize(
                                 editFrame.index, frame.roleId, handle, point.x, point.y
@@ -2019,17 +2383,45 @@ Item {
                                 }
                                 return false
                             }
-                            let admitted = admitChildResize(
-                                frame, handle,
-                                gesture.pressX, gesture.pressY,
-                                gesture.startX, gesture.startY,
-                                gesture.startWidth, gesture.startHeight,
-                                Number(bounded.x), Number(bounded.y)
+                            // First canonicalize through the Python role descriptor.
+                            // Only an actual guide correction earns the second
+                            // bridge; otherwise the resize hot path is unchanged.
+                            let canonical = Qt.point(Number(bounded.x), Number(bounded.y))
+                            const snapped = snapChildResizePointer(
+                                frame, handle, gesture, canonical
                             )
-                            admitted = throttleChildAutoGrowth(frame, handle, gesture, admitted)
+                            if (Math.abs(snapped.x - canonical.x) > 0.01
+                                    || Math.abs(snapped.y - canonical.y) > 0.01) {
+                                const resnapped = customLayoutOverlay.sessionModel.previewChildResize(
+                                    editFrame.index, frame.roleId, handle,
+                                    snapped.x, snapped.y
+                                )
+                                if (resnapped.valid)
+                                    canonical = Qt.point(Number(resnapped.x), Number(resnapped.y))
+                            }
+                            // The descriptor resolver already gave a canonical
+                            // one-radius pointer for center-owned uniform shapes.
+                            // A one-sided resize sweep would move the face center.
+                            let admitted = frame.centeredResize
+                                ? canonical
+                                : admitChildResize(
+                                    frame, handle,
+                                    gesture.pressX, gesture.pressY,
+                                    gesture.startX, gesture.startY,
+                                    gesture.startWidth, gesture.startHeight,
+                                    canonical.x, canonical.y
+                                )
+                            if (frame.allowParentGrowth)
+                                admitted = throttleChildAutoGrowth(frame, handle, gesture, admitted)
+                            else
+                                admitted = containChildResize(frame, handle, gesture, admitted)
                             const candidate = resizeCandidateForPointer(
                                 frame, handle, gesture, admitted
                             )
+                            // A peer/containment clamp wins over a magnetic hint;
+                            // never show an alignment line for an edge that was
+                            // not actually admitted.
+                            validateChildResizeGuides(frame, handle, candidate)
                             ensureImmediateChildOverflow(
                                 frame, candidate.x, candidate.y,
                                 candidate.width, candidate.height
@@ -2075,6 +2467,15 @@ Item {
                                     modelData.occupiedTarget || targetItem
                                 readonly property var geometryDependencies:
                                     modelData.geometryDependencies || []
+                                // Edit-only declaration, not a saved layout key.
+                                // Some children have a smaller legal surface than
+                                // the widget root (Media card vs external volume).
+                                readonly property var containmentTarget:
+                                    modelData.containmentTarget || null
+                                readonly property bool allowParentGrowth:
+                                    modelData.allowParentGrowth !== false
+                                readonly property bool centeredResize:
+                                    modelData.centeredResize === true
                                 readonly property var resizeReflowRoleIds:
                                     modelData.resizeReflowRoleIds || []
                                 // Some editors expose a container frame alongside
@@ -2144,12 +2545,34 @@ Item {
                                         )
                                         : ""
                                 }
-                                readonly property real semanticCornerInsetX: Math.max(
-                                    0.0, Number(modelData.semanticCornerInsetX || 0.0)
-                                )
-                                readonly property real semanticCornerInsetY: Math.max(
-                                    0.0, Number(modelData.semanticCornerInsetY || 0.0)
-                                )
+                                // A dense uniform card has live letterboxing,
+                                // but those parent dimensions must NOT be read
+                                // while constructing customEditableChildRoles:
+                                // the role model itself is observed during parent
+                                // geometry/child-requirement reconciliation.
+                                // Project at the stable role frame instead.
+                                readonly property real semanticCornerInsetX: {
+                                    const authoredInset = Number(modelData.semanticCornerInsetX || 0.0)
+                                    if (modelData.semanticInsetUsesUniformCard === true
+                                            && editFrame.hasPresentationItem) {
+                                        const card = editFrame.presentationItem
+                                        return Math.max(0.0,
+                                            (card.width - card.authoredWidth * card.presentationScale) / 2.0
+                                                + authoredInset * card.presentationScale)
+                                    }
+                                    return Math.max(0.0, authoredInset)
+                                }
+                                readonly property real semanticCornerInsetY: {
+                                    const authoredInset = Number(modelData.semanticCornerInsetY || 0.0)
+                                    if (modelData.semanticInsetUsesUniformCard === true
+                                            && editFrame.hasPresentationItem) {
+                                        const card = editFrame.presentationItem
+                                        return Math.max(0.0,
+                                            (card.height - card.authoredHeight * card.presentationScale) / 2.0
+                                                + authoredInset * card.presentationScale)
+                                    }
+                                    return Math.max(0.0, authoredInset)
+                                }
                                 // Dense families may keep an on-rail role displaced
                                 // by sibling reflow. When the user explicitly moves
                                 // that role, Python folds this retained logical delta
@@ -2177,10 +2600,16 @@ Item {
                                 // geometry here invalidates mapping event-by-event
                                 // without rebuilding the role model or polling.
                                 readonly property real mappingDependency: {
+                                    // mapToItem does not register ancestor transforms
+                                    // or normalized CUSTOM-state reads as bindings.
+                                    // Force an event-driven remap on each admitted
+                                    // state change, without observing normal runtime.
                                     let value = editFrame.width + editFrame.height
+                                        + editFrame.childStateRevision
                                     if (targetItem !== null) {
                                         value += targetItem.x + targetItem.y
                                             + targetItem.width + targetItem.height
+                                            + targetItem.scale + targetItem.rotation
                                         value += Number(
                                             targetItem.customEditMappingDependency || 0.0
                                         )
@@ -2188,15 +2617,22 @@ Item {
                                     if (occupiedItem !== null && occupiedItem !== targetItem) {
                                         value += occupiedItem.x + occupiedItem.y
                                             + occupiedItem.width + occupiedItem.height
+                                            + occupiedItem.scale + occupiedItem.rotation
                                         value += Number(
                                             occupiedItem.customEditMappingDependency || 0.0
                                         )
+                                    }
+                                    if (containmentTarget !== null) {
+                                        value += containmentTarget.x + containmentTarget.y
+                                            + containmentTarget.width + containmentTarget.height
+                                            + containmentTarget.scale + containmentTarget.rotation
                                     }
                                     for (let i = 0; i < geometryDependencies.length; ++i) {
                                         const dependency = geometryDependencies[i]
                                         if (dependency)
                                             value += dependency.x + dependency.y
                                                 + dependency.width + dependency.height
+                                                + dependency.scale + dependency.rotation
                                     }
                                     return value
                                 }
@@ -2255,6 +2691,12 @@ Item {
                                 property bool moveHadMotion: false
                                 property bool hasSnapX: false
                                 property bool hasSnapY: false
+                                property bool hasResizeSnapX: false
+                                property bool hasResizeSnapY: false
+                                property real resizeSnapXTarget: 0.0
+                                property real resizeSnapYTarget: 0.0
+                                property string resizeSnapXKind: ""
+                                property string resizeSnapYKind: ""
                                 property real snapXTarget: 0.0
                                 property real snapYTarget: 0.0
                                 property real snapXFeature: 0.0
@@ -2281,18 +2723,12 @@ Item {
                                 width: Math.abs(mappedBottomRight.x - mappedTopLeft.x)
                                 height: Math.abs(mappedBottomRight.y - mappedTopLeft.y)
 
-                                // Saved-slot application, Settings-driven role
-                                // changes and retained ancestor reflow can move a
-                                // target without a pointer handler running. Re-sync
-                                // the selected parent's transient floor from those
-                                // retained geometry notifications. callLater in the
-                                // layer coalesces a burst; outside selected Edit this
-                                // delegate does not exist.
-                                onOccupiedXChanged: childRoleLayer.scheduleRequirementSync()
-                                onOccupiedYChanged: childRoleLayer.scheduleRequirementSync()
-                                onOccupiedWidthChanged: childRoleLayer.scheduleRequirementSync()
-                                onOccupiedHeightChanged: childRoleLayer.scheduleRequirementSync()
-                                onVisibleChanged: childRoleLayer.scheduleRequirementSync()
+                                // Mapped/occupied rectangles are paint and hit-test
+                                // observation ONLY.  Parent resizing moves authored
+                                // rails; observing those moves as new child-demand
+                                // would feed the outer size straight back into itself.
+                                // Logical requirement changes and actual child state
+                                // revisions are reconciled at their own causal edges.
 
                                 Rectangle {
                                     anchors.fill: parent
@@ -2304,10 +2740,59 @@ Item {
                                     radius: 2
                                 }
 
+                                // A 1-3px separator is not a viable move
+                                // target. Reuse this SAME child move gesture,
+                                // with a small visible grip when the painted
+                                // role is too thin for a pointer. The grip is
+                                // edit-only; it is never a child size, collision
+                                // obstacle, paint target or persisted geometry.
+                                readonly property bool thinMoveTarget:
+                                    childRoleFrame.movable
+                                    && (childRoleFrame.height < 28.0
+                                        || childRoleFrame.width < 44.0)
+                                Rectangle {
+                                    id: thinChildMoveGrip
+                                    objectName: "customLayoutChildMoveGrip-"
+                                        + editFrame.widgetId + "-" + childRoleFrame.roleId
+                                    visible: childRoleFrame.thinMoveTarget
+                                    width: 20
+                                    height: 20
+                                    radius: width / 2.0
+                                    x: (childRoleFrame.width - width) / 2.0
+                                    y: (childRoleFrame.height - height) / 2.0
+                                    // On narrow/thin roles the 16px invisible
+                                    // resize corners overlap the middle. This
+                                    // visible move grip must win the central
+                                    // 20px without stealing the outer corners.
+                                    z: 5
+                                    color: "#eb142a40"
+                                    border.width: 1
+                                    border.color: "#d0a6d8ff"
+                                    Rectangle {
+                                        width: 8
+                                        height: 2
+                                        radius: 1
+                                        anchors.centerIn: parent
+                                        color: "#e3eaf7ff"
+                                    }
+                                }
+
                                 MouseArea {
                                     id: childMoveArea
-                                    anchors.fill: parent
-                                    z: 0
+                                    objectName: "customLayoutChildMoveArea-"
+                                        + editFrame.widgetId + "-" + childRoleFrame.roleId
+                                    // Only thin-role grips enlarge the pointer
+                                    // target. Other children keep their previous
+                                    // exactly mapped move area.
+                                    x: childRoleFrame.thinMoveTarget
+                                        ? thinChildMoveGrip.x : 0.0
+                                    y: childRoleFrame.thinMoveTarget
+                                        ? thinChildMoveGrip.y : 0.0
+                                    width: childRoleFrame.thinMoveTarget
+                                        ? thinChildMoveGrip.width : childRoleFrame.width
+                                    height: childRoleFrame.thinMoveTarget
+                                        ? thinChildMoveGrip.height : childRoleFrame.height
+                                    z: childRoleFrame.thinMoveTarget ? 5 : 2
                                     enabled: childRoleFrame.movable
                                     cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                                     propagateComposedEvents: false
@@ -2316,6 +2801,10 @@ Item {
                                         return mapToItem(
                                             customLayoutOverlay, mouse.x, mouse.y
                                         )
+                                    }
+
+                                    onWheel: function(wheel) {
+                                        wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
                                     }
 
                                     onPressed: function(mouse) {
@@ -2376,10 +2865,9 @@ Item {
                                             admittedPointerY,
                                             false
                                         )
-                                        // Retained occupied-rect change signals queue
-                                        // one coalesced exact floor reconciliation.
-                                        // Do not synchronously run the same scan a
-                                        // second time on every pointer sample.
+                                        // Only the admitted pointer/child-state edge
+                                        // can request new growth. Parent-authored
+                                        // remaps are observations, never demand.
                                     }
                                     onReleased: function(mouse) {
                                         const point = overlayPoint(mouse)
@@ -2445,22 +2933,31 @@ Item {
                                         && customLayoutOverlay.sessionModel.childAlignmentFlippable(
                                             editFrame.index, childRoleFrame.roleId
                                         )
-                                    width: 16
-                                    height: 16
-                                    radius: width / 2.0
+                                    // Large enough to click reliably while the
+                                    // original visible badge stays compact. The
+                                    // flip hit surface outranks the same role's
+                                    // move and narrow-child resize affordances.
+                                    width: 30
+                                    height: 30
                                     x: (childRoleFrame.width - width) / 2.0
                                     y: (childRoleFrame.height - height) / 2.0
-                                    z: 4
-                                    color: "#e01d2f42"
-                                    border.width: 1
-                                    border.color: "#d078b7e8"
-
-                                    Text {
+                                    z: 6
+                                    color: "transparent"
+                                    Rectangle {
                                         anchors.centerIn: parent
-                                        text: "↔"
-                                        color: "#f0d8f3ff"
-                                        font.pixelSize: 10
-                                        font.bold: true
+                                        width: 16
+                                        height: 16
+                                        radius: width / 2.0
+                                        color: "#e01d2f42"
+                                        border.width: 1
+                                        border.color: "#d078b7e8"
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "↔"
+                                            color: "#f0d8f3ff"
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                        }
                                     }
 
                                     MouseArea {
@@ -2542,6 +3039,9 @@ Item {
                                                 ? Qt.SizeFDiagCursor
                                                 : Qt.SizeBDiagCursor
                                             propagateComposedEvents: false
+                                            onWheel: function(wheel) {
+                                                wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
+                                            }
 
                                             function overlayPoint(mouse) {
                                                 return mapToItem(
@@ -2636,6 +3136,9 @@ Item {
                                             cursorShape: childResizeEdge.horizontalEdge
                                                 ? Qt.SizeHorCursor : Qt.SizeVerCursor
                                             propagateComposedEvents: false
+                                            onWheel: function(wheel) {
+                                                wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)
+                                            }
 
                                             function overlayPoint(mouse) {
                                                 return mapToItem(customLayoutOverlay, mouse.x, mouse.y)
@@ -2718,6 +3221,7 @@ Item {
                                 closeControl,
                                 restoreSizeControl,
                                 rotateContentControl,
+                                childEditLockControl,
                                 transferLeftControl,
                                 transferRightControl
                             ]

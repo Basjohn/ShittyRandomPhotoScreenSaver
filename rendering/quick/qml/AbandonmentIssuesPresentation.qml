@@ -5,6 +5,7 @@ OverlayWidget {
     id: abandonmentRoot
     objectName: "abandonmentIssuesPresentation"
 
+
     required property var abandonmentModel
     semanticDoubleClickEnabled: abandonmentModel.interactionEnabled
     signal refreshRequested()
@@ -18,6 +19,30 @@ OverlayWidget {
     readonly property real extraContentWidth: Math.max(0.0, authoredWidth - baseAuthoredWidth)
     readonly property real extraContentHeight: Math.max(0.0, authoredHeight - baseAuthoredHeight)
     uniformScaleTransform: true
+
+    // One existing Header alignment is the card orientation. Only the
+    // positions of whole semantic regions change; never mirror image/text pixels.
+    readonly property bool headerFlipped:
+        abandonmentModel.customHeaderAlignment === "right"
+    readonly property real flippedTextX:
+        baseAuthoredWidth - canonicalTextLeft - canonicalTextWidth
+    readonly property real flippedArtworkX:
+        baseAuthoredWidth - 17.0 - (canonicalArtworkWidth + 13.0)
+    function textRailX(onAuthoredRail) {
+        return headerFlipped && onAuthoredRail ? flippedTextX : canonicalTextLeft
+    }
+    function textRailShift(onAuthoredRail) {
+        return textRailX(onAuthoredRail) - canonicalTextLeft
+    }
+    function artworkTextReflow(onAuthoredRail) {
+        return onAuthoredRail && !headerFlipped ? artworkLayoutWidthDelta : 0.0
+    }
+    readonly property bool artworkFollowsFlippedRight:
+        headerFlipped && artworkOnAuthoredRail
+            && Math.abs(abandonmentModel.customArtworkWidthScale - 1.0)
+                <= childReflowPlacementEpsilon
+    readonly property real flippedArtworkParentReflowX:
+        artworkFollowsFlippedRight ? extraContentWidth : 0.0
 
     // Dense CUSTOM child roles deliberately use stable authored baselines.
     // Outer content_extent may grow around them, but must never become a new
@@ -165,17 +190,12 @@ OverlayWidget {
             "geometryDependencies": [authoredCanvas],
             "normalizationWidth": normW,
             "normalizationHeight": normH,
-            // Snap targets are expressed in the edit-frame coordinate space,
-            // including uniform-scale letterboxing. The header itself remains
-            // authored in logical card coordinates.
-            "semanticCornerInsetX":
-                (abandonmentRoot.width
-                    - abandonmentRoot.authoredWidth * abandonmentRoot.presentationScale) / 2.0
-                    + abandonmentRoot.headerSafeInsetX * abandonmentRoot.presentationScale,
-            "semanticCornerInsetY":
-                (abandonmentRoot.height
-                    - abandonmentRoot.authoredHeight * abandonmentRoot.presentationScale) / 2.0
-                    + abandonmentRoot.headerSafeInsetY * abandonmentRoot.presentationScale,
+            // Keep the role list independent of live parent dimensions.
+            // The shared child frame projects this authored inset into the
+            // current uniform/letterboxed edit-frame coordinate space at use.
+            "semanticCornerInsetX": abandonmentRoot.headerSafeInsetX,
+            "semanticCornerInsetY": abandonmentRoot.headerSafeInsetY,
+            "semanticInsetUsesUniformCard": true,
             "requirementTarget": customChildRequirement
         })
         if (normalContent.visible && artworkFrame.visible) {
@@ -282,7 +302,8 @@ OverlayWidget {
         // factors and authored-relative placement offsets. Never use the already
         // grown parent as a baseline: outer growth therefore cannot feed itself.
         readonly property real artworkRight: artworkFrame.visible
-            ? 17.0
+            ? (abandonmentRoot.headerFlipped && abandonmentRoot.artworkOnAuthoredRail
+                    ? abandonmentRoot.flippedArtworkX : 17.0)
                 + abandonmentRoot.abandonmentModel.customArtworkXOffset
                     * abandonmentRoot.baseAuthoredWidth
                 + artworkShelf.width
@@ -295,10 +316,15 @@ OverlayWidget {
                     * abandonmentRoot.baseAuthoredHeight
                 + artworkShelf.height
             : 0.0
+        // BACKLOG follows the live parent right rail for PAINT, but that
+        // parent-owned displacement is not child-driven content growth. Using
+        // backlogParentReflowX here would feed each admitted outer expansion
+        // straight back into its own required width.
         readonly property real backlogRight:
-            abandonmentRoot.baseAuthoredWidth
-                - abandonmentRoot.canonicalBacklogWidth - 18.0
-                + abandonmentRoot.backlogParentReflowX
+            (abandonmentRoot.headerFlipped && abandonmentRoot.backlogOnAuthoredRail
+                ? 18.0
+                : abandonmentRoot.baseAuthoredWidth
+                    - abandonmentRoot.canonicalBacklogWidth - 18.0)
                 + abandonmentRoot.abandonmentModel.customBacklogXOffset
                     * abandonmentRoot.baseAuthoredWidth
                 + archiveTab.width
@@ -307,9 +333,9 @@ OverlayWidget {
                 * abandonmentRoot.baseAuthoredHeight
             + archiveTab.height
         readonly property real gameRight: normalContent.visible
-            ? abandonmentRoot.canonicalTextLeft
-                + (abandonmentRoot.gameNameOnAuthoredRail
-                    ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+            ? abandonmentRoot.textRailX(abandonmentRoot.gameNameOnAuthoredRail)
+                + abandonmentRoot.artworkTextReflow(
+                    abandonmentRoot.gameNameOnAuthoredRail)
                 + abandonmentRoot.abandonmentModel.customGameNameXOffset
                     * abandonmentRoot.baseAuthoredWidth
                 + gameTitle.width
@@ -323,9 +349,9 @@ OverlayWidget {
                 + gameTitle.height
             : 0.0
         readonly property real flavourRight: flavourText.visible
-            ? abandonmentRoot.canonicalTextLeft
-                + (abandonmentRoot.flavourOnAuthoredRail
-                    ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+            ? abandonmentRoot.textRailX(abandonmentRoot.flavourOnAuthoredRail)
+                + abandonmentRoot.artworkTextReflow(
+                    abandonmentRoot.flavourOnAuthoredRail)
                 + abandonmentRoot.abandonmentModel.customFlavourXOffset
                     * abandonmentRoot.baseAuthoredWidth
                 + flavourText.width
@@ -341,9 +367,9 @@ OverlayWidget {
                 + flavourText.height
             : 0.0
         readonly property real lastVisitRight: normalContent.visible
-            ? abandonmentRoot.canonicalTextLeft
-                + (abandonmentRoot.lastVisitOnAuthoredRail
-                    ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+            ? abandonmentRoot.textRailX(abandonmentRoot.lastVisitOnAuthoredRail)
+                + abandonmentRoot.artworkTextReflow(
+                    abandonmentRoot.lastVisitOnAuthoredRail)
                 + abandonmentRoot.abandonmentModel.customLastVisitXOffset
                     * abandonmentRoot.baseAuthoredWidth
                 + ageStamp.width
@@ -360,9 +386,9 @@ OverlayWidget {
                 + ageStamp.height
             : 0.0
         readonly property real shelfRight: normalContent.visible && ledgerGroupFrame.visible
-            ? abandonmentRoot.canonicalTextLeft
-                + (abandonmentRoot.shelfGroupOnAuthoredRail
-                    ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+            ? abandonmentRoot.textRailX(abandonmentRoot.shelfGroupOnAuthoredRail)
+                + abandonmentRoot.artworkTextReflow(
+                    abandonmentRoot.shelfGroupOnAuthoredRail)
                 + abandonmentRoot.abandonmentModel.customShelfGroupXOffset
                     * abandonmentRoot.baseAuthoredWidth
                 + ledgerGroupFrame.width
@@ -419,7 +445,8 @@ OverlayWidget {
             logoObjectName: "abandonmentSteamLogo"
             textObjectName: "abandonmentHeaderText"
             property real customEditPlacementCompensationX:
-                abandonmentRoot.abandonmentModel.customHeaderAnchor.length > 0
+                (abandonmentRoot.abandonmentModel.customHeaderAnchor.length > 0
+                    || abandonmentRoot.headerFlipped)
                     ? x - (abandonmentRoot.headerSafeInsetX
                         + abandonmentRoot.abandonmentModel.customHeaderXOffset
                             * abandonmentRoot.baseAuthoredWidth)
@@ -432,7 +459,9 @@ OverlayWidget {
                     : 0.0
             transformOrigin: Item.TopLeft
             scale: abandonmentRoot.abandonmentModel.customHeaderWidthScale
-            x: abandonmentRoot.abandonmentModel.customHeaderAnchor.endsWith("right")
+            x: (abandonmentRoot.abandonmentModel.customHeaderAnchor.endsWith("right")
+                    || (abandonmentRoot.headerFlipped
+                        && !abandonmentRoot.abandonmentModel.customHeaderAnchor.endsWith("left")))
                 ? abandonmentRoot.authoredWidth - abandonmentRoot.headerSafeInsetX
                     - width * scale
                 : (abandonmentRoot.abandonmentModel.customHeaderAnchor.endsWith("left")
@@ -477,7 +506,8 @@ OverlayWidget {
             id: connectionInfo
             objectName: "abandonmentConnectionInfo"
             visible: abandonmentRoot.abandonmentModel.showConnectionInfo
-            x: 318.0
+            x: abandonmentRoot.headerFlipped
+                ? abandonmentRoot.baseAuthoredWidth - 318.0 - width : 318.0
             y: 17.0
             width: 18.0
             height: 18.0
@@ -577,15 +607,20 @@ OverlayWidget {
                 objectName: "abandonmentArchiveTab"
                 property bool customEditReflowEnabled: abandonmentRoot.backlogOnAuthoredRail
                 property real customEditPlacementCompensationX:
-                    abandonmentRoot.backlogParentReflowX
+                    abandonmentRoot.headerFlipped && abandonmentRoot.backlogOnAuthoredRail
+                        ? 18.0 - (abandonmentRoot.baseAuthoredWidth
+                            - abandonmentRoot.canonicalBacklogWidth - 18.0)
+                        : abandonmentRoot.backlogParentReflowX
                 property real customEditPlacementCompensationY: 0.0
                 // The authored BACKLOG rail follows horizontal parent content extent
                 // only while still authored. Once freely moved, its normalized
                 // placement is stable and a later right-edge parent shrink closes
                 // the gap instead of pushing BACKLOG through the left boundary.
-                x: abandonmentRoot.baseAuthoredWidth
-                    - abandonmentRoot.canonicalBacklogWidth - 18.0
-                    + abandonmentRoot.backlogParentReflowX
+                x: (abandonmentRoot.headerFlipped && abandonmentRoot.backlogOnAuthoredRail
+                        ? 18.0
+                        : abandonmentRoot.baseAuthoredWidth
+                            - abandonmentRoot.canonicalBacklogWidth - 18.0
+                            + abandonmentRoot.backlogParentReflowX)
                     + abandonmentRoot.abandonmentModel.customBacklogXOffset
                         * abandonmentRoot.baseAuthoredWidth
                 y: 19.0
@@ -667,7 +702,10 @@ OverlayWidget {
                     id: artworkShelf
                     objectName: "abandonmentArtworkShelf"
                     visible: abandonmentRoot.abandonmentModel.showArtwork
-                    x: 17.0
+                    x: (abandonmentRoot.headerFlipped && abandonmentRoot.artworkOnAuthoredRail
+                            ? abandonmentRoot.flippedArtworkX
+                                + abandonmentRoot.flippedArtworkParentReflowX
+                            : 17.0)
                         + abandonmentRoot.abandonmentModel.customArtworkXOffset
                             * abandonmentRoot.baseAuthoredWidth
                     y: abandonmentRoot.canonicalArtworkY - 4.0
@@ -706,7 +744,10 @@ OverlayWidget {
                         id: artworkFrame
                         objectName: "abandonmentArtworkFrame"
                         property bool customEditReflowEnabled: abandonmentRoot.artworkOnAuthoredRail
-                        property real customEditPlacementCompensationX: 0.0
+                        property real customEditPlacementCompensationX:
+                            abandonmentRoot.headerFlipped && abandonmentRoot.artworkOnAuthoredRail
+                                ? abandonmentRoot.flippedArtworkX - 17.0
+                                    + abandonmentRoot.flippedArtworkParentReflowX : 0.0
                         property real customEditPlacementCompensationY:
                             abandonmentRoot.artworkOnAuthoredRail
                                 ? abandonmentRoot.backlogLayoutHeightDelta : 0.0
@@ -815,14 +856,13 @@ OverlayWidget {
                     objectName: "abandonmentGameTitle"
                     property bool customEditReflowEnabled: abandonmentRoot.gameNameOnAuthoredRail
                     property real customEditPlacementCompensationX:
-                        abandonmentRoot.gameNameOnAuthoredRail
-                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0
+                        abandonmentRoot.textRailShift(abandonmentRoot.gameNameOnAuthoredRail)
+                            + abandonmentRoot.artworkTextReflow(abandonmentRoot.gameNameOnAuthoredRail)
                     property real customEditPlacementCompensationY:
                         abandonmentRoot.gameNameOnAuthoredRail
                             ? abandonmentRoot.backlogLayoutHeightDelta : 0.0
-                    x: abandonmentRoot.canonicalTextLeft
-                        + (abandonmentRoot.gameNameOnAuthoredRail
-                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                    x: abandonmentRoot.textRailX(abandonmentRoot.gameNameOnAuthoredRail)
+                        + abandonmentRoot.artworkTextReflow(abandonmentRoot.gameNameOnAuthoredRail)
                         + abandonmentRoot.abandonmentModel.customGameNameXOffset
                             * abandonmentRoot.baseAuthoredWidth
                     y: 74.0
@@ -864,16 +904,15 @@ OverlayWidget {
                     objectName: "abandonmentRediscoveryText"
                     property bool customEditReflowEnabled: abandonmentRoot.flavourOnAuthoredRail
                     property real customEditPlacementCompensationX:
-                        abandonmentRoot.flavourOnAuthoredRail
-                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0
+                        abandonmentRoot.textRailShift(abandonmentRoot.flavourOnAuthoredRail)
+                            + abandonmentRoot.artworkTextReflow(abandonmentRoot.flavourOnAuthoredRail)
                     property real customEditPlacementCompensationY:
                         abandonmentRoot.flavourOnAuthoredRail
                             ? abandonmentRoot.backlogLayoutHeightDelta
                                 + abandonmentRoot.gameNameLayoutHeightDelta
                             : 0.0
-                    x: abandonmentRoot.canonicalTextLeft
-                        + (abandonmentRoot.flavourOnAuthoredRail
-                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                    x: abandonmentRoot.textRailX(abandonmentRoot.flavourOnAuthoredRail)
+                        + abandonmentRoot.artworkTextReflow(abandonmentRoot.flavourOnAuthoredRail)
                         + abandonmentRoot.abandonmentModel.customFlavourXOffset
                             * abandonmentRoot.baseAuthoredWidth
                     y: 119.0
@@ -918,17 +957,16 @@ OverlayWidget {
                     objectName: "abandonmentAgeStamp"
                     property bool customEditReflowEnabled: abandonmentRoot.lastVisitOnAuthoredRail
                     property real customEditPlacementCompensationX:
-                        abandonmentRoot.lastVisitOnAuthoredRail
-                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0
+                        abandonmentRoot.textRailShift(abandonmentRoot.lastVisitOnAuthoredRail)
+                            + abandonmentRoot.artworkTextReflow(abandonmentRoot.lastVisitOnAuthoredRail)
                     property real customEditPlacementCompensationY:
                         abandonmentRoot.lastVisitOnAuthoredRail
                             ? abandonmentRoot.backlogLayoutHeightDelta
                                 + abandonmentRoot.gameNameLayoutHeightDelta
                                 + abandonmentRoot.flavourLayoutHeightDelta
                             : 0.0
-                    x: abandonmentRoot.canonicalTextLeft
-                        + (abandonmentRoot.lastVisitOnAuthoredRail
-                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                    x: abandonmentRoot.textRailX(abandonmentRoot.lastVisitOnAuthoredRail)
+                        + abandonmentRoot.artworkTextReflow(abandonmentRoot.lastVisitOnAuthoredRail)
                         + abandonmentRoot.abandonmentModel.customLastVisitXOffset
                             * abandonmentRoot.baseAuthoredWidth
                     y: 160.0
@@ -1030,8 +1068,8 @@ OverlayWidget {
                         * abandonmentRoot.abandonmentModel.customShelfGroupHeightScale
                     property bool customEditReflowEnabled: abandonmentRoot.shelfGroupOnAuthoredRail
                     property real customEditPlacementCompensationX:
-                        abandonmentRoot.shelfGroupOnAuthoredRail
-                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0
+                        abandonmentRoot.textRailShift(abandonmentRoot.shelfGroupOnAuthoredRail)
+                            + abandonmentRoot.artworkTextReflow(abandonmentRoot.shelfGroupOnAuthoredRail)
                     property real customEditPlacementCompensationY:
                         abandonmentRoot.shelfGroupOnAuthoredRail
                             ? abandonmentRoot.backlogLayoutHeightDelta
@@ -1040,9 +1078,8 @@ OverlayWidget {
                                 + abandonmentRoot.lastVisitLayoutHeightDelta
                             : 0.0
                     visible: ledgerRepeater.count > 0
-                    x: abandonmentRoot.canonicalTextLeft
-                        + (abandonmentRoot.shelfGroupOnAuthoredRail
-                            ? abandonmentRoot.artworkLayoutWidthDelta : 0.0)
+                    x: abandonmentRoot.textRailX(abandonmentRoot.shelfGroupOnAuthoredRail)
+                        + abandonmentRoot.artworkTextReflow(abandonmentRoot.shelfGroupOnAuthoredRail)
                         + abandonmentRoot.abandonmentModel.customShelfGroupXOffset
                             * abandonmentRoot.baseAuthoredWidth
                     y: 226.0

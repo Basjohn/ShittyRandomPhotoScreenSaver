@@ -41,7 +41,7 @@ Initial candidates:
 - **Future Steam cards where appropriate:** reuse the same artwork/layout-block/group-role descriptors rather than cloning Abandonment-specific geometry code.
 - **Friend Pulse:** six retained roles: singleton Header, Online Count and Separator plus three repeated shared roles for Friend Frames, Avatars and Usernames. Each repeated role has **one geometry record for the whole roster**, never one record per friend/delegate. Frame size remains family-positioned; avatar and username size/placement are shared across all repeated items so row/grid rhythm and clipping remain coherent.
 - **Weather:** condition/hero icon if the final interaction remains useful after the shared implementation exists.
-- **Clock analogue only:** separator role and Roman-numeral role are candidates. Each role changes as one grouped set: all analogue separators together, all Roman numerals together. Digital mode has no such child role and must not acquire hidden/dormant geometry state for one.
+- **Clock analogue only:** `clock_face` is a single center-owned uniform child comprising ring, markers, Roman numerals and every hand. Independent numeral geometry was physically rejected and retired. Separator/calendar/timezone are distinct optional roles. Digital mode keeps only its visible digital-specific text and optional footer roles; no dormant analogue edit target.
 
 The framework should make future widgets opt in declaratively by role/axis/policy rather than requiring a new controller per family. Freeform artwork geometry uses the shared `freeform_artwork_child_role(...)` contract so Achievement, Abandonment/future Steam artwork and Media inherit the same X/Y frame semantics without sharing or waking their provider/image owners.
 
@@ -70,7 +70,7 @@ A role declares, at minimum:
 - bounded minimum/maximum policy;
 - whether a single override applies to one item or a whole repeated group;
 - whether overflow contributes to outer `content_extent`;
-- whether the role is singular or group-scoped (for example all Friend Pulse avatars, all analogue Clock Roman numerals, or all analogue Clock separators).
+- whether the role is singular or group-scoped (for example all Friend Pulse avatars or all shared System Stats metric labels).
 - resize handle admission remains descriptor-owned. **Foundation note superseded by the later placement phase:** now that normalized child X/Y placement is part of the same `child_geometry` authority, editable roles default to all four corners and left/top resize preserves the opposite edge through that existing carrier. A descriptor may still restrict corners for a concrete semantic reason. The edit overlay queries only the selected parent's descriptor.
 
 Save/Cancel/slots round-trip the same shared `size_payload.child_geometry` carrier. The carrier now owns authored-relative child size **and optional X/Y placement**. Cancel restores the session-entry baseline. The existing bottom-left **Restore Size** glyph is deliberately broader: it is the widget's authored-state reset and atomically clears descriptor-owned child size/placement overrides plus the transient containment floor while restoring authored outer size/shape. It preserves the widget's current X/Y/display. There is no second per-child reset authority.

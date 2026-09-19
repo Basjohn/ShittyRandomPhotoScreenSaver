@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from core.settings.default_contract import require_canonical_default
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QPointF, QSize
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtQml import QQmlEngine
 from PySide6.QtQuick import QQuickItem
@@ -29,6 +29,7 @@ from rendering.quick.widgets.registry import (
 )
 from rendering.quick.window import QuickDisplayWindow
 from rendering.widget_runtime_manager import WidgetRuntimeManager
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 from widgets.media_runtime import (
     MediaRuntimeSnapshot,
     PreparedMediaArtwork,
@@ -1023,6 +1024,207 @@ def test_media_family_uses_current_scene_host_and_mutates_without_recreation(
         qt_app.processEvents()
 
 
+@pytest.mark.qt
+def test_media_authored_xy_reflow_and_empty_custom_roundtrip(qt_app) -> None:
+    """The old card rails reflow; child editing cannot freeze them at 600 px."""
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=93, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, provider = _model(factory.media_artwork_provider, runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host,
+            model=model,
+            geometry=OverlayWidgetGeometry(35.0, 40.0, 620.0, 330.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        artwork = item.findChild(QQuickItem, "mediaArtworkFrame")
+        seek = item.findChild(QQuickItem, "mediaProgressTrack")
+        transport = item.findChild(QQuickItem, "mediaControlsRow")
+        assert artwork is not None and seek is not None and transport is not None
+        assert artwork.isVisible() and seek.isVisible() and transport.isVisible()
+        metadata_lane = item.findChild(QQuickItem, "mediaMetadata")
+        assert metadata_lane is not None
+
+        def verify_authored_metadata_artwork_gap() -> None:
+            # World-space proof, including shell insets and uniform parent
+            # transforms. The edit box is the full metadata lane, not merely
+            # the handful of glyph pixels visible in the screenshot.
+            lane_right = metadata_lane.mapToItem(
+                item, QPointF(metadata_lane.width(), 0.0)
+            ).x()
+            art_left = artwork.mapToItem(item, QPointF(0.0, 0.0)).x()
+            assert lane_right <= art_left - 1.0, (lane_right, art_left)
+
+        verify_authored_metadata_artwork_gap()
+        authored = (artwork.x(), artwork.width(), artwork.height(),
+                    seek.width(), transport.width())
+        # A 1x1 artifact is a collapsed authored-rail calculation, not a
+        # legitimate artwork baseline. Catch it before the extent change too.
+        assert authored[1] > 32.0 and authored[2] > 32.0
+        assert model.customChildGeometry == {}
+
+        # Explicit outer content extent is the existing single reflow owner.
+        # The QML artwork/seek/transport children should measure the enlarged
+        # authored card, while the unedited child payload remains empty.
+        assert model.set_content_extent(980, 460)
+        qt_app.processEvents()
+        assert artwork.width() > authored[1]
+        assert artwork.height() > authored[2]
+        assert seek.width() > authored[3]
+        assert transport.width() > authored[4]
+        assert artwork.x() > authored[0]
+        verify_authored_metadata_artwork_gap()
+        assert model.customChildGeometry == {}
+        assert runtime.refresh_calls == []
+        assert provider.image_count == 1
+
+        # Restore authored width/height, without a child Save/reset/migration.
+        assert model.clear_content_extent()
+        qt_app.processEvents()
+        assert artwork.x() == pytest.approx(authored[0])
+        assert artwork.width() == pytest.approx(authored[1])
+        assert artwork.height() == pytest.approx(authored[2])
+        assert seek.width() == pytest.approx(authored[3])
+        assert transport.width() == pytest.approx(authored[4])
+        verify_authored_metadata_artwork_gap()
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_media_metadata_reset_releases_positioner_owned_y_without_stale_spacing(qt_app) -> None:
+    """Independently edited metadata/status must not compete with Column's Y.
+
+    A test of rendered coordinates, not just source literals: changing metadata
+    and PAUSED child offsets then clearing them restores the same authored flow
+    without reloading a CUSTOM slot or changing the outer rectangle.
+    """
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=98, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, provider = _model(factory.media_artwork_provider, runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host,
+            model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 620.0, 330.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        lane = item.findChild(QQuickItem, "mediaMetadata")
+        track = item.findChild(QQuickItem, "mediaTrackMetadata")
+        track_slot = item.findChild(QQuickItem, "mediaMetadataFlowSlot")
+        state = item.findChild(QQuickItem, "mediaPlaybackState")
+        state_slot = item.findChild(QQuickItem, "mediaPlaybackStateFlowSlot")
+        assert all(v is not None for v in (lane, track, track_slot, state, state_slot))
+        assert track.parentItem() is track_slot and state.parentItem() is state_slot
+        assert track_slot.parentItem() is lane and state_slot.parentItem() is lane
+        assert (track.x(), track.y(), track.scale()) == pytest.approx((0, 0, 1))
+        assert state_slot.y() >= track_slot.y() + track_slot.height()
+        baseline = (
+            state_slot.y(), track_slot.height(),
+            state.mapToItem(lane, QPointF(0.0, 0.0)).y(),
+        )
+        assert model.set_custom_child_geometry({
+            "metadata": {"x_offset": 0.035, "y_offset": 0.06,
+                         "width_scale": 1.2, "height_scale": 1.2},
+            "playback_state": {"x_offset": 0.02, "y_offset": -0.03,
+                               "width_scale": 1.1, "height_scale": 1.1},
+        })
+        qt_app.processEvents()
+        # Only content moves. The authored flow slots cannot inherit child X/Y.
+        assert state_slot.y() == pytest.approx(baseline[0])
+        assert track_slot.height() == pytest.approx(baseline[1])
+        assert track.y() != 0 and state.y() != 0
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert (track.x(), track.y(), track.scale()) == pytest.approx((0, 0, 1))
+        assert (state.x(), state.y(), state.scale()) == pytest.approx((0, 0, 1))
+        assert state_slot.y() == pytest.approx(baseline[0])
+        assert track_slot.height() == pytest.approx(baseline[1])
+        assert state.mapToItem(lane, QPointF(0.0, 0.0)).y() == pytest.approx(baseline[2])
+        assert runtime.refresh_calls == [] and provider.image_count == 1
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_media_artist_independent_xy_and_flip_preserve_authored_crossfade_slot(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=95, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, provider = _model(factory.media_artwork_provider, runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 620.0, 330.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        artist = item.findChild(QQuickItem, "mediaArtist")
+        title = item.findChild(QQuickItem, "mediaTitle")
+        outgoing = item.findChild(QQuickItem, "mediaOutgoingArtist")
+        assert artist is not None and title is not None and outgoing is not None
+        assert artist.isVisible() and artist.height() > 0.0
+        authored = (artist.x(), artist.y(), artist.scale(), title.x(), title.y())
+        assert authored[:3] == pytest.approx((0.0, 0.0, 1.0))
+        assert model.set_custom_child_geometry({"artist": {
+            "x_offset": 0.02, "y_offset": 0.03,
+            "width_scale": 1.25, "height_scale": 1.25,
+            "alignment": "right",
+        }})
+        qt_app.processEvents()
+        assert artist.x() == pytest.approx(0.02 * item.property("childNormalizationWidth"))
+        assert artist.y() == pytest.approx(0.03 * item.property("childNormalizationHeight"))
+        assert artist.scale() == pytest.approx(1.25)
+        assert outgoing.x() == pytest.approx(artist.x())
+        assert outgoing.y() == pytest.approx(artist.y())
+        assert outgoing.scale() == pytest.approx(artist.scale())
+        assert (title.x(), title.y()) == pytest.approx(authored[3:])
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert (artist.x(), artist.y(), artist.scale()) == pytest.approx(authored[:3])
+        assert model.customChildGeometry == {}
+        assert runtime.refresh_calls == [] and provider.image_count == 1
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
 def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
     qml = (QML_ROOT / "MediaPresentation.qml").read_text(encoding="utf-8")
     for marker in (
@@ -1083,3 +1285,354 @@ def test_retired_qwidget_media_core_pixels_have_no_surviving_presenter() -> None
         ROOT / "widgets" / "mute_button_widget.py",
     ):
         assert not retired_path.exists()
+
+
+def test_media_metadata_and_state_flip_and_resize_share_stable_top_left_projection() -> None:
+    descriptor = get_widget_runtime_descriptor("media")
+    roles = {role.role_id: role for role in descriptor.custom_child_roles}
+    assert roles["metadata"].alignment_flip and roles["playback_state"].alignment_flip
+    assert roles["artist"].alignment_flip and roles["artist"].movable
+    presentation = (QML_ROOT / "MediaPresentation.qml").read_text(encoding="utf-8")
+    for role in ("metadata", "playback_state"):
+        assert f'x: mediaRoot.childOffsetX("{role}")' in presentation
+        assert f'y: mediaRoot.childOffsetY("{role}")' in presentation
+        assert f'scale: mediaRoot.childWidthScale("{role}")' in presentation
+    assert 'textAlignment: mediaRoot.orientedChildAlignment("metadata", "left")' in presentation
+    assert 'horizontalAlignment: mediaRoot.orientedChildAlignment("playback_state", "left")' in presentation
+    assert 'artistAlignment: mediaRoot.orientedChildAlignment(' in presentation
+    assert 'readonly property real flippedAuthoredRailX:' in presentation
+    assert 'progressBand.width - 4.0 - width' in presentation
+    assert 'property real customEditPlacementCompensationX: flippedAuthoredRailX' in presentation
+    crossfade = (QML_ROOT / "MediaMetadataColumn.qml").read_text(encoding="utf-8")
+    assert crossfade.count('horizontalAlignment: metadataFade.textAlignment === "right"') == 4
+    assert crossfade.count('horizontalAlignment: metadataFade.artistAlignment === "right"') == 2
+
+
+@pytest.mark.qt
+def test_media_external_volume_bounds_and_edit_rebase_follow_live_lane(qt_app) -> None:
+    """Parent X/Y changes and old child offsets must map to the visible accessory.
+
+    The edit proxy maps the real appVolumeTrack. These scene assertions reject a
+    mere paint clip over an out-of-bounds target, and verify gesture compensation
+    for the pre-clamp saved offset without writing that offset on a plain click.
+    """
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=92,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    # The window is not shown in offscreen Qt tests; set a real display-local
+    # content rect before probing the side-selection rule.  A zero-width host
+    # would otherwise place a 650 px card to the left of its own fake midpoint.
+    window.setWidth(1600)
+    window.setHeight(900)
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    volume_runtime = _FakeMediaVolumeRuntime()
+    model, _, provider = _model(
+        factory.media_artwork_provider, runtime, volume_runtime
+    )
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host,
+            model=model,
+            geometry=OverlayWidgetGeometry(35.0, 40.0, 650.0, 300.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        assert model.appVolumeAvailable
+        track = item.findChild(QQuickItem, "mediaAppVolumeTrack")
+        lane = item.findChild(QQuickItem, "mediaAppVolumeSlider")
+        assert track is not None and lane is not None and lane.isVisible()
+
+        # A narrow Y edit shrinks the *live* track. Both signs of pre-existing
+        # normalized offset, both parent X extents and either accessory side
+        # must remain within the real lane (not the Media card).
+        # In an offscreen QQuickWindow the window's dimensions do not
+        # automatically size the detached ordinary-widget host. Set the
+        # ACTUAL parent item that Media's side-of-display binding reads.
+        # A zero-width parent makes every card appear on the wrong side and
+        # says nothing about the production orientation contract.
+        scene_host = item.parentItem()
+        assert scene_host is not None
+        scene_root = controller.scene_root
+        scene_root.setWidth(1600.0)
+        scene_root.setHeight(900.0)
+        qt_app.processEvents()
+        # The anchored host can only report the owning scene's actual geometry.
+        assert scene_root.width() >= 1600.0
+        assert scene_host.width() == pytest.approx(scene_root.width())
+
+        for width, height in ((650, 300), (620, 210), (780, 440)):
+            assert model.set_content_extent(width, height) or model.contentExtentActive
+            item.setWidth(float(width))
+            item.setHeight(float(height))
+            for left in (False, True):
+                parent_width = float(item.parentItem().width())
+                assert parent_width >= 1600.0, parent_width
+                if left:
+                    item.setX(parent_width - item.width() - 20.0)
+                else:
+                    item.setX(20.0)
+                qt_app.processEvents()
+                assert bool(item.property("appVolumeOnLeft")) is left
+                for offset in (-0.35, 0.0, 0.35):
+                    model.set_custom_child_geometry({"volume_bar": {
+                        "x_offset": offset, "y_offset": offset,
+                    }})
+                    qt_app.processEvents()
+                    assert float(track.x()) >= -0.01
+                    assert float(track.y()) >= -0.01
+                    assert float(track.x() + track.width()) <= lane.width() + 0.01
+                    assert float(track.y() + track.height()) <= lane.height() + 0.01
+                    assert float(track.property("customEditPlacementCompensationX")) == pytest.approx(
+                        float(track.x()) - float(track.property("requestedTrackX")), abs=0.01
+                    )
+                    assert float(track.property("customEditPlacementCompensationY")) == pytest.approx(
+                        float(track.y()) - float(track.property("requestedTrackY")), abs=0.01
+                    )
+        assert runtime.refresh_calls == []
+        assert provider.image_count == 1
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_media_header_flip_swaps_artwork_and_metadata_rails_and_reset_is_identity(qt_app) -> None:
+    """A semantic flip must not make metadata overlap the artwork or shift on reset."""
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=102, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, provider = _model(factory.media_artwork_provider, runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 700.0, 340.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        header = item.findChild(QQuickItem, "mediaHeaderFrame")
+        art = item.findChild(QQuickItem, "mediaArtworkFrame")
+        metadata = item.findChild(QQuickItem, "mediaMetadata")
+        assert header is not None and art is not None and metadata is not None
+        assert art.isVisible() and art.width() > 32.0 and metadata.width() > 32.0
+        baseline = (header.x(), art.x(), metadata.x(), metadata.width())
+        assert metadata.x() + metadata.width() + 1.0 < art.x()
+        text = item.findChild(QQuickItem, "mediaTrackMetadata")
+        state = item.findChild(QQuickItem, "mediaPlaybackState")
+        seek = item.findChild(QQuickItem, "mediaProgressTrack")
+        assert text is not None and state is not None and seek is not None
+        initial_seek_x = seek.x()
+        initial_state_alignment = int(state.property("horizontalAlignment"))
+        assert str(text.property("textAlignment")) == "left"
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        assert bool(item.property("headerFlipped"))
+        # BrandedHeader's nested frame itself always has local x=0. Its
+        # positioned parent owns the semantic rail.
+        assert header.parentItem().x() > 0.0
+        assert art.x() + art.width() + 1.0 < metadata.x()
+        assert metadata.width() > 32.0
+        assert str(text.property("textAlignment")) == "right"
+        assert int(state.property("horizontalAlignment")) != initial_state_alignment
+        assert seek.x() > initial_seek_x + 20.0
+        # An individual metadata flip composes with global placement orientation.
+        assert model.set_custom_child_geometry({
+            "header": {"alignment": "right"},
+            "metadata": {"alignment": "right"},
+        })
+        qt_app.processEvents()
+        assert str(text.property("textAlignment")) == "left"
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        assert str(text.property("textAlignment")) == "right"
+        assert model.set_content_extent(950, 455)
+        qt_app.processEvents()
+        assert art.x() + art.width() + 1.0 < metadata.x()
+        assert model.clear_content_extent()
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert not bool(item.property("headerFlipped"))
+        assert str(text.property("textAlignment")) == "left"
+        assert int(state.property("horizontalAlignment")) == initial_state_alignment
+        assert seek.x() == pytest.approx(initial_seek_x)
+        assert (header.x(), art.x(), metadata.x(), metadata.width()) == pytest.approx(baseline)
+        assert runtime.refresh_calls == [] and provider.image_count == 1
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_seek_child_placement_and_size_never_change_media_authored_flow_reservations(qt_app) -> None:
+    """Seek CUSTOM changes must not re-size artwork/metadata or shift bands.
+
+    Editing seek is a child-geometry transaction. Artwork's authored size and
+    the parent's Column reservation must not consume the edited seek rectangle,
+    even when the seek remains on its original X/Y rail while its size changes.
+    This is the causal regression behind mid-gesture artwork/seek disappearance.
+    """
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=121, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, provider = _model(factory.media_artwork_provider, runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 700.0, 340.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        art = item.findChild(QQuickItem, "mediaArtworkFrame")
+        seek = item.findChild(QQuickItem, "mediaProgressTrack")
+        band = item.findChild(QQuickItem, "mediaProgressBand")
+        main = item.findChild(QQuickItem, "mediaMainBand")
+        metadata = item.findChild(QQuickItem, "mediaMetadata")
+        controls = item.findChild(QQuickItem, "mediaControlsBandSlot")
+        assert all(v is not None for v in (art, seek, band, main, metadata, controls))
+        assert art.isVisible() and seek.isVisible()
+        for flipped in (False, True):
+            header = {"header": {"alignment": "right"}} if flipped else {}
+            model.set_custom_child_geometry(header)
+            qt_app.processEvents()
+            baseline = (art.x(), art.y(), art.width(), art.height(),
+                        main.height(), band.height(), metadata.x(),
+                        metadata.width(), controls.y())
+            assert baseline[2] > 32.0 and baseline[3] > 32.0
+            for seek_edit in (
+                {"width_scale": 1.45, "height_scale": 1.65},
+                {"x_offset": 0.12, "y_offset": 0.08},
+                {"x_offset": -0.16, "y_offset": -0.07,
+                 "width_scale": 1.22, "height_scale": 1.35},
+            ):
+                assert model.set_custom_child_geometry({**header, "seek_bar": seek_edit})
+                qt_app.processEvents()
+                measured = (art.x(), art.y(), art.width(), art.height(),
+                            main.height(), band.height(), metadata.x(),
+                            metadata.width(), controls.y())
+                assert measured == pytest.approx(baseline, abs=0.5), (
+                    "seek edited authored layout", flipped, seek_edit,
+                    baseline, measured,
+                )
+                assert art.isVisible() and art.width() > 32.0 and art.height() > 32.0
+                assert seek.isVisible() and seek.width() > 16.0 and seek.height() > 1.0
+            model.set_custom_child_geometry(header)
+            qt_app.processEvents()
+            restored = (art.x(), art.y(), art.width(), art.height(),
+                        main.height(), band.height(), metadata.x(),
+                        metadata.width(), controls.y())
+            assert restored == pytest.approx(baseline, abs=0.5)
+        assert runtime.refresh_calls == [] and provider.image_count == 1
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_flipped_media_artwork_and_seek_first_drag_stays_under_pointer(qt_app) -> None:
+    """An on-rail flip followed by the first REAL X/Y edit must not jump lanes.
+
+    This exercises real QML/model geometry with the same normalized offset
+    and compensation owned by the production child-move resolver. It does not
+    substitute for native pointer/collision or Save/reopen acceptance.
+    """
+    import math
+    from rendering.custom_child_geometry import (
+        CustomChildSize, freeform_layout_block_child_role,
+        resolve_child_move_geometry,
+    )
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=120, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, provider = _model(factory.media_artwork_provider, runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 700.0, 340.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        art = item.findChild(QQuickItem, "mediaArtworkFrame")
+        seek = item.findChild(QQuickItem, "mediaProgressTrack")
+        main = item.findChild(QQuickItem, "mediaMainBand")
+        assert all(v is not None for v in (art, seek, main))
+        assert art.isVisible() and art.width() > 32.0 and art.height() > 32.0
+        norm_width = float(item.property("childNormalizationWidth"))
+        norm_height = float(item.property("childNormalizationHeight"))
+        assert norm_width > 100.0 and norm_height > 100.0
+        role = freeform_layout_block_child_role("artwork", movable=True)
+        scale = float(item.property("presentationScale"))
+        assert scale > 0.0
+        # Each gesture reads the CURRENT on-rail presentation displacement.
+        # Applying a tiny move must change the observed rectangle by a tiny
+        # amount, not by a whole art/seek rail or the parent Column height.
+        for role_id, target in (("artwork", art), ("seek_bar", seek)):
+            model.set_custom_child_geometry({"header": {"alignment": "right"}})
+            qt_app.processEvents()
+            before = target.mapToItem(item, QPointF(0.0, 0.0))
+            before_size = (target.width(), target.height())
+            compensation_x = float(target.property("customEditPlacementCompensationX"))
+            compensation_y = float(target.property("customEditPlacementCompensationY") or 0.0)
+            assert all(map(math.isfinite, (compensation_x, compensation_y)))
+            record = resolve_child_move_geometry(
+                role, CustomChildSize(), raw_dx=7.0, raw_dy=5.0,
+                normalization_width=norm_width,
+                normalization_height=norm_height, outer_scale=scale,
+                placement_compensation_x=compensation_x,
+                placement_compensation_y=compensation_y,
+            )
+            assert model.set_custom_child_geometry({
+                "header": {"alignment": "right"},
+                role_id: record.to_mapping(),
+            })
+            qt_app.processEvents()
+            after = target.mapToItem(item, QPointF(0.0, 0.0))
+            assert abs(after.x() - before.x()) < 18.0, (role_id, before.x(), after.x())
+            assert abs(after.y() - before.y()) < 18.0, (role_id, before.y(), after.y())
+            assert target.isVisible() and target.width() > 16.0 and target.height() > 2.0
+            assert target.width() == pytest.approx(before_size[0], rel=0.08)
+            assert target.height() == pytest.approx(before_size[1], rel=0.08)
+        assert runtime.refresh_calls == [] and provider.image_count == 1
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()

@@ -5,6 +5,7 @@ OverlayWidget {
     id: mediaRoot
     objectName: "mediaPresentation"
 
+
     // H9: CUSTOM wheel/corner resize is one uniform retained-presentation scale.
     // Header, metadata, artwork, progress and controls scale together from the
     // outer-rect / baseline-preferred ratio, so a resize no longer recentres or
@@ -30,7 +31,6 @@ OverlayWidget {
     // semantic region has its own role. No provider/runtime state enters this map.
     readonly property var childGeometry: mediaModel.customChildGeometry
     readonly property real childNormalizationWidth: canonicalPreferredCardWidth
-        + canonicalVolumeAccessoryExtent
     readonly property real childNormalizationHeight: canonicalPreferredHeight
     function childRecord(roleId) {
         return childGeometry ? childGeometry[roleId] : null
@@ -46,7 +46,9 @@ OverlayWidget {
     function childOffsetX(roleId) {
         const value = childRecord(roleId)
         return (value && value.x_offset !== undefined ? Number(value.x_offset) : 0.0)
-            * childNormalizationWidth
+            * (roleId === "volume_bar"
+                ? canonicalPreferredCardWidth + canonicalVolumeAccessoryExtent
+                : childNormalizationWidth)
     }
     function childOffsetY(roleId) {
         const value = childRecord(roleId)
@@ -57,6 +59,17 @@ OverlayWidget {
         const value = childRecord(roleId)
         return value && value.alignment !== undefined
             ? String(value.alignment) : String(fallback || "left")
+    }
+    // The existing header alignment record is the ONE widget orientation.
+    // Header, artwork and metadata project their own semantic rails from it;
+    // independent child text alignments remain independently editable.
+    readonly property bool headerFlipped: childAlignment("header", "left") === "right"
+    // Orientation relocates the whole authored lane. A separately editable
+    // text alignment composes with that orientation, rather than cancelling it
+    // by unconditionally returning its own authored-left default.
+    function orientedChildAlignment(roleId, authored) {
+        const locallyRight = childAlignment(roleId, authored) === "right"
+        return locallyRight !== headerFlipped ? "right" : "left"
     }
     function childAnchor(roleId) {
         const value = childRecord(roleId)
@@ -74,7 +87,7 @@ OverlayWidget {
                 "geometryDependencies": [mediaColumn, headerSlot],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (trackMetadata.visible) {
@@ -82,9 +95,21 @@ OverlayWidget {
                 "roleId": "metadata",
                 "target": trackMetadata,
                 "geometryDependencies": [mediaColumn, mainBand, metadata],
+                "collisionIgnoreRoleIds": ["artist"],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
+            })
+        }
+        if (trackMetadata.visible && trackMetadata.artistEditTarget.visible) {
+            roles.push({
+                "roleId": "artist",
+                "target": trackMetadata.artistEditTarget,
+                "geometryDependencies": [mediaColumn, mainBand, metadata, trackMetadata],
+                "collisionIgnoreRoleIds": ["metadata"],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": null
             })
         }
         if (playbackState.visible) {
@@ -94,7 +119,7 @@ OverlayWidget {
                 "geometryDependencies": [mediaColumn, mainBand, metadata],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (artworkFrame.visible) {
@@ -104,7 +129,7 @@ OverlayWidget {
                 "geometryDependencies": [mediaColumn, mainBand],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (progressBand.visible) {
@@ -119,7 +144,7 @@ OverlayWidget {
                 "resizeReflowAxes": ["vertical"],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (appVolumeSlider.visible) {
@@ -127,9 +152,15 @@ OverlayWidget {
                 "roleId": "volume_bar",
                 "target": appVolumeTrack,
                 "geometryDependencies": [appVolumeSlider],
-                "normalizationWidth": normW,
+                "containmentTarget": appVolumeSlider,
+                "allowParentGrowth": false,
+                // Existing volume CUSTOM offsets were normalized against the
+                // former root+accessory baseline. Preserve those saved offsets;
+                // its *legal containment* is now independently the lane itself.
+                "normalizationWidth": canonicalPreferredCardWidth
+                    + canonicalVolumeAccessoryExtent,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (controlsRow.visible) {
@@ -141,7 +172,7 @@ OverlayWidget {
                 "collisionIgnoreRoleIds": ["mute_button"],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (systemMuteButton.visible) {
@@ -152,8 +183,14 @@ OverlayWidget {
                 "collisionIgnoreRoleIds": ["transport_controls"],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
+        }
+        for (let i = 0; i < roles.length; ++i) {
+            if (roles[i].roleId !== "volume_bar") {
+                roles[i].containmentTarget = mediaColumn
+                roles[i].allowParentGrowth = false
+            }
         }
         return roles
     }
@@ -161,7 +198,7 @@ OverlayWidget {
     // invisible authored-flow slots out of collision truth; selected-Edit exact
     // containment owns freely placed rectangles.
     customEditableChildObstacles: []
-    customEditableChildRequirementTarget: customChildRequirement
+    customEditableChildRequirementTarget: null
 
     // Content-driven outer size (H option A). Width honours the historical
     // ordinary-card minimum footprint (600) and enlarges above it only when the
@@ -185,11 +222,19 @@ OverlayWidget {
     readonly property real canonicalCardContentWidth: Math.max(
         1.0, canonicalPreferredCardWidth - mediaRoot.shellInset
     )
-    // Authored seek is genuinely 75% of the card. The old formula first
-    // removed two 8% margins and then took 75% of what remained, creating a
-    // second invisible right-side reservation that fought CUSTOM geometry.
+    // The 75% target is relative to the *live authored card*, not the
+    // canonical 600 px reference. Parent X reflow must still enlarge/shrink
+    // the seek bar. The canonical value remains its detached baseline/slot
+    // reference; neither one is another outer-size authority.
     readonly property real canonicalProgressTrackWidth: Math.max(
         1.0, canonicalCardContentWidth * 0.75
+    )
+    readonly property real authoredCardContentWidth: Math.max(
+        1.0, mediaRoot.authoredCardWidth - mediaRoot.shellInset
+    )
+    readonly property real authoredProgressTrackWidth: Math.max(
+        1.0, canonicalProgressTrackWidth
+            + (authoredCardContentWidth - canonicalCardContentWidth) * 0.75
     )
     readonly property real canonicalProgressTrackHeight: mediaModel.progressHeight
     readonly property real canonicalControlsHeight: Math.max(
@@ -227,28 +272,24 @@ OverlayWidget {
         (canonicalCardContentWidth < 210.0 ? 30.0 : 36.0) * 0.75
     readonly property real canonicalSystemMuteWidth:
         (canonicalCardContentWidth < 210.0 ? 32.0 : 40.0) * 0.75
-    readonly property real canonicalArtworkWidth: Math.max(
-        1.0,
-        Math.min(
-            mediaRoot.mediaModel.artworkSize * 0.85 * 0.85,
-            canonicalCardContentWidth
-                - Math.max(180.0, mediaRoot.mediaModel.fontSize * 10.0)
-        )
-    )
-    readonly property real canonicalArtworkHeight: Math.max(
-        88.0,
-        canonicalPreferredHeight
-            - (mediaModel.controlsBandAvailable
-                ? canonicalControlsHeight + 12.0 : 0.0)
-    )
+    // Only the intrinsic Settings-authored artwork width is canonical.  The
+    // actual on-card width/height remain derived from the live authored rails.
+    readonly property real canonicalArtworkWidth:
+        mediaModel.artworkSize * 0.85 * 0.85
     readonly property real canonicalVolumeTrackWidth: 18.0
     readonly property real canonicalVolumeTrackHeight: Math.max(
         1.0, canonicalPreferredHeight - 2.0 * mediaRoot.cardPadding - 12.0
     )
+    // Use the very same authored outer Y extent as the card. The former
+    // canonical-only height left the volume rail stranded when the parent
+    // was stretched or compressed vertically.
+    readonly property real authoredVolumeTrackHeight: Math.max(
+        1.0, mediaRoot.authoredLayoutHeight - 2.0 * mediaRoot.cardPadding - 12.0
+    )
     readonly property real customVolumeTrackWidth:
         canonicalVolumeTrackWidth * mediaModel.customVolumeWidthScale
     readonly property real customVolumeTrackHeight:
-        canonicalVolumeTrackHeight * mediaModel.customVolumeHeightScale
+        authoredVolumeTrackHeight * mediaModel.customVolumeHeightScale
     // The existing 48 px accessory lane already fits the descriptor's full
     // 9.9..45 px volume-width range. Keep the lane fixed so a child drag cannot
     // steal width from the card or create a preferred-size feedback path.
@@ -291,69 +332,9 @@ OverlayWidget {
     preferredContentWidth: effectivePreferredWidth
     preferredContentHeight: effectivePreferredHeight
 
-    // Family-wide grow-only requirement is observed live while a child gesture
-    // runs. It is built from stable authored baselines plus child geometry only,
-    // so outer growth can never feed back into the child baseline.
-    QtObject {
-        id: customChildRequirement
-        // Only visible/admitted roles contribute. Persisted geometry for a
-        // temporarily absent seek/volume/transport role must not silently grow
-        // the card while that child is not present.
-        readonly property real artworkWidthExtra: artworkFrame.visible
-            ? Math.max(0.0, artworkFrame.width - mediaRoot.canonicalArtworkWidth)
-            : 0.0
-        readonly property real artworkHeightExtra: artworkFrame.visible
-            ? Math.max(0.0, artworkFrame.height - mediaRoot.canonicalArtworkHeight)
-            : 0.0
-        // Nested seek/transport contribute to family reflow only while they
-        // remain on their authored rails. Once freely placed, their exact mapped
-        // occupied rectangles are already owned by the selected Edit containment
-        // floor; continuing to grow the family reservation from their size would
-        // create a second invisible layout authority and empty-space inflation.
-        readonly property real seekWidthExtra: progressBand.visible
-                && mediaRoot.seekOnAuthoredRail
-            ? Math.max(0.0, progressTrack.width - mediaRoot.canonicalProgressTrackWidth)
-            : 0.0
-        readonly property real seekHeightExtra: progressBand.visible
-                && mediaRoot.seekOnAuthoredRail
-            ? Math.max(0.0, progressTrack.height - mediaRoot.canonicalProgressTrackHeight)
-            : 0.0
-        readonly property real transportWidthExtra: controlsRow.visible
-                && mediaRoot.transportOnAuthoredRail
-            ? Math.max(0.0, controlsRow.width - mediaRoot.canonicalCardContentWidth)
-            : 0.0
-        readonly property real transportHeightExtra: controlsRow.visible
-                && mediaRoot.transportOnAuthoredRail
-            ? Math.max(0.0, controlsRow.height - mediaRoot.canonicalControlsHeight)
-            : 0.0
-        readonly property real accessoryHeightExtra: appVolumeSlider.visible
-            ? Math.max(0.0, appVolumeTrack.height - mediaRoot.canonicalVolumeTrackHeight)
-            : 0.0
-
-        // Placement itself is not approximated here. The selected Edit layer
-        // derives an exact transient floor from the mapped occupied role rects it
-        // already owns. Keeping this family target size/reflow-only avoids the old
-        // failure where any harmless positive move inflated the parent even while
-        // the child still fit comfortably inside it.
-
-        // Artwork occupies the right rail while seek occupies the left. If both
-        // widen, preserving their accepted baseline separation requires both
-        // positive deltas, not merely the larger one. Transport owns its own
-        // full-width band and therefore competes by max rather than sum.
-        readonly property real cardWidthExtra: Math.max(
-            transportWidthExtra, artworkWidthExtra + seekWidthExtra
-        )
-        readonly property real cardHeightExtra:
-            artworkHeightExtra + seekHeightExtra + transportHeightExtra
-        readonly property real requiredContentWidth:
-            mediaRoot.canonicalPreferredCardWidth
-                + mediaRoot.canonicalVolumeAccessoryExtent
-                + cardWidthExtra
-        readonly property real requiredContentHeight: Math.max(
-            mediaRoot.canonicalPreferredHeight + cardHeightExtra,
-            mediaRoot.canonicalPreferredHeight + accessoryHeightExtra
-        )
-    }
+    // CUSTOM children stay inside their actual card/accessory surfaces.
+    // Outer Media resizing and the existing authored content policy alone own
+    // parent extent; there is no child-driven second growth requirement.
 
     function appVolumeLevelAt(y, height) {
         if (height <= 0.0)
@@ -402,6 +383,12 @@ OverlayWidget {
         anchors.bottom: parent.bottom
         anchors.right: parent.right
         spacing: mediaRoot.sectionSpacing
+        // Presentation-only containment lock for CUSTOM content extents.
+        // The authored band positions, outer content_extent and saved child
+        // geometry remain unchanged; painting outside the real card is hidden.
+        // The card's content has an unconditional legal paint boundary. The
+        // separately mounted external-volume accessory has its own boundary.
+        clip: true
 
         Item {
             id: headerSlot
@@ -424,13 +411,17 @@ OverlayWidget {
                 scale: mediaRoot.childWidthScale("header")
                 readonly property string customAnchor: mediaRoot.childAnchor("header")
                 property real customEditPlacementCompensationX: customAnchor.length > 0
+                        || mediaRoot.headerFlipped
                     ? x - mediaRoot.childOffsetX("header") : 0.0
                 property real customEditPlacementCompensationY: customAnchor.length > 0
                     ? y - mediaRoot.childOffsetY("header") : 0.0
                 x: customAnchor.endsWith("right")
                     ? headerSlot.width - width * scale
                     : (customAnchor.endsWith("left")
-                        ? 0.0 : mediaRoot.childOffsetX("header"))
+                        ? 0.0
+                        : (mediaRoot.headerFlipped
+                            ? headerSlot.width - width * scale : 0.0)
+                            + mediaRoot.childOffsetX("header"))
                 y: customAnchor.startsWith("bottom")
                     ? mediaColumn.height - height * scale
                     : (customAnchor.startsWith("top")
@@ -468,18 +459,36 @@ OverlayWidget {
                     - mediaColumn.spacing * (mediaRoot.visibleSectionCount - 1)
             )
 
-            Column {
+            Item {
                 id: metadata
                 objectName: "mediaMetadata"
-                x: 2.0
+                // The authored metadata column is an independent layout
+                // region, not a live by-product of the artwork child's edited
+                // X/Y. If a first drag detaches artwork from its authored rail,
+                // rebuilding metadata to full card width would immediately
+                // overlap that artwork and feed a false collision into the SAME
+                // gesture. Reserve the intrinsic artwork rail in both flip
+                // orientations; actual artwork free placement belongs only to
+                // its own child record and the shared collision admission.
+                x: 2.0 + (mediaRoot.headerFlipped && artworkFrame.visible
+                    ? artworkFrame.authoredArtworkWidth + 16.0 : 0.0)
                 width: Math.max(
                     1.0,
-                    parent.width - x
-                        - (artworkFrame.visible && mediaRoot.artworkOnAuthoredRail
-                            ? artworkFrame.width + 18.0 : 0.0)
+                    artworkFrame.visible
+                        ? (mediaRoot.headerFlipped
+                            ? parent.width - x - 2.0
+                            : mediaRoot.authoredCardContentWidth
+                                - artworkFrame.authoredArtworkWidth - x - 18.0)
+                        : parent.width - x
                 )
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: mediaRoot.metadataSpacing
+                // Flow slots own the authored baseline explicitly, with no
+                // second positioner/polish pass after the child editor clears
+                // custom X/Y. Reset can be projected in the same QML evaluation.
+                implicitHeight: trackMetadataSlot.height
+                    + (playbackStateSlot.visible
+                        ? mediaRoot.metadataSpacing + playbackStateSlot.height : 0.0)
+                height: implicitHeight
                 // Vertical compaction must never visually translate the metadata
                 // lane away from its authored left edge.  Scaling around the
                 // centre made title/artist appear to drift right during some
@@ -489,54 +498,68 @@ OverlayWidget {
                     ? Math.max(0.1, (mainBand.height - 2.0) / implicitHeight)
                     : 1.0
 
-                MediaMetadataColumn {
-                    id: trackMetadata
+                // The Column positions only flow slots. Editable X/Y/scale
+                // belong to the content INSIDE each slot, so a child reset
+                // cannot fight the positioner's own Y assignment. Slot heights
+                // describe authored text, never the offset of a freely moved
+                // child; the existing shared editor owns only that offset.
+                Item {
+                    id: trackMetadataSlot
+                    objectName: "mediaMetadataFlowSlot"
                     width: metadata.width
-                    mediaModel: mediaRoot.mediaModel
-                    rowSpacing: mediaRoot.metadataSpacing
-                    transform: [
-                        Scale {
-                            origin.x: 0.0
-                            origin.y: 0.0
-                            xScale: mediaRoot.childWidthScale("metadata")
-                            yScale: mediaRoot.childHeightScale("metadata")
-                        },
-                        Translate {
-                            x: mediaRoot.childOffsetX("metadata")
-                            y: mediaRoot.childOffsetY("metadata")
-                        }
-                    ]
+                    height: trackMetadata.implicitHeight
+
+                    MediaMetadataColumn {
+                        id: trackMetadata
+                        objectName: "mediaTrackMetadata"
+                        width: parent.width
+                        mediaModel: mediaRoot.mediaModel
+                        rowSpacing: mediaRoot.metadataSpacing
+                        textAlignment: mediaRoot.orientedChildAlignment("metadata", "left")
+                        artistOffsetX: mediaRoot.childOffsetX("artist")
+                        artistOffsetY: mediaRoot.childOffsetY("artist")
+                        artistScale: mediaRoot.childWidthScale("artist")
+                        artistAlignment: mediaRoot.orientedChildAlignment(
+                            "artist", mediaRoot.childAlignment("metadata", "left")
+                        )
+                        x: mediaRoot.childOffsetX("metadata")
+                        y: mediaRoot.childOffsetY("metadata")
+                        scale: mediaRoot.childWidthScale("metadata")
+                        transformOrigin: Item.TopLeft
+                    }
                 }
 
-                ShadowedText {
-                    id: playbackState
-                    objectName: "mediaPlaybackState"
-                    transform: [
-                        Scale {
-                            origin.x: 0.0
-                            origin.y: 0.0
-                            xScale: mediaRoot.childWidthScale("playback_state")
-                            yScale: mediaRoot.childHeightScale("playback_state")
-                        },
-                        Translate {
-                            x: mediaRoot.childOffsetX("playback_state")
-                            y: mediaRoot.childOffsetY("playback_state")
-                        }
-                    ]
+                Item {
+                    id: playbackStateSlot
+                    objectName: "mediaPlaybackStateFlowSlot"
                     visible: mediaRoot.mediaModel.showPlaybackState
                         && mediaRoot.mediaModel.hasTrack
                     width: metadata.width
-                    height: visible ? implicitHeight : 0.0
-                    text: mediaRoot.mediaModel.playbackState.toUpperCase()
-                    color: mediaRoot.mediaModel.textColor
-                    opacity: 0.62
-                    font.family: mediaRoot.mediaModel.fontFamily
-                    font.pointSize: mediaRoot.mediaModel.fontSize * 0.65
-                    font.bold: true
-                    shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
-                    shadowColor: mediaRoot.mediaModel.textShadowColor
-                    shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
-                    shadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
+                    y: trackMetadataSlot.height + (visible ? mediaRoot.metadataSpacing : 0.0)
+                    height: visible ? playbackState.implicitHeight : 0.0
+
+                    ShadowedText {
+                        id: playbackState
+                        objectName: "mediaPlaybackState"
+                        x: mediaRoot.childOffsetX("playback_state")
+                        y: mediaRoot.childOffsetY("playback_state")
+                        scale: mediaRoot.childWidthScale("playback_state")
+                        transformOrigin: Item.TopLeft
+                        width: parent.width
+                        height: implicitHeight
+                        text: mediaRoot.mediaModel.playbackState.toUpperCase()
+                        horizontalAlignment: mediaRoot.orientedChildAlignment("playback_state", "left")
+                            === "right" ? Text.AlignRight : Text.AlignLeft
+                        color: mediaRoot.mediaModel.textColor
+                        opacity: 0.62
+                        font.family: mediaRoot.mediaModel.fontFamily
+                        font.pointSize: mediaRoot.mediaModel.fontSize * 0.65
+                        font.bold: true
+                        shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
+                        shadowColor: mediaRoot.mediaModel.textShadowColor
+                        shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
+                        shadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
+                    }
                 }
             }
 
@@ -550,9 +573,67 @@ OverlayWidget {
                 // artwork if its real horizontal rectangle could intersect this
                 // right-hand column.  The full-width transport row remains the
                 // normal hard lower boundary.
-                readonly property real topInColumn: headerFrame.visible
-                    ? headerSlot.y
-                    : mainBand.y
+                // Positioner-owned `y` values are not synchronous during
+                // content-extent changes. Derive the *same authored rails* from
+                // their slot sizes/spacing, or a one-frame stale `y` can clamp
+                // artwork to 1x1 and then freeze its edit target there.
+                readonly property real mainRailTop:
+                    (headerSlot.visible ? headerSlot.height + mediaColumn.spacing : 0.0)
+                readonly property real mainRailBottom: mainRailTop + mainBand.height
+                readonly property real progressRailTop: mainRailBottom
+                    + (progressBand.visible ? mediaColumn.spacing : 0.0)
+                readonly property real controlsRailTop: mainRailBottom
+                    + (progressBand.visible
+                        ? mediaColumn.spacing + progressBand.height : 0.0)
+                    + (controlsBandSlot.visible ? mediaColumn.spacing : 0.0)
+                readonly property real topInColumn: headerSlot.visible ? 0.0 : mainRailTop
+                // Preserve the pre-child-editor authored X/Y artwork reflow.
+                // Measurements come only from the existing card and Column
+                // flow; they NEVER feed preferredContentWidth/Height.  The
+                // provisional X below deliberately avoids a binding cycle:
+                // the final width may be capped by available height, so using
+                // artworkFrame.x in seek overlap would make width depend on
+                // itself through bottomInColumn/referenceHeight.
+                readonly property real baseArtworkWidth:
+                    mediaRoot.canonicalArtworkWidth
+                readonly property real extraHorizontalRoom:
+                    mediaRoot.authoredCardWidth - mediaRoot.canonicalPreferredCardWidth
+                readonly property real minimumMetadataRoom: Math.max(
+                    180.0, mediaRoot.mediaModel.fontSize * 10.0
+                )
+                readonly property real provisionalArtworkWidth: Math.min(
+                    Math.max(88.0, baseArtworkWidth + extraHorizontalRoom * 0.35),
+                    Math.max(1.0, mediaRoot.authoredCardContentWidth - minimumMetadataRoom)
+                )
+                readonly property real provisionalArtworkX:
+                    mediaRoot.authoredCardContentWidth - provisionalArtworkWidth
+                readonly property real normalBottomInColumn: controlsBandSlot.visible
+                    ? controlsRailTop - mediaColumn.spacing
+                    : mediaColumn.height
+                // The authored artwork reservation must observe only the
+                // authored seek rail. Reading the EDITED seek target here makes
+                // a seek move/resize change the artwork's reference size during
+                // that same gesture, invalidating both live child mappings and
+                // saved normalized offsets. Real off-rail seek/artwork collision
+                // is owned separately by the shared edit collision surface.
+                readonly property real authoredSeekX: mediaRoot.headerFlipped
+                    ? Math.max(0.0, progressBand.width - 4.0
+                        - mediaRoot.authoredProgressTrackWidth) : 2.0
+                readonly property bool seekWouldIntersectArtwork: progressBand.visible
+                    && (mediaRoot.headerFlipped
+                        ? authoredSeekX < provisionalArtworkWidth + 2.0
+                            && authoredSeekX + mediaRoot.authoredProgressTrackWidth > -2.0
+                        : authoredSeekX + mediaRoot.authoredProgressTrackWidth
+                            > provisionalArtworkX - 2.0)
+                readonly property real bottomInColumn: seekWouldIntersectArtwork
+                    ? progressRailTop - mediaColumn.spacing
+                    : normalBottomInColumn
+                readonly property real referenceHeight: Math.max(
+                    1.0, bottomInColumn - topInColumn
+                )
+                readonly property real authoredArtworkWidth: Math.min(
+                    provisionalArtworkWidth, referenceHeight
+                )
                 readonly property real artworkStrokeWidth: mediaRoot.scaleAwareStrokeWidth(
                     mediaRoot.mediaModel.artworkBorderWidth
                 )
@@ -565,22 +646,29 @@ OverlayWidget {
                 // below remains PreserveAspectCrop, so the bitmap is never
                 // distorted regardless of the rectangle the user draws.
                 width: visible
-                    ? mediaRoot.canonicalArtworkWidth
+                    ? authoredArtworkWidth
                         * mediaRoot.mediaModel.customArtworkWidthScale
                     : 0.0
                 height: visible
-                    ? mediaRoot.canonicalArtworkHeight
+                    ? referenceHeight
                         * mediaRoot.mediaModel.customArtworkHeightScale
                     : 0.0
-                // Stable authored X anchor: child width no longer implicitly
-                // changes its own position. The bottom-left edit handle owns the
-                // one compensating X offset needed to keep the right edge fixed.
+                // Flipped-on-rail is a transient presentation displacement,
+                // not an offset. The FIRST real child drag folds that displacement
+                // into the existing authored-relative offset, then the artwork
+                // detaches without a discontinuity. Crucially the baseline does
+                // not depend on the offset it is computing, or the first pointer
+                // sample jumps the artwork to the opposite edge of the card.
+                readonly property real unflippedAuthoredX:
+                    mediaRoot.authoredCardContentWidth - authoredArtworkWidth
+                property real customEditPlacementCompensationX:
+                    mediaRoot.headerFlipped && mediaRoot.artworkOnAuthoredRail
+                        ? -unflippedAuthoredX : 0.0
                 x: visible
-                    ? mediaRoot.canonicalCardContentWidth
-                        - mediaRoot.canonicalArtworkWidth
+                    ? (mediaRoot.headerFlipped && mediaRoot.artworkOnAuthoredRail
+                        ? 0.0 : unflippedAuthoredX)
                         + mediaRoot.mediaModel.customArtworkXOffset
-                            * (mediaRoot.canonicalPreferredCardWidth
-                                + mediaRoot.canonicalVolumeAccessoryExtent)
+                            * mediaRoot.childNormalizationWidth
                     : 0.0
                 y: visible
                     ? topInColumn - mainBand.y
@@ -653,16 +741,12 @@ OverlayWidget {
             objectName: "mediaProgressBand"
             visible: mediaRoot.mediaModel.progressAvailable
             width: parent.width
-            // This slot is authored-flow bookkeeping, not the free child's
-            // geometry owner. While seek is on-rail it follows seek height so
-            // downstream authored content reflows naturally. Once seek is moved
-            // off-rail, keep only the canonical reservation; the selected Edit
-            // containment floor owns the real placed rectangle.
-            height: visible
-                ? (mediaRoot.seekOnAuthoredRail
-                    ? progressTrack.height + 8.0
-                    : mediaRoot.canonicalProgressBandHeight)
-                : 0.0
+            // The band reserves the Settings-authored seek height, NEVER the
+            // independently edited target's height or offset. A child resize
+            // must not move the Column, artwork and transport underneath the
+            // editor. The actual seek rectangle uses the shared collision and
+            // always-on card-containment contracts, not a second flow owner.
+            height: visible ? mediaRoot.canonicalProgressBandHeight : 0.0
 
             Rectangle {
                 id: progressTrack
@@ -671,18 +755,24 @@ OverlayWidget {
                     + mediaRoot.authoredCardX
                 readonly property real customEditAncestorReflowY:
                     progressBand.y - mediaRoot.canonicalProgressBandY
-                property real customEditPlacementCompensationX: 0.0
+                // A 75%-width authored seek belongs to the same opposite rail
+                // as the global Header flip. A freely moved seek retains its
+                // independent X; the shared edit owner receives the rail shift
+                // as gesture compensation instead of persisting it on click.
+                readonly property real flippedAuthoredRailX:
+                    mediaRoot.headerFlipped && mediaRoot.seekOnAuthoredRail
+                        ? Math.max(0.0, progressBand.width - 4.0 - width) : 0.0
+                property real customEditPlacementCompensationX: flippedAuthoredRailX
                 property real customEditPlacementCompensationY:
                     mediaRoot.seekOnAuthoredRail ? customEditAncestorReflowY : 0.0
-                x: 2.0
+                x: 2.0 + flippedAuthoredRailX
                     + mediaRoot.mediaModel.customSeekXOffset
-                        * (mediaRoot.canonicalPreferredCardWidth
-                            + mediaRoot.canonicalVolumeAccessoryExtent)
+                        * mediaRoot.childNormalizationWidth
                 y: 4.0
                     + mediaRoot.mediaModel.customSeekYOffset
                         * mediaRoot.canonicalPreferredHeight
                     - (mediaRoot.seekOnAuthoredRail ? 0.0 : customEditAncestorReflowY)
-                width: mediaRoot.canonicalProgressTrackWidth
+                width: mediaRoot.authoredProgressTrackWidth
                     * mediaRoot.mediaModel.customSeekWidthScale
                 height: mediaRoot.canonicalProgressTrackHeight
                     * mediaRoot.mediaModel.customSeekHeightScale
@@ -769,12 +859,11 @@ OverlayWidget {
                 property real customEditPlacementCompensationY:
                     mediaRoot.transportOnAuthoredRail ? customEditAncestorReflowY : 0.0
                 x: mediaRoot.mediaModel.customTransportXOffset
-                    * (mediaRoot.canonicalPreferredCardWidth
-                        + mediaRoot.canonicalVolumeAccessoryExtent)
+                    * mediaRoot.childNormalizationWidth
                 y: mediaRoot.mediaModel.customTransportYOffset
                     * mediaRoot.canonicalPreferredHeight
                     - (mediaRoot.transportOnAuthoredRail ? 0.0 : customEditAncestorReflowY)
-                width: mediaRoot.canonicalCardContentWidth
+                width: mediaRoot.authoredCardContentWidth
                     * mediaRoot.mediaModel.customTransportWidthScale
                 height: mediaRoot.canonicalControlsHeight
                     * mediaRoot.mediaModel.customTransportHeightScale
@@ -1076,20 +1165,36 @@ OverlayWidget {
                 objectName: "mediaAppVolumeSlider"
                 visible: mediaRoot.mediaModel.appVolumeAvailable
                 anchors.fill: parent
-    
+                // The external accessory has its own paint containment; card
+                // children never use this lane for geometry or clipping.
+                clip: true
+
             Rectangle {
                 id: appVolumeTrack
                 objectName: "mediaAppVolumeTrack"
                 visible: appVolumeSlider.visible
                 property real customEditMappingDependency:
                     (mediaRoot.appVolumeOnLeft ? 1.0 : 0.0) + appVolumeSlider.x + appVolumeSlider.y
-                x: (parent.width - mediaRoot.canonicalVolumeTrackWidth) / 2.0
+                // Bound the actual item, not merely the accessory's paint. The
+                // shared Edit role maps this item, so its proxy follows the
+                // visible track when either parent axis is changed.
+                readonly property real requestedTrackX:
+                    (parent.width - mediaRoot.canonicalVolumeTrackWidth) / 2.0
                     + mediaRoot.mediaModel.customVolumeXOffset
                         * (mediaRoot.canonicalPreferredCardWidth
                             + mediaRoot.canonicalVolumeAccessoryExtent)
-                y: mediaRoot.cardPadding + 6.0
+                readonly property real requestedTrackY: mediaRoot.cardPadding + 6.0
                     + mediaRoot.mediaModel.customVolumeYOffset
                         * mediaRoot.canonicalPreferredHeight
+                x: Math.max(0.0, Math.min(requestedTrackX, Math.max(0.0, parent.width - width)))
+                y: Math.max(0.0, Math.min(requestedTrackY, Math.max(0.0, parent.height - height)))
+                // A parent shrink can clamp an older saved offset. Rebasing on
+                // the first REAL child move prevents the offset from jumping
+                // back to its old, now-illegal value. Zero-motion clicks do not
+                // write or change the saved geometry. This is an existing
+                // gesture-local placement seam, not a second persisted owner.
+                readonly property real customEditPlacementCompensationX: x - requestedTrackX
+                readonly property real customEditPlacementCompensationY: y - requestedTrackY
                 width: mediaRoot.customVolumeTrackWidth
                 height: mediaRoot.customVolumeTrackHeight
                 radius: width / 2.0

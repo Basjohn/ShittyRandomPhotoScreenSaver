@@ -417,6 +417,26 @@ def test_friend_pulse_qml_builds_real_rows(qt_app) -> None:
         row = _find_visual_item(item, "friendPulseRow_0")
         assert row is not None
         assert float(row.property("height")) == 50.0
+        baseline_row_width = float(row.property("width"))
+        baseline_view_width = float(rows.property("width"))
+        assert baseline_row_width == pytest.approx(baseline_view_width - 12.0)
+        frame_proxy = item.findChild(QQuickItem, "friendPulseCustomFriendFrameRoleTarget")
+        # Growing the parent must grow the LIVE row rather than leave a
+        # baseline-width island. One shared role target must match the delegate.
+        expanded_width = float(model.authoredWidth) + 260.0
+        assert model.set_content_extent(expanded_width, float(model.authoredHeight))
+        item.setWidth(expanded_width)
+        qt_app.processEvents()
+        QMetaObject.invokeMethod(rows, "forceLayout")
+        qt_app.processEvents()
+        assert float(row.property("width")) > baseline_row_width
+        assert float(row.property("width")) == pytest.approx(
+            float(rows.property("width")) - 12.0
+        )
+        assert frame_proxy is not None
+        assert float(frame_proxy.property("width")) == pytest.approx(
+            float(row.property("width"))
+        )
     finally:
         item.setParentItem(None)
         item.setParent(None)
@@ -1047,4 +1067,92 @@ def test_content_extent_vertical_grows_row_viewport(qt_app) -> None:
         component.deleteLater()
         engine.deleteLater()
         model.retire()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_friend_pulse_header_flip_moves_summary_to_opposite_rail_without_recreating_roles(qt_app) -> None:
+    """One stored header alignment drives both header and peer rail; reset is identity."""
+    model = _model(view_mode="rows", preferred_width=640)
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "FriendPulsePresentation.qml"))
+    )
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
+    item = component.createWithInitialProperties({"friendPulseModel": model})
+    assert isinstance(item, QQuickItem), [
+        error.toString() for error in component.errors()
+    ]
+    window = _show_item(item, model, qt_app)
+    try:
+        header = _find_visual_item(item, "friendPulseHeaderFrame")
+        summary = _find_visual_item(item, "friendPulseSummary")
+        separator = _find_visual_item(item, "friendPulseHeaderSeparator")
+        assert header is not None and summary is not None and separator is not None
+        initial_separator_width = separator.width()
+        assert initial_separator_width == pytest.approx(float(model.authoredWidth) - 36.0)
+        original_header_x, original_summary_x = header.x(), summary.x()
+        assert original_header_x < original_summary_x
+        assert summary.x() + summary.width() == pytest.approx(
+            float(model.authoredWidth) - float(item.property("headerSafeInsetX"))
+        )
+        # Parent X growth moves only the on-rail summary; it does not create
+        # a new child edit or request an extra provider snapshot.
+        expanded_width = float(model.authoredWidth) + 200.0
+        assert model.set_content_extent(expanded_width, float(model.authoredHeight))
+        item.setWidth(expanded_width)
+        qt_app.processEvents()
+        assert separator.x() == pytest.approx(18.0)
+        assert separator.width() == pytest.approx(expanded_width - 36.0)
+        assert separator.width() > initial_separator_width + 190.0
+        assert summary.x() + summary.width() == pytest.approx(
+            expanded_width - float(item.property("headerSafeInsetX"))
+        )
+        assert model.clear_content_extent()
+        item.setWidth(float(model.authoredWidth))
+        qt_app.processEvents()
+        assert separator.width() == pytest.approx(initial_separator_width)
+        # Explicitly customized width remains a multiplier on the live span;
+        # its independent normalized x/y offsets must not be rewritten.
+        assert model.set_custom_child_geometry({"separator": {"width_scale": 0.8}})
+        assert model.set_content_extent(expanded_width, float(model.authoredHeight))
+        item.setWidth(expanded_width)
+        qt_app.processEvents()
+        assert separator.width() == pytest.approx((expanded_width - 36.0) * 0.8)
+        assert model.clear_content_extent()
+        item.setWidth(float(model.authoredWidth))
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert summary.x() == pytest.approx(original_summary_x)
+        geometry_edges = QSignalSpy(model.customGeometryChanged)
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        assert bool(item.property("headerFlipped"))
+        assert header.parentItem().x() > summary.x()
+        assert summary.x() == pytest.approx(float(item.property("headerSafeInsetX")))
+        assert geometry_edges.count() == 1
+        assert model.set_custom_child_geometry({
+            "header": {"alignment": "right"},
+            "online_count": {"alignment": "left"},
+        })
+        qt_app.processEvents()
+        assert header.parentItem().x() > summary.x()
+        assert geometry_edges.count() == 2
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert not bool(item.property("headerFlipped"))
+        assert header.x() == pytest.approx(original_header_x)
+        assert summary.x() == pytest.approx(original_summary_x)
+        assert geometry_edges.count() == 3
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        window.close()
+        window.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
         qt_app.processEvents()
