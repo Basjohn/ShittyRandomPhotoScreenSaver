@@ -887,12 +887,17 @@ def test_selected_edit_role_containment_and_mapped_transform_contract() -> None:
 
     # Current role geometry must always depend on normalized CUSTOM revision
     # AND reflowing/scaled ancestors. mapToItem alone registers neither.
-    dependency = editor.split("readonly property real mappingDependency:", 1)[1].split(
+    dependency = editor.split("readonly property string mappingDependency:", 1)[1].split(
         "readonly property rect mappedTargetBounds:", 1
     )[0]
     assert "editFrame.childStateRevision" in dependency
-    assert "dependency.scale + dependency.rotation" in dependency
-    assert "containmentTarget.scale + containmentTarget.rotation" in dependency
+    # Individual geometry components must not cancel when x and y, or width
+    # and height, change by equal and opposite amounts during a live reflow.
+    assert "values.push(dependency.x, dependency.y," in dependency
+    assert "dependency.scale, dependency.rotation" in dependency
+    assert "values.push(containmentTarget.x, containmentTarget.y," in dependency
+    assert "containmentTarget.scale, containmentTarget.rotation" in dependency
+    assert 'return values.join("|")' in dependency
 
     # A physical role's true surface, not the whole root, owns clipping.
     assert "function childContainmentRect(frame)" in editor

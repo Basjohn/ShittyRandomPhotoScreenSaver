@@ -17,6 +17,7 @@ from PySide6.QtCore import (
     Slot,
 )
 from PySide6.QtQuick import QQuickItem
+from PySide6.QtQml import QJSValue
 from shiboken6 import isValid as _is_valid_qobject
 
 from rendering.custom_layout_session import (
@@ -71,6 +72,20 @@ _CONTENT_CORNER_HANDLES = frozenset(
         "content_bottom_right",
     }
 )
+
+
+def guide_property_matches(item: QQuickItem, name: str, projected: list[dict[str, object]]) -> bool:
+    """Compare a retained QML `var` guide list against one normalized sample.
+
+    Reading a QML `var` through PySide can return a QJSValue instead of a
+    Python list. Normalize that read rather than keeping a separate cache that
+    could outlive a QML scene replacement or overlook a guide clear/rebind.
+    """
+
+    current = item.property(name)
+    if isinstance(current, QJSValue):
+        current = current.toVariant()
+    return current == projected
 
 
 def _is_viewport_edge_handle(handle: str) -> bool:
@@ -324,6 +339,11 @@ class CustomLayoutOverlayModel(QAbstractListModel):
             if resolver is not None
             else proposed
         )
+        # Always run the resolver first: snap/guide ownership follows the live
+        # cursor, even when the admitted rectangle has stopped at a boundary.
+        # Only the unchanged session geometry publication is redundant.
+        if resolved == current:
+            return
         item.set_geometry(resolved)
         session = self._session
         if session is not None:
@@ -1005,20 +1025,19 @@ class RetainedCustomLayoutOverlay:
         vertical: Sequence[tuple[int, str]] = (),
         horizontal: Sequence[tuple[int, str]] = (),
     ) -> None:
-        self.item.setProperty(
-            "verticalGuides",
-            [
+        item = self.item
+        for property_name, guides in (
+            ("verticalGuides", vertical),
+            ("horizontalGuides", horizontal),
+        ):
+            projected = [
                 {"position": int(position), "kind": str(kind)}
-                for position, kind in vertical
-            ],
-        )
-        self.item.setProperty(
-            "horizontalGuides",
-            [
-                {"position": int(position), "kind": str(kind)}
-                for position, kind in horizontal
-            ],
-        )
+                for position, kind in guides
+            ]
+            # Compare against THIS retained item, not a cached last sample:
+            # scene recreation, session rebind and release-clearing remain valid.
+            if not guide_property_matches(item, property_name, projected):
+                item.setProperty(property_name, projected)
 
     def clear_session(self) -> bool:
         """Clear edit projection, returning False if the retained item was dead."""

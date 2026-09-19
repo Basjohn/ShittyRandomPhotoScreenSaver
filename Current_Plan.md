@@ -1,3 +1,17 @@
+## Current focus: live retained child paint/proxy mapping (2026-09-19)
+
+Operator confirms preceding expanded 68-case child bounded-resize/persistence gate and eight-case shared live Edit no-op gate all PASS. The next source-confirmed defect is an Edit-only map dependency that summed x/y/width/height and could miss equal-and-opposite reflows, leaving the mapped Edit rectangle behind actual child paint. Corrected at the existing selected Edit mapper with a per-component signature, not a new observer/geometry owner. Extended six-variant retained target/occupied mapping regression and added one real QQuickWindow cancelling-axes/reflow/delegate-retirement gate. Python compiles locally; Qt execution/physical live editing remain Windows-unverified. Continue genuine family-owned retained presentation and full Save/close/reopen after targeted verification; protect already accepted live resize/snap and Visualizer/Bubble. See `.godzip/RETAINED_CHILD_MAPPED_AXIS_CANCEL_CHECKPOINT_20260919.md`.
+
+## Current focus: retained Qt Edit geometry proof
+
+The source candidate removes redundant publications from Visualizer CUSTOM viewport resize, ordinary parent move, and existing edit/center guide properties. It does **not** suppress pointer resolution or no-op gesture finalization, and makes no change to ordinary Visualizer playback or Bubble reaction. New eight-case Qt gate in `tests/test_qtquick_edit_noop_publication.py` is **Windows-unverified**. The preceding child persistence/physical-bound suite has 27 operator-confirmed passes and 41 later cases still pending. After focused verification, continue real QQuickWindow child paint-versus-Edit proxy, smooth saturate/reverse and snap/unsnap and full Save/close/reopen. Avoid broad full-suite or native Qt teardown rediscovery; isolate teardown ownership only if independently reproduced. Checkpoint details and handoff live inside `.godzip/`.
+
+## CURRENT: child Save/reopen and finite content-floor implementation (2026-09-19)
+
+- The next requested implementation slice is now in the working tree. One demonstrated Edit-only source defect was corrected: an impossible child minimum could override the screen-bound clamp and produce a parent larger than its display. Bound the minimum to the destination display before calling the existing clamp; do not modify any always-on binding or runtime scheduler.
+- Added nine-family real writer/committed-reader payload round-trip and repeated fractional/impossible child floor tests in `tests/test_qtquick_child_persist_floor_regression.py`, maintained destination profile included. This does not claim end-to-end QML paint parity. New Qt-dependent tests remain Windows-unverified, PySide6 unavailable here.
+- Next: focused Windows verification of new cases and actual QQuickWindow child paint/role-proxy projection. Never ask for another broad `-x` discovery run; separately track the still-unresolved shared-process Qt teardown. See `.godzip/CHILD_SAVE_REOPEN_FLOOR_CHECKPOINT_20260919.md`.
+
 ## CURRENT: systematic whole-tree test-contract source preflight (2026-09-19)
 
 - Before another operator run, scanned all 389 Python test modules (AST/syntax), evaluated 1,436 direct source-literal assertions against current files (zero mismatches), and executed 296 locally available source/architecture/policy pytest cases (all pass). The GODZIP omits curated theme assets and this environment lacks PySide6: those cases were not represented as suite failures or passes. See `.godzip/TEST_TRUTH_SYSTEMATIC_SWEEP_20260919.md` for scope and limitations.
