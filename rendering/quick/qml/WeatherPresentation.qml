@@ -33,6 +33,66 @@ OverlayWidget {
         return Math.min(1.0, available / intrinsic)
     }
 
+    // CUSTOM child geometry remains one normalized payload owned by the shared
+    // edit session. Weather only projects those retained factors onto its
+    // existing presentation items; provider/runtime cadence is untouched.
+    readonly property real childNormalizationWidth: 600.0
+    readonly property real childNormalizationHeight: 220.0
+    readonly property var childGeometry: weatherModel.customChildGeometry
+    function childWidthScale(roleId) {
+        const value = childGeometry ? childGeometry[roleId] : null
+        return value && value.width_scale !== undefined ? Number(value.width_scale) : 1.0
+    }
+    function childHeightScale(roleId) {
+        const value = childGeometry ? childGeometry[roleId] : null
+        return value && value.height_scale !== undefined ? Number(value.height_scale) : 1.0
+    }
+    function childOffsetX(roleId) {
+        const value = childGeometry ? childGeometry[roleId] : null
+        return (value && value.x_offset !== undefined ? Number(value.x_offset) : 0.0)
+            * childNormalizationWidth
+    }
+    function childOffsetY(roleId) {
+        const value = childGeometry ? childGeometry[roleId] : null
+        return (value && value.y_offset !== undefined ? Number(value.y_offset) : 0.0)
+            * childNormalizationHeight
+    }
+
+    customEditableChildRoles: {
+        const roles = []
+        if (weatherModel.viewState === "ready") {
+            roles.push({ "roleId": "location_text", "target": locationText })
+            roles.push({ "roleId": "condition_text", "target": conditionText })
+            if (leftConditionIcon.visible || rightConditionIcon.visible) {
+                roles.push({
+                    "roleId": "condition_icon",
+                    "target": leftConditionIcon.visible ? leftConditionIcon : rightConditionIcon
+                })
+            }
+            if (detailsBand.visible) {
+                roles.push({ "roleId": "details_separator", "target": detailsSeparator })
+                roles.push({ "roleId": "details_metrics", "target": detailsRow })
+            }
+            if (forecastBand.visible) {
+                roles.push({ "roleId": "forecast_separator", "target": forecastSeparator })
+                roles.push({ "roleId": "forecast_text", "target": forecastText })
+            }
+            if (extendedForecastBand.visible) {
+                roles.push({ "roleId": "extended_separator", "target": extendedSeparator })
+                roles.push({ "roleId": "extended_label", "target": extendedForecastLabel })
+                roles.push({ "roleId": "extended_text", "target": extendedForecastText })
+            }
+        } else {
+            roles.push({ "roleId": "location_text", "target": statusTitle })
+            roles.push({ "roleId": "condition_text", "target": statusAction })
+        }
+        for (let i = 0; i < roles.length; ++i) {
+            roles[i].normalizationWidth = childNormalizationWidth
+            roles[i].normalizationHeight = childNormalizationHeight
+        }
+        return roles
+    }
+
     // Content-driven outer size (H option A). Width honours the historical
     // ordinary-card minimum footprint (BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH =
     // 600) and only enlarges above it when the intrinsic text/icon content
@@ -108,6 +168,10 @@ OverlayWidget {
                 Item {
                     id: leftConditionIcon
                     objectName: "weatherConditionIconLeft"
+                    transform: [
+                        Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_icon"); yScale: weatherRoot.childHeightScale("condition_icon") },
+                        Translate { x: weatherRoot.childOffsetX("condition_icon"); y: weatherRoot.childOffsetY("condition_icon") }
+                    ]
                     visible: weatherRoot.weatherModel.showConditionIcon
                         && weatherRoot.weatherModel.iconAlignment === "LEFT"
                     width: visible ? weatherRoot.weatherModel.iconSize : 0.0
@@ -160,6 +224,10 @@ OverlayWidget {
                     ShadowedText {
                         id: locationText
                         objectName: "weatherLocationText"
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("location_text"); yScale: weatherRoot.childHeightScale("location_text") },
+                            Translate { x: weatherRoot.childOffsetX("location_text"); y: weatherRoot.childOffsetY("location_text") }
+                        ]
                         x: leftConditionIcon.visible ? 0.0 : -locationInk.tightBoundingRect.x
                         width: primaryText.width
                         height: implicitHeight
@@ -180,6 +248,10 @@ OverlayWidget {
                     ShadowedText {
                         id: conditionText
                         objectName: "weatherConditionText"
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_text"); yScale: weatherRoot.childHeightScale("condition_text") },
+                            Translate { x: weatherRoot.childOffsetX("condition_text"); y: weatherRoot.childOffsetY("condition_text") }
+                        ]
                         x: leftConditionIcon.visible ? 0.0 : -temperatureInk.tightBoundingRect.x
                         width: primaryText.width
                         height: implicitHeight
@@ -203,6 +275,10 @@ OverlayWidget {
                 Item {
                     id: rightConditionIcon
                     objectName: "weatherConditionIconRight"
+                    transform: [
+                        Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_icon"); yScale: weatherRoot.childHeightScale("condition_icon") },
+                        Translate { x: weatherRoot.childOffsetX("condition_icon"); y: weatherRoot.childOffsetY("condition_icon") }
+                    ]
                     visible: weatherRoot.weatherModel.showConditionIcon
                         && weatherRoot.weatherModel.iconAlignment === "RIGHT"
                     width: visible ? weatherRoot.weatherModel.iconSize : 0.0
@@ -235,15 +311,25 @@ OverlayWidget {
                     spacing: 4.0
 
                     Separator {
+                        id: detailsSeparator
+                        objectName: "weatherDetailsSeparator"
                         width: parent.width
                         height: 1.0
                         thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("details_separator"); yScale: weatherRoot.childHeightScale("details_separator") },
+                            Translate { x: weatherRoot.childOffsetX("details_separator"); y: weatherRoot.childOffsetY("details_separator") }
+                        ]
                     }
 
                     Row {
                         id: detailsRow
                         objectName: "weatherDetailsRow"
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("details_metrics"); yScale: weatherRoot.childHeightScale("details_metrics") },
+                            Translate { x: weatherRoot.childOffsetX("details_metrics"); y: weatherRoot.childOffsetY("details_metrics") }
+                        ]
                         width: parent.width
                         // Rebuild the pre-migration detail-row breathing room.
                         // The icons/text remain compact and centred; the band owns
@@ -333,14 +419,25 @@ OverlayWidget {
                     spacing: 8.0
 
                     Separator {
+                        id: forecastSeparator
+                        objectName: "weatherForecastSeparator"
                         width: parent.width
                         height: 1.0
                         thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("forecast_separator"); yScale: weatherRoot.childHeightScale("forecast_separator") },
+                            Translate { x: weatherRoot.childOffsetX("forecast_separator"); y: weatherRoot.childOffsetY("forecast_separator") }
+                        ]
                     }
 
                     ShadowedText {
+                        id: forecastText
                         objectName: "weatherForecastText"
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("forecast_text"); yScale: weatherRoot.childHeightScale("forecast_text") },
+                            Translate { x: weatherRoot.childOffsetX("forecast_text"); y: weatherRoot.childOffsetY("forecast_text") }
+                        ]
                         width: parent.width
                         height: implicitHeight
                         text: weatherRoot.weatherModel.forecastText
@@ -360,6 +457,7 @@ OverlayWidget {
             }
 
             Item {
+                id: extendedForecastBand
                 objectName: "weatherExtendedForecastBand"
                 width: readyColumn.width
                 height: visible ? extendedForecastColumn.implicitHeight : 0.0
@@ -371,14 +469,25 @@ OverlayWidget {
                     spacing: 6.0
 
                     Separator {
+                        id: extendedSeparator
+                        objectName: "weatherExtendedForecastSeparator"
                         width: parent.width
                         height: 1.0
                         thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_separator"); yScale: weatherRoot.childHeightScale("extended_separator") },
+                            Translate { x: weatherRoot.childOffsetX("extended_separator"); y: weatherRoot.childOffsetY("extended_separator") }
+                        ]
                     }
 
                     ShadowedText {
+                        id: extendedForecastLabel
                         objectName: "weatherExtendedForecastLabel"
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_label"); yScale: weatherRoot.childHeightScale("extended_label") },
+                            Translate { x: weatherRoot.childOffsetX("extended_label"); y: weatherRoot.childOffsetY("extended_label") }
+                        ]
                         width: parent.width
                         height: implicitHeight
                         text: "5-DAY FORECAST"
@@ -395,7 +504,12 @@ OverlayWidget {
                     }
 
                     ShadowedText {
+                        id: extendedForecastText
                         objectName: "weatherExtendedForecastText"
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_text"); yScale: weatherRoot.childHeightScale("extended_text") },
+                            Translate { x: weatherRoot.childOffsetX("extended_text"); y: weatherRoot.childOffsetY("extended_text") }
+                        ]
                         width: parent.width
                         height: implicitHeight
                         text: weatherRoot.weatherModel.extendedForecastText
@@ -426,7 +540,12 @@ OverlayWidget {
             visible: weatherRoot.weatherModel.viewState !== "ready"
 
             ShadowedText {
+                id: statusTitle
                 objectName: "weatherStatusTitle"
+                transform: [
+                    Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("location_text"); yScale: weatherRoot.childHeightScale("location_text") },
+                    Translate { x: weatherRoot.childOffsetX("location_text"); y: weatherRoot.childOffsetY("location_text") }
+                ]
                 width: statusColumn.width
                 height: implicitHeight
                 text: weatherRoot.weatherModel.locationText
@@ -446,6 +565,10 @@ OverlayWidget {
             ShadowedText {
                 id: statusAction
                 objectName: "weatherStatusAction"
+                transform: [
+                    Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_text"); yScale: weatherRoot.childHeightScale("condition_text") },
+                    Translate { x: weatherRoot.childOffsetX("condition_text"); y: weatherRoot.childOffsetY("condition_text") }
+                ]
                 width: statusColumn.width
                 height: implicitHeight
                 text: weatherRoot.weatherModel.conditionText

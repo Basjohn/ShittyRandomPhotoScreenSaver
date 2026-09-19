@@ -25,14 +25,78 @@ OverlayWidget {
     signal systemMuteToggleRequested()
     signal seekFractionRequested(real fraction)
 
-    // CUSTOM exposes only four deliberate Media child roles. The shared edit
-    // overlay owns the smaller handles and Python/session owns normalized
-    // factors/persistence; these retained targets never become geometry owners.
+    // Media projects the shared normalized child-geometry payload directly.
+    // Track metadata remains one atomic crossfade block; every other visible
+    // semantic region has its own role. No provider/runtime state enters this map.
+    readonly property var childGeometry: mediaModel.customChildGeometry
+    readonly property real childNormalizationWidth: canonicalPreferredCardWidth
+        + canonicalVolumeAccessoryExtent
+    readonly property real childNormalizationHeight: canonicalPreferredHeight
+    function childRecord(roleId) {
+        return childGeometry ? childGeometry[roleId] : null
+    }
+    function childWidthScale(roleId) {
+        const value = childRecord(roleId)
+        return value && value.width_scale !== undefined ? Number(value.width_scale) : 1.0
+    }
+    function childHeightScale(roleId) {
+        const value = childRecord(roleId)
+        return value && value.height_scale !== undefined ? Number(value.height_scale) : 1.0
+    }
+    function childOffsetX(roleId) {
+        const value = childRecord(roleId)
+        return (value && value.x_offset !== undefined ? Number(value.x_offset) : 0.0)
+            * childNormalizationWidth
+    }
+    function childOffsetY(roleId) {
+        const value = childRecord(roleId)
+        return (value && value.y_offset !== undefined ? Number(value.y_offset) : 0.0)
+            * childNormalizationHeight
+    }
+    function childAlignment(roleId, fallback) {
+        const value = childRecord(roleId)
+        return value && value.alignment !== undefined
+            ? String(value.alignment) : String(fallback || "left")
+    }
+    function childAnchor(roleId) {
+        const value = childRecord(roleId)
+        return value && value.anchor !== undefined ? String(value.anchor) : ""
+    }
+
     customEditableChildRoles: {
         const roles = []
-        const normW = mediaRoot.canonicalPreferredCardWidth
-            + mediaRoot.canonicalVolumeAccessoryExtent
-        const normH = mediaRoot.canonicalPreferredHeight
+        const normW = childNormalizationWidth
+        const normH = childNormalizationHeight
+        if (headerFrame.visible) {
+            roles.push({
+                "roleId": "header",
+                "target": headerFrame,
+                "geometryDependencies": [mediaColumn, headerSlot],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (trackMetadata.visible) {
+            roles.push({
+                "roleId": "metadata",
+                "target": trackMetadata,
+                "geometryDependencies": [mediaColumn, mainBand, metadata],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (playbackState.visible) {
+            roles.push({
+                "roleId": "playback_state",
+                "target": playbackState,
+                "geometryDependencies": [mediaColumn, mainBand, metadata],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
         if (artworkFrame.visible) {
             roles.push({
                 "roleId": "artwork",
@@ -74,6 +138,18 @@ OverlayWidget {
                 "target": controlsRow,
                 "geometryDependencies": [mediaColumn, controlsBandSlot],
                 "resizeReflowGate": controlsRow,
+                "collisionIgnoreRoleIds": ["mute_button"],
+                "normalizationWidth": normW,
+                "normalizationHeight": normH,
+                "requirementTarget": customChildRequirement
+            })
+        }
+        if (systemMuteButton.visible) {
+            roles.push({
+                "roleId": "mute_button",
+                "target": systemMuteButton,
+                "geometryDependencies": [mediaColumn, controlsBandSlot, controlsRow],
+                "collisionIgnoreRoleIds": ["transport_controls"],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
                 "requirementTarget": customChildRequirement
@@ -81,17 +157,10 @@ OverlayWidget {
         }
         return roles
     }
-    // Collision truth includes only painted non-role regions. Transport edits
-    // own the complete controls surface, including the mute control; seek itself
-    // is already an editable peer. Do not register invisible structural slots
-    // such as progressBand as obstacles: once a child is freely placed, an empty
-    // authored layout reservation must not become a second/ghost placement
-    // authority. These rectangles are inspected only while the selected edit
-    // layer exists.
-    customEditableChildObstacles: [
-        headerFrame,
-        metadata
-    ]
+    // Every painted Media region above is now an editable semantic role. Keep
+    // invisible authored-flow slots out of collision truth; selected-Edit exact
+    // containment owns freely placed rectangles.
+    customEditableChildObstacles: []
     customEditableChildRequirementTarget: customChildRequirement
 
     // Content-driven outer size (H option A). Width honours the historical
@@ -116,10 +185,11 @@ OverlayWidget {
     readonly property real canonicalCardContentWidth: Math.max(
         1.0, canonicalPreferredCardWidth - mediaRoot.shellInset
     )
+    // Authored seek is genuinely 75% of the card. The old formula first
+    // removed two 8% margins and then took 75% of what remained, creating a
+    // second invisible right-side reservation that fought CUSTOM geometry.
     readonly property real canonicalProgressTrackWidth: Math.max(
-        1.0,
-        (canonicalCardContentWidth
-            - 2.0 * Math.max(12.0, canonicalCardContentWidth * 0.08)) * 0.75
+        1.0, canonicalCardContentWidth * 0.75
     )
     readonly property real canonicalProgressTrackHeight: mediaModel.progressHeight
     readonly property real canonicalControlsHeight: Math.max(
@@ -136,11 +206,17 @@ OverlayWidget {
         return Math.abs(Number(xOffset || 0.0)) <= childPlacementEpsilon
             && Math.abs(Number(yOffset || 0.0)) <= childPlacementEpsilon
     }
+    readonly property bool artworkOnAuthoredRail: childOnAuthoredRail(
+        mediaModel.customArtworkXOffset, mediaModel.customArtworkYOffset
+    )
     readonly property bool seekOnAuthoredRail: childOnAuthoredRail(
         mediaModel.customSeekXOffset, mediaModel.customSeekYOffset
     )
     readonly property bool transportOnAuthoredRail: childOnAuthoredRail(
         mediaModel.customTransportXOffset, mediaModel.customTransportYOffset
+    )
+    readonly property bool muteOnAuthoredRail: childOnAuthoredRail(
+        mediaRoot.childOffsetX("mute_button"), mediaRoot.childOffsetY("mute_button")
     )
     readonly property real canonicalProgressBandHeight: canonicalProgressTrackHeight + 8.0
     readonly property real canonicalControlsBandY: canonicalPreferredHeight - canonicalControlsHeight
@@ -327,30 +403,56 @@ OverlayWidget {
         anchors.right: parent.right
         spacing: mediaRoot.sectionSpacing
 
-        BrandedHeader {
-            id: headerFrame
-            frameObjectName: "mediaHeaderFrame"
-            logoObjectName: "mediaHeaderLogo"
-            textObjectName: "mediaHeaderText"
+        Item {
+            id: headerSlot
+            objectName: "mediaHeaderSlot"
             visible: mediaRoot.mediaModel.showHeaderFrame
-            width: implicitWidth
-            height: visible ? implicitHeight : 0.0
-            label: mediaRoot.mediaModel.providerName
-            logoSource: mediaRoot.mediaModel.providerLogoSource
-            fillColor: mediaRoot.mediaModel.headerFillColor
-            borderColor: mediaRoot.mediaModel.headerBorderColor
-            borderWidth: mediaRoot.scaleAwareHeaderStrokeWidth(mediaRoot.mediaModel.headerBorderWidth)
-            textColor: mediaRoot.mediaModel.headerTextColor
-            fontFamily: mediaRoot.mediaModel.fontFamily
-            textShadowEnabled: mediaRoot.mediaModel.textShadowEnabled
-            textShadowColor: mediaRoot.mediaModel.textShadowColor
-            textShadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
-            textShadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
-            shadowEnabled: mediaRoot.mediaModel.surfaceShadowEnabled
-            shadowColor: mediaRoot.mediaModel.surfaceShadowColor
-            shadowBlur: mediaRoot.mediaModel.surfaceShadowBlur
-            shadowOffsetX: mediaRoot.mediaModel.surfaceShadowOffsetX * 1.15
-            shadowOffsetY: mediaRoot.mediaModel.surfaceShadowOffsetY * 1.15
+            width: parent.width
+            // Keep authored family flow stable. Free header placement is visual
+            // child geometry; it must not become a second Column-height owner.
+            height: visible ? headerFrame.implicitHeight : 0.0
+
+            BrandedHeader {
+                id: headerFrame
+                frameObjectName: "mediaHeaderFrame"
+                logoObjectName: "mediaHeaderLogo"
+                textObjectName: "mediaHeaderText"
+                visible: headerSlot.visible
+                width: implicitWidth
+                height: visible ? implicitHeight : 0.0
+                transformOrigin: Item.TopLeft
+                scale: mediaRoot.childWidthScale("header")
+                readonly property string customAnchor: mediaRoot.childAnchor("header")
+                property real customEditPlacementCompensationX: customAnchor.length > 0
+                    ? x - mediaRoot.childOffsetX("header") : 0.0
+                property real customEditPlacementCompensationY: customAnchor.length > 0
+                    ? y - mediaRoot.childOffsetY("header") : 0.0
+                x: customAnchor.endsWith("right")
+                    ? headerSlot.width - width * scale
+                    : (customAnchor.endsWith("left")
+                        ? 0.0 : mediaRoot.childOffsetX("header"))
+                y: customAnchor.startsWith("bottom")
+                    ? mediaColumn.height - height * scale
+                    : (customAnchor.startsWith("top")
+                        ? 0.0 : mediaRoot.childOffsetY("header"))
+                contentReversed: mediaRoot.childAlignment("header", "left") === "right"
+                label: mediaRoot.mediaModel.providerName
+                logoSource: mediaRoot.mediaModel.providerLogoSource
+                fillColor: mediaRoot.mediaModel.headerFillColor
+                borderColor: mediaRoot.mediaModel.headerBorderColor
+                borderWidth: mediaRoot.scaleAwareHeaderStrokeWidth(mediaRoot.mediaModel.headerBorderWidth)
+                textColor: mediaRoot.mediaModel.headerTextColor
+                fontFamily: mediaRoot.mediaModel.fontFamily
+                textShadowEnabled: mediaRoot.mediaModel.textShadowEnabled
+                textShadowColor: mediaRoot.mediaModel.textShadowColor
+                textShadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
+                textShadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
+                shadowEnabled: mediaRoot.mediaModel.surfaceShadowEnabled
+                shadowColor: mediaRoot.mediaModel.surfaceShadowColor
+                shadowBlur: mediaRoot.mediaModel.surfaceShadowBlur
+                shadowOffsetX: mediaRoot.mediaModel.surfaceShadowOffsetX * 1.15
+                shadowOffsetY: mediaRoot.mediaModel.surfaceShadowOffsetY * 1.15
+            }
         }
 
         Item {
@@ -360,7 +462,7 @@ OverlayWidget {
             height: Math.max(
                 1.0,
                 parent.height
-                    - headerFrame.height
+                    - headerSlot.height
                     - progressBand.height
                     - controlsBandSlot.height
                     - mediaColumn.spacing * (mediaRoot.visibleSectionCount - 1)
@@ -369,10 +471,13 @@ OverlayWidget {
             Column {
                 id: metadata
                 objectName: "mediaMetadata"
-                anchors.left: parent.left
-                anchors.leftMargin: 2.0
-                anchors.right: artworkFrame.visible ? artworkFrame.left : parent.right
-                anchors.rightMargin: artworkFrame.visible ? 18.0 : 0.0
+                x: 2.0
+                width: Math.max(
+                    1.0,
+                    parent.width - x
+                        - (artworkFrame.visible && mediaRoot.artworkOnAuthoredRail
+                            ? artworkFrame.width + 18.0 : 0.0)
+                )
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: mediaRoot.metadataSpacing
                 // Vertical compaction must never visually translate the metadata
@@ -389,10 +494,35 @@ OverlayWidget {
                     width: metadata.width
                     mediaModel: mediaRoot.mediaModel
                     rowSpacing: mediaRoot.metadataSpacing
+                    transform: [
+                        Scale {
+                            origin.x: 0.0
+                            origin.y: 0.0
+                            xScale: mediaRoot.childWidthScale("metadata")
+                            yScale: mediaRoot.childHeightScale("metadata")
+                        },
+                        Translate {
+                            x: mediaRoot.childOffsetX("metadata")
+                            y: mediaRoot.childOffsetY("metadata")
+                        }
+                    ]
                 }
 
                 ShadowedText {
+                    id: playbackState
                     objectName: "mediaPlaybackState"
+                    transform: [
+                        Scale {
+                            origin.x: 0.0
+                            origin.y: 0.0
+                            xScale: mediaRoot.childWidthScale("playback_state")
+                            yScale: mediaRoot.childHeightScale("playback_state")
+                        },
+                        Translate {
+                            x: mediaRoot.childOffsetX("playback_state")
+                            y: mediaRoot.childOffsetY("playback_state")
+                        }
+                    ]
                     visible: mediaRoot.mediaModel.showPlaybackState
                         && mediaRoot.mediaModel.hasTrack
                     width: metadata.width
@@ -421,7 +551,7 @@ OverlayWidget {
                 // right-hand column.  The full-width transport row remains the
                 // normal hard lower boundary.
                 readonly property real topInColumn: headerFrame.visible
-                    ? headerFrame.y
+                    ? headerSlot.y
                     : mainBand.y
                 readonly property real artworkStrokeWidth: mediaRoot.scaleAwareStrokeWidth(
                     mediaRoot.mediaModel.artworkBorderWidth
@@ -680,7 +810,8 @@ OverlayWidget {
                     width: Math.max(
                         1.0,
                         parent.width
-                            - (systemMuteButton.visible ? systemMuteButton.width + 8.0 : 0.0)
+                            - (systemMuteButton.visible && mediaRoot.muteOnAuthoredRail
+                                ? systemMuteButton.width + 8.0 : 0.0)
                     )
                     height: parent.height
 
@@ -790,19 +921,33 @@ OverlayWidget {
                     id: systemMuteButton
                     objectName: "mediaSystemMuteButton"
                     visible: mediaRoot.mediaModel.systemMuteAvailable
-                    height: Math.min(
-                        parent.height * 0.92,
-                        mediaRoot.canonicalSystemMuteHeight
-                            * mediaRoot.mediaModel.customTransportHeightScale
+                    // The mute control is an intrinsic-shape child. When the
+                    // non-uniform control bar becomes too narrow/short it shrinks
+                    // through one common factor; it never inherits independent X/Y
+                    // transport scales and therefore cannot become a squashed pill.
+                    readonly property real requestedCustomScale:
+                        mediaRoot.childWidthScale("mute_button")
+                    readonly property real fitScale: Math.max(
+                        0.01,
+                        Math.min(
+                            requestedCustomScale,
+                            parent.height * 0.92 / Math.max(
+                                1.0, mediaRoot.canonicalSystemMuteHeight
+                            ),
+                            parent.width * 0.28 / Math.max(
+                                1.0, mediaRoot.canonicalSystemMuteWidth
+                            )
+                        )
                     )
-                    width: Math.min(
-                        parent.width * 0.28,
-                        mediaRoot.canonicalSystemMuteWidth
-                            * mediaRoot.mediaModel.customTransportWidthScale
-                    )
+                    height: mediaRoot.canonicalSystemMuteHeight * fitScale
+                    width: mediaRoot.canonicalSystemMuteWidth * fitScale
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.right: parent.right
                     anchors.rightMargin: 4.0
+                    transform: Translate {
+                        x: mediaRoot.childOffsetX("mute_button")
+                        y: mediaRoot.childOffsetY("mute_button")
+                    }
                     radius: Math.max(8.0, Math.min(12.0, height * 0.32))
                     border.width: mediaRoot.scaleAwareStrokeWidth(1.25)
                     border.color: mediaRoot.mediaModel.systemMuteBorderColor

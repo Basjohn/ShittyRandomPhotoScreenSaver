@@ -1150,6 +1150,12 @@ Item {
                                     const peer = childRoleRepeater.itemAt(i)
                                     if (!peer || peer === frame || !peer.visible)
                                         continue
+                                    const frameIgnoresPeer =
+                                        (frame.collisionIgnoreRoleIds || []).indexOf(peer.roleId) >= 0
+                                    const peerIgnoresFrame =
+                                        (peer.collisionIgnoreRoleIds || []).indexOf(frame.roleId) >= 0
+                                    if (frameIgnoresPeer || peerIgnoresFrame)
+                                        continue
                                     if (forResize
                                             && reflowPeers.indexOf(peer.roleId) >= 0
                                             && peer.resizeReflowEnabled)
@@ -2071,6 +2077,14 @@ Item {
                                     modelData.geometryDependencies || []
                                 readonly property var resizeReflowRoleIds:
                                     modelData.resizeReflowRoleIds || []
+                                // Some editors expose a container frame alongside
+                                // children painted inside it. Those intentional
+                                // containment pairs may opt out of peer collision
+                                // while still participating in guides/snapping and
+                                // colliding with every unrelated role. This is
+                                // selected-Edit metadata only, never persistence.
+                                readonly property var collisionIgnoreRoleIds:
+                                    modelData.collisionIgnoreRoleIds || []
                                 // Families declare only the axis on which an upstream
                                 // child resize translates those peers. The shared
                                 // editor uses that semantic declaration to predict

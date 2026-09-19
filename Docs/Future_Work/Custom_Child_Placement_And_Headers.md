@@ -1,7 +1,7 @@
 # CUSTOM Child Placement, Header Roles, and Text-Fit Phase
 
-Date captured: 2026-09-18
-Status: **ACTIVE / foundation landed in the current checkpoint candidate.** Physical Qt validation is still required before broad rollout. Placement was pulled forward because the Abandonment/Media closeout exposed containment, reset and collision failures that could not be treated as a later cosmetic phase. Shared headers remain the next major slice.
+Date captured: 2026-09-18; rollout closeout updated 2026-09-19
+Status: **ACTIVE / ordinary retained-family source rollout complete; rollout-end Windows/PySide + physical validation pending.** The operator explicitly authorized family-by-family source rollout before the deferred rollout-end gate. Abandonment Issues remains the reference implementation. Achievement Pulse, Friend Pulse, Weather, Clock, Reddit/Reddit2, Gmail, Media and System Stats now consume the shared descriptor/session owner. Visualizer is outside this rollout and remains untouched.
 
 ## Why this exists
 
@@ -256,14 +256,14 @@ Normal retained runtime should consume resolved geometry through ordinary QML bi
 
 Edit-only movement may naturally cause QML relayout and narrow `customGeometryChanged`/CUSTOM-session updates at pointer cadence. That work must disappear when the gesture/edit overlay disappears.
 
-Before broad rollout, audit CPU/GPU allocation, signal rate, delegate churn, provider dormancy, and render-node/effect count with Edit mode off.
+Before final rollout acceptance, audit CPU/GPU allocation, signal rate, delegate churn, provider dormancy, and render-node/effect count with Edit mode off. Source rollout may proceed family-by-family under the operator's explicit deferred-test instruction, with a checkpoint after each significant slice.
 
 ## 11. Current implementation state / next order
 
 1. **Landed in checkpoint candidate:** additive `x_offset` / `y_offset` fields inside the existing `size_payload.child_geometry` carrier; old size-only payloads remain valid.
 2. **Landed:** one shared Python-owned child move gesture; selected-parent-only mild edge/centre snapping; real-parent clipping; edit-only sibling/fixed-obstacle collision admission.
 3. **Landed:** Abandonment artwork, BACKLOG, Game Name, flavour text, Last Visit and grouped shelves are movable. Reflow is now authored-rail-aware so an explicitly moved role no longer drags unrelated siblings.
-4. **Landed:** Media artwork, seek, volume and the **whole** transport/mute band are movable; edit mapping invalidates on nested reflow and accessory-side changes.
+4. **Landed and superseded by full Media rollout:** Media Header, atomic metadata block, optional playback-state, artwork, seek, volume, grouped transport surface and separate intrinsic mute are editable. Edit mapping still invalidates on nested reflow/accessory-side changes; transport↔mute authored containment ignores only hard peer collision.
 5. **Landed:** Restore Size clears the whole child-geometry carrier atomically with the session child cache; Cancel remains baseline restore; layout slots retain nested placement via the existing deep-copied CUSTOM root.
 6. **Landed:** live child overflow uses the existing parent `content_extent` owner during pointer updates and the retained family requirement remains the transient floor for later parent content resize.
 7. **Landed in the lifecycle closeout:** child resize preview + commit share one descriptor-bounded Python resolver, so raw pointer overshoot cannot create a larger provisional parent floor than the geometry that can actually commit; diagonal collision admission resolves horizontal and vertical axes independently; selection change retires prior child gestures/containment by stable session-item identity rather than relying on a QML delegate row during teardown. QML destruction remains only the selected-parent fallback for same-row Settings/role changes.
@@ -272,9 +272,9 @@ Before broad rollout, audit CPU/GPU allocation, signal rate, delegate churn, pro
 10. **Landed in the Media nested-reflow detachment checkpoint:** seek and transport no longer inherit future ancestor-band movement after explicit placement. While still on-rail, each target reports the current `Column`/band displacement as the existing first-real-move compensation; once its normalized offset becomes nonzero, the retained target binding cancels later ancestor displacement. Off-rail transport also stops qualifying as the seek-resize reflow peer. This remains one `child_geometry` authority and retained arithmetic only; no background synchronizer exists.
 11. **Landed in the pre-rollout editor-polish checkpoint, still requiring Windows/PySide + physical proof:** descriptor-owned child roles now default to all four corner handles; child movement publishes visible selected-parent-only parent/sibling edge/centre guides with light acquisition + hysteresis; descriptor-gated left/right alignment flip is admitted inside the existing `child_geometry` record and proved first on Abandonment Game Name/flavour text; close/Restore chrome fades only from child gesture begin/end state using finite QML animation. No new timer/poller/provider/worker or normal-runtime scene scan was admitted.
 12. **Test-red reconciliation landed:** the real Steam CUSTOM-lock registry bug is fixed by filtering synthetic widget-scoped lock descriptors against active runtime widget ids rather than the single Settings section id. Three WidgetsTab failures were stale global-revert assertions and now protect the intended widget/family-scoped revert contract instead: reverting Media leaves unrelated Visualizer/Gmail CUSTOM state intact.
-13. **Still required before acceptance:** run Windows/PySide Qt tests and operator physical validation across all four child resize corners, sibling/parent guide acquisition + release hysteresis, alignment flip Save/Cancel/Restore/slot round-trip, gesture chrome fade, repeat resize/move, settings/visibility changes and parent-resize-after-child-edit. Re-test Media artwork Restore Size and apparent seek right-side spacing before introducing any Media-local reset or changing the accepted 75% authored seek baseline.
-14. **Next major feature slice only after that proof:** add `header` using the existing `BrandedHeader`, semantic margined-corner anchors, strong snap + hysteresis.
-15. **Broad rollout remains blocked until the header slice is also proven.** Only then roll the same placement primitive into Achievement Pulse / Friend Pulse and other dense widgets, adding roles only through the shared descriptor/session owner.
+13. **Still required before acceptance:** run Windows/PySide Qt tests and operator physical validation across all four child resize corners, sibling/parent guide acquisition + release hysteresis, alignment flip Save/Cancel/Restore/slot round-trip, gesture chrome fade, repeat resize/move, settings/visibility changes and parent-resize-after-child-edit. Re-test Media artwork Restore Size and verify the corrected true-75% seek baseline has no extra right-side reservation. Do not add Media-local reset logic.
+14. **Shared Header feature is landed:** `BrandedHeader` roles use the existing semantic margined-corner anchors, alignment flip and shared snap/hysteresis path; Media now consumes the same contract.
+15. **Operator-authorized staged source rollout — source complete:** Achievement Pulse, Friend Pulse, Weather/Clock, Reddit/Gmail, Media and System Stats are now admitted through the shared descriptor/session owner before the deferred rollout-end Qt/physical gate. System Stats uses singleton `header`/`header_separator` roles plus one shared record each for repeated `metric_panels`, `metric_accents`, `metric_labels`, `metric_details`, `metric_values` and `metric_tracks`; CPU/RAM/Uptime/Network never become geometry identities. This does not waive final validation; it moves that validation to the rollout-end gate. Visualizer remains excluded.
 
 ## 12. Physical acceptance checklist
 
@@ -450,4 +450,20 @@ The audit after the child-edge/input/growth checkpoint deliberately looked for d
 The shared QML resize path contains one `previewChildResize` callsite and one `resizeChild` callsite. Live pointer samples still rely on retained occupied-geometry notification to coalesce exact containment reconciliation; explicit `syncRequirementNow()` is kept only behind the final gesture boundary. No Timer/QTimer, polling loop, provider wake, worker/thread or normal-runtime scene scanner was added.
 
 Section 16 is therefore the mandatory family-admission gate. In particular, every future input-gate change must physically re-test the existing Visualizer parent side/corner handles even though Visualizer is not part of child-role rollout. Every dense family must close its own focused Qt + physical matrix before the next dense family is admitted.
+
+## 18. Post-rollout source audit — 2026-09-19
+
+After all ordinary retained families were enrolled, the first Windows focused gate returned 502 green / 10 red. One red represented a real authored-identity regression in Friend Pulse grid fitting and was repaired; the remaining nine were stale coordinate/source/API assertions reconciled to intentional contracts. The rollout was then diff-audited against the pre-rollout global-collision checkpoint.
+
+Source conclusions:
+
+- normal runtime gained no new Timer/QTimer/poller/thread/worker/provider cadence;
+- family geometry setters remain bounded by descriptor role count and emit only a narrow geometry signal;
+- the rollout added no new Settings/defaults key or persistence root; one global Child Collision key remains the only preference;
+- repeated families persist semantic role geometry, never friend/post/message/metric identity geometry;
+- provider/cache/network and child gestures remain separated;
+- shared Save/Cancel/Restore/slot/cross-display owners were reused rather than forked;
+- Visualizer remains outside child-role enrollment. Shared overlay changes are limited to declarative nested-role collision exemptions and are inert for Visualizer because it declares no ordinary child roles.
+
+This is a **source architecture audit**, not a claim of zero runtime cost. The rollout necessarily adds retained QML Items/bindings to ordinary widgets. Acceptance therefore still requires Windows rerun, full suite and physical/performance observation with Edit disabled and enabled. Future retained widgets must declare their semantic child roles in their initial decomposition/descriptor rather than shipping outer-only and scheduling another migration. Games You Follow is the first planned family updated to this rule.
 

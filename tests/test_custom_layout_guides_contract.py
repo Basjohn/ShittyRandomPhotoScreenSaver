@@ -123,6 +123,16 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     achievement_qml = _text("rendering/quick/qml/AchievementPulsePresentation.qml")
     media_qml = _text("rendering/quick/qml/MediaPresentation.qml")
     abandonment_qml = _text("rendering/quick/qml/AbandonmentIssuesPresentation.qml")
+    friend_qml = _text("rendering/quick/qml/FriendPulsePresentation.qml")
+    weather_qml = _text("rendering/quick/qml/WeatherPresentation.qml")
+    reddit_qml = _text("rendering/quick/qml/RedditPresentation.qml")
+    gmail_qml = _text("rendering/quick/qml/GmailPresentation.qml")
+    reddit_model = _text("rendering/quick/widgets/reddit.py")
+    gmail_model = _text("rendering/quick/widgets/gmail.py")
+    clock_qml = _text("rendering/quick/qml/ClockPresentation.qml")
+    clock_analogue_qml = _text("rendering/quick/qml/ClockAnalogueFace.qml")
+    clock_digital_qml = _text("rendering/quick/qml/ClockDigitalFace.qml")
+    descriptors = _text("rendering/widget_descriptors.py")
     general_settings = _text("ui/tabs/widgets_tab_defaults.py")
     media_settings = _text("ui/tabs/widgets_tab_media.py")
     steam_settings = _text("ui/tabs/widgets_tab_steam.py")
@@ -225,7 +235,7 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert "def _custom_layout_presentation_item(" in scene
     assert "property var customEditableChildRoles: []" in root_qml
     assert "property var customEditableChildRequirementTarget: null" in root_qml
-    assert "customEditableChildRequirementTarget: normalContent" in achievement_qml
+    assert "customEditableChildRequirementTarget: customChildRequirement" in achievement_qml
     assert "customEditableChildRequirementTarget: customChildRequirement" in media_qml
     assert "customEditableChildRequirementTarget: customChildRequirement" in abandonment_qml
     # Parent reflow belongs only to roles that remain on their authored rail.
@@ -248,6 +258,89 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     # rebuild the Repeater model from an offset-dependent ternary mid-gesture.
     assert '"resizeReflowRoleIds": abandonmentRoot.' not in abandonment_qml
     assert '"target": controlsRow' in media_qml
+    # Friend Pulse has one constant-size edit schema: singleton chrome plus three
+    # grouped repeated roles. Repeated friend delegates never acquire per-row
+    # geometry state. The containing friend frame intentionally ignores only its
+    # own nested avatar/username peers for collision; snapping remains shared.
+    for role_id in (
+        "header", "online_count", "separator",
+        "friend_frames", "avatars", "usernames",
+    ):
+        assert f'"roleId": "{role_id}"' in friend_qml
+    assert 'id: customFriendFrameRoleTarget' in friend_qml
+    assert 'id: customAvatarRoleTarget' in friend_qml
+    assert 'id: customUsernameRoleTarget' in friend_qml
+    assert '"collisionIgnoreRoleIds": ["avatars", "usernames"]' in friend_qml
+    assert '"collisionIgnoreRoleIds": ["friend_frames"]' in friend_qml
+    assert "readonly property var collisionIgnoreRoleIds:" in qml
+    assert "frameIgnoresPeer || peerIgnoresFrame" in qml
+    assert "Timer {" not in friend_qml
+    # Weather rollout is complete at semantic-element granularity: every ready
+    # presentation block is descriptor-backed, including optional forecast bands.
+    for role_id in (
+        "location_text", "condition_text", "condition_icon",
+        "details_separator", "details_metrics",
+        "forecast_separator", "forecast_text",
+        "extended_separator", "extended_label", "extended_text",
+    ):
+        assert f'"{role_id}"' in descriptors
+        assert f'"roleId": "{role_id}"' in weather_qml
+    assert 'id: statusTitle' in weather_qml
+    assert 'id: statusAction' in weather_qml
+    assert 'weatherModel.customChildGeometry' in weather_qml
+    assert "Timer {" not in weather_qml
+
+    # Reddit/Reddit2 and Gmail keep repeated feed/message semantics constant-size:
+    # one geometry record per repeated role, never one record per row identity.
+    for role_id in (
+        "header", "refresh", "post_rows", "post_time",
+        "post_titles", "post_separators",
+    ):
+        assert f'"{role_id}"' in descriptors
+        assert f'"roleId": "{role_id}"' in reddit_qml
+    for role_id in (
+        "header", "refresh", "message_rows", "envelopes", "timestamps",
+        "senders", "subjects", "message_actions", "message_separators",
+        "boundary_separators",
+    ):
+        assert f'"{role_id}"' in descriptors
+        assert f'"roleId": "{role_id}"' in gmail_qml
+    assert 'redditModel.customChildGeometry' in reddit_qml
+    assert 'gmailModel.customChildGeometry' in gmail_qml
+    assert 'id: customPostRowRoleTarget' in reddit_qml
+    assert 'id: customMessageRowRoleTarget' in gmail_qml
+    assert '"collisionIgnoreRoleIds": ["post_rows"]' in reddit_qml
+    assert '"collisionIgnoreRoleIds": ["message_rows"]' in gmail_qml
+    assert '"occupiedTarget": customPostSeparatorOccupiedTarget' in reddit_qml
+    assert '"occupiedTarget": customMessageSeparatorOccupiedTarget' in gmail_qml
+    assert '"occupiedTarget": customBoundarySeparatorOccupiedTarget' in gmail_qml
+    assert 'postIdentity' not in reddit_model[reddit_model.index("set_custom_child_geometry"):reddit_model.index("def admit_url")]
+    assert 'messageIdentity' not in gmail_model[gmail_model.index("set_custom_child_geometry"):gmail_model.index("def retire")]
+    assert 'postRailBudget' in reddit_qml
+    assert 'emailRailBudget' in gmail_qml and 'messageRowsYOffset' in gmail_qml
+    assert 'Math.max(0.0, postRowsYOffset)' in reddit_qml
+    assert 'Math.max(0.0, messageRowsYOffset)' in gmail_qml
+    assert 'Timer {' not in reddit_qml + gmail_qml
+
+    # Clock keeps face+hands geometrically attached, while numerals and optional
+    # footer elements are independently editable. Digital gets its time block and
+    # the same footer roles; no additional ticker/cadence exists in QML.
+    for role_id in (
+        "clock_face", "numerals", "separator",
+        "calendar_text", "timezone_text", "time_text",
+    ):
+        assert f'"{role_id}"' in descriptors
+    assert '"roleId": "clock_face"' in clock_qml
+    assert '"roleId": "numerals"' in clock_qml
+    assert '"collisionIgnoreRoleIds": ["numerals"]' in clock_qml
+    assert '"collisionIgnoreRoleIds": ["clock_face"]' in clock_qml
+    assert 'id: faceCoreUnderlay' in clock_analogue_qml
+    assert 'id: faceCoreHands' in clock_analogue_qml
+    assert 'xScale: analogueFace.childWidthScale("clock_face")' in clock_analogue_qml
+    assert 'id: numeralGroup' in clock_analogue_qml
+    assert '"roleId": "time_text"' in clock_qml
+    assert 'clockModel.customChildGeometry' in clock_digital_qml
+    assert "Timer {" not in clock_qml + clock_analogue_qml + clock_digital_qml
     assert "id: childRoleLoader" in qml
     assert "active: editFrame.selectedForChildEdit" in qml
     # Visualizer deliberately resolves no ordinary child-presentation QObject. Qt
@@ -514,22 +607,31 @@ def test_display_local_overlay_does_not_republish_stable_remote_pointer_chatter(
     )
 
 
-def test_friend_pulse_grouped_avatar_child_role_reuses_shared_owner_without_per_avatar_state() -> None:
+def test_friend_pulse_grouped_roles_reuse_shared_owner_without_per_friend_state() -> None:
     descriptors = _text("rendering/widget_descriptors.py")
     model = _text("rendering/quick/widgets/friend_pulse.py")
     qml = _text("rendering/quick/qml/FriendPulsePresentation.qml")
 
-    assert 'CustomChildRoleDescriptor(\n                "avatars"' in descriptors
+    for role_id in (
+        "header", "online_count", "separator",
+        "friend_frames", "avatars", "usernames",
+    ):
+        assert f'"{role_id}"' in descriptors
+        assert f'"roleId": "{role_id}"' in qml
     assert 'uniform_scale=True' in descriptors
-    assert 'CHILD_RESIZE_HANDLES' in _text("rendering/custom_child_geometry.py")
     assert 'customGeometryChanged = Signal()' in model
     assert 'def set_custom_child_geometry(self, child_geometry: object)' in model
-    assert 'avatar_scale=self._custom_avatar_scale' in model
-    assert 'customEditableChildRoles: [' in qml
-    assert '{ "roleId": "avatars", "target": customAvatarRoleTarget }' in qml
+    assert 'frame_width_scale=float(self._custom_friend_frame_geometry[0])' in model
+    assert 'objectName: "friendPulseCustomFriendFrameRoleTarget"' in qml
     assert 'objectName: "friendPulseCustomAvatarRoleTarget"' in qml
-    assert '36.0 * friendRoot.customAvatarScale' in qml
-    assert '* friendRoot.customAvatarScale' in qml
+    assert 'objectName: "friendPulseCustomUsernameRoleTarget"' in qml
+    assert 'friendRoot.customAvatarScale' in qml
+    assert 'customFriendFrameWidthScale' in qml
+    assert 'customUsernameWidthScale' in qml
+    # The repeated delegate identity is never used as a child_geometry key.
+    assert '"friend_frames_" + index' not in qml
+    assert '"avatars_" + index' not in qml
+    assert '"usernames_" + index' not in qml
     assert 'Timer {' not in qml
 
 

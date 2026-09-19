@@ -908,24 +908,72 @@ def test_narrow_grid_keeps_event_glow_and_friend_title_allocated(
         qt_app.processEvents()
 
 
-def test_custom_avatar_role_is_one_uniform_group_and_uses_narrow_geometry_signals() -> None:
+def test_custom_friend_roles_are_grouped_and_use_one_narrow_geometry_signal() -> None:
     model = _model(view_mode="grid", capacity=12, preferred_width=900)
     base_columns = int(model.gridColumns)
     state_spy = QSignalSpy(model.stateChanged)
     geometry_spy = QSignalSpy(model.customGeometryChanged)
 
-    # Intrinsic avatar geometry canonicalizes to one scalar even if persisted
-    # input has mismatched axes. It must not wake unrelated state bindings.
+    # Repeated roster geometry is one shared record per visual role, never one
+    # record per friend. Intrinsic avatars canonicalize to one scalar even if
+    # persisted input has mismatched axes. Applying all six roles is still one
+    # geometry-only notification and does not wake provider/state bindings.
     assert model.set_custom_child_geometry(
-        {"avatars": {"width_scale": 1.8, "height_scale": 0.6}}
+        {
+            "header": {
+                "width_scale": 1.15,
+                "height_scale": 0.75,
+                "x_offset": 0.05,
+                "alignment": "right",
+                "anchor": "top_right",
+            },
+            "online_count": {
+                "width_scale": 1.2,
+                "height_scale": 1.1,
+                "x_offset": -0.04,
+                "alignment": "left",
+            },
+            "separator": {"width_scale": 0.8, "y_offset": 0.03},
+            "friend_frames": {"width_scale": 1.35, "height_scale": 1.25},
+            "avatars": {
+                "width_scale": 1.8,
+                "height_scale": 0.6,
+                "x_offset": 0.02,
+                "y_offset": -0.03,
+            },
+            "usernames": {
+                "width_scale": 1.4,
+                "height_scale": 1.2,
+                "x_offset": -0.02,
+                "y_offset": 0.04,
+            },
+        }
     ) is True
+    assert model.customHeaderWidthScale == pytest.approx(1.15)
+    # Header is intrinsic/uniform: height canonicalizes to the width scale.
+    assert model.customHeaderHeightScale == pytest.approx(1.15)
+    assert model.customHeaderAlignment == "right"
+    assert model.customHeaderAnchor == "top_right"
+    assert model.customOnlineCountWidthScale == pytest.approx(1.2)
+    assert model.customOnlineCountAlignment == "left"
+    assert model.customSeparatorWidthScale == pytest.approx(0.8)
+    assert model.customFriendFrameWidthScale == pytest.approx(1.35)
+    assert model.customFriendFrameHeightScale == pytest.approx(1.25)
     assert model.customAvatarScale == pytest.approx(1.8)
+    assert model.customAvatarXOffset == pytest.approx(0.02)
+    assert model.customAvatarYOffset == pytest.approx(-0.03)
+    assert model.customUsernameWidthScale == pytest.approx(1.4)
+    assert model.customUsernameHeightScale == pytest.approx(1.2)
+    assert model.customUsernameXOffset == pytest.approx(-0.02)
+    assert model.customUsernameYOffset == pytest.approx(0.04)
     assert int(model.gridColumns) <= base_columns
     assert geometry_spy.count() == 1
     assert state_spy.count() == 0
 
     assert model.set_custom_child_geometry({}) is True
     assert model.customAvatarScale == pytest.approx(1.0)
+    assert model.customFriendFrameWidthScale == pytest.approx(1.0)
+    assert model.customUsernameWidthScale == pytest.approx(1.0)
 
 
 def test_content_extent_override_reflows_grid_columns() -> None:

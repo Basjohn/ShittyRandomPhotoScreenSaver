@@ -1050,8 +1050,9 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
         "cached: true",
         "layer.enabled: mediaRoot.mediaModel.roundedArtwork",
         "maskSource: artworkMask",
-        "seekWouldIntersectArtwork",
-        "normalBottomInColumn",
+        "canonicalCardContentWidth * 0.75",
+        "readonly property real fitScale: Math.max(",
+        'mediaRoot.childWidthScale("mute_button")',
         "anchors.margins: artworkFrame.imageInset",
         "scaleAwareHeaderStrokeWidth",
     ):

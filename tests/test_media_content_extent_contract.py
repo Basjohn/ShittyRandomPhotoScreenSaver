@@ -67,7 +67,7 @@ def test_media_vertical_compaction_sheds_lower_priority_metadata() -> None:
     assert "self._content_extent[1] >= 225" in state
 
 
-def test_media_qml_reflows_width_height_and_projects_four_custom_child_roles() -> None:
+def test_media_qml_reflows_width_height_and_projects_full_semantic_child_roles() -> None:
     qml = _text("rendering/quick/qml/MediaPresentation.qml")
     assert "readonly property real effectivePreferredWidth: mediaModel.contentExtentActive" in qml
     assert "readonly property real effectivePreferredHeight: mediaModel.contentExtentActive" in qml
@@ -75,13 +75,20 @@ def test_media_qml_reflows_width_height_and_projects_four_custom_child_roles() -
     assert "preferredContentHeight: effectivePreferredHeight" in qml
     assert "spacing: mediaRoot.sectionSpacing" in qml
     assert "rowSpacing: mediaRoot.metadataSpacing" in qml
-    for role_id in ("artwork", "seek_bar", "volume_bar", "transport_controls"):
+    for role_id in (
+        "header", "metadata", "playback_state", "artwork", "seek_bar",
+        "volume_bar", "transport_controls", "mute_button",
+    ):
         assert f'"roleId": "{role_id}"' in qml
+    assert '"target": headerFrame' in qml
+    assert '"target": trackMetadata' in qml
+    assert '"target": playbackState' in qml
     assert '"target": artworkFrame' in qml
     assert '"target": progressTrack' in qml
     assert '"target": appVolumeTrack' in qml
     assert '"target": controlsRow' in qml
-    assert qml.count('"requirementTarget": customChildRequirement') == 4
+    assert '"target": systemMuteButton' in qml
+    assert qml.count('"requirementTarget": customChildRequirement') == 8
     assert "canonicalArtworkWidth" in qml
     assert "canonicalProgressTrackWidth" in qml
     assert "canonicalControlsHeight" in qml
@@ -102,12 +109,12 @@ def test_media_qml_reflows_width_height_and_projects_four_custom_child_roles() -
     # only so a harmless positive move inside the card cannot inflate its parent.
     assert "horizontalPlacementExtra" not in qml
     assert "verticalPlacementExtra" not in qml
-    # The transport child role owns the complete painted band, not only the
-    # previous/play/next row; the mute section therefore cannot sit outside its
-    # edit/collision rectangle.
+    # Transport remains a grouped bar while mute is its own intrinsic child;
+    # the nested pair ignores only each other for hard peer collision.
     assert '"target": controlsRow' in qml
-    assert 'id: systemMuteButton' in qml
-    assert 'parent.width\n                            - (systemMuteButton.visible' in qml
+    assert '"target": systemMuteButton' in qml
+    assert '"collisionIgnoreRoleIds": ["mute_button"]' in qml
+    assert '"collisionIgnoreRoleIds": ["transport_controls"]' in qml
     assert '"resizeReflowRoleIds": ["transport_controls"]' in qml
     assert '"resizeReflowAxes": ["vertical"]' in qml
     assert '"resizeReflowGate": controlsRow' in qml
@@ -120,9 +127,13 @@ def test_media_qml_reflows_width_height_and_projects_four_custom_child_roles() -
     assert "mediaRoot.seekOnAuthoredRail ? 0.0 : customEditAncestorReflowY" in qml
     assert "mediaRoot.transportOnAuthoredRail ? 0.0 : customEditAncestorReflowY" in qml
     assert "metadata" in qml
-    # Fixed obstacles are painted non-role content only. The invisible
-    # progressBand is a Column reservation, not a collision/placement owner;
-    # the actual progressTrack role already protects the seek element itself.
+    # The authored seek is a true 75% bar. Do not reintroduce the old hidden
+    # two-sided 8% margin before applying the 75% factor.
+    assert "canonicalCardContentWidth * 0.75" in qml
+    assert "canonicalCardContentWidth * 0.08" not in qml
+    # Every painted semantic region is an editable role. Invisible flow slots
+    # remain outside collision truth.
+    assert "customEditableChildObstacles: []" in qml
     assert '{"target": progressBand' not in qml
     assert '"hardResize": false' not in qml
     # No child-resize timer/poller or recurring geometry scanner is admitted.
@@ -201,6 +212,8 @@ def test_media_custom_child_geometry_stays_on_retained_payload_owner_and_narrow_
 
     assert "customGeometryChanged = Signal()" in source
     assert "def set_custom_child_geometry(" in source
+    assert "self._custom_child_geometry: dict[str, CustomChildSize]" in source
+    assert "def customChildGeometry" in source
     assert 'payload.get("child_geometry")' in source
     assert "self._model.set_custom_child_geometry(child_geometry)" in source
     for prop in (
@@ -226,8 +239,13 @@ def test_media_custom_child_geometry_stays_on_retained_payload_owner_and_narrow_
         'widget_id="reddit"', 1
     )[0]
     assert "freeform_artwork_child_role(" in media_descriptor
-    for role_id in ("seek_bar", "volume_bar", "transport_controls"):
+    for role_id in (
+        "header", "metadata", "playback_state", "seek_bar", "volume_bar",
+        "transport_controls", "mute_button",
+    ):
         assert f'"{role_id}"' in media_descriptor
+    assert '"header"' in media_descriptor and "semantic_corner_anchor=True" in media_descriptor
+    assert '"mute_button"' in media_descriptor and "uniform_scale=True" in media_descriptor
 
 
 def test_media_custom_settings_lock_matches_child_geometry_authority() -> None:
@@ -242,9 +260,22 @@ def test_media_custom_settings_lock_matches_child_geometry_authority() -> None:
 def test_media_metadata_compaction_preserves_left_visual_anchor() -> None:
     qml = _text("rendering/quick/qml/MediaPresentation.qml")
     metadata = qml.split("id: metadata", 1)[1].split("MediaMetadataColumn {", 1)[0]
-    assert "anchors.left: parent.left" in metadata
+    assert "x: 2.0" in metadata
     assert "transformOrigin: Item.Left" in metadata
     assert "transformOrigin: Item.Center" not in metadata
+
+
+def test_media_seek_has_no_hidden_right_padding_and_mute_shrinks_uniformly_with_controls() -> None:
+    qml = _text("rendering/quick/qml/MediaPresentation.qml")
+    assert "canonicalCardContentWidth * 0.75" in qml
+    assert "canonicalCardContentWidth * 0.08" not in qml
+    mute = qml.split("id: systemMuteButton", 1)[1].split("gradient: Gradient", 1)[0]
+    assert 'mediaRoot.childWidthScale("mute_button")' in mute
+    assert "readonly property real fitScale" in mute
+    assert "height: mediaRoot.canonicalSystemMuteHeight * fitScale" in mute
+    assert "width: mediaRoot.canonicalSystemMuteWidth * fitScale" in mute
+    assert "customTransportWidthScale" not in mute
+    assert "customTransportHeightScale" not in mute
 
 
 def test_media_child_edit_targets_follow_actual_bands_and_accessory_side_changes() -> None:

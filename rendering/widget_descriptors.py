@@ -1461,6 +1461,132 @@ def widget_writes_custom_monitor_key(widget_id: str) -> bool:
     return bool(descriptor.writes_custom_monitor_key)
 
 
+WEATHER_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
+    freeform_layout_block_child_role(
+        "location_text", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "condition_text", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+    CustomChildRoleDescriptor(
+        "condition_icon", axes=("horizontal", "vertical"),
+        minimum_scale=(0.45, 0.45), maximum_scale=(2.50, 2.50),
+        uniform_scale=True, movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "details_separator", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "details_metrics", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "forecast_separator", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "forecast_text", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "extended_separator", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "extended_label", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "extended_text", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+)
+
+CLOCK_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
+    CustomChildRoleDescriptor(
+        "clock_face", axes=("horizontal", "vertical"),
+        minimum_scale=(0.45, 0.45), maximum_scale=(2.50, 2.50),
+        uniform_scale=True, movable=True,
+    ),
+    CustomChildRoleDescriptor(
+        "numerals", axes=("horizontal", "vertical"),
+        minimum_scale=(0.45, 0.45), maximum_scale=(2.50, 2.50),
+        uniform_scale=True, movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "separator", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "calendar_text", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "timezone_text", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "time_text", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+)
+
+REDDIT_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
+    CustomChildRoleDescriptor(
+        "header", axes=("horizontal", "vertical"),
+        minimum_scale=(0.65, 0.65), maximum_scale=(1.85, 1.85),
+        uniform_scale=True, movable=True, alignment_flip=True,
+        authored_alignment="left", semantic_corner_anchor=True,
+    ),
+    CustomChildRoleDescriptor(
+        "refresh", axes=("horizontal", "vertical"),
+        minimum_scale=(0.55, 0.55), maximum_scale=(2.00, 2.00),
+        uniform_scale=True, movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "post_rows", minimum_scale=(0.55, 0.65), maximum_scale=(1.80, 2.25), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "post_time", minimum_scale=(0.55, 0.60), maximum_scale=(2.00, 2.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "post_titles", minimum_scale=(0.45, 0.60), maximum_scale=(2.25, 2.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "post_separators", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
+    ),
+)
+
+GMAIL_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
+    CustomChildRoleDescriptor(
+        "header", axes=("horizontal", "vertical"),
+        minimum_scale=(0.65, 0.65), maximum_scale=(1.85, 1.85),
+        uniform_scale=True, movable=True, alignment_flip=True,
+        authored_alignment="left", semantic_corner_anchor=True,
+    ),
+    CustomChildRoleDescriptor(
+        "refresh", axes=("horizontal", "vertical"),
+        minimum_scale=(0.55, 0.55), maximum_scale=(2.00, 2.00),
+        uniform_scale=True, movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "message_rows", minimum_scale=(0.55, 0.65), maximum_scale=(1.80, 2.25), movable=True,
+    ),
+    CustomChildRoleDescriptor(
+        "envelopes", axes=("horizontal", "vertical"),
+        minimum_scale=(0.50, 0.50), maximum_scale=(2.25, 2.25),
+        uniform_scale=True, movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "timestamps", minimum_scale=(0.55, 0.60), maximum_scale=(2.00, 2.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "senders", minimum_scale=(0.45, 0.60), maximum_scale=(2.25, 2.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "subjects", minimum_scale=(0.45, 0.60), maximum_scale=(2.25, 2.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "message_actions", minimum_scale=(0.55, 0.55), maximum_scale=(2.00, 2.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "message_separators", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
+    ),
+    freeform_layout_block_child_role(
+        "boundary_separators", minimum_scale=(0.30, 0.50), maximum_scale=(2.50, 3.00), movable=True,
+    ),
+)
+
 WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
     WidgetRuntimeDescriptor(
         widget_id="clock",
@@ -1474,6 +1600,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="clock_font",
+        custom_child_roles=CLOCK_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
         widget_id="clock2",
@@ -1488,6 +1615,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="clock_font",
+        custom_child_roles=CLOCK_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
         widget_id="clock3",
@@ -1502,6 +1630,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="clock_font",
+        custom_child_roles=CLOCK_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
         widget_id="weather",
@@ -1522,6 +1651,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         custom_layout_resize_mode="weather_scale",
         content_extent_axes=("horizontal", "vertical"),
         content_extent_minimum_size=(420, 220),
+        custom_child_roles=WEATHER_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
         widget_id="media",
@@ -1540,6 +1670,33 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         content_extent_axes=("horizontal", "vertical"),
         content_extent_minimum_size=(520, 210),
         custom_child_roles=(
+            CustomChildRoleDescriptor(
+                "header",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.65, 0.65),
+                maximum_scale=(1.85, 1.85),
+                uniform_scale=True,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+                semantic_corner_anchor=True,
+            ),
+            CustomChildRoleDescriptor(
+                "metadata",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.55, 0.55),
+                maximum_scale=(1.90, 1.90),
+                uniform_scale=True,
+                movable=True,
+            ),
+            CustomChildRoleDescriptor(
+                "playback_state",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.55, 0.55),
+                maximum_scale=(1.90, 1.90),
+                uniform_scale=True,
+                movable=True,
+            ),
             freeform_artwork_child_role(
                 movable=True,
             ),
@@ -1567,6 +1724,14 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
                 uniform_scale=False,
                 movable=True,
             ),
+            CustomChildRoleDescriptor(
+                "mute_button",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.45, 0.45),
+                maximum_scale=(2.00, 2.00),
+                uniform_scale=True,
+                movable=True,
+            ),
         ),
     ),
     WidgetRuntimeDescriptor(
@@ -1592,6 +1757,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
         content_extent_axes=("horizontal", "vertical"),
+        custom_child_roles=REDDIT_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit2",
@@ -1616,6 +1782,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
         content_extent_axes=("horizontal", "vertical"),
+        custom_child_roles=REDDIT_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
         widget_id="gmail",
@@ -1642,6 +1809,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="gmail_font",
         content_extent_axes=("horizontal", "vertical"),
+        custom_child_roles=GMAIL_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
         widget_id="achievement_pulse",
@@ -1661,16 +1829,19 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         content_extent_minimum_size=(600, 290),
         content_extent_floor_at_authored_size=True,
         custom_child_roles=(
-            # Artwork frames are freeform X/Y; the retained image itself keeps
-            # native aspect via PreserveAspectCrop. Intrinsic-shape roles stay
-            # uniform so circles/square badges cannot be distorted.
-            # These three Achievement roles remain authored-rail size-only until
-            # that family reaches the post-header placement rollout. Left/top
-            # handles would otherwise imply persisted translation that the family
-            # does not yet consume. The shared default is still four corners for
-            # placement-capable roles; this is the concrete semantic exception.
+            CustomChildRoleDescriptor(
+                "header",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.65, 0.65),
+                maximum_scale=(1.85, 1.85),
+                uniform_scale=True,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+                semantic_corner_anchor=True,
+            ),
             freeform_artwork_child_role(
-                resize_handles=("bottom_left",),
+                movable=True,
             ),
             CustomChildRoleDescriptor(
                 "badge",
@@ -1678,7 +1849,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
                 minimum_scale=(0.55, 0.55),
                 maximum_scale=(2.50, 2.50),
                 uniform_scale=True,
-                resize_handles=("bottom_right",),
+                movable=True,
             ),
             CustomChildRoleDescriptor(
                 "progress_circle",
@@ -1686,7 +1857,31 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
                 minimum_scale=(0.60, 0.60),
                 maximum_scale=(2.25, 2.25),
                 uniform_scale=True,
-                resize_handles=("top_right",),
+                movable=True,
+            ),
+            CustomChildRoleDescriptor(
+                "game_name",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.50, 0.60),
+                maximum_scale=(2.25, 2.50),
+                uniform_scale=False,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+            freeform_layout_block_child_role(
+                "achievement_list",
+                minimum_scale=(0.50, 0.55),
+                maximum_scale=(2.25, 2.50),
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+            freeform_layout_block_child_role(
+                "field_group",
+                minimum_scale=(0.55, 0.60),
+                maximum_scale=(2.25, 2.25),
+                movable=True,
             ),
         ),
     ),
@@ -1793,19 +1988,58 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         custom_layout_resize_mode="ordinary_uniform",
         content_extent_axes=("horizontal", "vertical"),
         custom_child_roles=(
-            # One grouped intrinsic role: every visible avatar consumes the same
-            # scalar, preserving shape/alignment without per-avatar state.
-            # Group avatar scaling is still size-only authored reflow. Keep its
-            # existing anchor handle until Friend Pulse joins the later placement
-            # rollout; four-corner resize requires a role that can persist the
-            # corresponding left/top translation.
+            # Friend Pulse repeats the same visual grammar for every roster item.
+            # Persist one shared geometry record per repeated role, never one per
+            # friend/delegate; singleton chrome remains independently editable.
+            CustomChildRoleDescriptor(
+                "header",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.65, 0.65),
+                maximum_scale=(1.85, 1.85),
+                uniform_scale=True,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+                semantic_corner_anchor=True,
+            ),
+            freeform_layout_block_child_role(
+                "online_count",
+                minimum_scale=(0.50, 0.60),
+                maximum_scale=(2.00, 2.00),
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="right",
+            ),
+            freeform_layout_block_child_role(
+                "separator",
+                minimum_scale=(0.30, 0.50),
+                maximum_scale=(2.25, 3.00),
+                movable=True,
+            ),
+            # One repeated frame-size contract controls every row/tile. It is
+            # deliberately size-only: list/grid placement remains family-owned.
+            CustomChildRoleDescriptor(
+                "friend_frames",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.60, 0.65),
+                maximum_scale=(1.80, 2.00),
+                uniform_scale=False,
+                movable=False,
+                resize_handles=("bottom_right",),
+            ),
             CustomChildRoleDescriptor(
                 "avatars",
                 axes=("horizontal", "vertical"),
                 minimum_scale=(0.55, 0.55),
                 maximum_scale=(2.00, 2.00),
                 uniform_scale=True,
-                resize_handles=("bottom_right",),
+                movable=True,
+            ),
+            freeform_layout_block_child_role(
+                "usernames",
+                minimum_scale=(0.50, 0.60),
+                maximum_scale=(2.25, 2.25),
+                movable=True,
             ),
         ),
     ),
@@ -1831,6 +2065,69 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="ordinary_uniform",
         content_extent_axes=("horizontal", "vertical"),
+        custom_child_roles=(
+            CustomChildRoleDescriptor(
+                "header",
+                axes=("horizontal", "vertical"),
+                minimum_scale=(0.65, 0.65),
+                maximum_scale=(1.85, 1.85),
+                uniform_scale=True,
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+                semantic_corner_anchor=True,
+            ),
+            freeform_layout_block_child_role(
+                "header_separator",
+                minimum_scale=(0.30, 0.50),
+                maximum_scale=(2.50, 3.00),
+                movable=True,
+            ),
+            # Metric cards are structurally repeated. Keep one shared geometry
+            # record per semantic role, never CPU/RAM/Uptime/Network copies.
+            freeform_layout_block_child_role(
+                "metric_panels",
+                minimum_scale=(0.55, 0.55),
+                maximum_scale=(2.25, 2.25),
+                movable=True,
+            ),
+            freeform_layout_block_child_role(
+                "metric_accents",
+                minimum_scale=(0.40, 0.40),
+                maximum_scale=(3.00, 3.00),
+                movable=True,
+            ),
+            freeform_layout_block_child_role(
+                "metric_labels",
+                minimum_scale=(0.50, 0.55),
+                maximum_scale=(2.50, 2.50),
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+            freeform_layout_block_child_role(
+                "metric_details",
+                minimum_scale=(0.50, 0.55),
+                maximum_scale=(2.50, 2.50),
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="left",
+            ),
+            freeform_layout_block_child_role(
+                "metric_values",
+                minimum_scale=(0.50, 0.55),
+                maximum_scale=(2.50, 2.50),
+                movable=True,
+                alignment_flip=True,
+                authored_alignment="right",
+            ),
+            freeform_layout_block_child_role(
+                "metric_tracks",
+                minimum_scale=(0.35, 0.50),
+                maximum_scale=(3.00, 3.00),
+                movable=True,
+            ),
+        ),
     ),
     WidgetRuntimeDescriptor(
         widget_id="spotify_visualizer",

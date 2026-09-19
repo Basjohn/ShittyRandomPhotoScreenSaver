@@ -22,6 +22,8 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
+from rendering.custom_child_geometry import CustomChildSize, child_role_map, clamp_child_geometry
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 
 from .theme_projection import (
     resolve_card_surface_colors,
@@ -386,6 +388,7 @@ class WeatherPresentationModel(QObject):
     """Stable Weather runtime consumer and QML-facing state model."""
 
     stateChanged = Signal()
+    customGeometryChanged = Signal()
 
     def __init__(
         self,
@@ -401,6 +404,13 @@ class WeatherPresentationModel(QObject):
         self._active = False
         self._retired = False
         self._content_extent: tuple[int, int] | None = None
+        descriptor = get_widget_runtime_descriptor(config.widget_id)
+        if descriptor is None:
+            raise RuntimeError(f"Missing runtime descriptor for {config.widget_id!r}")
+        self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
+        self._custom_child_geometry: dict[str, CustomChildSize] = {
+            role_id: CustomChildSize() for role_id in self._custom_child_roles
+        }
 
     def set_runtime_service(self, runtime_service: Any) -> None:
         """Accept the neutral owner injected by ``WidgetRuntimeManager``."""
@@ -525,6 +535,39 @@ class WeatherPresentationModel(QObject):
         self._content_extent = None
         self.stateChanged.emit()
         return True
+
+    def set_custom_child_geometry(self, child_geometry: object) -> bool:
+        """Project persisted Weather child geometry into retained presentation state."""
+
+        raw = child_geometry if isinstance(child_geometry, Mapping) else {}
+        resolved: dict[str, CustomChildSize] = {}
+        for role_id, role in self._custom_child_roles.items():
+            value = raw.get(role_id) if isinstance(raw, Mapping) else None
+            if not isinstance(value, Mapping):
+                resolved[role_id] = CustomChildSize()
+                continue
+            resolved[role_id] = clamp_child_geometry(
+                role,
+                value.get("width_scale", 1.0),
+                value.get("height_scale", 1.0),
+                value.get("x_offset", 0.0),
+                value.get("y_offset", 0.0),
+                value.get("alignment"),
+                value.get("anchor"),
+            )
+        if resolved == self._custom_child_geometry:
+            return False
+        self._custom_child_geometry = resolved
+        self.customGeometryChanged.emit()
+        return True
+
+    @Property("QVariantMap", notify=customGeometryChanged)
+    def customChildGeometry(self) -> dict[str, dict[str, object]]:
+        return {
+            role_id: geometry.to_mapping()
+            for role_id, geometry in self._custom_child_geometry.items()
+            if not geometry.is_authored
+        }
 
     @Property(bool, notify=stateChanged)
     def contentExtentActive(self) -> bool:
@@ -862,6 +905,8 @@ class RetainedWeatherPresentation:
             self._model.set_content_extent(extent[0], extent[1])
         else:
             self._model.clear_content_extent()
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
+        self._model.set_custom_child_geometry(child_geometry)
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

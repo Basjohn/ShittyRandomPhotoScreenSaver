@@ -291,6 +291,31 @@ System Stats uses the same ordinary retained-card rules as the mature widgets:
 - shared edit-mode ownership;
 - no family-specific layout manager or theme cascade.
 
+CUSTOM child editing follows the same descriptor/session/persistence owner as the other retained widgets. System Stats
+does **not** persist geometry per CPU/RAM/Uptime/Network panel. Its stable role set is:
+
+```text
+header
+header_separator
+metric_panels
+metric_accents
+metric_labels
+metric_details
+metric_values
+metric_tracks
+```
+
+`header` and `header_separator` are singleton chrome. Every `metric_*` role is one shared geometry record projected onto
+all structurally equivalent enabled panels. The panel container and its nested semantic roles may overlap by design, so
+that containment pair is excluded only from selected-Edit hard peer collision; unrelated roles still use the global
+Child Collision preference. The header separator keeps its truthful painted line for collision while exposing a larger
+Edit hit proxy. Child geometry lives only in the ordinary CUSTOM `size_payload.child_geometry` carrier and Restore Size
+returns it to the authored identity without mutating metric-selection Settings.
+
+The sampling edge remains separate from editing: accepted runtime samples emit `sampleChanged`, while CUSTOM geometry
+publishes only `customGeometryChanged`. Dragging/resizing child roles must not start/stop/wake the sampler, and a 10-second
+sample must not rebuild or republish child geometry.
+
 Do not create a custom-GL card merely because the data resembles a performance HUD. QML rectangles/text/bars are
 sufficient.
 

@@ -21,7 +21,13 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 from core.system_stats.source import CpuRamSample
+from rendering.custom_child_geometry import (
+    CustomChildSize,
+    child_role_map,
+    clamp_child_geometry,
+)
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
@@ -315,6 +321,7 @@ class SystemStatsPresentationModel(QObject):
     # update does not make QML reevaluate the entire retained card.
     stateChanged = Signal()
     sampleChanged = Signal()
+    customGeometryChanged = Signal()
 
     def __init__(
         self,
@@ -333,6 +340,16 @@ class SystemStatsPresentationModel(QObject):
         self._thread_manager: Any | None = None
         self._sample = CpuRamSample("warming", None, "warming", None, None)
         self._content_extent: tuple[int, int] | None = None
+        descriptor = get_widget_runtime_descriptor("system_stats")
+        if descriptor is None or not descriptor.custom_child_roles:
+            raise RuntimeError("System Stats CUSTOM child-role descriptor is missing")
+        self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
+        # One descriptor-normalized record per repeated semantic role. This
+        # remains constant-size regardless of enabled metrics and never couples
+        # edit geometry to sample/runtime ownership.
+        self._custom_child_geometry: dict[str, CustomChildSize] = {
+            role_id: CustomChildSize() for role_id in self._custom_child_roles
+        }
         self._revision = 0
         self._active = False
         self._retired = False
@@ -415,6 +432,46 @@ class SystemStatsPresentationModel(QObject):
         self._content_extent = None
         self.stateChanged.emit()
         return True
+
+    def set_custom_child_geometry(self, child_geometry: object) -> bool:
+        """Project shared System Stats child geometry into retained state.
+
+        Geometry is supplied only by the global CUSTOM layout owner. Repeated
+        metric panels and their internals consume shared semantic role records;
+        CPU/RAM/Uptime/Network identities never become persistence keys. The
+        narrow signal keeps sparse edit traffic separate from 10 s sample
+        invalidation and from broad config/layout state.
+        """
+
+        raw = child_geometry if isinstance(child_geometry, Mapping) else {}
+        resolved: dict[str, CustomChildSize] = {}
+        for role_id, role in self._custom_child_roles.items():
+            value = raw.get(role_id) if isinstance(raw, Mapping) else None
+            if not isinstance(value, Mapping):
+                resolved[role_id] = CustomChildSize()
+                continue
+            resolved[role_id] = clamp_child_geometry(
+                role,
+                value.get("width_scale", 1.0),
+                value.get("height_scale", 1.0),
+                value.get("x_offset", 0.0),
+                value.get("y_offset", 0.0),
+                value.get("alignment"),
+                value.get("anchor"),
+            )
+        if resolved == self._custom_child_geometry:
+            return False
+        self._custom_child_geometry = resolved
+        self.customGeometryChanged.emit()
+        return True
+
+    @Property("QVariantMap", notify=customGeometryChanged)
+    def customChildGeometry(self) -> dict[str, dict[str, object]]:
+        return {
+            role_id: geometry.to_mapping()
+            for role_id, geometry in self._custom_child_geometry.items()
+            if not geometry.is_authored
+        }
 
     def retire(self) -> None:
         if self._retired:
@@ -625,10 +682,18 @@ class SystemStatsPresentationModel(QObject):
             return float(self._content_extent[0])
         return float(self.config.authored_width)
 
+    @Property(float, constant=True)
+    def baseAuthoredWidth(self) -> float:
+        return float(self.config.authored_width)
+
     @Property(float, notify=stateChanged)
     def authoredHeight(self) -> float:
         if self._content_extent is not None:
             return float(self._content_extent[1])
+        return float(self.config.authored_height)
+
+    @Property(float, constant=True)
+    def baseAuthoredHeight(self) -> float:
         return float(self.config.authored_height)
 
 
@@ -661,6 +726,8 @@ class RetainedSystemStatsPresentation:
             self._model.set_content_extent(extent[0], extent[1])
         else:
             self._model.clear_content_extent()
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
+        self._model.set_custom_child_geometry(child_geometry)
 
     @property
     def item(self) -> Any:

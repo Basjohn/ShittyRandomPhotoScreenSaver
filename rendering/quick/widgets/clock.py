@@ -23,6 +23,8 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
+from rendering.custom_child_geometry import CustomChildSize, child_role_map, clamp_child_geometry
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 from widgets.clock_ticker import GlobalClockTicker, get_global_clock_ticker
 
 from .theme_projection import (
@@ -516,6 +518,7 @@ class ClockPresentationModel(QObject):
     """One stable presentation-oriented model per logical Clock instance."""
 
     stateChanged = Signal()
+    customGeometryChanged = Signal()
 
     def __init__(
         self,
@@ -535,6 +538,13 @@ class ClockPresentationModel(QObject):
         self._active = False
         self._timezone = _parse_timezone(config.timezone_name)
         self._snapshot = self._build_snapshot(config, style)
+        descriptor = get_widget_runtime_descriptor(config.widget_id)
+        if descriptor is None:
+            raise RuntimeError(f"Missing runtime descriptor for {config.widget_id!r}")
+        self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
+        self._custom_child_geometry: dict[str, CustomChildSize] = {
+            role_id: CustomChildSize() for role_id in self._custom_child_roles
+        }
 
     @property
     def config(self) -> ClockPresentationConfig:
@@ -594,6 +604,39 @@ class ClockPresentationModel(QObject):
         return self.apply_config(
             replace(self._snapshot.config, display_mode=normalized)
         )
+
+    def set_custom_child_geometry(self, child_geometry: object) -> bool:
+        """Project variant-local Clock child geometry without touching ticker cadence."""
+
+        raw = child_geometry if isinstance(child_geometry, Mapping) else {}
+        resolved: dict[str, CustomChildSize] = {}
+        for role_id, role in self._custom_child_roles.items():
+            value = raw.get(role_id) if isinstance(raw, Mapping) else None
+            if not isinstance(value, Mapping):
+                resolved[role_id] = CustomChildSize()
+                continue
+            resolved[role_id] = clamp_child_geometry(
+                role,
+                value.get("width_scale", 1.0),
+                value.get("height_scale", 1.0),
+                value.get("x_offset", 0.0),
+                value.get("y_offset", 0.0),
+                value.get("alignment"),
+                value.get("anchor"),
+            )
+        if resolved == self._custom_child_geometry:
+            return False
+        self._custom_child_geometry = resolved
+        self.customGeometryChanged.emit()
+        return True
+
+    @Property("QVariantMap", notify=customGeometryChanged)
+    def customChildGeometry(self) -> dict[str, dict[str, object]]:
+        return {
+            role_id: geometry.to_mapping()
+            for role_id, geometry in self._custom_child_geometry.items()
+            if not geometry.is_authored
+        }
 
     def _publish_tick(self) -> None:
         next_snapshot = self._build_snapshot(
@@ -811,10 +854,11 @@ class ClockPresentationModel(QObject):
 
 @dataclass(frozen=True)
 class ClockGeometryVariantState:
-    """One mode-specific Clock CUSTOM shape plus its resize-derived font scale."""
+    """One mode-specific Clock CUSTOM shape, font scale, and child geometry."""
 
     geometry: OverlayWidgetGeometry
     font_size: int
+    child_geometry: dict[str, dict[str, object]]
 
 
 class ClockGeometryVariantStore:
@@ -841,12 +885,23 @@ class ClockGeometryVariantStore:
         geometry: OverlayWidgetGeometry,
         *,
         font_size: int,
+        child_geometry: Mapping[str, object] | None = None,
     ) -> None:
-        self._states[self._key(widget_id, display_identity, variant)] = (
-            ClockGeometryVariantState(
-                geometry=geometry,
-                font_size=max(8, int(font_size)),
-            )
+        key = self._key(widget_id, display_identity, variant)
+        previous = self._states.get(key)
+        if child_geometry is None and previous is not None:
+            resolved_child_geometry = dict(previous.child_geometry)
+        else:
+            raw = child_geometry if isinstance(child_geometry, Mapping) else {}
+            resolved_child_geometry = {
+                str(role_id): dict(value)
+                for role_id, value in raw.items()
+                if isinstance(value, Mapping)
+            }
+        self._states[key] = ClockGeometryVariantState(
+            geometry=geometry,
+            font_size=max(8, int(font_size)),
+            child_geometry=resolved_child_geometry,
         )
 
     def state_for(
@@ -997,6 +1052,8 @@ class RetainedClockPresentation:
                 self.geometry,
                 font_size=self._model.config.font_size,
             )
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
+        self._model.set_custom_child_geometry(child_geometry)
 
     @property
     def display_identity(self) -> str:
@@ -1025,12 +1082,14 @@ class RetainedClockPresentation:
 
         payload = size_payload if isinstance(size_payload, Mapping) else {}
         font_size = int(payload.get("font_size", self._model.config.font_size))
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
         self._geometry_store.remember(
             self._model.config.widget_id,
             self._display_identity,
             mode,
             geometry,
             font_size=max(8, font_size),
+            child_geometry=child_geometry if isinstance(child_geometry, Mapping) else {},
         )
 
     def set_display_mode(self, mode: object) -> bool:
@@ -1045,6 +1104,7 @@ class RetainedClockPresentation:
             current_mode,
             current_geometry,
             font_size=self._model.config.font_size,
+            child_geometry=self._model.customChildGeometry,
         )
         target_state = self._geometry_store.state_for(
             self._model.config.widget_id,
@@ -1062,6 +1122,9 @@ class RetainedClockPresentation:
                 display_mode=target,
                 font_size=target_font_size,
             )
+        )
+        self._model.set_custom_child_geometry(
+            {} if target_state is None else target_state.child_geometry
         )
         if target_state is None:
             target_geometry = derive_clock_variant_geometry(
@@ -1092,11 +1155,13 @@ class RetainedClockPresentation:
             else "analog"
         )
         if self.set_display_mode(target) and self._on_mode_toggle is not None:
-            self._on_mode_toggle(
-                target,
-                self.geometry,
-                {"font_size": int(self._model.config.font_size)},
-            )
+            payload: dict[str, object] = {
+                "font_size": int(self._model.config.font_size)
+            }
+            child_geometry = self._model.customChildGeometry
+            if child_geometry:
+                payload["child_geometry"] = child_geometry
+            self._on_mode_toggle(target, self.geometry, payload)
 
     def apply_config(
         self,
