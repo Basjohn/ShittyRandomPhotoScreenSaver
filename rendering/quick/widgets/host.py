@@ -349,6 +349,8 @@ class OrdinaryWidgetPresentationHost:
             [Mapping[str, object], QQmlContext], QQuickItem
         ],
         shadow_host_item: QQuickItem | None = None,
+        foreground_host_item: QQuickItem | None = None,
+        foreground_shadow_host_item: QQuickItem | None = None,
         create_shadow_item: Callable[
             [Mapping[str, object], QQmlContext], QQuickItem
         ]
@@ -361,6 +363,10 @@ class OrdinaryWidgetPresentationHost:
     ) -> None:
         self._host_item: QQuickItem | None = host_item
         self._shadow_host_item: QQuickItem | None = shadow_host_item
+        # Foreground OSD uses the same retained owner and lifecycle, but its
+        # paint/shadow lanes must exist before the first family is admitted.
+        self._foreground_host_item: QQuickItem | None = foreground_host_item
+        self._foreground_shadow_host_item: QQuickItem | None = foreground_shadow_host_item
         self._context: QQmlContext | None = context
         self._create_overlay_item = create_overlay_item
         self._create_shadow_item = create_shadow_item
@@ -479,12 +485,25 @@ class OrdinaryWidgetPresentationHost:
                         pass
         return self._adopt_item(
             item,
-            host_item=host_item,
+            host_item=self._paint_host_for_identity(model_identity),
             model_identity=model_identity,
             geometry=geometry,
             fade_opacity=fade_opacity,
             card_style=card_style,
         )
+
+    def _paint_host_for_identity(self, identity: str | None) -> QQuickItem:
+        """Select only the OSD's foreground lane, with one common lifecycle owner."""
+        if str(identity or "") == "system_audio_osd" and self._foreground_host_item is not None:
+            return self._foreground_host_item
+        if self._host_item is None:
+            raise RuntimeError("ordinary presentation host is incomplete")
+        return self._host_item
+
+    def _shadow_host_for_identity(self, identity: str | None) -> QQuickItem | None:
+        if str(identity or "") == "system_audio_osd" and self._foreground_shadow_host_item is not None:
+            return self._foreground_shadow_host_item
+        return self._shadow_host_item
 
     def _adopt_item(
         self,
@@ -536,7 +555,7 @@ class OrdinaryWidgetPresentationHost:
                 f"duplicate retained model identity: {normalized_identity!r}"
             )
         shadow_item: QQuickItem | None = None
-        shadow_host_item = self._shadow_host_item
+        shadow_host_item = self._shadow_host_for_identity(model_identity)
         shadow_creator = self._create_shadow_item
         if shadow_host_item is not None and shadow_creator is not None:
             try:
@@ -904,8 +923,9 @@ class OrdinaryWidgetPresentationHost:
             raise RuntimeError("cannot transfer through a retired presentation host")
         if widget not in self._live or widget._host is not self:
             raise ValueError("ordinary presentation is not owned by the source host")
-        source_item = self._host_item
-        target_item = target._host_item
+        identity = widget.model_identity
+        source_item = self._paint_host_for_identity(identity)
+        target_item = target._paint_host_for_identity(identity)
         if source_item is None:
             raise RuntimeError("source ordinary presentation host is incomplete")
         if target_item is None:
@@ -916,8 +936,8 @@ class OrdinaryWidgetPresentationHost:
 
         item = widget.item
         shadow_item = widget.shadow_item
-        source_shadow_host = self._shadow_host_item
-        target_shadow_host = target._shadow_host_item
+        source_shadow_host = self._shadow_host_for_identity(identity)
+        target_shadow_host = target._shadow_host_for_identity(identity)
         if (source_shadow_host is None) != (target_shadow_host is None):
             raise RuntimeError(
                 "cannot transfer between incompatible ordinary shadow topologies"
@@ -973,6 +993,8 @@ class OrdinaryWidgetPresentationHost:
             widget._retire()
         self._host_item = None
         self._shadow_host_item = None
+        self._foreground_host_item = None
+        self._foreground_shadow_host_item = None
         self._context = None
         self._create_overlay_item = None
         self._create_shadow_item = None

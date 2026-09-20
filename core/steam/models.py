@@ -16,6 +16,7 @@ class SteamSourceId(str, Enum):
     FRIEND_LIST = "friend_list"
     PLAYER_SUMMARIES = "player_summaries"
     APP_NEWS = "app_news"
+    GAMES_FOLLOWED = "games_followed"
     SINGLE_GAME_PLAYTIME = "single_game_playtime"
     NEWS_AUTHED = "news_authed"
     CHECK_APP_OWNERSHIP = "check_app_ownership"

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QUrl
+from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem
 
@@ -167,4 +168,130 @@ def test_retained_qml_bar_tracks_actual_master_volume_without_recreation(qt_app)
         model.retire()
         item.deleteLater()
         engine.deleteLater()
+        qt_app.processEvents()
+
+
+def test_osd_colour_inheritance_respects_active_widget_theme_and_authored_overrides():
+    """OSD must use the same semantic colour owner as other retained widgets."""
+    from ui.settings_theme_spec import Rgba
+    from ui.widget_theme_spec import WidgetThemeSpec
+    from ui.widget_theme_active import get_active_widget_theme, set_active_widget_theme
+
+    original = get_active_widget_theme()
+    palette = dict(original.colors)
+    palette.update({
+        "card.background": Rgba(24, 34, 44, 218),
+        "card.border": Rgba(120, 190, 225, 243),
+        "card.text": Rgba(233, 240, 249, 250),
+        "widget.accent": Rgba(85, 180, 215, 255),
+    })
+    themed = WidgetThemeSpec(theme_id="osd_test_palette", name="OSD Test Palette", colors=palette)
+    try:
+        set_active_widget_theme(themed)
+        config = SystemAudioOSDConfig.from_widgets_mapping({"system_audio_osd": {}})
+        assert config.card_style.background_color == QColor(24, 34, 44, 218)
+        assert config.card_style.border_color == QColor(120, 190, 225, 243)
+        assert config.text_color == (233, 240, 249, 250)
+        assert config.accent_color == (85, 180, 215, 255)
+        assert config.track_color == (24, 34, 44, 218)
+
+        authored = SystemAudioOSDConfig.from_widgets_mapping({"system_audio_osd": {
+            "bg_color": [20, 30, 40, 255],
+            "border_color": [12, 22, 32, 220],
+            "color": [120, 130, 140, 250],
+            "accent_color": [151, 161, 171, 255],
+            "track_color": [44, 55, 66, 210],
+        }})
+        assert authored.card_style.background_color == QColor(20, 30, 40, 255)
+        assert authored.card_style.border_color == QColor(12, 22, 32, 220)
+        assert authored.text_color == (120, 130, 140, 250)
+        assert authored.accent_color == (151, 161, 171, 255)
+        assert authored.track_color == (44, 55, 66, 210)
+    finally:
+        set_active_widget_theme(original)
+
+
+@pytest.mark.qt
+def test_osd_foreground_host_is_above_visualizer_and_below_context_menu(qt_app):
+    """Retained OSD and its shadow share one owner and one pixel-shift space."""
+    from PySide6.QtCore import QObject
+    from rendering.quick.scene_controller import QuickSceneFactory
+    from rendering.quick.widgets.host import OrdinaryWidgetPresentationHost, OverlayWidgetGeometry
+    from rendering.quick.widgets.system_audio_osd import RetainedSystemAudioOSDPresentation
+
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(
+        owner=owner, screen_index=0, runtime_generation=783,
+    )
+    def locate(name):
+        item = root.findChild(QQuickItem, name)
+        assert item is not None, name
+        return item
+    foreground = locate("systemAudioOSDForegroundHost")
+    shadow_host = locate("systemAudioOSDShadowHost")
+    normal = locate("ordinaryWidgetHost")
+    visualizer = locate("visualizerPresentationLoader")
+    context_menu = locate("retainedContextMenu")
+    assert normal.parentItem() is foreground.parentItem() is visualizer.parentItem()
+    assert normal.z() < visualizer.z() < shadow_host.z() < foreground.z()
+    assert context_menu.z() > foreground.parentItem().z()
+    host = OrdinaryWidgetPresentationHost(
+        host_item=normal,
+        shadow_host_item=locate("ordinaryWidgetShadowHost"),
+        foreground_host_item=foreground,
+        foreground_shadow_host_item=shadow_host,
+        context=context,
+        create_overlay_item=factory.create_overlay_widget,
+        create_shadow_item=factory.create_overlay_card_shadow,
+        create_family_item=factory.create_ordinary_widget_family,
+    )
+    model = _model()
+    presentation = RetainedSystemAudioOSDPresentation(
+        host=host, model=model,
+        geometry=OverlayWidgetGeometry(20.0, 30.0, 380.0, 68.0),
+    )
+    try:
+        assert presentation.item.parentItem() is foreground
+        assert host.live_count == 1
+        retained = host.presentation_for_model_identity("system_audio_osd")
+        assert retained is not None and retained.item is presentation.item
+        assert retained.shadow_item is not None
+        assert retained.shadow_item.parentItem() is shadow_host
+        # A display transfer must keep the same retained root and shadow in the
+        # destination's foreground lanes. The ordinary owner still holds one
+        # identity and retirement path; it must not route OSD back below viz.
+        context2, root2 = factory.create_display_root(
+            owner=owner, screen_index=1, runtime_generation=784,
+        )
+        def locate2(name):
+            found = root2.findChild(QQuickItem, name)
+            assert found is not None, name
+            return found
+        host2 = OrdinaryWidgetPresentationHost(
+            host_item=locate2("ordinaryWidgetHost"),
+            shadow_host_item=locate2("ordinaryWidgetShadowHost"),
+            foreground_host_item=locate2("systemAudioOSDForegroundHost"),
+            foreground_shadow_host_item=locate2("systemAudioOSDShadowHost"),
+            context=context2,
+            create_overlay_item=factory.create_overlay_widget,
+            create_shadow_item=factory.create_overlay_card_shadow,
+            create_family_item=factory.create_ordinary_widget_family,
+        )
+        try:
+            original_item = presentation.item
+            original_shadow = retained.shadow_item
+            assert host.transfer_widget_to(retained, host2)
+            assert host.live_count == 0 and host2.live_count == 1
+            assert retained.item is original_item and retained.shadow_item is original_shadow
+            assert original_item.parentItem() is locate2("systemAudioOSDForegroundHost")
+            assert original_shadow.parentItem() is locate2("systemAudioOSDShadowHost")
+            assert host2.presentation_for_model_identity("system_audio_osd") is retained
+        finally:
+            host2.retire_all()
+            root2.deleteLater()
+    finally:
+        host.retire_all()
+        root.deleteLater()
+        owner.deleteLater()
         qt_app.processEvents()

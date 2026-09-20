@@ -156,6 +156,27 @@ Item {
             source: "VisualizerPresentation.qml"
             z: 20
         }
+
+        // One existing-host foreground admission lane for the optional OSD.
+        // These are inert Item containers when the OSD is disabled. Keeping
+        // them in pixelShiftLayer preserves identical display coordinates and
+        // CUSTOM editing while painting above all visualizer families. The
+        // context menu remains a scene-root sibling above this entire layer.
+        Item {
+            id: systemAudioOSDShadowHost
+            objectName: "systemAudioOSDShadowHost"
+            anchors.fill: parent
+            enabled: false
+            clip: false
+            z: 29
+        }
+        Item {
+            id: systemAudioOSDForegroundHost
+            objectName: "systemAudioOSDForegroundHost"
+            anchors.fill: parent
+            clip: false
+            z: 30
+        }
     }
 
     CustomLayoutOverlay {

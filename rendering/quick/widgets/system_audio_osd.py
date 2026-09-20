@@ -16,6 +16,11 @@ from PySide6.QtGui import QColor
 
 from core.media.system_audio_osd_policy import SystemAudioOSDPolicy
 from core.settings.default_contract import require_canonical_default
+from ui.widget_theme_active import get_active_widget_theme
+from .theme_projection import (
+    configured_rgba_override, resolve_card_surface_colors,
+    resolve_primary_text_color, resolve_rgba_role,
+)
 from .host import OrdinaryWidgetPresentationHost, OverlayCardStyle, OverlayWidgetGeometry, RetainedOverlayWidget
 
 
@@ -61,6 +66,34 @@ class SystemAudioOSDConfig:
             mode = str(_DEFAULTS["text_position"])
         bg = color("bg_color")
         border = color("border_color")
+        current = values if isinstance(values, Mapping) else {}
+        theme = get_active_widget_theme()
+        # Canonical/default-valued swatches are implicit Inherit. Explicit
+        # family colours remain authoritative, as with Media/System Stats.
+        shell_bg, shell_border = resolve_card_surface_colors(
+            values=current, defaults=_DEFAULTS,
+            background_color=bg, background_opacity=1.0,
+            border_color=border, border_opacity=1.0,
+        )
+        text = resolve_primary_text_color(
+            values=current, defaults=_DEFAULTS, text_color=color("color"),
+        )
+        accent = resolve_rgba_role(
+            "system_audio_osd.accent",
+            local_roles={"local.accent": theme.color("card.border")},
+            fallback=color("accent_color"),
+            explicit=configured_rgba_override(
+                current, _DEFAULTS, "accent_color", color("accent_color")
+            ),
+        )
+        track = resolve_rgba_role(
+            "system_audio_osd.track",
+            local_roles={"local.surface": theme.color("card.background")},
+            fallback=color("track_color"),
+            explicit=configured_rgba_override(
+                current, _DEFAULTS, "track_color", color("track_color")
+            ),
+        )
         return cls(
             preferred_width=get_number("preferred_width", 180.0, 900.0),
             preferred_height=get_number("preferred_height", 48.0, 220.0),
@@ -68,13 +101,13 @@ class SystemAudioOSDConfig:
             font_family=str(values.get("font_family", _DEFAULTS["font_family"])),
             font_size=int(get_number("font_size", 11.0, 56.0)),
             text_position=mode,
-            text_color=color("color"),
-            accent_color=color("accent_color"),
-            track_color=color("track_color"),
+            text_color=text,
+            accent_color=accent,
+            track_color=track,
             bar_thickness=get_number("bar_thickness", 3.0, 32.0),
             card_style=OverlayCardStyle(
                 shell_enabled=bool(values.get("show_background", _DEFAULTS["show_background"])),
-                background_color=QColor(*bg), border_color=QColor(*border),
+                background_color=QColor(*shell_bg), border_color=QColor(*shell_border),
                 border_width=2.0, corner_radius=12.0, padding=10.0,
             ),
         )
