@@ -33,6 +33,7 @@ from core.settings.shadow_direction import (
 )
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 from rendering.custom_child_geometry import CustomChildSize, child_role_map, clamp_child_geometry
+from rendering.quick.column_rails import normalize_column_rails
 from rendering.widget_descriptors import get_widget_runtime_descriptor
 
 from .theme_projection import (
@@ -479,6 +480,7 @@ class RedditPresentationModel(QObject):
 
     stateChanged = Signal()
     customGeometryChanged = Signal()
+    columnOrderChanged = Signal()  # Discrete rail reorder, independent of child/parent geometry.
 
     def __init__(
         self,
@@ -508,6 +510,7 @@ class RedditPresentationModel(QObject):
         if descriptor is None:
             raise RuntimeError(f"Missing runtime descriptor for {config.widget_id!r}")
         self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
+        self._custom_column_order: tuple[str, ...] | None = None
         self._custom_child_geometry: dict[str, CustomChildSize] = {
             role_id: CustomChildSize() for role_id in self._custom_child_roles
         }
@@ -778,6 +781,18 @@ class RedditPresentationModel(QObject):
         self.customGeometryChanged.emit()
         return True
 
+    def set_custom_column_order(self, order: object) -> bool:
+        normalized = normalize_column_rails("reddit", order)
+        if self._custom_column_order == normalized:
+            return False
+        self._custom_column_order = normalized
+        self.columnOrderChanged.emit()
+        return True
+
+    @Property("QVariantList", notify=columnOrderChanged)
+    def customColumnOrder(self) -> list[str]:
+        return list(self._custom_column_order or ())
+
     @Property("QVariantMap", notify=customGeometryChanged)
     def customChildGeometry(self) -> dict[str, dict[str, object]]:
         return {
@@ -1011,6 +1026,8 @@ class RetainedRedditPresentation:
             self._model.clear_content_extent()
         child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
         self._model.set_custom_child_geometry(child_geometry)
+        order = payload.get("column_rails") if isinstance(payload, Mapping) else None
+        self._model.set_custom_column_order(order)
 
     def set_fade_opacity(self, opacity: float) -> None:
         self._retained.set_fade_opacity(opacity)

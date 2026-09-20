@@ -196,7 +196,7 @@ OverlayWidget {
             "semanticCornerInsetX": abandonmentRoot.headerSafeInsetX,
             "semanticCornerInsetY": abandonmentRoot.headerSafeInsetY,
             "semanticInsetUsesUniformCard": true,
-            "requirementTarget": customChildRequirement
+            "requirementTarget": null
         })
         if (normalContent.visible && artworkFrame.visible) {
             roles.push({
@@ -209,7 +209,7 @@ OverlayWidget {
                 "resizeReflowGate": artworkFrame,
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         roles.push({
@@ -221,7 +221,7 @@ OverlayWidget {
             "resizeReflowGate": archiveTab,
             "normalizationWidth": normW,
             "normalizationHeight": normH,
-            "requirementTarget": customChildRequirement
+            "requirementTarget": null
         })
         if (normalContent.visible) {
             roles.push({
@@ -233,7 +233,7 @@ OverlayWidget {
                 "resizeReflowGate": gameTitle,
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
             if (flavourText.visible) {
                 roles.push({
@@ -245,7 +245,7 @@ OverlayWidget {
                     "resizeReflowGate": flavourText,
                     "normalizationWidth": normW,
                     "normalizationHeight": normH,
-                    "requirementTarget": customChildRequirement
+                    "requirementTarget": null
                 })
             }
             roles.push({
@@ -257,7 +257,7 @@ OverlayWidget {
                 "resizeReflowGate": ageStamp,
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
             if (ledgerRepeater.count > 0) {
                 roles.push({
@@ -267,7 +267,7 @@ OverlayWidget {
                     "resizeReflowGate": ledgerGroupFrame,
                     "normalizationWidth": normW,
                     "normalizationHeight": normH,
-                    "requirementTarget": customChildRequirement
+                    "requirementTarget": null
                 })
             }
         }
@@ -277,7 +277,7 @@ OverlayWidget {
     // itself is now a descriptor-backed role and therefore participates as a
     // normal child collision surface instead of a fixed obstacle.
     customEditableChildObstacles: [connectionInfo]
-    customEditableChildRequirementTarget: customChildRequirement
+    customEditableChildRequirementTarget: null
 
     // Rotation fades only data that actually changes. Archive chrome, shelves,
     // separators, labels (including LAST VISIT), and artwork framing remain stable;
@@ -291,133 +291,7 @@ OverlayWidget {
     preferredContentWidth: abandonmentRoot.authoredWidth
     preferredContentHeight: abandonmentRoot.authoredHeight
 
-    // One stable grow-only requirement object for every dense role. The formulas
-    // use authored baselines plus rail-aware child geometry, never the already-grown
-    // parent as a new child baseline. The selected edit overlay observes this
-    // retained object live and coalesces requirement changes without polling.
-    QtObject {
-        id: customChildRequirement
-
-        // Derive a stable logical bounding box from authored anchors, child
-        // factors and authored-relative placement offsets. Never use the already
-        // grown parent as a baseline: outer growth therefore cannot feed itself.
-        readonly property real artworkRight: artworkFrame.visible
-            ? (abandonmentRoot.headerFlipped && abandonmentRoot.artworkOnAuthoredRail
-                    ? abandonmentRoot.flippedArtworkX : 17.0)
-                + abandonmentRoot.abandonmentModel.customArtworkXOffset
-                    * abandonmentRoot.baseAuthoredWidth
-                + artworkShelf.width
-            : 0.0
-        readonly property real artworkBottom: artworkFrame.visible
-            ? abandonmentRoot.canonicalArtworkY - 4.0
-                + (abandonmentRoot.artworkOnAuthoredRail
-                    ? abandonmentRoot.backlogLayoutHeightDelta : 0.0)
-                + abandonmentRoot.abandonmentModel.customArtworkYOffset
-                    * abandonmentRoot.baseAuthoredHeight
-                + artworkShelf.height
-            : 0.0
-        // BACKLOG follows the live parent right rail for PAINT, but that
-        // parent-owned displacement is not child-driven content growth. Using
-        // backlogParentReflowX here would feed each admitted outer expansion
-        // straight back into its own required width.
-        readonly property real backlogRight:
-            (abandonmentRoot.headerFlipped && abandonmentRoot.backlogOnAuthoredRail
-                ? 18.0
-                : abandonmentRoot.baseAuthoredWidth
-                    - abandonmentRoot.canonicalBacklogWidth - 18.0)
-                + abandonmentRoot.abandonmentModel.customBacklogXOffset
-                    * abandonmentRoot.baseAuthoredWidth
-                + archiveTab.width
-        readonly property real backlogBottom: 19.0
-            + abandonmentRoot.abandonmentModel.customBacklogYOffset
-                * abandonmentRoot.baseAuthoredHeight
-            + archiveTab.height
-        readonly property real gameRight: normalContent.visible
-            ? abandonmentRoot.textRailX(abandonmentRoot.gameNameOnAuthoredRail)
-                + abandonmentRoot.artworkTextReflow(
-                    abandonmentRoot.gameNameOnAuthoredRail)
-                + abandonmentRoot.abandonmentModel.customGameNameXOffset
-                    * abandonmentRoot.baseAuthoredWidth
-                + gameTitle.width
-            : 0.0
-        readonly property real gameBottom: normalContent.visible
-            ? 74.0
-                + (abandonmentRoot.gameNameOnAuthoredRail
-                    ? abandonmentRoot.backlogLayoutHeightDelta : 0.0)
-                + abandonmentRoot.abandonmentModel.customGameNameYOffset
-                    * abandonmentRoot.baseAuthoredHeight
-                + gameTitle.height
-            : 0.0
-        readonly property real flavourRight: flavourText.visible
-            ? abandonmentRoot.textRailX(abandonmentRoot.flavourOnAuthoredRail)
-                + abandonmentRoot.artworkTextReflow(
-                    abandonmentRoot.flavourOnAuthoredRail)
-                + abandonmentRoot.abandonmentModel.customFlavourXOffset
-                    * abandonmentRoot.baseAuthoredWidth
-                + flavourText.width
-            : 0.0
-        readonly property real flavourBottom: flavourText.visible
-            ? 119.0
-                + (abandonmentRoot.flavourOnAuthoredRail
-                    ? abandonmentRoot.backlogLayoutHeightDelta
-                        + abandonmentRoot.gameNameLayoutHeightDelta
-                    : 0.0)
-                + abandonmentRoot.abandonmentModel.customFlavourYOffset
-                    * abandonmentRoot.baseAuthoredHeight
-                + flavourText.height
-            : 0.0
-        readonly property real lastVisitRight: normalContent.visible
-            ? abandonmentRoot.textRailX(abandonmentRoot.lastVisitOnAuthoredRail)
-                + abandonmentRoot.artworkTextReflow(
-                    abandonmentRoot.lastVisitOnAuthoredRail)
-                + abandonmentRoot.abandonmentModel.customLastVisitXOffset
-                    * abandonmentRoot.baseAuthoredWidth
-                + ageStamp.width
-            : 0.0
-        readonly property real lastVisitBottom: normalContent.visible
-            ? 160.0
-                + (abandonmentRoot.lastVisitOnAuthoredRail
-                    ? abandonmentRoot.backlogLayoutHeightDelta
-                        + abandonmentRoot.gameNameLayoutHeightDelta
-                        + abandonmentRoot.flavourLayoutHeightDelta
-                    : 0.0)
-                + abandonmentRoot.abandonmentModel.customLastVisitYOffset
-                    * abandonmentRoot.baseAuthoredHeight
-                + ageStamp.height
-            : 0.0
-        readonly property real shelfRight: normalContent.visible && ledgerGroupFrame.visible
-            ? abandonmentRoot.textRailX(abandonmentRoot.shelfGroupOnAuthoredRail)
-                + abandonmentRoot.artworkTextReflow(
-                    abandonmentRoot.shelfGroupOnAuthoredRail)
-                + abandonmentRoot.abandonmentModel.customShelfGroupXOffset
-                    * abandonmentRoot.baseAuthoredWidth
-                + ledgerGroupFrame.width
-            : 0.0
-        readonly property real shelfBottom: normalContent.visible && ledgerGroupFrame.visible
-            ? 226.0
-                + (abandonmentRoot.shelfGroupOnAuthoredRail
-                    ? abandonmentRoot.backlogLayoutHeightDelta
-                        + abandonmentRoot.gameNameLayoutHeightDelta
-                        + abandonmentRoot.flavourLayoutHeightDelta
-                        + abandonmentRoot.lastVisitLayoutHeightDelta
-                    : 0.0)
-                + abandonmentRoot.abandonmentModel.customShelfGroupYOffset
-                    * abandonmentRoot.baseAuthoredHeight
-                + ledgerGroupFrame.height
-            : 0.0
-
-        readonly property real requiredContentWidth: Math.max(
-            abandonmentRoot.baseAuthoredWidth,
-            artworkRight, backlogRight, gameRight, flavourRight,
-            lastVisitRight, shelfRight
-        )
-        readonly property real requiredContentHeight: Math.max(
-            abandonmentRoot.baseAuthoredHeight,
-            artworkBottom, backlogBottom, gameBottom, flavourBottom,
-            lastVisitBottom, shelfBottom
-        )
-    }
-
+    // No child-driven parent growth or passive child requirement computation.
     TapHandler {
         enabled: abandonmentRoot.abandonmentModel.interactionEnabled
         acceptedButtons: Qt.LeftButton

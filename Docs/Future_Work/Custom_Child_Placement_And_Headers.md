@@ -7,7 +7,7 @@ Scope: **current shared CUSTOM child-editor contract** for ordinary retained fam
 The child editor must satisfy these visible and ownership requirements:
 
 - customized children must remain inside a truthful parent even when the **parent** content controls are used afterward;
-- child-driven outer growth should be visible during the edit, not appear only after release;
+- child gestures must never resize the outer card; outer side/corner controls alone own parent dimensions;
 - major children need optional **placement**, not only size, because resizing exposes authored spacing that is sensible at the default but unnecessarily rigid in CUSTOM;
 - Abandonment's flavour/subtitle text should become an editable role as part of that fuller layout control;
 - the shared `BrandedHeader` should be eligible as a per-widget role without forking its theme/appearance implementation;
@@ -43,29 +43,16 @@ The current child-size work remains the foundation. Placement extends the same r
 
 ## 2. Parent containment is a hard invariant
 
-A customized child may never become stranded outside the visible parent because a later parent-side or two-axis content resize ignored the child requirement.
-
-The shared owner uses the following primitive: while a parent is selected, the retained family reports one **transient current child-content requirement**. The shared Python owner records that requirement as the live floor for parent `content_extent` side/corner gestures. A smaller later child requirement lowers the *floor* but does not auto-collapse the parent.
-
-The child requirement includes placement as well as size:
-
-```text
-required extent = family authored/reflow requirement
-                + customized child size overflow
-                + customized child placement overflow
-```
-
-Rules:
-
-- child growth/movement may request outer growth through the existing `content_extent` owner;
-- the requirement may update live during the edit through event-driven retained bindings;
-- shrinking/moving inward updates the transient floor but never auto-shrinks the outer card;
-- parent side/diagonal controls may reclaim space only down to the current child floor;
-- uniform whole-widget scale remains a different operation and scales the already-valid logical box as one unit;
-- display clamping remains owned by the existing Python parent geometry owner;
-- do not solve containment by clipping children or silently resetting their CUSTOM state.
-
-Free placement uses the **real parent bounds**, not the family padding/margins, as its hard boundary. Padding and authored margins may act only as mild snap hints. A move that would cross the real parent edge is clipped there; child resize may request grow-only right/bottom parent expansion through the existing owner. Do not smuggle padding back in as a movement constraint.
+The actual painted parent/card (or an explicitly declared existing accessory lane)
+sets the hard boundary for **every** child gesture. Child move and resize clamp
+inside it even with sibling collision OFF, and may never publish parent growth.
+Only the parent's outer side/corner handles change its dimensions. Parent
+resizing must preserve painted-child containment and existing explicit CUSTOM
+geometry without treating a one-time authored width as an unconditional CUSTOM
+minimum. A too-large legacy child is handled at the existing bounded owner,
+not by repeated inside-out growth, hidden clipping or resetting user settings.
+Family padding and authored margins are mild snap hints, not hard movement bounds.
+No parent-child feedback/catch-up loop, timer, worker or extra persistence owner.
 
 ## 3. Extend `child_geometry`, do not create `child_position`
 
@@ -87,17 +74,17 @@ The existing carrier and its compatibility contract are:
 
 - size factors remain authored-relative;
 - placement is always persisted as an authored-relative normalized offset, never an absolute screen coordinate;
-- while a role is still on its authored rail, family reflow may temporarily displace its retained target; on the first real free-move sample that current reflow displacement is folded once into the persisted offset and the role detaches from later sibling reflow without a visual jump;
-- **parent reflow obeys the same authored/off-rail boundary:** if a child is freely placed, a later parent side-resize must reclaim/close empty space around that stable child, never keep translating the child with the parent's authored edge. Any live authored-parent displacement required for the first move must be exposed through the existing placement-compensation hook and folded exactly once;
-- a role must also stop following a parent rail on an axis when the role's own resize on that axis would make admitted parent growth feed back into the same child position. Parent `content_extent` is never allowed to become a recursive child-position baseline;
+- child geometry is an independent normalized X/Y delta on top of the family’s live authored rails; an X edit cannot disable Y reflow, and a Y edit cannot disable X reflow;
+- first-move compensation may preserve legacy saved offsets, but must only affect the edited axis, never sever the opposite-axis parent or sibling rail;
+- child resize changes that child only. A parent content extent never grows from child edits and cannot become a recursive placement baseline;
 - a zero-motion press/release does not fold compensation or create placement state;
 - offsets are normalized against stable authored parent geometry, never raw device pixels;
-- a parent `content_extent` growth must not become the next placement baseline;
+- outer-handle content extent is separate from child geometry and cannot be changed by a child gesture;
 - old size-only payloads imply zero authored-relative offset and no semantic anchor;
 - unknown role data continues to be preserved by the existing forward-compatible mapping update path;
 - user-authored CUSTOM state is never rewritten merely to adopt the new fields.
 
-This lets ordinary family reflow continue to do useful work until the user deliberately places a role. After that first real move, the saved offset preserves the role's current visual position against its stable authored anchor and later unrelated sibling resize cannot drag it elsewhere. The compensation is folded into the existing `child_geometry` record; there is no second anchor store or absolute-position authority.
+A child edit retains the ordinary family’s live row/column reflow on untouched axes. An intentional offset on one axis remains a bounded delta on that axis rather than a permanent detachment from unrelated live parent geometry. The existing `child_geometry` carrier remains the only saved child authority.
 
 ## 4. Shared gesture model for child movement
 
@@ -116,7 +103,7 @@ Movement is pointer-event driven only. No idle hover scan is needed.
 
 ### Collision invariant
 
-Declared child roles and declared fixed obstacles must not be allowed to create new committed overlap during move/resize. Existing legacy/corrupt overlap must remain escapable rather than trapping the user. Collision admission is selected-parent/Edit-only and uses the already-retained role targets; it must not become a normal-runtime scene scan. Family-authored reflow may explicitly exempt a downstream sibling during resize only while both the source reflow gate and that downstream peer remain on their authored rails, and only on the axis that the family explicitly declares. Once a role has explicit placement, it becomes an ordinary collision surface and is no longer silently displaced by later sibling resize. The shared editor also predicts that declared same-axis secondary translation before commit, clamps it against off-rail peers/fixed obstacles, and includes the predicted edge in the same live parent-growth request so indirect reflow cannot create a new overlap or a one-turn containment catch-up.
+Declared child roles and declared fixed obstacles must not be allowed to create new committed overlap during move/resize. Existing legacy/corrupt overlap must remain escapable rather than trapping the user. Collision admission is selected-parent/Edit-only and uses the already-retained role targets; it must not become a normal-runtime scene scan. Family-authored reflow may explicitly exempt a downstream sibling during resize only while both the source reflow gate and that downstream peer remain on their authored rails, and only on the axis that the family explicitly declares. Explicit child placement remains a normal collision surface, but it cannot suspend unrelated-axis family reflow. The shared editor also predicts that declared same-axis secondary translation before commit, clamps it against off-rail peers/fixed obstacles, and clamps that predicted result against the current parent instead of asking it to grow or repairing overlap one frame later.
 
 **Editable-child crossing:** move gestures may cross another declared editable child with modest resistance rather than trapping the selected role forever on one side. First contact stays hard. After 14 logical px of additional pressure into the peer, the selected role may snap to that peer's far side only if the complete occupied rectangle fits inside the real parent and does not deepen overlap with any other peer/obstacle. The active gesture then rebases transiently onto the admitted far-side coordinate, preventing the next raw pointer sample from immediately asking for the pre-pass side again; the crossing bias resets at the gesture boundary and is never persisted. The unselected peer never moves or changes persistence. Fixed family obstacles and all resize collisions stay hard. This is deliberately not a generic swap/reorder engine and introduces no second-child transaction or normal-runtime cadence.
 
@@ -254,15 +241,15 @@ During final acceptance and every future family admission, measure CPU/GPU alloc
 
 ## 11. Current editor behavior
 
-**Role declaration and containment.** Placement-capable child roles expose four corner handles and, only where non-uniform axes permit it, invisible one-axis side zones. Size-only roles cannot advertise left/top resize unless the shared placement carrier can preserve the opposite edge. Intrinsic/uniform elements remain uniformly resized. All child controls act on the selected parent; visualizers have no ordinary child roles. A child may not be committed outside its real parent; right/bottom overflow grows the parent through the existing `content_extent` owner. When the child reaches that edge, the selected gesture admits an additional 6-pixel parent-growth step only after 12 physical pixels of extra outward pointer travel. A smaller later requirement lowers the session floor without automatically shrinking the card.
+**Role declaration and containment.** Placement-capable child roles expose four corner handles and, only where non-uniform axes permit it, invisible one-axis side zones. Size-only roles cannot advertise left/top resize unless the shared placement carrier can preserve the opposite edge. Intrinsic/uniform elements remain uniformly resized. All child controls act on the selected parent; visualizers have no ordinary child roles. A child may not be committed outside its real parent; every attempted overflow is clamped at the existing painted boundary. The outer side/corner controls alone change the parent size. There is no child-triggered growth threshold, child-content growth floor or catch-up publication.
 
-**Reflow and alignment.** The first genuine free move folds the current authored-rail displacement into the existing normalized offset exactly once; zero-motion press/release does not detach the role. Off-rail roles stop inheriting sibling and parent reflow on the detached axis. A parent or sibling resize must not pull an explicitly placed child off its retained position. Only a declared on-rail, same-axis reflow peer may receive the narrowly declared collision exemption. Predict that peer's secondary translation and parent growth before commit; do not accept a one-turn overlap and fix it afterward. Selected-parent parent/sibling edge-and-centre guides use light acquisition and hysteresis; headers use stronger family-inset corner anchors. Descriptor-declared left/right flip is stored in the same `child_geometry` entry, with absence of an override representing authored alignment. Centered/no-alignment roles have no flip unless they explicitly mirror asymmetric decoration; BACKLOG may retain centred text while mirroring its decoration.
+**Reflow and alignment.** The first genuine free move preserves the existing authored-rail compensation on the edited axis only; zero-motion press/release creates no placement state. A child retains live parent/sibling reflow on every axis except a specifically authored semantic constraint on that same edited axis. An X-only child edit cannot freeze later Y reflow, including after a flip or Save/reopen. Only a declared on-rail, same-axis reflow peer may receive the narrowly declared collision exemption. Predict that peer’s secondary translation and bounded containment before commit; do not accept a one-turn overlap and fix it afterward. Selected-parent parent/sibling edge-and-centre guides use light acquisition and hysteresis; headers use stronger family-inset corner anchors. Descriptor-declared left/right flip is stored in the same `child_geometry` entry, with absence of an override representing authored alignment. Centered/no-alignment roles have no flip unless they explicitly mirror asymmetric decoration; BACKLOG may retain centred text while mirroring its decoration.
 
 **Child Collision preference.** `widgets.global.child_collision_enabled` is the only shared editable-peer collision preference and defaults OFF. It is surfaced once in Widgets -> General -> Layout and is not stored in `child_geometry` or a layout slot. OFF permits editable-child overlap, but never disables real-parent containment, fixed obstacles, alignment guides, anchors or Edit input ownership. With collision enabled, editable-child crossing is possible only by a complete, admitted 14-logical-pixel pressure pass to the other side; fixed obstacles and all resize collisions remain hard. The unselected role does not move.
 
 **Edit controls and input.** The selected parent exposes an explicit, session-local HIDE CONTROLS / SHOW CONTROLS wedge for parent glyph visibility, with a short finite opacity transition; controls start visible on a newly selected/re-entered widget. Do **not** revive automatic gesture-driven 1000-ms/3000-ms fading, a delayed return, a timer or a persisted visibility flag. Hiding parent glyphs leaves child edit controls and guides active. Edit-only QML blockers prevent normal family actions under editable cards; the Quick display window suppresses runtime pointer actions while forwarding QQuickWindow/QML pointer delivery to the editor. A short runtime-recreation guard must not preempt CUSTOM pointer ownership. Right-click retains the editor context-menu command. Empty-background double-click commits through the same canonical Save route instead of cycling the slideshow. Save/Cancel/slot changes, role disappearance, selection transfer and loader teardown retire gesture and containment state before a stale delegate can commit.
 
-**Bounded work.** Pointer samples stay on the Qt GUI thread: selected-parent role/obstacle admission, descriptor-bounded Python preview/commit, narrow session notification, retained display projection and one coalesced `Qt.callLater` exact containment reconciliation. Immediate provisional right/bottom growth remains narrow, and the exact scan must not also run synchronously every sample. Containment floors round upward; impossible growth at an unchanged outer rectangle is a no-op, not an endless publication loop. Stable remote displays do not receive every local child pointer sample. Settings I/O occurs only at explicit Save/reset/slot boundaries. Outside Edit, no collision/snap scanner, pointer listener, per-frame Python publication, extra provider wake, timer, worker, or deferred Edit coalescer remains. New families with many independently editable roles require measured admission rather than silently expanding the selected-parent scan into a scene-wide solver.
+**Bounded work.** Pointer samples stay on the Qt GUI thread: selected-parent role/obstacle admission, descriptor-bounded Python preview/commit, narrow session notification and retained display projection. Each sample admits a bounded child rectangle inside the already-existing parent, with no deferred growth/coalesced containment catch-up and no redundant no-op publication. Stable remote displays do not receive every local child pointer sample. Settings I/O occurs only at explicit Save/reset/slot boundaries. Outside Edit, no collision/snap scanner, pointer listener, per-frame Python publication, extra provider wake, timer, worker, or deferred Edit coalescer remains. New families with many independently editable roles require measured admission rather than silently expanding the selected-parent scan into a scene-wide solver.
 
 ## 12. Family admission and physical acceptance
 
@@ -271,3 +258,36 @@ For each new ordinary family, declare the stable widget ID, Settings-section ID,
 The acceptance matrix must cover all applicable corners/side zones, child move -> resize -> move, parent resize after child movement, guide acquisition/release, sibling crossing with Child Collision both ON and OFF, fixed obstacles, header anchor detachment and parent-resize stability, text fit rather than accidental ellipsis, Save/re-entry, Cancel, Restore Size, layout-slot replay, visibility/Settings changes, dual-display transfer and exit, HIDE/SHOW controls, background double-click Save, right-click menu, and deliberate attempts to activate normal widget actions while editing. Retest Visualizer's existing parent viewport handles after any shared input-gate change, although Visualizer is not enrolled in the child editor.
 
 Media requires an explicit artwork Restore Size round trip and inspection of actual seek-track width versus invisible layout reservation: retain the authored 75%-width seek baseline unless the rendered track itself proves faulty. Do not add Media-local reset or padding workarounds to conceal a shared geometry defect. Live Qt/PySide, installed visual and Edit-off resource acceptance remain separate from static source inspection; source enrollment alone is not that proof.
+
+## 13. Repeated-list semantic column rails (current implementation)
+
+Reddit/Reddit2 expose three semantic columns (`age`, `ago`, `title`); Gmail exposes
+`timestamp`, `sender`, `subject`. While a parent is selected and child-editing is
+unlocked, the existing overlay draws an Edit-only vertical guide and grip for each
+currently visible first-row target. Dragging a grip across another column commits
+**one swap upon release**, not a sequence of per-pointer or per-row position updates.
+The QML renders one widget-wide semantic order across **every** retained row.
+
+`QuickCustomLayoutOwner` alone owns the discrete change and bounded three-action
+Undo history. It persists a validated permutation as `size_payload.column_rails`
+in the ordinary CUSTOM layout entry, never in provider data, per-row records,
+family Settings defaults or a parallel schema. The model projects that key into
+existing retained QML at a session-change, Save/reopen and layout-slot hydration.
+When absent, authored header orientation supplies the existing default order.
+An explicit CUSTOM order is an explicit override, independent of later header
+flips; Restore Size clears that override while preserving authored mode's
+baseline. Wheel/corner gestures retain live order, not a stale baseline.
+
+AGE and AGO retain their normal 2 logical px gap when adjacent; a title-adjacent
+rail uses Reddit's scale-aware legibility gap. Gmail retains the configured
+sender/subject width ratio and the fixed menu/envelope controls. The title/subject
+can elide within their own assigned widths, never bleed into another column.
+Swapping never mirrors image/text glyphs, changes the parent size, detaches X/Y
+reflow or rebuilds provider models and repeated QML row delegates.
+
+Admission requires a Windows retained-scene check on **every** row, both header
+orientations, compact X/Y, a real drag/reverse, Ctrl+Z, Cancel, Restore, Save,
+slot replay and fresh display generation. Tests that see only a changed Python
+payload or a blue guide without changed painted rows do not establish acceptance.
+A normal-runtime column observer, timer, polling loop, new persistence owner or
+one saved geometry record per repeated row is forbidden.

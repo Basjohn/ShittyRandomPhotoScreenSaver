@@ -67,8 +67,8 @@ def test_edit_lock_hides_only_child_overlay_and_never_changes_card_paint() -> No
     child_loader = editor.split('id: childRoleLoader', 1)[1].split('sourceComponent:', 1)[0]
     assert '&& !editFrame.childEditingLocked' not in child_loader
     assert 'visible: !editFrame.childEditingLocked' in editor.split('id: childRoleLayer', 1)[1].split('NumberAnimation on opacity', 1)[0]
-    assert 'if (!frame || !frame.targetReady || !frame.roleId.length)' in editor
-    assert 'editFrame.syncChildRequirementNow()' in editor
+    assert 'visible: targetReady && roleId.length > 0' in editor
+    assert 'editFrame.syncChildRequirementNow()' not in editor
     assert 'id: childRoleRepeater' in editor
     assert 'customLayoutOverlay.sessionModel.cancelChildGesture(editFrame.index)' in editor
     # Neither the card nor the QML family binds paint to the edit lock.
@@ -109,7 +109,7 @@ def test_wheel_from_child_body_and_resize_handles_uses_parent_owner_once() -> No
     editor = _text(QML / 'CustomLayoutOverlay.qml')
     assert editor.count('function resizeParentByWheel(deltaY)') == 1
     helper = editor.split('function resizeParentByWheel(deltaY)', 1)[1].split('\n            MouseArea {', 1)[0]
-    assert 'editFrame.syncChildRequirementNow()' in helper
+    assert 'editFrame.syncChildRequirementNow()' not in helper
     assert 'sessionModel.resizeWheel(' in helper
     assert editor.count('wheel.accepted = editFrame.resizeParentByWheel(wheel.angleDelta.y)') == 5
     # The same owner services parent, child body/edge/corner, and lock glyph wheel.

@@ -372,6 +372,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         signal_block_attrs=(
             "weather_enabled", "weather_location", "weather_position",
             "weather_font_combo", "weather_font_size", "weather_show_forecast",
+            "weather_show_five_day_forecast",
             "weather_show_background", "weather_bg_opacity", "weather_border_opacity",
             "weather_margin", "weather_monitor_combo",
         ),
@@ -1493,6 +1494,11 @@ WEATHER_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     ),
     freeform_layout_block_child_role(
         "extended_text", minimum_scale=(0.45, 0.55), maximum_scale=(2.50, 2.50), movable=True,
+    ),
+    CustomChildRoleDescriptor(
+        "extended_icons", axes=("horizontal", "vertical"),
+        minimum_scale=(0.45, 0.45), maximum_scale=(2.50, 2.50),
+        uniform_scale=True, movable=True,
     ),
 )
 
@@ -2826,6 +2832,7 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("monitor", "weather_monitor_combo", "current_text"),
             WidgetPreviewFieldDescriptor("font_size", "weather_font_size", "value"),
             WidgetPreviewFieldDescriptor("show_forecast", "weather_show_forecast", "checked"),
+            WidgetPreviewFieldDescriptor("show_five_day_forecast", "weather_show_five_day_forecast", "checked"),
         ),
     ),
     WidgetStackPreviewDescriptor(

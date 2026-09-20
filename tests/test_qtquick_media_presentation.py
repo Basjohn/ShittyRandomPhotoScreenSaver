@@ -730,8 +730,8 @@ def test_media_model_routes_capability_gated_seek_without_mutating_progress() ->
     assert runtime.seek_calls == [1.0]
 
     runtime.publish(_snapshot(3, image=None, info=_info(duration_ms=0)))
-    assert model.canSeek is True
-    assert model.progressAvailable is False
+    assert model.canSeek is False
+    assert model.progressAvailable is True
     assert model.request_seek(0.5) is False
     assert runtime.seek_calls == [1.0]
     model.retire()
@@ -1630,6 +1630,379 @@ def test_flipped_media_artwork_and_seek_first_drag_stays_under_pointer(qt_app) -
             assert target.isVisible() and target.width() > 16.0 and target.height() > 2.0
             assert target.width() == pytest.approx(before_size[0], rel=0.08)
             assert target.height() == pytest.approx(before_size[1], rel=0.08)
+        assert runtime.refresh_calls == [] and provider.image_count == 1
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_media_volume_opposite_axis_reflow_updates_live_edit_proxy(qt_app) -> None:
+    """The actual Media accessory must not lose opposite-axis ancestor changes.
+
+    Its previous scalar edit dependency added slider.x + slider.y.  Moving the
+    accessory ancestor +X/-Y preserved that number even though the real
+    on-screen track moved diagonally.  Use an actual retained family, its
+    volume role and the shared selected-Edit proxy, not a synthetic rectangle.
+    """
+    # A native event/render-loop stall must never leave Foundry waiting forever.
+    # Test-only watchdog: if a Qt call blocks, emit its Python stack and exit
+    # this isolated pytest process. It is not application/runtime instrumentation.
+    import faulthandler
+    from PySide6.QtCore import QPoint, QRect
+    from rendering.custom_layout_session import (
+        CustomLayoutKey, CustomLayoutSession, CustomLayoutSessionItem,
+    )
+    from rendering.quick.custom_layout_overlay import RetainedCustomLayoutOverlay
+    from rendering.quick.widgets.host import OrdinaryWidgetPresentationHost
+    from PySide6.QtQuick import QQuickWindow
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    # Use the already-accepted Reddit scene fixture: a plain QQuickWindow and
+    # real family host, without the production display controller's background,
+    # render scheduling, or runtime side effects. The previous hidden
+    # QuickDisplayWindow did not instantiate the Edit repeater, while exposing
+    # that full controller scene had stalled the test runner.
+    window = QQuickWindow()
+    window.setGeometry(0, 0, 1600, 900)
+    factory = QuickSceneFactory()
+    context, scene_root = factory.create_display_root(
+        owner=window, screen_index=0, runtime_generation=2197,
+    )
+    scene_root.setParent(window.contentItem())
+    scene_root.setParentItem(window.contentItem())
+    scene_root.setWidth(1600.0)
+    scene_root.setHeight(900.0)
+    host_item = scene_root.findChild(QQuickItem, "ordinaryWidgetHost")
+    shadow_host = scene_root.findChild(QQuickItem, "ordinaryWidgetShadowHost")
+    assert host_item is not None and shadow_host is not None
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item, shadow_host_item=shadow_host,
+        context=context, create_overlay_item=factory.create_overlay_widget,
+        create_family_item=factory.create_ordinary_widget_family,
+        create_shadow_item=factory.create_overlay_card_shadow,
+    )
+    runtime = _FakeMediaRuntime()
+    volume_runtime = _FakeMediaVolumeRuntime()
+    model, _, _ = _model(factory.media_artwork_provider, runtime, volume_runtime)
+    overlay = None
+    faulthandler.dump_traceback_later(20.0, repeat=False, exit=True)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=host, model=model,
+            geometry=OverlayWidgetGeometry(40.0, 50.0, 650.0, 300.0),
+        )
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        # The first Qt scene test could block during native exposure; the
+        # hidden successor produced no Edit delegate. Expose only this stripped
+        # retained scene, with a diagnostic watchdog on the entire test.
+        window.show()
+        qt_app.processEvents()
+        widget = presentation.item
+        track = widget.findChild(QQuickItem, "mediaAppVolumeTrack")
+        slider = widget.findChild(QQuickItem, "mediaAppVolumeSlider")
+        assert track is not None and slider is not None
+        assert model.appVolumeAvailable and track.isVisible()
+        descriptor = get_widget_runtime_descriptor("media")
+        assert descriptor is not None
+        session = CustomLayoutSession()
+        rect = QRect(40, 50, 650, 300)
+        session.add_item(CustomLayoutSessionItem(
+            source_key=CustomLayoutKey("media", "display:media-axes"),
+            model_identity="media", baseline_global_rect=rect,
+            current_global_rect=rect, baseline_size_payload={},
+            current_size_payload={}, baseline_enabled=True,
+            current_enabled=True, custom_child_roles=descriptor.custom_child_roles,
+        ))
+        edit_root = scene_root.findChild(QQuickItem, "customLayoutOverlay")
+        assert edit_root is not None
+        overlay = RetainedCustomLayoutOverlay(edit_root)
+        overlay.bind_session(
+            session, display_identity="display:media-axes",
+            display_origin=QPoint(0, 0),
+            presentation_item_resolver=lambda _item: widget,
+        )
+        assert overlay.model.selectItem(0)
+        qt_app.processEvents()
+        frame = edit_root.findChild(QQuickItem, "customLayoutEditFrame-media")
+        assert frame is not None, (
+            "Media Edit delegate missing after plain QQuickWindow exposure; "
+            f"model rows={overlay.model.rowCount()}, editActive={edit_root.property('editActive')}"
+        )
+        assert frame.setProperty("childEditingLocked", False)
+        qt_app.processEvents()
+        role = edit_root.findChild(QQuickItem, "customLayoutChildRole-media-volume_bar")
+        assert role is not None and role.property("targetReady") is True
+
+        def mapped():
+            corners = [track.mapToItem(frame, x, y) for x, y in (
+                (0.0, 0.0), (track.width(), 0.0),
+                (0.0, track.height()), (track.width(), track.height()),
+            )]
+            x0 = min(p.x() for p in corners)
+            y0 = min(p.y() for p in corners)
+            return (x0, y0, max(p.x() for p in corners) - x0,
+                    max(p.y() for p in corners) - y0)
+
+        def assert_proxy():
+            assert (role.x(), role.y(), role.width(), role.height()) == pytest.approx(
+                mapped(), abs=0.04,
+            )
+
+        assert_proxy()
+        original = (slider.x(), slider.y())
+        original_signature = role.property("mappingDependency")
+        original_extra = track.property("customEditMappingDependency")
+        # With a scalar x+y dependency, the next pair has the identical value.
+        # The independently mapped X and Y coordinates are nevertheless different.
+        slider.setX(original[0] + 11.0)
+        slider.setY(original[1] - 11.0)
+        qt_app.processEvents()
+        assert track.property("customEditMappingDependency") != original_extra
+        assert role.property("mappingDependency") != original_signature
+        assert edit_root.findChild(QQuickItem, "customLayoutChildRole-media-volume_bar") is role
+        assert_proxy()
+        # Returning to the original coordinates must remap immediately too;
+        # repeated unchanged samples must not manufacture a new proxy delegate.
+        slider.setX(original[0])
+        slider.setY(original[1])
+        qt_app.processEvents()
+        assert_proxy()
+        assert edit_root.findChild(QQuickItem, "customLayoutChildRole-media-volume_bar") is role
+        overlay.clear_session()
+        qt_app.processEvents()
+        assert track.isVisible()
+    finally:
+        if overlay is not None:
+            overlay.clear_session()
+        window.hide()
+        host.retire_all()
+        scene_root.setParentItem(None)
+        scene_root.setParent(None)
+        scene_root.deleteLater()
+        context.deleteLater()
+        factory.deleteLater()
+        window.deleteLater()
+        qt_app.processEvents()
+        faulthandler.cancel_dump_traceback_later()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("flipped", (False, True), ids=("ordinary", "flipped"))
+@pytest.mark.parametrize("reset_before_flip", (False, True), ids=("direct", "reset-flip-reprojection"))
+def test_media_child_axis_edits_keep_live_band_flow_at_compact_y(
+    qt_app, flipped: bool, reset_before_flip: bool,
+) -> None:
+    """Real paint regression for flipped/customized Y-only shrink.
+
+    In the old QML, any nonzero child X/Y offset disabled Y inheritance from
+    its Column band. A clean-model compact test passed while the actual saved
+    child geometry left transport and seek below the clipped card. Model
+    rehydration here is not a substitute for a separate full owner Save test.
+    """
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=141, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, provider = _model(factory.media_artwork_provider, runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 600.0, 310.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        seek = item.findChild(QQuickItem, "mediaProgressTrack")
+        seek_band = item.findChild(QQuickItem, "mediaProgressBand")
+        transport = item.findChild(QQuickItem, "mediaControlsRow")
+        transport_band = item.findChild(QQuickItem, "mediaControlsBandSlot")
+        artwork = item.findChild(QQuickItem, "mediaArtworkFrame")
+        title = item.findChild(QQuickItem, "mediaTitle")
+        metadata = item.findChild(QQuickItem, "mediaMetadata")
+        assert all(v is not None for v in (
+            seek, seek_band, transport, transport_band, artwork, title, metadata,
+        ))
+        retained_ids = tuple(id(v) for v in (seek, transport, artwork, title))
+        right_header = {"header": {"alignment": "right"}} if flipped else {}
+        if reset_before_flip:
+            # Reset child customization, then commit the header-flip carrier
+            # before the next Edit session uses the live compacted parent.
+            model.set_custom_child_geometry({})
+            qt_app.processEvents()
+            model.set_custom_child_geometry(right_header)
+            qt_app.processEvents()
+        # Preserve nonzero independent X and Y edits across subsequent parent
+        # reflow. Keep the projected child values within physical card bounds.
+        saved_children = {
+            **right_header,
+            "seek_bar": {
+                "x_offset": -0.008 if flipped else 0.008,
+                "y_offset": -0.005,
+            },
+            "transport_controls": {
+                "x_offset": 0.003,
+                "y_offset": -0.005,
+                "width_scale": 0.985,
+            },
+        }
+        assert model.set_custom_child_geometry(saved_children)
+        qt_app.processEvents()
+        def relative_y(child, band):
+            return child.mapToItem(band, QPointF(0.0, 0.0)).y()
+        baseline_relative = (relative_y(seek, seek_band),
+                             relative_y(transport, transport_band))
+        card = item.findChild(QQuickItem, "overlayWidgetCard")
+        assert card is not None
+        # The shared OverlayWidget uniformly scales AND centres its authored
+        # canvas when only the outer height shrinks.  Absolute scene X is not a
+        # valid right-rail invariant: the visible card itself moves inward.  Test
+        # the actual painted relationship to that card instead.
+        def right_rail_inset():
+            card_right = card.mapToItem(item, QPointF(card.width(), 0.0)).x()
+            metadata_right = metadata.mapToItem(
+                item, QPointF(metadata.width(), 0.0)
+            ).x()
+            scale = float(item.property("presentationScale"))
+            assert scale > 0.0
+            return (card_right - metadata_right) / scale
+        initial_right_inset = right_rail_inset()
+        # The user-visible symptom was clipping of essential rows, not merely
+        # the model's logical visibility. Preserve paint relative to the *card*,
+        # which may be narrower than the full root because volume owns its own
+        # independent accessory lane.
+        def card_y_bounds():
+            top = card.mapToItem(item, QPointF(0.0, 0.0)).y()
+            bottom = card.mapToItem(item, QPointF(card.width(), card.height())).y()
+            return top, bottom
+        for height in (310.0, 287.0, 240.0, 220.0, 287.0, 310.0):
+            presentation.set_geometry(OverlayWidgetGeometry(25.0, 30.0, 600.0, height))
+            qt_app.processEvents()
+            assert model.progressAvailable and model.controlsBandAvailable
+            assert tuple(id(v) for v in (seek, transport, artwork, title)) == retained_ids
+            if flipped:
+                # A compacted right-aligned title may shrink, not move inward
+                # from the right lane. The old Item.Left origin broke this.
+                inset = right_rail_inset()
+                assert inset == pytest.approx(initial_right_inset, abs=1.2), (
+                    height, inset, initial_right_inset,
+                )
+            assert (relative_y(seek, seek_band), relative_y(transport, transport_band)) == pytest.approx(
+                baseline_relative, abs=0.6,
+            ), (flipped, reset_before_flip, height)
+            card_top, card_bottom = card_y_bounds()
+            for child in (seek, transport, artwork, title):
+                top = child.mapToItem(item, QPointF(0.0, 0.0))
+                bottom = child.mapToItem(item, QPointF(child.width(), child.height()))
+                assert child.isVisible() and child.width() > 1.0 and child.height() > 1.0
+                assert top.y() >= card_top - 0.6, (
+                    child.objectName(), height, top.y(), card_top,
+                )
+                assert bottom.y() <= card_bottom + 0.6, (
+                    child.objectName(), height, bottom.y(), card_bottom,
+                )
+        # Re-project the same saved semantic/child carrier through the existing
+        # model. This is NOT an owner Save, a new model or a fresh Edit session:
+        # the dedicated owner-generation suite owns those lifecycle contracts.
+        model.set_custom_child_geometry({})
+        model.set_custom_child_geometry(saved_children)
+        presentation.set_geometry(OverlayWidgetGeometry(25.0, 30.0, 600.0, 220.0))
+        qt_app.processEvents()
+        for child in (seek, transport):
+            bottom = child.mapToItem(item, QPointF(child.width(), child.height()))
+            assert child.isVisible() and bottom.y() <= item.height() + 0.6
+        assert runtime.refresh_calls == [] and provider.image_count == 1
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_compact_media_essential_rows_survive_flip_and_transient_capability_loss(qt_app) -> None:
+    """Both orientations keep actual lower painted bounds during pure Y resize.
+
+    Provider capability/duration gaps must disable actions, not remove the seek
+    or transport bands and cause a new geometry layout. Check retained mapping
+    inside the card, not merely the QML visible flags. No new scene per flip.
+    """
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=139, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, provider = _model(factory.media_artwork_provider, runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 600.0, 310.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        seek = item.findChild(QQuickItem, "mediaProgressTrack")
+        controls = item.findChild(QQuickItem, "mediaControlsRow")
+        art = item.findChild(QQuickItem, "mediaArtworkFrame")
+        title = item.findChild(QQuickItem, "mediaTitle")
+        assert all(v is not None for v in (seek, controls, art, title))
+        before_ids = tuple(id(v) for v in (seek, controls, art, title))
+
+        def inside_card(child):
+            top = child.mapToItem(item, QPointF(0.0, 0.0))
+            bottom = child.mapToItem(item, QPointF(child.width(), child.height()))
+            # Content boundary includes the card's usual inset; assert the
+            # selected essential role actually has positive visible area.
+            assert child.isVisible() and child.width() > 1 and child.height() > 1
+            assert top.y() >= -0.5, (child.objectName(), top.y())
+            assert bottom.y() <= item.height() + 0.5, (
+                child.objectName(), bottom.y(), item.height(),
+            )
+
+        next_revision = 1
+        for flipped in (False, True):
+            header = {"header": {"alignment": "right"}} if flipped else {}
+            model.set_custom_child_geometry(header)
+            for height in (310.0, 287.0, 240.0, 220.0):
+                presentation.set_geometry(OverlayWidgetGeometry(25.0, 30.0, 600.0, height))
+                qt_app.processEvents()
+                assert model.controlsAvailable and model.progressAvailable
+                for child in (seek, controls, art, title):
+                    inside_card(child)
+                # A temporary snapshot with metadata/artwork intact but no
+                # transport capabilities and no duration must not remove rows.
+                next_revision += 1
+                runtime.publish(_snapshot(
+                    next_revision, image=None,
+                    info=_info(can_play_pause=False, can_previous=False,
+                               can_next=False, can_seek=False, duration_ms=0),
+                ))
+                qt_app.processEvents()
+                assert model.hasTrack and not model.canSeek
+                assert model.controlsAvailable and model.progressAvailable
+                for child in (seek, controls, art, title):
+                    inside_card(child)
+                assert tuple(id(v) for v in (seek, controls, art, title)) == before_ids
+                next_revision += 1
+                runtime.publish(_snapshot(
+                    next_revision, image=None,
+                ))
+                qt_app.processEvents()
         assert runtime.refresh_calls == [] and provider.image_count == 1
     finally:
         controller.quiesce_for_retirement()

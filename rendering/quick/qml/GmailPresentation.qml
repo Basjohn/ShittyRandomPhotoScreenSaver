@@ -40,6 +40,23 @@ OverlayWidget {
     // Header alignment is the existing widget-wide semantic flip intent.
     // Project structural rails, NEVER mirror glyphs or text alignment.
     readonly property bool headerFlipped: childAlignment("header", "left") === "right"
+    readonly property var visualColumnOrder: {
+        const saved = gmailModel.customColumnOrder
+        return saved && saved.length === 3 ? saved
+            : (headerFlipped ? ["sender", "subject", "timestamp"]
+                             : ["timestamp", "sender", "subject"])
+    }
+    customColumnRailSpecs: {
+        // No repeated-row descriptor lookup in ordinary playback.
+        if (!gmailRoot.customLayoutInputBlocked) return []
+        const order = gmailRoot.visualColumnOrder
+        const first = messageRepeater.count > 0 ? messageRepeater.itemAt(0) : null
+        if (!first || !first.visible || !first.columnTargets)
+            return []
+        const targets = first.columnTargets
+        return order.map(function(role) { return {"roleId": role, "target": targets[role]} })
+    }
+
 
     function childRecord(roleId) {
         return childGeometry ? childGeometry[roleId] : null
@@ -216,7 +233,7 @@ OverlayWidget {
         roles.push({
             "roleId": "header",
             "target": headerFrame,
-            "allowParentGrowth": false,
+
             "normalizationWidth": normW,
             "normalizationHeight": normH,
             "semanticCornerInsetX": 0.0,
@@ -226,7 +243,7 @@ OverlayWidget {
             roles.push({
                 "roleId": "refresh",
                 "target": refreshTarget,
-                "allowParentGrowth": false,
+
                 "normalizationWidth": normW,
                 "normalizationHeight": normH
             })
@@ -412,6 +429,9 @@ OverlayWidget {
                     28.0, gmailRoot.gmailModel.fontSize * 1.65
                 )
                 objectName: "gmailMessageRow_" + index
+                    readonly property var columnTargets: ({"timestamp": timestampText,
+                        "sender": senderText, "subject": subjectText})
+
                 width: contentColumn.width
                 visible: index < gmailRoot.effectiveVisibleCount
                 height: visible ? boundary.height + gmailRoot.extentRowHeight : 0.0
@@ -459,6 +479,27 @@ OverlayWidget {
                         // Explicit semantic rails avoid carrying a stale pair
                         // of opposite anchors across repeated flip/resize/reset.
                         // Both orientations reserve exactly the same space.
+                        readonly property real semanticGap: 8.0
+                        readonly property real stampWidth: Math.max(52.0, dateMetrics.width + 6.0)
+                        readonly property real senderWidth: Math.max(1.0,
+                            (width - stampWidth - semanticGap * 2.0)
+                                * gmailRoot.gmailModel.senderSubjectRatio)
+                        readonly property real subjectWidth: Math.max(1.0,
+                            width - stampWidth - senderWidth - semanticGap * 2.0)
+                        function columnWidth(role) {
+                            if (role === "timestamp") return stampWidth
+                            if (role === "sender") return senderWidth
+                            return subjectWidth
+                        }
+                        function columnX(role) {
+                            const order = gmailRoot.visualColumnOrder
+                            let left = 0.0
+                            for (let i = 0; i < order.length; ++i) {
+                                if (order[i] === role) return left
+                                left += columnWidth(order[i]) + semanticGap
+                            }
+                            return 0.0
+                        }
                         readonly property real envelopeGap: envelope.visible ? 6.0 : 0.0
                         x: gmailRoot.headerFlipped
                             ? menuButton.width + 6.0 : envelope.width + envelopeGap
@@ -469,16 +510,14 @@ OverlayWidget {
                         ShadowedText {
                             id: timestampText
                             objectName: "gmailTimestamp_" + messageRow.index
-                            x: gmailRoot.headerFlipped ? parent.width - width : 0.0
+                            x: openArea.columnX("timestamp")
                             anchors.verticalCenter: parent.verticalCenter
                             horizontalAlignment: gmailRoot.headerFlipped
                                 ? Text.AlignRight : Text.AlignLeft
                             // Fixed column sized to the widest date (measured, not
                             // guessed) so full dates never elide; kept constant across
                             // rows to align the sender edge.
-                            width: messageRow.messageTimestamp.length > 0
-                                ? Math.max(52.0, dateMetrics.width + 6.0)
-                                : 0.0
+                            width: openArea.stampWidth
                             height: parent.height
                             text: messageRow.messageTimestamp
                             color: gmailRoot.gmailModel.timestampColor
@@ -497,21 +536,16 @@ OverlayWidget {
                             // Text remains in reading order on the *opposite*
                             // side of the timestamp. Width cannot inherit a
                             // stale anchor when the header flip reverses twice.
-                            readonly property real stampGap:
-                                messageRow.messageTimestamp.length > 0 ? 8.0 : 0.0
-                            x: gmailRoot.headerFlipped
-                                ? 0.0 : timestampText.width + stampGap
-                            width: Math.max(1.0, parent.width - timestampText.width - stampGap)
+                            x: 0.0
+                            width: parent.width
                             height: parent.height
 
                             ShadowedText {
                                 id: senderText
                                 objectName: "gmailSender_" + messageRow.index
-                                anchors.left: parent.left
+                                x: openArea.columnX("sender")
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: messageRow.messageSender.length > 0
-                                    ? parent.width * gmailRoot.gmailModel.senderSubjectRatio
-                                    : 0.0
+                                width: openArea.senderWidth
                                 height: parent.height
                                 text: messageRow.messageSender
                                     + (messageRow.messageCount > 1
@@ -533,9 +567,8 @@ OverlayWidget {
                             ShadowedText {
                                 id: subjectText
                                 objectName: "gmailSubject_" + messageRow.index
-                                anchors.left: senderText.right
-                                anchors.leftMargin: senderText.width > 0.0 ? 8.0 : 0.0
-                                anchors.right: parent.right
+                                x: openArea.columnX("subject")
+                                width: openArea.subjectWidth
                                 anchors.verticalCenter: parent.verticalCenter
                                 height: parent.height
                                 text: messageRow.messageSubject

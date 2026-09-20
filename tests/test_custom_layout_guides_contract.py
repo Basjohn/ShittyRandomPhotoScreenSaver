@@ -201,54 +201,34 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert "placement_compensation_y" not in begin_resize_names
     assert "def resizeChild(" in overlay_model
     assert "def childResizeHandles(" in overlay_model
-    assert "def ensureChildContentExtent(" in overlay_model
-    assert "def clearChildContentExtent(" in overlay_model
+    # Child gestures can neither grow the parent nor publish an auxiliary
+    # selected-child size authority. Only explicit outer handles own size.
     assert "def ensure_child_content_extent(" in owner
-    assert "def clear_child_content_extent(" in owner
-    assert "item.child_content_requirement = (requested_width, requested_height)" in owner
+    guard = owner.split("def ensure_child_content_extent(", 1)[1].split(
+        "def resize_wheel(", 1)[0]
+    assert "return False" in guard
+    assert "item.set_geometry(" not in guard
+    assert "sessionModel.ensureChildContentExtent(" not in qml
+    assert "queueSelectedChildRequirementSync" not in qml
+    assert "function ensureImmediateChildOverflow(" not in qml
+    assert "function throttleChildAutoGrowth(" not in qml
+    assert "function containChildResize(" in qml
+    assert "admitted = containChildResize(frame, handle, gesture, admitted)" in qml
     assert "def restore_authored_child_geometry(" in session
     assert "payload = item.restore_authored_child_geometry(payload)" in owner
-    assert "child = item.child_content_requirement" in size
     assert "Qt.callLater(function()" not in qml
-    # The old synchronous reentrancy guard still mutated Python extent INSIDE
-    # a QML geometry-change callback. Queue the exact reconciliation on the
-    # stable root and resolve the current selection at flush instead.
-    assert "childRequirementSyncQueued = true" in qml
-    assert "Qt.callLater(customLayoutOverlay.flushSelectedChildRequirementSync)" in qml
-    assert "requirementSyncInProgress" not in qml
-    assert "childRoleLoader.item !== childRoleLayer" in qml
-    assert "function syncRequirementNow()" in qml
-    assert "function aggregateRequiredContentSize()" in qml
-    assert "frame.occupiedX + frame.occupiedWidth" in qml
-    assert "childRoleLoader.item.syncRequirementNow()" in qml
-    # Parent-driven mapped positions are NEVER new child-content requirements.
-    assert "onOccupiedXChanged: childRoleLayer.scheduleRequirementSync()" not in qml
-    assert "onOccupiedHeightChanged: childRoleLayer.scheduleRequirementSync()" not in qml
-    assert "onChildStateRevisionChanged:" in qml
-    assert "function ensureImmediateChildOverflow(" in qml
-    assert 'const shiftX = axes.indexOf("horizontal") >= 0' in qml
-    assert 'const shiftY = axes.indexOf("vertical") >= 0' in qml
-    assert "peer.occupiedX + shiftX + peer.occupiedWidth" in qml
-    assert "peer.occupiedY + shiftY + peer.occupiedHeight" in qml
-    assert "function scheduleRequirementSync()" in qml
-    # Wheel, white corners, blue sides and blue diagonals all synchronize the
-    # exact selected-child floor before a parent gesture can capture its origin.
-    assert qml.count("editFrame.syncChildRequirementNow()") >= 4
-    assert "onRequiredContentWidthChanged: scheduleRequirementSync()" in qml
-    assert "onRequiredContentHeightChanged: scheduleRequirementSync()" in qml
-    assert "clearChildContentExtent(" in qml
     assert "const horizontalCandidate = occupiedRectAt(" in qml
     assert "horizontalCandidate.y + horizontalCandidate.height" in qml
     assert "def _custom_layout_presentation_item(" in scene
     assert "property var customEditableChildRoles: []" in root_qml
     assert "property var customEditableChildRequirementTarget: null" in root_qml
-    assert "customEditableChildRequirementTarget: customChildRequirement" in achievement_qml
+    assert "customEditableChildRequirementTarget: null" in achievement_qml
     # Media accessory extends the outer root, not the card-child legal surface.
     # No child-driven growth requirement may turn internal CUSTOM into an
     # alternative parent sizing authority.
     assert "customEditableChildRequirementTarget: null" in media_qml
     assert "id: customChildRequirement" not in media_qml
-    assert "customEditableChildRequirementTarget: customChildRequirement" in abandonment_qml
+    assert "customEditableChildRequirementTarget: null" in abandonment_qml
     # Parent reflow belongs only to roles that remain on their authored rail.
     # A freely placed BACKLOG must keep its authored-relative X while the parent
     # right edge reclaims empty space; the live parent displacement is folded
@@ -263,7 +243,6 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert ": abandonmentRoot.backlogParentReflowX" in abandonment_qml
     assert ": abandonmentRoot.baseAuthoredWidth" in abandonment_qml
     assert "+ abandonmentRoot.backlogParentReflowX" in abandonment_qml
-    assert "readonly property real backlogRight:" in abandonment_qml
     assert "readonly property real backlogParentReflowX: backlogFollowsParentRightRail" in abandonment_qml
     assert '"roleId": "flavour_text"' in abandonment_qml
     assert "childOnAuthoredResizeRail(" in abandonment_qml
@@ -299,7 +278,7 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
         "location_text", "condition_text", "condition_icon",
         "details_separator", "details_metrics",
         "forecast_separator", "forecast_text",
-        "extended_separator", "extended_label", "extended_text",
+        "extended_separator", "extended_label", "extended_icons", "extended_text",
     ):
         assert f'"{role_id}"' in descriptors
         assert f'"roleId": "{role_id}"' in weather_qml
@@ -325,9 +304,12 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
         assert f'"roleId": "{retired}"' not in reddit_qml + gmail_qml
     # Retained explicit rails avoid flipped anchor-strength loops that once
     # widened ageText across the row and blanked the post title.
-    assert 'x: redditRoot.headerFlipped ? 0.0 : ageText.width + 4.0' in reddit_qml
-    assert 'parent.width - ageText.width - redditRoot.flippedTitleAgeGap' in reddit_qml
-    assert 'ageValueText.width + redditRoot.ageValueAgoGap' in reddit_qml
+    assert 'postRow.columnX("age") - ageText.x' in reddit_qml
+    assert 'postRow.columnX("ago") - ageText.x' in reddit_qml
+    assert 'postRow.columnX("title")' in reddit_qml
+    assert 'redditRoot.ageValueAgoGap' in reddit_qml
+    assert 'openArea.columnX("sender")' in gmail_qml
+    assert 'openArea.columnX("subject")' in gmail_qml
     assert 'postRailBudget' in reddit_qml
     assert 'emailRailBudget' in gmail_qml
     assert 'Math.floor(postRailBudget / (naturalRowHeight + baseRowSpacing))' in reddit_qml
@@ -342,7 +324,7 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
         assert f'"{role_id}"' in descriptors
     assert '"roleId": "clock_face"' in clock_qml
     assert '"centeredResize": true' in clock_qml
-    assert '"allowParentGrowth": false' in clock_qml
+    assert '"allowParentGrowth": false' not in clock_qml
     assert '"roleId": "numerals"' not in clock_qml
     assert '"numerals", axes=' not in descriptors
     assert 'customNumeralsTarget' not in clock_analogue_qml
@@ -362,16 +344,12 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert "Timer {" not in clock_qml + clock_analogue_qml + clock_digital_qml
     assert "id: childRoleLoader" in qml
     assert "active: editFrame.selectedForChildEdit" in qml
-    # Visualizer deliberately resolves no ordinary child-presentation QObject. Qt
-    # may surface that Python None as QML undefined, so every child-edit dereference
-    # must go through one null+undefined lifecycle gate. Parent handles call
-    # syncChildRequirementNow() before beginResize; regressing this check aborts the
-    # Visualizer resize press with a TypeError.
+    # Visualizer has no ordinary child-presentation item. The retained child
+    # overlay must still gate its role resolution without dereferencing None.
     assert "readonly property bool hasPresentationItem:" in qml
     assert "presentationItem !== null && presentationItem !== undefined" in qml
-    assert "|| !editFrame.hasPresentationItem" in qml
-    assert "&& editFrame.hasPresentationItem" in qml
-    assert "customEditableChildRequirementTarget !== null" in qml
+    assert "editFrame.hasPresentationItem" in qml
+    assert "? (editFrame.presentationItem.customEditableChildRoles || [])" in qml
     assert 'objectName: "customLayoutChildRole-"' in qml
     assert 'readonly property string controlsWedgeSide:' in qml
     assert 'readonly property bool controlsWedgeVertical:' in qml
@@ -425,8 +403,8 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert "shelfGroupOnAuthoredRail" in abandonment_qml
     assert "property real customEditPlacementCompensationX" in abandonment_qml
     assert "property real customEditPlacementCompensationY" in abandonment_qml
-    assert "onCountChanged: childRoleLayer.scheduleRequirementSync()" in qml
-    assert "onModelChanged: childRoleLayer.scheduleRequirementSync()" in qml
+    assert "onCountChanged: childRoleLayer.scheduleRequirementSync()" not in qml
+    assert "onModelChanged: childRoleLayer.scheduleRequirementSync()" not in qml
     assert "Component.onDestruction" in qml
     assert "width: 8" in qml and "height: 8" in qml
     assert "childResizeHandles(" in qml
@@ -442,7 +420,7 @@ def test_custom_child_geometry_stays_on_one_session_owner_and_is_event_driven() 
     assert 'objectName: "customLayoutChildVerticalGuide"' in qml
     assert 'objectName: "customLayoutChildHorizontalGuide"' in qml
     child_layer_start = qml.index("id: childRoleLayer")
-    child_layer_end = qml.index("// One family-wide retained requirement", child_layer_start)
+    child_layer_end = qml.index("function overlapsEditRect(", child_layer_start)
     child_layer = qml[child_layer_start:child_layer_end]
     assert "opacity: 0.0" in child_layer
     assert "NumberAnimation on opacity" in child_layer
@@ -555,58 +533,33 @@ def test_live_child_edit_path_is_in_memory_gui_work_until_explicit_save() -> Non
     assert "QTimer" not in combined
 
 
-def test_live_child_pointer_samples_do_not_duplicate_exact_requirement_scans() -> None:
+def test_child_pointer_samples_do_not_publish_any_parent_growth() -> None:
     qml = _text("rendering/quick/qml/CustomLayoutOverlay.qml")
-
-    # Pointer motion performs provisional grow-only overflow admission, commits
-    # the child, then lets retained occupied-rect notifications coalesce one exact
-    # reconciliation. A second synchronous aggregate scan per motion sample was
-    # redundant and could amplify dense-role drag cost. Release keeps an explicit
-    # final sync as a deterministic gesture boundary.
     move_area = qml.split("id: childMoveArea", 1)[1]
     move_motion = move_area.split("onPositionChanged: function(mouse)", 1)[1].split(
         "onReleased: function(mouse)", 1
     )[0]
     assert "sessionModel.moveChild(" in move_motion
-    assert "childRoleLayer.syncRequirementNow()" not in move_motion
-
-    resize_area = qml.split("id: childResizeHandle", 1)[1]
-    resize_motion = resize_area.split("onPositionChanged: function(mouse)", 1)[1].split(
-        "onReleased: function(mouse)", 1
-    )[0]
-    # Corner and invisible-edge delegates intentionally share one resize pipeline.
-    # Live motion delegates into it instead of cloning the preview/admission/commit
-    # sequence in every MouseArea.  Exact containment remains release-only here;
-    # retained occupied-rect changes coalesce the live exact reconciliation.
-    assert "childRoleLayer.updateChildResizeGesture(" in resize_motion
-    assert "childRoleLayer.syncRequirementNow()" not in resize_motion
+    assert "ensureImmediateChildOverflow" not in qml
     shared_resize = qml.split("function updateChildResizeGesture(", 1)[1].split(
         "function cancelChildResizeGesture(", 1
     )[0]
+    assert "admitted = containChildResize(frame, handle, gesture, admitted)" in shared_resize
     assert "sessionModel.resizeChild(" in shared_resize
-    assert "if (finalize)" in shared_resize
-    assert "syncRequirementNow()" in shared_resize
-    assert shared_resize.index("if (finalize)") < shared_resize.index("syncRequirementNow()")
-    assert "Qt.callLater(customLayoutOverlay.flushSelectedChildRequirementSync)" in qml
-    assert "requirementSyncInProgress" not in qml
+    assert "throttleChildAutoGrowth" not in qml
+    assert "queueSelectedChildRequirementSync" not in qml
     assert "Qt.callLater(function()" not in qml
 
 
-def test_child_containment_growth_is_one_way_rounded_and_noop_republish_bounded() -> None:
+def test_child_requirement_cannot_resize_the_parent_or_publish_geometry() -> None:
     owner = _text("rendering/quick/custom_layout_owner.py")
     method = owner.split("def ensure_child_content_extent", 1)[1].split(
         "def resize_wheel", 1
     )[0]
-
-    # A containment floor must never round below the requested logical edge.
-    assert "int(math.ceil(next_width * scale))" in method
-    assert "int(math.ceil(next_height * scale))" in method
-    # When display clamping means the outer rect/extent is already the admitted
-    # result, keep the transient floor but do not notify/project the same geometry
-    # again for each live pointer sample.
-    assert "local.width() == current.width()" in method
-    assert "local.height() == current.height()" in method
     assert "return False" in method
+    assert "item.set_geometry(" not in method
+    assert "_bindings" not in method
+    assert "current_size_payload" not in method
 
 
 def test_display_local_overlay_does_not_republish_stable_remote_pointer_chatter() -> None:
@@ -698,10 +651,11 @@ def test_child_edit_selection_owns_transient_retirement_without_stale_row_cleanu
     assert "self.clear_child_content_extent(previous)" in owner
     assert "session.unsubscribe_selection(self._on_child_edit_selection_changed)" in owner
 
-    # QML destruction hooks are defensive selected-parent fallbacks only. Stable
-    # object identity in Python owns selection teardown, so a stale delegate row
-    # cannot clear/cancel a newly reindexed session item.
-    assert qml.count("&& editFrame.selectedForChildEdit") >= 2
+    # Stable Python identity owns selected-item teardown, while the QML child
+    # delegate only cancels its own gesture. No stale row may grow a parent.
+    assert "self.clear_child_content_extent(previous)" in owner
+    assert "cancelChildGesture(" in qml
+    assert "ensureChildContentExtent(" not in qml
 
 
 def test_abandonment_dense_child_editor_reuses_shared_roles_without_new_cadence() -> None:
@@ -735,10 +689,10 @@ def test_abandonment_dense_child_editor_reuses_shared_roles_without_new_cadence(
     assert "x: (abandonmentRoot.headerFlipped && abandonmentRoot.backlogOnAuthoredRail" in qml
     assert ": abandonmentRoot.baseAuthoredWidth" in qml
     assert "+ abandonmentRoot.backlogParentReflowX" in qml
-    assert "readonly property real backlogRight:" in qml
-    assert "backlogParentReflowX" not in qml.split(
-        "readonly property real backlogRight:", 1
-    )[1].split("readonly property real backlogBottom:", 1)[0]
+    # Retained visual reflow remains, but the abandoned child-driven parent
+    # requirement computation is absent from normal and Edit rendering.
+    assert "backlogParentReflowX" in qml
+    assert "id: customChildRequirement" not in qml
     assert "y: 160.0\n                        + (abandonmentRoot.lastVisitOnAuthoredRail" in qml
     assert "y: 226.0\n                        + (abandonmentRoot.shelfGroupOnAuthoredRail" in qml
     assert "readonly property bool shelfGroupOnAuthoredRail" in qml
@@ -746,8 +700,8 @@ def test_abandonment_dense_child_editor_reuses_shared_roles_without_new_cadence(
     assert "customEditPlacementCompensationY" in qml
     assert "extraContentHeight * 0.20" not in qml
     assert "extraContentHeight * 0.65" not in qml
-    assert "id: customChildRequirement" in qml
-    assert "customEditableChildRequirementTarget: customChildRequirement" in qml
+    assert "id: customChildRequirement" not in qml
+    assert "customEditableChildRequirementTarget: null" in qml
 
     # Resizing a title must preserve its text. It may shrink and/or wrap, but
     # CUSTOM width changes must not fall back to right-side truncation.
@@ -847,20 +801,21 @@ def test_custom_edit_input_owns_pointer_before_runtime_replacement_guard() -> No
     assert "super().mouseDoubleClickEvent(event)" in double
 
 
-def test_child_editor_has_invisible_axis_edges_and_timid_step_growth() -> None:
+def test_child_editor_has_invisible_axis_edges_and_one_bounded_containment_pipeline() -> None:
     qml = _text("rendering/quick/qml/CustomLayoutOverlay.qml")
     overlay = _text("rendering/quick/custom_layout_overlay.py")
     child = _text("rendering/custom_child_geometry.py")
-
     assert "def resize_edges(self)" in child
     assert "def admits_resize_handle(self, handle: str)" in child
     assert "def childResizeEdges(" in overlay
     assert 'objectName: "customLayoutChildResizeEdge-"' in qml
     assert "Qt.SizeHorCursor" in qml
     assert "Qt.SizeVerCursor" in qml
-    assert "function throttleChildAutoGrowth(" in qml
-    assert "const pointerThreshold = 12.0" in qml
-    assert "const growthStep = 6.0" in qml
+    assert "function containChildResize(" in qml
+    assert "const bounds = childContainmentRect(frame)" in qml
+    assert "if (!within(start))" in qml
+    assert "for (let i = 0; i < 12; ++i)" in qml
+    assert "function throttleChildAutoGrowth(" not in qml
     assert "Timer {" not in qml
 
 
@@ -903,10 +858,10 @@ def test_selected_edit_role_containment_and_mapped_transform_contract() -> None:
     assert "function childContainmentRect(frame)" in editor
     assert "const bounds = childContainmentRect(frame)" in editor
     assert "modelData.containmentTarget || null" in editor
-    assert "modelData.allowParentGrowth !== false" in editor
-    assert "if (!frame.allowParentGrowth)" in editor
+    assert "modelData.containmentTarget || null" in editor
     assert "admitted = containChildResize(frame, handle, gesture, admitted)" in editor
-    assert "if (frame.allowParentGrowth)" in editor
+    assert "if (frame.allowParentGrowth)" not in editor
+    assert "ensureImmediateChildOverflow" not in editor
     assert "if (!within(start))" in editor  # corrupt inherited layouts must not grow
     assert "for (let i = 0; i < 12; ++i)" in editor  # bounded gesture admission
 
@@ -914,13 +869,13 @@ def test_selected_edit_role_containment_and_mapped_transform_contract() -> None:
     # without waking the service or giving children a parent-growth pathway.
     assert "roles[i].geometryDependencies = [weatherContent, readyColumn," in weather
     assert "roles[i].containmentTarget = weatherContent" in weather
-    assert "roles[i].allowParentGrowth = false" in weather
+    assert "roles[i].allowParentGrowth = false" not in weather
 
     # Media card vs optional external volume have separate legal surfaces;
     # card saved offsets must never change when accessory availability toggles.
     assert "readonly property real childNormalizationWidth: canonicalPreferredCardWidth" in media
     assert "roles[i].containmentTarget = mediaColumn" in media
-    assert "roles[i].allowParentGrowth = false" in media
+    assert "roles[i].allowParentGrowth = false" not in media
     assert '"containmentTarget": appVolumeSlider' in media
     assert '"normalizationWidth": canonicalPreferredCardWidth\n                    + canonicalVolumeAccessoryExtent' in media
     assert "customEditableChildRequirementTarget: null" in media
@@ -971,6 +926,7 @@ def test_resize_uses_shared_guides_without_override_of_descriptor_or_collision()
     assert "const resnapped = customLayoutOverlay.sessionModel.previewChildResize(" in update
     assert update.index("const resnapped") < update.index("let admitted")
     assert update.index("let admitted") < update.index("validateChildResizeGuides(")
-    assert update.index("validateChildResizeGuides(") < update.index("ensureImmediateChildOverflow(")
+    assert update.index("admitted = containChildResize(") < update.index("validateChildResizeGuides(")
+    assert "ensureImmediateChildOverflow" not in update
     assert "childVerticalGuides = []" in qml
     assert "childHorizontalGuides = []" in qml

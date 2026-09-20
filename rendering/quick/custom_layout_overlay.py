@@ -53,6 +53,7 @@ ChildMoveUpdateHandler = Callable[
     [CustomLayoutSessionItem, str, QPoint, bool], bool
 ]
 ChildAlignmentFlipHandler = Callable[[CustomLayoutSessionItem, str], bool]
+ColumnRailSwapHandler = Callable[[CustomLayoutSessionItem, str, str], bool]
 ChildSemanticAnchorHandler = Callable[[CustomLayoutSessionItem, str, str | None], bool]
 ChildGestureCancelHandler = Callable[[CustomLayoutSessionItem], None]
 ChildContentExtentHandler = Callable[[CustomLayoutSessionItem, float, float], bool]
@@ -151,6 +152,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         child_move_begin_handler: ChildMoveBeginHandler | None = None,
         child_move_update_handler: ChildMoveUpdateHandler | None = None,
         child_alignment_flip_handler: ChildAlignmentFlipHandler | None = None,
+        column_rail_swap_handler: ColumnRailSwapHandler | None = None,
         child_semantic_anchor_handler: ChildSemanticAnchorHandler | None = None,
         child_gesture_cancel_handler: ChildGestureCancelHandler | None = None,
         child_content_extent_handler: ChildContentExtentHandler | None = None,
@@ -181,6 +183,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._child_move_begin_handler = child_move_begin_handler
         self._child_move_update_handler = child_move_update_handler
         self._child_alignment_flip_handler = child_alignment_flip_handler
+        self._column_rail_swap_handler = column_rail_swap_handler
         self._child_semantic_anchor_handler = child_semantic_anchor_handler
         self._child_gesture_cancel_handler = child_gesture_cancel_handler
         self._child_content_extent_handler = child_content_extent_handler
@@ -658,6 +661,17 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._notify_resize(item)
         return True
 
+    @Slot(int, str, str, result=bool)
+    def swapColumnRails(self, row: int, source: str, target: str) -> bool:
+        if not 0 <= int(row) < len(self._items):
+            return False
+        item = self._items[int(row)]
+        handler = self._column_rail_swap_handler
+        if handler is None or not handler(item, str(source), str(target)):
+            return False
+        self._notify_resize(item)
+        return True
+
     @Slot(int, str, result=bool)
     def childAlignmentFlippable(self, row: int, role_id: str) -> bool:
         if not 0 <= int(row) < len(self._items):
@@ -805,6 +819,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._child_move_begin_handler = None
         self._child_move_update_handler = None
         self._child_alignment_flip_handler = None
+        self._column_rail_swap_handler = None
         self._child_semantic_anchor_handler = None
         self._child_gesture_cancel_handler = None
         self._child_content_extent_handler = None
@@ -979,6 +994,7 @@ class RetainedCustomLayoutOverlay:
         child_move_begin_handler: ChildMoveBeginHandler | None = None,
         child_move_update_handler: ChildMoveUpdateHandler | None = None,
         child_alignment_flip_handler: ChildAlignmentFlipHandler | None = None,
+        column_rail_swap_handler: ColumnRailSwapHandler | None = None,
         child_semantic_anchor_handler: ChildSemanticAnchorHandler | None = None,
         child_gesture_cancel_handler: ChildGestureCancelHandler | None = None,
         child_content_extent_handler: ChildContentExtentHandler | None = None,
@@ -1007,6 +1023,7 @@ class RetainedCustomLayoutOverlay:
             child_move_begin_handler=child_move_begin_handler,
             child_move_update_handler=child_move_update_handler,
             child_alignment_flip_handler=child_alignment_flip_handler,
+            column_rail_swap_handler=column_rail_swap_handler,
             child_semantic_anchor_handler=child_semantic_anchor_handler,
             child_gesture_cancel_handler=child_gesture_cancel_handler,
             child_content_extent_handler=child_content_extent_handler,

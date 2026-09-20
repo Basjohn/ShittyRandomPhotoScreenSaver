@@ -123,15 +123,12 @@ def test_child_records_survive_owner_write_and_committed_rehydrate_after_parent_
     ((760.25, 420.75), (1920, 1080)),
     ((4000.5, 2000.25), (1000, 680)),
 ])
-def test_dense_child_requirement_reaches_a_stable_floor_without_republishing(
+def test_child_reports_never_grow_outer_geometry_or_create_a_floor(
     family, required_extent, display_size, monkeypatch,
 ):
     owner, item, _descriptor, _screen = _owner_and_item(
         family, display_width=display_size[0], display_height=display_size[1],
     )
-    # This counts actual owner calls that republish the parent, not time elapsed
-    # or rendering callbacks.  Twenty identical reports model a duplicated QML
-    # notification sequence while retaining the same single geometry authority.
     publications = []
     real_set_geometry = CustomLayoutSessionItem.set_geometry
 
@@ -140,34 +137,17 @@ def test_dense_child_requirement_reaches_a_stable_floor_without_republishing(
         publications.append(QRect(global_rect))
         return real_set_geometry(target, global_rect, **kwargs)
 
-    # A slotted session item cannot have an instance method replaced. Spy on
-    # the class for this test only, and let monkeypatch restore it afterward.
     monkeypatch.setattr(CustomLayoutSessionItem, "set_geometry", record_geometry)
-    assert owner.ensure_child_content_extent(item, *required_extent)
-    settled = (
-        QRect(item.current_global_rect), item.current_content_extent,
-        deepcopy(item.current_size_payload),
-    )
+    original = (QRect(item.current_global_rect), item.current_content_extent,
+                deepcopy(item.current_size_payload))
     for _ in range(20):
         assert owner.ensure_child_content_extent(item, *required_extent) is False
-        assert item.current_global_rect == settled[0]
-        assert item.current_content_extent == settled[1]
-        assert item.current_size_payload == settled[2]
-    assert len(publications) == 1, (family, required_extent, publications)
-    assert item.child_content_requirement == pytest.approx(required_extent)
-    assert 0 <= item.current_global_rect.x()
-    assert 0 <= item.current_global_rect.y()
-    assert item.current_global_rect.right() < display_size[0]
-    assert item.current_global_rect.bottom() < display_size[1]
-    # Reporting a smaller child after detachment cannot auto-shrink the user's
-    # parent. The transient floor can fall without scheduling another update.
-    assert owner.ensure_child_content_extent(item, 600.0, 300.0) is False
-    assert item.current_global_rect == settled[0]
-    assert len(publications) == 1
-    assert owner.clear_child_content_extent(item)
-    assert item.child_content_requirement is None
+        assert item.current_global_rect == original[0]
+        assert item.current_content_extent == original[1]
+        assert item.current_size_payload == original[2]
+        assert item.child_content_requirement is None
+    assert publications == [], (family, required_extent, publications)
     assert owner.clear_child_content_extent(item) is False
-    assert len(publications) == 1
 
 
 @pytest.mark.parametrize("edge,rect,expected", [

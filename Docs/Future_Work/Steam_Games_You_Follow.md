@@ -241,6 +241,36 @@ stable list-model identity. **Child-role editing is part of v1 admission, not a
 follow-up rollout.** The first descriptor/QML/model slice must declare the
 semantic child surface below and consume the existing shared CUSTOM owner.
 
+### Mandatory flow and containment admission
+
+Both retained story variants must treat their authored row/column rails as live
+on each independent axis. A permitted singleton child adjustment never detaches
+an unedited axis, and an outer X/Y side resize may not convert repeated stories
+into fixed-position child islands. Story images, metadata and source/badge lanes
+must remain within the real card during compact height and width changes;
+missing news images or fewer accepted stories must not collapse the authored
+view into a different layout. `single_row` and `double_row` remain the only
+product-owned row-count choices.
+
+A singleton child may be moved or resized only within its actual containing
+surface. Collision OFF permits overlap with siblings, not movement past the
+card edge, and child edits must never grow the outer widget or publish a child
+required-size floor. Only outer handles may resize the parent, with the shared
+normalization/Save/slot machinery. Header semantic alignment must preserve
+actual text/badge/artwork paint and all remaining X/Y reflow; no mirroring of
+image/text pixels and no off-rail cancellation of a Column's Y movement.
+
+Gate G3 and G5 on both orientation variants if a flip is admitted: compact Y and
+X independently; X-only and Y-only child edits followed by opposite-axis parent
+reflow; Reset -> Flip -> Save -> Edit -> compact Y; parent-edge/child-edge
+containment with collisions ON and OFF; committed fresh-generation paint versus
+Edit-proxy mapping and retained identity. Use accepted cached fixtures for
+missing image, stale and private states and ensure none can trigger unexpected
+row materialization, provider requests or image downloads during a gesture.
+Proof of authorized article/news-image URL and redirect handling remains a
+separate G0 security gate; no layout work may relax it or introduce article
+scraping, unsafe redirects or additional credentials.
+
 ### 5.1 Child-role contract from first implementation
 
 Games You Follow must be born on the ordinary-widget child editor contract. Do
@@ -268,6 +298,12 @@ fixed authored repeated-story layout (not editable child roles)
 - Repeated separators keep the same authored visual geometry; no repeated
   editor proxy is created. Richer list editing requires a later separately
   tested/physically approved contract, not an implicit v1 default.
+- A future semantic column-swap capability, if approved, stores **one widget-wide
+  column order** in the canonical CUSTOM transaction and applies it to every
+  retained story. Never persist a per-story x/y placement, reorder provider
+  results, add a second row-count authority or detach an X-only edit from Y
+  reflow. Prove the contract on Reddit/Gmail's existing row types and in both
+  orientations before enrolling Games You Follow.
 - Header uses the existing shared `BrandedHeader` semantics: placement, uniform
   sizing, alignment flip where admitted, and semantic corner anchor behavior.
   Refresh is a separate singleton placement/size role and must not be baked into

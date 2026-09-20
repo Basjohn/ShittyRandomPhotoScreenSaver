@@ -130,6 +130,41 @@ Ordinary widgets share one normalization/session geometry system. Whole-card uni
 
 Lazy family Settings/runtime teardown is an ownership boundary. Invalidate queued/coalesced UI work, close admission, clear retained child references before Qt deletion, and reject stale wrappers/completions. A future widget should extend the generic family lifetime contract rather than grow a widget-name unload exception.
 
+## CUSTOM child and semantic-flip admission
+
+A child Edit gesture is not permission to change outer parent dimensions or
+persist an inferred `content_extent`. Child motion/resize is hard-contained to
+its actual painted/card or separately declared accessory surface, whether peer
+collision is enabled or not. Only explicit **outer handles** can change parent
+size; authored dimensions remain Restore's baseline, not a second live child
+minimum. Clamp snap results after snapping and commit unchanged results without
+churn. Never turn a child overflow request into another Settings or geometry
+owner, even as a temporary selected-Edit requirement.
+
+Family-authored reflow remains live per axis after independent child edits.
+An X-only edit does not detach Y; a Y-only edit does not detach X. Avoid scalar
+`x+y` change detection, offset-dependent all-axis `onAuthoredRail` gates and
+subtraction of subsequent parent Column displacement. Flip exchanges placement,
+not pixels; choose a semantic text scaling origin in either orientation.
+Admission requires a real retained-scene/paint test of **saved customized** child
+records under Y-only/X-only resize, plus Reset -> Flip -> Save -> Edit -> shrink,
+checking painted bounds rather than model visibility. When a test passes but a
+physical flipped widget fails, its gate is insufficient and must be revised.
+Look for matching off-rail/clip/churn failure in other families, but do not apply
+a universal QML rewrite without family-level paint and owner-lifecycle proof.
+
+### Repeated list-column edit boundary
+
+A semantic rail swap must reorder **all rows of one retained list** using one
+widget-scoped order in the existing CUSTOM owner and payload. Reddit's age
+value, title and AGO are distinct semantic columns;
+Gmail has sender, subject and timestamp. Do not simulate swaps with per-row
+child positions, a second persisted column map, repeated-delegate rebuilds or
+new runtime observers. Commit one discrete reorder action, preserve both flip
+orientations and untouched-axis reflow, and prove Undo/Save/Reset/layout slots
+and fresh-generation paint before accepting it. The rail UI is Edit-only;
+ordinary runtime must not construct rail targets or watch their geometry.
+
 ## Last-good cache guardrail
 
 A successful cache record does **not** expire merely because it becomes stale. Freshness controls refresh admission and stale labeling; it is not deletion permission. On source failure, keep rendering last-good intended data indefinitely unless an explicit account/cache reset, schema rejection/corruption, or proven identity change invalidates it. Never improve apparent freshness by blanking stale-but-valid data or substituting semantically different data.

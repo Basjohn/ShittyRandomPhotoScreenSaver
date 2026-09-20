@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 This file is the **current test/acceptance authority** for SRPSS. It describes what deserves trust now, how to classify evidence, and which architecture contracts must stay guarded. It is not a checkpoint diary or migration changelog; source control and `Docs/Historical_Bugs/` preserve chronology.
 
@@ -10,10 +10,10 @@ This file is the **current test/acceptance authority** for SRPSS. It describes w
 
 The maintained product profile is `destination` in `tests/run_chunked.py`.
 
-Current-tree inventory at this checkpoint:
+Current-tree inventory at this checkpoint (module count enumerated from this tree; destination target count is the last separately recorded profile snapshot):
 
 ```text
-375 test_*.py modules
+393 test_*.py modules
 136 maintained destination targets
 0 missing destination target files
 ```
@@ -22,13 +22,59 @@ The destination profile is **target-isolated**: each selected target runs in its
 
 The previously recorded maintained destination profile ran **132/132 GREEN on Windows + PySide6 + OpenGL on 2026-09-17**, before the later ordinary-widget CUSTOM/Visualizer changes. The current maintained profile lists 136 targets and remains **NEEDS RUN** on the present tree. The separate accepted R-87/CHK26 performance landmark is documented in `Docs/Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md` and `Docs/Guardrails/Performance_Optimization_Contract.md`.
 
-**Most recent operator evidence, 2026-09-19:** the focused Media gate passed and a larger affected-family gate reported **153 passed, 3 failed**. All three failures stopped at an undefined `QSize` in the Reddit/Gmail/Media parametrizations of `test_flip_wheel_restore_repeatedly_returns_authored_shape_and_clears_stale_extent`. That module now imports `QSize`. This repairs the harness error, **not** the obligation to run all three actual geometry assertions on Windows. The initial Media seek shift on an older save stopped reproducing after Reset, but that does not prove every saved-geometry case. Reddit flipped spacing/order, Friend separator live width, edit-only `L`, and one-step `Ctrl+Z` are source candidates pending Windows scene and physical checks.
+**Most recent operator evidence, 2026-09-20:** the expanded three-action undo/third-generation owner gate passed **6/6 on Windows**; the focused Reddit Restore/spacing and offline Achievement Pulse/Weather owner gate passed **7/7 on Windows**; the operator also accepted the rendered Reddit Restore and title/age clearance. The earlier Reddit/Reddit2 owner Save/fresh-generation/second Edit gate passed 2/2. The revised owner lifecycle gate includes Achievement Pulse/Weather second Save and third fresh generation, accepted in the six-case run. The bounded three-action Edit undo is accepted in that run; real user keyboard and physical end-to-end acceptance remain distinct. Media's separate absent-Edit-delegate regression remains unverified beyond its known failing setup, not a reason to replace working automatic side placement.
+
+**Open acceptance gates:** the real retained Media saved-offset/compact-Y test returned **2 PASS / 2 RED** on Windows. The previous right-edge assertion measured absolute root X despite legitimate uniform card recentering; the revised test measures painted-card-relative metadata alignment and essential row containment. Its test parameter named reset/reprojection does **not** execute owner Save/reopen; physical Reset -> Flip -> Save -> Edit remains unaccepted until rechecked. The third-generation Pulse/Weather selected Edit-proxy/actual paint comparisons are newly added and not yet run. Repeated-column drag swapping is proposed and is not an implemented or accepted test contract.
 
 The current agent/container may lack PySide6/OpenGL. In that environment, a collection failure caused by missing runtime dependencies is **ENVIRONMENT BLOCKED**, not a product RED and not a PASS.
 
 ## 1.1 Qt delivery and painted-geometry evidence (2026-09-19)
 
 A green geometry owner/source suite does not verify which MouseArea receives a click or whether a short post headline makes a timestamp rail float. `tests/test_qtquick_edit_pointer_delivery.py` sends real press/release events into a QQuickWindow and verifies top-strip selection, header-gap selection, and that the flip target calls the existing flip authority instead of selecting/moving the parent. `tests/test_qtquick_reddit_presentation.py` asserts retained Reddit/Reddit2 title/age/AGO paint-item rectangles and common timestamp alignment across short and long titles, parent resize and semantic flips. Both are Windows/PySide6 **NEEDS RUN** for the new checkpoint. Only screen-pixel appearance/hardware-specific DPI, OS mouse routing, and real GPU dual-display behaviour require subsequent bounded physical sampling if these tests pass. The previous all-green suite predates these tests and does not retroactively pass them.
+
+## Current child-geometry and owner lifecycle gates
+
+The inventory below describes the live contracts and their evidence state. New or
+modified tests must be entered here in the same checkpoint as their source changes.
+These focused gates supplement rather than replace the maintained destination profile.
+
+| Contract | Executable gate | Current evidence |
+| --- | --- | --- |
+| Nine-family normalized child persistence, physical-floor and resize no-churn | `tests/test_qtquick_child_persist_floor_regression.py` | PASS: operator, 68 cases (2026-09-19) |
+| Shared parent/Visualizer Edit no-op publication and gesture release | `tests/test_qtquick_edit_noop_publication.py` | PASS: operator, 8 cases (2026-09-19) |
+| Mapped child/proxy geometry, cancelling axes | `tests/test_qtquick_child_mapped_geometry.py` | PASS: operator, focused mapped gate (2026-09-19) |
+| Reddit/Reddit2 committed painted child reopen and full owner Save/live promotion/fresh display/second Edit | `tests/test_qtquick_reddit_child_committed_reopen_scene.py` | PASS: operator, owner 2 cases (2026-09-20); direct committed 2 cases previously passed |
+| Achievement Pulse header/list semantic flip and actual text/badge paint | `tests/test_qtquick_achievement_pulse_presentation.py` | PASS: operator, recent 2 header cases; physical header flip accepted. Outer leading-gutter trim/reverse/Save still needs physical acceptance |
+| Achievement Pulse and Weather owner Save/live promotion/fresh generation/second Edit with offline cached provider | `tests/test_qtquick_other_family_owner_save_reopen.py` | PASS: operator, 2 cases in 7-case focused gate and extended second Save/third generation in six-case focused gate (2026-09-20). This is not a binder phase-2 activation acceptance test. |
+| Reddit/Reddit2 AGO/title clearance at ordinary and scaled CUSTOM sizes, both alignments | `tests/test_qtquick_reddit_presentation.py`, `tests/test_reddit_spacing_contract.py` | PASS: operator, affected seven-case gate plus physical check on 2026-09-20; retain internal 01HR/AGO spacing and actual post-title clearance. |
+| Bounded three-action Edit undo across widgets, no-op gesture exclusion, active-gesture block and Edit retirement | `tests/test_qtquick_custom_layout_owner.py::test_three_level_undo_retains_only_three_completed_edit_actions`, `tests/test_qtquick_custom_layout_owner.py::test_three_action_undo_is_global_across_items_and_clears_on_retirement`, `tests/test_qtquick_input_controller.py::test_edit_only_undo_and_lock_hotkeys_preserve_plain_z_and_ignore_repeats` | PASS: operator, two new owner cases in six-case focused Windows gate (2026-09-20); keyboard routing unchanged. No pointer-sample snapshot, redo, polling or Settings write. |
+| Media compact-height active-track rows, saved-offset independent-axis flow and flipped right-rail text scaling | `tests/test_qtquick_media_presentation.py::test_compact_media_essential_rows_survive_flip_and_transient_capability_loss`, `tests/test_qtquick_media_presentation.py::test_media_child_axis_edits_keep_live_band_flow_at_compact_y`, `tests/test_media_content_extent_contract.py::test_media_nested_seek_and_transport_keep_axis_independent_band_reflow` | Operator reran the revised saved-offset Media four-case gate on Windows: **4 PASS**, including reset/reprojection flipped. The gate is model reprojection and does not on its own certify an actual Media owner Save/reopen or the original physical sequence; it checks real card bounds and right-edge metadata alignment. The source-only and pristine-child cases do not accept the original physical Reset -> Flip -> Save -> Edit defect; this parametrized case is model reprojection, not a real owner Save/reopen. |
+| Outer-only child containment across families and dense requirement retirement | `tests/test_custom_layout_guides_contract.py`, `tests/test_qml_reflow_loop_contract.py`, `tests/test_qtquick_child_edit_off_dependency_contract.py`, `tests/test_quick_child_paint_containment_contract.py`, `tests/test_qtquick_child_persist_floor_regression.py`, `tests/test_qtquick_custom_layout_owner.py` | Source-only guards updated and executed locally; dynamic Qt child/parent move/resize, collision OFF, no Settings writes and unchanged live pointer feel NEED WINDOWS RUN. Old parent-growth tests no longer certify this changed policy. |
+| Achievement Pulse/Weather full owner Save, second Save, third fresh generation **and selected painted-child/Edit-proxy mapping** | `tests/test_qtquick_other_family_owner_save_reopen.py::test_other_family_real_owner_save_live_promotion_fresh_generation_and_reedit` | Operator accepted the earlier two-family owner/third-generation 6-case gate. The additional third-generation selected Edit-proxy assertions were RUN on Windows and are **2 RED**: Achievement Pulse lacks the selected artwork proxy; Weather creates a location-text proxy whose rectangle does not match the target mapped by the test. Do not discard these checks or classify the result as a Save/reopen pass. Investigate actual role declaration, Qt delegate creation/lifetime and mapped-paint target selection. Cancel must leave paint and Settings unchanged. |
+| Media external volume Edit-proxy geometry | `tests/test_qtquick_media_presentation.py::test_media_volume_opposite_axis_reflow_updates_live_edit_proxy` | RED at absent Qt Edit delegate before the mapping assertions; automatic side placement is physically working and is not under redesign |
+| Reddit Restore Size loading/ready invariant and child retention | `tests/test_qtquick_reddit_presentation.py::test_reddit_loading_and_ready_state_use_the_same_authored_height`, `tests/test_qtquick_custom_layout_owner.py::test_flip_wheel_restore_repeatedly_returns_authored_shape_and_clears_stale_extent` | PASS: operator focused seven-case Qt gate and subsequent physical Restore check (2026-09-20). Existing saved compact rectangles remain valid CUSTOM geometry. |
+
+The offline Achievement Pulse/Weather Save/reopen fixture explicitly activates the
+real retained-family ports and injects synchronous cached data. It must not be used
+to certify binder phase-2 activation or external-service readiness. A future
+binder-activation regression requires a separate test with a real activation
+service seam and should inspect the event-edge activation warning rather than
+mistaking an inactive family for a persistence failure.
+
+Reddit's authored preferred height must be stable while row data is absent or
+loading. The CUSTOM content extent is a separate user-authored resize override;
+do not fix Restore by deleting saved extents, changing the post limit, or
+introducing an extra geometry/size owner. After the focused QML gate passes,
+physically check loading -> populated -> Restore Size and live reversed Edit;
+a render-level source assertion alone cannot accept the previous reported snap.
+
+For Reddit post rows, check the actual painted geometry after the shared retained
+presentation scale. A QML source literal or unscaled logical-gap assertion is
+insufficient: both alignments and all rows must retain visible separation between
+AGO and the title, without changing the 01HR/AGO internal gap.
+
+**Repeated-list semantic rail swap (candidate, Qt/physical acceptance pending):** `tests/test_column_rails_contract.py` validates all permutations, no-op and invalid input. `tests/test_qtquick_custom_layout_owner.py::test_column_rail_swap_is_one_bounded_owner_undo_action_and_restores_authored_order` checks one whole-list discrete Undo transaction without Settings I/O. `tests/test_qtquick_reddit_presentation.py::test_three_semantic_column_rails_reorder_every_retained_post_and_rehydrate` and `tests/test_qtquick_gmail_presentation.py::test_gmail_semantic_column_rails_reorder_all_retained_message_rows` check actual retained painted positions in all rows, order reversal, header-flip independence, Y/width reflow and retained delegate identity. Windows execution and physical grip drag/Undo/Cancel/Save/slot/fresh-generation are still required. The canonical CUSTOM payload is `column_rails`, never per-row `x_offset`; no normal-runtime rail observer, and a dedicated column-order notification
+so child-geometry changes do not churn the list columns. See `Docs/Future_Work/Custom_Child_Placement_And_Headers.md`.
 
 ## 2. Status vocabulary
 
@@ -168,7 +214,7 @@ Required properties:
 
 Primary suites include `test_qtquick_resize_normalization.py`, `test_widget_auto_shrink.py`, `test_qtquick_family_size_policy.py`, `test_qtquick_geometry_resolver.py`, `test_qtquick_custom_layout_owner.py`, `test_qtquick_custom_layout_overlay.py` and capture/geometry tests.
 
-**Current Edit acceptance:** `test_qtquick_custom_layout_owner.py` exercises last-action-only undo, flips, wheel then reset; `test_qtquick_input_controller.py` exercises keyboard admission only in Edit without stealing non-Edit plain `Z`; `test_qtquick_child_lock_scene.py` checks keyboard and glyph signals against one retained lock frame. `test_qtquick_reddit_presentation.py` checks flipped title → age value → AGO order and compact live spacing; `test_qtquick_friend_pulse_presentation.py` checks separator growth/reset and edited width-scale preservation. Confirm these in the intended Windows Qt environment plus actual pointer/Save/Cancel/Restore interactions. Source tests cannot prove QML signal delivery, pointer grabs, render alignment or full paint/geometry parity.
+**Current Edit acceptance:** `test_qtquick_custom_layout_owner.py` exercises three completed-action undo, flips, wheel then reset; `test_qtquick_input_controller.py` exercises keyboard admission only in Edit without stealing non-Edit plain `Z`; `test_qtquick_child_lock_scene.py` checks keyboard and glyph signals against one retained lock frame. `test_qtquick_reddit_presentation.py` checks flipped title → age value → AGO order and compact live spacing; `test_qtquick_friend_pulse_presentation.py` checks separator growth/reset and edited width-scale preservation. Confirm these in the intended Windows Qt environment plus actual pointer/Save/Cancel/Restore interactions. Source tests cannot prove QML signal delivery, pointer grabs, render alignment or full paint/geometry parity.
 
 Clock face state is independent from its digital/analogue geometry variants. `test_layout_slots.py`, the real DisplayManager slot path, and Clock Settings preservation coverage must keep those authorities separate.
 

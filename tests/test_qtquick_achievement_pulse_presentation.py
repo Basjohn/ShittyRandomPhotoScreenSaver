@@ -1153,7 +1153,9 @@ def test_semantic_header_flip_exchanges_achievement_regions_not_image_or_text_pi
             assert pos(obj) == pytest.approx(base_width - initial_x - obj.width(), abs=1.5)
         assert art.x() < title.x() and progress.x() > fields.x()
         assert image.property("fillMode") == art_fill
-        assert title.property("horizontalAlignment") == title_alignment
+        # Header reverses semantic text alignment as well as region placement;
+        # image pixels are not mirrored and per-role flips remain independent.
+        assert int(title.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignRight)
         flipped_title_width = title.width()
         flipped_art_x = art.x()
         required_before = float(requirement.property("requiredContentWidth"))
@@ -1172,7 +1174,256 @@ def test_semantic_header_flip_exchanges_achievement_regions_not_image_or_text_pi
         qt_app.processEvents()
         assert not bool(item.property("headerFlipped"))
         assert tuple(pos(obj) for obj in roles) == pytest.approx(original)
+        assert title.property("horizontalAlignment") == title_alignment
     finally:
         item.deleteLater()
         component.deleteLater()
         engine.deleteLater()
+
+
+@pytest.mark.qt
+def test_achievement_list_flip_mirrors_small_text_and_unedited_badge(qt_app, tmp_path) -> None:
+    """Flip must exchange the small-text and badge lanes, not align in a left stub.
+
+    The first unlock has its own descriptor/persisted role. The badge may also
+    be moved independently; neither is reauthored by flipping the list.
+    """
+    model = _model()
+    model.activate()
+    badge_file = tmp_path / "achievement-flip-badge.png"
+    card = replace(
+        build_mock_steam_view_model("achievement_pulse"),
+        latest_unlocks=("First large unlock", "Second small unlock", "Third unlock"),
+    )
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=card,
+            latest_artwork=_image(badge_file),
+            latest_artwork_identity=str(badge_file),
+            latest_artwork_key="flip-badge",
+        ),
+        animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        canvas = _find_visual_item(item, "achievementAuthoredCanvas")
+        group = _find_visual_item(item, "achievementListGroup")
+        first = _find_visual_item(item, "achievementUnlock_0")
+        second = _find_visual_item(item, "achievementUnlock_1")
+        badge = _find_visual_item(item, "achievementLatestArtworkFrame")
+        assert all(part is not None for part in (canvas, group, first, second, badge))
+        assert badge.isVisible() and second.isVisible()
+
+        def at_canvas(part):
+            return part.mapToItem(canvas, 0.0, 0.0).x()
+
+        first_x = at_canvas(first)
+        original_badge = at_canvas(badge)
+        original_second = at_canvas(second)
+        assert original_second + second.width() <= original_badge - 5.0
+
+        assert model.set_custom_child_geometry({
+            "achievement_list": {"alignment": "right"},
+        })
+        qt_app.processEvents()
+        assert first_x == pytest.approx(at_canvas(first), abs=0.1)
+        assert badge is _find_visual_item(item, "achievementLatestArtworkFrame")
+        assert second is _find_visual_item(item, "achievementUnlock_1")
+        assert int(second.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignRight)
+        assert at_canvas(badge) > original_badge + 20.0
+        assert at_canvas(second) >= at_canvas(badge) + badge.width() * badge.scale() + 5.0
+        assert at_canvas(second) + second.width() == pytest.approx(
+            at_canvas(group) + group.width(), abs=0.1,
+        ), "Small text must right-align at the true group edge, not the old left-side stub"
+
+        # An independent badge drag is its own persisted geometry. Flipping
+        # the list does not overwrite its explicit placement record.
+        assert model.set_custom_child_geometry({
+            "achievement_list": {"alignment": "right"},
+            "badge": {"x_offset": 0.10},
+        })
+        qt_app.processEvents()
+        manually_moved = at_canvas(badge)
+        assert model.set_custom_child_geometry({
+            "achievement_list": {"alignment": "left"},
+            "badge": {"x_offset": 0.10},
+        })
+        qt_app.processEvents()
+        assert at_canvas(badge) == pytest.approx(manually_moved, abs=0.1)
+        assert int(second.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignLeft)
+        assert first_x == pytest.approx(at_canvas(first), abs=0.1)
+
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert at_canvas(badge) == pytest.approx(original_badge, abs=0.1)
+        assert at_canvas(second) == pytest.approx(original_second, abs=0.1)
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        qt_app.processEvents()
+
+@pytest.mark.qt
+def test_header_flip_mirrors_actual_title_first_unlock_and_small_text_lanes(qt_app, tmp_path) -> None:
+    """Exercise the operator's real Header-flip gesture, NOT a list-only flip.
+
+    The parent Header flip moves the artwork/text regions. The painted glyphs
+    and the badge/list lanes must follow the resulting semantic orientation,
+    while independently flipping a child must still invert that child's lane.
+    """
+    model = _model()
+    model.activate()
+    badge_file = tmp_path / "achievement-header-flip-badge.png"
+    card = replace(
+        build_mock_steam_view_model("achievement_pulse"),
+        latest_unlocks=("First large unlock", "Second small unlock", "Third unlock"),
+    )
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=card, latest_artwork=_image(badge_file),
+            latest_artwork_identity=str(badge_file),
+            latest_artwork_key="header-flip-badge",
+        ),
+        animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        canvas = _find_visual_item(item, "achievementAuthoredCanvas")
+        group = _find_visual_item(item, "achievementListGroup")
+        title = _find_visual_item(item, "achievementGameTitle")
+        first = _find_visual_item(item, "achievementUnlock_0")
+        second = _find_visual_item(item, "achievementUnlock_1")
+        badge = _find_visual_item(item, "achievementLatestArtworkFrame")
+        assert all(part is not None for part in (canvas, group, title, first, second, badge))
+        assert badge.isVisible() and second.isVisible()
+
+        def x_at_canvas(part):
+            return part.mapToItem(canvas, 0.0, 0.0).x()
+
+        starting_group_x = x_at_canvas(group)
+        assert int(second.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignLeft)
+        assert model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        assert x_at_canvas(group) > starting_group_x + 30.0
+        assert int(title.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignRight)
+        assert int(first.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignRight)
+        assert int(second.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignRight)
+        assert x_at_canvas(second) >= x_at_canvas(badge) + badge.width() * badge.scale() + 5.0
+        assert x_at_canvas(second) + second.width() == pytest.approx(
+            x_at_canvas(group) + group.width(), abs=0.1,
+        )
+        # Independently flip text roles while the Header is still reversed.
+        assert model.set_custom_child_geometry({
+            "header": {"alignment": "right"},
+            "game_name": {"alignment": "right"},
+            "first_achievement": {"alignment": "right"},
+            "achievement_list": {"alignment": "right"},
+        })
+        qt_app.processEvents()
+        assert int(title.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignLeft)
+        assert int(first.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignLeft)
+        assert int(second.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignLeft)
+        # No overlay-role replacement, timer, or re-parenting to implement a flip.
+        assert second is _find_visual_item(item, "achievementUnlock_1")
+        assert badge is _find_visual_item(item, "achievementLatestArtworkFrame")
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert x_at_canvas(group) == pytest.approx(starting_group_x, abs=0.1)
+        assert int(second.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignLeft)
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        qt_app.processEvents()
+
+@pytest.mark.qt
+def test_reversed_custom_pulse_can_trim_only_real_leading_gutter_without_shrinking_children(qt_app) -> None:
+    """The operator's flipped/independently moved artwork and field-row case.
+
+    An authored-width floor must not block a left-edge trim if the left lane is
+    actually empty. The retained family reports only that measured clearance;
+    layout targets preserve their authored footprints while the card contracts.
+    """
+    model = _model()
+    model.activate()
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=build_mock_steam_view_model("achievement_pulse")
+        ), animate=False,
+    )
+    base_width = float(model.baseAuthoredWidth)
+    base_height = float(model.baseAuthoredHeight)
+    assert model.set_custom_child_geometry({
+        "header": {"alignment": "right"},
+        "artwork": {"x_offset": -0.518148},
+        "field_group": {"x_offset": -0.229815},
+    })
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        allowance = float(item.property("customLeadingTrimAllowance"))
+        assert 20.0 < allowance < base_width / 2.0
+        art = _find_visual_item(item, "achievementArtworkFrame")
+        fields = _find_visual_item(item, "achievementFieldGroup")
+        header = _find_visual_item(item, "achievementHeaderFrame")
+        title = _find_visual_item(item, "achievementGameTitle")
+        assert all(part is not None for part in (art, fields, header, title))
+        sizes = [(part.width(), part.height()) for part in (art, fields, header, title)]
+        old_art_x = art.mapToItem(item, 0, 0).x()
+        trim = int(allowance * 0.70)
+        assert model.set_content_extent(base_width - trim, base_height)
+        item.setWidth(model.authoredWidth)
+        qt_app.processEvents()
+        assert model.authoredWidth == pytest.approx(base_width - trim)
+        assert item.property("leadingTrim") == pytest.approx(trim)
+        assert art.mapToItem(item, 0, 0).x() == pytest.approx(old_art_x - trim, abs=0.1)
+        for part, size in zip((art, fields, header, title), sizes):
+            assert (part.width(), part.height()) == pytest.approx(size, abs=0.1)
+            bounds = part.mapRectToItem(item, part.boundingRect())
+            assert bounds.left() >= -0.2, (part.objectName(), bounds)
+            assert bounds.right() <= item.width() + 0.2, (part.objectName(), bounds)
+        assert float(item.property("customLeadingTrimAllowance")) == pytest.approx(allowance, abs=0.1)
+        assert model.clear_content_extent()
+        item.setWidth(model.authoredWidth)
+        qt_app.processEvents()
+        assert art.mapToItem(item, 0, 0).x() == pytest.approx(old_art_x, abs=0.1)
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        qt_app.processEvents()
+
+@pytest.mark.qt
+def test_pulse_trimmed_extent_rehydrates_only_after_header_flip_and_unflipped_floor(qt_app) -> None:
+    """A narrow saved CUSTOM box is valid only with its matching flip record."""
+    base = _model()
+    width, height = base.baseAuthoredWidth, base.baseAuthoredHeight
+    assert base.set_content_extent(width - 35, height)
+    assert base.authoredWidth == pytest.approx(width)
+    assert base.set_custom_child_geometry({"header": {"alignment": "right"}})
+    assert base.set_content_extent(width - 35, height)
+    assert base.authoredWidth == pytest.approx(width - 35)
+    # Use the production retained-payload handler, not hand-applied model calls.
+    from rendering.quick.widgets.achievement_pulse import RetainedAchievementPulsePresentation
+    rebound = _model()
+    carrier = object.__new__(RetainedAchievementPulsePresentation)
+    carrier._model = rebound
+    carrier._apply_custom_layout_size_payload({
+        "child_geometry": {"header": {"alignment": "right"}},
+        "content_extent": [width - 35, height],
+    })
+    assert rebound.customHeaderAlignment == "right"
+    assert rebound.authoredWidth == pytest.approx(width - 35)
+    carrier._apply_custom_layout_size_payload({
+        "child_geometry": {}, "content_extent": [width - 35, height],
+    })
+    assert rebound.customHeaderAlignment != "right"
+    assert rebound.authoredWidth == pytest.approx(width)

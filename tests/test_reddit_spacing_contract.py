@@ -1,19 +1,22 @@
-"""Static contract for Reddit's compact flipped title / age / AGO rails."""
+"""Source contract for stable full-list age/AGO/title rails and projected gap."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 QML = ROOT / "rendering" / "quick" / "qml" / "RedditPresentation.qml"
 
 
-def test_reddit_flipped_age_value_precedes_ago_close_to_post_title() -> None:
+def test_reddit_flipped_age_value_and_ago_stay_legible_in_any_column_order():
     source = QML.read_text(encoding="utf-8")
-    assert 'readonly property real flippedTitleAgeGap: 4.0' in source
-    assert 'objectName: "redditPostAgeAgo_" + postRow.index' in source
-    assert 'x: redditRoot.headerFlipped ? parent.width - width : 0.0' in source
-    assert 'parent.width - ageText.width - redditRoot.flippedTitleAgeGap' in source
-    assert 'readonly property real ageValueAgoGap: 4.0' in source
-    assert 'ageValueText.width + redditRoot.ageValueAgoGap' in source
-    assert 'titleText.x + titleText.width + redditRoot.flippedTitleAgeGap' not in source
-    assert 'x: 0.0' in source.split('id: ageValueText', 1)[1].split('id: ageAgoText', 1)[0]
+    assert '9.0 / Math.max(0.2, redditRoot.presentationScale)' in source
+    assert 'readonly property real ageValueAgoGap: 2.0' in source
+    assert 'visualColumnOrder' in source
+    assert '["age", "ago", "title"]' in source
+    assert '["title", "age", "ago"]' in source
+    assert 'postRow.columnX("age") - ageText.x' in source
+    assert 'postRow.columnX("ago") - ageText.x' in source
+    assert 'postRow.columnX("title")' in source
+    assert 'postRow.columnWidth("title")' in source
+    assert 'Math.max(44.0, redditRoot.redditModel.ageFontSize * 4.4)' in source
+    assert 'readonly property var columnTargets:' in source
     assert 'LayoutMirroring.enabled:' not in source
     assert 'childOffsetX("post_titles")' not in source

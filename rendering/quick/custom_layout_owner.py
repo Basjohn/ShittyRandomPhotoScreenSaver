@@ -19,6 +19,9 @@ from PySide6.QtCore import QPoint, QRect, QSize
 
 from core.logging.logger import get_logger, is_geometry_logging_enabled
 from core.settings.default_contract import require_canonical_default
+from rendering.quick.column_rails import (
+    COLUMN_RAILS_PAYLOAD_KEY, COLUMN_RAIL_IDS, normalize_column_rails, swap_column_rails,
+)
 from rendering.custom_child_geometry import (
     CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY,
     CustomChildSize,
@@ -242,9 +245,9 @@ class QuickCustomLayoutOwner:
         # same drag, producing duplicate/dead target admissions. Release clears it.
         self._visualizer_move_transfer_latch: set[CustomLayoutKey] = set()
         self._deferred_topology_reconciliation_reason: str | None = None
-        # One-level, Edit-only, event-driven undo. Gesture candidates are
-        # captured once and promoted only if the completed action changed state.
-        self._undo_last: _EditUndoSnapshot | None = None
+        # Bounded three-action Edit-only undo. Snapshot only at action edges;
+        # pointer samples, retained QML updates and Settings remain untouched.
+        self._undo_history: list[_EditUndoSnapshot] = []
         self._undo_pending: tuple[str, _EditUndoSnapshot] | None = None
         self._active = False
         self._retired = False
@@ -293,22 +296,28 @@ class QuickCustomLayoutOwner:
         self._finish_undo_gesture()
         self._undo_pending = (kind, self._capture_undo(item))
 
+    def _record_undo(self, before: _EditUndoSnapshot) -> None:
+        """Retain at most three completed, state-changing Edit actions."""
+        if not self._undo_state_changed(before):
+            return
+        if len(self._undo_history) == 3:
+            del self._undo_history[0]
+        self._undo_history.append(before)
+
     def _finish_undo_gesture(self, kind: str | None = None) -> None:
         pending = self._undo_pending
         if pending is None or (kind is not None and pending[0] != kind):
             return
         self._undo_pending = None
         before = pending[1]
-        if self._undo_state_changed(before):
-            self._undo_last = before
+        self._record_undo(before)
 
     def _commit_discrete_undo(self, before: _EditUndoSnapshot) -> None:
         self._finish_undo_gesture()
-        if self._undo_state_changed(before):
-            self._undo_last = before
+        self._record_undo(before)
 
     def undo_last_change(self) -> bool:
-        """Consume only the last completed Edit action; never write Settings.
+        """Consume one of the last three completed Edit actions; never write Settings.
 
         No undo during an active pointer gesture: a later release must not be
         permitted to replay the held cursor against restored geometry.
@@ -320,11 +329,16 @@ class QuickCustomLayoutOwner:
                 or self._child_resize_origins or self._child_move_origins):
             return False
         self._finish_undo_gesture()
-        before = self._undo_last
-        if before is None or not any(entry is before.item for entry in session.items()):
+        if not self._undo_history:
+            return False
+        before = self._undo_history[-1]
+        if not any(entry is before.item for entry in session.items()):
+            # A stale item cannot be restored; do not replay older snapshots
+            # through a broken session ownership boundary.
+            self._undo_history.clear()
             return False
         item = before.item
-        self._undo_last = None
+        self._undo_history.pop()
         self._visualizer_move_transfer_latch.clear()
         self._clear_all_guides()
         item.set_current_display(before.display_identity, monitor_route=before.monitor_route)
@@ -341,7 +355,8 @@ class QuickCustomLayoutOwner:
             self._visualizer_pixels_per_world[item.source_key] = before.visualizer_pixels_per_world
         session.refresh_duplicate_state()
         session.notify_all_items_changed()
-        logger.info("[CUSTOM_LAYOUT] Undo last Edit action widget=%s", item.model_identity)
+        logger.info("[CUSTOM_LAYOUT] Undo Edit action widget=%s remaining=%d",
+                    item.model_identity, len(self._undo_history))
         return True
 
     def close_item(self, item: CustomLayoutSessionItem) -> None:
@@ -460,6 +475,7 @@ class QuickCustomLayoutOwner:
                     child_move_begin_handler=self.begin_child_move,
                     child_move_update_handler=self.update_child_move,
                     child_alignment_flip_handler=self.flip_child_alignment,
+                    column_rail_swap_handler=self.swap_column_rail_roles,
                     close_item_handler=self.close_item,
                     child_semantic_anchor_handler=self.set_child_semantic_anchor,
                     child_gesture_cancel_handler=self.cancel_child_gesture,
@@ -1122,6 +1138,43 @@ class QuickCustomLayoutOwner:
         elif not item.resize_capable:
             return False
 
+        # A family may explicitly expose real painted leading clearance for a
+        # reversed CUSTOM content card. Sample it ONCE at the gesture boundary,
+        # never on pointer motion or normal rendering. The authored dimensions
+        # remain the independent Restore Size reference; this lowers only the
+        # selected session's *horizontal* content minimum, not its Y floor or
+        # collision policy. No opt-in property means the existing safe minimum.
+        if handle_id == "left" and not item.viewport_resize_capable:
+            descriptor = self._descriptors.get(item.source_key)
+            if descriptor is not None and descriptor.content_extent_floor_at_authored_size:
+                binding = self._bindings.get(item.current_display_identity)
+                presenter = getattr(getattr(binding, "unit", None), "presenter", None)
+                lookup = getattr(presenter, "presentation_for_widget_id", None)
+                presentation = lookup(item.model_identity) if callable(lookup) else None
+                root = getattr(presentation, "item", None)
+                # A retired QQuickItem is never a licence to shrink the card.
+                # Use the ordinary authored floor if the retained family cannot
+                # provide its measured Edit-only paint clearance at this boundary.
+                try:
+                    raw_allowance = (
+                        root.property("customLeadingTrimAllowance") if root is not None else None
+                    )
+                    allowance = float(raw_allowance)
+                except (TypeError, ValueError, OverflowError, RuntimeError):
+                    allowance = 0.0
+                configured_width, configured_height = descriptor.content_extent_minimum_size or (1, 1)
+                authored_width, authored_height = item.authored_reference_size or (1, 1)
+                if not math.isfinite(allowance) or allowance <= 0.0:
+                    allowance = 0.0
+                # Never invent more clearance than the retained family reported;
+                # keep the card usable even if a stale QML item returns nonsense.
+                allowance = min(allowance, max(0.0, float(authored_width) - 48.0))
+                item.content_extent_minimum_size = (
+                    max(int(configured_width) if allowance == 0 else 1,
+                        int(math.ceil(float(authored_width) - allowance))),
+                    max(int(configured_height), int(authored_height)),
+                )
+
         # One item has one active geometry gesture owner. If a child pointer
         # stream was interrupted and a parent handle takes over, retire only the
         # transient child origin before capturing the parent resize origin.
@@ -1457,6 +1510,33 @@ class QuickCustomLayoutOwner:
                 )
         return changed
 
+    def swap_column_rail_roles(
+        self, item: CustomLayoutSessionItem, source: str, target: str
+    ) -> bool:
+        """Reorder a whole list column once on release; no per-row edits or I/O."""
+        family = item.source_key.widget_id
+        authored = COLUMN_RAIL_IDS.get(family)
+        if authored is None or not self._active or self._session is None:
+            return False
+        current = normalize_column_rails(
+            family, item.current_size_payload.get(COLUMN_RAILS_PAYLOAD_KEY)
+        )
+        if current is None:
+            flipped = item.child_size("header").alignment == "right"
+            if family in ("reddit", "reddit2"):
+                current = ("title", "age", "ago") if flipped else authored
+            else:
+                current = ("sender", "subject", "timestamp") if flipped else authored
+        updated = swap_column_rails(family, current, source, target)
+        if updated is None:
+            return False
+        before = self._capture_undo(item)
+        payload = dict(item.current_size_payload)
+        payload[COLUMN_RAILS_PAYLOAD_KEY] = list(updated)
+        item.current_size_payload = payload
+        self._commit_discrete_undo(before)
+        return True
+
     def flip_child_alignment(
         self, item: CustomLayoutSessionItem, role_id: str
     ) -> bool:
@@ -1536,124 +1616,14 @@ class QuickCustomLayoutOwner:
         required_width: float,
         required_height: float,
     ) -> bool:
-        """Record a child floor and grow the shared ordinary content box if needed.
+        """Never enlarge an outer widget in response to a child edit.
 
-        The retained family reports the logical minimum implied by its current
-        customized children.  The latest requirement is kept transiently in the
-        edit session so later parent content-side/corner gestures cannot cut back
-        through those children.  A smaller requirement lowers only that gesture
-        floor; it never auto-shrinks the user's outer box.  This owner remains the
-        sole mutator of outer geometry.
+        This defensive boundary also rejects stale QML or external callers
+        trying to publish an obsolete growth demand. The selected child editor
+        clamps painted occupancy to its containing surface, while outer handles
+        remain the only source of parent size changes.
         """
-
-        if (
-            item.viewport_resize_capable
-            or not item.content_extent_capable
-            or not item.child_geometry_capable
-        ):
-            return False
-        try:
-            requested_width = float(required_width)
-            requested_height = float(required_height)
-        except (TypeError, ValueError):
-            return False
-        if not math.isfinite(requested_width):
-            requested_width = 0.0
-        if not math.isfinite(requested_height):
-            requested_height = 0.0
-        if requested_width > 0.0 and requested_height > 0.0:
-            # Session-only state.  It is re-derived from retained presentation
-            # geometry whenever this parent is selected for child editing, so no
-            # second persisted geometry authority or steady-state observer exists.
-            item.child_content_requirement = (requested_width, requested_height)
-
-        scale = max(1.0e-6, float(item.resize_scale))
-        current_box = item.current_content_extent
-        if current_box is None:
-            current_box = (
-                float(item.current_global_rect.width()) / scale,
-                float(item.current_global_rect.height()) / scale,
-            )
-        next_width = float(current_box[0])
-        next_height = float(current_box[1])
-        if "horizontal" in item.content_extent_axes and requested_width > next_width:
-            next_width = requested_width
-        if "vertical" in item.content_extent_axes and requested_height > next_height:
-            next_height = requested_height
-        if (
-            next_width <= float(current_box[0]) + 1.0e-4
-            and next_height <= float(current_box[1]) + 1.0e-4
-        ):
-            return False
-
-        binding = self._bindings.get(item.current_display_identity)
-        if binding is None:
-            return False
-        minimum = quick_custom_content_extent_minimum_size(item)
-        # This is a minimum containment floor, not a nearest-pixel preference.
-        # Rounding down can leave a fractional child overflow unresolved and make
-        # later retained-geometry notifications retry the same impossible growth.
-        # Ceil admits the logical requirement in one bounded step (at most +1 px).
-        target_width = max(minimum.width(), int(math.ceil(next_width * scale)))
-        target_height = max(minimum.height(), int(math.ceil(next_height * scale)))
-        current = item.current_global_rect
-        # A transient child may request more room than the physical display.
-        # Its logical minimum must never override the hard screen containment
-        # bound: clamp_local_rect_to_bounds treats min_size as mandatory, so an
-        # unbounded child floor would otherwise manufacture an offscreen parent.
-        # Only this selected-Edit growth request needs a bounded minimum; the
-        # shared mapper, authored family baselines and runtime remain unchanged.
-        bounded_minimum = QSize(
-            min(minimum.width(), binding.geometry.width()),
-            min(minimum.height(), binding.geometry.height()),
-        )
-        local = clamp_local_rect_to_bounds(
-            QRect(
-                current.x() - binding.geometry.x(),
-                current.y() - binding.geometry.y(),
-                target_width,
-                target_height,
-            ),
-            binding.geometry.size(),
-            min_size=bounded_minimum,
-        )
-        # If the display cannot physically admit the requested growth, persist
-        # only the logical box represented by the clamped physical rectangle.
-        # This keeps content_extent and rendered outer geometry truthful.
-        admitted_box = (
-            float(local.width()) / scale,
-            float(local.height()) / scale,
-        )
-        current_extent = item.current_content_extent
-        if (
-            local.width() == current.width()
-            and local.height() == current.height()
-            and current_extent is not None
-            and abs(float(current_extent[0]) - admitted_box[0]) <= 1.0e-4
-            and abs(float(current_extent[1]) - admitted_box[1]) <= 1.0e-4
-        ):
-            # Display bounds can make a requested overflow physically impossible.
-            # Keep the transient child floor for parent-gesture protection, but do
-            # not republish an identical outer rectangle on every pointer sample.
-            return False
-
-        payload = dict(item.current_size_payload)
-        payload.update(
-            width=local.width(),
-            height=local.height(),
-            content_extent=[admitted_box[0], admitted_box[1]],
-        )
-        item.set_geometry(
-            QRect(
-                binding.geometry.x() + local.x(),
-                binding.geometry.y() + local.y(),
-                local.width(),
-                local.height(),
-            ),
-            size_payload=payload,
-            content_extent=admitted_box,
-        )
-        return True
+        return False
 
     def resize_wheel(
         self,
@@ -1929,6 +1899,17 @@ class QuickCustomLayoutOwner:
                     committed_content_extent[0],
                     committed_content_extent[1],
                 ]
+
+            # One widget-wide list order is part of the committed CUSTOM carrier.
+            # It must survive a new Edit session and a different display generation,
+            # but never leak into authored mode or unrelated widget families.
+            if committed_entry is not None and widget_id in COLUMN_RAIL_IDS:
+                committed_order = normalize_column_rails(
+                    widget_id,
+                    committed_entry.size_payload.get(COLUMN_RAILS_PAYLOAD_KEY),
+                )
+                if committed_order is not None:
+                    payload[COLUMN_RAILS_PAYLOAD_KEY] = list(committed_order)
 
             # Per-widget Restore Size has a different authority from the edit
             # admission baseline.  The display presenter retains the current
@@ -2352,6 +2333,17 @@ class QuickCustomLayoutOwner:
             item.baseline_size_payload,
             payload_scale,
         )
+        # The uniform-size baseline is not a source for *discrete* edit state.
+        # In particular Restore Size removes a rail override; a subsequent
+        # wheel gesture must not resurrect it from a previously saved baseline.
+        payload.pop(COLUMN_RAILS_PAYLOAD_KEY, None)
+        if item.source_key.widget_id in COLUMN_RAIL_IDS:
+            order = normalize_column_rails(
+                item.source_key.widget_id,
+                item.current_size_payload.get(COLUMN_RAILS_PAYLOAD_KEY),
+            )
+            if order is not None:
+                payload[COLUMN_RAILS_PAYLOAD_KEY] = list(order)
         if item.child_geometry_capable:
             # Baseline payloads are an absolute *size* reference, never a
             # snapshot of the currently edited children. A wheel/corner gesture
@@ -3271,7 +3263,7 @@ class QuickCustomLayoutOwner:
             self._resize_origins = {}
             self._child_resize_origins = {}
             self._child_move_origins = {}
-            self._undo_last = None
+            self._undo_history.clear()
             self._undo_pending = None
             self._selected_child_edit_item = None
             self._visualizer_pixels_per_world.clear()

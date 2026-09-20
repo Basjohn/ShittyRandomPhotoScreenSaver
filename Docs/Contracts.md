@@ -217,9 +217,19 @@ X/Y/display, stays in CUSTOM and bypasses stacking/ordinary auto-fit/shrink. Onl
 cannot fit the owning display may receive uniform emergency reduction. CUSTOM side reflow must never overwrite the
 authored restore target.
 
-**Edit-only controls and one-action undo:** the existing shared `CustomLayoutSession` remains the sole working parent/child geometry and payload owner. The retained edit overlay owns only selected-frame transient, default-locked child-handle visibility. Plain `L` during Edit and the existing 22 px lock glyph invoke the same toggle. Locking cancels any held child gesture before hiding handles; neither control changes the parent edit controls, child paint, ordinary widget enabled state, Settings, or the saved layout. The child-role observer remains alive while the chrome is locked.
+**Edit-only controls and bounded three-action undo:** the existing shared `CustomLayoutSession` remains the sole working parent/child geometry and payload owner. The retained edit overlay owns only selected-frame transient, default-locked child-handle visibility. Plain `L` during Edit and the existing 22 px lock glyph invoke the same toggle. Locking cancels any held child gesture before hiding handles; neither control changes the parent edit controls, child paint, ordinary widget enabled state, Settings, or the saved layout. The child-role observer remains alive while the chrome is locked.
 
-`Ctrl+Z` while Edit is active consumes **one** snapshot of the last completed parent or child edit action. A drag counts once at release, not per pointer sample; an admitted wheel step, child flip, reset, or other discrete editor change counts once. The snapshot records values of the existing item, not a competing state model. Undo republishes through the shared session, never writes Settings, has no redo stack, and is disabled outside Edit and during an active pointer gesture. Its snapshot is cleared at Edit teardown. Plain `Z` retains its normal previous-image behaviour outside Edit. The lock toggle changes transient QML chrome only, so it is not an undoable geometry action. No extra polling, timer, per-frame work, persisted schema, or input owner is introduced.
+`Ctrl+Z` while Edit is active consumes one of **up to three completed Edit actions**, newest first, across all widgets in the shared Edit session. A drag counts once at release, not per pointer sample; an admitted wheel step, child flip, reset, or other discrete editor change counts once. Only state-changing completed actions enter the bounded history; the fourth-previous action is evicted. Each snapshot records values of the existing item, not a competing state model. Undo republishes through the shared session, never writes Settings, has no redo stack, and is disabled outside Edit and during an active pointer gesture. The entire history is cleared at Edit teardown. Plain `Z` retains its normal previous-image behaviour outside Edit. The lock toggle changes transient QML chrome only, so it is not an undoable geometry action. No extra polling, timer, per-frame work, persisted schema, or input owner is introduced.
+
+**Ordinary child containment and two-axis reflow:** Parent CUSTOM size/extent is
+controlled by the outer resize controls only; moving/resizing a child never
+grows the parent. The shared Edit admission clamps its actual occupied painted
+bounds to the legal card or separately declared accessory surface regardless of
+sibling-collision setting. Saved child X/Y are independent deltas from live
+family rails: customizing one axis cannot suppress the other's parent reflow.
+Flipped layouts retain the same compact-height, Save/reopen and Edit geometry
+contracts and may not alter text/image pixels or hide essential active-track
+controls. Authored size is a Restore target, not child-growth permission.
 
 **Family-local live rails:** Friend Pulse's unedited separator follows its existing live `authoredWidth`/content extent, while an explicitly edited `width_scale` multiplies that live span. The separator's own geometry cannot demand parent growth. Flipped Reddit reads `post title | age value (e.g. 01HR) | AGO`, with a compact title/time gap and no mirrored text or independently persisted post-row geometry. These are projections of existing family and normalized child values, not new ownership systems.
 
@@ -426,3 +436,15 @@ Ordinary uniform CUSTOM scale is absolute against stable authored/preferred geom
 The shared edit parent MouseArea covers its entire parent footprint; only explicit higher-z chrome owns a restricted hit target. An entire top-strip exclusion is not a close-button collision solution. The child-alignment flip glyph may have a larger invisible event target than its painted disc, but both must route through the same child flip method, above the child move/resize target, without introducing a second alignment or geometry authority. Locked child handles must not disable selection of their parent.
 
 Reddit/Reddit2 flipped rows use a single bounded trailing age rail, with title before age value before AGO and explicit compact gaps; title text elides before reaching that rail. Timestamp X must not depend on a headline's intrinsic width. Real QQuickWindow pointer-delivery and real retained-item geometry tests are required to assert these behaviours; green source-string checks alone cannot establish them.
+
+### CUSTOM semantic repeated-list columns
+
+The existing CUSTOM layout `size_payload` may contain one `column_rails` list
+for Reddit/Reddit2 (`age`, `ago`, `title`) or Gmail (`timestamp`, `sender`,
+`subject`). It is accepted only as an exact three-item permutation of that
+family's stable IDs. Missing/invalid data falls back to the normal header-flip
+order; it cannot mutate saved user content during hydration. One release in
+selected/unlocked Edit commits a whole-list swap as one Undo action. The model emits a dedicated column-order change event so an unrelated child
+geometry sample never rebinds every repeated-row column. Retained
+per-row items use the same order, preserve their identity, and never become
+independent position owners. Normal render has no edit-rail descriptor scan.

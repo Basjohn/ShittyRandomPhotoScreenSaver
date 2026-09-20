@@ -1156,3 +1156,57 @@ def test_gmail_header_flip_swaps_chrome_and_message_rails_without_text_mirroring
         if engine is not None:
             engine.deleteLater()
         qt_app.processEvents()
+
+@pytest.mark.qt
+def test_gmail_semantic_column_rails_reorder_all_retained_message_rows(qt_app):
+    """Sender/subject/timestamp rail order belongs to one widget, not each row."""
+    from PySide6.QtCore import QPointF
+
+    config = _config(group_threads=False, limit=3)
+    model = GmailPresentationModel(config, _style(config))
+    model.activate()
+    model.on_gmail_runtime_snapshot(_snapshot(1, (_email("one"), _email("two"),
+                                                    _email("three"))))
+    engine = component = item = None
+    try:
+        engine, component, item = _create_qml_item(model)
+        qt_app.processEvents()
+
+        def row_columns(index):
+            row = _find_visual_item(item, f"gmailMessageRow_{index}")
+            assert row is not None and row.isVisible()
+            fields = {role: _find_visual_item(item, f"gmail{name}_{index}")
+                      for role, name in (("timestamp", "Timestamp"),
+                                         ("sender", "Sender"), ("subject", "Subject"))}
+            assert all(x is not None and x.isVisible() for x in fields.values())
+            positions = {role: text.mapToItem(row, QPointF(0, 0)).x()
+                         for role, text in fields.items()}
+            return fields, positions
+
+        originals = [row_columns(i)[0] for i in range(3)]
+        model.set_custom_column_order(["sender", "timestamp", "subject"])
+        qt_app.processEvents()
+        for i in range(3):
+            fields, p = row_columns(i)
+            assert p["sender"] < p["timestamp"] < p["subject"]
+            assert all(fields[k] is originals[i][k] for k in fields)
+        model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        item.setHeight(280.0)
+        qt_app.processEvents()
+        for i in range(3):
+            fields, p = row_columns(i)
+            assert p["sender"] < p["timestamp"] < p["subject"]
+            assert all(fields[k] is originals[i][k] for k in fields)
+        model.set_custom_column_order(["subject", "sender", "timestamp"])
+        qt_app.processEvents()
+        for i in range(3):
+            _, p = row_columns(i)
+            assert p["subject"] < p["sender"] < p["timestamp"]
+    finally:
+        if item is not None:
+            item.deleteLater()
+        if component is not None:
+            component.deleteLater()
+        if engine is not None:
+            engine.deleteLater()
+        qt_app.processEvents()

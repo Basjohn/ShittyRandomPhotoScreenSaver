@@ -1792,6 +1792,7 @@
         "show_background": true,
         "show_condition_icon": true,
         "show_details_row": true,
+        "show_five_day_forecast": false,
         "show_forecast": true
       }
     },

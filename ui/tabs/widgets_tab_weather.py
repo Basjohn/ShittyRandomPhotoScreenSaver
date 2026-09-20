@@ -242,6 +242,16 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_show_forecast.stateChanged.connect(tab._update_stack_status)
     content_layout.addWidget(tab.weather_show_forecast)
 
+    # Separate from the compact Tomorrow line. Height admission is owned by QML.
+    tab.weather_show_five_day_forecast = QCheckBox("Show 5-Day Forecast")
+    tab.weather_show_five_day_forecast.setProperty("circleIndicator", True)
+    tab.weather_show_five_day_forecast.setChecked(tab._default_bool('weather', 'show_five_day_forecast'))
+    tab.weather_show_five_day_forecast.setToolTip(
+        "Show five daily icons and short weekday labels when the card has vertical room"
+    )
+    tab.weather_show_five_day_forecast.stateChanged.connect(tab._save_settings)
+    content_layout.addWidget(tab.weather_show_five_day_forecast)
+
     # Show details row
     tab.weather_show_details = QCheckBox("Show Details (Rain/Humidity/Wind)")
     tab.weather_show_details.setProperty("circleIndicator", True)
@@ -399,6 +409,7 @@ def load_weather_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.weather_font_combo.setCurrentFont(QFont(tab._config_str('weather', weather_config, 'font_family')))
     tab.weather_font_size.setValue(tab._config_int('weather', weather_config, 'font_size'))
     tab.weather_show_forecast.setChecked(tab._config_bool('weather', weather_config, 'show_forecast'))
+    tab.weather_show_five_day_forecast.setChecked(tab._config_bool('weather', weather_config, 'show_five_day_forecast'))
     tab.weather_show_details.setChecked(tab._config_bool('weather', weather_config, 'show_details_row'))
     tab.weather_show_icon.setChecked(tab._config_bool('weather', weather_config, 'show_condition_icon'))
     tab._set_combo_text(tab.weather_icon_alignment, tab._config_str('weather', weather_config, 'icon_alignment'))
@@ -448,6 +459,7 @@ def save_weather_settings(tab: WidgetsTab) -> dict:
         'font_size': tab.weather_font_size.value(),
         'margin': tab.weather_margin.value(),
         'show_forecast': tab.weather_show_forecast.isChecked(),
+        'show_five_day_forecast': tab.weather_show_five_day_forecast.isChecked(),
         'show_details_row': tab.weather_show_details.isChecked(),
         'show_condition_icon': tab.weather_show_icon.isChecked(),
         'icon_alignment': tab.weather_icon_alignment.currentText(),

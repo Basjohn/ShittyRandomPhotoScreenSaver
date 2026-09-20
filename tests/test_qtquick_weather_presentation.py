@@ -120,6 +120,7 @@ def _weather_values(**overrides):
         "border_color": [120, 195, 255, 255],
         "border_opacity": 0.9,
         "show_forecast": True,
+        "show_five_day_forecast": True,
         "show_condition_icon": True,
         "icon_alignment": "RIGHT",
         "icon_size": 96,
@@ -264,6 +265,8 @@ def test_weather_model_is_stable_runtime_consumer_for_loading_ready_and_cached_e
     assert model.detailIconSize == 30.0
     assert model.forecastText == "Tomorrow: 19°C, light rain"
     assert model.extendedForecastText.count("\n") == 4
+    assert [row["day"] for row in model.forecastDayCards] == ["FRI", "SAT", "SUN", "MON", "TUE"]
+    assert all(row["icon"].startswith("file:") for row in model.forecastDayCards)
     assert model.extendedForecastAvailable is True
     assert model.set_content_extent(760, 420) is True
     assert model.extendedForecastAvailable is True
@@ -285,6 +288,29 @@ def test_weather_model_is_stable_runtime_consumer_for_loading_ready_and_cached_e
     assert model.is_active is False
     assert runtime.consumer is None
     assert runtime.running is False
+
+
+def test_weather_five_day_option_and_cached_daily_cards_are_independent_of_tomorrow() -> None:
+    model, runtime = _model(show_forecast=False, show_five_day_forecast=True)
+    model.activate(object())
+    runtime.publish(_sample())
+    assert model.showForecast is False
+    assert model.extendedForecastAvailable is True
+    assert len(model.forecastDayCards) == 5
+    assert [row["day"] for row in model.forecastDayCards] == ["FRI", "SAT", "SUN", "MON", "TUE"]
+    assert model.forecastDayCards[0]["temperature"] == "19°-24°"
+    assert model.forecastDayCards[0]["icon"].endswith("rain.png")
+    before = runtime.fetch_calls
+    model.apply_config(replace(model.config, show_five_day_forecast=False))
+    assert model.extendedForecastAvailable is False
+    assert model.forecastDayCards[0]["day"] == "FRI"
+    assert runtime.fetch_calls == before
+    model.apply_config(replace(model.config, show_five_day_forecast=True))
+    assert model.extendedForecastAvailable is True
+    runtime.publish(_sample(forecast_days=["Fri: 19°-24°C / Light Rain"]))
+    assert model.extendedForecastAvailable is False
+    assert model.forecastDayCards == []  # no partial five-day strip
+    model.retire()
 
 
 def test_weather_model_rebinds_same_location_cached_state_without_discarding_it() -> None:
@@ -460,7 +486,11 @@ def test_weather_family_uses_current_scene_host_and_mutates_without_recreation(q
         assert _find_visual_item(item, "weatherConditionIconRight") is not None
         assert model.viewState == "ready"
 
-        compact_height = float(item.property("preferredContentHeight"))
+        # With the 5-day option on, the anchored card naturally includes it.
+        # A CUSTOM card at compact height must hide the strip by Y alone.
+        extended = _find_visual_item(item, "weatherExtendedForecastBand")
+        assert extended is not None and extended.isVisible() is True
+        compact_height = float(item.property("compactIntrinsicContentHeight"))
         presentation._apply_custom_layout_size_payload(
             {"content_extent": [760.0, compact_height]}
         )
@@ -478,10 +508,46 @@ def test_weather_family_uses_current_scene_host_and_mutates_without_recreation(q
         qt_app.processEvents()
         assert extended.isVisible() is True
         assert model.contentExtentHeight == pytest.approx(expanded_height)
+        icons = _find_visual_item(item, "weatherExtendedForecastIcons")
+        labels = _find_visual_item(item, "weatherExtendedForecastText")
+        assert icons is not None and labels is not None
+        assert icons.isVisible() and labels.isVisible()
+        icon_cells = [child for child in icons.childItems() if child.width() > 0]
+        label_cells = [child for child in labels.childItems() if child.width() > 0]
+        assert len(icon_cells) == len(label_cells) == 5
+        assert all(child.width() == pytest.approx(icons.width() / 5.0) for child in icon_cells)
+        assert all(child.width() == pytest.approx(labels.width() / 5.0) for child in label_cells)
+        # Only vertical space affects admission. Changing X alone must not
+        # wake a hidden band or retire a visible one.
+        presentation._apply_custom_layout_size_payload({
+            "content_extent": [920.0, expanded_height]
+        })
+        qt_app.processEvents()
+        assert extended.isVisible() is True
+        presentation._apply_custom_layout_size_payload({
+            "content_extent": [920.0, compact_height]
+        })
+        qt_app.processEvents()
+        assert extended.isVisible() is False
+        presentation._apply_custom_layout_size_payload({
+            "content_extent": [760.0, compact_height]
+        })
+        qt_app.processEvents()
+        assert extended.isVisible() is False
+        # Progressive pure-Y reduction also retires Tomorrow and detail metrics.
+        presentation._apply_custom_layout_size_payload({
+            "content_extent": [760.0, 220.0]
+        })
+        qt_app.processEvents()
+        details = _find_visual_item(item, "weatherDetailsBand")
+        tomorrow = _find_visual_item(item, "weatherForecastBand")
+        assert details is not None and tomorrow is not None
+        assert details.isVisible() is False
+        assert tomorrow.isVisible() is False
 
         presentation._apply_custom_layout_size_payload({})
         qt_app.processEvents()
-        assert extended.isVisible() is False
+        assert extended.isVisible() is True
         assert model.contentExtentActive is False
 
         next_config = replace(
@@ -543,6 +609,11 @@ def test_weather_qml_and_registry_are_static_presentation_only() -> None:
     assert "sourceSize." not in qml
     assert "legacyHorizontalInset: 10.0" in qml
     assert "68.0" in qml
+    assert 'id: extendedIconRow' in qml
+    assert 'model: weatherRoot.weatherModel.forecastDayCards' in qml
+    assert 'readonly property real verticalBudget:' in qml
+    assert 'weatherModel.contentExtentHeight : Number.POSITIVE_INFINITY' in qml
+    assert '"roleId": "extended_icons"' in qml
     for asset in (
         ROOT / "images" / "weather" / "presented" / "overcast-day.png",
         ROOT / "images" / "weather" / "presented" / "clear-night.png",

@@ -373,7 +373,9 @@ class OpenMeteoProvider:
                         day_label = f"Day {index}"
                         if index < len(dates):
                             try:
-                                day_label = datetime.fromisoformat(str(dates[index])).strftime("%a")
+                                day_label = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")[
+                                    datetime.fromisoformat(str(dates[index])).weekday()
+                                ]
                             except (TypeError, ValueError):
                                 pass
                         day_condition = self.WEATHER_CODES.get(codes[index], "")

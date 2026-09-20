@@ -29,12 +29,36 @@ OverlayWidget {
     readonly property real cExtentH: redditModel.contentExtentHeight
     readonly property real naturalRowHeight: Math.max(28.0, redditModel.fontSize * 1.55)
     readonly property real baseRowSpacing: 4.0
-    readonly property real flippedTitleAgeGap: 4.0
-    readonly property real ageValueAgoGap: 4.0
+    // Reserve enough *painted* space between AGO and the title even when the
+    // whole retained card is uniformly scaled down. Neither the internal
+    // 01HR/AGO separation nor the stable timestamp rail changes.
+    // The scale is a projection of the outer rect, never an input to the
+    // preferred-size authority; this cannot feed a card-size cycle.
+    readonly property real titleAgeGap: Math.max(
+        8.0, 9.0 / Math.max(0.2, redditRoot.presentationScale)
+    )
+    readonly property real ageValueAgoGap: 2.0
     readonly property var childGeometry: redditModel.customChildGeometry
     // Header alignment is the existing widget-wide semantic flip intent.
     // Project structural rails, NEVER mirror glyphs or text alignment.
     readonly property bool headerFlipped: childAlignment("header", "left") === "right"
+    // One widget-wide semantic order; no per-post data or position is stored.
+    readonly property var visualColumnOrder: {
+        const saved = redditModel.customColumnOrder
+        return saved && saved.length === 3 ? saved
+            : (headerFlipped ? ["title", "age", "ago"] : ["age", "ago", "title"])
+    }
+    customColumnRailSpecs: {
+        // No repeated-row descriptor lookup in ordinary playback.
+        if (!redditRoot.customLayoutInputBlocked) return []
+        const order = redditRoot.visualColumnOrder
+        const first = postRepeater.count > 0 ? postRepeater.itemAt(0) : null
+        if (!first || !first.visible || !first.columnTargets)
+            return []
+        const targets = first.columnTargets
+        return order.map(function(role) { return {"roleId": role, "target": targets[role]} })
+    }
+
 
     function childRecord(roleId) {
         return childGeometry ? childGeometry[roleId] : null
@@ -120,9 +144,15 @@ OverlayWidget {
     // Parent side-reflow remains owned solely by content_extent.
     preferredContentWidth: cExtentW > 0.0
         ? cExtentW : canonicalPreferredWidth
+    // Loading/empty post delegates must NOT become the authored size authority.
+    // Otherwise starting Edit before the provider publishes rows captures a
+    // tiny 600x88 card; Restore Size later collapses a full ready-state card
+    // back to that provisional height. Keep the post-limit authored reference
+    // stable across provider changes, while preserving explicit CUSTOM extents.
     preferredContentHeight: cExtentH > 0.0
         ? cExtentH
-        : Math.max(60.0, contentColumn.childrenRect.height) + redditRoot.shellInset
+        : Math.max(canonicalAuthoredHeight,
+                   contentColumn.childrenRect.height + redditRoot.shellInset)
 
     customEditableChildRoles: {
         const roles = []
@@ -133,7 +163,7 @@ OverlayWidget {
             "target": headerFrame,
             // A semantic header relocation follows the already-admitted
             // parent rail; it is not a new content-size requirement.
-            "allowParentGrowth": false,
+
             "normalizationWidth": normW,
             "normalizationHeight": normH,
             "semanticCornerInsetX": 0.0,
@@ -143,7 +173,7 @@ OverlayWidget {
             roles.push({
                 "roleId": "refresh",
                 "target": refreshTarget,
-                "allowParentGrowth": false,
+
                 "normalizationWidth": normW,
                 "normalizationHeight": normH
             })
@@ -290,6 +320,37 @@ OverlayWidget {
                 required property int index
 
                 objectName: "redditPostRow_" + index
+                readonly property var columnTargets: ({"age": ageValueText,
+                                                       "ago": ageAgoText,
+                                                       "title": titleText})
+                readonly property real ageRailWidth: ageValueText.width
+                readonly property real agoRailWidth: ageAgoText.width
+                readonly property real semanticGapTotal: {
+                    const order = redditRoot.visualColumnOrder
+                    return postRow.columnGap(order[0], order[1])
+                        + postRow.columnGap(order[1], order[2])
+                }
+                function columnGap(left, right) {
+                    return (left === "age" && right === "ago")
+                        || (left === "ago" && right === "age")
+                        ? redditRoot.ageValueAgoGap : redditRoot.titleAgeGap
+                }
+                function columnWidth(role) {
+                    if (role === "age") return ageRailWidth
+                    if (role === "ago") return agoRailWidth
+                    return Math.max(1.0, width - ageRailWidth - agoRailWidth - semanticGapTotal)
+                }
+                function columnX(role) {
+                    const order = redditRoot.visualColumnOrder
+                    let left = 0.0
+                    for (let i = 0; i < order.length; ++i) {
+                        if (order[i] === role) return left
+                        left += columnWidth(order[i])
+                        if (i < order.length - 1) left += columnGap(order[i], order[i + 1])
+                    }
+                    return 0.0
+                }
+
                 width: contentColumn.width
                 visible: index < redditRoot.effectiveVisibleCount
                 height: visible ? redditRoot.extentRowHeight : 0.0
@@ -302,10 +363,13 @@ OverlayWidget {
                     // pull 01HR/AGO towards the middle, while long titles pushed
                     // them to the edge. The title elides against this stable
                     // rail; the two timestamp glyphs stay adjacent.
-                    x: redditRoot.headerFlipped ? parent.width - width : 0.0
+                    // The age wrapper retains its compact authored width when
+                    // AGE and AGO are adjacent. It spans both rails only after
+                    // an explicit semantic split (AGE | TITLE | AGO).
+                    x: Math.min(postRow.columnX("age"), postRow.columnX("ago"))
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.max(88.0, ageValueText.width
-                        + redditRoot.ageValueAgoGap + ageAgoText.width)
+                    width: Math.max(postRow.columnX("age") + postRow.ageRailWidth,
+                        postRow.columnX("ago") + postRow.agoRailWidth) - x
                     height: parent.height
 
                     readonly property string valueText: {
@@ -318,9 +382,9 @@ OverlayWidget {
                     ShadowedText {
                         id: ageValueText
                         objectName: "redditPostAgeValue_" + postRow.index
-                        x: 0.0
+                        x: postRow.columnX("age") - ageText.x
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(49.0, implicitWidth)
+                        width: Math.max(44.0, redditRoot.redditModel.ageFontSize * 4.4)
                         height: parent.height
                         text: ageText.valueText
                         color: redditRoot.redditModel.ageColor
@@ -344,9 +408,7 @@ OverlayWidget {
                         objectName: "redditPostAgeAgo_" + postRow.index
                         // Flipped reading order is POST TITLE | 01HR | AGO.
                         // Never mirror the actual text/glyphs.
-                        x: redditRoot.headerFlipped
-                            ? ageValueText.width + redditRoot.ageValueAgoGap
-                            : parent.width - width
+                        x: postRow.columnX("ago") - ageText.x
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(30.0, implicitWidth)
                         height: parent.height
@@ -368,10 +430,10 @@ OverlayWidget {
                 ShadowedText {
                     id: titleText
                     objectName: "redditPostTitle_" + postRow.index
-                    x: redditRoot.headerFlipped ? 0.0 : ageText.width + 4.0
-                    width: Math.max(1.0, redditRoot.headerFlipped
-                        ? parent.width - ageText.width - redditRoot.flippedTitleAgeGap
-                        : parent.width - ageText.width - 4.0)
+                    x: postRow.columnX("title")
+                    // One variable-width title rail follows the same discrete
+                    // semantic permutation on EVERY row, including after reflow.
+                    width: postRow.columnWidth("title")
                     anchors.verticalCenter: parent.verticalCenter
                     // Post text remains left-aligned in both arrangements. The
                     // timestamp occupies the opposite fixed-width semantic rail.

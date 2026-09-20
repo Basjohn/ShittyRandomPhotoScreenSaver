@@ -12,34 +12,9 @@ Item {
     property var verticalGuides: []
     property var horizontalGuides: []
 
-    // Only actual child-state/role/logical-requirement events trigger this
-    // reconciliation, never a mapped child rectangle moving because its parent
-    // changed size. Separate the event from the QML binding evaluation using
-    // a root-owned callLater microtask on this stable display-local root, never
-    // a closure capturing a short-lived child Loader/delegate or an obsolete row.
-    // It is Edit-only, event-driven, and does not poll or create a timer.
-    property bool childRequirementSyncQueued: false
-    function queueSelectedChildRequirementSync() {
-        if (childRequirementSyncQueued || !editActive || !sessionModel)
-            return
-        childRequirementSyncQueued = true
-        Qt.callLater(customLayoutOverlay.flushSelectedChildRequirementSync)
-    }
-    function flushSelectedChildRequirementSync() {
-        childRequirementSyncQueued = false
-        if (!editActive || !sessionModel)
-            return
-        // Resolve the CURRENT selection after the retained reflow has settled.
-        // A role/model/selection retired in the intervening turn cannot publish
-        // a stale child floor onto a different row or a destroyed Loader.
-        for (let i = 0; i < editFrameRepeater.count; ++i) {
-            const frame = editFrameRepeater.itemAt(i)
-            if (frame && frame.selectedForChildEdit && frame.hasPresentationItem) {
-                frame.syncChildRequirementNow()
-                return
-            }
-        }
-    }
+    // Only the outer handles change the parent's size. Child gestures are
+    // clamped to the retained family's declared paint surface, never published
+    // as a competing parent content-extent request.
 
     // Theme-coloured edit-mode close (X) control. Default Dark = black circle,
     // white X, tiny white outline. Phase 1c binds these to the resolved Widget
@@ -288,50 +263,12 @@ Item {
                     && axes.indexOf("vertical") >= 0
             }
 
-            function syncChildRequirementNow() {
-                // While the selected-parent child layer exists it is the most
-                // accurate edit-only observer: it can combine the family's
-                // retained authored/reflow requirement with the *actual mapped*
-                // occupied rectangles of freely placed children. This prevents a
-                // saved placement in an already-expanded parent from being eaten
-                // by a later parent resize without forcing every family to
-                // duplicate placement-bound math. Outside child editing, retain
-                // the old family requirement fallback and no geometry scan exists.
-                if (childRoleLoader.active && childRoleLoader.item !== null) {
-                    childRoleLoader.item.syncRequirementNow()
-                    return
-                }
-                if (!customLayoutOverlay.sessionModel
-                        || !editFrame.hasPresentationItem)
-                    return
-                const requirement = editFrame.presentationItem.customEditableChildRequirementTarget
-                if (requirement === null || requirement === undefined) {
-                    customLayoutOverlay.sessionModel.clearChildContentExtent(editFrame.index)
-                    return
-                }
-                const requiredWidth = Number(requirement.requiredContentWidth || 0.0)
-                const requiredHeight = Number(requirement.requiredContentHeight || 0.0)
-                if (requiredWidth <= 0.0 || requiredHeight <= 0.0) {
-                    customLayoutOverlay.sessionModel.clearChildContentExtent(editFrame.index)
-                    return
-                }
-                customLayoutOverlay.sessionModel.ensureChildContentExtent(
-                    editFrame.index, requiredWidth, requiredHeight
-                )
-            }
-
             objectName: "customLayoutEditFrame-" + widgetId
             z: 10
             x: geometryX
             y: geometryY
             width: geometryWidth
             height: geometryHeight
-            // Only a normalized CHILD edit invalidates this revision.  Parent
-            // geometry/containment publication does not increment it, so an
-            // admitted outer growth cannot request itself again through remap.
-            onChildStateRevisionChanged:
-                customLayoutOverlay.queueSelectedChildRequirementSync()
-
             Rectangle {
                 anchors.fill: parent
                 color: "transparent"
@@ -662,7 +599,6 @@ Item {
                 if (!editFrame.resizable || !customLayoutOverlay.sessionModel)
                     return false
                 customLayoutOverlay.sessionModel.selectItem(editFrame.index)
-                editFrame.syncChildRequirementNow()
                 return customLayoutOverlay.sessionModel.resizeWheel(
                     editFrame.index, deltaY
                 )
@@ -858,8 +794,7 @@ Item {
                             // resize gesture takes ownership. The retained family
                             // is the current truth for child occupancy, so publish
                             // that floor synchronously at the gesture boundary.
-                            editFrame.syncChildRequirementNow()
-                            const point = overlayPoint(mouse)
+                                        const point = overlayPoint(mouse)
                             customLayoutOverlay.sessionModel.beginResize(
                                 editFrame.index,
                                 parent.corner,
@@ -954,8 +889,7 @@ Item {
 
                         onPressed: function(mouse) {
                             customLayoutOverlay.sessionModel.selectItem(editFrame.index)
-                            editFrame.syncChildRequirementNow()
-                            const point = overlayPoint(mouse)
+                                        const point = overlayPoint(mouse)
                             customLayoutOverlay.sessionModel.beginResize(
                                 editFrame.index,
                                 parent.edge,
@@ -984,6 +918,142 @@ Item {
                                 point.y,
                                 true
                             )
+                        }
+                    }
+                }
+            }
+
+            // Semantic list rails are a separate EDIT-only affordance. The model
+            // owns a single discrete permutation per widget, not row offsets.
+            // Grips drag horizontally; release swaps the nearest two semantic
+            // columns for every row in one bounded Undo/Save transaction.
+            Loader {
+                id: columnRailLoader
+                anchors.fill: parent
+                z: 63
+                active: editFrame.selectedForChildEdit && editFrame.hasPresentationItem
+                    && !editFrame.childEditingLocked
+                    && (editFrame.presentationItem.customColumnRailSpecs || []).length === 3
+                sourceComponent: Component {
+                    Item {
+                        id: columnRailLayer
+                        anchors.fill: parent
+                        Repeater {
+                            id: columnRailRepeater
+                            model: editFrame.hasPresentationItem
+                                ? (editFrame.presentationItem.customColumnRailSpecs || []) : []
+                            delegate: Item {
+                                id: columnGrip
+                                required property var modelData
+                                readonly property string railId: String(modelData.roleId || "")
+                                // Edit-only pointer preview. It never changes the
+                                // semantic order or any row until release.
+                                property real previewOffsetX: 0.0
+                                readonly property var targetItem: modelData.target || null
+                                readonly property bool targetReady: targetItem !== null
+                                    && targetItem.visible && targetItem.width > 0
+                                // Keep each axis an independent dependency. A
+                                // summed signature loses opposite-axis changes.
+                                readonly property var geometryAxes: targetReady ? [
+                                    targetItem.x, targetItem.y, targetItem.width, targetItem.height,
+                                    targetItem.parent.x, targetItem.parent.y,
+                                    targetItem.parent.parent.x, targetItem.parent.parent.y,
+                                    editFrame.width, editFrame.height,
+                                    editFrame.presentationItem.width,
+                                    editFrame.presentationItem.height
+                                ] : []
+                                readonly property point mappedOrigin: {
+                                    const axes = geometryAxes
+                                    return targetReady
+                                        ? targetItem.mapToItem(editFrame, targetItem.width / 2.0, 0)
+                                        : Qt.point(0, 0)
+                                }
+                                objectName: "customLayoutColumnRail-" + editFrame.widgetId
+                                    + "-" + railId
+                                visible: targetReady && editFrame.selectedForChildEdit
+                                width: 18
+                                x: mappedOrigin.x - width / 2.0
+                                y: mappedOrigin.y
+                                height: Math.max(14.0, editFrame.height - y - 12.0)
+                                // A slim continuous guide, with the handle on the
+                                // first row. It never paints or observes the list
+                                // when Edit is closed or the child controls are locked.
+                                Rectangle {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: 2
+                                    radius: 1
+                                    color: "#a94d9ee5"
+                                    transform: Translate { x: columnGrip.previewOffsetX }
+                                }
+                                Rectangle {
+                                    objectName: "customLayoutColumnGrip-" + editFrame.widgetId
+                                        + "-" + columnGrip.railId
+                                    width: 17
+                                    height: 17
+                                    radius: 4
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    anchors.top: parent.top
+                                    color: "#d8265eaa"
+                                    border.width: 1
+                                    border.color: "#e8d6edff"
+                                    transform: Translate { x: columnGrip.previewOffsetX }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "↔"
+                                        color: "white"
+                                        font.pixelSize: 12
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.SizeHorCursor
+                                    property real pressedX: 0.0
+                                    onPressed: function(mouse) {
+                                        pressedX = mapToItem(editFrame, mouse.x, mouse.y).x
+                                        columnGrip.previewOffsetX = 0.0
+                                        mouse.accepted = true
+                                    }
+                                    onPositionChanged: function(mouse) {
+                                        if (!pressed) return
+                                        const x = mapToItem(editFrame, mouse.x, mouse.y).x
+                                        columnGrip.previewOffsetX = Math.max(-columnGrip.x,
+                                            Math.min(editFrame.width - columnGrip.x - columnGrip.width,
+                                                x - pressedX))
+                                    }
+                                    onCanceled: columnGrip.previewOffsetX = 0.0
+                                    onReleased: function(mouse) {
+                                        if (!customLayoutOverlay.sessionModel)
+                                            return
+                                        const released = mapToItem(editFrame, mouse.x, mouse.y).x
+                                        columnGrip.previewOffsetX = 0.0
+                                        if (Math.abs(released - pressedX) < 9.0)
+                                            return
+                                        let nearest = null
+                                        let distance = Infinity
+                                        for (let i = 0; i < columnRailRepeater.count; ++i) {
+                                            const candidate = columnRailRepeater.itemAt(i)
+                                            if (!candidate || !candidate.visible || candidate === columnGrip)
+                                                continue
+                                            const center = candidate.x + candidate.width / 2.0
+                                            const delta = Math.abs(center - released)
+                                            if (delta < distance) {
+                                                nearest = candidate
+                                                distance = delta
+                                            }
+                                        }
+                                        if (nearest) {
+                                            const ownCenter = columnGrip.x + columnGrip.width / 2.0
+                                            const targetCenter = nearest.x + nearest.width / 2.0
+                                            if (Math.abs(released - ownCenter)
+                                                    >= Math.abs(targetCenter - ownCenter) / 2.0)
+                                                customLayoutOverlay.sessionModel.swapColumnRails(
+                                                    editFrame.index, columnGrip.railId, nearest.railId)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1054,194 +1124,6 @@ Item {
                                 color: semantic ? "#dc8bc8ff" : "#b45ea8ff"
                                 z: 1
                             }
-                        }
-
-                        // One family-wide retained requirement, observed only
-                        // while this parent is selected for child editing. Changes
-                        // are coalesced to the next QML turn so one retained reflow
-                        // cannot publish width + height as two outer grows. This is
-                        // event-driven edit work, never a timer/poller. Gesture
-                        // handlers also queue this after each accepted sample so
-                        // parent growth follows the pointer instead of landing as a
-                        // delayed release-time jump.
-                        readonly property var requirementTarget:
-                            editFrame.hasPresentationItem
-                                ? editFrame.presentationItem.customEditableChildRequirementTarget
-                                : null
-                        readonly property real requiredContentWidth:
-                            requirementTarget !== null
-                                ? Number(requirementTarget.requiredContentWidth || 0.0)
-                                : 0.0
-                        readonly property real requiredContentHeight:
-                            requirementTarget !== null
-                                ? Number(requirementTarget.requiredContentHeight || 0.0)
-                                : 0.0
-                        function aggregateRequiredContentSize() {
-                            // Family targets remain the authority for authored
-                            // reflow/size requirements. Placement is different:
-                            // because roles may move anywhere inside the real
-                            // parent, the selected Edit layer can cheaply derive
-                            // the exact occupied right/bottom edge from the retained
-                            // targets it already owns. No scene-wide scan, timer or
-                            // normal-runtime observer is introduced.
-                            let width = Math.max(0.0, requiredContentWidth)
-                            let height = Math.max(0.0, requiredContentHeight)
-                            const scale = Math.max(1.0e-6, editFrame.resizeScale)
-                            if (childRoleRepeater) {
-                                for (let i = 0; i < childRoleRepeater.count; ++i) {
-                                    const frame = childRoleRepeater.itemAt(i)
-                                    // The chrome may be locked (invisible),
-                                    // but the underlying painted target still
-                                    // contributes to its existing content floor.
-                                    if (!frame || !frame.targetReady || !frame.roleId.length)
-                                        continue
-                                    if (!frame.allowParentGrowth)
-                                        continue
-                                    // Dense families expose a stable logical
-                                    // child requirement. Their on-rail targets
-                                    // move WITH an already-grown parent; using
-                                    // those live mapped edges as a new parent
-                                    // minimum would count parent growth twice.
-                                    // An off-rail/free-placed role still needs
-                                    // the genuine mapped occupancy floor.
-                                    if (frame.requirementTarget !== null
-                                            && frame.targetItem !== null
-                                            && frame.targetItem.customEditReflowEnabled === true)
-                                        continue
-                                    width = Math.max(
-                                        width,
-                                        Math.max(frame.occupiedWidth,
-                                                 frame.occupiedX + frame.occupiedWidth) / scale
-                                    )
-                                    height = Math.max(
-                                        height,
-                                        Math.max(frame.occupiedHeight,
-                                                 frame.occupiedY + frame.occupiedHeight) / scale
-                                    )
-                                }
-                            }
-                            return Qt.size(width, height)
-                        }
-
-                        function syncRequirementNow() {
-                            if (!customLayoutOverlay.sessionModel)
-                                return false
-                            // A queued callback from an old selection/loader must
-                            // never resurrect that item's transient floor after the
-                            // layer has been retired.
-                            if (!editFrame.selectedForChildEdit
-                                    || !childRoleLoader.active
-                                    || childRoleLoader.item !== childRoleLayer)
-                                return false
-                            const aggregate = aggregateRequiredContentSize()
-                            if (aggregate.width <= 0.0 || aggregate.height <= 0.0)
-                                return customLayoutOverlay.sessionModel.clearChildContentExtent(
-                                    editFrame.index
-                                )
-                            return customLayoutOverlay.sessionModel.ensureChildContentExtent(
-                                editFrame.index,
-                                aggregate.width,
-                                aggregate.height
-                            )
-                        }
-
-                        function scheduleRequirementSync() {
-                            // Only genuine child-state, family logical requirement,
-                            // or role-inventory events reach this coalescer. A
-                            // parent-driven mapped-rectangle change must NEVER
-                            // request a fresh parent-growth measurement.
-                            // The root resolves the current selected row on
-                            // flush; no stale child-layer closure is retained.
-                            customLayoutOverlay.queueSelectedChildRequirementSync()
-                        }
-
-                        function ensureImmediateChildOverflow(frame, candidateX, candidateY,
-                                                              candidateWidth, candidateHeight) {
-                            // Pointer-owned provisional containment. The retained
-                            // family remains the exact logical requirement authority,
-                            // but a child can cross the current right/bottom edge in
-                            // the same event that changes its geometry. Grow the
-                            // parent's existing logical box from that *actual painted*
-                            // candidate before the next scene turn so the user never
-                            // sees a release-time catch-up jump. This is edit-only and
-                            // event-driven; the retained requirement immediately
-                            // reconciles the conservative floor afterward.
-                            if (!customLayoutOverlay.sessionModel
-                                    || editFrame.resizeScale <= 0.0
-                                    || !frame.allowParentGrowth)
-                                return false
-                            const occupied = occupiedRectAt(
-                                frame, candidateX, candidateY,
-                                candidateWidth, candidateHeight
-                            )
-                            let candidateRight = occupied.x + occupied.width
-                            let candidateBottom = occupied.y + occupied.height
-
-                            // Resizing one authored-rail child can synchronously move
-                            // other on-rail roles. Include those predicted secondary
-                            // edges in the same pointer-owned growth request instead
-                            // of waiting for the retained scene to reflow and then
-                            // catching up one turn later. Movement passes zero size
-                            // deltas, so this adds no special placement behavior.
-                            if (frame.resizeReflowEnabled) {
-                                const axes = frame.resizeReflowAxes || []
-                                const roleIds = frame.resizeReflowRoleIds || []
-                                const shiftX = axes.indexOf("horizontal") >= 0
-                                    ? candidateWidth - frame.width : 0.0
-                                const shiftY = axes.indexOf("vertical") >= 0
-                                    ? candidateHeight - frame.height : 0.0
-                                if (Math.abs(shiftX) > 0.001 || Math.abs(shiftY) > 0.001) {
-                                    for (let i = 0; i < childRoleRepeater.count; ++i) {
-                                        const peer = childRoleRepeater.itemAt(i)
-                                        if (!peer || peer === frame || !peer.visible
-                                                || !peer.resizeReflowEnabled
-                                                || roleIds.indexOf(peer.roleId) < 0)
-                                            continue
-                                        candidateRight = Math.max(
-                                            candidateRight,
-                                            peer.occupiedX + shiftX + peer.occupiedWidth
-                                        )
-                                        candidateBottom = Math.max(
-                                            candidateBottom,
-                                            peer.occupiedY + shiftY + peer.occupiedHeight
-                                        )
-                                    }
-                                }
-                            }
-                            if (candidateRight <= editFrame.width + 0.25
-                                    && candidateBottom <= editFrame.height + 0.25)
-                                return false
-                            const aggregate = aggregateRequiredContentSize()
-                            const requiredPhysicalWidth = Math.max(
-                                aggregate.width * editFrame.resizeScale,
-                                Math.max(occupied.width, candidateRight)
-                            )
-                            const requiredPhysicalHeight = Math.max(
-                                aggregate.height * editFrame.resizeScale,
-                                Math.max(occupied.height, candidateBottom)
-                            )
-                            return customLayoutOverlay.sessionModel.ensureChildContentExtent(
-                                editFrame.index,
-                                requiredPhysicalWidth / editFrame.resizeScale,
-                                requiredPhysicalHeight / editFrame.resizeScale
-                            )
-                        }
-
-                        onRequirementTargetChanged: scheduleRequirementSync()
-                        onRequiredContentWidthChanged: scheduleRequirementSync()
-                        onRequiredContentHeightChanged: scheduleRequirementSync()
-                        Component.onCompleted: scheduleRequirementSync()
-                        Component.onDestruction: {
-                            // Selection retirement is owned in Python by stable
-                            // session-item identity. This row-based hook is only the
-                            // selected-parent fallback for Settings/role availability
-                            // changes where the row is still authoritative. Never use
-                            // a stale delegate row after selection/model teardown.
-                            if (customLayoutOverlay.sessionModel
-                                    && editFrame.selectedForChildEdit)
-                                customLayoutOverlay.sessionModel.clearChildContentExtent(
-                                    editFrame.index
-                                )
                         }
 
                         NumberAnimation on opacity {
@@ -1789,8 +1671,10 @@ Item {
                             )
                             let x = Math.max(minX, Math.min(maxX, desiredX))
                             let y = Math.max(minY, Math.min(maxY, desiredY))
-                            x = snapChildAxis(frame, x, true)
-                            y = snapChildAxis(frame, y, false)
+                            x = Math.max(minX, Math.min(maxX,
+                                snapChildAxis(frame, x, true)))
+                            y = Math.max(minY, Math.min(maxY,
+                                snapChildAxis(frame, y, false)))
 
                             const obstacles = obstacleRects(frame, false, "")
                             const current = occupiedRectAt(
@@ -2081,9 +1965,9 @@ Item {
                             let width = Math.max(1.0, leftSide ? startWidth - dx : startWidth + dx)
                             let height = Math.max(1.0, topSide ? startHeight - dy : startHeight + dy)
 
-                            // Left/top may never escape the real parent. Right/bottom
-                            // are deliberately allowed to extend it; the retained
-                            // family requirement then grows the parent live.
+                            // Left/top and right/bottom all share the same final
+                            // painted-surface containment. No child edge may grow
+                            // the parent; only the outer handles own its dimensions.
                             let occupied = occupiedRectAt(frame, x, y, width, height)
                             if (leftSide && occupied.x < 0.0) {
                                 const correction = -occupied.x
@@ -2257,59 +2141,6 @@ Item {
                             }
                         }
 
-                        function throttleChildAutoGrowth(frame, handle, gesture, admittedPointer) {
-                            // Auto-growth should feel deliberate rather than letting a
-                            // tiny child drag explode the whole parent. Once a dragged
-                            // right/bottom edge reaches the parent boundary, require
-                            // another 12 px of pointer travel for each 6 px containment
-                            // expansion. The child is clamped to the same admitted step,
-                            // so it never visibly outruns the parent. This is pure
-                            // pointer-event state: no timer, poller or delayed task.
-                            const pointerThreshold = 12.0
-                            const growthStep = 6.0
-                            let resultX = admittedPointer.x
-                            let resultY = admittedPointer.y
-                            let candidate = resizeCandidateForPointer(
-                                frame, handle, gesture, Qt.point(resultX, resultY)
-                            )
-                            let occupied = occupiedRectAt(
-                                frame, candidate.x, candidate.y,
-                                candidate.width, candidate.height
-                            )
-
-                            if (candidate.horizontalActive && !candidate.leftSide
-                                    && occupied.x + occupied.width > editFrame.width + 0.25) {
-                                const rawTravel = admittedPointer.x - gesture.lastGrowthPointerX
-                                const allowance = rawTravel >= pointerThreshold ? growthStep : 0.0
-                                const excess = occupied.x + occupied.width
-                                    - (editFrame.width + allowance)
-                                if (excess > 0.0)
-                                    resultX -= excess
-                                if (allowance > 0.0)
-                                    gesture.lastGrowthPointerX = admittedPointer.x
-                            }
-
-                            candidate = resizeCandidateForPointer(
-                                frame, handle, gesture, Qt.point(resultX, resultY)
-                            )
-                            occupied = occupiedRectAt(
-                                frame, candidate.x, candidate.y,
-                                candidate.width, candidate.height
-                            )
-                            if (candidate.verticalActive && !candidate.topSide
-                                    && occupied.y + occupied.height > editFrame.height + 0.25) {
-                                const rawTravel = admittedPointer.y - gesture.lastGrowthPointerY
-                                const allowance = rawTravel >= pointerThreshold ? growthStep : 0.0
-                                const excess = occupied.y + occupied.height
-                                    - (editFrame.height + allowance)
-                                if (excess > 0.0)
-                                    resultY -= excess
-                                if (allowance > 0.0)
-                                    gesture.lastGrowthPointerY = admittedPointer.y
-                            }
-                            return Qt.point(resultX, resultY)
-                        }
-
                         function beginChildResizeGesture(frame, gesture, handle, point) {
                             clearChildGuides(frame)
                             gesture.pressX = point.x
@@ -2318,8 +2149,6 @@ Item {
                             gesture.startY = frame.y
                             gesture.startWidth = frame.width
                             gesture.startHeight = frame.height
-                            gesture.lastGrowthPointerX = point.x
-                            gesture.lastGrowthPointerY = point.y
                             return customLayoutOverlay.sessionModel.beginChildResize(
                                 editFrame.index, frame.roleId, handle, point.x, point.y,
                                 frame.width, frame.height,
@@ -2422,10 +2251,10 @@ Item {
                                     gesture.startWidth, gesture.startHeight,
                                     canonical.x, canonical.y
                                 )
-                            if (frame.allowParentGrowth)
-                                admitted = throttleChildAutoGrowth(frame, handle, gesture, admitted)
-                            else
-                                admitted = containChildResize(frame, handle, gesture, admitted)
+                            // Both axis-only and corner gestures are constrained
+                            // to the *painted* containment surface, regardless of
+                            // family metadata or collision enablement.
+                            admitted = containChildResize(frame, handle, gesture, admitted)
                             const candidate = resizeCandidateForPointer(
                                 frame, handle, gesture, admitted
                             )
@@ -2433,17 +2262,11 @@ Item {
                             // never show an alignment line for an edge that was
                             // not actually admitted.
                             validateChildResizeGuides(frame, handle, candidate)
-                            ensureImmediateChildOverflow(
-                                frame, candidate.x, candidate.y,
-                                candidate.width, candidate.height
-                            )
                             const changed = customLayoutOverlay.sessionModel.resizeChild(
                                 editFrame.index, frame.roleId, handle,
                                 admitted.x, admitted.y, finalize
                             )
                             if (finalize) {
-                                if (changed)
-                                    syncRequirementNow()
                                 clearChildGuides(frame)
                             }
                             return true
@@ -2460,15 +2283,6 @@ Item {
                             model: editFrame.hasPresentationItem
                                 ? (editFrame.presentationItem.customEditableChildRoles || [])
                                 : []
-                            // A Settings/provider state change can remove the role
-                            // that established the largest mapped containment floor
-                            // while the family requirement object itself remains.
-                            // Recompute exactly when the role set changes so that
-                            // stale selected-Edit containment cannot survive until
-                            // the next pointer gesture. No timer/poller is involved.
-                            onCountChanged: childRoleLayer.scheduleRequirementSync()
-                            onModelChanged: childRoleLayer.scheduleRequirementSync()
-
                             delegate: Item {
                                 id: childRoleFrame
                                 required property var modelData
@@ -2483,8 +2297,6 @@ Item {
                                 // the widget root (Media card vs external volume).
                                 readonly property var containmentTarget:
                                     modelData.containmentTarget || null
-                                readonly property bool allowParentGrowth:
-                                    modelData.allowParentGrowth !== false
                                 readonly property bool centeredResize:
                                     modelData.centeredResize === true
                                 readonly property var resizeReflowRoleIds:
@@ -2618,16 +2430,16 @@ Item {
                                         values.push(targetItem.x, targetItem.y,
                                             targetItem.width, targetItem.height,
                                             targetItem.scale, targetItem.rotation)
-                                        values.push(Number(
-                                            targetItem.customEditMappingDependency || 0.0
+                                        values.push(String(
+                                            targetItem.customEditMappingDependency || ""
                                         ))
                                     }
                                     if (occupiedItem !== null && occupiedItem !== targetItem) {
                                         values.push(occupiedItem.x, occupiedItem.y,
                                             occupiedItem.width, occupiedItem.height,
                                             occupiedItem.scale, occupiedItem.rotation)
-                                        values.push(Number(
-                                            occupiedItem.customEditMappingDependency || 0.0
+                                        values.push(String(
+                                            occupiedItem.customEditMappingDependency || ""
                                         ))
                                     }
                                     if (containmentTarget !== null) {
@@ -2642,6 +2454,9 @@ Item {
                                                 dependency.width, dependency.height,
                                                 dependency.scale, dependency.rotation)
                                     }
+                                    // Family-specific dependencies may themselves be
+                                    // component-wise strings. Do not coerce them back to
+                                    // Number: opposite ancestor deltas would cancel again.
                                     // String equality avoids an unnecessary remap
                                     // for an unchanged dependency value. A fresh JS
                                     // array would invalidate bindings on every read.
@@ -2843,13 +2658,6 @@ Item {
                                             + admitted.x - childRoleFrame.moveStartX
                                         const admittedPointerY = childRoleFrame.movePressY
                                             + admitted.y - childRoleFrame.moveStartY
-                                        childRoleLayer.ensureImmediateChildOverflow(
-                                            childRoleFrame,
-                                            admitted.x,
-                                            admitted.y,
-                                            childRoleFrame.width,
-                                            childRoleFrame.height
-                                        )
                                         customLayoutOverlay.sessionModel.moveChild(
                                             editFrame.index,
                                             childRoleFrame.roleId,
@@ -2857,9 +2665,6 @@ Item {
                                             admittedPointerY,
                                             false
                                         )
-                                        // Only the admitted pointer/child-state edge
-                                        // can request new growth. Parent-authored
-                                        // remaps are observations, never demand.
                                     }
                                     onReleased: function(mouse) {
                                         const point = overlayPoint(mouse)
@@ -2875,13 +2680,6 @@ Item {
                                         if (Math.abs(admitted.x - childRoleFrame.moveStartX) > 0.5
                                                 || Math.abs(admitted.y - childRoleFrame.moveStartY) > 0.5)
                                             childRoleFrame.moveHadMotion = true
-                                        childRoleLayer.ensureImmediateChildOverflow(
-                                            childRoleFrame,
-                                            admitted.x,
-                                            admitted.y,
-                                            childRoleFrame.width,
-                                            childRoleFrame.height
-                                        )
                                         const changed = customLayoutOverlay.sessionModel.moveChild(
                                             editFrame.index,
                                             childRoleFrame.roleId,
@@ -2891,8 +2689,6 @@ Item {
                                                 + admitted.y - childRoleFrame.moveStartY,
                                             true
                                         )
-                                        if (changed)
-                                            childRoleLayer.syncRequirementNow()
                                         if (childRoleFrame.moveHadMotion
                                                 && childRoleFrame.semanticCornerAnchorCapable
                                                 && customLayoutOverlay.sessionModel) {
@@ -3004,8 +2800,6 @@ Item {
                                         property real startY: 0.0
                                         property real startWidth: 0.0
                                         property real startHeight: 0.0
-                                        property real lastGrowthPointerX: 0.0
-                                        property real lastGrowthPointerY: 0.0
                                         z: 3
                                         width: 16
                                         height: 16
@@ -3110,8 +2904,6 @@ Item {
                                         property real startY: 0.0
                                         property real startWidth: 0.0
                                         property real startHeight: 0.0
-                                        property real lastGrowthPointerX: 0.0
-                                        property real lastGrowthPointerY: 0.0
                                         z: 2
                                         width: horizontalEdge ? 10.0 : Math.max(0.0, childRoleFrame.width - 20.0)
                                         height: horizontalEdge ? Math.max(0.0, childRoleFrame.height - 20.0) : 10.0
@@ -3285,8 +3077,7 @@ Item {
 
                                     onPressed: function(mouse) {
                                         customLayoutOverlay.sessionModel.selectItem(editFrame.index)
-                                        editFrame.syncChildRequirementNow()
-                                        const point = overlayPoint(mouse)
+                                                                const point = overlayPoint(mouse)
                                         customLayoutOverlay.sessionModel.beginResize(
                                             editFrame.index,
                                             "content_" + parent.corner,

@@ -654,8 +654,10 @@ def test_header_flip_rearranges_reddit_rails_without_mirroring_post_text(qt_app,
         assert age.x() > title.x() and title.x() >= -0.1
         assert title.x() + title.width() <= age.x() - 3.0
         assert age_value.x() < age_ago.x(), "flipped timestamp must read 01HR then AGO"
-        assert age_ago.x() - (age_value.x() + age_value.width()) == pytest.approx(4.0)
-        assert age.x() - (title.x() + title.width()) == pytest.approx(4.0)
+        assert age_ago.x() - (age_value.x() + age_value.width()) == pytest.approx(2.0)
+        gap = age.x() - (title.x() + title.width())
+        assert gap == pytest.approx(float(item.property("titleAgeGap")))
+        assert gap * float(item.property("presentationScale")) >= 8.9
         assert age.x() + age.width() == pytest.approx(row.width())
         assert title.property("horizontalAlignment") == title_align
         assert bool(item.property("headerFlipped"))
@@ -763,13 +765,136 @@ def test_flipped_reddit_long_and_short_titles_keep_one_legible_timestamp_rail(qt
                 assert mapped_age.right() <= row.width() + 0.1
                 assert mapped_title.left() >= -0.1
                 assert mapped_title.right() <= row.width() + 0.1
-                if flipped:
-                    assert mapped_title.right() <= mapped_age.left() - 3.0
+                # Compare actual retained rails after whole-card scaling, not
+                # a source literal. Both post directions need a clear painted
+                # separation at small CUSTOM sizes, for every row.
+                gap = (mapped_age.left() - mapped_title.right()) if flipped else (
+                    mapped_title.left() - mapped_age.right()
+                )
+                assert gap == pytest.approx(float(item.property("titleAgeGap")), abs=0.25)
+                assert gap * float(item.property("presentationScale")) >= 8.9
                 rails.append((round(age.x(), 2), round(age.width(), 2)))
             if flipped:
                 assert rails[0] == rails[1] == rails[2], (
                     "Timestamp shifts with post-title length", family, width, rails
                 )
+    finally:
+        host.retire_all()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        owner.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("family", ("reddit", "reddit2"))
+def test_reddit_loading_and_ready_state_use_the_same_authored_height(qt_app, family):
+    """Restore Size may not capture the compact provisional loading height."""
+    owner = QObject()
+    factory = QuickSceneFactory(owner)
+    context, root, host = _create_host(factory, owner)
+    model = _model(widget_id=family, limit=4)
+    presentation = RetainedRedditPresentation(
+        host=host, model=model,
+        geometry=OverlayWidgetGeometry(22.0, 35.0, 600.0, 350.0),
+    )
+    item = presentation.item
+    try:
+        # Before data admission, authored dimensions must already reserve the
+        # post-limit card instead of inferring height from zero ready delegates.
+        qt_app.processEvents()
+        authored = float(item.property("canonicalAuthoredHeight"))
+        initial = float(item.property("preferredContentHeight"))
+        assert authored >= 4 * 28.0
+        assert initial >= authored - 0.1
+        assert model.publish_posts(tuple(_post(i) for i in range(1, 5)),
+                                   from_cache=True, now_ts=20_000.0)
+        presentation.activate()
+        qt_app.processEvents()
+        assert float(item.property("preferredContentHeight")) >= authored - 0.1
+        # A deliberate CUSTOM vertical extent remains a different authority.
+        assert model.set_content_extent(600.0, authored + 55.0)
+        qt_app.processEvents()
+        assert float(item.property("preferredContentHeight")) == pytest.approx(authored + 55.0)
+        assert model.clear_content_extent()
+        qt_app.processEvents()
+        assert float(item.property("preferredContentHeight")) >= authored - 0.1
+        # Empty/error/repopulation edges must not shrink or bounce the authored
+        # reference, which a subsequent Restore Size captures independently.
+        assert model.publish_posts((), from_cache=True, now_ts=20_000.0)
+        qt_app.processEvents()
+        assert model.viewState == "empty"
+        assert float(item.property("preferredContentHeight")) >= authored - 0.1
+    finally:
+        host.retire_all()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        owner.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+@pytest.mark.qt
+@pytest.mark.parametrize("family", ("reddit", "reddit2"))
+def test_three_semantic_column_rails_reorder_every_retained_post_and_rehydrate(qt_app, family):
+    """A single saved permutation moves all three painted columns on every row."""
+    owner = QObject()
+    factory = QuickSceneFactory(owner)
+    context, root, host = _create_host(factory, owner)
+    model = _model(widget_id=family, limit=3)
+    model.publish_posts((_post(1, title="short"),
+                         _post(2, title="a significantly longer title"),
+                         _post(3, title="last")), now_ts=20_000.0)
+    presentation = RetainedRedditPresentation(
+        host=host, model=model,
+        geometry=OverlayWidgetGeometry(25, 30, 620, 340),
+    )
+    try:
+        presentation.activate()
+        qt_app.processEvents()
+        item = presentation.item
+        from PySide6.QtCore import QPointF
+
+        def row_rails(index):
+            row = _find_visual_item(item, f"redditPostRow_{index}")
+            assert row is not None and row.isVisible()
+            texts = {key: _find_visual_item(item, f"redditPost{name}_{index}")
+                     for key, name in (("age", "AgeValue"), ("ago", "AgeAgo"), ("title", "Title"))}
+            assert all(v is not None and v.isVisible() for v in texts.values())
+            return row, texts, {key: text.mapToItem(row, QPointF(0, 0)).x()
+                                for key, text in texts.items()}
+
+        originals = [row_rails(i)[1] for i in range(3)]
+        order = ["age", "title", "ago"]
+        presentation._apply_custom_layout_size_payload({"column_rails": order})
+        qt_app.processEvents()
+        for i in range(3):
+            row, texts, pos = row_rails(i)
+            assert pos["age"] < pos["title"] < pos["ago"]
+            assert pos["ago"] + texts["ago"].width() <= row.width() + 1.0
+            assert all(texts[key] is originals[i][key] for key in order)
+        # An independent header flip must not scramble an explicitly saved order.
+        model.set_custom_child_geometry({"header": {"alignment": "right"}})
+        qt_app.processEvents()
+        for i in range(3):
+            _, _, pos = row_rails(i)
+            assert pos["age"] < pos["title"] < pos["ago"]
+        presentation.set_geometry(OverlayWidgetGeometry(25, 30, 540, 285))
+        qt_app.processEvents()
+        for i in range(3):
+            _, _, pos = row_rails(i)
+            assert pos["age"] < pos["title"] < pos["ago"]
+        # The same live family consumes committed CUSTOM payload without row replacement.
+        presentation._apply_custom_layout_size_payload({"column_rails": ["title", "ago", "age"]})
+        qt_app.processEvents()
+        for i in range(3):
+            _, texts, pos = row_rails(i)
+            assert pos["title"] < pos["ago"] < pos["age"]
+            assert all(texts[key] is originals[i][key] for key in order)
     finally:
         host.retire_all()
         root.setParentItem(None)

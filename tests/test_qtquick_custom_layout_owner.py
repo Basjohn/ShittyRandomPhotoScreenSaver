@@ -1880,8 +1880,8 @@ def test_flip_wheel_restore_repeatedly_returns_authored_shape_and_clears_stale_e
 
 
 @pytest.mark.parametrize("widget_id", ("reddit", "gmail", "media"))
-def test_one_level_undo_restores_last_flip_or_wheel_only_in_active_edit(widget_id) -> None:
-    """The existing session is the only restored geometry and payload owner."""
+def test_three_level_undo_retains_only_three_completed_edit_actions(widget_id) -> None:
+    """The existing session is the only undo geometry/payload owner."""
     descriptor = get_widget_runtime_descriptor(widget_id)
     assert descriptor is not None
     item = CustomLayoutSessionItem(
@@ -1896,8 +1896,9 @@ def test_one_level_undo_restores_last_flip_or_wheel_only_in_active_edit(widget_i
     )
     session = CustomLayoutSession()
     session.add_item(item)
+    settings = _Settings({})
     owner = QuickCustomLayoutOwner(
-        settings_manager=_Settings({}), participants_provider=lambda: (),
+        settings_manager=settings, participants_provider=lambda: (),
         visualizer_provider=lambda: (None, None), reload_request=lambda _: None,
     )
     owner._session = session
@@ -1909,30 +1910,85 @@ def test_one_level_undo_restores_last_flip_or_wheel_only_in_active_edit(widget_i
     owner._descriptors = {item.source_key: descriptor}
     owner._publish_uniform_wheel_guides = lambda _item: None
     original = QRect(item.current_global_rect)
-    assert owner.flip_child_alignment(item, "header")
-    assert item.child_size("header").alignment == "right"
-    assert owner.resize_wheel(item, 120)
+
+    # Four completed actions: the first flip must fall out of the bounded
+    # history while newer wheel/flip actions retain their original order.
+    assert owner.flip_child_alignment(item, "header")         # 1: right
+    assert owner.resize_wheel(item, 120)                      # 2: larger
     enlarged = QRect(item.current_global_rect)
     assert enlarged.size() != original.size()
-    assert owner.undo_last_change()
-    assert item.current_global_rect == original
-    assert item.child_size("header").alignment == "right", "Undo wheel must not undo older flip"
-    assert item.current_size_payload["child_geometry"]["header"]["alignment"] == "right"
-    assert not owner.undo_last_change(), "Only one completed edit action is retained"
-    assert owner.flip_child_alignment(item, "header")
+    assert owner.flip_child_alignment(item, "header")         # 3: authored
+    assert owner.flip_child_alignment(item, "header")         # 4: right
+    assert len(owner._undo_history) == 3
+    assert owner.undo_last_change()                            # 4 -> 3
     assert item.child_size("header").is_authored
-    assert owner.undo_last_change()
+    assert item.current_global_rect == enlarged
+    assert owner.undo_last_change()                            # 3 -> 2
+    assert item.child_size("header").alignment == "right"
+    assert item.current_global_rect == enlarged
+    assert owner.undo_last_change()                            # 2 -> 1
+    assert item.current_global_rect == original
     assert item.child_size("header").alignment == "right"
     assert item.current_size_payload["child_geometry"]["header"]["alignment"] == "right"
-    # An unfinished parent drag must not consume the previous completed flip
-    # while its held pointer would subsequently overwrite restored geometry.
-    assert owner.flip_child_alignment(item, "header")
+    assert not owner.undo_last_change(), "The fourth-previous action must be evicted"
+
+    # An unchanged completed gesture does not consume another history slot.
     owner._begin_undo_gesture(item, "parent_move")
-    assert not owner.undo_last_change()
+    owner._finish_undo_gesture("parent_move")
+    assert owner._undo_history == []
+    assert owner.flip_child_alignment(item, "header")
+    assert len(owner._undo_history) == 1
+    owner._begin_undo_gesture(item, "parent_move")
+    assert not owner.undo_last_change(), "Held pointer must not replay against restored geometry"
     owner._finish_undo_gesture("parent_move")
     assert owner.undo_last_change()
     assert item.child_size("header").alignment == "right"
+    assert not owner.undo_last_change(), "Undo cannot create a redo snapshot"
+    assert settings.save_calls == 0
     owner._active = False
+    assert not owner.undo_last_change()
+
+
+def test_three_action_undo_is_global_across_items_and_clears_on_retirement() -> None:
+    """One Edit session, one bounded history even when actions alternate families."""
+    session = CustomLayoutSession()
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}), participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None), reload_request=lambda _: None,
+    )
+    owner._session = session
+    owner._active = True
+    entries = []
+    for widget_id in ("reddit", "gmail"):
+        descriptor = get_widget_runtime_descriptor(widget_id)
+        assert descriptor is not None
+        item = CustomLayoutSessionItem(
+            source_key=CustomLayoutKey(widget_id, "display:a"),
+            model_identity=widget_id, baseline_global_rect=QRect(50, 50, 600, 300),
+            current_global_rect=QRect(50, 50, 600, 300),
+            baseline_size_payload={}, current_size_payload={},
+            baseline_enabled=True, current_enabled=True,
+            custom_child_roles=descriptor.custom_child_roles,
+        )
+        session.add_item(item)
+        owner._descriptors[item.source_key] = descriptor
+        entries.append(item)
+    reddit, gmail = entries
+    assert owner.flip_child_alignment(reddit, "header")
+    assert owner.flip_child_alignment(gmail, "header")
+    assert owner.flip_child_alignment(reddit, "header")
+    assert owner.undo_last_change()
+    assert reddit.child_size("header").alignment == "right"
+    assert owner.undo_last_change()
+    assert gmail.child_size("header").is_authored
+    assert owner.undo_last_change()
+    assert reddit.child_size("header").is_authored
+    assert not owner.undo_last_change()
+    assert owner.flip_child_alignment(gmail, "header")
+    assert len(owner._undo_history) == 1
+    # Session retirement must discard item references and the whole history.
+    owner._finish()
+    assert owner._undo_history == []
     assert not owner.undo_last_change()
 
 
@@ -1998,75 +2054,33 @@ def test_restore_size_clears_child_size_placement_and_floor_but_preserves_parent
     assert item.child_content_requirement is None
 
 
-def test_child_requirement_is_live_parent_content_floor_without_auto_shrink() -> None:
+def test_child_requirement_cannot_change_parent_extent_without_an_outer_handle() -> None:
     owner = QuickCustomLayoutOwner(
         settings_manager=_Settings({}),
         participants_provider=lambda: (),
         visualizer_provider=lambda: (None, None),
         reload_request=lambda _kind: None,
     )
-    owner._bindings = {
-        "display:a": _DisplayBinding(
-            identity="display:a",
-            monitor_route="1",
-            unit=SimpleNamespace(),
-            screen=None,
-            geometry=QRect(0, 0, 3840, 2160),
-        )
-    }
     item = CustomLayoutSessionItem(
         source_key=CustomLayoutKey("abandonment_issues", "display:a"),
         model_identity="abandonment_issues",
         baseline_global_rect=QRect(100, 100, 700, 400),
         current_global_rect=QRect(100, 100, 700, 400),
-        baseline_size_payload={},
-        current_size_payload={},
-        baseline_enabled=True,
-        current_enabled=True,
-        resize_capable=True,
+        baseline_size_payload={}, current_size_payload={},
+        baseline_enabled=True, current_enabled=True, resize_capable=True,
         content_extent_axes=frozenset({"vertical", "horizontal"}),
         baseline_content_extent=(700.0, 400.0),
-        custom_child_roles=(
-            freeform_artwork_child_role(
-                resize_handles=("bottom_right",),
-            ),
-        ),
+        custom_child_roles=(freeform_artwork_child_role(resize_handles=("bottom_right",)),),
     )
-
-    # A retained child requirement may grow the parent immediately.
-    assert owner.ensure_child_content_extent(item, 900.0, 550.0) is True
-    assert item.child_content_requirement == (900.0, 550.0)
-    assert item.current_content_extent == pytest.approx((900.0, 550.0))
-
-    # When children later need less room, update the transient floor but do not
-    # auto-collapse the parent. The user still owns reclaiming outer space.
-    assert owner.ensure_child_content_extent(item, 760.0, 460.0) is False
-    assert item.child_content_requirement == (760.0, 460.0)
-    assert item.current_content_extent == pytest.approx((900.0, 550.0))
-
-    # The floor is selected-Edit transient state. Retiring the child layer clears
-    # it without changing the user's current outer/content geometry.
-    assert owner.clear_child_content_extent(item) is True
-    assert item.child_content_requirement is None
-    assert item.current_content_extent == pytest.approx((900.0, 550.0))
+    before = (QRect(item.current_global_rect), item.current_content_extent,
+              dict(item.current_size_payload))
+    for requirement in ((900.0, 550.0), (760.0, 460.0), (5000.0, 10000.0)):
+        assert owner.ensure_child_content_extent(item, *requirement) is False
+        assert item.current_global_rect == before[0]
+        assert item.current_content_extent == before[1]
+        assert item.current_size_payload == before[2]
+        assert item.child_content_requirement is None
     assert owner.clear_child_content_extent(item) is False
-
-    # Re-derived selected-child geometry may establish the current floor again.
-    assert owner.ensure_child_content_extent(item, 760.0, 460.0) is False
-    assert item.child_content_requirement == (760.0, 460.0)
-
-    # Parent content controls may now shrink, but never through the current child
-    # requirement. This closes the child-overflow path exposed by physical edit.
-    start = QPoint(item.current_global_rect.center())
-    assert owner.begin_resize(item, "content_bottom_right", start) is True
-    assert owner.update_resize(
-        item,
-        "content_bottom_right",
-        QPoint(start.x() - 500, start.y() - 500),
-        True,
-    ) is True
-    assert item.current_content_extent[0] == pytest.approx(760.0, abs=1.0)
-    assert item.current_content_extent[1] == pytest.approx(460.0, abs=1.0)
 
 
 def test_child_edit_selection_change_retires_previous_transient_state_by_object_identity() -> None:
@@ -2262,3 +2276,142 @@ def test_wheel_does_not_resurrect_saved_header_flip_after_unsaved_flip_back() ->
     assert owner.flip_child_alignment(item, "header")
     assert owner.resize_wheel(item, 120)
     assert item.current_size_payload[CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY]["header"]["alignment"] == "right"
+
+
+def test_reversed_dense_parent_left_resize_admits_measured_gutter_not_authored_floor(qt_app, monkeypatch) -> None:
+    """One gesture samples a retained family allowance; repeated samples settle.
+
+    No child collision override can affect parent sizing. An unadvertised family
+    keeps its ordinary authored floor, and changing a visible rectangle always
+    publishes immediately, including when moving back from the clamped edge.
+    """
+    from rendering.quick.custom_layout_size import quick_custom_content_extent_minimum_size
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    bounds = QRect(screen.geometry())
+    if bounds.width() < 900 or bounds.height() < 650:
+        bounds = QRect(0, 0, 1600, 900)
+    key = CustomLayoutKey("achievement_pulse", "display:trim")
+    initial = QRect(bounds.x() + 180, bounds.y() + 110, 540, 361)
+    item = CustomLayoutSessionItem(
+        source_key=key, model_identity="achievement_pulse",
+        baseline_global_rect=QRect(initial), current_global_rect=QRect(initial),
+        baseline_size_payload={}, current_size_payload={},
+        baseline_enabled=True, current_enabled=True, resize_capable=True,
+        resize_scale=0.9, baseline_resize_scale=0.9,
+        content_extent_axes=frozenset(("horizontal", "vertical")),
+        content_extent_minimum_size=(600, 401),
+        baseline_content_extent=(600.0, 401.0),
+        current_content_extent=(600.0, 401.0),
+        authored_reference_size=(600, 401),
+        child_collision_enabled=False,
+    )
+    class _Retained:
+        def __init__(self):
+            self.allowance = 52.0
+            self.reads = 0
+        def property(self, name):
+            assert name == "customLeadingTrimAllowance"
+            self.reads += 1
+            return self.allowance
+    retained = _Retained()
+    presenter = SimpleNamespace(
+        presentation_for_widget_id=lambda _wid: SimpleNamespace(item=retained),
+    )
+    binding = _DisplayBinding(
+        identity=key.display_identity, monitor_route="1",
+        unit=SimpleNamespace(presenter=presenter), screen=screen,
+        geometry=bounds,
+    )
+    owner = QuickCustomLayoutOwner(
+        settings_manager=_Settings({}), participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None), reload_request=lambda _kind: None,
+    )
+    owner._bindings = {binding.identity: binding}
+    owner._descriptors = {key: get_widget_runtime_descriptor("achievement_pulse")}
+    session = CustomLayoutSession()
+    session.add_item(item)
+    owner._session = session
+    monkeypatch.setattr(owner, "_snap_resize_edges", lambda _item, _binding, rect, **_kwargs: rect)
+    start = QPoint(initial.x(), initial.y())
+    assert quick_custom_content_extent_minimum_size(item).width() == 540
+    assert owner.begin_resize(item, "left", start)
+    assert retained.reads == 1
+    assert item.content_extent_minimum_size == (548, 401)
+    origin = owner._resize_origins[key]
+    # Inward movement may trim the measured empty gutter while the opposite
+    # edge remains anchored and Y stays untouched.
+    assert owner._resize_content_edge(item, origin, "left", start + QPoint(32, 0))
+    changed = QRect(item.current_global_rect)
+    assert changed.x() == initial.x() + 32
+    assert changed.right() == initial.right()
+    assert changed.height() == initial.height()
+    assert retained.reads == 1
+    # Saturation does not create an endless geometry publication loop.
+    assert owner._resize_content_edge(item, origin, "left", start + QPoint(500, 0))
+    saturated = QRect(item.current_global_rect)
+    assert saturated.width() >= int(548 * 0.9)
+    assert owner._resize_content_edge(item, origin, "left", start + QPoint(500, 0)) is False
+    assert item.current_global_rect == saturated
+    assert owner._resize_content_edge(item, origin, "left", start + QPoint(20, 0))
+    assert item.current_global_rect.width() > saturated.width()
+    # The final sample may be unchanged, but release must still finish undo.
+    assert owner.update_resize(item, "left", start + QPoint(20, 0), True) is False
+    assert key not in owner._resize_origins
+    assert owner._undo_pending is None
+    assert retained.reads == 1
+    # Restore Size's authored dimensions are not redefined by the trim.
+    assert item.authored_reference_size == (600, 401)
+    # The next non-trimmable gesture restores the ordinary minimum.
+    retained.allowance = 0.0
+    assert owner.begin_resize(item, "left", start)
+    assert item.content_extent_minimum_size == (600, 401)
+    assert retained.reads == 2
+    owner._resize_origins.clear()
+
+@pytest.mark.parametrize("family,authored,flipped", (
+    ("reddit", ("age", "ago", "title"), ("title", "age", "ago")),
+    ("reddit2", ("age", "ago", "title"), ("title", "age", "ago")),
+    ("gmail", ("timestamp", "sender", "subject"), ("sender", "subject", "timestamp")),
+))
+def test_column_rail_swap_is_one_bounded_owner_undo_action_and_restores_authored_order(
+    family, authored, flipped,
+):
+    """The session owns semantic ordering, not QML delegates or row IDs."""
+    session = CustomLayoutSession()
+    settings = _Settings({})
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings, participants_provider=lambda: (),
+        visualizer_provider=lambda: (None, None), reload_request=lambda _: None,
+    )
+    descriptor = get_widget_runtime_descriptor(family)
+    assert descriptor is not None
+    item = CustomLayoutSessionItem(
+        source_key=CustomLayoutKey(family, "display:a"), model_identity=family,
+        baseline_global_rect=QRect(40, 50, 600, 300),
+        current_global_rect=QRect(40, 50, 600, 300),
+        baseline_size_payload={}, current_size_payload={},
+        baseline_enabled=True, current_enabled=True,
+        custom_child_roles=descriptor.custom_child_roles,
+    )
+    session.add_item(item)
+    owner._active = True
+    owner._session = session
+    owner._descriptors[item.source_key] = descriptor
+    assert not owner.swap_column_rail_roles(item, authored[0], authored[0])
+    assert not owner.swap_column_rail_roles(item, authored[0], "invalid")
+    assert len(owner._undo_history) == 0
+    assert owner.swap_column_rail_roles(item, authored[0], authored[2])
+    assert item.current_size_payload["column_rails"] == [authored[2], authored[1], authored[0]]
+    assert len(owner._undo_history) == 1
+    assert owner.undo_last_change()
+    assert item.current_size_payload.get("column_rails") is None
+    assert not owner.undo_last_change()
+    assert owner.flip_child_alignment(item, "header")
+    assert owner.swap_column_rail_roles(item, flipped[0], flipped[2])
+    assert item.current_size_payload["column_rails"] == [flipped[2], flipped[1], flipped[0]]
+    assert owner.undo_last_change()
+    assert item.current_size_payload.get("column_rails") is None
+    assert item.child_size("header").alignment == "right"
+    assert settings.save_calls == 0
