@@ -28,6 +28,7 @@ from core.settings.widget_family_catalog import (
     get_widget_family_descriptor,
     get_widget_family_descriptors,  # noqa: F401 - compatibility re-export
 )
+from rendering.games_followed_child_roles import FOLLOWED_CHILD_ROLES
 from rendering.custom_layout_contract import (
     get_custom_layout_restore_entry,
     load_custom_layout_map,
@@ -801,6 +802,7 @@ WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS: tuple[WidgetCustomPositionOptionDescr
     WidgetCustomPositionOptionDescriptor("reddit", "reddit_position"),
     WidgetCustomPositionOptionDescriptor("reddit2", "reddit2_position"),
     WidgetCustomPositionOptionDescriptor("gmail", "gmail_position"),
+    WidgetCustomPositionOptionDescriptor("steam_progress", "steam_progress_position"),
     WidgetCustomPositionOptionDescriptor("achievement_pulse", "achievement_pulse_position"),
     WidgetCustomPositionOptionDescriptor("abandonment_issues", "abandonment_issues_position"),
     WidgetCustomPositionOptionDescriptor("friend_pulse", "friend_pulse_position"),
@@ -1815,6 +1817,28 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         custom_layout_resize_mode="gmail_font",
         content_extent_axes=("horizontal", "vertical"),
         custom_child_roles=GMAIL_CUSTOM_CHILD_ROLES,
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="steam_progress",
+        attr_name="steam_progress_presentation",
+        settings_section_id="steam",
+        settings_prefixes=("widgets.steam_progress", "widgets.steam"),
+        startup_stage="primary",
+        service_backed=True,
+        service_runtime_contracts=(
+            "shared_generation_owner", "cache_first", "latest_wins",
+            "last_good_cache", "generation_fencing", "timer_stop_cleanup",
+        ),
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS
+        + (CUSTOM_POSITION_OPTION_LABEL,),
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="ordinary_uniform",
+        content_extent_axes=("horizontal", "vertical"),
+        content_extent_minimum_size=(180, 130),
+        custom_child_roles=FOLLOWED_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
         widget_id="achievement_pulse",
@@ -2914,7 +2938,6 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("font_size", "steam_progress_font_size", "value"),
         ),
         family_enabled_attr_name="steam_enabled",
-        dev_feature_gate="steam",
     ),
     WidgetStackPreviewDescriptor(
         widget_id="achievement_pulse",

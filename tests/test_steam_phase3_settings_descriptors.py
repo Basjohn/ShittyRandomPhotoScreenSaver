@@ -48,11 +48,10 @@ def _steam_settings_module():
     return importlib.import_module("ui.tabs.widgets_tab_steam")
 
 
-def test_retained_and_unported_steam_descriptors_are_public_while_scaffolds_stay_gated() -> None:
+def test_all_steam_members_have_public_runtime_and_custom_descriptors() -> None:
     prior = _with_steam_gate(False)
     try:
-        substantive = {"achievement_pulse", "abandonment_issues", "friend_pulse"}
-        unfinished = set(STEAM_WIDGET_IDS) - substantive
+        substantive = set(STEAM_WIDGET_IDS)
         factory_ids = {descriptor.settings_key for descriptor in get_factory_widget_descriptors()}
         runtime_ids = {descriptor.widget_id for descriptor in get_widget_runtime_descriptors()}
         preview_ids = {descriptor.widget_id for descriptor in get_widget_stack_preview_descriptors()}
@@ -61,15 +60,11 @@ def test_retained_and_unported_steam_descriptors_are_public_while_scaffolds_stay
         assert not substantive.intersection(factory_ids)
         assert substantive.issubset(runtime_ids & preview_ids & custom_ids)
         assert "steam" in {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
-        assert not unfinished.intersection(factory_ids)
-        assert not unfinished.intersection(runtime_ids)
-        assert not unfinished.intersection(preview_ids)
-        assert not unfinished.intersection(custom_ids)
     finally:
         _restore_steam_gate(prior)
 
 
-def test_steam_descriptors_are_complete_with_journey_scaffold_gate() -> None:
+def test_steam_descriptors_remain_complete_with_optional_dev_gate() -> None:
     prior = _with_steam_gate(True)
     try:
         factory_keys = [descriptor.settings_key for descriptor in get_factory_widget_descriptors()]
@@ -82,7 +77,6 @@ def test_steam_descriptors_are_complete_with_journey_scaffold_gate() -> None:
             if descriptor.section_id == "steam"
         )
 
-        scaffolds = {"steam_progress"}
         assert not set(STEAM_WIDGET_IDS).intersection(factory_keys)
         for widget_id in {"achievement_pulse", "abandonment_issues"}:
             assert widget_id in runtime_ids
@@ -97,9 +91,13 @@ def test_steam_descriptors_are_complete_with_journey_scaffold_gate() -> None:
             "privacy_reprojection",
             "visible_row_avatar_hydration",
         }.issubset(get_service_runtime_contracts("friend_pulse"))
-        assert not scaffolds.intersection(runtime_ids)
-        assert not scaffolds.intersection(custom_ids)
-        assert scaffolds.issubset(preview_ids)
+        assert "steam_progress" in runtime_ids
+        assert "steam_progress" in custom_ids
+        assert "steam_progress" in preview_ids
+        followed = next(d for d in get_widget_runtime_descriptors() if d.widget_id == "steam_progress")
+        assert tuple(role.role_id for role in followed.custom_child_roles) == (
+            "header", "refresh", "story_tiles", "overflow_summary"
+        )
 
         assert section.persisted_widget_keys == ("steam",) + STEAM_WIDGET_IDS
         assert section.builder_module == "ui.tabs.widgets_tab_steam"
@@ -390,7 +388,7 @@ def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settin
         try:
             checks = (
                 ("Connection & Privacy", "steam", "connection"),
-                ("Steam Journey", "steam", "steam_progress"),
+                ("Games You Follow", "steam", "steam_progress"),
                 ("Achievement Pulse", "steam", "achievement_pulse"),
                 ("Abandonment Issues", "steam", "abandonment_issues"),
                 ("Friend Pulse", "steam", "friend_pulse"),
@@ -408,7 +406,7 @@ def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settin
         _restore_steam_gate(prior)
 
 
-def test_only_steam_journey_bucket_is_hidden_without_dev_gate(qt_app, settings_manager) -> None:
+def test_games_you_follow_bucket_available_without_dev_gate(qt_app, settings_manager) -> None:
     prior = _with_steam_gate(False)
     try:
         tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
@@ -416,8 +414,8 @@ def test_only_steam_journey_bucket_is_hidden_without_dev_gate(qt_app, settings_m
             for label in ("Achievement Pulse", "Abandonment Issues", "Friend Pulse"):
                 promoted = _find_toggle(tab._steam_container, label)
                 assert promoted is not None and promoted.isHidden() is False
-            journey = _find_toggle(tab._steam_container, "Steam Journey")
-            assert journey is not None and journey.isHidden() is True
+            followed = _find_toggle(tab._steam_container, "Games You Follow")
+            assert followed is not None and followed.isHidden() is False
         finally:
             tab.deleteLater()
     finally:

@@ -3283,6 +3283,7 @@ class DisplayManager(QObject):
             friend_profile_target,
             normalize_steam_id,
             store_target,
+            news_article_target,
         )
         from core.widget_product_actions import dispatch_steam_link_product_action
         from core.windows.secure_url_launcher import open_steam_target
@@ -3319,6 +3320,17 @@ class DisplayManager(QObject):
             target = friend_profile_target(target_value)
         elif kind == "store":
             target = store_target(target_value)
+        elif kind == "news_article" and widget_id == "steam_progress":
+            # The presentation resolves a private accepted row. The display
+            # manager independently validates the canonical public URL before
+            # dispatching the existing Steam action/secure-helper consequence.
+            import re
+            match = re.fullmatch(
+                r"https://store\.steampowered\.com/news/app/([1-9][0-9]*)/view/([0-9]{1,32})",
+                target_value if isinstance(target_value, str) else "",
+            )
+            target = (news_article_target(int(match[1]), match[2], target_value)
+                      if match is not None else None)
         else:
             target = None
         if target is None:

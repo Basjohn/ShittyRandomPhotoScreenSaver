@@ -21,6 +21,7 @@ from rendering.quick.widgets.family_binder import (
     AchievementPulseFamilyAdapter,
     ClockFamilyAdapter,
     FriendPulseFamilyAdapter,
+    GamesYouFollowFamilyAdapter,
     GmailFamilyAdapter,
     MediaFamilyAdapter,
     OrdinaryFamilyPresentationBinder,
@@ -237,8 +238,7 @@ def test_system_stats_adapter_is_public_but_member_defaults_dormant_without_qt()
 
 def test_default_adapter_set_covers_every_wired_family_without_qt() -> None:
     families = [adapter.family_id for adapter in default_ordinary_family_adapters()]
-    # Three Steam-card adapters share the capability id; System Stats is its
-    # own normally available family.
+    # Four admitted Steam cards share one capability, not one runtime source per card.
     assert families == [
         "clocks",
         "weather",
@@ -248,7 +248,9 @@ def test_default_adapter_set_covers_every_wired_family_without_qt() -> None:
         "steam",
         "steam",
         "steam",
+        "steam",
         "system_stats",
+        "system_audio_osd",
     ]
 
 
@@ -526,6 +528,72 @@ def test_clock_action_uses_live_display_context_after_transfer(qt_app):
         assert family.geometry.x + family.geometry.width <= 800.
     finally:
         binder.retire_all()
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+@pytest.mark.qt
+def test_followed_news_real_host_admission_and_grouped_custom_lifecycle(qt_app, monkeypatch) -> None:
+    """One actual host-owned news card; no Steam I/O until a real active source is started."""
+    from core.steam.games_followed_source import FollowedNewsSnapshot, FollowedNewsStory
+    from rendering.quick.widgets.family_binder import GamesYouFollowFamilyAdapter
+    from rendering.quick.widgets.games_you_follow import GamesYouFollowPresentationModel
+    from rendering.quick.widgets.registry import ordinary_widget_family_component
+    from widgets.steam_followed_runtime import shared_followed_owner_count
+
+    assert ordinary_widget_family_component("steam_progress").qml_filename == "GamesYouFollowPresentation.qml"
+    assert GamesYouFollowFamilyAdapter().enabled_instance_ids({}) == ()
+    assert GamesYouFollowFamilyAdapter().enabled_instance_ids(
+        {"steam_progress": {"enabled": True}}
+    ) == ("steam_progress",)
+    # Exercise real QML/host/service injection without admitting network or
+    # constructing a separate worker/timer in this rendering-lifetime test.
+    monkeypatch.setattr(GamesYouFollowPresentationModel, "activate", lambda _self, _tm=None: True)
+    runtime, factory = _make_runtime(qt_app, 413)
+    try:
+        host = runtime.scene_controller.ordinary_widget_host
+        widgets = {
+            "family_activation": {"steam": True},
+            "steam": {"enabled": True, "refresh_minutes": 6},
+            "steam_progress": {"enabled": True, "monitor": "ALL", "preferred_width": 760,
+                               "preferred_height": 410, "font_size": 15},
+        }
+        binder = _binder(runtime, adapters=(GamesYouFollowFamilyAdapter(),))
+        assert binder.bind(widgets) == ("steam_progress",)
+        retained = binder.presentation_for_widget_id("steam_progress")
+        assert retained is not None
+        assert host.model_identities() == ("steam_progress",)
+        item = retained.item
+        model = retained.model
+        assert item.objectName() == "steam_progress"
+        assert model.baseAuthoredWidth == 760
+        assert model.baseAuthoredHeight == 410
+        assert model._runtime_service is not None
+        assert shared_followed_owner_count() == 0
+        assert item.property("customEditableChildRoles") is not None
+
+        snapshot = FollowedNewsSnapshot(
+            "available", (FollowedNewsStory(41, "123456789", "A real public patch note",
+                       1700000000, "Steam News", False),), followed_count=142,
+        )
+        assert model.accept_snapshot(snapshot)
+        qt_app.processEvents()
+        assert model.storyRows.rowCount() == 8
+        assert model.selectedStoryCount == 1
+        assert model.set_custom_child_geometry({
+            "story_tiles": {"x_offset": 0.06, "y_offset": 0.12,
+                            "width_scale": 0.92, "height_scale": 0.86},
+        })
+        payload = {"content_extent": [650.0, 460.0],
+                   "child_geometry": {"header": {"x_offset": 0.025}}}
+        model.apply_custom_layout_size_payload(payload)
+        assert model.authoredWidth == 650 and model.authoredHeight == 460
+        assert "header" in model.customChildGeometry
+        assert "story_tiles" not in model.customChildGeometry
+        assert binder.retire_widget("steam_progress") is True
+        assert binder.live_count == 0 and host.live_count == 0
+        assert shared_followed_owner_count() == 0
+    finally:
         runtime.close_runtime()
         factory.deleteLater()
         qt_app.processEvents()

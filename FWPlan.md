@@ -4,8 +4,7 @@
 
 ## Promoted to the current plan (not dormant backlog)
 
-- [ ] **System volume/mute OSD:** current B0–B3, [focused live decomposition](Docs/Future_Work/System_Volume_OSD.md). One Core Audio callback owner (not an OSD poll), COM apartment + device rebind must be proven before GUI; retire the existing 30-second Media poll only after Windows callback parity is demonstrated.
-- [ ] **Steam Games You Follow:** current C0–C3, [feasibility-first live decomposition](Docs/Future_Work/Steam_Games_You_Follow.md). G0 existing-key follow-list proof is a real release gate; no substitute source.
+- [ ] **Steam Games You Follow:** active full-product audit and cumulative Windows/physical acceptance in [current contract](Docs/Future_Work/Steam_Games_You_Follow.md). Use its accepted real followed source, not a substitute or a four-game sample presented as a complete feed.
 - [ ] **Bounded cross-project churn audit:** current A1–A4. Accepted child guides and 85+25 Windows test results are baseline, not outstanding re-acceptance.
 
 ## Dormant product/effect options (not permission to implement automatically)

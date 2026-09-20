@@ -10,13 +10,17 @@ QML = ROOT / "rendering/quick/qml/GamesYouFollowPresentation.qml"
 ROLES = ROOT / "rendering/games_followed_child_roles.py"
 
 
-def test_preview_family_not_admitted_before_shared_steam_lease_and_security_gate():
+def test_live_family_admission_uses_one_shared_steam_lease_without_qml_provider():
     registry = (ROOT / "rendering/quick/widgets/registry.py").read_text("utf-8")
     services = (ROOT / "rendering/widget_runtime_services.py").read_text("utf-8")
     binder = (ROOT / "rendering/quick/widgets/family_binder.py").read_text("utf-8")
-    assert 'qml_filename="GamesYouFollowPresentation.qml"' not in registry
-    assert 'class GamesYouFollowFamilyAdapter' not in binder
-    assert '"steam_progress": _FOLLOWED' not in services
+    assert 'family_id="steam_progress"' in registry
+    assert 'qml_filename="GamesYouFollowPresentation.qml"' in registry
+    assert 'class GamesYouFollowFamilyAdapter' in binder
+    assert '_enabled_from_candidates(widgets_config, ("steam_progress",))' in binder
+    assert '"steam_progress": _FOLLOWED_SERVICE_SPEC' in services
+    assert 'def _build_followed_service(' in services
+    assert 'model.activate(thread_manager)' in (ROOT / "rendering/quick/widgets/games_you_follow.py").read_text("utf-8")
 
 
 def test_g2_model_has_one_fixed_ordinal_row_model_and_grouped_roles():
@@ -49,6 +53,19 @@ def test_g2_quick_has_stable_role_targets_bounded_slots_and_no_side_effects():
     assert "model: followedModel.storyRows" in qml
     assert "visibleCapacity" in qml and "overflowSummary" in qml
     assert 'textFormat: Text.PlainText' in qml
+    # Offscreen ordinal slots remain retained but must not acquire Qt images.
+    assert 'tile.visible && storyGroup.visible' in qml
+    assert 'source: tile.showArt ? storyArtwork : ""' in qml
+    # Authored-capacity is owned by the Python parent projection, not a second
+    # independently rounded QML calculator. CUSTOM X/Y uses local rail capacity.
+    assert 'readonly property int rows: onAuthoredRail ? followedModel.layoutRows' in qml
+    assert '? followedModel.visibleStoryCount' in qml
+    assert 'Math.max(0, Math.min(8, rowsFit,' in qml
+    # The CUSTOM Y edit box follows the user's independent scale, not sibling
+    # overflow bounds. Paint capacity is clipped without freezing the handle.
+    assert 'height: Math.max(0.0, authoredGroupHeight * childHeightScale("story_tiles"))' in qml
+    assert 'readonly property real paintHeight:' in qml
+    assert 'followedModel.showArtwork ? 294.0 : 235.0' in qml
     for forbidden in ("Timer {", "MouseArea {", "onClicked:", "XMLHttpRequest", "Qt.openUrlExternally", "https://", "http://"):
         assert forbidden not in qml
     assert not any(value in qml for value in ("steamid", "appid", "gid", "providerUrl", "onLinkActivated"))
@@ -63,4 +80,5 @@ def test_source_identity_and_private_fields_do_not_flow_through_qt_roles():
     assert role_source is not None
     for forbidden in ("appId", "steamId", "gid", "providerUrl", "rawHtml", "remoteArtwork"):
         assert forbidden not in role_source
-    assert 'return False  # No click permission' in source
+    assert 'self._article_action("news_article", target.browser_url)' in source
+    assert 'news_article_target(story.appid, story.gid, canonical)' in source

@@ -131,7 +131,7 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
             "friend_pulse",
         ),
         settings_section_id="steam",
-        description="Steam progress, achievement pulse, abandonment and friend cards.",
+        description="Followed-game news, achievement pulse, abandonment and friend cards.",
     ),
     WidgetFamilyDescriptor(
         family_id="system_audio_osd",

@@ -92,29 +92,15 @@ def test_clocks_family_owns_all_three_clocks():
     assert family.member_widget_ids == ("clock", "clock2", "clock3")
 
 
-def test_steam_family_keeps_friend_pulse_public_and_journey_scaffold_gated():
-    # Steam owns public retained members, including Friend Pulse, so the family
-    # is always available; --devsteam only exposes the Journey preview scaffold. The
-    # neutral catalog and runtime-descriptor caches are env-signature keyed, so
-    # toggling the gate is reflected without clearing caches.
+def test_steam_family_admits_followed_news_via_canonical_member_without_dev_gate():
     import rendering.widget_descriptors as wd
 
     dev_gates.force_gate(steam=False)
     try:
-        family = wd.get_widget_family_descriptor("steam")
-        assert family is not None
         active = set(wd.get_active_member_widget_ids("steam"))
-        assert "achievement_pulse" in active
-        assert "abandonment_issues" in active
-        assert "friend_pulse" in active
-        # Steam Journey has no retained runtime and is absent from the active set.
-        assert "steam_progress" not in active
-
+        assert {"steam_progress", "achievement_pulse", "abandonment_issues", "friend_pulse"} <= active
+        # This remains an OFF-by-default ordinary member, independent of --devsteam.
         dev_gates.force_gate(steam=True)
-        active_dev = set(wd.get_active_member_widget_ids("steam"))
-        # Steam Journey remains a Settings-only scaffold; a dev gate must not
-        # turn it into a runtime widget without a retained implementation.
-        assert "steam_progress" not in active_dev
-        assert "friend_pulse" in active_dev
+        assert set(wd.get_active_member_widget_ids("steam")) == active
     finally:
         dev_gates.force_gate(steam=False)
