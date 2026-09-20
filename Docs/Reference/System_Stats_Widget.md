@@ -27,7 +27,13 @@ Each metric has a canonical default-on presentation/monitoring checkbox. Disable
 single sampler pulse** rather than spawning alternate samplers or merely hiding work. Enabled metric panels reflow through
 the shared horizontal/vertical `content_extent`: extra width opens text/value lanes, extra height above the authored baseline distributes panel
 spacing, and reducing height hides complete trailing panels rather than shrinking
-all four panels. Direct-axis CUSTOM changes remain presentation state rather
+all four panels. The fixed panel/step baseline and a single retained metric-stack
+Edit role use the shared OverlayCard content padding to convert the family-local
+Y rail into the physical card paint boundary; Edit handles and real panel bottoms
+must never cross the bottom inset on Save/reopen or after uniform corner scale.
+Panel selection persists while cards are temporarily hidden, and reversing Y
+reflow restores those complete cards without republishing outer geometry.
+Direct-axis CUSTOM changes remain presentation state rather
 than Settings geometry. The metric-panel outline
 uses the scale-aware 1.25 px baseline so it visually joins the authored 5 px accent block without changing that accent.
 
@@ -280,7 +286,7 @@ System Stats uses the same ordinary retained-card rules as the mature widgets:
 
 - one retained Quick component inside the existing engine/window;
 - stable item identity;
-- descriptor uses the shared uniform **corner/wheel** outer-resize contract plus horizontal/vertical `content_extent` axes. A side-handle changes only the requested logical axis; the QML single uniform transform is admitted only when both outer axes differ from the logical extent, so Y-only compaction cannot accidentally uniformly shrink the panel internals;
+- descriptor uses the shared uniform **corner/wheel** outer-resize contract plus horizontal/vertical `content_extent` axes. The shared `OverlayWidget` authored-root transform is always enabled, but its **effective scale is 1.0** when an axis-only gesture has updated the corresponding logical extent. Only a real corner/wheel scale produces a non-unit outer/logical ratio. Do not infer the gesture from whether two dimensions happen to differ during separate Qt property updates; that can make a Y-only drag temporarily shrink the whole scene;
 - side extent reflows enabled metric panels only; corners/wheel remain uniform and shared Restore Size clears extent back
   to authored geometry without changing X/Y/display;
 - shared whole-card normalization/40% floor outside family side-drag policy;
@@ -314,9 +320,7 @@ These three roles persist through the ordinary CUSTOM `size_payload.child_geomet
 them to the authored geometry without changing metric-selection Settings. Old per-metric child edit records do not
 participate in the current layout. They are not repurposed as independent label/value/track layout authorities.
 
-The sampling edge remains separate from editing: accepted runtime samples emit `sampleChanged`, while CUSTOM geometry
-publishes only `customGeometryChanged`. Dragging/resizing child roles must not start/stop/wake the sampler, and a 10-second
-sample must not rebuild or republish child geometry.
+The sampling edge remains separate from editing: accepted runtime samples emit `sampleChanged`, child edits emit `customGeometryChanged`, and changes to the parent logical reflow box emit only `contentExtentChanged`. That last narrow signal invalidates `authoredWidth`/`authoredHeight` without republishing unchanged metric labels, font, colour or configuration values on each pointer sample. Dragging/resizing child roles must not start/stop/wake the sampler, and a 10-second sample must not rebuild or republish child geometry.
 
 Do not create a custom-GL card merely because the data resembles a performance HUD. QML rectangles/text/bars are
 sufficient.

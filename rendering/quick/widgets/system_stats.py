@@ -320,6 +320,9 @@ class SystemStatsPresentationModel(QObject):
     # Keep them separate from layout/style/config invalidation so one CPU/RAM
     # update does not make QML reevaluate the entire retained card.
     stateChanged = Signal()
+    # CUSTOM logical extent is edited per pointer sample. It must not
+    # invalidate the immutable colours, labels and metric-selection properties.
+    contentExtentChanged = Signal()
     sampleChanged = Signal()
     customGeometryChanged = Signal()
 
@@ -424,14 +427,14 @@ class SystemStatsPresentationModel(QObject):
         if extent == self._content_extent:
             return False
         self._content_extent = extent
-        self.stateChanged.emit()
+        self.contentExtentChanged.emit()
         return True
 
     def clear_content_extent(self) -> bool:
         if self._content_extent is None:
             return False
         self._content_extent = None
-        self.stateChanged.emit()
+        self.contentExtentChanged.emit()
         return True
 
     def set_custom_child_geometry(self, child_geometry: object) -> bool:
@@ -677,7 +680,7 @@ class SystemStatsPresentationModel(QObject):
     def textShadowOffsetY(self) -> float:
         return self.style.text_shadow_offset_y
 
-    @Property(float, notify=stateChanged)
+    @Property(float, notify=contentExtentChanged)
     def authoredWidth(self) -> float:
         if self._content_extent is not None:
             return float(self._content_extent[0])
@@ -687,7 +690,7 @@ class SystemStatsPresentationModel(QObject):
     def baseAuthoredWidth(self) -> float:
         return float(self.config.authored_width)
 
-    @Property(float, notify=stateChanged)
+    @Property(float, notify=contentExtentChanged)
     def authoredHeight(self) -> float:
         if self._content_extent is not None:
             return float(self._content_extent[1])

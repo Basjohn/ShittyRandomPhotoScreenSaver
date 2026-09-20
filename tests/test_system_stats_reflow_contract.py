@@ -45,8 +45,12 @@ def test_system_stats_uses_shared_content_extent_reflow_contract() -> None:
     assert "visibleMetricCount" in qml
     assert "metricPanelHeight" in qml
     assert "Math.max(statsRoot.systemStatsModel.baseAuthoredHeight," in qml
-    assert "Math.abs(width - systemStatsModel.authoredWidth) > 0.5" in qml
-    assert "Math.abs(height - systemStatsModel.authoredHeight) > 0.5" in qml
+    # Reuse the canonical shared content-root transform, never guess gesture
+    # type from asynchronous outer/logical width and height snapshots.
+    assert "uniformScaleTransform: true" in qml
+    assert "Math.abs(width - systemStatsModel.authoredWidth) > 0.5" not in qml
+    assert "contentExtentChanged = Signal()" in model
+    assert "@Property(float, notify=contentExtentChanged)" in model
     assert "valueLaneWidth" in qml
     assert "systemStatsModel.showCpu" in qml
     assert "systemStatsModel.showMemory" in qml
@@ -93,6 +97,13 @@ def test_system_stats_metrics_are_one_editable_stack_with_authored_flipped_child
     assert "visibleMetricCount - 1) * metricGap" in qml
     assert "paintedMetricCount" in qml
     assert "metricPaintBottom" in qml
+    # The shared OverlayCard puts family children inside its padded content.
+    # Root-space paint bounds must be translated into content-local bounds
+    # before panel admission and the single group Edit target are evaluated.
+    assert "metricContentPaintBottom" in qml
+    assert "metricPaintBottom - statsRoot.cardPadding" in qml
+    assert "bottom > metricContentPaintBottom + 0.01" in qml
+    assert "authoredMetricStackHeight, metricContentPaintBottom - representativePanelY" in qml
     assert "height: statsRoot.visibleMetricStackHeight" in qml
     assert qml.count("function metricRoleX(roleId, panelWidth, roleWidth)") == 1
     # Every real metric still shares the same QML flip rails, with no extra

@@ -6,13 +6,13 @@ OverlayWidget {
 
 
     required property var systemStatsModel
-    // A side-handle changes only the logical card axis, so the family reflows
-    // without scaling its whole painted scene.  Corner/wheel scaling changes
-    // both outer axes relative to the retained logical content extent and
-    // retains the existing one-transform uniform-size contract.
-    uniformScaleTransform:
-        Math.abs(width - systemStatsModel.authoredWidth) > 0.5
-        && Math.abs(height - systemStatsModel.authoredHeight) > 0.5
+    // Use the *existing shared* authored-root uniform transform continuously.
+    // The CUSTOM owner supplies a logical content_extent for side-axis reflow;
+    // it matches the painted root when the gesture is an axis-only resize.
+    // Only corner/wheel changes the ratio of outer to logical dimensions.
+    // Guessing gesture type from two changing dimensions made an ordinary
+    // vertical resize intermittently switch the entire scene scale on/off.
+    uniformScaleTransform: true
     preferredContentWidth: systemStatsModel.authoredWidth
     preferredContentHeight: systemStatsModel.authoredHeight
 
@@ -86,7 +86,8 @@ OverlayWidget {
     readonly property real canonicalMetricPanelHeight: visibleMetricCount > 0
         ? Math.max(58.0, (Math.max(statsRoot.systemStatsModel.baseAuthoredHeight,
             statsRoot.systemStatsModel.authoredHeight) - metricAreaTop - metricAreaBottomMargin
-            - canonicalMetricGap * (visibleMetricCount - 1)) / visibleMetricCount)
+            - statsRoot.cardPadding - canonicalMetricGap * (visibleMetricCount - 1))
+            / visibleMetricCount)
         : 0.0
     readonly property real metricPanelWidth: canonicalMetricPanelWidth
         * childWidthScale("metric_panels")
@@ -105,9 +106,16 @@ OverlayWidget {
     // cards, in their existing order, only while they fit the card's Y rail.
     // Never use this painted subset to recompute panel height/step: that would
     // turn a visibility edge into a resize feedback loop and jump the handles.
+    // The shared OverlayCard owns the content padding: metric panel/role y
+    // positions are local to its inset content area, while the root-boundary
+    // comparison uses outer-card coordinates. Do not compare those spaces
+    // without projecting through the card inset (8px at the authored theme).
+    // At authored size, all four panels must still fit inside the real lower
+    // boundary; Y-only contraction then sheds whole panels without scaling.
     readonly property real metricPaintBottom:
-        Math.min(statsRoot.height, statsRoot.systemStatsModel.authoredHeight)
-            - statsRoot.metricAreaBottomMargin
+        statsRoot.systemStatsModel.authoredHeight - statsRoot.metricAreaBottomMargin
+    readonly property real metricContentPaintBottom:
+        metricPaintBottom - statsRoot.cardPadding
     readonly property real authoredMetricStackHeight: visibleMetricCount > 0
         ? visibleMetricCount * metricPanelHeight
             + Math.max(0, visibleMetricCount - 1) * metricGap
@@ -119,7 +127,7 @@ OverlayWidget {
         let count = 0
         for (let index = 0; index < visibleMetricCount; ++index) {
             const bottom = representativePanelY + index * metricStep + metricPanelHeight
-            if (bottom > metricPaintBottom + 0.01)
+            if (bottom > metricContentPaintBottom + 0.01)
                 break
             ++count
         }
@@ -129,7 +137,7 @@ OverlayWidget {
     // full stack. Its height does not jump when an entire trailing panel is
     // hidden, so the same drag can expand the stack to reveal it again.
     readonly property real visibleMetricStackHeight: Math.max(0.0, Math.min(
-        authoredMetricStackHeight, metricPaintBottom - representativePanelY
+        authoredMetricStackHeight, metricContentPaintBottom - representativePanelY
     ))
 
     // Keep only useful, physically meaningful Edit surfaces. The metric role
