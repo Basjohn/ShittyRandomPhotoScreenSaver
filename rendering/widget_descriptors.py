@@ -2066,48 +2066,12 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
                 maximum_scale=(2.50, 3.00),
                 movable=True,
             ),
-            # Metric cards are structurally repeated. Keep one shared geometry
-            # record per semantic role, never CPU/RAM/Uptime/Network copies.
+            # One structural metric-stack Edit role. All repeated card internals
+            # are family-authored, not extra overlapping/partially movable roles.
             freeform_layout_block_child_role(
                 "metric_panels",
                 minimum_scale=(0.55, 0.55),
                 maximum_scale=(2.25, 2.25),
-                movable=True,
-            ),
-            freeform_layout_block_child_role(
-                "metric_accents",
-                minimum_scale=(0.40, 0.40),
-                maximum_scale=(3.00, 3.00),
-                movable=True,
-            ),
-            freeform_layout_block_child_role(
-                "metric_labels",
-                minimum_scale=(0.50, 0.55),
-                maximum_scale=(2.50, 2.50),
-                movable=True,
-                alignment_flip=True,
-                authored_alignment="left",
-            ),
-            freeform_layout_block_child_role(
-                "metric_details",
-                minimum_scale=(0.50, 0.55),
-                maximum_scale=(2.50, 2.50),
-                movable=True,
-                alignment_flip=True,
-                authored_alignment="left",
-            ),
-            freeform_layout_block_child_role(
-                "metric_values",
-                minimum_scale=(0.50, 0.55),
-                maximum_scale=(2.50, 2.50),
-                movable=True,
-                alignment_flip=True,
-                authored_alignment="right",
-            ),
-            freeform_layout_block_child_role(
-                "metric_tracks",
-                minimum_scale=(0.35, 0.50),
-                maximum_scale=(3.00, 3.00),
                 movable=True,
             ),
         ),

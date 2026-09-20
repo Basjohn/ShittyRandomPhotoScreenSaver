@@ -64,8 +64,11 @@ def test_achievement_declares_and_projects_dense_custom_child_roles():
         assert property_name in presentation
         assert f"def {property_name}(self)" in model
 
-    assert "id: customChildRequirement" in presentation
-    assert "customEditableChildRequirementTarget: customChildRequirement" in presentation
+    # A child-driven outer-size authority is deliberately retired: authored
+    # content_extent and the existing CUSTOM owner remain the only parent size.
+    assert "id: customChildRequirement" not in presentation
+    assert "customEditableChildRequirementTarget: null" in presentation
+    assert '"requirementTarget": customChildRequirement' not in presentation
     assert "readonly property bool artworkOnAuthoredRail" in presentation
     assert "readonly property bool progressOnAuthoredRail" in presentation
     assert "readonly property bool fieldGroupOnAuthoredRail" in presentation
@@ -101,16 +104,19 @@ def test_achievement_artwork_is_freeform_but_intrinsic_roles_scale_as_shapes():
     assert "scale: achievementRoot.achievementModel.customProgressCircleScale" in presentation
     assert "transformOrigin: Item.TopLeft" in presentation
 
-def test_achievement_custom_child_growth_reports_one_stable_family_wide_requirement():
+def test_achievement_outer_extent_is_not_observed_or_republished_by_children():
     presentation = PRESENTATION.read_text(encoding="utf-8")
 
-    assert "readonly property real requiredContentWidth: Math.max(" in presentation
-    assert "readonly property real requiredContentHeight: Math.max(" in presentation
-    assert "achievementRoot.baseAuthoredWidth," in presentation
-    assert "achievementRoot.baseAuthoredHeight," in presentation
-    assert "artworkFrame.x - achievementRoot.artworkParentReflowX" in presentation
-    assert "progressPulse.y - achievementRoot.progressParentReflowY" in presentation
-    assert "fieldGroupFrame.y - achievementRoot.fieldGroupParentReflowY" in presentation
+    assert "id: customChildRequirement" not in presentation
+    assert "customEditableChildRequirementTarget: null" in presentation
+    assert '"requirementTarget": customChildRequirement' not in presentation
+    assert "preferredContentWidth: achievementRoot.authoredWidth" in presentation
+    assert "preferredContentHeight: achievementRoot.authoredHeight" in presentation
+    assert "readonly property real baseAuthoredWidth: achievementModel.baseAuthoredWidth" in presentation
+    assert "readonly property real baseAuthoredHeight: achievementModel.baseAuthoredHeight" in presentation
+    assert "readonly property real artworkParentReflowX:" in presentation
+    assert "readonly property real progressParentReflowY:" in presentation
+    assert "readonly property real fieldGroupParentReflowY:" in presentation
     assert "extraContentHeight * 0.20" not in presentation
     assert "extraContentHeight * 0.65" not in presentation
 
@@ -126,6 +132,9 @@ def test_achievement_live_parent_x_reflow_retains_authored_title_rail_without_gr
     assert '(achievementRoot.gameNameOnAuthoredRail\n                    ? normalContent.titleWidth' in qml
     assert '(achievementRoot.achievementListOnAuthoredRail\n                    ? normalContent.titleWidth' in qml
     assert 'achievementRoot.firstAchievementOnAuthoredRail' in qml
-    assert 'achievementRoot.gameNameOnAuthoredRail\n                    ? normalContent.titleParentReflowWidth' in qml
-    assert 'achievementRoot.achievementListOnAuthoredRail\n                    ? normalContent.titleParentReflowWidth' in qml
+    # Width reflow is projected once through normalContent.titleWidth.
+    # Re-adding titleParentReflowWidth to either child's X would create a
+    # second, competing placement path and parent-width feedback.
+    assert 'achievementRoot.semanticRailX(' in qml
+    assert 'achievementRoot.canonicalTitleWidth + titleParentReflowWidth' in qml
     assert 'Timer {' not in qml

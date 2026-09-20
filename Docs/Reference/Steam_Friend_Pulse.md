@@ -10,9 +10,8 @@ Friend Pulse should answer one useful question at a glance:
 
 > **Which of my Steam friends are online, what are they playing, and who else is in my roster?**
 
-The pre-Quick mock card is not a fidelity target. The old scaffold survives only as evidence that the stable id,
-Settings shell and family slot already exist. Product behavior is designed against the current Steam source/request
-policy and retained Quick widget architecture.
+The retained Quick widget is the presentation authority. The older widget scaffold is not a fidelity target;
+Steam source/request policy, accepted cache ownership and the shared CUSTOM Edit owner govern current behavior.
 
 This implementation must not become a Steam social client, chat client, activity-history database or a second Steam
 provider. It is a small, privacy-aware activity card fed by the same bounded Steam ownership used by the existing
@@ -30,6 +29,8 @@ columns up to the project-wide 24-friend ceiling. The final incomplete row remai
 Title-Case/bold/two-line fit, centred beneath avatars and independently size-adjustable. Tiles/rows show privacy-permitted
 identity, ALL-CAPS presence/game chrome, offline-avatar desaturation and hard clipping. The redundant lower-right avatar
 presence dot is retired. Strict mode groups anonymously and exposes neither names, avatars nor per-friend actions.
+
+The semantic Edit roles are stable while the authored card baseline, roster, names or viewport changes; the selected Edit delegate reads `baseAuthoredWidth`/`baseAuthoredHeight` on the retained root instead of publishing a new role list. Repeated row/grid targets represent the first actual painted item rather than independently persisting every row.
 
 The source/cache/runtime path is cache-first, uses existing Steam locks/request coordination/backoff/redaction, and has
 one Friend Pulse owner per runtime generation shared by every display. A coherent successful FriendList/PlayerSummaries
@@ -57,9 +58,9 @@ summary area from the already-owned snapshot count; it adds no source work. Shar
 are current architecture, not Friend Pulse-local geometry systems. `--devsteam` now owns only unfinished Games You Follow.
 Live/installed acceptance debt is tracked only in `Current_Plan.md`; this document describes the landed product contract.
 
-## 1. Current foundation to reuse
+## 1. Current implementation owners
 
-Current source already provides useful pieces that must remain the authority:
+Current source and ownership boundaries:
 
 - `core/settings/widget_family_catalog.py` already registers `friend_pulse` inside the Steam family;
 - canonical defaults already contain `widgets.friend_pulse` and the Steam family connection settings;
@@ -69,8 +70,8 @@ Current source already provides useful pieces that must remain the authority:
 - `core/steam/backend.py` already declares `FRIEND_LIST` and `PLAYER_SUMMARIES` as conditional client-safe sources;
 - `core/steam/request_policy.py`, Steam cache/credential/redaction infrastructure and shared request ownership already
   define rate/backoff/secret behavior;
-- the existing Steam family `privacy_mode` (`Strict` / `Balanced` / `Rich`) is canonical persisted state and should
-  become real Friend Pulse presentation policy rather than gaining a second card-local privacy switch;
+- the existing Steam family `privacy_mode` (`Strict` / `Balanced` / `Rich`) is canonical persisted state and governs
+  Friend Pulse presentation; it is not duplicated in card-local Settings;
 - `Docs/Guides/10_WIDGET_GUIDELINES.md` owns ordinary retained-card normalization, styling, global-CUSTOM behavior,
   stacking, lifecycle, retirement and dormancy expectations.
 
@@ -330,8 +331,9 @@ Friend Pulse inherits the ordinary-widget contract, including:
 - CUSTOM child geometry is roster-shared, not delegate-owned: singleton Header / Online Count / Separator plus one shared Friend Frames, Avatars and Usernames record each. Repeated roles affect every row/tile consistently and never create per-friend persistence. The shared frame remains family-positioned and exposes size only; avatar/username placement is a shared offset applied uniformly across repeated items.
 - selected-Edit collision may ignore only the structural frame↔avatar/username containment pairs so a containing frame does not block its own children; snapping/guides and collision against unrelated roles remain active.
 
-The default `420x180` scaffold geometry is only a starting authoring hint; eyes-on Quick layout may revise canonical
-preferred dimensions if the actual useful row design needs it. Normalization contracts, not old pixels, are binding.
+The authored baseline comes from the current `FriendPulsePresentationModel` and its configured roster capacity;
+the original pre-Quick scaffold size is not a normalization target. The selected Edit delegate reads the retained root's
+`baseAuthoredWidth`/`baseAuthoredHeight` without rebuilding the six semantic-role descriptors on a capacity change.
 
 ## 9. Settings design
 
@@ -387,7 +389,7 @@ reactivity or freshness.
 
 ## 12. Removal boundary
 
-The implementation remains deliberately removable as:
+The family remains independently removable through:
 
 - Friend Pulse preparation/runtime/model/QML implementation;
 - bounded descriptor/registration wiring;

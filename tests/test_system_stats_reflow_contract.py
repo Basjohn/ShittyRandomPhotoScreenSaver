@@ -63,3 +63,34 @@ def test_system_stats_metric_selection_skips_disabled_source_reads() -> None:
     assert 'else ("disabled", None)' in source
     assert '"sample_network": selected("show_network")' in services
     assert "WholeSystemCpuRamSource(**metric_selection)" in services
+
+
+def test_system_stats_metrics_are_one_editable_stack_with_authored_flipped_children() -> None:
+    """No ghost targets, per-metric handles, timer or alternate geometry authority."""
+    qml = _text("rendering/quick/qml/SystemStatsPresentation.qml")
+    descriptor = _text("rendering/widget_descriptors.py")
+    stats = descriptor.split('widget_id="system_stats"', 1)[1].split(
+        'WidgetRuntimeDescriptor(', 1
+    )[0]
+    assert stats.count('freeform_layout_block_child_role(') == 2
+    for id_ in ("header", "header_separator", "metric_panels"):
+        assert f'"roleId": "{id_}"' in qml
+    for id_ in ("metric_accents", "metric_labels", "metric_details",
+                "metric_values", "metric_tracks"):
+        assert f'"roleId": "{id_}"' not in qml
+        assert f'"{id_}",' not in stats
+        for helper in ("childOffsetX", "childOffsetY", "childWidthScale",
+                       "childHeightScale", "childAlignment"):
+            assert f'{helper}("{id_}")' not in qml
+    assert qml.count('objectName: "systemStatsCustomMetricPanelRoleTarget"') == 1
+    assert 'metricGap: canonicalMetricGap * childHeightScale("metric_panels")' in qml
+    assert "visibleMetricCount * statsRoot.metricPanelHeight" in qml
+    assert "visibleMetricCount - 1) * statsRoot.metricGap" in qml
+    assert qml.count("function metricRoleX(roleId, panelWidth, roleWidth)") == 1
+    # Every real metric still shares the same QML flip rails, with no extra
+    # delegate for its label, value, accent, detail or track.
+    for id_ in ("metric_accents", "metric_labels", "metric_details",
+                "metric_values", "metric_tracks"):
+        assert qml.count(f'statsRoot.metricRoleX("{id_}", panel.width, width)') == 1
+    for forbidden in ("Timer {", "Connections {", "Qt.callLater", "SettingsManager"):
+        assert forbidden not in qml, forbidden

@@ -1,7 +1,5 @@
 # SRPSS Documentation Index
 
-Last updated: 2026-09-19
-
 ## Start here
 
 ```text
@@ -13,6 +11,12 @@ exact current source
 ```
 
 `Current_Plan.md` owns current work admission and sequence. `Spec.md` owns durable product/architecture. `Docs/Historical_Bugs/` is the only intentional historical-document collection; ordinary chronology and retired decompositions belong in source control rather than the live docs tree.
+
+## Active widget development and regression lessons
+
+- `Current_Plan.md` is a **live checklist**: accepted 85-test multi-family and 25-test retained-child-guide baseline; current bounded wider churn audit; queued opt-in OSD and Games You Follow feasibility/implementation. It must not retain checkpoint chronology.
+- `Docs/Future_Work/System_Volume_OSD.md` and `Docs/Future_Work/Steam_Games_You_Follow.md` are the **live feature decompositions**; `FWPlan.md` is only a backlog router. A new transition integrates through the current canonical registry/host, with self-contained lazy resources, not a parallel sandbox runtime.
+- `Docs/Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md` records the resolved Edit geometry/role/guide pitfalls and test-oracle failures; the current acceptance queue remains in `Current_Plan.md`.
 
 ## Directory roles
 
@@ -45,7 +49,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
 | ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Contracts.md` → Ordinary CUSTOM geometry / normalization |
-| current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Ordinary widgets, normalization and CUSTOM |
+| current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for outstanding native gates |
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
@@ -87,4 +91,3 @@ Any production change that touches Bubble reaction/timing requires active-music 
 Do not add another inventory/changelog/history layer. Closed decompositions are consolidated into current contracts or Historical Bugs and then deleted from the live docs tree. Persisted-input compatibility bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated — not a backlog); caller-dead residue is deleted outright, not tracked in a register. When paths move, update this router and all live cross-references in the same checkpoint.
 
 
-Current 2026-09-19 edit-input / Reddit paint checkpoint: the current GODZIP handoff and `.godzip/TEST_COMMANDS.md` identify new real-Qt pointer event and Reddit/Reddit2 retained-row rail regressions. Source-level green alone is not acceptance; use the focused automated Windows gate rather than an exhaustive operator gesture matrix.

@@ -4,6 +4,8 @@ Status: **ACCEPTED EXPERIMENTAL — ISOLATED.** Visual/product acceptance does *
 
 ## Current golden
 
+Sphere remains a separate, disabled-by-default experimental Visualizer mode; its accepted look and response are preservation inputs, not permission to promote its implementation into the established five modes. Ordinary-widget semantic Edit/lifetime machinery is not part of Sphere's viewport ownership.
+
 The accepted representation is the stepped voxel shell, not the retired smooth icosphere. Current musical behaviour is now a preservation target: strong/local detached fragmentation, granular event-owned intake/outtake cohorts, stable four-corner population identity, sustained body growth, event-stepped tracer travel, continuous rotation and the vocal-linked intake recoil. Presentation or cleanup work may not make the mode quieter, slower to react, less spatially articulate or more ambient/free-running.
 
 Only two curated Sphere presets remain:

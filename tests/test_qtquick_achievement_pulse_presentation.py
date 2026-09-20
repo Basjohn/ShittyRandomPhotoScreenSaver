@@ -1133,8 +1133,17 @@ def test_semantic_header_flip_exchanges_achievement_regions_not_image_or_text_pi
         from PySide6.QtQml import QJSValue
         if isinstance(requirement, QJSValue):
             requirement = requirement.toQObject()
-        assert all(obj is not None for obj in
-                   (canvas, art, image, title, unlocks, progress, fields, requirement))
+        # Parent sizing is owned by content_extent; the old child-driven
+        # requirement object was retired to prevent reflow feedback.
+        assert requirement is None
+        painted = {
+            "canvas": canvas, "artwork": art, "image": image,
+            "title": title, "unlocks": unlocks,
+            "progress": progress, "fields": fields,
+        }
+        assert all(obj is not None for obj in painted.values()), [
+            name for name, obj in painted.items() if obj is None
+        ]
         assert art.isVisible() and progress.isVisible() and fields.isVisible()
         def pos(obj):
             return obj.mapToItem(canvas, 0.0, 0.0).x()
@@ -1158,14 +1167,20 @@ def test_semantic_header_flip_exchanges_achievement_regions_not_image_or_text_pi
         assert int(title.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignRight)
         flipped_title_width = title.width()
         flipped_art_x = art.x()
-        required_before = float(requirement.property("requiredContentWidth"))
         assert model.set_content_extent(base_width + 140.0, base_height)
         item.setWidth(model.authoredWidth)
         item.setHeight(model.authoredHeight)
         qt_app.processEvents()
         assert art.x() == pytest.approx(flipped_art_x)
         assert title.width() == pytest.approx(flipped_title_width + 140.0)
-        assert float(requirement.property("requiredContentWidth")) == pytest.approx(required_before, abs=1.5)
+        # The painted right-rail relation may reflow, but it must not publish
+        # another outer-size request after event-loop settling.
+        for _ in range(3):
+            qt_app.processEvents()
+            assert float(model.authoredWidth) == pytest.approx(base_width + 140.0)
+            assert float(model.baseAuthoredWidth) == pytest.approx(base_width)
+            assert float(item.property("extraContentWidth")) == pytest.approx(140.0)
+            assert art.x() == pytest.approx(flipped_art_x)
 
         assert model.clear_content_extent()
         item.setWidth(model.authoredWidth)

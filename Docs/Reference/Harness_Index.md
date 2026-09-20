@@ -15,6 +15,8 @@ explicitly requests it.
 
 ## 1. Targeted tests first
 
+For retained ordinary Edit changes, the shared native painter test (`tests/test_qtquick_child_mapped_geometry.py`) covers clipped/applied transforms and repeated family-owned normalization values. Combine it with the specific family scene tests (Clock, System Stats, Friend Pulse, Weather, Achievement Pulse or Abandonment Issues) and the import-free lifetime/paint source contracts. Stable role identity and real painted bounds must both pass; a green source scan cannot certify native gesture responsiveness.
+
 Ordinary widget pixels and resize geometry: `python -m tools.ordinary_widget_resize_capture
 --output logs/widget_resize_normalization/before`. The retained long-term harness,
 comparison command and evidence boundaries are documented in
@@ -238,11 +240,10 @@ include:
 tests/test_widget_family_catalog.py
 tests/test_capability_activation.py
 tests/test_transition_distribution.py
-tests/test_widget_manager_refresh.py
 tests/test_visualizer_failover_reclaim.py
 ```
 
-This list is routing, not a frozen manifest.
+This list is routing, not a frozen manifest. Resolve exact test functions and current existence from `tests/run_chunked.py` and the source tree before running a command.
 
 ### 8.2 Shared runtime/service ownership
 

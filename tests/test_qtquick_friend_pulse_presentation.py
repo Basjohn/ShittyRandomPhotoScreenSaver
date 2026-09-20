@@ -139,6 +139,27 @@ def _visual_items(root: QQuickItem):
         yield from _visual_items(child)
 
 
+def _assert_representative_matches_rendered_role(
+    root: QQuickItem, representative_name: str, rendered_name: str,
+) -> None:
+    representative = _find_visual_item(root, representative_name)
+    rendered = _find_visual_item(root, rendered_name)
+    assert representative is not None and rendered is not None, (
+        representative_name, rendered_name,
+    )
+    assert representative.isVisible() and rendered.isVisible(), rendered_name
+    def mapped_bounds(item):
+        corners = [item.mapToItem(root, x, y) for x, y in (
+            (0.0, 0.0), (item.width(), 0.0),
+            (0.0, item.height()), (item.width(), item.height()),
+        )]
+        return (min(p.x() for p in corners), min(p.y() for p in corners),
+                max(p.x() for p in corners), max(p.y() for p in corners))
+    assert mapped_bounds(representative) == pytest.approx(
+        mapped_bounds(rendered), abs=0.02,
+    ), rendered_name
+
+
 def test_configured_capacity_owns_authored_height_and_privacy() -> None:
     config = FriendPulsePresentationConfig.from_widgets_mapping(
         {
@@ -437,6 +458,29 @@ def test_friend_pulse_qml_builds_real_rows(qt_app) -> None:
         assert float(frame_proxy.property("width")) == pytest.approx(
             float(row.property("width"))
         )
+        for representative, painted in (
+            ("friendPulseCustomFriendFrameRoleTarget", "friendPulseRow_0"),
+            ("friendPulseCustomAvatarRoleTarget", "friendPulseRowAvatar_0"),
+            ("friendPulseCustomUsernameRoleTarget", "friendPulseRowName_0"),
+        ):
+            _assert_representative_matches_rendered_role(item, representative, painted)
+        # One edit owner for every repeated row: X/Y and scale changes update
+        # the existing representative without creating per-row Edit delegates.
+        assert model.set_custom_child_geometry({
+            "friend_frames": {"width_scale": 0.93, "height_scale": 1.12},
+            "avatars": {"width_scale": 1.1, "x_offset": 0.015, "y_offset": -0.01},
+            "usernames": {"width_scale": 0.9, "height_scale": 1.08,
+                          "x_offset": -0.008, "y_offset": 0.012},
+        })
+        qt_app.processEvents()
+        QMetaObject.invokeMethod(rows, "forceLayout")
+        qt_app.processEvents()
+        for representative, painted in (
+            ("friendPulseCustomFriendFrameRoleTarget", "friendPulseRow_0"),
+            ("friendPulseCustomAvatarRoleTarget", "friendPulseRowAvatar_0"),
+            ("friendPulseCustomUsernameRoleTarget", "friendPulseRowName_0"),
+        ):
+            _assert_representative_matches_rendered_role(item, representative, painted)
     finally:
         item.setParentItem(None)
         item.setParent(None)
@@ -589,6 +633,27 @@ def test_friend_pulse_qml_builds_centered_dynamic_avatar_grid(qt_app) -> None:
             positions[-1].x() + float(tiles["friendPulseGridTile_2"].property("width"))
         )
         assert abs(left_gap - right_gap) <= 1.0
+        for representative, painted in (
+            ("friendPulseCustomFriendFrameRoleTarget", "friendPulseGridTile_0"),
+            ("friendPulseCustomAvatarRoleTarget", "friendPulseGridAvatar_0"),
+            ("friendPulseCustomUsernameRoleTarget", "friendPulseGridName_0"),
+        ):
+            _assert_representative_matches_rendered_role(item, representative, painted)
+        assert model.set_custom_child_geometry({
+            "friend_frames": {"width_scale": 0.93, "height_scale": 1.12},
+            "avatars": {"width_scale": 1.1, "x_offset": 0.015, "y_offset": -0.01},
+            "usernames": {"width_scale": 0.9, "height_scale": 1.08,
+                          "x_offset": -0.008, "y_offset": 0.012},
+        })
+        qt_app.processEvents()
+        QMetaObject.invokeMethod(grid, "forceLayout")
+        qt_app.processEvents()
+        for representative, painted in (
+            ("friendPulseCustomFriendFrameRoleTarget", "friendPulseGridTile_0"),
+            ("friendPulseCustomAvatarRoleTarget", "friendPulseGridAvatar_0"),
+            ("friendPulseCustomUsernameRoleTarget", "friendPulseGridName_0"),
+        ):
+            _assert_representative_matches_rendered_role(item, representative, painted)
     finally:
         item.setParentItem(None)
         item.setParent(None)

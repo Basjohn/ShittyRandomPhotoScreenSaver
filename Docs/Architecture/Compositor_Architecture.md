@@ -256,6 +256,12 @@ Same-scene dimming/pixel shift and retained context-menu presentation are curren
 
 The one Quick scene owns runtime pixels that visually coexist over the screensaver.
 
+### Optional OSD and transition addition (current extension seam)
+
+An opt-in system-volume OSD, if admitted, is an ordinary retained Quick widget/overlay **inside the existing per-display scene**, not a new physical surface or a QML input/polling cadence. The current system-mute source/COM runtime owns its data; the OSD resolves one coalesced snapshot and event-owned visibility. Enabled CUSTOM Edit may show its shell without a new audio event; disabled state must not construct that shell. See `Docs/Future_Work/System_Volume_OSD.md` for the live native callback/retirement gate.
+
+A new transition identity should be registered in the current canonical transition catalog and lazily resolved by `rendering/quick/transitions/implementation_registry.py` through the existing Quick render host. Keep effect-specific GPU objects private and dormant while off; integration does **not** mean copying shaders/resources into the shared controller or building a parallel experimental compositor. Slide modifiers belong to the existing Slide owner. Voxel Sphere is a separate accepted Visualizer mode with its own preserved contract.
+
 ## 9. Readiness / first frame
 
 A runtime window must not be visibly exposed until it can show intentional current-generation content.

@@ -154,6 +154,8 @@ an existing helper merely to claim reuse.
 
 ## Ordinary widgets
 
+Ordinary CUSTOM semantics are divided between family-owned retained QML paint/reflow and the shared session-owned Edit/persistence path. A semantic child-role list declares stable identity and real paint targets, not live normalization values, visibility or provider snapshots. The selected Edit delegate resolves the current family-owned normalization and paints through the actual retained transform/clip chain; a change in size or readiness must not replace a selected role delegate. Repeated content exposes meaningful editing units, not overlapping per-primitive handles: System Stats uses header, top separator and one complete metric stack; Friend Pulse uses grouped row/grid representatives. No parallel geometry owner, polling, normal-render Edit observer or per-pointer Settings writes are allowed.
+
 ```text
 provider/backend/runtime/cadence/actions
 -> stable presentation model/state
@@ -454,6 +456,12 @@ Slide has one canonical identity and four cardinal directions. Its frozen per-ru
 Elastic, Wobble or Flex: endpoints sample the unmodified source/destination, each pixel has one image owner, and
 Elastic's bounded late-arrival settlement samples destination coordinates relative to arrival without wrap strips.
 Slide adds no effect-local timer, clock, worker or resource owner; true Perspective remains a separate 3D feature.
+
+## Optional feature extension contracts
+
+- A system-master-volume/mute OSD, if admitted, is one opt-in ordinary retained Qt Quick widget inside the single display scene. Current system audio endpoint/action authority is reused; cross-thread COM notifications must be queued and coalesced to the GUI thread, default output rebinding/retirement tested, and disabled OSD must not cause additional backend acquisition or continuous work. One event-owned hide deadline/fade and the ordinary CUSTOM owner govern its presentation. The existing mute runtime's admitted poll and process-global endpoint import lifetime must be explicitly reconciled, never assumed away.
+- Games You Follow is a feasibility-gated `steam_progress`-identity Steam card for only explicitly followed games, with existing-key follow-source proof mandatory, secure action and validated images, bounded shared Steam fetching and non-expiring last-good account-private cache. One retained Quick model, two authored row variants and current ordinary CUSTOM edit/extent contract own visuals; no surrogate follow source or second Steam backend.
+- A new transition identity enters the one canonical transition registry and lazy Quick render host. Effect-local resources remain removable/dormant, canonical Settings owns persistence, and neither a parallel experimental engine nor permanent second architecture is required. Existing Slide modifiers stay in Slide. Accepted Voxel Sphere isolation and Bubble/Visualizer goldens are unaffected by this transition extension rule.
 
 ## Lifecycle
 

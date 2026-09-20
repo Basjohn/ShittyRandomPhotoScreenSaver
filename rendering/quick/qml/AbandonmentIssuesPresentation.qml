@@ -180,16 +180,17 @@ OverlayWidget {
     // its authored rail, its size stops displacing unrelated siblings and the
     // edit-only collision gate becomes the authority for separation instead.
 
+    // Stable retained semantic roles. Visibility is evaluated by the selected
+    // Edit mapper, not by rebuilding this role list during content transitions.
     customEditableChildRoles: {
         const roles = []
-        const normW = abandonmentRoot.baseAuthoredWidth
-        const normH = abandonmentRoot.baseAuthoredHeight
         roles.push({
             "roleId": "header",
+            "normalizationTarget": abandonmentRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
             "target": headerFrame,
             "geometryDependencies": [authoredCanvas],
-            "normalizationWidth": normW,
-            "normalizationHeight": normH,
             // Keep the role list independent of live parent dimensions.
             // The shared child frame projects this authored inset into the
             // current uniform/letterboxed edit-frame coordinate space at use.
@@ -198,79 +199,77 @@ OverlayWidget {
             "semanticInsetUsesUniformCard": true,
             "requirementTarget": null
         })
-        if (normalContent.visible && artworkFrame.visible) {
-            roles.push({
-                "roleId": "artwork",
-                "target": artworkFrame,
-                "occupiedTarget": artworkShelf,
-                "geometryDependencies": [authoredCanvas, archiveContent, normalContent, artworkShelf],
-                "resizeReflowRoleIds": ["game_name", "flavour_text", "last_visit", "shelf_group"],
-                "resizeReflowAxes": ["horizontal"],
-                "resizeReflowGate": artworkFrame,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
+        roles.push({
+            "roleId": "artwork",
+            "normalizationTarget": abandonmentRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": artworkFrame,
+            "occupiedTarget": artworkShelf,
+            "geometryDependencies": [authoredCanvas, archiveContent, normalContent, artworkShelf],
+            "resizeReflowRoleIds": ["game_name", "flavour_text", "last_visit", "shelf_group"],
+            "resizeReflowAxes": ["horizontal"],
+            "resizeReflowGate": artworkFrame,
+            "requirementTarget": null
+        })
         roles.push({
             "roleId": "backlog_block",
+            "normalizationTarget": abandonmentRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
             "target": archiveTab,
             "geometryDependencies": [authoredCanvas, archiveContent],
             "resizeReflowRoleIds": ["artwork", "game_name", "flavour_text", "last_visit", "shelf_group"],
             "resizeReflowAxes": ["vertical"],
             "resizeReflowGate": archiveTab,
-            "normalizationWidth": normW,
-            "normalizationHeight": normH,
             "requirementTarget": null
         })
-        if (normalContent.visible) {
-            roles.push({
-                "roleId": "game_name",
-                "target": gameTitle,
-                "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
-                "resizeReflowRoleIds": ["flavour_text", "last_visit", "shelf_group"],
-                "resizeReflowAxes": ["vertical"],
-                "resizeReflowGate": gameTitle,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-            if (flavourText.visible) {
-                roles.push({
-                    "roleId": "flavour_text",
-                    "target": flavourText,
-                    "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
-                    "resizeReflowRoleIds": ["last_visit", "shelf_group"],
-                    "resizeReflowAxes": ["vertical"],
-                    "resizeReflowGate": flavourText,
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH,
-                    "requirementTarget": null
-                })
-            }
-            roles.push({
-                "roleId": "last_visit",
-                "target": ageStamp,
-                "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
-                "resizeReflowRoleIds": ["shelf_group"],
-                "resizeReflowAxes": ["vertical"],
-                "resizeReflowGate": ageStamp,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-            if (ledgerRepeater.count > 0) {
-                roles.push({
-                    "roleId": "shelf_group",
-                    "target": ledgerGroupFrame,
-                    "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
-                    "resizeReflowGate": ledgerGroupFrame,
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH,
-                    "requirementTarget": null
-                })
-            }
-        }
+        roles.push({
+            "roleId": "game_name",
+            "normalizationTarget": abandonmentRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": gameTitle,
+            "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
+            "resizeReflowRoleIds": ["flavour_text", "last_visit", "shelf_group"],
+            "resizeReflowAxes": ["vertical"],
+            "resizeReflowGate": gameTitle,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "flavour_text",
+            "normalizationTarget": abandonmentRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": flavourText,
+            "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
+            "resizeReflowRoleIds": ["last_visit", "shelf_group"],
+            "resizeReflowAxes": ["vertical"],
+            "resizeReflowGate": flavourText,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "last_visit",
+            "normalizationTarget": abandonmentRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": ageStamp,
+            "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
+            "resizeReflowRoleIds": ["shelf_group"],
+            "resizeReflowAxes": ["vertical"],
+            "resizeReflowGate": ageStamp,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "shelf_group",
+            "normalizationTarget": abandonmentRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": ledgerGroupFrame,
+            "geometryDependencies": [authoredCanvas, archiveContent, normalContent],
+            "resizeReflowGate": ledgerGroupFrame,
+            "requirementTarget": null
+        })
         return roles
     }
     // Non-editable chrome remains selected-Edit-only collision truth. The header

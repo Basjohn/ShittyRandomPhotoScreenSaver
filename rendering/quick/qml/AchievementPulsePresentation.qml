@@ -191,16 +191,18 @@ OverlayWidget {
     // CUSTOM child editing is descriptor admission only. The shared overlay owns
     // handles, snapping/collision and gestures; this family supplies retained
     // targets, authored reflow relationships and one stable requirement surface.
+    // Stable semantic declarations: Edit delegates are retained even when a
+    // content state hides their painted targets. The shared mapper gates their
+    // visibility/interactivity, not the presence of their role identity.
     customEditableChildRoles: {
         const roles = []
-        const normW = achievementRoot.baseAuthoredWidth
-        const normH = achievementRoot.baseAuthoredHeight
         roles.push({
             "roleId": "header",
+            "normalizationTarget": achievementRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
             "target": headerFrame,
             "geometryDependencies": [authoredCanvas],
-            "normalizationWidth": normW,
-            "normalizationHeight": normH,
             // Keep the role list independent of live parent dimensions.
             // The shared child frame projects this authored inset into the
             // current uniform/letterboxed edit-frame coordinate space at use.
@@ -209,91 +211,85 @@ OverlayWidget {
             "semanticInsetUsesUniformCard": true,
             "requirementTarget": null
         })
-        if (normalContent.visible && artworkFrame.visible) {
-            roles.push({
-                "roleId": "artwork",
-                "target": artworkFrame,
-                "occupiedTarget": artworkOccupiedFrame,
-                "geometryDependencies": [authoredCanvas, normalContent, artworkOccupiedFrame],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (normalContent.visible && gameTitle.visible) {
-            roles.push({
-                "roleId": "game_name",
-                "target": gameTitle,
-                "geometryDependencies": [authoredCanvas, normalContent],
-                "resizeReflowRoleIds": ["achievement_list", "badge"],
-                "resizeReflowAxes": ["vertical"],
-                "resizeReflowGate": gameTitle,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (normalContent.visible && achievementListFrame.visible
-                && (achievementRoot.achievementModel.subtitle.length > 0
-                    || unlockRepeater.count > 1)) {
-            roles.push({
-                "roleId": "achievement_list",
-                "target": achievementListFrame,
-                "geometryDependencies": [authoredCanvas, normalContent],
-                "resizeReflowGate": achievementListFrame,
-                "collisionIgnoreRoleIds": ["first_achievement"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (normalContent.visible && unlockRepeater.count > 0
-                && unlockRepeater.itemAt(0) !== null) {
-            roles.push({
-                "roleId": "first_achievement",
-                "target": unlockRepeater.itemAt(0),
-                "geometryDependencies": [authoredCanvas, normalContent, achievementListFrame],
-                "collisionIgnoreRoleIds": ["achievement_list"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (normalContent.visible && latestArtworkFrame.visible) {
-            roles.push({
-                "roleId": "badge",
-                "target": latestArtworkFrame,
-                "geometryDependencies": [authoredCanvas, normalContent, achievementListFrame],
-                "resizeReflowGate": latestArtworkFrame,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (normalContent.visible && progressPulse.visible) {
-            roles.push({
-                "roleId": "progress_circle",
-                "target": progressPulse,
-                "geometryDependencies": [authoredCanvas, normalContent],
-                "resizeReflowRoleIds": ["field_group"],
-                "resizeReflowAxes": ["horizontal"],
-                "resizeReflowGate": progressPulse,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (normalContent.visible && fieldGroupFrame.visible) {
-            roles.push({
-                "roleId": "field_group",
-                "target": fieldGroupFrame,
-                "geometryDependencies": [authoredCanvas, normalContent],
-                "resizeReflowGate": fieldGroupFrame,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
+        roles.push({
+            "roleId": "artwork",
+            "normalizationTarget": achievementRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": artworkFrame,
+            "occupiedTarget": artworkOccupiedFrame,
+            "geometryDependencies": [authoredCanvas, normalContent, artworkOccupiedFrame],
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "game_name",
+            "normalizationTarget": achievementRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": gameTitle,
+            "geometryDependencies": [authoredCanvas, normalContent],
+            "resizeReflowRoleIds": ["achievement_list", "badge"],
+            "resizeReflowAxes": ["vertical"],
+            "resizeReflowGate": gameTitle,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "achievement_list",
+            "normalizationTarget": achievementRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": achievementListFrame,
+            "geometryDependencies": [authoredCanvas, normalContent],
+            "resizeReflowGate": achievementListFrame,
+            "collisionIgnoreRoleIds": ["first_achievement"],
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "first_achievement",
+            "normalizationTarget": achievementRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            // A data-ready Repeater can create/retire its first row while
+            // Edit is open. Resolve its item only inside the selected Edit
+            // delegate; do not reallocate ALL role delegates on count.
+            "targetSource": unlockRepeater,
+            "targetIndex": 0,
+            "geometryDependencies": [authoredCanvas, normalContent, achievementListFrame],
+            "collisionIgnoreRoleIds": ["achievement_list"],
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "badge",
+            "normalizationTarget": achievementRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": latestArtworkFrame,
+            "geometryDependencies": [authoredCanvas, normalContent, achievementListFrame],
+            "resizeReflowGate": latestArtworkFrame,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "progress_circle",
+            "normalizationTarget": achievementRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": progressPulse,
+            "geometryDependencies": [authoredCanvas, normalContent],
+            "resizeReflowRoleIds": ["field_group"],
+            "resizeReflowAxes": ["horizontal"],
+            "resizeReflowGate": progressPulse,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "field_group",
+            "normalizationTarget": achievementRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": fieldGroupFrame,
+            "geometryDependencies": [authoredCanvas, normalContent],
+            "resizeReflowGate": fieldGroupFrame,
+            "requirementTarget": null
+        })
         return roles
     }
     customEditableChildObstacles: [connectionInfo]

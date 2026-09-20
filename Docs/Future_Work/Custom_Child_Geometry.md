@@ -1,6 +1,6 @@
 # CUSTOM Editable Child Geometry
 
-Scope: **current ordinary-widget CUSTOM child editor contract**. Existing family enrollment is source-complete; Windows/PySide and physical acceptance must be established separately. This file describes behavior and admission criteria, not the sequence of checkpoints that implemented them.
+Scope: **current ordinary-widget CUSTOM child editor contract**. Current ordinary-family enrollment and the shared selected-Edit contracts are supported. Family-specific new work still needs its own automated and, only where necessary, physical validation. This file describes behavior and admission criteria, not the sequence of checkpoints that implemented them.
 
 This feature extends the existing CUSTOM presentation/edit system into a **role-declared visual editor** for ordinary widgets. The role catalogue may grow aggressively as useful edit affordances are identified; the boundary is architectural, not a feature-count ceiling. Every adjustable element/group still enters through the shared descriptor/session/persistence owner rather than exposing arbitrary QML geometry or creating a second layout, sizing, persistence, or runtime owner.
 
@@ -10,8 +10,8 @@ This feature extends the existing CUSTOM presentation/edit system into a **role-
 authored child-size setting / authored child geometry
 -> optional CUSTOM child-geometry override
 -> ordinary family layout/reflow
--> shared content_extent requirement when the child no longer fits
--> existing outer CUSTOM geometry/session owner
+-> shared child containment/collision admission inside current parent extent
+-> existing outer CUSTOM geometry/session owner (outer resize only)
 ```
 
 The presentation/edit layer owns drag affordances and transient CUSTOM child geometry. The family owns only its normal response to the resolved child size. The shared CUSTOM session/payload infrastructure owns Save/Cancel/slot persistence/reset semantics. No family may add a parallel Settings-backed CUSTOM width/height, timer, poller, layout solver, or per-frame geometry synchronization path.
@@ -36,11 +36,11 @@ Visual roles opt in deliberately through shared descriptors. The goal is rich ed
 Admitted role patterns and future extensions:
 
 - **Media:** full semantic rollout is now Header, one atomic title/artist/album metadata crossfade block, optional playback-state text, main artwork, seek bar, app-volume bar, grouped `transport_controls` surface, and a separate intrinsic/uniform `mute_button`. Previous/play-pause/next remain one grouped transport semantic and are never persisted individually. The mute button is separate specifically so the non-uniform control bar cannot squash it; it shrinks through one common fit factor when bar dimensions become restrictive. Transport↔mute authored containment bypasses only hard peer collision. All roles remain in the same `child_geometry` carrier.
-- **Achievement Pulse:** three first-wave roles: primary artwork, latest-achievement badge, and progress circle. The **artwork frame itself is freeform on X/Y**; the source image must never distort and continues to use the family's existing native-aspect fill/zoom/crop policy inside whatever rectangle CUSTOM creates. Badge and progress circle are intrinsic-shape roles and remain uniform/aspect-locked. Additional Pulse Name, Achievement List and grouped Pills/Shelves roles require explicit descriptor admission; do not introduce family-local geometry controls.
+- **Achievement Pulse:** admitted artwork, achievement/status, name, list and grouped badge/shelf semantics are declared through the shared role catalogue; current role IDs, axes and grouping are defined by the family descriptor, not this future-work reference. The **artwork frame itself is freeform on X/Y**; the source image must never distort and continues to use the family's existing native-aspect fill/zoom/crop policy inside whatever rectangle CUSTOM creates. Badge and progress circle are intrinsic-shape roles and remain uniform/aspect-locked. Any further Pulse role must enter through the existing descriptor; do not introduce family-local geometry controls.
 - **Abandonment Issues:** primary artwork, BACKLOG/archive-status block, Game Name block, flavour text, Last Visit metric box, and one grouped shelf/ledger role. The shelf role resizes every shelf together; do not persist one geometry record per shelf. This proves the reusable **layout-block** role: the containing frame changes through shared CUSTOM geometry while family-authored internal typography/layout responds to the new frame.
 - **Future Steam cards where appropriate:** reuse the same artwork/layout-block/group-role descriptors rather than cloning Abandonment-specific geometry code.
 - **Friend Pulse:** six retained roles: singleton Header, Online Count and Separator plus three repeated shared roles for Friend Frames, Avatars and Usernames. Each repeated role has **one geometry record for the whole roster**, never one record per friend/delegate. Frame size remains family-positioned; avatar and username size/placement are shared across all repeated items so row/grid rhythm and clipping remain coherent.
-- **Weather:** condition/hero icon if the final interaction remains useful after the shared implementation exists.
+- **Weather:** existing condition art, location text and related admitted semantic targets participate in the same shared Edit geometry owner. Further roles require an actual painted target, stable role identity and a justified interaction contract; do not resurrect family-local controls.
 - **Clock analogue only:** `clock_face` is a single center-owned uniform child comprising ring, markers, Roman numerals and every hand. Independent numeral geometry was physically rejected and retired. Separator/calendar/timezone are distinct optional roles. Digital mode keeps only its visible digital-specific text and optional footer roles; no dormant analogue edit target.
 
 The framework should make future widgets opt in declaratively by role/axis/policy rather than requiring a new controller per family. Freeform artwork geometry uses the shared `freeform_artwork_child_role(...)` contract so Achievement, Abandonment/future Steam artwork and Media inherit the same X/Y frame semantics without sharing or waking their provider/image owners.
@@ -69,11 +69,11 @@ A role declares, at minimum:
 - authored baseline geometry/size;
 - bounded minimum/maximum policy;
 - whether a single override applies to one item or a whole repeated group;
-- whether overflow contributes to outer `content_extent`;
-- whether the role is singular or group-scoped (for example all Friend Pulse avatars or all shared System Stats metric labels).
+- the painted containment surface within the committed parent (child overflow never publishes outer `content_extent`);
+- whether the role is singular or group-scoped (for example all Friend Pulse avatars or the complete System Stats metric stack).
 - resize handle admission remains descriptor-owned. **Foundation note superseded by the later placement phase:** now that normalized child X/Y placement is part of the same `child_geometry` authority, editable roles default to all four corners and left/top resize preserves the opposite edge through that existing carrier. A descriptor may still restrict corners for a concrete semantic reason. The edit overlay queries only the selected parent's descriptor.
 
-Save/Cancel/slots round-trip the same shared `size_payload.child_geometry` carrier. The carrier now owns authored-relative child size **and optional X/Y placement**. Cancel restores the session-entry baseline. The existing bottom-left **Restore Size** glyph is deliberately broader: it is the widget's authored-state reset and atomically clears descriptor-owned child size/placement overrides plus the transient containment floor while restoring authored outer size/shape. It preserves the widget's current X/Y/display. There is no second per-child reset authority.
+Save/Cancel/slots round-trip the same shared `size_payload.child_geometry` carrier. The carrier now owns authored-relative child size **and optional X/Y placement**. Cancel restores the session-entry baseline. The existing bottom-left **Restore Size** glyph is deliberately broader: it is the widget's authored-state reset and atomically clears descriptor-owned child size/placement overrides while restoring authored outer size/shape. It preserves the widget's current X/Y/display. There is no second per-child reset authority.
 
 ### Persistence / Settings SSOT
 
@@ -83,11 +83,10 @@ Child geometry does **not** get a new file, database or family-local Settings ke
 
 The family must consume child geometry through its existing layout flow. Collision admission is a **shared selected-Edit interaction rule**, not a normal-runtime layout solver: declared editable peers and fixed painted obstacles may block move/resize samples while the selected child overlay exists, but no collision scan survives outside Edit and no family gets `if collision then move X by N` persistence logic.
 
-- If the resized child still fits inside the current card, neighboring content reflows/redistributes using the family's normal authored minimum padding/spacing.
-- If the child grows beyond available room, the family may raise its required logical `content_extent`; the existing outer CUSTOM owner decides the outer geometry response.
-- The selected family exposes one retained child-content requirement target. The edit overlay observes that target only while selected and coalesces requirement changes to the next QML turn, so child-driven growth can apply **live during the gesture** without a timer/poller or scene-wide observer.
-- The owner retains the latest requirement as a **transient session-only floor** for parent content side/corner gestures. Parent controls therefore cannot shrink the logical box back through already-customized children. If the child later needs less room, the floor lowers but the outer card does not auto-collapse.
-- **Growth may expand the outer widget when required. Shrinking a child must not automatically shrink the outer widget.** The user can separately reclaim outer space. This avoids shrink/grow feedback loops during editing.
+- Each child is clamped to its family-declared painted containment within the existing parent card. Resizing or moving a child **must not publish an outer-extent growth request**, including when the family’s internal authored content is wider than a compact parent.
+- The family reflows neighboring content on its own authored rails while preserving the committed parent rectangle. Shared collision admission may refuse an overlapping/overflowing gesture; it does not repair the painted QML by silently enlarging the parent.
+- Only the outer CUSTOM side/corner controls may change `content_extent`. Their current geometry owner preserves the authored minimum and any existing parent-specific constraints. In particular, Achievement Pulse and Abandonment Issues expose `customEditableChildRequirementTarget: null`; their retired child-driven requirement object must not be restored.
+- The editor may read selected child target geometry for mapping and containment, but no child-size listener or QML preferred-width binding may write the parent extent. Repeated event-loop settlement must leave the committed outer rectangle and authored baseline unchanged.
 - Side-axis `content_extent`, optional diagonal two-axis content reflow, and square-corner/wheel whole-card scale remain gestures on the **same** outer CUSTOM sizing authority.
 
 ## 6. Artwork quality handoff
@@ -115,6 +114,6 @@ Prefer immutable/retained resolved state and event-owned updates. A child drag m
 
 The shared child editor and `content_extent` owner serve Achievement Pulse, Abandonment Issues, Friend Pulse, Media, Weather, Clock, Reddit/Reddit2, Gmail and System Stats. Each family must declare stable editable role IDs, permissible axes, handle/placement semantics and painted occupied geometry through shared descriptors. Visualizer is deliberately excluded. Repeated roster/metric/row elements share a role-level geometry record; neither friend IDs nor metric identities are persistence keys.
 
-The current source exposes descriptor-limited resize and movement, live selected-parent containment, shared Settings locks, Save/Cancel/Restore/slot round-trips and event-only edit input. Acceptance remains a separate **Windows/PySide plus physical gate**: test all admitted resize directions, role move/reflow, flip, collision on/off, parent growth, Save/Cancel/Restore/slots, cross-display transfer, Settings visibility and no runtime click-through while editing. Normal runtime must not gain a timer, polling, provider wake, collision scan or extra geometry-publishing cadence. See [CUSTOM Child Placement](Custom_Child_Placement_And_Headers.md) for the gesture and admission contracts.
+The current source exposes descriptor-limited resize and movement, live selected-parent containment, shared Settings locks, Save/Cancel/Restore/slot round-trips and event-only edit input. The accepted cross-family Qt gate covers retained geometry/lifetime, and the System Stats three-role physical editor has been accepted. For new changes, validate the *affected* resize directions, role movement/reflow, flip, collision on/off, **parent extent stability**, Save/Cancel/Restore/slots and retained delegate identity with focused native Qt tests; reserve operator visual testing for pixel/interaction properties that those tests cannot observe. Normal runtime must not gain a timer, polling, provider wake, collision scan or extra geometry-publishing cadence. See [CUSTOM Child Placement](Custom_Child_Placement_And_Headers.md) for the gesture and admission contracts.
 
 Artwork quality escalation is conditional, not a mandatory refetch: resolve a larger source only on committed geometry when an existing image owner can actually supply better pixels. In particular, do not invent a Media artwork refetch when the present source has no higher-resolution variant.

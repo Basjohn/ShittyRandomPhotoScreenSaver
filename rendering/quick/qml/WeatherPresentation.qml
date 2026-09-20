@@ -40,6 +40,10 @@ OverlayWidget {
     readonly property real childNormalizationWidth: 600.0
     readonly property real childNormalizationHeight: 220.0
     readonly property var childGeometry: weatherModel.customChildGeometry
+    // Each transformed painted child exposes the APPLIED Scale/Translate object
+    // properties to the selected Edit mapper.  Watching childGeometry here would
+    // invalidate mapToItem before the QML transform binding has actually updated.
+    // Normal content flow remains owned by this presentation; no extra observer.
     function childWidthScale(roleId) {
         const value = childGeometry ? childGeometry[roleId] : null
         return value && value.width_scale !== undefined ? Number(value.width_scale) : 1.0
@@ -59,35 +63,28 @@ OverlayWidget {
             * childNormalizationHeight
     }
 
+    // Declare semantic ready-content roles once, independently of provider
+    // readiness or optional band visibility. A temporarily hidden target keeps
+    // its identity but has no live Edit box until it paints again. Status text
+    // is not silently substituted for the user's saved location-text target.
     customEditableChildRoles: {
-        const roles = []
-        if (weatherModel.viewState === "ready") {
-            roles.push({ "roleId": "location_text", "target": locationText })
-            roles.push({ "roleId": "condition_text", "target": conditionText })
-            if (leftConditionIcon.visible || rightConditionIcon.visible) {
-                roles.push({
-                    "roleId": "condition_icon",
-                    "target": leftConditionIcon.visible ? leftConditionIcon : rightConditionIcon
-                })
-            }
-            if (detailsBand.visible) {
-                roles.push({ "roleId": "details_separator", "target": detailsSeparator })
-                roles.push({ "roleId": "details_metrics", "target": detailsRow })
-            }
-            if (forecastBand.visible) {
-                roles.push({ "roleId": "forecast_separator", "target": forecastSeparator })
-                roles.push({ "roleId": "forecast_text", "target": forecastText })
-            }
-            if (extendedForecastBand.visible) {
-                roles.push({ "roleId": "extended_separator", "target": extendedSeparator })
-                roles.push({ "roleId": "extended_label", "target": extendedForecastLabel })
-                roles.push({ "roleId": "extended_icons", "target": extendedIconRow })
-                roles.push({ "roleId": "extended_text", "target": extendedForecastText })
-            }
-        } else {
-            roles.push({ "roleId": "location_text", "target": statusTitle })
-            roles.push({ "roleId": "condition_text", "target": statusAction })
-        }
+        const roles = [
+            { "roleId": "location_text", "target": locationText },
+            { "roleId": "condition_text", "target": conditionText },
+            // These are the two existing positions of the SAME semantic icon.
+            // The shared selected-Edit mapper chooses the visible paint item
+            // without rebuilding this descriptor on an orientation change.
+            { "roleId": "condition_icon", "target": leftConditionIcon,
+                "alternateTarget": rightConditionIcon },
+            { "roleId": "details_separator", "target": detailsSeparator },
+            { "roleId": "details_metrics", "target": detailsRow },
+            { "roleId": "forecast_separator", "target": forecastSeparator },
+            { "roleId": "forecast_text", "target": forecastText },
+            { "roleId": "extended_separator", "target": extendedSeparator },
+            { "roleId": "extended_label", "target": extendedForecastLabel },
+            { "roleId": "extended_icons", "target": extendedIconRow },
+            { "roleId": "extended_text", "target": extendedForecastText }
+        ]
         for (let i = 0; i < roles.length; ++i) {
             // The ready presentation is centered and uniformly fitted. Its
             // ancestor transforms must invalidate edit-box mapping on reflow.
@@ -97,9 +94,7 @@ OverlayWidget {
                 primaryRow, primaryText, detailsBand, forecastBand,
                 extendedForecastBand]
             roles[i].containmentTarget = weatherContent
-
-            roles[i].normalizationWidth = childNormalizationWidth
-            roles[i].normalizationHeight = childNormalizationHeight
+            roles[i].normalizationTarget = weatherRoot
         }
         return roles
     }
@@ -199,9 +194,14 @@ OverlayWidget {
                     id: leftConditionIcon
                     objectName: "weatherConditionIconLeft"
                     transform: [
-                        Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_icon"); yScale: weatherRoot.childHeightScale("condition_icon") },
-                        Translate { x: weatherRoot.childOffsetX("condition_icon"); y: weatherRoot.childOffsetY("condition_icon") }
+                        Scale { id: paintScale0; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_icon"); yScale: weatherRoot.childHeightScale("condition_icon") },
+                        Translate { id: paintTranslate0; x: weatherRoot.childOffsetX("condition_icon"); y: weatherRoot.childOffsetY("condition_icon") }
                     ]
+                    // Applied transform values, not the child-geometry inputs.
+                    readonly property string customEditMappingDependency: [
+                        paintScale0.xScale, paintScale0.yScale,
+                        paintTranslate0.x, paintTranslate0.y
+                    ].join("|")
                     visible: weatherRoot.weatherModel.showConditionIcon
                         && weatherRoot.weatherModel.iconAlignment === "LEFT"
                     width: visible ? weatherRoot.weatherModel.iconSize : 0.0
@@ -255,9 +255,14 @@ OverlayWidget {
                         id: locationText
                         objectName: "weatherLocationText"
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("location_text"); yScale: weatherRoot.childHeightScale("location_text") },
-                            Translate { x: weatherRoot.childOffsetX("location_text"); y: weatherRoot.childOffsetY("location_text") }
+                            Scale { id: paintScale1; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("location_text"); yScale: weatherRoot.childHeightScale("location_text") },
+                            Translate { id: paintTranslate1; x: weatherRoot.childOffsetX("location_text"); y: weatherRoot.childOffsetY("location_text") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale1.xScale, paintScale1.yScale,
+                            paintTranslate1.x, paintTranslate1.y
+                        ].join("|")
                         x: leftConditionIcon.visible ? 0.0 : -locationInk.tightBoundingRect.x
                         width: primaryText.width
                         height: implicitHeight
@@ -279,9 +284,14 @@ OverlayWidget {
                         id: conditionText
                         objectName: "weatherConditionText"
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_text"); yScale: weatherRoot.childHeightScale("condition_text") },
-                            Translate { x: weatherRoot.childOffsetX("condition_text"); y: weatherRoot.childOffsetY("condition_text") }
+                            Scale { id: paintScale2; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_text"); yScale: weatherRoot.childHeightScale("condition_text") },
+                            Translate { id: paintTranslate2; x: weatherRoot.childOffsetX("condition_text"); y: weatherRoot.childOffsetY("condition_text") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale2.xScale, paintScale2.yScale,
+                            paintTranslate2.x, paintTranslate2.y
+                        ].join("|")
                         x: leftConditionIcon.visible ? 0.0 : -temperatureInk.tightBoundingRect.x
                         width: primaryText.width
                         height: implicitHeight
@@ -306,9 +316,14 @@ OverlayWidget {
                     id: rightConditionIcon
                     objectName: "weatherConditionIconRight"
                     transform: [
-                        Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_icon"); yScale: weatherRoot.childHeightScale("condition_icon") },
-                        Translate { x: weatherRoot.childOffsetX("condition_icon"); y: weatherRoot.childOffsetY("condition_icon") }
+                        Scale { id: paintScale3; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_icon"); yScale: weatherRoot.childHeightScale("condition_icon") },
+                        Translate { id: paintTranslate3; x: weatherRoot.childOffsetX("condition_icon"); y: weatherRoot.childOffsetY("condition_icon") }
                     ]
+                    // Applied transform values, not the child-geometry inputs.
+                    readonly property string customEditMappingDependency: [
+                        paintScale3.xScale, paintScale3.yScale,
+                        paintTranslate3.x, paintTranslate3.y
+                    ].join("|")
                     visible: weatherRoot.weatherModel.showConditionIcon
                         && weatherRoot.weatherModel.iconAlignment === "RIGHT"
                     width: visible ? weatherRoot.weatherModel.iconSize : 0.0
@@ -348,18 +363,28 @@ OverlayWidget {
                         thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("details_separator"); yScale: weatherRoot.childHeightScale("details_separator") },
-                            Translate { x: weatherRoot.childOffsetX("details_separator"); y: weatherRoot.childOffsetY("details_separator") }
+                            Scale { id: paintScale4; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("details_separator"); yScale: weatherRoot.childHeightScale("details_separator") },
+                            Translate { id: paintTranslate4; x: weatherRoot.childOffsetX("details_separator"); y: weatherRoot.childOffsetY("details_separator") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale4.xScale, paintScale4.yScale,
+                            paintTranslate4.x, paintTranslate4.y
+                        ].join("|")
                     }
 
                     Row {
                         id: detailsRow
                         objectName: "weatherDetailsRow"
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("details_metrics"); yScale: weatherRoot.childHeightScale("details_metrics") },
-                            Translate { x: weatherRoot.childOffsetX("details_metrics"); y: weatherRoot.childOffsetY("details_metrics") }
+                            Scale { id: paintScale5; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("details_metrics"); yScale: weatherRoot.childHeightScale("details_metrics") },
+                            Translate { id: paintTranslate5; x: weatherRoot.childOffsetX("details_metrics"); y: weatherRoot.childOffsetY("details_metrics") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale5.xScale, paintScale5.yScale,
+                            paintTranslate5.x, paintTranslate5.y
+                        ].join("|")
                         width: parent.width
                         // Rebuild the pre-migration detail-row breathing room.
                         // The icons/text remain compact and centred; the band owns
@@ -456,18 +481,28 @@ OverlayWidget {
                         thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("forecast_separator"); yScale: weatherRoot.childHeightScale("forecast_separator") },
-                            Translate { x: weatherRoot.childOffsetX("forecast_separator"); y: weatherRoot.childOffsetY("forecast_separator") }
+                            Scale { id: paintScale6; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("forecast_separator"); yScale: weatherRoot.childHeightScale("forecast_separator") },
+                            Translate { id: paintTranslate6; x: weatherRoot.childOffsetX("forecast_separator"); y: weatherRoot.childOffsetY("forecast_separator") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale6.xScale, paintScale6.yScale,
+                            paintTranslate6.x, paintTranslate6.y
+                        ].join("|")
                     }
 
                     ShadowedText {
                         id: forecastText
                         objectName: "weatherForecastText"
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("forecast_text"); yScale: weatherRoot.childHeightScale("forecast_text") },
-                            Translate { x: weatherRoot.childOffsetX("forecast_text"); y: weatherRoot.childOffsetY("forecast_text") }
+                            Scale { id: paintScale7; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("forecast_text"); yScale: weatherRoot.childHeightScale("forecast_text") },
+                            Translate { id: paintTranslate7; x: weatherRoot.childOffsetX("forecast_text"); y: weatherRoot.childOffsetY("forecast_text") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale7.xScale, paintScale7.yScale,
+                            paintTranslate7.x, paintTranslate7.y
+                        ].join("|")
                         width: parent.width
                         height: implicitHeight
                         text: weatherRoot.weatherModel.forecastText
@@ -506,18 +541,28 @@ OverlayWidget {
                         thickness: weatherRoot.scaleAwareStrokeWidth(1.0)
                         lineColor: weatherRoot.weatherModel.separatorColor
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_separator"); yScale: weatherRoot.childHeightScale("extended_separator") },
-                            Translate { x: weatherRoot.childOffsetX("extended_separator"); y: weatherRoot.childOffsetY("extended_separator") }
+                            Scale { id: paintScale8; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_separator"); yScale: weatherRoot.childHeightScale("extended_separator") },
+                            Translate { id: paintTranslate8; x: weatherRoot.childOffsetX("extended_separator"); y: weatherRoot.childOffsetY("extended_separator") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale8.xScale, paintScale8.yScale,
+                            paintTranslate8.x, paintTranslate8.y
+                        ].join("|")
                     }
 
                     ShadowedText {
                         id: extendedForecastLabel
                         objectName: "weatherExtendedForecastLabel"
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_label"); yScale: weatherRoot.childHeightScale("extended_label") },
-                            Translate { x: weatherRoot.childOffsetX("extended_label"); y: weatherRoot.childOffsetY("extended_label") }
+                            Scale { id: paintScale9; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_label"); yScale: weatherRoot.childHeightScale("extended_label") },
+                            Translate { id: paintTranslate9; x: weatherRoot.childOffsetX("extended_label"); y: weatherRoot.childOffsetY("extended_label") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale9.xScale, paintScale9.yScale,
+                            paintTranslate9.x, paintTranslate9.y
+                        ].join("|")
                         width: parent.width
                         height: implicitHeight
                         text: "5-DAY FORECAST"
@@ -544,9 +589,14 @@ OverlayWidget {
                         height: 42.0
                         spacing: 0.0
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_icons"); yScale: weatherRoot.childHeightScale("extended_icons") },
-                            Translate { x: weatherRoot.childOffsetX("extended_icons"); y: weatherRoot.childOffsetY("extended_icons") }
+                            Scale { id: paintScale10; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_icons"); yScale: weatherRoot.childHeightScale("extended_icons") },
+                            Translate { id: paintTranslate10; x: weatherRoot.childOffsetX("extended_icons"); y: weatherRoot.childOffsetY("extended_icons") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale10.xScale, paintScale10.yScale,
+                            paintTranslate10.x, paintTranslate10.y
+                        ].join("|")
 
                         Repeater {
                             model: weatherRoot.weatherModel.forecastDayCards
@@ -575,9 +625,14 @@ OverlayWidget {
                         height: Math.max(40.0, weatherRoot.weatherModel.detailFontSize * 3.6)
                         spacing: 0.0
                         transform: [
-                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_text"); yScale: weatherRoot.childHeightScale("extended_text") },
-                            Translate { x: weatherRoot.childOffsetX("extended_text"); y: weatherRoot.childOffsetY("extended_text") }
+                            Scale { id: paintScale11; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_text"); yScale: weatherRoot.childHeightScale("extended_text") },
+                            Translate { id: paintTranslate11; x: weatherRoot.childOffsetX("extended_text"); y: weatherRoot.childOffsetY("extended_text") }
                         ]
+                        // Applied transform values, not the child-geometry inputs.
+                        readonly property string customEditMappingDependency: [
+                            paintScale11.xScale, paintScale11.yScale,
+                            paintTranslate11.x, paintTranslate11.y
+                        ].join("|")
 
                         Repeater {
                             model: weatherRoot.weatherModel.forecastDayCards
@@ -637,9 +692,14 @@ OverlayWidget {
                 id: statusTitle
                 objectName: "weatherStatusTitle"
                 transform: [
-                    Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("location_text"); yScale: weatherRoot.childHeightScale("location_text") },
-                    Translate { x: weatherRoot.childOffsetX("location_text"); y: weatherRoot.childOffsetY("location_text") }
+                    Scale { id: paintScale12; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("location_text"); yScale: weatherRoot.childHeightScale("location_text") },
+                    Translate { id: paintTranslate12; x: weatherRoot.childOffsetX("location_text"); y: weatherRoot.childOffsetY("location_text") }
                 ]
+                // Applied transform values, not the child-geometry inputs.
+                readonly property string customEditMappingDependency: [
+                    paintScale12.xScale, paintScale12.yScale,
+                    paintTranslate12.x, paintTranslate12.y
+                ].join("|")
                 width: statusColumn.width
                 height: implicitHeight
                 text: weatherRoot.weatherModel.locationText
@@ -660,9 +720,14 @@ OverlayWidget {
                 id: statusAction
                 objectName: "weatherStatusAction"
                 transform: [
-                    Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_text"); yScale: weatherRoot.childHeightScale("condition_text") },
-                    Translate { x: weatherRoot.childOffsetX("condition_text"); y: weatherRoot.childOffsetY("condition_text") }
+                    Scale { id: paintScale13; origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("condition_text"); yScale: weatherRoot.childHeightScale("condition_text") },
+                    Translate { id: paintTranslate13; x: weatherRoot.childOffsetX("condition_text"); y: weatherRoot.childOffsetY("condition_text") }
                 ]
+                // Applied transform values, not the child-geometry inputs.
+                readonly property string customEditMappingDependency: [
+                    paintScale13.xScale, paintScale13.yScale,
+                    paintTranslate13.x, paintTranslate13.y
+                ].join("|")
                 width: statusColumn.width
                 height: implicitHeight
                 text: weatherRoot.weatherModel.conditionText

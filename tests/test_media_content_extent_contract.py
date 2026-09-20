@@ -108,7 +108,8 @@ def test_media_qml_reflows_width_height_and_projects_full_semantic_child_roles()
     # content-extent requirement from those children or from absent roles.
     assert "artworkFrame.visible" in qml
     assert "progressBand.visible" in qml
-    assert "controlsRow.visible" in qml
+    controls = qml.split("id: controlsRow", 1)[1].split("id: systemMuteButton", 1)[0]
+    assert "visible: controlsBandSlot.visible" in controls
     assert "appVolumeSlider.visible" in qml
     assert "artworkWidthExtra + seekWidthExtra" not in qml
     assert "transportWidthExtra" not in qml
@@ -280,7 +281,8 @@ def test_media_card_child_x_uses_card_only_normalization_even_with_volume_access
     # normalization; that is not the legal containment for ordinary card roles.
     assert 'roleId": "volume_bar"' in qml
     assert '"containmentTarget": appVolumeSlider' in qml
-    assert '"normalizationWidth": canonicalPreferredCardWidth\n                    + canonicalVolumeAccessoryExtent' in qml
+    assert '"normalizationWidthProperty": "volumeChildNormalizationWidth"' in qml
+    assert "canonicalPreferredCardWidth + canonicalVolumeAccessoryExtent" in qml
 
 
 def test_media_metadata_crossfade_accepts_vertical_spacing_projection() -> None:
@@ -411,11 +413,14 @@ def test_media_child_edit_targets_follow_actual_bands_and_accessory_side_changes
     # Card children must invalidate mapToItem chrome when the external volume
     # accessory flips left/right and shifts the authored card origin.
     assert qml.count("mediaColumn.y, mediaRoot.authoredCardX") == 3
-    assert qml.count('property string customEditMappingDependency: [') == 4
+    assert qml.count('property string customEditMappingDependency: [') == 5
     assert 'mainBand.y, mediaColumn.y, mediaRoot.authoredCardX' in qml
     assert 'progressBand.y, mediaColumn.y, mediaRoot.authoredCardX' in qml
     assert 'controlsBandSlot.y, mediaColumn.y, mediaRoot.authoredCardX' in qml
     assert 'appVolumeSlider.x, appVolumeSlider.y' in qml
     mapper = _text("rendering/quick/qml/CustomLayoutOverlay.qml")
-    assert 'String(\n                                            targetItem.customEditMappingDependency' in mapper
-    assert 'String(\n                                            occupiedItem.customEditMappingDependency' in mapper
+    # Shared ancestor mapper reads each genuine bindable family marker once;
+    # it must never enumerate QQuickItem.transform (a non-bindable Qt list).
+    assert 'values.push(node.customEditMappingDependency || "")' in mapper
+    assert 'values.push(node.x, node.y, node.width, node.height' in mapper
+    assert 'const dependency = mappingDependency' in mapper

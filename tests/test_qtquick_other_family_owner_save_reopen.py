@@ -11,7 +11,7 @@ from copy import deepcopy
 import pytest
 from PySide6.QtCore import QRect
 from PySide6.QtQuick import QQuickItem
-from shiboken6 import isValid as is_valid_qobject
+from shiboken6 import getCppPointer, isValid as is_valid_qobject
 
 from core.settings.default_contract import require_canonical_default
 from rendering.custom_child_geometry import normalize_child_geometry, update_child_geometry_payload
@@ -240,6 +240,13 @@ def test_other_family_real_owner_save_live_promotion_fresh_generation_and_reedit
                 ),
                 animate=False,
             )
+            # The offline adapter intentionally has no Steam service to emit
+            # the production fade request. Its retained widget starts at
+            # fadeOpacity=0, so a role may exist while *nothing paints*.
+            # Exercise the real model -> retained presenter reveal signal;
+            # never force the Edit proxy ready for a hidden target.
+            retained.model.request_achievement_fade()
+            assert retained.item.property("fadeOpacity") == pytest.approx(1.0)
         apply_quick_committed_payloads(unit, widgets)
         presentation = unit.presenter.presentation_for_widget_id(family)
         assert presentation is not None, f"{family}: retained presenter not admitted"
@@ -399,6 +406,19 @@ def test_other_family_real_owner_save_live_promotion_fresh_generation_and_reedit
         assert third_owner.start()
         third_unit.runtime.window.show()
         qt_app.processEvents()
+        painted = _target(third_presentation.item, spec["paint_role"])
+        assert painted.isVisible(), (
+            family, "real target is not painting after native exposure",
+            third_presentation.item.property("fadeOpacity"),
+            third_presentation.item.property("startupRevealOpacity"),
+            third_presentation.model.viewState,
+        )
+        # QQuickWindow exposure can finish a family's initially deferred
+        # native text/implicit-size layout. Save/reopen above compared two
+        # equally *unexposed* generations; selected Edit and Cancel must now
+        # preserve the actual exposed paint, not an earlier speculative box.
+        exposed_paint = _mapped_box(painted, third_presentation.item)
+        assert exposed_paint[2] > 0.0 and exposed_paint[3] > 0.0
         overlay = third_unit.runtime.scene_controller.custom_layout_overlay
         assert overlay.model.selectItem(0)
         qt_app.processEvents()
@@ -406,18 +426,23 @@ def test_other_family_real_owner_save_live_promotion_fresh_generation_and_reedit
         frame = _target(edit_scene, f"customLayoutEditFrame-{family}")
         assert frame.setProperty("childEditingLocked", False)
         qt_app.processEvents()
-        painted = _target(third_presentation.item, spec["paint_role"])
         role = _target(
             edit_scene, f"customLayoutChildRole-{family}-{spec['edit_role']}"
         )
-        assert role.property("targetReady") is True
+        assert role.property("targetReady") is True, (
+            family, "paint is visible but its stable Edit role is not ready",
+            exposed_paint, (role.x(), role.y(), role.width(), role.height()),
+        )
+        assert getCppPointer(role.property("targetItem")) == getCppPointer(painted), (
+            family, "selected role maps a different QQuickItem from the painted target",
+        )
         assert (role.x(), role.y(), role.width(), role.height()) == pytest.approx(
             _mapped_box(painted, frame), abs=1.0,
         ), f"{family}: restored Edit proxy differs from the actually painted child"
         assert third_owner.cancel()
         qt_app.processEvents()
         assert _mapped_box(painted, third_presentation.item) == pytest.approx(
-            second_paint, abs=1.0,
+            exposed_paint, abs=1.0,
         )
         assert settings.widgets == second_committed
         assert settings.save_calls == 2 and settings.update_calls == 2

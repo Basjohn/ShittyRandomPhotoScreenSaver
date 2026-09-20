@@ -68,66 +68,65 @@ OverlayWidget {
         canonicalGridAvatarSize * customAvatarScale + 60.0
     )
 
+    // Stable retained semantic roles. Visibility is evaluated by the selected
+    // Edit mapper, not by rebuilding this role list during content transitions.
     customEditableChildRoles: {
         const roles = []
-        const normW = friendRoot.baseAuthoredWidth
-        const normH = friendRoot.baseAuthoredHeight
         roles.push({
             "roleId": "header",
+            "normalizationTarget": friendRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
             "target": headerFrame,
-            "normalizationWidth": normW,
-            "normalizationHeight": normH,
             // Keep model identity stable during parent X/Y reflow. The shared
             // edit frame projects these authored insets into live letterboxing.
             "semanticCornerInsetX": friendRoot.headerSafeInsetX,
             "semanticCornerInsetY": friendRoot.headerSafeInsetY,
             "semanticInsetUsesUniformCard": true
         })
-        if (activitySummary.visible) {
-            roles.push({
-                "roleId": "online_count",
-                "target": activitySummary,
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-        }
         roles.push({
-            "roleId": "separator",
-            "target": headerSeparator,
-            // This width follows the parent. It cannot also demand parent
-            // growth or an edited >1 width_scale would form a reflow loop.
-
-            "normalizationWidth": normW,
-            "normalizationHeight": normH
+            "roleId": "online_count",
+            "normalizationTarget": friendRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": activitySummary
         })
-        if (customFriendFrameRoleTarget.visible) {
-            roles.push({
-                "roleId": "friend_frames",
-                "target": customFriendFrameRoleTarget,
-                "collisionIgnoreRoleIds": ["avatars", "usernames"],
-                "geometryDependencies": [activityRowsView, activityGridView],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-            roles.push({
-                "roleId": "avatars",
-                "target": customAvatarRoleTarget,
-                "collisionIgnoreRoleIds": ["friend_frames"],
-                "geometryDependencies": [customFriendFrameRoleTarget, activityRowsView, activityGridView],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-            if (friendPulseModel.viewMode === "rows" || friendPulseModel.showNames) {
-                roles.push({
-                    "roleId": "usernames",
-                    "target": customUsernameRoleTarget,
-                    "collisionIgnoreRoleIds": ["friend_frames"],
-                    "geometryDependencies": [customFriendFrameRoleTarget, customAvatarRoleTarget],
-                    "normalizationWidth": normW,
-                    "normalizationHeight": normH
-                })
-            }
-        }
+        roles.push({
+            // The separator follows the parent width; its role cannot also
+            // demand a larger parent or create a width feedback loop.
+            "roleId": "separator",
+            "normalizationTarget": friendRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": headerSeparator
+        })
+        roles.push({
+            "roleId": "friend_frames",
+            "normalizationTarget": friendRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": customFriendFrameRoleTarget,
+            "collisionIgnoreRoleIds": ["avatars", "usernames"],
+            "geometryDependencies": [activityRowsView, activityGridView]
+        })
+        roles.push({
+            "roleId": "avatars",
+            "normalizationTarget": friendRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": customAvatarRoleTarget,
+            "collisionIgnoreRoleIds": ["friend_frames"],
+            "geometryDependencies": [customFriendFrameRoleTarget, activityRowsView, activityGridView]
+        })
+        roles.push({
+            "roleId": "usernames",
+            "normalizationTarget": friendRoot,
+            "normalizationWidthProperty": "baseAuthoredWidth",
+            "normalizationHeightProperty": "baseAuthoredHeight",
+            "target": customUsernameRoleTarget,
+            "collisionIgnoreRoleIds": ["friend_frames"],
+            "geometryDependencies": [customFriendFrameRoleTarget, customAvatarRoleTarget]
+        })
         return roles
     }
 
@@ -816,6 +815,7 @@ OverlayWidget {
                 }
                 Rectangle {
                     id: gridAvatarFrame
+                    objectName: "friendPulseGridAvatar_" + index
                     x: (parent.width - width) / 2.0
                         + friendRoot.friendPulseModel.customAvatarXOffset
                             * friendRoot.baseAuthoredWidth

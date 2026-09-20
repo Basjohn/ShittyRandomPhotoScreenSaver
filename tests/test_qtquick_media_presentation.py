@@ -1640,12 +1640,12 @@ def test_flipped_media_artwork_and_seek_first_drag_stays_under_pointer(qt_app) -
 
 @pytest.mark.qt
 def test_media_volume_opposite_axis_reflow_updates_live_edit_proxy(qt_app) -> None:
-    """The actual Media accessory must not lose opposite-axis ancestor changes.
+    """The volume Edit proxy follows REAL CUSTOM offsets and automatic side flips.
 
-    Its previous scalar edit dependency added slider.x + slider.y.  Moving the
-    accessory ancestor +X/-Y preserved that number even though the real
-    on-screen track moved diagonally.  Use an actual retained family, its
-    volume role and the shared selected-Edit proxy, not a synthetic rectangle.
+    The accessory slider fills its parent and cannot be repositioned by writing
+    slider.x/y: its anchor binding restores both to zero. Exercise the supported
+    normalized volume offsets and display-side selection instead. The source
+    retains the exact painted target and the same Edit delegate throughout.
     """
     # A native event/render-loop stall must never leave Foundry waiting forever.
     # Test-only watchdog: if a Qt call blocks, emit its Python stack and exit
@@ -1658,6 +1658,18 @@ def test_media_volume_opposite_axis_reflow_updates_live_edit_proxy(qt_app) -> No
     from rendering.quick.custom_layout_overlay import RetainedCustomLayoutOverlay
     from rendering.quick.widgets.host import OrdinaryWidgetPresentationHost
     from PySide6.QtQuick import QQuickWindow
+
+    def live_item(parent: QQuickItem, name: str) -> QQuickItem | None:
+        # Repeater delegates belong to the *visual* QQuickItem scene. QObject
+        # findChild() can miss a live delegate whose QObject parent is its
+        # QML creation context rather than its visual parent.
+        pending = [parent]
+        while pending:
+            item = pending.pop()
+            if item.objectName() == name:
+                return item
+            pending.extend(item.childItems())
+        return None
 
     screen = qt_app.primaryScreen()
     assert screen is not None
@@ -1697,11 +1709,6 @@ def test_media_volume_opposite_axis_reflow_updates_live_edit_proxy(qt_app) -> No
         )
         presentation.activate(object())
         runtime.publish(_snapshot(1, image=_image()))
-        # The first Qt scene test could block during native exposure; the
-        # hidden successor produced no Edit delegate. Expose only this stripped
-        # retained scene, with a diagnostic watchdog on the entire test.
-        window.show()
-        qt_app.processEvents()
         widget = presentation.item
         track = widget.findChild(QQuickItem, "mediaAppVolumeTrack")
         slider = widget.findChild(QQuickItem, "mediaAppVolumeSlider")
@@ -1726,16 +1733,22 @@ def test_media_volume_opposite_axis_reflow_updates_live_edit_proxy(qt_app) -> No
             display_origin=QPoint(0, 0),
             presentation_item_resolver=lambda _item: widget,
         )
+        # Match the already-working retained scene fixture: install the model
+        # before native exposure, so the Repeater's first component completion
+        # receives its role model. Do not instantiate a second Edit owner.
+        window.show()
+        qt_app.processEvents()
         assert overlay.model.selectItem(0)
         qt_app.processEvents()
-        frame = edit_root.findChild(QQuickItem, "customLayoutEditFrame-media")
+        frame = live_item(edit_root, "customLayoutEditFrame-media")
         assert frame is not None, (
             "Media Edit delegate missing after plain QQuickWindow exposure; "
-            f"model rows={overlay.model.rowCount()}, editActive={edit_root.property('editActive')}"
+            f"model rows={overlay.model.rowCount()}, editActive={edit_root.property('editActive')}, "
+            f"visual children={[item.objectName() for item in edit_root.childItems()]}"
         )
         assert frame.setProperty("childEditingLocked", False)
         qt_app.processEvents()
-        role = edit_root.findChild(QQuickItem, "customLayoutChildRole-media-volume_bar")
+        role = live_item(edit_root, "customLayoutChildRole-media-volume_bar")
         assert role is not None and role.property("targetReady") is True
 
         def mapped():
@@ -1754,25 +1767,42 @@ def test_media_volume_opposite_axis_reflow_updates_live_edit_proxy(qt_app) -> No
             )
 
         assert_proxy()
-        original = (slider.x(), slider.y())
-        original_signature = role.property("mappingDependency")
-        original_extra = track.property("customEditMappingDependency")
-        # With a scalar x+y dependency, the next pair has the identical value.
-        # The independently mapped X and Y coordinates are nevertheless different.
-        slider.setX(original[0] + 11.0)
-        slider.setY(original[1] - 11.0)
+        initial_track = (track.x(), track.y())
+        initial_signature = role.property("mappingDependency")
+        # The REAL Media model owns normalized child offsets. The slider's
+        # anchors.fill deliberately makes direct slider.setX/Y inert.
+        assert model.set_custom_child_geometry({"volume_bar": {
+            "x_offset": 0.015, "y_offset": -0.015,
+        }})
         qt_app.processEvents()
-        assert track.property("customEditMappingDependency") != original_extra
-        assert role.property("mappingDependency") != original_signature
-        assert edit_root.findChild(QQuickItem, "customLayoutChildRole-media-volume_bar") is role
+        assert (track.x(), track.y()) != pytest.approx(initial_track, abs=0.01)
+        assert role.property("mappingDependency") != initial_signature
+        assert live_item(edit_root, "customLayoutChildRole-media-volume_bar") is role
         assert_proxy()
-        # Returning to the original coordinates must remap immediately too;
-        # repeated unchanged samples must not manufacture a new proxy delegate.
-        slider.setX(original[0])
-        slider.setY(original[1])
+
+        # Side choice belongs exclusively to Media's existing display-centre
+        # binding. Crossing the centre must relocate the volume accessory,
+        # NOT mirror its image, replace its Edit delegate or persist a side flag.
+        host_width = widget.parentItem().width()
+        assert host_width > widget.width() * 2.0
+        widget.setX(host_width - widget.width() - 20.0)
         qt_app.processEvents()
+        assert widget.property("appVolumeOnLeft") is True
+        assert live_item(edit_root, "customLayoutChildRole-media-volume_bar") is role
         assert_proxy()
-        assert edit_root.findChild(QQuickItem, "customLayoutChildRole-media-volume_bar") is role
+        widget.setX(20.0)
+        qt_app.processEvents()
+        assert widget.property("appVolumeOnLeft") is False
+        assert live_item(edit_root, "customLayoutChildRole-media-volume_bar") is role
+        assert_proxy()
+
+        assert model.set_custom_child_geometry({"volume_bar": {
+            "x_offset": 0.0, "y_offset": 0.0,
+        }})
+        qt_app.processEvents()
+        assert (track.x(), track.y()) == pytest.approx(initial_track, abs=0.04)
+        assert_proxy()
+        assert live_item(edit_root, "customLayoutChildRole-media-volume_bar") is role
         overlay.clear_session()
         qt_app.processEvents()
         assert track.isVisible()

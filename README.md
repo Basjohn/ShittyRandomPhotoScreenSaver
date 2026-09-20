@@ -136,7 +136,7 @@ The settings dialog lets you:
 
 It also is a riduclously pretty looking thing that even simulates DWM transparency from the Vista era.
 
-All changes are applied immediately and persisted between runs.
+Settings are persisted between runs; controls with continuous input commit on their normal completion/release path rather than writing to disk for every pointer increment. Edit-mode widget layout changes use the explicit Save/Cancel workflow.
 
 ---
 

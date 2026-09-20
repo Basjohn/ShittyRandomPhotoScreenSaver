@@ -75,6 +75,7 @@ DESTINATION_PROFILE = (
     "test_widget_glow_settings.py",
     "test_shadow_direction.py",
     "test_qtquick_clock_presentation.py",
+    "test_clock_applied_edit_transform_contract.py",  # applied Clock role paint, no edit-off observer
     "test_qtquick_weather_presentation.py",
     "test_qtquick_media_presentation.py",
     "test_qtquick_reddit_presentation.py",

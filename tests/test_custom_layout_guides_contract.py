@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 
@@ -848,10 +849,17 @@ def test_selected_edit_role_containment_and_mapped_transform_contract() -> None:
     assert "editFrame.childStateRevision" in dependency
     # Individual geometry components must not cancel when x and y, or width
     # and height, change by equal and opposite amounts during a live reflow.
-    assert "values.push(dependency.x, dependency.y," in dependency
-    assert "dependency.scale, dependency.rotation" in dependency
-    assert "values.push(containmentTarget.x, containmentTarget.y," in dependency
-    assert "containmentTarget.scale, containmentTarget.rotation" in dependency
+    for retained_source in ("targetItem", "occupiedItem", "containmentTarget", "editFrame", "dependency"):
+        assert f"childRoleLayer.appendMappingChain(values, {retained_source})" in dependency
+    chain = editor.split("function appendMappingChain(values, start) {", 1)[1].split(
+        "function clipMappedPolygon(points, clipItem) {", 1
+    )[0]
+    assert "values.push(node.x, node.y, node.width, node.height," in chain
+    assert "node.scale, node.rotation, node.transformOrigin" in chain
+    assert "seen.indexOf(node) !== -1" in chain  # common ancestors observed once
+    assert "node.customEditMappingDependency" in chain  # applied QML transforms
+    assert not any(re.search(r"\bnode\.transform\b", line) for line in chain.splitlines()
+                   if not line.lstrip().startswith("//"))  # no non-bindable list reads
     assert 'return values.join("|")' in dependency
 
     # A physical role's true surface, not the whole root, owns clipping.
@@ -877,7 +885,8 @@ def test_selected_edit_role_containment_and_mapped_transform_contract() -> None:
     assert "roles[i].containmentTarget = mediaColumn" in media
     assert "roles[i].allowParentGrowth = false" not in media
     assert '"containmentTarget": appVolumeSlider' in media
-    assert '"normalizationWidth": canonicalPreferredCardWidth\n                    + canonicalVolumeAccessoryExtent' in media
+    assert '"normalizationWidthProperty": "volumeChildNormalizationWidth"' in media
+    assert "canonicalPreferredCardWidth + canonicalVolumeAccessoryExtent" in media
     assert "customEditableChildRequirementTarget: null" in media
 
 
@@ -928,5 +937,55 @@ def test_resize_uses_shared_guides_without_override_of_descriptor_or_collision()
     assert update.index("let admitted") < update.index("validateChildResizeGuides(")
     assert update.index("admitted = containChildResize(") < update.index("validateChildResizeGuides(")
     assert "ensureImmediateChildOverflow" not in update
-    assert "childVerticalGuides = []" in qml
-    assert "childHorizontalGuides = []" in qml
+    # A snapped pointer may produce the same line dozens of times. Guides are
+    # retained edit-only Items, not disposable Repeater-array delegates.
+    assert 'property bool childVerticalGuideActive: false' in qml
+    assert 'property bool childHorizontalGuideActive: false' in qml
+    assert 'publishChildGuide(false, null, "")' in qml
+    assert 'publishChildGuide(true, null, "")' in qml
+    assert 'childVerticalGuides = []' not in qml
+    assert 'childHorizontalGuides = []' not in qml
+
+
+def test_child_snap_guide_chrome_is_retained_and_idempotent_during_selected_edit() -> None:
+    """Snap hints must not allocate a Repeater model on each pointer sample."""
+    qml = _text("rendering/quick/qml/CustomLayoutOverlay.qml")
+    layer = qml.split("id: childRoleLayer", 1)[1].split(
+        "function overlapsEditRect(candidate)", 1
+    )[0]
+    assert 'active: editFrame.selectedForChildEdit' in qml.split(
+        "id: childRoleLoader", 1
+    )[1].split("sourceComponent: Component", 1)[0]
+    for axis in ("Vertical", "Horizontal"):
+        assert f"property bool child{axis}GuideActive: false" in layer
+        assert f'objectName: "customLayoutChild{axis}Guide"' in layer
+        assert f"visible: childRoleLayer.child{axis}GuideActive" in layer
+        assert f"property real child{axis}GuidePosition: 0.0" in layer
+        assert f"property string child{axis}GuideKind:" in layer
+    assert "Repeater {" not in layer
+    assert "modelData" not in layer
+    publisher = qml.split("function publishChildGuide(horizontal, target, kind) {", 1)[1].split(
+        "function clearChildGuides(frame) {", 1
+    )[0]
+    for axis in ("Vertical", "Horizontal"):
+        assert f"if (child{axis}GuidePosition !== position)" in publisher
+        assert f"if (child{axis}GuideKind !== guideKind)" in publisher
+        assert f"if (child{axis}GuideActive)" in publisher
+        assert f"if (!child{axis}GuideActive)" in publisher
+    assert "property var childVerticalGuides" not in qml
+    assert "property var childHorizontalGuides" not in qml
+    assert 'publishChildGuide(false, null, "")' in qml
+    assert 'publishChildGuide(true, null, "")' in qml
+    assert "Timer {" not in layer
+    assert "requestUpdate(" not in publisher
+    assert "sessionModel" not in publisher
+    # The Qt scene test verifies QQuickItem identity under 24 repeated samples,
+    # changes to both axes and semantic style, and hide/reveal after a clear.
+    native = _text("tests/test_qtquick_child_mapped_geometry.py")
+    exercise = native.split(
+        "def test_child_snap_guides_retain_one_item_per_axis_during_repeated_pointer_samples", 1
+    )[1]
+    assert "range(24)" in exercise
+    assert 'is vertical' in exercise and 'is horizontal' in exercise
+    assert "QQmlExpression(" in exercise
+    assert "overlay.clear_session()" in exercise

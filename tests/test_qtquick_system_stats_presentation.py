@@ -143,19 +143,18 @@ def test_system_stats_custom_child_geometry_is_constant_semantic_state() -> None
                 "x_offset": 0.05,
                 "y_offset": 0.04,
             },
-            "metric_values": {
+            "header_separator": {
                 "width_scale": 0.9,
                 "height_scale": 1.15,
-                "alignment": "left",
             },
         }
     ) is True
     assert custom_edges == [None]
     assert state_edges == []
     assert sample_edges == []
-    assert set(model.customChildGeometry) == {"metric_panels", "metric_values"}
+    assert set(model.customChildGeometry) == {"metric_panels", "header_separator"}
     assert model.customChildGeometry["metric_panels"]["width_scale"] == pytest.approx(1.2)
-    assert model.customChildGeometry["metric_values"]["alignment"] == "left"
+    assert model.customChildGeometry["header_separator"]["height_scale"] == pytest.approx(1.15)
 
     # Resetting to authored state clears the sparse projection without touching
     # Settings, sample state or the enabled-metric identities.
@@ -207,11 +206,6 @@ def test_system_stats_family_is_public_and_default_leaves_are_explicit() -> None
         "header",
         "header_separator",
         "metric_panels",
-        "metric_accents",
-        "metric_labels",
-        "metric_details",
-        "metric_values",
-        "metric_tracks",
     )
     assert not any(
         metric in role.role_id
@@ -251,7 +245,7 @@ def test_system_stats_registry_icon_and_qml_are_presentation_only() -> None:
     assert "Behavior on width" in qml
     assert "customEditableChildRoles" in qml
     assert '"roleId": "metric_panels"' in qml
-    assert '"roleId": "metric_values"' in qml
+    assert '"roleId": "metric_values"' not in qml
     assert "systemStatsCustomMetricPanelRoleTarget" in qml
 
 
@@ -267,12 +261,6 @@ def test_system_stats_shared_metric_geometry_projects_to_every_panel(qt_app) -> 
                 "height_scale": 0.76,
                 "x_offset": 0.03,
                 "y_offset": 0.02,
-            },
-            "metric_values": {
-                "width_scale": 0.88,
-                "height_scale": 1.10,
-                "x_offset": -0.01,
-                "alignment": "left",
             },
         }
     ) is True
@@ -450,17 +438,11 @@ def test_system_stats_header_flip_swaps_metric_rails_and_restores_authored_spaci
         assert header.parentItem().x() > baseline[0]
         assert label.x() > value.x() + value.width() + 1.0
         assert accent.x() > 0.0
-        # Independent role flip is still possible; it changes alignment only,
-        # never silently swaps the already flipped structural rails.
-        flipped_label_x = label.x()
-        flipped_text_alignment = int(label.property("horizontalAlignment"))
-        assert model.set_custom_child_geometry({
-            "header": {"alignment": "right"},
-            "metric_labels": {"alignment": "right"},
-        })
-        qt_app.processEvents()
-        assert label.x() == pytest.approx(flipped_label_x)
-        assert int(label.property("horizontalAlignment")) != flipped_text_alignment
+        # The flip now owns all repeated metric internals as one semantic layout;
+        # no independently movable label/value/track edit roles remain.
+        assert int(label.property("horizontalAlignment")) != int(
+            item.findChild(QObject, "systemStatsCpuValue").property("horizontalAlignment")
+        )
         assert model.set_custom_child_geometry({})
         qt_app.processEvents()
         assert not bool(item.property("headerFlipped"))
@@ -471,4 +453,236 @@ def test_system_stats_header_flip_swaps_metric_rails_and_restores_authored_spaci
         item.deleteLater()
         component.deleteLater()
         engine.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("enabled", (
+    ("cpu", "memory", "uptime", "network"),
+    ("memory", "uptime"),
+    ("network",),
+    (),
+))
+def test_metric_edit_stack_encloses_every_enabled_panel_without_ghost_targets(
+    qt_app, enabled: tuple[str, ...],
+) -> None:
+    """One real editable block, including gaps; no per-card or per-label proxies."""
+    config = SystemStatsPresentationConfig.from_widgets_mapping({
+        "system_stats": {
+            "show_cpu": "cpu" in enabled,
+            "show_memory": "memory" in enabled,
+            "show_uptime": "uptime" in enabled,
+            "show_network": "network" in enabled,
+        },
+    })
+    model = SystemStatsPresentationModel(
+        config,
+        SystemStatsPresentationStyle.project(
+            config, dict(require_canonical_default("widgets.shadows")),
+        ),
+    )
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "SystemStatsPresentation.qml")),
+    )
+    item = component.createWithInitialProperties({"systemStatsModel": model})
+    assert isinstance(item, QQuickItem), [e.toString() for e in component.errors()]
+    item.setWidth(model.authoredWidth)
+    item.setHeight(model.authoredHeight)
+    target = item.findChild(QQuickItem, "systemStatsCustomMetricPanelRoleTarget")
+    assert target is not None
+    panel_names = {"cpu": "Cpu", "memory": "Ram", "uptime": "Uptime", "network": "Network"}
+    all_panels = {
+        key: item.findChild(QQuickItem, "systemStats" + suffix + "Panel")
+        for key, suffix in panel_names.items()
+    }
+    assert all(panel is not None for panel in all_panels.values())
+    try:
+        for extent in ((model.authoredWidth, model.authoredHeight), (710.0, 525.0)):
+            model.set_content_extent(*extent)
+            item.setWidth(extent[0]); item.setHeight(extent[1])
+            for flipped in (False, True, False):
+                model.set_custom_child_geometry({
+                    "metric_panels": {
+                        "width_scale": 0.94, "height_scale": 1.08,
+                        "x_offset": 0.015 if flipped else -0.012,
+                        "y_offset": 0.012 if flipped else -0.008,
+                    },
+                    "header": {"alignment": "right" if flipped else "left"},
+                })
+                qt_app.processEvents()
+                assert target.isVisible() == bool(enabled)
+                active = [all_panels[key] for key in enabled]
+                for key, panel in all_panels.items():
+                    assert panel.isVisible() == (key in enabled)
+                if not active:
+                    continue
+                def box(child):
+                    corners = [child.mapToItem(item, x, y) for x, y in (
+                        (0., 0.), (child.width(), 0.), (0., child.height()),
+                        (child.width(), child.height()),
+                    )]
+                    return (min(p.x() for p in corners), min(p.y() for p in corners),
+                            max(p.x() for p in corners), max(p.y() for p in corners))
+                boxes = [box(panel) for panel in active]
+                expected = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+                            max(b[2] for b in boxes), max(b[3] for b in boxes))
+                assert box(target) == pytest.approx(expected, abs=0.02)
+                # The one group edit moves every real card by the same delta,
+                # without separately displacing the label/value/accent/track.
+                assert all(panel.x() == pytest.approx(active[0].x()) for panel in active)
+                for panel in active:
+                    label = panel.findChild(QQuickItem, panel.objectName().replace("Panel", "Label"))
+                    value = panel.findChild(QQuickItem, panel.objectName().replace("Panel", "Value"))
+                    assert label is not None and value is not None
+                    assert (label.x() > value.x()) == flipped
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater(); component.deleteLater(); engine.deleteLater()
+        model.retire(); qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_system_stats_selected_edit_exposes_one_live_metric_stack_and_no_ghost_roles(qt_app) -> None:
+    """Real selected CUSTOM scene, not only stand-in QML representative equality.
+
+    All four painted panels must move with the SAME retained group Edit proxy,
+    while the header and separator remain separately editable. Flipping or
+    changing group geometry must not recreate the three Edit delegates.
+    """
+    from PySide6.QtCore import QPoint, QRect, qInstallMessageHandler
+    from PySide6.QtQuick import QQuickWindow
+    from rendering.custom_layout_session import (
+        CustomLayoutKey, CustomLayoutSession, CustomLayoutSessionItem,
+    )
+    from rendering.quick.custom_layout_overlay import RetainedCustomLayoutOverlay
+    from rendering.quick.scene_controller import QuickSceneFactory
+    from rendering.quick.widgets.host import (
+        OrdinaryWidgetPresentationHost, OverlayWidgetGeometry,
+    )
+    from rendering.quick.widgets.system_stats import RetainedSystemStatsPresentation
+
+    def visual(root: QQuickItem, name: str) -> QQuickItem | None:
+        if root.objectName() == name:
+            return root
+        for child in root.childItems():
+            found = visual(child, name)
+            if found is not None:
+                return found
+        return None
+
+    window = QQuickWindow()
+    window.setGeometry(0, 0, 1000, 800)
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(
+        owner=window, screen_index=0, runtime_generation=41,
+    )
+    root.setParent(window.contentItem())
+    root.setParentItem(window.contentItem())
+    root.setWidth(1000.0); root.setHeight(800.0)
+    host_item = visual(root, "ordinaryWidgetHost")
+    assert host_item is not None
+    host = OrdinaryWidgetPresentationHost(
+        host_item=host_item, context=context,
+        create_overlay_item=factory.create_overlay_widget,
+        create_family_item=factory.create_ordinary_widget_family,
+    )
+    model = _model()
+    geometry = OverlayWidgetGeometry(90.0, 65.0, 600.0, 500.0)
+    presentation = RetainedSystemStatsPresentation(host=host, model=model, geometry=geometry)
+    edit_root = visual(root, "customLayoutOverlay")
+    assert edit_root is not None
+    overlay = RetainedCustomLayoutOverlay(edit_root)
+    bounds = QRect(90, 65, 600, 500)
+    session = CustomLayoutSession()
+    descriptor = get_widget_runtime_descriptor("system_stats")
+    assert descriptor is not None
+    session.add_item(CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("system_stats", "display:stats-three-roles"),
+        model_identity="system_stats", baseline_global_rect=bounds,
+        current_global_rect=bounds, baseline_size_payload={},
+        current_size_payload={}, baseline_enabled=True, current_enabled=True,
+        custom_child_roles=descriptor.custom_child_roles,
+    ))
+    messages: list[str] = []
+    prior_handler = qInstallMessageHandler(
+        lambda _level, _context, message: messages.append(str(message))
+    )
+    try:
+        overlay.bind_session(
+            session, display_identity="display:stats-three-roles",
+            display_origin=QPoint(0, 0),
+            presentation_item_resolver=lambda _item: presentation.item,
+        )
+        window.show()
+        assert overlay.model.selectItem(0)
+        qt_app.processEvents()
+        frame = visual(edit_root, "customLayoutEditFrame-system_stats")
+        assert frame is not None
+        assert frame.setProperty("childEditingLocked", False)
+        qt_app.processEvents()
+        retained = {
+            role: visual(edit_root, "customLayoutChildRole-system_stats-" + role)
+            for role in ("header", "header_separator", "metric_panels")
+        }
+        assert all(role is not None for role in retained.values())
+        # No old overlap handles can shadow the one useful group edit.
+        for retired in ("metric_accents", "metric_labels", "metric_details",
+                        "metric_values", "metric_tracks"):
+            assert visual(edit_root, "customLayoutChildRole-system_stats-" + retired) is None
+        group = retained["metric_panels"]
+        target = visual(presentation.item, "systemStatsCustomMetricPanelRoleTarget")
+        assert target is not None and group.property("targetItem") == target
+        panels = [visual(presentation.item, "systemStats" + suffix + "Panel")
+                  for suffix in ("Cpu", "Ram", "Uptime", "Network")]
+        assert all(panel is not None for panel in panels)
+        first_rects = [(panel.x(), panel.y()) for panel in panels]
+        for index in range(16):
+            flipped = index % 2 == 1
+            assert model.set_custom_child_geometry({
+                "header": {"alignment": "right" if flipped else "left"},
+                "metric_panels": {
+                    "width_scale": 0.95, "height_scale": 0.96,
+                    "x_offset": 0.008 + index * 0.0003,
+                    "y_offset": 0.006 + index * 0.0002,
+                },
+            })
+            qt_app.processEvents()
+            for role_id, role in retained.items():
+                assert visual(edit_root, "customLayoutChildRole-system_stats-" + role_id) is role, role_id
+            assert group.property("targetItem") == target
+            assert group.property("targetReady") is True
+            points = [target.mapToItem(frame, x, y) for x, y in (
+                (0., 0.), (target.width(), 0.), (0., target.height()),
+                (target.width(), target.height()),
+            )]
+            rect = (min(p.x() for p in points), min(p.y() for p in points),
+                    max(p.x() for p in points), max(p.y() for p in points))
+            assert (group.x(), group.y(), group.width(), group.height()) == pytest.approx(
+                (rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]), abs=0.02
+            )
+            assert [panel.x() for panel in panels] == pytest.approx([target.x()] * 4)
+            assert panels[0].y() == pytest.approx(target.y())
+            assert panels[-1].y() + panels[-1].height() == pytest.approx(
+                target.y() + target.height()
+            )
+        assert panels[0].x() != pytest.approx(first_rects[0][0])
+        assert panels[0].y() != pytest.approx(first_rects[0][1])
+        overlay.clear_session()
+        qt_app.processEvents()
+        assert visual(edit_root, "customLayoutChildRole-system_stats-metric_panels") is None
+        assert not [msg for msg in messages if "CustomLayoutOverlay.qml" in msg and (
+            "Binding loop" in msg or "non-bindable" in msg
+        )], messages[:8]
+    finally:
+        qInstallMessageHandler(prior_handler)
+        overlay.clear_session()
+        host.retire_all()
+        window.hide()
+        root.setParentItem(None); root.setParent(None); root.deleteLater()
+        context.deleteLater(); factory.deleteLater(); window.deleteLater()
         qt_app.processEvents()

@@ -163,34 +163,53 @@ class RetainedOverlayWidget:
         """Assign this widget's display-space rectangle."""
 
         item = self.item
-        item.setX(float(geometry.x))
-        item.setY(float(geometry.y))
-        item.setWidth(float(geometry.width))
-        item.setHeight(float(geometry.height))
+        # The retained QQuickItem is the geometry authority.  A refreshed
+        # family snapshot must not reassign four unchanged coordinates, while
+        # a real axis change (including live CUSTOM resizing) still projects.
+        for current, setter, value in (
+            (item.x(), item.setX, float(geometry.x)),
+            (item.y(), item.setY, float(geometry.y)),
+            (item.width(), item.setWidth, float(geometry.width)),
+            (item.height(), item.setHeight, float(geometry.height)),
+        ):
+            if current != value:
+                setter(value)
 
     def set_fade_opacity(self, opacity: float) -> None:
         """Set the whole-widget authored fade (root opacity), clamped to [0, 1]."""
 
         clamped = max(0.0, min(1.0, float(opacity)))
-        self.item.setProperty("fadeOpacity", clamped)
+        item = self.item
+        if item.property("fadeOpacity") != clamped:
+            item.setProperty("fadeOpacity", clamped)
 
     def set_startup_reveal_opacity(self, opacity: float) -> None:
         """Set the independent generation-scoped startup visibility gate."""
 
         clamped = max(0.0, min(1.0, float(opacity)))
-        self.item.setProperty("startupRevealOpacity", clamped)
+        item = self.item
+        if item.property("startupRevealOpacity") != clamped:
+            item.setProperty("startupRevealOpacity", clamped)
 
     def set_working_visible(self, visible: bool) -> None:
         """Apply transient CUSTOM visibility without rewriting authored fade."""
 
-        self.item.setProperty("workingVisible", bool(visible))
+        item = self.item
+        normalized = bool(visible)
+        if item.property("workingVisible") != normalized:
+            item.setProperty("workingVisible", normalized)
 
     def set_card_style(self, style: OverlayCardStyle) -> None:
         """Apply one immutable card style record to the shared shell."""
 
         item = self.item
         for property_name, attribute in _CARD_STYLE_BINDINGS:
-            if not item.setProperty(property_name, getattr(style, attribute)):
+            value = getattr(style, attribute)
+            # Do not cache an old style record: a QML-owned reset or display
+            # transfer must reconcile against the actual retained destination.
+            if item.property(property_name) == value:
+                continue
+            if not item.setProperty(property_name, value):
                 raise RuntimeError(
                     f"OverlayWidget.qml rejected card style property {property_name}"
                 )
@@ -241,17 +260,25 @@ class RetainedOverlayWidget:
                 and (input_state.interaction_mode_enabled or input_state.ctrl_held)
             )
             item = self._item
-            item.setProperty("widgetGlowOnHover", input_state.widget_glow_on_hover)
-            item.setProperty("widgetGlowOnClick", input_state.widget_glow_on_click)
-            item.setProperty("widgetGlowIntensity", input_state.widget_glow_intensity)
-            item.setProperty("widgetGlowDistance", input_state.widget_glow_distance)
-            item.setProperty("widgetGlowColor", QColor(*input_state.widget_glow_color))
-            item.setProperty("widgetGlowJediMode", input_state.widget_glow_jedi_mode)
-            item.setProperty("widgetGlowAdmitted", admitted)
+            # Input snapshots also carry semantic mouse/key events. They may
+            # change without altering ANY glow facts; project only actual
+            # differences instead of writing seven QML properties per event.
+            for name, value in (
+                ("widgetGlowOnHover", input_state.widget_glow_on_hover),
+                ("widgetGlowOnClick", input_state.widget_glow_on_click),
+                ("widgetGlowIntensity", input_state.widget_glow_intensity),
+                ("widgetGlowDistance", input_state.widget_glow_distance),
+                ("widgetGlowColor", QColor(*input_state.widget_glow_color)),
+                ("widgetGlowJediMode", input_state.widget_glow_jedi_mode),
+                ("widgetGlowAdmitted", admitted),
+            ):
+                if item.property(name) != value:
+                    item.setProperty(name, value)
             if (
-                not admitted
-                or not input_state.widget_glow_on_click
-                or not bool(item.property("cardShellEnabled"))
+                (not admitted
+                 or not input_state.widget_glow_on_click
+                 or not bool(item.property("cardShellEnabled")))
+                and bool(item.property("widgetGlowClicked"))
             ):
                 item.setProperty("widgetGlowClicked", False)
         handler = self._input_state_handler
