@@ -73,11 +73,13 @@ def test_custom_title_bar_signals(qapp, qtbot):
 
 def test_tab_button_creation(qapp):
     """Test tab button creation."""
-    button = TabButton("Test Tab", "📁")
+    button = TabButton("Test Tab", "sources")
     
     assert button is not None
-    assert "Test Tab" in button.text()
+    assert button.text() == "Test Tab"
     assert button.isCheckable() is True
+    assert button._tab_icon_widget is not None
+    assert button._tab_icon_name == "sources"
 
 
 def test_settings_dialog_creation(qapp, settings_manager, animation_manager):

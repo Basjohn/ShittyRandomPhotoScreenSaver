@@ -6,7 +6,13 @@ OverlayWidget {
 
 
     required property var systemStatsModel
-    uniformScaleTransform: true
+    // A side-handle changes only the logical card axis, so the family reflows
+    // without scaling its whole painted scene.  Corner/wheel scaling changes
+    // both outer axes relative to the retained logical content extent and
+    // retains the existing one-transform uniform-size contract.
+    uniformScaleTransform:
+        Math.abs(width - systemStatsModel.authoredWidth) > 0.5
+        && Math.abs(height - systemStatsModel.authoredHeight) > 0.5
     preferredContentWidth: systemStatsModel.authoredWidth
     preferredContentHeight: systemStatsModel.authoredHeight
 
@@ -74,8 +80,12 @@ OverlayWidget {
     readonly property real canonicalMetricPanelWidth: Math.max(
         1.0, statsRoot.systemStatsModel.authoredWidth - 32.0
     )
+    // Y-only contraction never changes an admitted panel's authored height.
+    // Preserve a stable panel step through hide/reveal, but retain the normal
+    // expansion behaviour when the whole logical card is made taller.
     readonly property real canonicalMetricPanelHeight: visibleMetricCount > 0
-        ? Math.max(58.0, (statsRoot.systemStatsModel.authoredHeight - metricAreaTop - metricAreaBottomMargin
+        ? Math.max(58.0, (Math.max(statsRoot.systemStatsModel.baseAuthoredHeight,
+            statsRoot.systemStatsModel.authoredHeight) - metricAreaTop - metricAreaBottomMargin
             - canonicalMetricGap * (visibleMetricCount - 1)) / visibleMetricCount)
         : 0.0
     readonly property real metricPanelWidth: canonicalMetricPanelWidth
@@ -90,6 +100,37 @@ OverlayWidget {
         118.0 + Math.max(0.0, metricPanelWidth + 32.0 - 520.0) * 0.20
     )
     readonly property real representativePanelY: metricAreaTop + metricPanelYOffset
+    // The parent/custom owner may shorten the authored content extent without
+    // changing which metrics the user chose to monitor. Admit complete painted
+    // cards, in their existing order, only while they fit the card's Y rail.
+    // Never use this painted subset to recompute panel height/step: that would
+    // turn a visibility edge into a resize feedback loop and jump the handles.
+    readonly property real metricPaintBottom:
+        Math.min(statsRoot.height, statsRoot.systemStatsModel.authoredHeight)
+            - statsRoot.metricAreaBottomMargin
+    readonly property real authoredMetricStackHeight: visibleMetricCount > 0
+        ? visibleMetricCount * metricPanelHeight
+            + Math.max(0, visibleMetricCount - 1) * metricGap
+        : 0.0
+    readonly property int paintedMetricCount: {
+        if (visibleMetricCount === 0 || metricPanelHeight < 50.0
+                || representativePanelY < -0.01)
+            return 0
+        let count = 0
+        for (let index = 0; index < visibleMetricCount; ++index) {
+            const bottom = representativePanelY + index * metricStep + metricPanelHeight
+            if (bottom > metricPaintBottom + 0.01)
+                break
+            ++count
+        }
+        return count
+    }
+    // The edit surface is a continuously bounded portion of the requested
+    // full stack. Its height does not jump when an entire trailing panel is
+    // hidden, so the same drag can expand the stack to reveal it again.
+    readonly property real visibleMetricStackHeight: Math.max(0.0, Math.min(
+        authoredMetricStackHeight, metricPaintBottom - representativePanelY
+    ))
 
     // Keep only useful, physically meaningful Edit surfaces. The metric role
     // covers the ENTIRE stack of enabled cards, including their shared gaps.
@@ -341,7 +382,7 @@ OverlayWidget {
         objectPrefix: "systemStatsCpu"
         x: statsRoot.metricPanelX
         y: statsRoot.metricAreaTop + statsRoot.metricPanelYOffset
-        visible: statsRoot.systemStatsModel.showCpu
+        visible: statsRoot.systemStatsModel.showCpu && statsRoot.paintedMetricCount > 0
         metricLabel: "CPU LOAD"
         metricValue: statsRoot.systemStatsModel.cpuValue
         metricDetail: statsRoot.systemStatsModel.cpuDetail
@@ -356,7 +397,8 @@ OverlayWidget {
         x: statsRoot.metricPanelX
         y: statsRoot.metricAreaTop + statsRoot.metricPanelYOffset
             + (statsRoot.systemStatsModel.showCpu ? statsRoot.metricStep : 0.0)
-        visible: statsRoot.systemStatsModel.showMemory
+        visible: statsRoot.systemStatsModel.showMemory && statsRoot.paintedMetricCount > (
+            statsRoot.systemStatsModel.showCpu ? 1 : 0)
         metricLabel: "MEMORY"
         metricValue: statsRoot.systemStatsModel.ramValue
         metricDetail: statsRoot.systemStatsModel.ramDetail
@@ -373,7 +415,10 @@ OverlayWidget {
             (statsRoot.systemStatsModel.showCpu ? 1 : 0)
             + (statsRoot.systemStatsModel.showMemory ? 1 : 0)
         ) * statsRoot.metricStep
-        visible: statsRoot.systemStatsModel.showUptime
+        visible: statsRoot.systemStatsModel.showUptime && statsRoot.paintedMetricCount > (
+            (statsRoot.systemStatsModel.showCpu ? 1 : 0)
+            + (statsRoot.systemStatsModel.showMemory ? 1 : 0)
+        )
         metricLabel: "UPTIME"
         metricValue: statsRoot.systemStatsModel.uptimeValue
         metricDetail: statsRoot.systemStatsModel.uptimeDetail
@@ -392,7 +437,11 @@ OverlayWidget {
             + (statsRoot.systemStatsModel.showMemory ? 1 : 0)
             + (statsRoot.systemStatsModel.showUptime ? 1 : 0)
         ) * statsRoot.metricStep
-        visible: statsRoot.systemStatsModel.showNetwork
+        visible: statsRoot.systemStatsModel.showNetwork && statsRoot.paintedMetricCount > (
+            (statsRoot.systemStatsModel.showCpu ? 1 : 0)
+            + (statsRoot.systemStatsModel.showMemory ? 1 : 0)
+            + (statsRoot.systemStatsModel.showUptime ? 1 : 0)
+        )
         metricLabel: "NETWORK"
         metricValue: statsRoot.systemStatsModel.networkValue
         metricDetail: statsRoot.systemStatsModel.networkDetail
@@ -401,19 +450,18 @@ OverlayWidget {
         showTrack: false
     }
 
-    // Exactly ONE Edit target for the whole visible metric stack. Its top-left
-    // and width are the actual first panel's; its bottom reaches the last
-    // enabled panel. Group movement/resize uses the existing metric_panels
-    // geometry record already consumed by all four MetricPanels above.
+    // Exactly ONE Edit target for the stack. It follows the authored stack
+    // continuously up to the card's Y paint boundary; complete trailing panels
+    // shed when the remaining area cannot contain them. The reserved edit area
+    // stays continuous so a resize can reveal those panels without handle jumps.
     Item {
         id: customMetricPanelRoleTarget
         objectName: "systemStatsCustomMetricPanelRoleTarget"
-        visible: statsRoot.visibleMetricCount > 0
+        visible: statsRoot.paintedMetricCount > 0
         enabled: false
         x: statsRoot.metricPanelX
         y: statsRoot.representativePanelY
         width: statsRoot.metricPanelWidth
-        height: Math.max(1.0, statsRoot.visibleMetricCount * statsRoot.metricPanelHeight
-            + Math.max(0, statsRoot.visibleMetricCount - 1) * statsRoot.metricGap)
+        height: statsRoot.visibleMetricStackHeight
     }
 }

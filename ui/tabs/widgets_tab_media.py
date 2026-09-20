@@ -395,8 +395,9 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_provider_combo.setMinimumWidth(150)
     tab.media_provider_combo.setToolTip(
         "Select which media player to monitor via Windows GSMTC.\n"
-        "Spotify Browser uses the active session exposed by a supported browser; "
-        "Windows does not reveal the website or tab origin."
+        "Browser Media uses the active session exposed by a supported browser; "
+        "Windows does not reveal the website or tab origin. "
+        "YouTube Music requires a separately identified PWA session."
     )
     tab.media_provider_combo.currentIndexChanged.connect(tab._save_settings)
     tab.media_provider_combo.currentIndexChanged.connect(
@@ -426,8 +427,8 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._spotify_browser_provider_note = QLabel(
         "Browser GSMTC identifies Chrome, Edge, Firefox, Brave, Opera, or "
         "Vivaldi—not a specific website. The browser's active media session is used. "
-        "Volume fallback therefore affects that browser's whole audio session, not "
-        "only its Spotify tab."
+        "A browser-wide fallback would affect that browser's whole audio session, not "
+        "only one website or tab."
     )
     tab._spotify_browser_provider_note.setWordWrap(True)
     shared_styles.apply_shared_label_style(tab._spotify_browser_provider_note, "INFO_LABEL_STYLE")

@@ -1,9 +1,9 @@
-"""Shared presentation-neutral system-mute ownership for Media.
+"""Event-driven, shared Core Audio ownership for Media and future OSD.
 
-The Windows endpoint object is acquired lazily on the UI/runtime thread.  One
-owner per runtime generation coordinates availability, mute state, semantic
-toggle/system-volume actions and the 30-second poll cadence.  Per-display
-services are leases; retained Quick only presents pixels and supplies feedback.
+One Core Audio callback session serves the admitted Media generation leases on
+the GUI/COM apartment. Runtime generations retain independent publication
+fences, but concurrent display generations do not create a second endpoint.
+Inactive presentation has no endpoint registration or 30-second poll.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Any, Callable
 import weakref
 
 from core.logging.logger import get_logger
-from core.threading.manager import ThreadManager
+from core.media.audio_event_session import AudioEventState
 
 logger = get_logger(__name__)
 
@@ -26,17 +26,19 @@ class SystemMuteRuntimeSnapshot:
     available: bool
     muted: bool
     source: str
+    volume: float | None = None
+    endpoint_token: int = 0
 
 
 SystemMuteBackendFactory = Callable[[], Any]
 
 
 def _load_system_mute_backend() -> Any:
-    # Import acquires the process-global endpoint. Keep that work behind actual
-    # mute-widget admission and on the same UI thread that will call it.
-    from core.media import system_mute
+    # This import creates no endpoint or callback; registration belongs only
+    # to an active Media/OSD owner through the retained shared session.
+    from core.media.audio_shared_source import SharedCoreAudioBackend
 
-    return system_mute
+    return SharedCoreAudioBackend()
 
 
 _SHARED_SYSTEM_MUTE_OWNERS: dict[
@@ -72,9 +74,8 @@ def reset_shared_system_mute_runtime_for_tests() -> None:
 
 
 class _SharedSystemMuteRuntimeOwner:
-    """One runtime-generation system-mute state/poll/action authority."""
+    """Runtime-generation publication owner; endpoint is a shared event source."""
 
-    _POLL_INTERVAL_MS = 30_000
     _EXTERNAL_REFRESH_THROTTLE_SEC = 0.1
 
     def __init__(
@@ -94,21 +95,19 @@ class _SharedSystemMuteRuntimeOwner:
             try:
                 self._backend = backend_factory()
             except Exception:
-                logger.error(
-                    "[SYSTEM_MUTE_RUNTIME] Backend construction failed closed",
-                    exc_info=True,
-                )
+                logger.error("[SYSTEM_AUDIO] Backend construction failed closed", exc_info=True)
                 self._backend = None
-
         self._leases: weakref.WeakSet[SystemMuteRuntimeService] = weakref.WeakSet()
         self._active_leases: weakref.WeakSet[SystemMuteRuntimeService] = weakref.WeakSet()
         self._running = False
         self._retired = False
         self._owner_generation = 0
-        self._poll_token = 0
         self._last_refresh_ts = 0.0
-        self._available = self._backend_is_available()
+        self._available = False
         self._muted = False
+        self._volume: float | None = None
+        self._endpoint_token = 0
+        self._source_revision = -1
         self._revision = 1
         self._source = "initial"
 
@@ -117,13 +116,7 @@ class _SharedSystemMuteRuntimeOwner:
         return self._owner_generation
 
     @property
-    def poll_token(self) -> int:
-        return self._poll_token
-
-    @property
     def backend(self) -> Any:
-        """Read-only diagnostic for focused cardinality regressions."""
-
         return self._backend
 
     def is_running(self) -> bool:
@@ -144,25 +137,22 @@ class _SharedSystemMuteRuntimeOwner:
             available=self._available,
             muted=self._muted,
             source=self._source,
+            volume=self._volume,
+            endpoint_token=self._endpoint_token,
         )
 
     def attach(self, lease: "SystemMuteRuntimeService") -> None:
         if self._retired:
-            raise RuntimeError("cannot attach to a retired system-mute owner")
+            raise RuntimeError("cannot attach to a retired system-audio owner")
         if self._thread_manager is None and lease._thread_manager is not None:
             self._thread_manager = lease._thread_manager
-        elif (
-            lease._thread_manager is not None
-            and self._thread_manager is not None
-            and lease._thread_manager is not self._thread_manager
-        ):
-            raise RuntimeError("shared system-mute consumers must use one ThreadManager")
-        if (
-            self._runtime_generation is not None
-            and lease.runtime_generation is not None
-            and lease.runtime_generation != self._runtime_generation
-        ):
-            raise RuntimeError("shared system-mute runtime generation mismatch")
+        elif (lease._thread_manager is not None and self._thread_manager is not None
+              and lease._thread_manager is not self._thread_manager):
+            raise RuntimeError("shared system-audio consumers must use one ThreadManager")
+        if (self._runtime_generation is not None
+              and lease.runtime_generation is not None
+              and lease.runtime_generation != self._runtime_generation):
+            raise RuntimeError("shared system-audio runtime generation mismatch")
         self._leases.add(lease)
 
     def detach(self, lease: "SystemMuteRuntimeService") -> None:
@@ -175,31 +165,34 @@ class _SharedSystemMuteRuntimeOwner:
         if self._retired or lease not in self._leases:
             return False
         self._active_leases.add(lease)
-        started_owner = False
         if not self._running:
             from core.media.media_native_trace import trace_media_native_stage
-
             trace_media_native_stage(
                 component="mute_button",
                 stage="owner_activate_begin",
                 generation=self._runtime_generation,
-                detail="available=%s" % self._available,
+                detail="event_driven=true",
             )
             self._running = True
             self._owner_generation += 1
-            self._poll_token += 1
-            started_owner = True
+            backend = self._backend
+            try:
+                started = bool(backend is not None and backend.start(self._on_event_state))
+            except Exception:
+                logger.error("[SYSTEM_AUDIO] Event subscription failed closed", exc_info=True)
+                started = False
+            if not started:
+                self._running = False
+                self._owner_generation += 1
+                self._active_leases.discard(lease)
+                return False
             trace_media_native_stage(
                 component="mute_button",
                 stage="owner_activate_complete",
                 generation=self._runtime_generation,
+                detail="event_driven=true",
             )
         lease._deliver_snapshot(self.current_snapshot())
-        if started_owner and self._available:
-            self._schedule_next_poll(
-                owner_generation=self._owner_generation,
-                poll_token=self._poll_token,
-            )
         return True
 
     def deactivate(self, lease: "SystemMuteRuntimeService") -> None:
@@ -208,30 +201,48 @@ class _SharedSystemMuteRuntimeOwner:
             return
         self._running = False
         self._owner_generation += 1
-        self._poll_token += 1
+        backend = self._backend
+        if backend is not None:
+            backend.stop()
+        self._available = False
+        self._muted = False
+        self._volume = None
+        self._endpoint_token = 0
+        self._source_revision = -1
+        self._source = "inactive"
+
+    def _on_event_state(self, state: AudioEventState) -> None:
+        if self._retired or not self._running:
+            return
+        if (state.endpoint_token < self._endpoint_token or
+                (state.endpoint_token == self._endpoint_token and
+                 state.revision <= self._source_revision)):
+            return
+        self._source_revision = state.revision
+        available = bool(state.available)
+        muted = bool(state.muted) if available else False
+        volume = float(state.volume) if available and state.volume is not None else None
+        next_values = (available, muted, volume, state.endpoint_token)
+        current_values = (self._available, self._muted, self._volume, self._endpoint_token)
+        if next_values == current_values:
+            return
+        self._available, self._muted, self._volume, self._endpoint_token = next_values
+        self._publish(source=state.source)
 
     def request_refresh(self, *, force: bool = False, source: str = "refresh") -> bool:
-        if self._retired or not self._running or not self._available:
+        """One explicit input-triggered read, never a recurring reconciliation poll."""
+        if self._retired or not self._running:
             return False
         now = time.monotonic()
-        if (
-            not force
-            and now - self._last_refresh_ts < self._EXTERNAL_REFRESH_THROTTLE_SEC
-        ):
+        if not force and now - self._last_refresh_ts < self._EXTERNAL_REFRESH_THROTTLE_SEC:
             return False
         self._last_refresh_ts = now
         backend = self._backend
         try:
-            state = backend.get_mute() if backend is not None else None
+            return bool(backend is not None and backend.request_snapshot())
         except Exception:
-            logger.debug("[SYSTEM_MUTE_RUNTIME] get_mute failed", exc_info=True)
-            state = None
-        if not isinstance(state, bool):
+            logger.debug("[SYSTEM_AUDIO] Explicit snapshot failed", exc_info=True)
             return False
-        if state != self._muted:
-            self._muted = state
-            self._publish(source=source)
-        return True
 
     def toggle_mute(self) -> bool:
         if self._retired or not self._running or not self._available:
@@ -240,11 +251,11 @@ class _SharedSystemMuteRuntimeOwner:
         try:
             result = backend.toggle_mute() if backend is not None else None
         except Exception:
-            logger.debug("[SYSTEM_MUTE_RUNTIME] toggle_mute failed", exc_info=True)
+            logger.debug("[SYSTEM_AUDIO] Toggle failed", exc_info=True)
             result = None
-        # Preserve the prior input contract: an admitted click is consumed even
-        # if the optional backend reports no result, so local feedback still runs.
-        if isinstance(result, bool):
+        # Preserve the admitted-click feedback contract even if a device was
+        # unplugged between the displayed state and the user interaction.
+        if isinstance(result, bool) and result != self._muted:
             self._muted = result
             self._publish(source="toggle")
         return True
@@ -256,84 +267,31 @@ class _SharedSystemMuteRuntimeOwner:
         try:
             result = backend.step_volume(float(delta)) if backend is not None else None
         except Exception:
-            logger.debug("[SYSTEM_MUTE_RUNTIME] step_volume failed", exc_info=True)
-            result = None
+            logger.debug("[SYSTEM_AUDIO] Volume step failed", exc_info=True)
+            return None
         if not isinstance(result, (int, float)) or isinstance(result, bool):
             return None
-        self.request_refresh(force=True, source="system_volume")
+        # The event source handles the callback echo and latest-value
+        # publication. A step must never query a second endpoint or poll.
         return float(result)
 
     def retire(self) -> None:
         if self._retired:
             return
-        self._running = False
+        was_running = self._running
         self._retired = True
+        self._running = False
         self._owner_generation += 1
-        self._poll_token += 1
         self._active_leases.clear()
         self._leases.clear()
-        self._thread_manager = None
-        # The backend module owns one process-global endpoint. A display lease
-        # never shuts it down or resets it.
-        self._backend = None
-        if self._registry_key is not None:
-            _drop_shared_owner(self._registry_key, self)
-
-    def _backend_is_available(self) -> bool:
-        backend = self._backend
-        if backend is None:
-            return False
+        backend, self._backend = self._backend, None
         try:
-            return bool(backend.is_available())
-        except Exception:
-            return False
-
-    def _schedule_next_poll(
-        self,
-        *,
-        owner_generation: int,
-        poll_token: int,
-    ) -> None:
-        if (
-            self._retired
-            or not self._running
-            or not self._available
-            or owner_generation != self._owner_generation
-            or poll_token != self._poll_token
-        ):
-            return
-        owner_ref = weakref.ref(self)
-
-        def _poll() -> None:
-            owner = owner_ref()
-            if owner is not None:
-                owner._poll_tick(
-                    owner_generation=owner_generation,
-                    poll_token=poll_token,
-                )
-
-        _poll._srpss_runtime_generation = self._runtime_generation
-        try:
-            ThreadManager.single_shot(self._POLL_INTERVAL_MS, _poll)
-        except Exception:
-            logger.error("[SYSTEM_MUTE_RUNTIME] Failed to schedule mute poll", exc_info=True)
-            self._running = False
-            self._owner_generation += 1
-            self._poll_token += 1
-
-    def _poll_tick(self, *, owner_generation: int, poll_token: int) -> None:
-        if (
-            self._retired
-            or not self._running
-            or owner_generation != self._owner_generation
-            or poll_token != self._poll_token
-        ):
-            return
-        self.request_refresh(force=True, source="poll")
-        self._schedule_next_poll(
-            owner_generation=owner_generation,
-            poll_token=poll_token,
-        )
+            if was_running and backend is not None:
+                backend.stop()
+        finally:
+            self._thread_manager = None
+            if self._registry_key is not None:
+                _drop_shared_owner(self._registry_key, self)
 
     def _publish(self, *, source: str) -> None:
         self._revision += 1

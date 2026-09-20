@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMenu, QScrollArea, QStyle, QStyleOptionButton,
     QStylePainter,
 )
-from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer, QEvent
+from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer, QEvent, QPointF
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPainterPath, QDesktopServices
 
 from core.logging.logger import get_log_dir, get_logger, is_perf_metrics_enabled
@@ -207,55 +207,213 @@ class CustomTitleBar(QWidget):
             super().mouseDoubleClickEvent(event)
 
 
+class _SettingsTabVectorIcon(QWidget):
+    """Small wireframe icon that inherits the tab's semantic text colour."""
+
+    _STROKE_WIDTH = 1.7
+
+    def __init__(self, icon_name: str, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._icon_name = icon_name
+        self._color = _theme_qcolor("navigation.tab.text")
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setFixedSize(26, 26)
+
+    def set_icon_color(self, color: QColor) -> None:
+        resolved = QColor(color)
+        if resolved == self._color:
+            return
+        self._color = resolved
+        self.update()
+
+    def _draw_folder(self, painter: QPainter, rect: QRectF) -> None:
+        path = QPainterPath()
+        path.moveTo(rect.left() + 1.0, rect.top() + rect.height() * 0.42)
+        path.lineTo(rect.left() + rect.width() * 0.26, rect.top() + rect.height() * 0.42)
+        path.lineTo(rect.left() + rect.width() * 0.38, rect.top() + rect.height() * 0.26)
+        path.lineTo(rect.left() + rect.width() * 0.58, rect.top() + rect.height() * 0.26)
+        path.lineTo(rect.right() - 1.0, rect.top() + rect.height() * 0.26)
+        path.lineTo(rect.right() - 1.0, rect.bottom() - 1.0)
+        path.lineTo(rect.left() + 1.0, rect.bottom() - 1.0)
+        path.closeSubpath()
+        painter.drawPath(path)
+
+    def _draw_display(self, painter: QPainter, rect: QRectF) -> None:
+        screen = rect.adjusted(1.5, 2.0, -1.5, -6.0)
+        painter.drawRoundedRect(screen, 2.2, 2.2)
+        center_x = rect.center().x()
+        stand_top = screen.bottom() + 1.5
+        painter.drawLine(QPointF(center_x, stand_top), QPointF(center_x, stand_top + 3.3))
+        painter.drawLine(
+            QPointF(center_x - 4.8, stand_top + 4.6),
+            QPointF(center_x + 4.8, stand_top + 4.6),
+        )
+
+    def _draw_transitions(self, painter: QPainter, rect: QRectF) -> None:
+        cx = rect.center().x()
+        cy = rect.center().y()
+        painter.drawLine(QPointF(cx, rect.top() + 1.5), QPointF(cx, rect.bottom() - 1.5))
+        painter.drawLine(QPointF(rect.left() + 1.5, cy), QPointF(rect.right() - 1.5, cy))
+        painter.drawLine(QPointF(cx - 4.2, cy - 4.2), QPointF(cx + 4.2, cy + 4.2))
+        painter.drawLine(QPointF(cx + 4.2, cy - 4.2), QPointF(cx - 4.2, cy + 4.2))
+        painter.drawLine(
+            QPointF(rect.right() - 5.0, rect.top() + 2.8),
+            QPointF(rect.right() - 2.0, rect.top() + 5.8),
+        )
+        painter.drawLine(
+            QPointF(rect.right() - 3.5, rect.top() + 1.3),
+            QPointF(rect.right() - 3.5, rect.top() + 7.3),
+        )
+
+    def _draw_widgets(self, painter: QPainter, rect: QRectF) -> None:
+        cell_w = rect.width() * 0.36
+        cell_h = rect.height() * 0.28
+        left = rect.left() + rect.width() * 0.08
+        top = rect.top() + rect.height() * 0.12
+        gap_x = rect.width() * 0.12
+        gap_y = rect.height() * 0.12
+        for row in range(2):
+            for col in range(2):
+                x = left + col * (cell_w + gap_x)
+                y = top + row * (cell_h + gap_y)
+                painter.drawRoundedRect(QRectF(x, y, cell_w, cell_h), 1.8, 1.8)
+
+    def _draw_visualizers(self, painter: QPainter, rect: QRectF) -> None:
+        base = rect.bottom() - 2.0
+        bar_w = rect.width() * 0.12
+        left = rect.left() + rect.width() * 0.12
+        heights = (0.32, 0.62, 0.9, 0.54, 0.76)
+        gap = rect.width() * 0.08
+        for index, factor in enumerate(heights):
+            x = left + index * (bar_w + gap)
+            height = max(4.0, rect.height() * factor)
+            painter.drawRoundedRect(QRectF(x, base - height, bar_w, height), 1.1, 1.1)
+
+    def _draw_accessibility(self, painter: QPainter, rect: QRectF) -> None:
+        center_x = rect.center().x()
+        head_center = QPointF(center_x, rect.top() + 4.5)
+        painter.drawEllipse(head_center, 2.2, 2.2)
+        painter.drawLine(QPointF(center_x, rect.top() + 7.5), QPointF(center_x, rect.bottom() - 4.0))
+        painter.drawLine(
+            QPointF(center_x - 6.0, rect.top() + 11.0),
+            QPointF(center_x + 6.0, rect.top() + 11.0),
+        )
+        painter.drawLine(
+            QPointF(center_x, rect.top() + 14.0),
+            QPointF(center_x - 5.0, rect.bottom() - 1.5),
+        )
+        painter.drawLine(
+            QPointF(center_x, rect.top() + 14.0),
+            QPointF(center_x + 5.0, rect.bottom() - 1.5),
+        )
+
+    def _draw_themes(self, painter: QPainter, rect: QRectF) -> None:
+        path = QPainterPath()
+        path.moveTo(rect.left() + rect.width() * 0.54, rect.top() + 1.5)
+        path.cubicTo(
+            rect.left() + rect.width() * 0.18, rect.top() + 1.5,
+            rect.left() + 1.5, rect.top() + rect.height() * 0.38,
+            rect.left() + 1.5, rect.top() + rect.height() * 0.6,
+        )
+        path.cubicTo(
+            rect.left() + 1.5, rect.bottom() - 1.5,
+            rect.left() + rect.width() * 0.34, rect.bottom() - 1.5,
+            rect.left() + rect.width() * 0.46, rect.bottom() - 3.8,
+        )
+        path.cubicTo(
+            rect.left() + rect.width() * 0.56, rect.bottom() - 6.0,
+            rect.left() + rect.width() * 0.7, rect.bottom() - 5.8,
+            rect.left() + rect.width() * 0.78, rect.bottom() - 4.0,
+        )
+        path.cubicTo(
+            rect.right() - 1.5, rect.bottom() - 6.2,
+            rect.right() - 1.5, rect.top() + rect.height() * 0.28,
+            rect.left() + rect.width() * 0.72, rect.top() + 6.0,
+        )
+        path.cubicTo(
+            rect.left() + rect.width() * 0.66, rect.top() + 2.8,
+            rect.left() + rect.width() * 0.6, rect.top() + 1.5,
+            rect.left() + rect.width() * 0.54, rect.top() + 1.5,
+        )
+        painter.drawPath(path)
+        for cx, cy in ((0.36, 0.46), (0.54, 0.34), (0.6, 0.56)):
+            painter.drawEllipse(
+                QPointF(rect.left() + rect.width() * cx, rect.top() + rect.height() * cy),
+                1.0,
+                1.0,
+            )
+
+    def _draw_about(self, painter: QPainter, rect: QRectF) -> None:
+        painter.drawEllipse(rect.adjusted(1.5, 1.5, -1.5, -1.5))
+        center_x = rect.center().x()
+        painter.drawEllipse(QPointF(center_x, rect.top() + 6.0), 0.9, 0.9)
+        painter.drawLine(QPointF(center_x, rect.top() + 10.0), QPointF(center_x, rect.bottom() - 5.0))
+        painter.drawLine(QPointF(center_x - 2.2, rect.bottom() - 5.0), QPointF(center_x + 2.2, rect.bottom() - 5.0))
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        del event
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(self._color)
+        pen.setWidthF(self._STROKE_WIDTH)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        rect = QRectF(self.rect()).adjusted(3.0, 3.0, -3.0, -3.0)
+        icon_name = self._icon_name.strip().lower()
+        if icon_name == "sources":
+            self._draw_folder(painter, rect)
+        elif icon_name == "display":
+            self._draw_display(painter, rect)
+        elif icon_name == "transitions":
+            self._draw_transitions(painter, rect)
+        elif icon_name == "widgets":
+            self._draw_widgets(painter, rect)
+        elif icon_name == "visualizers":
+            self._draw_visualizers(painter, rect)
+        elif icon_name == "accessibility":
+            self._draw_accessibility(painter, rect)
+        elif icon_name == "themes":
+            self._draw_themes(painter, rect)
+        elif icon_name == "about":
+            self._draw_about(painter, rect)
+        else:
+            self._draw_about(painter, rect)
+
+
 class TabButton(QPushButton):
-    """Navigation tab with separately rendered icon and text content.
+    """Navigation tab with a retained vector icon and renderer-owned text."""
 
-    The QPushButton continues to own interaction/state and keeps its full text
-    value for tests/accessibility. Painting the icon and label as dedicated
-    child widgets avoids Windows colour-emoji clipping and lets the existing
-    crisp QLabel shadow renderer handle the text without duplicating the icon.
-    """
-
-    _ICON_PIXEL_SIZE = 17  # Previously inherited the 15px tab QSS: +2px.
-    _ICON_BOX_SIZE = 26
-    _ICON_HOST_SIZE = 30  # Breathing room for the glyph + renderer-owned shadow.
+    _ICON_HOST_SIZE = 30
     _TEXT_POINT_SIZE = 12.25  # 15px at 96 DPI is 11.25pt: requested +1pt.
     _MINIMUM_HEIGHT = 52  # Previous minimum was 50px: requested +2px.
 
     def __init__(
         self,
         text: str,
-        icon_text: str = "",
+        icon_name: str = "",
         parent: Optional[QWidget] = None,
     ):
-        """
-        Initialize tab button.
-
-        Args:
-            text: Button text.
-            icon_text: Icon text (emoji or symbol).
-            parent: Parent widget.
-        """
+        """Initialize the tab button using a semantic vector icon name."""
         super().__init__(parent)
 
-        # Preserve the historical public button text even though the native
-        # label is suppressed in paintEvent in favour of unclipped children.
         self._tab_label_text = text
-        self._tab_icon_text = icon_text
-        self.setText(f"{icon_text} {text}" if icon_text else text)
+        self._tab_icon_name = icon_name
+        self.setText(text)
         self.setAccessibleName(text)
         self.setCheckable(True)
         self.setObjectName("tabButton")
         self.setMinimumHeight(self._MINIMUM_HEIGHT)
 
-        # The parent button's QSS still owns its translucent body/border. Child
-        # content is positioned to match the existing 20px left padding plus
-        # the tab's 3px left margin.
         content_layout = QHBoxLayout(self)
         content_layout.setContentsMargins(23, 0, 20, 0)
         content_layout.setSpacing(6)
 
-        if icon_text:
+        self._tab_icon_host: Optional[QWidget] = None
+        self._tab_icon_widget: Optional[_SettingsTabVectorIcon] = None
+        if icon_name:
             self._tab_icon_host = QWidget(self)
             self._tab_icon_host.setAttribute(
                 Qt.WidgetAttribute.WA_TransparentForMouseEvents,
@@ -266,34 +424,14 @@ class TabButton(QPushButton):
                 self._ICON_HOST_SIZE,
             )
 
-            self._tab_icon_label = QLabel(icon_text, self._tab_icon_host)
-            # Construction owns the icon; control_shadow.py owns its shadow.
-            self._tab_icon_label.setProperty("settingsNavIcon", True)
-            self._tab_icon_label.setAttribute(
-                Qt.WidgetAttribute.WA_TransparentForMouseEvents,
-                True,
-            )
-            self._tab_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._tab_icon_label.setGeometry(
-                0,
-                0,
-                self._ICON_BOX_SIZE,
-                self._ICON_BOX_SIZE,
-            )
-            icon_font = QFont("Segoe UI Emoji")
-            icon_font.setFamilies(
-                [
-                    "Segoe UI Emoji",
-                    "Noto Color Emoji",
-                    "Apple Color Emoji",
-                    "Segoe UI Symbol",
-                ]
-            )
-            icon_font.setPixelSize(self._ICON_PIXEL_SIZE)
-            self._tab_icon_label.setFont(icon_font)
-            self._tab_icon_label.setStyleSheet(
-                "background: transparent; border: none; padding: 0px; margin: 0px;"
-            )
+            icon_layout = QHBoxLayout(self._tab_icon_host)
+            icon_layout.setContentsMargins(0, 0, 0, 0)
+            icon_layout.setSpacing(0)
+            self._tab_icon_widget = _SettingsTabVectorIcon(icon_name, self._tab_icon_host)
+            self._tab_icon_widget.setProperty("settingsNavIcon", True)
+            icon_layout.addStretch()
+            icon_layout.addWidget(self._tab_icon_widget, 0, Qt.AlignmentFlag.AlignCenter)
+            icon_layout.addStretch()
 
             content_layout.addWidget(
                 self._tab_icon_host,
@@ -339,14 +477,16 @@ class TabButton(QPushButton):
             weight = QFont.Weight.DemiBold
 
         color = _SETTINGS_THEME.color(token)
+        resolved_qcolor = QColor(color.r, color.g, color.b, color.a)
         self._tab_text_label.setStyleSheet(
             "background: transparent; border: none; padding: 0px; margin: 0px;"
             f" color: rgba({color.r}, {color.g}, {color.b}, {color.a});"
         )
+        if self._tab_icon_widget is not None:
+            self._tab_icon_widget.set_icon_color(resolved_qcolor)
         font = self._tab_text_label.font()
         font.setWeight(weight)
         self._tab_text_label.setFont(font)
-
 
     def changeEvent(self, event) -> None:  # type: ignore[override]
         super().changeEvent(event)
@@ -916,15 +1056,14 @@ class SettingsDialog(QDialog):
         sidebar_layout.setSpacing(5)
         
         # Tab buttons
-        self.sources_tab_btn = TabButton("Sources", "📁")
-        self.display_tab_btn = TabButton("Display", "🖥")
-        self.transitions_tab_btn = TabButton("Transitions", "✨")
-        self.widgets_tab_btn = TabButton("Widgets", "🕐")
-        self.visualizers_tab_btn = TabButton("Visualizers", "📊")
-        # Accessibility icon: wheelchair symbol for universal accessibility
-        self.accessibility_tab_btn = TabButton("Accessibility", "♿")
-        self.themes_tab_btn = TabButton("Themes", "🎨")
-        self.about_tab_btn = TabButton("About", "ℹ️")
+        self.sources_tab_btn = TabButton("Sources", "sources")
+        self.display_tab_btn = TabButton("Display", "display")
+        self.transitions_tab_btn = TabButton("Transitions", "transitions")
+        self.widgets_tab_btn = TabButton("Widgets", "widgets")
+        self.visualizers_tab_btn = TabButton("Visualizers", "visualizers")
+        self.accessibility_tab_btn = TabButton("Accessibility", "accessibility")
+        self.themes_tab_btn = TabButton("Themes", "themes")
+        self.about_tab_btn = TabButton("About", "about")
 
         self._tab_button_by_key = {
             "sources": self.sources_tab_btn,

@@ -33,8 +33,10 @@ def test_system_stats_uses_shared_content_extent_reflow_contract() -> None:
     start = descriptors.index('widget_id="system_stats"')
     block = descriptors[start:descriptors.index('WidgetRuntimeDescriptor(', start + 20)]
     assert 'content_extent_axes=("horizontal", "vertical")' in block
+    assert 'content_extent_minimum_size=(440, 190)' in block
 
     model = _text("rendering/quick/widgets/system_stats.py")
+    assert "resolved_height = max(190, min(3000, resolved_height))" in model
     assert "def set_content_extent(" in model
     assert 'payload.get("content_extent")' in model
     assert "set_custom_layout_size_payload_handler" in model
@@ -42,6 +44,9 @@ def test_system_stats_uses_shared_content_extent_reflow_contract() -> None:
     qml = _text("rendering/quick/qml/SystemStatsPresentation.qml")
     assert "visibleMetricCount" in qml
     assert "metricPanelHeight" in qml
+    assert "Math.max(statsRoot.systemStatsModel.baseAuthoredHeight," in qml
+    assert "Math.abs(width - systemStatsModel.authoredWidth) > 0.5" in qml
+    assert "Math.abs(height - systemStatsModel.authoredHeight) > 0.5" in qml
     assert "valueLaneWidth" in qml
     assert "systemStatsModel.showCpu" in qml
     assert "systemStatsModel.showMemory" in qml
@@ -84,8 +89,11 @@ def test_system_stats_metrics_are_one_editable_stack_with_authored_flipped_child
             assert f'{helper}("{id_}")' not in qml
     assert qml.count('objectName: "systemStatsCustomMetricPanelRoleTarget"') == 1
     assert 'metricGap: canonicalMetricGap * childHeightScale("metric_panels")' in qml
-    assert "visibleMetricCount * statsRoot.metricPanelHeight" in qml
-    assert "visibleMetricCount - 1) * statsRoot.metricGap" in qml
+    assert "visibleMetricCount * metricPanelHeight" in qml
+    assert "visibleMetricCount - 1) * metricGap" in qml
+    assert "paintedMetricCount" in qml
+    assert "metricPaintBottom" in qml
+    assert "height: statsRoot.visibleMetricStackHeight" in qml
     assert qml.count("function metricRoleX(roleId, panelWidth, roleWidth)") == 1
     # Every real metric still shares the same QML flip rails, with no extra
     # delegate for its label, value, accent, detail or track.

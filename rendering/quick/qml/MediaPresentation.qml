@@ -240,9 +240,9 @@ OverlayWidget {
         - canonicalProgressBandHeight
         - (mediaModel.controlsBandAvailable ? canonicalControlsHeight + 12.0 : 0.0)
     readonly property real canonicalSystemMuteHeight:
-        (canonicalCardContentWidth < 210.0 ? 30.0 : 36.0) * 0.75
+        (canonicalCardContentWidth < 210.0 ? 30.0 : 36.0) * 0.54675
     readonly property real canonicalSystemMuteWidth:
-        (canonicalCardContentWidth < 210.0 ? 32.0 : 40.0) * 0.75
+        (canonicalCardContentWidth < 210.0 ? 32.0 : 40.0) * 0.54675
     // Only the intrinsic Settings-authored artwork width is canonical.  The
     // actual on-card width/height remain derived from the live authored rails.
     readonly property real canonicalArtworkWidth:
@@ -994,6 +994,10 @@ OverlayWidget {
                     height: mediaRoot.canonicalSystemMuteHeight * fitScale
                     width: mediaRoot.canonicalSystemMuteWidth * fitScale
                     anchors.verticalCenter: parent.verticalCenter
+                    // The transport bar's optical center sits just above its
+                    // geometric center. Keep this presentation-only correction
+                    // separate from CUSTOM's authored X/Y offset.
+                    anchors.verticalCenterOffset: -2.0
                     anchors.right: parent.right
                     anchors.rightMargin: 4.0
                     transform: Translate {
@@ -1008,7 +1012,7 @@ OverlayWidget {
                     ].join("|")
                     radius: Math.max(8.0, Math.min(12.0, height * 0.32))
                     border.width: mediaRoot.scaleAwareStrokeWidth(1.25)
-                    border.color: mediaRoot.mediaModel.systemMuteBorderColor
+                    border.color: mediaRoot.mediaModel.controlsBorderColor
                     scale: systemMuteTap.pressed ? 1.06 : 1.0
                     property real feedbackOpacity: 0.0
                     gradient: Gradient {
@@ -1034,15 +1038,6 @@ OverlayWidget {
                                 mediaRoot.mediaModel.systemMuteBackgroundColor.a * 0.85
                             )
                         }
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: 3.0
-                        radius: Math.max(1.0, parent.radius - 1.0)
-                        color: "transparent"
-                        border.width: mediaRoot.scaleAwareStrokeWidth(1.0)
-                        border.color: mediaRoot.mediaModel.systemMuteInnerBorderColor
                     }
 
                     Canvas {

@@ -25,8 +25,10 @@ flight, and final release fences completion and closes/clears source ownership. 
 The retained card can show CPU load, RAM percentage plus used/total, system uptime and aggregate Network ↓/↑ throughput.
 Each metric has a canonical default-on presentation/monitoring checkbox. Disabled metrics are skipped inside the **same
 single sampler pulse** rather than spawning alternate samplers or merely hiding work. Enabled metric panels reflow through
-the shared horizontal/vertical `content_extent`: extra width opens text/value lanes, extra height distributes panel
-spacing, and direct-axis CUSTOM changes remain presentation state rather than Settings geometry. The metric-panel outline
+the shared horizontal/vertical `content_extent`: extra width opens text/value lanes, extra height above the authored baseline distributes panel
+spacing, and reducing height hides complete trailing panels rather than shrinking
+all four panels. Direct-axis CUSTOM changes remain presentation state rather
+than Settings geometry. The metric-panel outline
 uses the scale-aware 1.25 px baseline so it visually joins the authored 5 px accent block without changing that accent.
 
 The card uses semantic Widget Theme roles, ordinary stacking/global-CUSTOM normalization and an original packaged
@@ -278,7 +280,7 @@ System Stats uses the same ordinary retained-card rules as the mature widgets:
 
 - one retained Quick component inside the existing engine/window;
 - stable item identity;
-- descriptor uses the shared ordinary uniform outer-resize contract plus horizontal/vertical `content_extent` axes;
+- descriptor uses the shared uniform **corner/wheel** outer-resize contract plus horizontal/vertical `content_extent` axes. A side-handle changes only the requested logical axis; the QML single uniform transform is admitted only when both outer axes differ from the logical extent, so Y-only compaction cannot accidentally uniformly shrink the panel internals;
 - side extent reflows enabled metric panels only; corners/wheel remain uniform and shared Restore Size clears extent back
   to authored geometry without changing X/Y/display;
 - shared whole-card normalization/40% floor outside family side-drag policy;
@@ -303,6 +305,8 @@ painted stroke. `metric_panels` is **one editable block** enclosing the entire v
 stack and the gaps between enabled cards. Moving or scaling it projects the same geometry record onto all enabled
 cards and scales their shared gaps with their height. The metric internals retain their QML-authored positions
 relative to their own card; they do not have their own CUSTOM Edit handles or persisted role geometries.
+
+**Y compaction and complete-panel admission:** the selected metrics remain the canonical monitored set; reducing card height or resizing the grouped metric block must not change Settings or sampler selection. The family keeps each panel's baseline height/step while the logical height contracts, rather than recomputing panel height from the new outer extent; a taller-than-baseline card may expand panel spacing/height. It admits only complete leading panels that fit above the authored bottom margin. An incomplete trailing card is hidden as a whole, and reappears when the Y extent increases. This presentation-only count does **not** feed back into panel height, preferred outer size, a parent-growth requirement or the shared CUSTOM owner. The one retained grouped Edit target follows the requested stack continuously up to the same card paint boundary, retaining a resize surface while later panels are hidden; its visible rectangle may reserve empty space for a hidden trailing card. There is no per-panel handle, repeated delegate creation, poll or new persistence field. Save/reopen must agree with that painted boundary, not an unclipped logical stack.
 
 The three-role semantic array remains stable when the metric subset, panel extent or authored normalization changes. Its retained selected Edit delegate reads `childNormalizationWidth`/`childNormalizationHeight` on the family root; repeated CPU/Memory/Uptime/Network samples do not reconstruct Edit roles. All metric cards share the same family-owned group reflow and the shared CUSTOM owner persists only its block geometry.
 

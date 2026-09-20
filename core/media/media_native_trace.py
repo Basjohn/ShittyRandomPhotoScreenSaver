@@ -4,8 +4,8 @@ Bounded instrumentation for the dual-display *replacement-generation* native
 termination recorded in ``H_Post_Cutover_Runtime_Reality_Corrections.md`` §3:
 the old two-display generation tears down cleanly, the replacement starts, screen
 0 completes, and the process dies during screen 1's Media/native activation
-(``Windows GSMTC controller initialized`` -> Media poll timer -> comtypes/Core
-Audio release), with no clean Python return.
+(``Windows GSMTC controller initialized`` -> legacy Media mute/source admission
+-> Core Audio release), with no clean Python return.
 
 Because the failure is native, the decisive evidence is *which* Media component
 reaches *which* stage last, on *which thread*, in *which runtime generation*.

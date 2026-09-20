@@ -127,6 +127,8 @@ class _SharedMediaVolumeRuntimeOwner:
         self._write_request_id = 0
 
         self._browser_process: str | None = None
+        self._last_session_source_identity = ""
+        self._session_listener = None
         self._supported = False
         self._available = self._controller_is_available()
         self._level = 1.0
@@ -253,6 +255,7 @@ class _SharedMediaVolumeRuntimeOwner:
         if list(self._active_leases) or not self._running:
             return
         self._running = False
+        self._stop_session_listener()
         self._owner_generation += 1
         self._invalidate_pending_work()
 
@@ -262,6 +265,8 @@ class _SharedMediaVolumeRuntimeOwner:
             return False
         self._provider = normalized
         self._browser_process = None
+        self._last_session_source_identity = ""
+        self._stop_session_listener()
         self._invalidate_target()
         self._configure_target(normalized, "")
         self._publish(source="provider")
@@ -273,7 +278,22 @@ class _SharedMediaVolumeRuntimeOwner:
         self, provider: object, source_app_user_model_id: object
     ) -> bool:
         normalized = preserve_provider_setting(provider)
-        if normalized != self._provider or normalized != "spotify_browser":
+        if normalized != self._provider:
+            return False
+        if normalized != "spotify_browser":
+            # Desktop provider identification remains exact. When the initial
+            # lease started before a local audio session existed, a later
+            # source-identity event can admit the listener once, without
+            # a retry timer or scanning during playback/render updates.
+            from core.media.provider_registry import provider_matches_source_app_user_model_id
+            identity = str(source_app_user_model_id or "").strip().casefold()
+            if not identity or not provider_matches_source_app_user_model_id(normalized, identity):
+                return False
+            if identity == getattr(self, "_last_session_source_identity", ""):
+                return False
+            self._last_session_source_identity = identity
+            if self._running and self._session_listener is None:
+                self._start_session_listener()
             return False
         browser_process = get_provider_process_exe_name_for_source(
             normalized, source_app_user_model_id
@@ -283,6 +303,7 @@ class _SharedMediaVolumeRuntimeOwner:
             and self._supported == (browser_process is not None)
         ):
             return False
+        self._stop_session_listener()
         self._invalidate_target()
         configured = self._configure_target(normalized, source_app_user_model_id)
         self._browser_process = browser_process if configured else None
@@ -298,6 +319,9 @@ class _SharedMediaVolumeRuntimeOwner:
         if not force and now - self._last_read_request_ts < self._READ_THROTTLE_SEC:
             return False
         self._last_read_request_ts = now
+        # Source-driven admission only: a selected session may have appeared
+        # since activation. A successful listener is never re-enumerated.
+        self._start_session_listener()
         self._read_request_id += 1
         request_id = self._read_request_id
         self._read_in_flight_request = request_id
@@ -390,6 +414,7 @@ class _SharedMediaVolumeRuntimeOwner:
             return
         self._running = False
         self._retired = True
+        self._stop_session_listener()
         self._owner_generation += 1
         self._invalidate_pending_work()
         self._active_leases.clear()
@@ -488,10 +513,14 @@ class _SharedMediaVolumeRuntimeOwner:
             or owner_generation != self._owner_generation
             or target_generation != self._target_generation
             or request_id != self._read_request_id
+            or self._pending_volume is not None
             or not isinstance(value, float)
         ):
             return
-        self._level = float(max(0.0, min(1.0, value)))
+        bounded = float(max(0.0, min(1.0, value)))
+        if abs(bounded - self._level) <= 0.000001:
+            return
+        self._level = bounded
         self._publish(source="read")
 
     def _flush_pending(
@@ -581,6 +610,63 @@ class _SharedMediaVolumeRuntimeOwner:
         except Exception:
             logger.debug("[MEDIA_VOLUME_RUNTIME] Volume write failed", exc_info=True)
             return False
+
+    def _start_session_listener(self) -> None:
+        """Activate at most one selected-session callback per shared owner.
+
+        A failed/no-session binding is retried only at a later source-driven
+        sync or explicit lifecycle change, never by a timer or scan loop.
+        Standalone injected controllers intentionally retain their test API.
+        """
+        if (self._retired or not self._running or not self._supported
+                or not self._available or self._session_listener is not None):
+            return
+        targets = getattr(self._controller, "process_targets", ())
+        if not targets:
+            return
+        try:
+            from core.media.session_volume_listener import SessionVolumeListener
+            listener = SessionVolumeListener(
+                on_volume=self._on_session_volume,
+                on_disconnected=self._on_session_disconnected,
+            )
+            if listener.start(tuple(targets)):
+                self._session_listener = listener
+            else:
+                listener.close()
+        except Exception:
+            # A failed listener must not retire the working volume controller.
+            logger.debug("[MEDIA_VOLUME_RUNTIME] Session listener unavailable", exc_info=True)
+
+    def _stop_session_listener(self) -> None:
+        listener, self._session_listener = self._session_listener, None
+        if listener is not None:
+            try:
+                listener.close()
+            except Exception:
+                logger.debug("[MEDIA_VOLUME_RUNTIME] Session listener retirement failed", exc_info=True)
+
+    def _on_session_volume(self, level: float, muted: bool) -> None:
+        """GUI-apartment projection of one real session notification."""
+        if self._retired or not self._running or not self._supported:
+            return
+        # An external notification must never write back to Core Audio.
+        # Keep an active user's still-debounced slider adjustment authoritative.
+        if self._pending_volume is not None:
+            return
+        bounded = max(0.0, min(1.0, float(level)))
+        if abs(bounded - self._level) <= 0.000001:
+            return
+        self._read_request_id += 1  # Fence older worker-read completions.
+        self._read_in_flight_request = 0
+        self._level = bounded
+        self._publish(source="session_event")
+
+    def _on_session_disconnected(self) -> None:
+        self._stop_session_listener()
+        # No periodic rebinding. The next explicit media-source admission can
+        # resolve a newly created session, on its own source epoch.
+        self._invalidate_pending_work()
 
     def _publish(self, *, source: str, notify: bool = True) -> None:
         self._revision += 1

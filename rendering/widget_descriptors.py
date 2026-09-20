@@ -2048,6 +2048,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="ordinary_uniform",
         content_extent_axes=("horizontal", "vertical"),
+        content_extent_minimum_size=(440, 190),
         custom_child_roles=(
             CustomChildRoleDescriptor(
                 "header",

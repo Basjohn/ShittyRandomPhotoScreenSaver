@@ -415,9 +415,11 @@ class SystemStatsPresentationModel(QObject):
             resolved_height = int(round(float(height)))
         except (TypeError, ValueError):
             return False
-        enabled_count = max(1, self.enabled_metric_count)
+        # A Y-only resize may hide trailing *complete* panels.  Reserving a
+        # minimum for every enabled metric prevents the requested compaction,
+        # and makes the owner hit its floor while the card appears to shrink.
         resolved_width = max(440, min(1800, resolved_width))
-        resolved_height = max(110 + enabled_count * 58, min(3000, resolved_height))
+        resolved_height = max(190, min(3000, resolved_height))
         extent = (resolved_width, resolved_height)
         if extent == self._content_extent:
             return False
