@@ -99,6 +99,7 @@ def test_widget_settings_section_descriptors_default_order():
         "gmail",
         "steam",
         "system_stats",
+        "system_audio_osd",
         "defaults",
     ]
 
@@ -966,6 +967,7 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
         "abandonment_issues",
         "friend_pulse",
         "system_stats",
+        "system_audio_osd",
     }
     assert {
         widget_id

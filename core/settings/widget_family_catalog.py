@@ -134,6 +134,13 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
         description="Steam progress, achievement pulse, abandonment and friend cards.",
     ),
     WidgetFamilyDescriptor(
+        family_id="system_audio_osd",
+        label="System Audio OSD",
+        member_widget_ids=("system_audio_osd",),
+        settings_section_id="system_audio_osd",
+        description="Opt-in event-driven master-volume and mute on-screen display.",
+    ),
+    WidgetFamilyDescriptor(
         family_id="system_stats",
         label="System Stats",
         member_widget_ids=("system_stats",),

@@ -855,6 +855,39 @@ class SystemStatsFamilyAdapter:
             raise
 
 
+class SystemAudioOSDFamilyAdapter:
+    """Opt-in retained OSD consuming only the shared system-audio service."""
+
+    @property
+    def family_id(self) -> str:
+        return "system_audio_osd"
+
+    def enabled_instance_ids(self, widgets_config: Mapping[str, object]) -> tuple[str, ...]:
+        return _enabled_from_candidates(widgets_config, ("system_audio_osd",))
+
+    def build(self, *, widget_id: str, widgets_config: Mapping[str, object],
+              host: OrdinaryWidgetPresentationHost, geometry: OverlayWidgetGeometry,
+              display_bounds: OverlayWidgetGeometry, display_identity: str,
+              shadow_values: Mapping[str, object], runtime_manager: Any,
+              runtime_generation: int | None = None) -> BoundFamilyPresentation | None:
+        from .system_audio_osd import (SystemAudioOSDConfig,
+            SystemAudioOSDPresentationModel, RetainedSystemAudioOSDPresentation)
+        model = SystemAudioOSDPresentationModel(
+            SystemAudioOSDConfig.from_widgets_mapping(widgets_config),
+            runtime_generation=runtime_generation,
+        )
+        if not _attach_runtime_service(runtime_manager, widget_id, model, widgets_config):
+            model.retire()
+            return None
+        try:
+            return RetainedSystemAudioOSDPresentation(
+                host=host, model=model, geometry=geometry)
+        except Exception:
+            runtime_manager.retire_widget_service(widget_id)
+            model.retire()
+            raise
+
+
 class MediaFamilyAdapter:
     """Adapter for the single-card Media family (media + volume + mute leases).
 
@@ -1010,6 +1043,7 @@ def default_ordinary_family_adapters(
         ),
         FriendPulseFamilyAdapter(on_steam_action_requested=steam_open_requested),
         SystemStatsFamilyAdapter(),
+        SystemAudioOSDFamilyAdapter(),
     )
 
 
@@ -1025,6 +1059,7 @@ __all__ = [
     "OrdinaryFamilyPresentationBinder",
     "RedditFamilyAdapter",
     "SystemStatsFamilyAdapter",
+    "SystemAudioOSDFamilyAdapter",
     "WeatherFamilyAdapter",
     "default_ordinary_family_adapters",
 ]
