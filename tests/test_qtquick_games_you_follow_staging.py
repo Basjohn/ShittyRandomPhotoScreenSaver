@@ -1,6 +1,7 @@
 """G2 retained presentation gate. No live Steam/network/source admission."""
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -305,7 +306,9 @@ def test_followed_story_action_uses_current_private_slot_and_retirement_fence(qt
 
 
 def test_followed_story_cap_reports_source_overflow_without_replacing_retained_slots(qt_app) -> None:
-    model = GamesYouFollowPresentationModel(FollowedPresentationConfig(story_cap=3))
+    model = GamesYouFollowPresentationModel(
+        replace(FollowedPresentationConfig.from_widgets_mapping({}), story_cap=3)
+    )
     rows = model.storyRows
     assert model.accept_snapshot(_snapshot(8))
     assert model.selectedStoryCount == 3 and model.omittedBySetting == 5

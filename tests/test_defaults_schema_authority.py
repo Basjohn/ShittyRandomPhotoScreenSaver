@@ -796,3 +796,30 @@ def test_defaults_authority_audit_covers_tooling_and_root_entrypoints() -> None:
     assert "main.py" in scanned
     assert "tests/test_defaults_schema_authority.py" not in scanned
 
+
+def test_repository_has_no_defaults_authority_violations() -> None:
+    """The whole tree must pass the same audit the Build Foundry preflight runs.
+
+    Build Foundry (and the build scripts' preflight tool) block on every
+    ``audit_defaults_authority`` issue, but that gate only fired at build time.
+    A new widget/config could ship a second product-default authority -- e.g. a
+    ``*PresentationConfig`` with local field defaults, or a call-site literal
+    fallback on a canonical dotted key -- and nobody would notice until a build
+    was attempted. Running the real audit here catches those source violations in
+    the normal test loop instead.
+
+    NOTE: "Regen Defaults" only fixes the *derived* subset (the JSON snapshot and
+    the two .sst documents). Source-level violations reported below are NOT
+    regenerable -- they must be fixed at the owning source (route product state
+    through the canonical authority / a resolved projection). Snapshot/SST
+    staleness is additionally covered by
+    ``test_defaults_snapshot_tooling_is_headless_and_exact``.
+    """
+    from core.settings.defaults_authority_audit import audit_defaults_authority
+
+    issues = audit_defaults_authority(ROOT)
+    assert not issues, (
+        "defaults authority violations (Build Foundry would block on these):\n"
+        + "\n".join(issue.render() for issue in issues)
+    )
+
