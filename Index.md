@@ -12,11 +12,11 @@ exact current source
 
 `Current_Plan.md` owns current work admission and sequence. `Spec.md` owns durable product/architecture. `Docs/Historical_Bugs/` is the only intentional historical-document collection; ordinary chronology and retired decompositions belong in source control rather than the live docs tree.
 
-## Active widget development and regression lessons
+## Current product and regression references
 
-- `Current_Plan.md` is a **live checklist**: accepted 85-test multi-family and 25-test retained-child-guide baseline; current bounded wider churn audit; queued opt-in OSD and Games You Follow feasibility/implementation. It must not retain checkpoint chronology.
-- `Docs/Future_Work/System_Volume_OSD.md` and `Docs/Future_Work/Steam_Games_You_Follow.md` are the **live feature decompositions**; `FWPlan.md` is only a backlog router. A new transition integrates through the current canonical registry/host, with self-contained lazy resources, not a parallel sandbox runtime.
-- `Docs/Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md` records the resolved Edit geometry/role/guide pitfalls and test-oracle failures; the current acceptance queue remains in `Current_Plan.md`.
+- `Current_Plan.md` contains only active work; closed Games You Follow and OSD work is not an implementation queue.
+- `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md` describe the current product contracts. `FWPlan.md` routes deferred feature ideas, not completed products.
+- `Docs/Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md` records durable Edit paint/role and test-oracle failures; use the live source and targeted tests for any new defect.
 
 ## Directory roles
 
@@ -48,8 +48,8 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Bubble temporal fidelity | `Docs/Guardrails/Bubble_Temporal_Fidelity.md` |
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
-| ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Contracts.md` → Ordinary CUSTOM geometry / normalization |
-| current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for outstanding native gates |
+| ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Guides/Custom_Child_Geometry.md` and `Docs/Guides/Custom_Child_Placement_And_Headers.md` |
+| current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for newly opened gates |
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
@@ -66,6 +66,8 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | compatibility / schema-migration bridges | `Docs/Architecture/Persisted_Input_Compatibility.md` |
 | broad deferred features | `Future_Work.md` |
 | dormant future ordering | `FWPlan.md` |
+| Games You Follow product/source/CUSTOM | `Docs/Reference/Steam_Games_You_Follow.md` |
+| system master-volume OSD | `Docs/Reference/System_Volume_OSD.md` |
 
 ## Performance/freshness baseline
 

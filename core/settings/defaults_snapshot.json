@@ -1654,6 +1654,7 @@
       "show_connection_info_icon": true
     },
     "steam_progress": {
+      "artwork_shape": "wide",
       "bg_color": [
         35,
         35,
@@ -1677,18 +1678,17 @@
       "enabled": false,
       "font_family": "Inter",
       "font_size": 14,
+      "headline_alignment": "left",
+      "headline_truncation_chars": 180,
       "margin": 30,
       "monitor": "1",
       "position": "Top Right",
       "preferred_height": 360,
       "preferred_width": 520,
-      "show_background": true,
-      "artwork_shape": "wide",
       "show_artwork": true,
+      "show_background": true,
       "show_refresh_frame": false,
-      "story_cap": 8,
-      "headline_truncation_chars": 180,
-      "headline_alignment": "left"
+      "story_cap": 8
     },
     "system_audio_osd": {
       "accent_color": [
@@ -1716,13 +1716,13 @@
         252,
         245
       ],
-      "enabled": false,
+      "enabled": true,
       "font_family": "Inter",
       "font_size": 20,
       "inactivity_ms": 1800,
       "margin": 30,
       "monitor": "1",
-      "position": "Bottom Center",
+      "position": "Top Center",
       "preferred_height": 68,
       "preferred_width": 380,
       "show_background": true,

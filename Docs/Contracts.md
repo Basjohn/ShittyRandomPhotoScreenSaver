@@ -247,7 +247,7 @@ For durable provider caches, freshness controls refresh admission and cached/sta
 cache record remains usable indefinitely and is the preferred fallback after network/private/rate-limit/provider failure.
 Failed, malformed or stale-generation responses never overwrite/freshen last-good evidence. Deletion requires explicit
 user/account/cache reset, schema rejection/corruption, or a proven identity change. Do not substitute semantically
-different data simply because the intended source is stale; Games You Follow, if admitted, may not replace stale follows
+different data simply because the intended source is stale; Games You Follow must not replace stale follows
 with owned/recent/wishlist games.
 
 ### Startup composition
@@ -270,8 +270,8 @@ The desktop snapshot is never queue/history/current-image semantic truth and is 
 
 ### Current feature admission and selected-Edit churn boundary
 
-- New optional OSD consumes the existing system-audio authority, not another endpoint/service: prove callback registration/apartment/default-device rebind and bound GUI latest-wins publication before product code. The existing mute runtime's admitted **30-second poll** and module-import endpoint lifetime are real current behavior; any change to them needs Media coexistence and native lifetime tests. OSD disabled must add no callback/Quick/timer cost; its enabled global-CUSTOM Edit shell is an ordinary widget instance.
-- Games You Follow is gated by an existing-key `GetGamesFollowed/v1` feasibility result. Until proved, do not create a new source owner or enable the unfinished `steam_progress` card. After admission it inherits shared Steam coordinator, opaque account-private non-expiring last-good cache, ordinary retained Quick/card/CUSTOM authority and stable singleton Edit roles. The card never fabricates follows from owned or recently played games.
+- The implemented opt-in `system_audio_osd` consumes the shared GUI-apartment Core Audio source, not another endpoint, poll or Qt window. Media and OSD retain independent display admission; endpoint lifetime follows the combined live consumer count. One event-owned hide deadline/fade belongs to each active OSD presentation. See `Docs/Reference/System_Volume_OSD.md`.
+- The implemented default-off Games You Follow family retains the `steam_progress` identity. Only linked-account `GetGamesFollowed/v1` supplies membership; bounded per-game news is ranked newest-first from validated discovered results and kept in a profile-private last-good per-app cache. Initial complete coverage persists; ordinary maintenance advances a saved cursor by at most eight apps per session instead of redoing the full sweep. One generation-shared source/deadline serves displays, with a retained Qt model and stable grouped CUSTOM roles. See `Docs/Reference/Steam_Games_You_Follow.md`.
 - A selected child role is stable identity, not an array of changing normalization/visibility facts. Its selected-only delegate observes named live family normalization and applied QML transform dependencies; it compares **actual clipped paint** to Edit bounds without non-bindable transform-list reads. Child snap guides are retained per axis. Parent extent cannot be republished by child occupancy. See the authoring guide and historical R-88 for failure modes and test-oracle cautions.
 
 ## Actions / images

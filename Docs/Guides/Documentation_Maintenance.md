@@ -12,7 +12,7 @@ SRPSS documentation is organized by **current role**, not by the phase/checkpoin
 | `Docs/Guardrails/` | binding invariants and preflight contracts |
 | `Docs/Guides/` | maintained how-to/change procedures |
 | `Docs/Reference/` | current lookup/reference/harness material |
-| `Docs/Future_Work/` | genuinely pending or operator-activated work only |
+| `Docs/Future_Work/` | genuinely pending or operator-activated work only; completed product contracts belong in `Docs/Reference/` or `Spec.md` |
 | `Docs/Historical_Bugs/` | permanent regression, root-cause and failed-method evidence |
 | `Docs/TestSuite.md` | live test inventory/status authority |
 | `Docs/Architecture/Persisted_Input_Compatibility.md` | persisted-input compatibility-bridge guard (user-data protection, horizon-gated — not a backlog) |

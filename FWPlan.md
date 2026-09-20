@@ -2,10 +2,9 @@
 
 **Authority:** `Current_Plan.md` owns active work. This router is an open-item index, not a checkpoint log, ordering override or duplicate architecture. A user request may promote a named item immediately. Check a future item only when implemented/accepted, then remove it from this queue and leave durable detail in `Spec.md` / relevant reference.
 
-## Promoted to the current plan (not dormant backlog)
+## Active work
 
-- [ ] **Steam Games You Follow:** active full-product audit and cumulative Windows/physical acceptance in [current contract](Docs/Future_Work/Steam_Games_You_Follow.md). Use its accepted real followed source, not a substitute or a four-game sample presented as a complete feed.
-- [ ] **Bounded cross-project churn audit:** current A1–A4. Accepted child guides and 85+25 Windows test results are baseline, not outstanding re-acceptance.
+See `Current_Plan.md`. Games You Follow and the system-audio OSD are implemented products, not backlog items; consult their references only when a concrete defect or extension is requested.
 
 ## Dormant product/effect options (not permission to implement automatically)
 

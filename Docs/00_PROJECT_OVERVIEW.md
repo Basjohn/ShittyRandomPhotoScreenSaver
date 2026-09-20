@@ -33,7 +33,7 @@ Performance/freshness changes are evidence-gated and symptom-driven. Treat the a
 
 ## Current feature-extension boundary
 
-The current live checklist (`Current_Plan.md`) routes the wider churn audit and two next widgets: an opt-in master-volume/mute OSD and feasibility-gated Steam Games You Follow. Their independently owned live decompositions are `Docs/Future_Work/System_Volume_OSD.md` and `Docs/Future_Work/Steam_Games_You_Follow.md`. Neither is implemented by adding this documentation. Both must use the one ordinary retained Quick host, shared CUSTOM owner, stable Edit semantics, and lifecycle/Settings authority already used by current cards. New transitions instead enter the canonical transition registry/host with lazy, self-contained implementations rather than a second experimental runtime.
+Games You Follow and the opt-in master-volume/mute OSD are implemented ordinary retained Quick widgets. Their current source, cache, presentation and lifecycle requirements live in `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md`; they do not need a new presentation stack, Settings authority or implementation queue. `Current_Plan.md` contains only currently active work. New transitions instead enter the canonical transition registry/host with lazy, self-contained implementations rather than a second experimental runtime.
 
 ## Visualizer geometry
 
