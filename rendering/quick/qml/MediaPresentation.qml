@@ -993,11 +993,10 @@ OverlayWidget {
                     )
                     height: mediaRoot.canonicalSystemMuteHeight * fitScale
                     width: mediaRoot.canonicalSystemMuteWidth * fitScale
+                    // The border and glyph share the transport band's true
+                    // geometric centre. Do not stack optical Y nudges on the
+                    // existing authored child translation or pressed transform.
                     anchors.verticalCenter: parent.verticalCenter
-                    // The transport bar's optical center sits just above its
-                    // geometric center. Keep this presentation-only correction
-                    // separate from CUSTOM's authored X/Y offset.
-                    anchors.verticalCenterOffset: -2.0
                     anchors.right: parent.right
                     anchors.rightMargin: 4.0
                     transform: Translate {

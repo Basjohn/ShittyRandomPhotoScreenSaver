@@ -457,6 +457,27 @@ class VisualizerClipHost:
         self._vao = 0
 
     @staticmethod
+    def prepare_unclipped_render_state(
+        render_state: QSGRenderNode.RenderState,
+    ) -> None:
+        """Reconcile Qt's current clip before an unclipped mode draws.
+
+        Qt's render-state clip is authoritative.  The previous GL draw may
+        leave a scissor or stencil enabled for an ordinary widget/card even
+        when this render node has no inherited clip.  The normal visualizer
+        path already reconciles the scissor through ``begin``; Sphere's
+        overflow path bypasses that local mask and must do the same without
+        creating a second clip owner or querying the driver every frame.
+        """
+
+        VisualizerClipHost._apply_incoming_scissor(render_state)
+        if not render_state.stencilEnabled():
+            gl.glDisable(gl.GL_STENCIL_TEST)
+        # A genuinely inherited Qt stencil belongs to Qt.  Do not replace
+        # its test/value or disable it merely because Sphere may overflow the
+        # visualizer's *local* rounded-rectangle mask.
+
+    @staticmethod
     def _apply_incoming_scissor(
         render_state: QSGRenderNode.RenderState,
     ) -> tuple[int, int, int, int] | None:

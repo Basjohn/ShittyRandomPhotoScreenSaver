@@ -271,10 +271,13 @@ class VisualizerRenderNode(QSGRenderNode):
                     auxiliary=int(snapshot.logical.runtime_generation),
                 )
             if overflow:
-                # Descriptor-gated experimental overflow bypasses only this
-                # render-node-local stencil. Qt/inherited scene state is still
-                # fenced/restored by QuickVisualizerRenderHost, and every
-                # accepted mode stays on the legacy clipped branch.
+                # The overflow mode bypasses only our *local* rounded-card
+                # stencil.  Reconcile inherited Qt scissor/stencil from this
+                # render node's RenderState BEFORE the GL host captures state.
+                # Otherwise a preceding ordinary widget's stale GL scissor or
+                # stencil can clip Sphere to that widget's painted footprint.
+                # The four accepted clipped modes keep their original path.
+                self._clip_host.prepare_unclipped_render_state(state)
                 if trace is not None:
                     trace.record(
                         FrameTraceEvent.RENDER_HOST_BEGIN,

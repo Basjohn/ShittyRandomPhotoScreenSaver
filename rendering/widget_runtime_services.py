@@ -687,6 +687,7 @@ _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "media": _MEDIA_SERVICE_SPEC,
     "spotify_volume": _MEDIA_VOLUME_SERVICE_SPEC,
     "mute_button": _SYSTEM_MUTE_SERVICE_SPEC,
+    "system_audio_osd": _SYSTEM_MUTE_SERVICE_SPEC,
     "gmail": _GMAIL_SERVICE_SPEC,
     "abandonment_issues": _ABANDONMENT_SERVICE_SPEC,
     "achievement_pulse": _ACHIEVEMENT_SERVICE_SPEC,
