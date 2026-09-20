@@ -26,7 +26,7 @@ def test_snapshot_projection_never_exposes_private_source_identity_or_unverified
     assert shown.rows[0].title == "Patch 0 Update"
     assert shown.rows[0].source_label == "Steam News"
     assert shown.rows[0].published_label == "14 Nov 2023"
-    assert not any(row.action_enabled or row.local_artwork_source for row in shown.rows)
+    assert all(row.action_enabled and not row.local_artwork_source for row in shown.rows)
     assert not any("appid" in field.name or "gid" in field.name or "url" in field.name
                    or "steamid" in field.name for field in fields(shown.rows[0]))
     assert all("http" not in str(row) and "123456" not in str(row) for row in shown.rows)
@@ -76,3 +76,37 @@ def test_projection_and_layout_have_no_qt_backend_network_or_schedulers():
     for filename in ("core/steam/games_followed_projection.py", "widgets/steam_followed_layout.py"):
         content = (root / filename).read_text("utf-8")
         assert not any(word in content for word in ("QTimer", "QQuick", "QThread", "ThreadManager", "fetch_json(", "time.sleep(", "SettingsManager", "get_steam_source_refresh_lock"))
+
+
+
+def test_followed_wide_rail_and_large_grid_capacity_match_retained_qml():
+    """The pure parent layout must never promise a different default tile rail."""
+    wide = followed_news_layout(960, 450, 8)
+    assert wide.arrangement == "wide" and wide.rows == 3
+    assert wide.visible_count == 8 and wide.overflow_count == 0
+    # Five image-capable cards on each 1,570 px wide row; two rows of eight.
+    screenshot = followed_news_layout(1570, 700, 8)
+    assert (screenshot.columns, screenshot.visible_count, screenshot.overflow_count) == (5, 8, 0)
+    # Extreme vertical keeps one readable tile rather than hiding all art.
+    portrait = followed_news_layout(290, 1100, 8)
+    assert portrait.columns == 1 and portrait.visible_count == 8
+    grid = followed_news_layout(1300, 900, 8)
+    assert grid.arrangement == "grid" and grid.columns == 4
+    assert grid.visible_count == 8 and grid.overflow_count == 0
+
+
+def test_preview_and_local_artwork_only_traverse_the_safe_view_projection(tmp_path):
+    local = tmp_path / "cached-art.jpg"
+    local.write_bytes(b"existing-local-file")
+    snapshot = FollowedNewsSnapshot(
+        "available", (FollowedNewsStory(41, "123456", "Patch", 1700000000, "Steam News",
+                                        True, "<b>do not interpret as HTML</b>", "Verified Name"),),
+        followed_count=1, checked_count=1, artwork_paths=(str(local),),
+    )
+    shown = project_followed_news(snapshot)
+    assert shown.rows[0].game_label == "Verified Name"
+    assert shown.rows[0].preview == "<b>do not interpret as HTML</b>"
+    assert shown.rows[0].local_artwork_source == local.as_uri()
+    assert shown.rows[0].action_enabled
+    assert not any("appid" in name or "gid" in name or "provider" in name.lower()
+                   for name in vars(shown.rows[0]))

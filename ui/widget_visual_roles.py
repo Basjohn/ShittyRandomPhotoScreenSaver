@@ -86,6 +86,11 @@ WIDGET_VISUAL_ROLE_PARENTS: Mapping[str, str] = {
     "achievement_pulse.header.fill": "header.fill",
     "achievement_pulse.header.border": "header.border",
     "achievement_pulse.header.text": "header.text",
+    # Games You Follow reuses the retired steam_progress persistence key, but
+    # is an ordinary branded Steam card and must share the same theme parents.
+    "steam_progress.header.fill": "header.fill",
+    "steam_progress.header.border": "header.border",
+    "steam_progress.header.text": "header.text",
     "abandonment_issues.header.fill": "header.fill",
     "abandonment_issues.header.border": "header.border",
     "abandonment_issues.header.text": "header.text",

@@ -29,7 +29,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.dev_gates import is_steam_enabled
 from core.resources.manager import ResourceManager
 from core.steam.abandonment_cache import load_owned_game_choices_from_cache
 from core.steam.abandonment_issues import (
@@ -84,7 +83,7 @@ if TYPE_CHECKING:
 
 
 _STEAM_CARD_ORDER: tuple[tuple[str, str, str], ...] = (
-    ("steam_progress", "Steam Journey", "Top Right"),
+    ("steam_progress", "Games You Follow", "Top Right"),
     ("achievement_pulse", "Achievement Pulse", "Middle Right"),
     ("abandonment_issues", "Abandonment Issues", "Bottom Right"),
     ("friend_pulse", "Friend Pulse", "Top Left"),
@@ -1025,6 +1024,17 @@ def _build_card_group(
         capacity_row.addWidget(visible_capacity)
         capacity_row.addStretch()
 
+    if key == "steam_progress":
+        cap_row = _aligned_row(layout, "Visible News Stories:")
+        cap = QSpinBox()
+        cap.setRange(1, 8)
+        cap.setValue(tab._default_int(key, "story_cap"))
+        cap.setToolTip("Maximum displayed stories. Additional source stories remain available and X/Y reflow may show fewer without refetching.")
+        cap.valueChanged.connect(tab._save_settings)
+        tab.steam_progress_story_cap = cap
+        cap_row.addWidget(cap)
+        cap_row.addStretch()
+
     _finalize_bucket_body(layout_toggle, layout_body)
     appearance_toggle, appearance_body, appearance_layout = _build_card_subbucket(
         tab,
@@ -1060,6 +1070,46 @@ def _build_card_group(
     font_row.addWidget(font_size)
     font_row.addWidget(QLabel("px"))
     font_row.addStretch()
+
+    if key == "steam_progress":
+        art = QCheckBox("Show Game Artwork")
+        art.setProperty("circleIndicator", True)
+        art.setChecked(tab._default_bool(key, "show_artwork"))
+        art.stateChanged.connect(tab._save_settings)
+        tab.steam_progress_show_artwork = art
+        appearance_layout.addWidget(art)
+        refresh_frame = QCheckBox("Frame Around Refresh Control")
+        refresh_frame.setProperty("circleIndicator", True)
+        refresh_frame.setChecked(tab._default_bool(key, "show_refresh_frame"))
+        refresh_frame.stateChanged.connect(tab._save_settings)
+        tab.steam_progress_show_refresh_frame = refresh_frame
+        appearance_layout.addWidget(refresh_frame)
+        shape_row = _aligned_row(appearance_layout, "Artwork Shape:")
+        shape = StyledComboBox()
+        for name, value in (("Wide", "wide"), ("Square", "square"), ("Portrait", "portrait")):
+            shape.addItem(name, value)
+        _set_combo_data(shape, str(tab._widget_default(key, "artwork_shape")))
+        shape.currentIndexChanged.connect(tab._save_settings)
+        tab.steam_progress_artwork_shape = shape
+        shape_row.addWidget(shape)
+        shape_row.addStretch()
+        headline_row = _aligned_row(appearance_layout, "Headline Alignment:")
+        align = StyledComboBox()
+        for name, value in (("Left", "left"), ("Center", "center"), ("Right", "right")):
+            align.addItem(name, value)
+        _set_combo_data(align, str(tab._widget_default(key, "headline_alignment")))
+        align.currentIndexChanged.connect(tab._save_settings)
+        tab.steam_progress_headline_alignment = align
+        headline_row.addWidget(align)
+        headline_row.addStretch()
+        trunc_row = _aligned_row(appearance_layout, "Headline Limit:")
+        trunc = QSpinBox()
+        trunc.setRange(48, 300)
+        trunc.setValue(tab._default_int(key, "headline_truncation_chars"))
+        trunc.valueChanged.connect(tab._save_settings)
+        tab.steam_progress_headline_truncation_chars = trunc
+        trunc_row.addWidget(trunc)
+        trunc_row.addStretch()
 
     if key == "friend_pulse":
         show_names = QCheckBox("Show Names under Avatars")
@@ -1622,9 +1672,9 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     connection_layout.setSpacing(12)
 
     info = QLabel(
-        "Achievement Pulse, Abandonment Issues, and Friend Pulse are available normally. Steam Journey remains an "
-        "unfinished scaffold visible only with --devsteam. Opening this section reads "
-        "encrypted-storage availability and bounded cached records only; it never decrypts credentials or contacts Steam."
+        "Games You Follow uses your existing linked Steam identity to show public news "
+        "from followed games. Opening Settings reads only encrypted-storage availability "
+        "and bounded cached records; network refreshes run only while an enabled card is active."
     )
     info.setWordWrap(True)
     shared_styles.apply_shared_label_style(info, "INFO_LABEL_STYLE")
@@ -1704,15 +1754,9 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
 
     _finalize_bucket_body(connection_toggle, connection_body)
 
-    show_steam_journey = is_steam_enabled()
     for key, label, fallback_position in _STEAM_CARD_ORDER:
         _build_card_group(
-            tab,
-            _steam_controls_layout,
-            key,
-            label,
-            fallback_position,
-            visible=key != "steam_progress" or show_steam_journey,
+            tab, _steam_controls_layout, key, label, fallback_position,
         )
     _hydrate_achievement_selection_titles(tab)
     _hydrate_abandonment_library_choices(tab)
@@ -1767,6 +1811,27 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             )
         except Exception:
             getattr(tab, f"{key}_font_size").setValue(tab._default_int(key, "font_size"))
+        if key == "steam_progress":
+            for attr, lo, hi in (("story_cap", 1, 8),
+                                 ("headline_truncation_chars", 48, 300)):
+                value = config.get(attr, tab._default_int(key, attr))
+                try:
+                    parsed = max(lo, min(hi, int(value)))
+                except (TypeError, ValueError):
+                    parsed = tab._default_int(key, attr)
+                getattr(tab, f"steam_progress_{attr}").setValue(parsed)
+            tab.steam_progress_show_artwork.setChecked(
+                bool(config.get("show_artwork", tab._default_bool(key, "show_artwork")))
+            )
+            tab.steam_progress_show_refresh_frame.setChecked(
+                bool(config.get("show_refresh_frame", tab._default_bool(key, "show_refresh_frame")))
+            )
+            for attr in ("artwork_shape", "headline_alignment"):
+                _set_combo_data(
+                    getattr(tab, f"steam_progress_{attr}"),
+                    str(config.get(attr, tab._default_str(key, attr))),
+                    canonical_value=tab._default_str(key, attr),
+                )
         if key == "friend_pulse":
             _set_combo_data(
                 tab.friend_pulse_view_mode,
@@ -2071,6 +2136,15 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         "font_family": getattr(tab, f"{key}_font_family").currentFont().family(),
         "font_size": int(getattr(tab, f"{key}_font_size").value()),
     })
+    if key == "steam_progress":
+        payload.update({
+            "story_cap": int(tab.steam_progress_story_cap.value()),
+            "headline_truncation_chars": int(tab.steam_progress_headline_truncation_chars.value()),
+            "headline_alignment": str(tab.steam_progress_headline_alignment.currentData()),
+            "show_artwork": bool(tab.steam_progress_show_artwork.isChecked()),
+            "show_refresh_frame": bool(tab.steam_progress_show_refresh_frame.isChecked()),
+            "artwork_shape": str(tab.steam_progress_artwork_shape.currentData()),
+        })
     if key in {"achievement_pulse", "abandonment_issues"}:
         payload["header_fill_color"] = _rgba_payload(
             getattr(tab, f"_{key}_header_fill_color")

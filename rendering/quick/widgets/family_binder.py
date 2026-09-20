@@ -667,6 +667,58 @@ class AchievementPulseFamilyAdapter:
         )
 
 
+class GamesYouFollowFamilyAdapter:
+    """One enabled Steam news card; its generation-shared source stays neutral."""
+
+    def __init__(self, *, on_steam_action_requested: Callable[[str, str, str], bool] | None = None) -> None:
+        self._on_steam_action_requested = on_steam_action_requested
+
+    @property
+    def family_id(self) -> str:
+        return "steam"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        return _enabled_from_candidates(widgets_config, ("steam_progress",))
+
+    def build(
+        self, *, widget_id: str, widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost, geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry, display_identity: str,
+        shadow_values: Mapping[str, object], runtime_manager: Any,
+        runtime_generation: int | None = None,
+    ) -> BoundFamilyPresentation | None:
+        from .games_you_follow import (
+            FollowedPresentationConfig, GamesYouFollowPresentationModel,
+            RetainedGamesYouFollowPresentation, followed_visual_style,
+        )
+
+        visual_style = followed_visual_style(widgets_config, shadow_values)
+        model = GamesYouFollowPresentationModel(
+            FollowedPresentationConfig.from_widgets_mapping(widgets_config),
+            runtime_generation=runtime_generation, visual_style=visual_style,
+            widgets=widgets_config,
+        )
+        if not _attach_runtime_service(runtime_manager, widget_id, model, widgets_config):
+            model.retire()
+            return None
+        try:
+            return RetainedGamesYouFollowPresentation(
+                host=host, model=model, geometry=geometry,
+                card_style=visual_style.card_style,
+                on_steam_action_requested=(
+                    (lambda kind, target, wid=widget_id: bool(
+                        self._on_steam_action_requested(wid, kind, target)
+                    )) if self._on_steam_action_requested is not None else None
+                ),
+            )
+        except Exception:
+            runtime_manager.retire_widget_service(widget_id)
+            model.retire()
+            raise
+
+
 class AbandonmentIssuesFamilyAdapter:
     """Adapter for the Abandonment Issues card (Steam capability family)."""
 
@@ -1035,6 +1087,7 @@ def default_ordinary_family_adapters(
         MediaFamilyAdapter(),
         RedditFamilyAdapter(on_open_requested=reddit_open_requested),
         GmailFamilyAdapter(),
+        GamesYouFollowFamilyAdapter(on_steam_action_requested=steam_open_requested),
         AchievementPulseFamilyAdapter(
             on_steam_action_requested=steam_open_requested
         ),
@@ -1053,6 +1106,7 @@ __all__ = [
     "BoundFamilyPresentation",
     "ClockFamilyAdapter",
     "FriendPulseFamilyAdapter",
+    "GamesYouFollowFamilyAdapter",
     "GmailFamilyAdapter",
     "MediaFamilyAdapter",
     "OrdinaryFamilyAdapter",

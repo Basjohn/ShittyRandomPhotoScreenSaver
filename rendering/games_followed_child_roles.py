@@ -1,7 +1,7 @@
 """Presentation-neutral, canonical grouped CUSTOM child roles for Games You Follow.
 
-Kept outside Qt so eventual descriptor/admission can import exactly these identities
-without activating a disabled presentation or Steam backend.
+Kept outside Qt so the runtime descriptor and retained Qt model share exactly
+these identities without importing Steam, starting a widget, or polling.
 """
 from __future__ import annotations
 

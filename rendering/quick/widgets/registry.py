@@ -61,6 +61,11 @@ ORDINARY_WIDGET_FAMILY_COMPONENTS: tuple[OrdinaryWidgetFamilyComponent, ...] = (
         presentation_model_kind="FriendPulsePresentationModel",
     ),
     OrdinaryWidgetFamilyComponent(
+        family_id="steam_progress",
+        qml_filename="GamesYouFollowPresentation.qml",
+        presentation_model_kind="GamesYouFollowPresentationModel",
+    ),
+    OrdinaryWidgetFamilyComponent(
         family_id="system_audio_osd",
         qml_filename="SystemAudioOSDPresentation.qml",
         presentation_model_kind="SystemAudioOSDPresentationModel",

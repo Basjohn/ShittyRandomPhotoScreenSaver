@@ -1680,9 +1680,15 @@
       "margin": 30,
       "monitor": "1",
       "position": "Top Right",
-      "preferred_height": 180,
-      "preferred_width": 420,
-      "show_background": true
+      "preferred_height": 360,
+      "preferred_width": 520,
+      "show_background": true,
+      "artwork_shape": "wide",
+      "show_artwork": true,
+      "show_refresh_frame": false,
+      "story_cap": 8,
+      "headline_truncation_chars": 180,
+      "headline_alignment": "left"
     },
     "system_audio_osd": {
       "accent_color": [

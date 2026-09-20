@@ -680,6 +680,49 @@ _SYSTEM_MUTE_SERVICE_SPEC = RuntimeServiceSpec(
 )
 
 
+def _build_followed_service(widget_id: str, widgets_config: Mapping[str, Any]) -> Any:
+    """Construct one dormant lease; only an admitted presenter may start it."""
+    from core.settings.default_contract import require_canonical_default
+    from widgets.steam_followed_runtime import FollowedRuntimeConfig, FollowedRuntimeLease
+
+    steam = widgets_config.get("steam", {}) if isinstance(widgets_config, Mapping) else {}
+    if not isinstance(steam, Mapping):
+        steam = {}
+    refresh = steam.get("refresh_minutes", require_canonical_default("widgets.steam.refresh_minutes"))
+    try:
+        interval = int(refresh)
+    except (TypeError, ValueError):
+        interval = int(require_canonical_default("widgets.steam.refresh_minutes"))
+    return FollowedRuntimeLease(config=FollowedRuntimeConfig(interval))
+
+
+def _inject_followed_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError("Games You Follow consumer has no shared lease injection")
+    setter(service)
+
+
+def _retire_followed_service(service: Any) -> None:
+    service.retire()
+
+
+def _followed_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if bool(getattr(widget, "_retired", False)) or _service_is_retired(service):
+        return False
+    return not bool(getattr(widget, "_active", False)) or bool(getattr(service, "_running", False))
+
+
+_FOLLOWED_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_followed_service,
+    inject=_inject_followed_service,
+    retire=_retire_followed_service,
+    reuse_is_valid=_followed_service_reuse_is_valid,
+)
+
+
 _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "reddit": _REDDIT_SERVICE_SPEC,
     "reddit2": _REDDIT_SERVICE_SPEC,
@@ -692,6 +735,7 @@ _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "abandonment_issues": _ABANDONMENT_SERVICE_SPEC,
     "achievement_pulse": _ACHIEVEMENT_SERVICE_SPEC,
     "friend_pulse": _FRIEND_PULSE_SERVICE_SPEC,
+    "steam_progress": _FOLLOWED_SERVICE_SPEC,
     "system_stats": _SYSTEM_STATS_SERVICE_SPEC,
 }
 

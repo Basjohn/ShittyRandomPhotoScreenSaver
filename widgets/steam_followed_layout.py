@@ -20,7 +20,7 @@ class FollowedNewsLayout:
 
 def followed_news_layout(
     width: float, height: float, item_count: int,
-    *, previous_arrangement: str | None = None,
+    *, previous_arrangement: str | None = None, show_artwork: bool = True,
 ) -> FollowedNewsLayout:
     """Choose the three card shapes with a resize-state hysteresis deadband."""
     if (not math.isfinite(width) or not math.isfinite(height)
@@ -43,16 +43,21 @@ def followed_news_layout(
         arrangement = "grid"
     # The header/overflow are family chrome, not additional story rows. A card
     # too small for one readable tile shows a truthful overflow summary instead.
-    available_width = max(0.0, width - 32.0)
-    available_height = max(0.0, height - 104.0)
-    cols_fit = int((available_width + 8.0) // 180.0)
-    rows_fit = int((available_height + 8.0) // 112.0)
-    if arrangement == "wide":
-        cols, rows = min(8, cols_fit), min(1, rows_fit)
-    elif arrangement == "tall":
-        cols, rows = min(1, cols_fit), min(8, rows_fit)
-    else:
-        cols, rows = min(8, cols_fit), min(8, rows_fit)
+    # Mirror the family QML's authored grouped rail: choose readable card
+    # widths BEFORE columns, then admit as many whole rows as height permits.
+    # Width and height remain independent and neither is fed back to the parent.
+    minimum_tile_width = (180.0 if arrangement == "tall"
+                          else 294.0 if show_artwork else 235.0)
+    available_width = max(0.0, width - 28.0)
+    cols_fit = int((available_width + 4.0) // minimum_tile_width)
+    max_cols = 1 if arrangement == "tall" else 8 if arrangement == "wide" else 4
+    cols = min(max_cols, cols_fit)
+    authored_cols = max(1, cols)
+    authored_rows = math.ceil(count / authored_cols)
+    authored_group_height = min(max(0.0, height - 110.0),
+                                authored_rows * 160.0 + max(0, authored_rows - 1) * 8.0)
+    rows_fit = int((authored_group_height + 14.0) // 112.0)
+    rows = min(8, rows_fit, math.ceil(count / max(1, cols))) if cols > 0 else 0
     capacity = max(0, cols * rows)
     visible = min(count, capacity)
     return FollowedNewsLayout(arrangement, cols, rows, visible, count - visible)
