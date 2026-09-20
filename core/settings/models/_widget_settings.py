@@ -49,6 +49,7 @@ class WeatherWidgetSettings:
     border_color: list[int] = field(default_factory=lambda: _default("widgets.weather", "border_color"))
     border_opacity: float = float(_default("widgets.weather", "border_opacity"))
     show_forecast: bool = bool(_default("widgets.weather", "show_forecast"))
+    show_five_day_forecast: bool = bool(_default("widgets.weather", "show_five_day_forecast"))
     show_details_row: bool = bool(_default("widgets.weather", "show_details_row"))
     show_condition_icon: bool = bool(_default("widgets.weather", "show_condition_icon"))
     icon_alignment: str = str(_default("widgets.weather", "icon_alignment"))
@@ -77,6 +78,7 @@ class WeatherWidgetSettings:
             border_color=list(settings.get(f"{prefix}.border_color")),
             border_opacity=float(settings.get(f"{prefix}.border_opacity")),
             show_forecast=bool(settings.get(f"{prefix}.show_forecast")),
+            show_five_day_forecast=bool(settings.get(f"{prefix}.show_five_day_forecast")),
             show_details_row=bool(settings.get(f"{prefix}.show_details_row")),
             show_condition_icon=bool(settings.get(f"{prefix}.show_condition_icon")),
             icon_alignment=str(settings.get(f"{prefix}.icon_alignment")),
@@ -109,6 +111,7 @@ class WeatherWidgetSettings:
             border_color=list(_mapping_value(data, prefix, "border_color")),
             border_opacity=float(_mapping_value(data, prefix, "border_opacity")),
             show_forecast=bool(_mapping_value(data, prefix, "show_forecast")),
+            show_five_day_forecast=bool(_mapping_value(data, prefix, "show_five_day_forecast")),
             show_details_row=bool(_mapping_value(data, prefix, "show_details_row")),
             show_condition_icon=bool(_mapping_value(data, prefix, "show_condition_icon")),
             icon_alignment=str(_mapping_value(data, prefix, "icon_alignment")),
@@ -132,6 +135,7 @@ class WeatherWidgetSettings:
             f"{prefix}.border_color": list(self.border_color),
             f"{prefix}.border_opacity": self.border_opacity,
             f"{prefix}.show_forecast": self.show_forecast,
+            f"{prefix}.show_five_day_forecast": self.show_five_day_forecast,
             f"{prefix}.show_details_row": self.show_details_row,
             f"{prefix}.show_condition_icon": self.show_condition_icon,
             f"{prefix}.icon_alignment": self.icon_alignment,

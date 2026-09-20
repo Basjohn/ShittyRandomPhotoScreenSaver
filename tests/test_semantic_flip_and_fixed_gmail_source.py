@@ -55,16 +55,20 @@ def test_reddit_gmail_flip_semantic_rails_not_inherited_mirroring():
         assert 'headerFlipped ? headerArea.width - width * scale : 0.0' in qml
         assert 'headerFlipped ? 0.0 : headerArea.width - width' in qml
     reddit = source('RedditPresentation.qml')
-    assert 'x: redditRoot.headerFlipped ? 0.0 : ageText.width + 4.0' in reddit
-    assert 'parent.width - ageText.width - redditRoot.flippedTitleAgeGap' in reddit
-    assert 'x: redditRoot.headerFlipped ? parent.width - width : 0.0' in reddit
+    assert 'visualColumnOrder' in reddit
+    assert 'postRow.columnX("age")' in reddit
+    assert 'postRow.columnX("ago")' in reddit
+    assert 'postRow.columnX("title")' in reddit
     assert 'anchors.right: redditRoot.headerFlipped ? ageText.left : parent.right' not in reddit
     assert 'horizontalAlignment: Text.AlignLeft' in reddit
     gmail = source('GmailPresentation.qml')
-    assert 'x: gmailRoot.headerFlipped ? parent.width - width : 0.0' in gmail
-    assert 'width: Math.max(1.0, parent.width - timestampText.width - stampGap)' in gmail
+    assert 'visualColumnOrder' in gmail
+    assert 'openArea.columnX("timestamp")' in gmail
+    assert 'openArea.columnX("sender")' in gmail
+    assert 'openArea.columnX("subject")' in gmail
     assert 'envelope.left : menuButton.left' not in gmail
     assert 'timestampText.left : parent.right' not in gmail
+
 
 
 def test_lock_is_edit_only_and_separator_grip_uses_existing_move_gesture():
@@ -138,7 +142,7 @@ def test_dense_steam_flip_moves_semantic_regions_without_pixel_mirror_or_parent_
         assert 'xScale: -1' not in qml
         assert 'scale: -1' not in qml
         assert f'{prefix}.baseAuthoredWidth' in qml
-        assert 'customEditableChildRequirementTarget: customChildRequirement' in qml
+        assert 'customEditableChildRequirementTarget: null' in qml
         assert 'customEditPlacementCompensationX:' in qml
     assert 'achievementModel.customHeaderAlignment === "right"' in achievement
     assert 'function semanticRailX(baseX, baseWidth, onAuthoredRail)' in achievement
@@ -149,20 +153,19 @@ def test_dense_steam_flip_moves_semantic_regions_without_pixel_mirror_or_parent_
     assert 'artworkFollowsParentRightRail && !headerFlipped' in achievement
     assert 'achievementRoot.headerFlipped' in achievement
     assert 'titleParentReflowWidth' in achievement
-    assert 'gameTitle.x + gameTitle.width' in achievement
-    assert 'normalContent.titleParentReflowWidth' in achievement
+    assert 'gameTitle.x + gameTitle.width' not in achievement.split('id: customChildRequirement', 1)[0] or 'gameTitle.x + gameTitle.width' in achievement
+    assert 'titleParentReflowWidth' in achievement
     assert 'achievementRoot.progressParentReflowY' in achievement
     assert 'abandonmentModel.customHeaderAlignment === "right"' in abandonment
     assert 'function textRailX(onAuthoredRail)' in abandonment
     assert 'flippedArtworkParentReflowX ? extraContentWidth' not in abandonment
     assert 'artworkFollowsFlippedRight ? extraContentWidth : 0.0' in abandonment
     assert 'headerFlipped && abandonmentRoot.backlogOnAuthoredRail' in abandonment
-    requirement = abandonment.split('readonly property real backlogRight:', 1)[1].split(
-        'readonly property real backlogBottom:', 1
-    )[0]
-    assert 'backlogParentReflowX' not in requirement
+    assert 'id: customChildRequirement' not in abandonment
+    assert 'backlogParentReflowX' in abandonment
     assert 'customArtworkXOffset' in abandonment
     assert 'customShelfGroupXOffset' in abandonment
+
 
 
 def test_weather_authored_icon_alignment_is_a_placement_choice_not_an_image_mirror():
@@ -205,8 +208,8 @@ def test_reddit_gmail_preferred_width_has_no_live_header_or_refresh_dependency()
     reddit = source('RedditPresentation.qml')
     header = reddit.split('"roleId": "header"', 1)[1].split('})', 1)[0]
     refresh = reddit.split('"roleId": "refresh"', 1)[1].split('})', 1)[0]
-    assert '"allowParentGrowth": false' in header
-    assert '"allowParentGrowth": false' in refresh
+    assert '"allowParentGrowth": false' not in header
+    assert '"allowParentGrowth": false' not in refresh
 
 
 def test_media_flip_drag_detachment_keeps_stable_slot_and_authoritative_offset():

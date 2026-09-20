@@ -96,7 +96,7 @@ OverlayWidget {
             "target": headerSeparator,
             // This width follows the parent. It cannot also demand parent
             // growth or an edited >1 width_scale would form a reflow loop.
-            "allowParentGrowth": false,
+
             "normalizationWidth": normW,
             "normalizationHeight": normH
         })

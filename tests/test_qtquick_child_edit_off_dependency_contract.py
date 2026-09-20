@@ -21,9 +21,9 @@ def test_role_declarations_have_no_edit_off_observer_or_publisher() -> None:
     assert "model: editFrame.hasPresentationItem" in edit
     assert "? (editFrame.presentationItem.customEditableChildRoles || [])" in edit
     assert "&& ((editFrame.presentationItem.customEditableChildRoles || []).length > 0" in edit
-    assert "if (childRequirementSyncQueued || !editActive || !sessionModel)" in edit
-    assert "if (!editActive || !sessionModel)" in edit
-    assert "Qt.callLater(customLayoutOverlay.flushSelectedChildRequirementSync)" in edit
+    assert "queueSelectedChildRequirementSync" not in edit
+    assert "flushSelectedChildRequirementSync" not in edit
+    assert "ensureImmediateChildOverflow" not in edit
 
 
 def test_preferred_size_sink_remains_change_driven_and_geometry_idempotent() -> None:

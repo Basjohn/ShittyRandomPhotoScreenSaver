@@ -201,6 +201,7 @@ class WeatherPresentationConfig:
     border_color: tuple[int, int, int, int]
     border_opacity: float
     show_forecast: bool
+    show_five_day_forecast: bool
     show_condition_icon: bool
     icon_alignment: str
     icon_size: int
@@ -238,6 +239,7 @@ class WeatherPresentationConfig:
             border_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
             border_opacity=_bounded_float(merged["border_opacity"], float(defaults["border_opacity"]), 0.0, 1.0),
             show_forecast=_as_bool(merged["show_forecast"], bool(defaults["show_forecast"])),
+            show_five_day_forecast=_as_bool(merged["show_five_day_forecast"], bool(defaults["show_five_day_forecast"])),
             show_condition_icon=_as_bool(merged["show_condition_icon"], bool(defaults["show_condition_icon"])),
             icon_alignment=alignment,
             icon_size=_bounded_int(merged["icon_size"], int(defaults["icon_size"]), 32, 256),
@@ -353,6 +355,7 @@ class WeatherPresentationSnapshot:
     temperature_text: str
     forecast_text: str
     forecast_days: tuple[str, ...]
+    forecast_cards: tuple[tuple[str, str, str], ...]
     error_text: str
     condition_icon_source: str
     rain_text: str
@@ -375,6 +378,7 @@ def _initial_snapshot(
         temperature_text="",
         forecast_text="",
         forecast_days=(),
+        forecast_cards=(),
         error_text="",
         condition_icon_source="",
         rain_text="0%",
@@ -388,6 +392,9 @@ class WeatherPresentationModel(QObject):
     """Stable Weather runtime consumer and QML-facing state model."""
 
     stateChanged = Signal()
+    # Forecast delegates are stable while content extent and presentation
+    # settings change during live editing; refresh the Repeater only on data.
+    forecastDaysChanged = Signal()
     customGeometryChanged = Signal()
 
     def __init__(
@@ -621,6 +628,29 @@ class WeatherPresentationModel(QObject):
             )
         )
 
+    @staticmethod
+    def _daily_cards(rows: object) -> tuple[tuple[str, str, str], ...]:
+        """Project existing retained daily lines into weekday, temperature and packaged icon.
+
+        Both fresh provider data and older on-disk caches use these same lines;
+        this adds no network request, cache schema or background processing.
+        """
+        if not isinstance(rows, (list, tuple)):
+            return ()
+        cards: list[tuple[str, str, str]] = []
+        days = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}
+        for row in rows[:5]:
+            label, separator, detail = str(row).partition(":")
+            weekday = label.strip().upper()[:3]
+            if not separator or weekday not in days:
+                return ()
+            temperature, separator, condition = detail.partition("/")
+            if not separator or not temperature.strip():
+                return ()
+            icon = _condition_icon_source(None, condition.strip(), True)
+            cards.append((weekday, temperature.strip().replace("°C", "°"), icon))
+        return tuple(cards) if len(cards) == 5 else ()
+
     def _publish_data(self, data: Mapping[str, Any], *, from_cache: bool) -> None:
         temperature = data.get("temperature")
         condition = data.get("condition")
@@ -662,6 +692,7 @@ class WeatherPresentationModel(QObject):
                     for row in (data.get("forecast_days") or ())[:5]
                     if str(row).strip()
                 ) if isinstance(data.get("forecast_days"), (tuple, list)) else (),
+                forecast_cards=self._daily_cards(data.get("forecast_days")),
                 error_text="",
                 condition_icon_source=_condition_icon_source(
                     weather_code, condition_text, is_day_value
@@ -676,7 +707,10 @@ class WeatherPresentationModel(QObject):
     def _replace_snapshot(self, snapshot: WeatherPresentationSnapshot) -> None:
         if snapshot == self._snapshot:
             return
+        daily_changed = snapshot.forecast_cards != self._snapshot.forecast_cards
         self._snapshot = snapshot
+        if daily_changed:
+            self.forecastDaysChanged.emit()
         self.stateChanged.emit()
 
     @Property(str, notify=stateChanged)
@@ -721,6 +755,13 @@ class WeatherPresentationModel(QObject):
     def extendedForecastText(self) -> str:
         return "\n".join(self._snapshot.forecast_days)
 
+    @Property("QVariantList", notify=forecastDaysChanged)
+    def forecastDayCards(self) -> list[dict[str, str]]:
+        return [
+            {"day": day, "temperature": temperature, "icon": icon}
+            for day, temperature, icon in self._snapshot.forecast_cards
+        ]
+
     @Property(bool, notify=stateChanged)
     def extendedForecastAvailable(self) -> bool:
         """Whether retained data can populate Weather's expanded forecast band.
@@ -730,7 +771,11 @@ class WeatherPresentationModel(QObject):
         CUSTOM edit from accidentally revealing richer vertical content.
         """
 
-        return bool(self.showForecast and self._snapshot.forecast_days)
+        return bool(
+            self._snapshot.view_state == "ready"
+            and self.config.show_five_day_forecast
+            and len(self._snapshot.forecast_cards) == 5
+        )
 
     @Property(str, notify=stateChanged)
     def errorText(self) -> str:

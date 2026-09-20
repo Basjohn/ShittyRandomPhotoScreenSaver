@@ -753,9 +753,11 @@ class AchievementPulsePresentationModel(QObject):
     ) -> bool:
         """Apply a CUSTOM-only logical canvas for side-axis reflow.
 
-        Achievement Pulse keeps its dense authored layout as the minimum. Side
-        handles may add horizontal/vertical room, while corner/wheel resize still
-        owns the one uniform whole-card transform.
+        The shared CUSTOM owner admits the physical width against the retained
+        family's reported painted-child requirement. The authored size remains
+        the Restore reference, not a second width clamp here: reversed cards
+        may trim only a measured empty leading gutter. Height retains the
+        authored minimum, while corner/wheel keep uniform whole-card scaling.
         """
 
         if width is None or height is None:
@@ -766,7 +768,12 @@ class AchievementPulsePresentationModel(QObject):
         except (TypeError, ValueError):
             return False
         base_width, base_height = self.config.authored_size
-        resolved_width = max(int(round(base_width)), min(4000, resolved_width))
+        # A below-authored content box is meaningful only while the card is
+        # semantically reversed. The retained QML exposes measured *left* paint
+        # clearance for that orientation; unflipped geometry must not silently
+        # replay a stale narrow box against its full authored canvas.
+        width_floor = 48 if self._custom_header_alignment == "right" else int(round(base_width))
+        resolved_width = max(width_floor, min(4000, resolved_width))
         resolved_height = max(int(round(base_height)), min(4000, resolved_height))
         extent = (resolved_width, resolved_height)
         if extent == self._content_extent:
@@ -1363,14 +1370,17 @@ class RetainedAchievementPulsePresentation:
         # artwork/font keys remain ignored. In CUSTOM the shared child_geometry
         # payload owns admitted child rectangles while preserved Settings values
         # remain the non-CUSTOM/reset baseline.
+        # A trimmed width is valid only when the saved Header is right-aligned.
+        # Hydrate that semantic state before validating the saved content box;
+        # the previous order silently restored a truncated CUSTOM parent with
+        # an untrimmed inner canvas on fresh generation construction.
+        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
+        self._model.set_custom_child_geometry(child_geometry)
         extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
         if isinstance(extent, (tuple, list)) and len(extent) == 2:
             self._model.set_content_extent(extent[0], extent[1])
         else:
             self._model.clear_content_extent()
-
-        child_geometry = payload.get("child_geometry") if isinstance(payload, Mapping) else None
-        self._model.set_custom_child_geometry(child_geometry)
 
     def apply_input_state(self, input_state: object) -> bool:
         if isinstance(input_state, Mapping):

@@ -33,6 +33,7 @@ _LAYOUT_SECTION_KEYS = frozenset(
         "show_condition_icon",
         "show_details_row",
         "show_forecast",
+        "show_five_day_forecast",
         "show_background",
         "show_controls",
         "show_header_frame",

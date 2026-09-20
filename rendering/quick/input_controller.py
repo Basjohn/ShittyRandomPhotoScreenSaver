@@ -148,7 +148,7 @@ class QuickInputController(RuntimeInputOwner):
         custom_active = bool(provider is not None and provider())
         if (custom_active and event.key() == Qt.Key.Key_Z
                 and event.modifiers() == Qt.KeyboardModifier.ControlModifier):
-            # One physical press, never auto-repeat a one-level undo. Outside
+            # One physical press, never auto-repeat one of the three undo steps. Outside
             # Edit, the existing plain-Z previous-image shortcut is untouched.
             if not event.isAutoRepeat():
                 self.custom_layout_undo_requested.emit()

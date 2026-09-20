@@ -931,6 +931,7 @@ class TestWidgetsTab:
             assert tab.weather_position.currentText() == str(weather_defaults["position"])
             assert tab.weather_location.text() == str(weather_defaults["location"])
             assert tab.weather_show_forecast.isChecked() is bool(weather_defaults["show_forecast"])
+            assert tab.weather_show_five_day_forecast.isChecked() is bool(weather_defaults["show_five_day_forecast"])
             assert tab.weather_show_background.isChecked() is bool(weather_defaults["show_background"])
             assert tab.weather_bg_opacity.value() == round(float(weather_defaults["bg_opacity"]) * 100)
             assert tab.widget_shadows_enabled.isChecked() is bool(shadow_defaults["enabled"])
@@ -994,6 +995,7 @@ class TestWidgetsTab:
         tab.weather_position.setCurrentText("Bottom Left")
         tab.weather_monitor_combo.setCurrentText("ALL")
         tab.weather_show_forecast.setChecked(True)
+        tab.weather_show_five_day_forecast.setChecked(True)
         tab.weather_show_background.setChecked(True)
         tab.weather_bg_opacity.setValue(80)  # 80%
         tab.widget_shadows_enabled.setChecked(False)
@@ -1019,6 +1021,7 @@ class TestWidgetsTab:
         assert weather_cfg.get("location") == "Johannesburg"
         assert weather_cfg.get("position") == "Bottom Left"
         assert weather_cfg.get("show_forecast") is True
+        assert weather_cfg.get("show_five_day_forecast") is True
         assert weather_cfg.get("show_background") is True
         assert pytest.approx(weather_cfg.get("bg_opacity", 0.0)) == 0.80
         assert weather_cfg.get("monitor") == "ALL"

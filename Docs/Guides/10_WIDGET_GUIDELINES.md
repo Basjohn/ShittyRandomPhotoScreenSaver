@@ -310,6 +310,67 @@ A new family should not copy Media/Friend Pulse arithmetic as infrastructure. It
 the common logical extent; family-local code owns only its own internal reflow. This keeps normalization extensible without
 creating a second geometry architecture.
 
+### Child editing, live rails, and parent containment
+
+Child editing is an adjustment **inside** an already sized parent, not an
+inside-out parent resize. Only the outer side/corner/wheel handles change the
+parent's CUSTOM rectangle or logical content extent. Do not derive its minimum,
+preferred size, or persisted `content_extent` from live child occupancy; do not
+publish a child-required size or queue a correction on child paint/role changes.
+Authoring mode still supplies the baseline and Restore Size reference.
+
+Every admitted child move and resize must contain the **actual occupied paint**
+inside its declared surface, regardless of the peer-collision toggle. The usual
+surface is the card's real content boundary, not an invented padding margin;
+Media's independent volume accessory has its own legal surface inside the outer
+widget. Collision OFF means peers may overlap; it never permits an escape from
+the containing surface. A legal drag stops at the boundary and does not change
+parent geometry. Handle clamping and magnetic guides must agree, including when
+the child starts in an old, invalid saved position. Reconcile existing malformed
+records without silent outer growth or repetitive geometry publication.
+
+**Flow on each untouched axis.** Saved `child_geometry` placement values are
+independent local deltas from *live family-authored* X/Y rails, not absolute
+coordinates in the once-authored canvas. Editing X alone must not detach Y from
+its Column/row, and editing Y alone must not detach X/semantic alignment.
+Resizing content must not freeze its siblings' authored layout. An explicit
+free-position edit can change a relationship on the *edited axis only*; the
+opposite axis remains family-authored. Never infer full two-axis detachment from
+`x_offset != 0 || y_offset != 0`, subtract later ancestor motion to cancel a
+Column's Y reflow, or let a child dimension set the enclosing Column's height.
+The family remains responsible for actual internal layout, while the shared
+Edit owner is responsible for admission, containment, Save/Cancel and geometry.
+
+Flipped presentation exchanges semantic placement, not glyph or bitmap pixels.
+Use the corresponding left/right transform origin when text scales under compact
+Y. Validate the exact interaction sequences: flip before a Y-only resize; Reset
+Size -> Flip -> Save -> re-enter Edit -> Y-only resize; X-only child edit ->
+parent Y resize, and the reciprocal. Measure **mapped painted rectangles** and
+selected Edit proxies, including right-edge alignment, seek/transport and
+visible controls at the minimum admitted height. An unchanged `visible: true`
+flag or a test of pristine `child_geometry` is not proof of those outcomes.
+Never manufacture tests that bypass production QML, normalize away a bad saved
+record, or force an external provider state to mask a geometry defect.
+
+Changes to any shared gesture/containment/normalization policy require relevant
+non-child/parent pointer no-churn and Save/Cancel/Undo/reopen guards as well as
+family-specific scene tests. Do not add pollers, frame callbacks, off-Edit role
+scans, extra geometry/persistence owners or per-pointer Settings writes.
+
+**Repeated-list column order is semantic, not child free placement.** If a
+feed wants drag-swappable columns, declare one list-wide semantic role per
+column, present an Edit-only vertical rail/grip, and commit one stable ordered
+permutation for the widget. Do not persist geometry per row, allocate one
+handle per delegate, make age/AGO reorder depend on independent accidental
+child offsets, or detach repeated text from compact-height/flip reflow. The
+shared CUSTOM session and owner must own Undo/Save/Cancel/Reset/slot replay;
+ordinary QML projects the order across every retained delegate without
+provider refresh or Repeater recreation. Reddit's `01HR` and `AGO` are separate
+semantic columns for this feature even though the current presentation groups
+them in one age cell. Gmail sender/subject/timestamp likewise keep one
+widget-wide order. This UI is **not yet implemented**; introducing it requires
+a separate retained Qt acceptance gate, not a source-only role assertion.
+
 ### Non-CUSTOM authored stacking
 
 Ordinary placement is owned by the display presentation/orchestration layer, not by family QML. When global CUSTOM is inactive, the smart stacker may project a family away from its authored slot to avoid collisions. A new widget therefore needs:
@@ -526,3 +587,22 @@ Then caller-proof and retire old pixels.
 Spotify Visualizer is not an ordinary widget-family presentation. Its authored logical runtime and inline
 custom-GL render-node contracts are governed by visualizer docs/guardrails. Do not force it through ordinary
 widget abstractions merely for consistency.
+
+## Repeated list semantic rails
+
+For repeated-list widgets, keep column reordering separate from free child
+movement. Reddit/Reddit2 (`age`, `ago`, `title`) and Gmail (`timestamp`, `sender`,
+`subject`) declare their stable semantic columns in `rendering/quick/column_rails.py`.
+The family model projects the validated widget-wide `size_payload.column_rails`
+from the existing CUSTOM owner through a dedicated discrete column-order signal,
+not through a per-child-geometry notification, and every retained QML row derives column X
+and width from that same order. When the key is absent, the existing header-flip
+orientation supplies the default. Do not persist row identities, one X offset per
+entry, or provider-derived data in CUSTOM, and do not let an X-only swap detach Y
+flow or rebuild the list model. The selected/unlocked Edit overlay alone loads
+vertical guides and grip hit-zones; a release calls the shared discrete swap
+slot once, with the ordinary three-action Undo/Save/Cancel/Restore/lifecycle
+authority. Wheel/outer resize must carry the *current* order, not resurrect a
+baseline permutation after Restore. Test the actual painted rows, not just the
+model list, in both orientations and after Save/reopen and slot hydration. Qt
+and physical acceptance are separate from pure schema/source tests.

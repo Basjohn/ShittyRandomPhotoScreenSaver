@@ -30,6 +30,8 @@ Item {
     // The list is retained presentation data only; Python/session remains the
     // geometry and persistence owner.
     property var customEditableChildRoles: []
+    // Edit-only semantic list columns; each entry references an existing retained target.
+    property var customColumnRailSpecs: []
     // Optional selected-parent-only collision surfaces that are not themselves
     // editable roles (for example Media metadata or its separate mute control).
     // The edit overlay reads these only while this parent is selected. Normal

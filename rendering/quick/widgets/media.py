@@ -1251,7 +1251,9 @@ class MediaPresentationModel(QObject):
 
     @Property(bool, notify=stateChanged)
     def canSeek(self) -> bool:
-        return self._snapshot.can_seek
+        # A capability flag without a known timeline must not admit a seek.
+        # The progress rail itself remains present while track data refreshes.
+        return self._snapshot.can_seek and self._snapshot.duration_ms > 0
 
     @Property(float, notify=stateChanged)
     def progressFraction(self) -> float:
@@ -1516,13 +1518,18 @@ class MediaPresentationModel(QObject):
 
     @Property(bool, notify=stateChanged)
     def controlsAvailable(self) -> bool:
-        return self.config.show_controls and (
-            self.canPlayPause or self.canPrevious or self.canNext
-        )
+        # Presentation presence is not a playback capability. During provider
+        # handovers a track can retain its title/artwork while all three action
+        # flags are briefly unavailable; removing this band also reflows the
+        # seek/artwork rails and can strand a compact CUSTOM edit. The individual
+        # controls remain disabled by their existing capability gates.
+        return self.config.show_controls and self._snapshot.has_track
 
     @Property(bool, notify=stateChanged)
     def progressAvailable(self) -> bool:
-        return self.config.playback_progress_enabled and self._snapshot.duration_ms > 0
+        # Reserve the seek band for a track even while the duration is unknown.
+        # The fraction is already zero in that state; canSeek gates interaction.
+        return self.config.playback_progress_enabled and self._snapshot.has_track
 
     @Property(bool, notify=stateChanged)
     def textShadowEnabled(self) -> bool:

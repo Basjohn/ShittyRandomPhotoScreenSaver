@@ -17,6 +17,27 @@ OverlayWidget {
     readonly property real baseAuthoredWidth: achievementModel.baseAuthoredWidth
     readonly property real baseAuthoredHeight: achievementModel.baseAuthoredHeight
     readonly property real extraContentWidth: Math.max(0.0, authoredWidth - baseAuthoredWidth)
+    // A reversed CUSTOM card can have a genuinely empty leading gutter after
+    // its children were independently placed. Retain their authored coordinates
+    // while trimming that gutter; do not scale the artwork/text or migrate any
+    // role's saved normalized offsets when the outer left edge moves.
+    readonly property real leadingTrim: headerFlipped && achievementModel.contentExtentActive
+        ? Math.max(0.0, baseAuthoredWidth - authoredWidth) : 0.0
+    // The ordinary authored baseline is still the Restore Size reference.
+    // Only a reversed card with real visible leading clearance offers this
+    // selected-Edit capability; non-reversed/custom-placed content stays guarded.
+    readonly property real customLeadingTrimAllowance: headerFlipped && normalContent.visible
+        ? Math.max(0.0, Math.min(
+            headerFrame.visible ? headerFrame.x : baseAuthoredWidth,
+            artworkFrame.visible ? artworkFrame.x : baseAuthoredWidth,
+            metricText.visible ? metricText.x : baseAuthoredWidth,
+            gameTitle.visible ? gameTitle.x : baseAuthoredWidth,
+            achievementListFrame.visible ? achievementListFrame.x : baseAuthoredWidth,
+            latestArtworkFrame.visible ? latestArtworkFrame.x : baseAuthoredWidth,
+            progressPulse.visible ? progressPulse.x : baseAuthoredWidth,
+            fieldGroupFrame.visible ? fieldGroupFrame.x : baseAuthoredWidth,
+            connectionInfo.visible ? connectionInfo.x : baseAuthoredWidth
+        ) - headerSafeInsetX) : 0.0
     readonly property real extraContentHeight: Math.max(0.0, authoredHeight - baseAuthoredHeight)
     readonly property real contentScale: Math.max(
         0.05,
@@ -60,11 +81,22 @@ OverlayWidget {
         ? Math.max(120.0, baseAuthoredWidth - 36.0)
         : Math.max(120.0, canonicalArtworkX - 32.0)
 
-    // A single existing Header alignment exchanges semantic regions, not their
-    // contents. Reflect only the region's stable placement rectangle; images,
-    // text, capsule labels and independently authored alignments stay upright.
+    // The Header alignment exchanges semantic regions without mirroring image
+    // pixels or text glyphs. Text-role alignment follows the card orientation
+    // unless that role is independently flipped relative to its parent.
     readonly property bool headerFlipped:
         achievementModel.customHeaderAlignment === "right"
+    // The Header flip exchanges the entire card's authored left/right regions.
+    // Each text-role flip is *relative* to that semantic orientation: without
+    // this combination the frame moves right while its glyphs remain left.
+    // The individual role can still be flipped independently in either header
+    // orientation. No child record is implicitly written by the Header flip.
+    readonly property bool gameNameFlipped:
+        headerFlipped !== (achievementModel.customGameNameAlignment === "right")
+    readonly property bool firstAchievementFlipped:
+        headerFlipped !== (achievementModel.customFirstAchievementAlignment === "right")
+    readonly property bool achievementListFlipped:
+        headerFlipped !== (achievementModel.customAchievementListAlignment === "right")
     function semanticRailX(baseX, baseWidth, onAuthoredRail) {
         return headerFlipped && onAuthoredRail
             ? baseAuthoredWidth - baseX - baseWidth : baseX
@@ -175,7 +207,7 @@ OverlayWidget {
             "semanticCornerInsetX": achievementRoot.headerSafeInsetX,
             "semanticCornerInsetY": achievementRoot.headerSafeInsetY,
             "semanticInsetUsesUniformCard": true,
-            "requirementTarget": customChildRequirement
+            "requirementTarget": null
         })
         if (normalContent.visible && artworkFrame.visible) {
             roles.push({
@@ -185,7 +217,7 @@ OverlayWidget {
                 "geometryDependencies": [authoredCanvas, normalContent, artworkOccupiedFrame],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (normalContent.visible && gameTitle.visible) {
@@ -198,7 +230,7 @@ OverlayWidget {
                 "resizeReflowGate": gameTitle,
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (normalContent.visible && achievementListFrame.visible
@@ -212,7 +244,7 @@ OverlayWidget {
                 "collisionIgnoreRoleIds": ["first_achievement"],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (normalContent.visible && unlockRepeater.count > 0
@@ -224,7 +256,7 @@ OverlayWidget {
                 "collisionIgnoreRoleIds": ["achievement_list"],
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (normalContent.visible && latestArtworkFrame.visible) {
@@ -235,7 +267,7 @@ OverlayWidget {
                 "resizeReflowGate": latestArtworkFrame,
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (normalContent.visible && progressPulse.visible) {
@@ -248,7 +280,7 @@ OverlayWidget {
                 "resizeReflowGate": progressPulse,
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         if (normalContent.visible && fieldGroupFrame.visible) {
@@ -259,13 +291,13 @@ OverlayWidget {
                 "resizeReflowGate": fieldGroupFrame,
                 "normalizationWidth": normW,
                 "normalizationHeight": normH,
-                "requirementTarget": customChildRequirement
+                "requirementTarget": null
             })
         }
         return roles
     }
     customEditableChildObstacles: [connectionInfo]
-    customEditableChildRequirementTarget: customChildRequirement
+    customEditableChildRequirementTarget: null
 
     // Content-driven outer size (H option A): this card is a self-contained
     // authored canvas, so its preferred content size is the authored dimension
@@ -280,93 +312,7 @@ OverlayWidget {
     // than stretching the shell around a shorter authored canvas.
     uniformScaleTransform: true
 
-    // One stable grow-only logical requirement for every dense role. Live
-    // parent-right/bottom rail displacement is subtracted back out so admitted
-    // outer growth cannot feed itself. This is observed only by selected Edit.
-    QtObject {
-        id: customChildRequirement
-
-        readonly property real headerVisualWidth: headerFrame.width
-            * achievementRoot.achievementModel.customHeaderWidthScale
-        readonly property real headerVisualHeight: headerFrame.height
-            * achievementRoot.achievementModel.customHeaderHeightScale
-        readonly property real headerStableRight:
-            (achievementRoot.achievementModel.customHeaderAnchor.endsWith("right")
-                || (achievementRoot.headerFlipped
-                    && !achievementRoot.achievementModel.customHeaderAnchor.endsWith("left")))
-                ? achievementRoot.baseAuthoredWidth - achievementRoot.headerSafeInsetX
-                : achievementRoot.headerSafeInsetX
-                    + achievementRoot.achievementModel.customHeaderXOffset
-                        * achievementRoot.baseAuthoredWidth
-                    + headerVisualWidth
-        readonly property real headerStableBottom:
-            achievementRoot.achievementModel.customHeaderAnchor.startsWith("bottom")
-                ? achievementRoot.baseAuthoredHeight - achievementRoot.headerSafeInsetY
-                : achievementRoot.headerSafeInsetY
-                    + achievementRoot.achievementModel.customHeaderYOffset
-                        * achievementRoot.baseAuthoredHeight
-                    + headerVisualHeight
-        readonly property real artworkRight: artworkFrame.visible
-            ? artworkFrame.x - achievementRoot.artworkParentReflowX
-                + artworkFrame.width
-            : 0.0
-        readonly property real artworkBottom: artworkFrame.visible
-            ? artworkFrame.y + artworkFrame.height : 0.0
-        readonly property real metricRight: metricText.visible
-            ? metricText.x - achievementRoot.artworkParentReflowX
-                + metricText.width
-            : 0.0
-        readonly property real metricBottom: metricText.visible
-            ? metricText.y + metricText.height : 0.0
-        // Parent-owned title-rail widening is not a new CUSTOM content
-        // requirement. Counting it here would make outer growth feed itself.
-        readonly property real gameRight: gameTitle.visible
-            ? gameTitle.x + gameTitle.width
-                - (achievementRoot.gameNameOnAuthoredRail
-                    ? normalContent.titleParentReflowWidth
-                        * achievementRoot.achievementModel.customGameNameWidthScale
-                    : 0.0)
-            : 0.0
-        readonly property real gameBottom: gameTitle.visible
-            ? gameTitle.y + gameTitle.height : 0.0
-        readonly property real listRight: achievementListFrame.visible
-            ? achievementListFrame.x + achievementListFrame.width
-                - (achievementRoot.achievementListOnAuthoredRail
-                    ? normalContent.titleParentReflowWidth
-                        * achievementRoot.achievementModel.customAchievementListWidthScale
-                    : 0.0)
-            : 0.0
-        readonly property real listBottom: achievementListFrame.visible
-            ? achievementListFrame.y + achievementListFrame.height : 0.0
-        readonly property real badgeRight: latestArtworkFrame.visible
-            ? latestArtworkFrame.x + latestArtworkFrame.visualWidth : 0.0
-        readonly property real badgeBottom: latestArtworkFrame.visible
-            ? latestArtworkFrame.y + latestArtworkFrame.visualHeight : 0.0
-        readonly property real progressRight: progressPulse.visible
-            ? progressPulse.x + progressPulse.visualSize : 0.0
-        readonly property real progressBottom: progressPulse.visible
-            ? progressPulse.y - achievementRoot.progressParentReflowY
-                + progressPulse.visualSize
-            : 0.0
-        readonly property real fieldRight: fieldGroupFrame.visible
-            ? fieldGroupFrame.x + fieldGroupFrame.width : 0.0
-        readonly property real fieldBottom: fieldGroupFrame.visible
-            ? fieldGroupFrame.y - achievementRoot.fieldGroupParentReflowY
-                + fieldGroupFrame.height
-            : 0.0
-
-        readonly property real requiredContentWidth: Math.max(
-            achievementRoot.baseAuthoredWidth,
-            headerStableRight, artworkRight, metricRight, gameRight, listRight,
-            badgeRight, progressRight, fieldRight
-        )
-        readonly property real requiredContentHeight: Math.max(
-            achievementRoot.baseAuthoredHeight,
-            headerStableBottom, artworkBottom, metricBottom, gameBottom, listBottom,
-            badgeBottom, progressBottom, fieldBottom
-        )
-    }
-
+    // Child edits are card-contained; only outer handles change the parent size.
     TapHandler {
         enabled: achievementRoot.achievementModel.interactionEnabled
         acceptedButtons: Qt.LeftButton
@@ -376,13 +322,13 @@ OverlayWidget {
     Item {
         id: authoredCanvas
         objectName: "achievementAuthoredCanvas"
-        width: achievementRoot.authoredWidth
+        width: Math.max(achievementRoot.authoredWidth, achievementRoot.baseAuthoredWidth)
         height: achievementRoot.authoredHeight
         // OverlayWidget now owns the whole-card uniform transform.  Keep this
         // authored content at canonical coordinates inside that transformed
         // shell; a second local scale/centering pass would recreate the visible
         // top/bottom bands that parity is removing.
-        x: 0.0
+        x: -achievementRoot.leadingTrim
         y: 0.0
         scale: 1.0
         transformOrigin: Item.TopLeft
@@ -410,7 +356,7 @@ OverlayWidget {
             x: (achievementRoot.achievementModel.customHeaderAnchor.endsWith("right")
                     || (achievementRoot.headerFlipped
                         && !achievementRoot.achievementModel.customHeaderAnchor.endsWith("left")))
-                ? achievementRoot.authoredWidth - achievementRoot.headerSafeInsetX
+                ? authoredCanvas.width - achievementRoot.headerSafeInsetX
                     - width * scale
                 : (achievementRoot.achievementModel.customHeaderAnchor.endsWith("left")
                     ? achievementRoot.headerSafeInsetX
@@ -680,9 +626,8 @@ OverlayWidget {
                 font.pointSize: (achievementRoot.achievementModel.fontSize + 5.0)
                     * achievementRoot.achievementModel.customGameNameHeightScale
                 font.bold: true
-                horizontalAlignment:
-                    achievementRoot.achievementModel.customGameNameAlignment === "right"
-                        ? Text.AlignRight : Text.AlignLeft
+                horizontalAlignment: achievementRoot.gameNameFlipped
+                    ? Text.AlignRight : Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter
                 readonly property bool customGeometryActive:
                     Math.abs(achievementRoot.achievementModel.customGameNameWidthScale - 1.0)
@@ -746,9 +691,8 @@ OverlayWidget {
                     font.family: achievementRoot.achievementModel.fontFamily
                     font.pointSize: achievementRoot.achievementModel.fontSize * 0.78
                         * achievementRoot.achievementModel.customAchievementListHeightScale
-                    horizontalAlignment:
-                        achievementRoot.achievementModel.customAchievementListAlignment === "right"
-                            ? Text.AlignRight : Text.AlignLeft
+                    horizontalAlignment: achievementRoot.achievementListFlipped
+                        ? Text.AlignRight : Text.AlignLeft
                     verticalAlignment: Text.AlignTop
                     wrap: true
                     elide: Text.ElideRight
@@ -770,33 +714,38 @@ OverlayWidget {
                         // The first unlock has its own persisted role. Cancel
                         // only the remainder-list CUSTOM offset, not the authored
                         // game-name reflow, so the first line remains independent.
-                        x: index === 0
-                            ? (achievementRoot.achievementModel.customFirstAchievementXOffset
-                                - achievementRoot.achievementModel.customAchievementListXOffset)
-                                * achievementRoot.baseAuthoredWidth
-                            : 0.0
                         y: index === 0
                             ? (achievementRoot.achievementModel.customFirstAchievementYOffset
                                 - achievementRoot.achievementModel.customAchievementListYOffset)
                                 * achievementRoot.baseAuthoredHeight
                             : (30.0 + (index - 1) * 14.0)
                                 * achievementRoot.achievementModel.customAchievementListHeightScale
-                        // The first, larger unlock owns the full title rail. The
-                        // recent-achievement badge begins below it and therefore
-                        // only the smaller lines yield horizontal room to it.
+                        // The first unlock retains its own independent child
+                        // geometry. The smaller lines share one badge-clearance
+                        // lane: on a right flip, START after the badge and end at
+                        // the actual right edge of the editable list rectangle.
+                        // Leaving x at zero and only changing Text.AlignRight
+                        // would right-align within the old narrow left lane.
+                        readonly property real badgeClearance: 6.0
+                        x: index === 0
+                            ? (achievementRoot.achievementModel.customFirstAchievementXOffset
+                                - achievementRoot.achievementModel.customAchievementListXOffset)
+                                * achievementRoot.baseAuthoredWidth
+                            : latestArtworkFrame.visible && achievementRoot.achievementListFlipped
+                                ? Math.min(achievementListFrame.width, Math.max(0.0,
+                                    latestArtworkFrame.x + latestArtworkFrame.visualWidth
+                                    - achievementListFrame.x + badgeClearance))
+                                : 0.0
                         width: index === 0
                             ? (achievementRoot.firstAchievementOnAuthoredRail
                                 ? normalContent.titleWidth : achievementRoot.canonicalTitleWidth)
                                 * achievementRoot.achievementModel.customFirstAchievementWidthScale
                             : !latestArtworkFrame.visible
-                            ? achievementListFrame.width
-                            : Math.min(
-                                achievementListFrame.width,
-                                Math.max(
-                                    0.0,
-                                    latestArtworkFrame.x - achievementListFrame.x - 6.0
-                                )
-                            )
+                                ? achievementListFrame.width
+                                : achievementRoot.achievementListFlipped
+                                    ? Math.max(0.0, achievementListFrame.width - x)
+                                    : Math.min(achievementListFrame.width, Math.max(0.0,
+                                        latestArtworkFrame.x - achievementListFrame.x - badgeClearance))
                         height: index === 0
                             ? 26.0 * achievementRoot.achievementModel.customFirstAchievementHeightScale
                             : 13.0 * achievementRoot.achievementModel.customAchievementListHeightScale
@@ -812,8 +761,8 @@ OverlayWidget {
                         font.bold: index === 0
                         horizontalAlignment:
                             (index === 0
-                                ? achievementRoot.achievementModel.customFirstAchievementAlignment
-                                : achievementRoot.achievementModel.customAchievementListAlignment) === "right"
+                                ? achievementRoot.firstAchievementFlipped
+                                : achievementRoot.achievementListFlipped)
                                 ? Text.AlignRight : Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
@@ -842,10 +791,16 @@ OverlayWidget {
                 readonly property real baseRailX: 102.0
                 readonly property real textClearance: 8.0
                 property bool customEditReflowEnabled: achievementRoot.badgeOnAuthoredRail
+                // Flipping the list also mirrors its uncustomized companion
+                // badge inside the *live* list extent. An independently moved
+                // badge keeps its own persisted position and is not reauthored.
+                readonly property bool followsListFlip:
+                    achievementRoot.achievementListFlipped
+                        && achievementRoot.badgeOnAuthoredRail
                 property real customEditPlacementCompensationX:
-                    achievementRoot.semanticRailShift(
-                        resolvedRailX(), achievementRoot.canonicalBadgeWidth,
-                        achievementRoot.badgeOnAuthoredRail)
+                    x - resolvedRailX()
+                        - achievementRoot.achievementModel.customBadgeXOffset
+                            * achievementRoot.baseAuthoredWidth
                 property real customEditPlacementCompensationY:
                     achievementRoot.badgeOnAuthoredRail
                         ? achievementRoot.gameNameLayoutHeightDelta : 0.0
@@ -856,9 +811,12 @@ OverlayWidget {
                         if (unlockItem !== null)
                             required = Math.max(
                                 required,
+                                // Only the intrinsic glyph width may set the
+                                // authored badge clearance. On a right flip the
+                                // row's live x itself depends on badge.x; reading
+                                // it here would create a QML geometry feedback loop.
                                 achievementRoot.canonicalAchievementListX
-                                    + unlockItem.x + unlockItem.implicitWidth
-                                    + textClearance
+                                    + unlockItem.implicitWidth + textClearance
                             )
                     }
                     return Math.min(
@@ -867,9 +825,13 @@ OverlayWidget {
                             achievementRoot.canonicalTitleWidth - width)
                     )
                 }
-                x: achievementRoot.semanticRailX(
-                        resolvedRailX(), achievementRoot.canonicalBadgeWidth,
-                        achievementRoot.badgeOnAuthoredRail)
+                x: (followsListFlip
+                        ? achievementListFrame.x + achievementListFrame.width
+                            - (resolvedRailX() - achievementRoot.canonicalAchievementListX)
+                            - visualWidth
+                        : achievementRoot.semanticRailX(
+                            resolvedRailX(), achievementRoot.canonicalBadgeWidth,
+                            achievementRoot.badgeOnAuthoredRail))
                     + achievementRoot.achievementModel.customBadgeXOffset
                         * achievementRoot.baseAuthoredWidth
                 y: achievementRoot.canonicalBadgeY

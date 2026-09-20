@@ -38,11 +38,12 @@ def test_reddit_age_column_aligns_first_value_digit_and_fixed_ago_suffix() -> No
     assert "? Text.AlignLeft : Text.AlignRight" in reddit
     assert "anchors.left: parent.left" in reddit
     assert "anchors.right: parent.right" in reddit
-    # The flipped timestamp occupies the same right rail for both long and
-    # short titles; 01HR / AGO remain close with no mirrored glyphs.
-    assert 'ageValueText.width + redditRoot.ageValueAgoGap' in reddit
-    assert 'x: redditRoot.headerFlipped ? parent.width - width : 0.0' in reddit
-    assert 'parent.width - ageText.width - redditRoot.flippedTitleAgeGap' in reddit
+    # Every repeated post uses one widget-wide ordered timestamp/title rail.
+    assert 'postRow.columnX("age") - ageText.x' in reddit
+    assert 'postRow.columnX("ago") - ageText.x' in reddit
+    assert 'postRow.columnX("title")' in reddit
+    assert 'readonly property real ageValueAgoGap: 2.0' in reddit
+
 
 
 def test_context_submenu_has_event_driven_pointer_corridor_without_timer_owner() -> None:

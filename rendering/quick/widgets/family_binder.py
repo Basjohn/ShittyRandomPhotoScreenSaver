@@ -334,9 +334,13 @@ class OrdinaryFamilyPresentationBinder:
                 try:
                     activate(self._thread_manager)
                 except Exception:
-                    logger.debug(
-                        "[FAMILY_BINDER] Failed to activate %s",
-                        widget_id,
+                    # A built retained family whose activation failed otherwise
+                    # appears present but stays in loading/inactive state. Report
+                    # this once at the activation edge, never on frame/render or
+                    # provider cadence; teardown still owns the built family.
+                    logger.warning(
+                        "[FAMILY_BINDER] Failed to activate %s in generation %s",
+                        widget_id, self._runtime_generation,
                         exc_info=True,
                     )
         return tuple(self._bound_widget_ids)

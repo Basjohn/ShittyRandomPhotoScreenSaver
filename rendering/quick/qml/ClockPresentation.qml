@@ -42,7 +42,7 @@ OverlayWidget {
                 "roleId": "clock_face",
                 "target": analogueFace.customFaceTarget,
                 "centeredResize": true,
-                "allowParentGrowth": false,
+
                 "containmentTarget": analogueFace,
                 "geometryDependencies": [analogueFace]
             })

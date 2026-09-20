@@ -96,7 +96,7 @@ def test_media_qml_reflows_width_height_and_projects_full_semantic_child_roles()
     assert qml.count('"requirementTarget": null') == 9
     assert "customEditableChildRequirementTarget: null" in qml
     assert "id: customChildRequirement" not in qml
-    assert 'roles[i].allowParentGrowth = false' in qml
+    assert 'roles[i].allowParentGrowth = false' not in qml
     assert "canonicalArtworkWidth" in qml
     assert "canonicalProgressTrackWidth" in qml
     assert "canonicalControlsHeight" in qml
@@ -131,8 +131,9 @@ def test_media_qml_reflows_width_height_and_projects_full_semantic_child_roles()
     assert "customEditPlacementCompensationY" in qml
     assert "progressBand.y - mediaRoot.canonicalProgressBandY" in qml
     assert "controlsBandSlot.y - mediaRoot.canonicalControlsBandY" in qml
-    assert "mediaRoot.seekOnAuthoredRail ? 0.0 : customEditAncestorReflowY" in qml
-    assert "mediaRoot.transportOnAuthoredRail ? 0.0 : customEditAncestorReflowY" in qml
+    # A child X/Y edit must not cancel the live Y motion of its Column band.
+    assert "- (mediaRoot.seekOnAuthoredRail ? 0.0 : customEditAncestorReflowY)" not in qml
+    assert "- (mediaRoot.transportOnAuthoredRail ? 0.0 : customEditAncestorReflowY)" not in qml
     assert "metadata" in qml
     # The authored seek is a true 75% bar. Do not reintroduce the old hidden
     # two-sided 8% margin before applying the 75% factor.
@@ -181,7 +182,7 @@ def test_media_authored_xy_reflow_survives_child_editor_and_visibility_gates() -
     assert "visible: mediaRoot.mediaModel.controlsBandAvailable" in qml
     assert '"requirementTarget": null' in qml
     assert "customEditableChildRequirementTarget: null" in qml
-    assert "roles[i].allowParentGrowth = false" in qml
+    assert "roles[i].allowParentGrowth = false" not in qml
 
 
 def test_authored_metadata_lane_reserves_intrinsic_artwork_rail_independent_of_child_move() -> None:
@@ -191,7 +192,7 @@ def test_authored_metadata_lane_reserves_intrinsic_artwork_rail_independent_of_c
     # X/Y/width. A first artwork drag may not rebuild the sibling's authored
     # lane and then invalidate collision and pointer compensation mid-gesture.
     assert "artworkFrame.authoredArtworkWidth + 16.0" in lane
-    assert "mediaRoot.authoredCardContentWidth" in lane
+    assert "parent.width - artworkFrame.authoredArtworkWidth" in lane
     assert "artworkFrame.x" not in lane and "artworkFrame.width" not in lane
     assert "mediaRoot.artworkOnAuthoredRail" not in lane
     # Artwork's own provisional position is card-content relative, unaffected
@@ -238,55 +239,27 @@ def test_media_artwork_rail_does_not_depend_on_positioner_polish_or_expand_a_loc
     assert "Timer {" not in qml
 
 
-def test_media_nested_seek_and_transport_detach_from_reflowing_bands_after_placement() -> None:
+def test_media_nested_seek_and_transport_keep_axis_independent_band_reflow() -> None:
     qml = _text("rendering/quick/qml/MediaPresentation.qml")
-
-    # Seek/transport live inside Column-managed bands. A real free-placement
-    # offset must therefore stop inheriting later ancestor-band motion while
-    # still using the one shared child_geometry carrier. The current band
-    # displacement is exposed as first-move compensation; once off-rail, the
-    # retained binding subtracts later displacement instead of accumulating it.
-    assert "readonly property bool seekOnAuthoredRail" in qml
-    assert "readonly property bool transportOnAuthoredRail" in qml
-    assert "progressBand.y - mediaRoot.canonicalProgressBandY" in qml
-    assert "controlsBandSlot.y - mediaRoot.canonicalControlsBandY" in qml
-    assert "mediaRoot.seekOnAuthoredRail ? customEditAncestorReflowY : 0.0" in qml
-    assert "mediaRoot.transportOnAuthoredRail ? customEditAncestorReflowY : 0.0" in qml
-    assert "- (mediaRoot.seekOnAuthoredRail ? 0.0 : customEditAncestorReflowY)" in qml
-    assert "- (mediaRoot.transportOnAuthoredRail ? 0.0 : customEditAncestorReflowY)" in qml
-
-    # A manually placed transport is no longer a seek-resize reflow exemption.
-    # It becomes an ordinary hard peer for the shared edit-only collision pass.
-    assert "property bool customEditReflowEnabled: mediaRoot.transportOnAuthoredRail" in qml
-    assert '"resizeReflowGate": controlsRow' in qml
-
-    # The containing progress band is an invisible structural reservation, not
-    # a fixed collision obstacle after seek becomes a freely placed role.
-    assert '{"target": progressBand' not in qml
-
-    # An editable seek must never determine the parent Column reservation,
-    # even during a size gesture on its original authored rail. The logical
-    # band is canonical in both states; rendered collision owns the edited
-    # target. No seek->Column->artwork feedback is admitted.
+    # Both roles remain descendants of their existing Column-owned bands.
+    # Changing X or Y child offset must not subtract the band's live Y movement
+    # during compact-height parent editing in either semantic orientation.
+    seek = qml.split('id: progressTrack', 1)[1].split('id: progressFill', 1)[0]
+    transport = qml.split('id: controlsRow', 1)[1].split('id: appVolumeSlider', 1)[0]
+    assert 'customEditPlacementCompensationY: 0.0' in seek
+    assert 'customEditPlacementCompensationY: 0.0' in transport
+    assert 'mediaRoot.mediaModel.customSeekYOffset' in seek
+    assert 'mediaRoot.mediaModel.customTransportYOffset' in transport
+    assert '- (mediaRoot.seekOnAuthoredRail ? 0.0 : customEditAncestorReflowY)' not in seek
+    assert '- (mediaRoot.transportOnAuthoredRail ? 0.0 : customEditAncestorReflowY)' not in transport
+    assert 'property bool customEditReflowEnabled: true' in transport
     assert 'height: visible ? mediaRoot.canonicalProgressBandHeight : 0.0' in qml
-    artwork = qml.split('id: artworkFrame', 1)[1].split('id: progressBand', 1)[0]
-    assert 'readonly property real authoredSeekX:' in artwork
-    assert 'authoredSeekX + mediaRoot.authoredProgressTrackWidth' in artwork
-    assert 'progressTrack.x' not in artwork
-    assert 'progressTrack.width' not in artwork
-    assert "mediaRoot.transportOnAuthoredRail\n                    ? Math.max(mediaRoot.canonicalControlsHeight, controlsRow.height)" in qml
-    # The former family-wide child requirement and its on-rail gates were
-    # deliberately retired.  Reflow follows the two slot-height gates above;
-    # off-rail geometry is hard-contained by the card, not admitted as an outer
-    # extent requirement (which could otherwise feed back into slot reflow).
+    assert 'height: visible ? mediaRoot.canonicalControlsHeight : 0.0' in qml
+    # One outer owner; child geometry never becomes a Column or parent-size input.
     assert 'customEditableChildRequirementTarget: null' in qml
     assert 'roles[i].containmentTarget = mediaColumn' in qml
-    assert 'roles[i].allowParentGrowth = false' in qml
-
-    # Detachment is retained arithmetic only. Do not sneak a helper cadence into
-    # ordinary CUSTOM runtime to keep nested placements stable.
-    assert "Timer {" not in qml
-    assert "QTimer" not in qml
+    assert 'roles[i].allowParentGrowth' not in qml
+    assert 'Timer {' not in qml
 
 
 def test_media_card_child_x_uses_card_only_normalization_even_with_volume_accessory() -> None:
@@ -409,11 +382,11 @@ def test_media_custom_settings_lock_matches_child_geometry_authority() -> None:
     assert '"media_playback_progress_height"' in block
 
 
-def test_media_metadata_compaction_preserves_left_visual_anchor() -> None:
+def test_media_metadata_compaction_preserves_orientation_specific_visual_anchor() -> None:
     qml = _text("rendering/quick/qml/MediaPresentation.qml")
     metadata = qml.split("id: metadata", 1)[1].split("MediaMetadataColumn {", 1)[0]
     assert "x: 2.0" in metadata
-    assert "transformOrigin: Item.Left" in metadata
+    assert "transformOrigin: mediaRoot.headerFlipped ? Item.Right : Item.Left" in metadata
     assert "transformOrigin: Item.Center" not in metadata
 
 
@@ -437,5 +410,12 @@ def test_media_child_edit_targets_follow_actual_bands_and_accessory_side_changes
     assert '"target": appVolumeTrack' in qml
     # Card children must invalidate mapToItem chrome when the external volume
     # accessory flips left/right and shifts the authored card origin.
-    assert qml.count("+ mediaRoot.authoredCardX") >= 3
-    assert "property real customEditMappingDependency:" in qml
+    assert qml.count("mediaColumn.y, mediaRoot.authoredCardX") == 3
+    assert qml.count('property string customEditMappingDependency: [') == 4
+    assert 'mainBand.y, mediaColumn.y, mediaRoot.authoredCardX' in qml
+    assert 'progressBand.y, mediaColumn.y, mediaRoot.authoredCardX' in qml
+    assert 'controlsBandSlot.y, mediaColumn.y, mediaRoot.authoredCardX' in qml
+    assert 'appVolumeSlider.x, appVolumeSlider.y' in qml
+    mapper = _text("rendering/quick/qml/CustomLayoutOverlay.qml")
+    assert 'String(\n                                            targetItem.customEditMappingDependency' in mapper
+    assert 'String(\n                                            occupiedItem.customEditMappingDependency' in mapper

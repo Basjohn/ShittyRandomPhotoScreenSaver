@@ -81,6 +81,7 @@ OverlayWidget {
             if (extendedForecastBand.visible) {
                 roles.push({ "roleId": "extended_separator", "target": extendedSeparator })
                 roles.push({ "roleId": "extended_label", "target": extendedForecastLabel })
+                roles.push({ "roleId": "extended_icons", "target": extendedIconRow })
                 roles.push({ "roleId": "extended_text", "target": extendedForecastText })
             }
         } else {
@@ -96,7 +97,7 @@ OverlayWidget {
                 primaryRow, primaryText, detailsBand, forecastBand,
                 extendedForecastBand]
             roles[i].containmentTarget = weatherContent
-            roles[i].allowParentGrowth = false
+
             roles[i].normalizationWidth = childNormalizationWidth
             roles[i].normalizationHeight = childNormalizationHeight
         }
@@ -117,22 +118,41 @@ OverlayWidget {
             + 2.0 * weatherRoot.legacyHorizontalInset
             + 2.0 * weatherRoot.legacyTextInset
     )
+    // Height-only admission. A horizontal-only edit cannot change these thresholds.
+    // Every threshold depends on intrinsic child heights, never on a band that
+    // depends on its own visibility or on positioned childrenRect geometry.
+    readonly property real verticalBudget: weatherModel.contentExtentActive
+        ? weatherModel.contentExtentHeight : Number.POSITIVE_INFINITY
+    // Admission sizes are independent of line wrapping caused by X-only edits.
+    readonly property real primaryRequiredHeight: Math.max(60.0,
+        weatherModel.showConditionIcon ? weatherModel.iconSize : 0.0,
+        weatherModel.fontSize * 2.8)
+        + weatherRoot.shellInset + 2.0 * weatherRoot.legacyVerticalInset
+    readonly property real tomorrowAdmissionHeight: 9.0
+        + Math.max(20.0, weatherModel.detailFontSize * 1.9)
+    readonly property bool detailsVisible: weatherModel.showDetails
+        && verticalBudget >= Math.max(260.0, primaryRequiredHeight
+            + readyColumn.spacing + detailsColumn.implicitHeight)
+    readonly property real afterDetailsRequiredHeight: primaryRequiredHeight
+        + (detailsVisible ? readyColumn.spacing + detailsColumn.implicitHeight : 0.0)
+    readonly property bool tomorrowVisible: weatherModel.showForecast
+        && verticalBudget >= Math.max(240.0, afterDetailsRequiredHeight
+            + readyColumn.spacing + tomorrowAdmissionHeight)
     readonly property real compactReadyContentHeight:
         primaryRow.height
-        + (detailsBand.visible ? readyColumn.spacing + detailsBand.height : 0.0)
-        + (forecastBand.visible ? readyColumn.spacing + forecastBand.height : 0.0)
+        + (detailsVisible ? readyColumn.spacing + detailsColumn.implicitHeight : 0.0)
+        + (tomorrowVisible ? readyColumn.spacing + forecastColumn.implicitHeight : 0.0)
     readonly property real compactIntrinsicContentHeight: Math.max(
         60.0, compactReadyContentHeight
     ) + weatherRoot.shellInset
         + 2.0 * weatherRoot.legacyVerticalInset
     readonly property real extendedForecastRequiredHeight:
-        compactIntrinsicContentHeight
-        + readyColumn.spacing
-        + extendedForecastColumn.implicitHeight
+        afterDetailsRequiredHeight
+        + (tomorrowVisible ? readyColumn.spacing + tomorrowAdmissionHeight : 0.0)
+        + readyColumn.spacing + extendedForecastColumn.implicitHeight
     readonly property bool extendedForecastVisible:
         weatherModel.extendedForecastAvailable
-        && weatherModel.contentExtentActive
-        && weatherModel.contentExtentHeight >= extendedForecastRequiredHeight
+        && verticalBudget >= extendedForecastRequiredHeight
     readonly property real intrinsicContentHeight: Math.max(
         // Intrinsic Column layout only; its positioned child bounding box must
         // not become a feedback source during CUSTOM geometry changes.
@@ -313,7 +333,7 @@ OverlayWidget {
                 objectName: "weatherDetailsBand"
                 width: readyColumn.width
                 height: visible ? detailsColumn.implicitHeight : 0.0
-                visible: weatherRoot.weatherModel.showDetails
+                visible: weatherRoot.detailsVisible
 
                 Column {
                     id: detailsColumn
@@ -421,7 +441,7 @@ OverlayWidget {
                 objectName: "weatherForecastBand"
                 width: readyColumn.width
                 height: visible ? forecastColumn.implicitHeight : 0.0
-                visible: weatherRoot.weatherModel.showForecast
+                visible: weatherRoot.tomorrowVisible
 
                 Column {
                     id: forecastColumn
@@ -513,26 +533,90 @@ OverlayWidget {
                         shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
                     }
 
-                    ShadowedText {
+                    // Two whole-strip edit roles: a single icon scale/offset and
+                    // a single label/temperature scale/offset for all five days.
+                    // Both strips use identical fifth-width cells, so a live
+                    // resize cannot detach a day's text from its condition icon.
+                    Row {
+                        id: extendedIconRow
+                        objectName: "weatherExtendedForecastIcons"
+                        width: parent.width
+                        height: 42.0
+                        spacing: 0.0
+                        transform: [
+                            Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_icons"); yScale: weatherRoot.childHeightScale("extended_icons") },
+                            Translate { x: weatherRoot.childOffsetX("extended_icons"); y: weatherRoot.childOffsetY("extended_icons") }
+                        ]
+
+                        Repeater {
+                            model: weatherRoot.weatherModel.forecastDayCards
+                            delegate: Item {
+                                required property var modelData
+                                width: extendedIconRow.width / 5.0
+                                height: extendedIconRow.height
+                                Image {
+                                    objectName: "weatherForecastDayIcon"
+                                    anchors.centerIn: parent
+                                    width: Math.min(38.0, Math.max(8.0, parent.width - 8.0))
+                                    height: width
+                                    source: modelData.icon
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: false
+                                    cache: true
+                                }
+                            }
+                        }
+                    }
+
+                    Row {
                         id: extendedForecastText
                         objectName: "weatherExtendedForecastText"
+                        width: parent.width
+                        height: Math.max(40.0, weatherRoot.weatherModel.detailFontSize * 3.6)
+                        spacing: 0.0
                         transform: [
                             Scale { origin.x: 0.0; origin.y: 0.0; xScale: weatherRoot.childWidthScale("extended_text"); yScale: weatherRoot.childHeightScale("extended_text") },
                             Translate { x: weatherRoot.childOffsetX("extended_text"); y: weatherRoot.childOffsetY("extended_text") }
                         ]
-                        width: parent.width
-                        height: implicitHeight
-                        text: weatherRoot.weatherModel.extendedForecastText
-                        color: weatherRoot.weatherModel.textColor
-                        font.family: weatherRoot.weatherModel.fontFamily
-                        font.pointSize: weatherRoot.weatherModel.detailFontSize
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        wrap: true
-                        shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
-                        shadowColor: weatherRoot.weatherModel.textShadowColor
-                        shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
-                        shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
+
+                        Repeater {
+                            model: weatherRoot.weatherModel.forecastDayCards
+                            delegate: Column {
+                                required property var modelData
+                                width: extendedForecastText.width / 5.0
+                                height: extendedForecastText.height
+                                spacing: 3.0
+                                ShadowedText {
+                                    objectName: "weatherForecastDayLabel"
+                                    width: parent.width
+                                    height: implicitHeight
+                                    text: modelData.day
+                                    color: weatherRoot.weatherModel.textColor
+                                    font.family: weatherRoot.weatherModel.fontFamily
+                                    font.pointSize: weatherRoot.weatherModel.detailFontSize
+                                    font.bold: true
+                                    horizontalAlignment: Text.AlignHCenter
+                                    shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                                    shadowColor: weatherRoot.weatherModel.textShadowColor
+                                    shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
+                                    shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
+                                }
+                                ShadowedText {
+                                    objectName: "weatherForecastDayTemperature"
+                                    width: parent.width
+                                    height: implicitHeight
+                                    text: modelData.temperature
+                                    color: weatherRoot.weatherModel.textColor
+                                    font.family: weatherRoot.weatherModel.fontFamily
+                                    font.pointSize: weatherRoot.weatherModel.detailFontSize * 0.83
+                                    horizontalAlignment: Text.AlignHCenter
+                                    shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                                    shadowColor: weatherRoot.weatherModel.textShadowColor
+                                    shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
+                                    shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
+                                }
+                            }
+                        }
                     }
                 }
             }

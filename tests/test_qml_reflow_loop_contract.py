@@ -12,29 +12,26 @@ def source(name: str) -> str:
     return (QML / name).read_text(encoding="utf-8")
 
 
-def test_reflow_requirement_is_event_driven_but_never_mutated_inside_a_geometry_binding() -> None:
+def test_parent_size_authority_has_no_selected_child_requirement_observer() -> None:
     editor = source("CustomLayoutOverlay.qml")
-    assert "Qt.callLater(customLayoutOverlay.flushSelectedChildRequirementSync)" in editor
-    assert "function queueSelectedChildRequirementSync()" in editor
-    assert "frame.syncChildRequirementNow()" in editor
-    assert "if (frame && frame.selectedForChildEdit && frame.hasPresentationItem)" in editor
-    scheduled = editor.split("function scheduleRequirementSync() {", 1)[1].split("\n                        }", 1)[0]
-    assert "customLayoutOverlay.queueSelectedChildRequirementSync()" in scheduled
-    assert "syncRequirementNow()" not in scheduled
+    assert "queueSelectedChildRequirementSync" not in editor
+    assert "flushSelectedChildRequirementSync" not in editor
+    assert "ensureImmediateChildOverflow" not in editor
+    assert "syncRequirementNow()" not in editor
     assert "Qt.callLater(function" not in editor
 
 
-def test_dense_parent_follow_rail_is_not_recounted_as_child_growth() -> None:
+def test_dense_parent_reflow_cannot_publish_a_child_driven_outer_size() -> None:
     editor = source("CustomLayoutOverlay.qml")
-    assert "frame.targetItem.customEditReflowEnabled === true" in editor
+    assert "ensureImmediateChildOverflow" not in editor
+    assert "aggregateRequiredContentSize" not in editor
+    assert "queueSelectedChildRequirementSync" not in editor
     abandonment = source("AbandonmentIssuesPresentation.qml")
-    requirement = abandonment.split("readonly property real backlogRight:", 1)[1].split(
-        "readonly property real backlogBottom:", 1
-    )[0]
-    assert "baseAuthoredWidth" in requirement
-    assert "backlogParentReflowX" not in requirement
-    assert "archiveTab.width" in requirement
-    assert "backlogParentReflowX" in abandonment  # visible authored reflow retained
+    assert "id: customChildRequirement" not in abandonment
+    assert "customEditableChildRequirementTarget: null" in abandonment
+    assert '"requirementTarget": customChildRequirement' not in abandonment
+    assert "backlogParentReflowX" in abandonment
+
 
 
 def test_dense_header_snap_uses_static_roles_with_live_edit_frame_projection() -> None:
@@ -44,7 +41,7 @@ def test_dense_header_snap_uses_static_roles_with_live_edit_frame_projection() -
     for name, root in (("AbandonmentIssuesPresentation.qml", "abandonmentRoot"),
                        ("AchievementPulsePresentation.qml", "achievementRoot")):
         qml = source(name)
-        header = qml.split('"roleId": "header",', 1)[1].split('"requirementTarget": customChildRequirement', 1)[0]
+        header = qml.split('"roleId": "header",', 1)[1].split('"requirementTarget": null', 1)[0]
         assert f'"semanticCornerInsetX": {root}.headerSafeInsetX' in header
         assert f'"semanticCornerInsetY": {root}.headerSafeInsetY' in header
         assert '"semanticInsetUsesUniformCard": true' in header
@@ -56,8 +53,8 @@ def test_gmail_refresh_has_single_painted_and_edit_rectangle_inside_header() -> 
     gmail = source("GmailPresentation.qml")
     header = gmail.split('"roleId": "header",', 1)[1].split('"roleId": "refresh",', 1)[0]
     refresh = gmail.split('"roleId": "refresh",', 1)[1].split("return roles", 1)[0]
-    assert '"allowParentGrowth": false' in header
-    assert '"allowParentGrowth": false' in refresh
+    assert '"allowParentGrowth": false' not in header
+    assert '"allowParentGrowth": false' not in refresh
     bounds = gmail.split("id: refreshTarget", 1)[1].split("ShadowedText {", 1)[0]
     assert "clip: true" in bounds
     assert "Math.min(Math.max(1.0, headerArea.width)" in bounds
@@ -89,7 +86,7 @@ def test_parent_geometry_change_does_not_republish_child_requirement_or_child_re
     assert "onOccupiedYChanged: childRoleLayer.scheduleRequirementSync()" not in editor
     assert "onOccupiedWidthChanged: childRoleLayer.scheduleRequirementSync()" not in editor
     assert "onOccupiedHeightChanged: childRoleLayer.scheduleRequirementSync()" not in editor
-    assert "onChildStateRevisionChanged:" in editor
+    assert "onChildStateRevisionChanged:" not in editor
     model = (QML.parent / "custom_layout_overlay.py").read_text(encoding="utf-8")
     assert "child_snapshot = tuple(sorted(item.current_child_sizes.items()))" in model
     assert "if child_changed:" in model
