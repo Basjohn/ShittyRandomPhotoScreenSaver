@@ -4,6 +4,8 @@
 
 ## Active work
 
+The operator has activated the transition backlog. `Current_Plan.md` and `Docs/Future_Work/Transition_Expansion.md` own ambition-first implementation and acceptance; the remaining Visualizer/UI ideas stay dormant.
+
 See `Current_Plan.md`. Games You Follow and the system-audio OSD are implemented products, not backlog items; consult their references only when a concrete defect or extension is requested.
 
 ## Dormant product/effect options (not permission to implement automatically)
