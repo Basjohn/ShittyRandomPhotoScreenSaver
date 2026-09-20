@@ -104,8 +104,10 @@ def test_system_stats_sample_edge_invalidates_only_dynamic_metric_properties() -
     model.activate(object())
     sample_edges: list[None] = []
     state_edges: list[None] = []
+    extent_edges: list[None] = []
     model.sampleChanged.connect(lambda: sample_edges.append(None))
     model.stateChanged.connect(lambda: state_edges.append(None))
+    model.contentExtentChanged.connect(lambda: extent_edges.append(None))
 
     model.on_system_stats_runtime_snapshot(
         SimpleNamespace(
@@ -119,9 +121,22 @@ def test_system_stats_sample_edge_invalidates_only_dynamic_metric_properties() -
 
     assert sample_edges == [None]
     assert state_edges == []
-    # Layout/config mutation still owns the broad state signal, not the sample.
+    # Pointer-rate logical extent changes invalidate only geometry, never the
+    # static panel colours, labels or the dynamic 10-second sample properties.
     assert model.set_content_extent(760, 640) is True
-    assert state_edges == [None]
+    assert state_edges == []
+    assert extent_edges == [None]
+    assert sample_edges == [None]
+    for height in range(639, 589, -1):
+        assert model.set_content_extent(760, height)
+    assert len(extent_edges) == 51
+    assert state_edges == []
+    assert sample_edges == [None]  # The initial 10-second sample is not erased by geometry.
+    assert not model.set_content_extent(760, 590)
+    assert len(extent_edges) == 51
+    assert model.clear_content_extent()
+    assert len(extent_edges) == 52
+    assert state_edges == []
     assert sample_edges == [None]
     model.retire()
 
@@ -242,8 +257,12 @@ def test_system_stats_registry_icon_and_qml_are_presentation_only() -> None:
         "https://",
     ):
         assert forbidden not in qml
-    assert "Math.abs(width - systemStatsModel.authoredWidth) > 0.5" in qml
-    assert "Math.abs(height - systemStatsModel.authoredHeight) > 0.5" in qml
+    # The family uses the existing OverlayWidget logical extent + uniform
+    # root scale. Inferring gesture type from two independent size snapshots
+    # was retired because it triggered scale oscillation during live Y edit.
+    assert "uniformScaleTransform: true" in qml
+    assert "Math.abs(width - systemStatsModel.authoredWidth) > 0.5" not in qml
+    assert "Math.abs(height - systemStatsModel.authoredHeight) > 0.5" not in qml
     assert "Behavior on width" in qml
     assert "customEditableChildRoles" in qml
     assert '"roleId": "metric_panels"' in qml
@@ -538,7 +557,13 @@ def test_metric_edit_stack_encloses_every_enabled_panel_without_ghost_targets(
                 # The handle continuously tracks the requested stack until the
                 # card bottom, even if a whole trailing panel has to hide.
                 assert edit_box[3] >= expected[3] - 0.02
+                # The actual root-space bottom, not the content-local bottom,
+                # must respect the card boundary including its shared inset.
                 assert edit_box[3] <= float(item.property("metricPaintBottom")) + 0.02
+                assert float(item.property("metricContentPaintBottom")) == pytest.approx(
+                    float(item.property("metricPaintBottom")) - float(item.property("cardPadding")),
+                    abs=0.02,
+                )
                 if count == len(enabled):
                     assert edit_box == pytest.approx(expected, abs=0.02)
                 # The one group edit moves every real card by the same delta,
@@ -582,6 +607,15 @@ def test_system_stats_y_compaction_hides_complete_panels_without_republishing_ge
         qt_app.processEvents()
         assert int(item.property("paintedMetricCount")) == 4
         assert all(panel.isVisible() for panel in panels)
+        # At the authored extent, the fourth panel and the retained Edit
+        # target land on the SAME root-space bottom rail, not 8px below it.
+        root_bottom = float(item.property("metricPaintBottom"))
+        assert panels[-1].mapToItem(item, 0.0, panels[-1].height()).y() == pytest.approx(
+            root_bottom, abs=0.02,
+        )
+        assert target.mapToItem(item, 0.0, target.height()).y() == pytest.approx(
+            root_bottom, abs=0.02,
+        )
         before = dict(model.customChildGeometry)
         observed_counts = []
         for height in (350., 280., 240., 190., 240., 280., 350., 430.):
@@ -595,17 +629,16 @@ def test_system_stats_y_compaction_hides_complete_panels_without_republishing_ge
             assert [panel.isVisible() for panel in panels] == [i < count for i in range(4)]
             if count:
                 bottom = float(item.property("metricPaintBottom"))
-                assert target.y() + target.height() <= bottom + 0.02
+                assert target.mapToItem(item, 0.0, target.height()).y() <= bottom + 0.02
                 for panel in panels[:count]:
-                    assert panel.y() + panel.height() <= bottom + 0.02
+                    assert panel.mapToItem(item, 0.0, panel.height()).y() <= bottom + 0.02
             assert dict(model.customChildGeometry) == before
             assert item.findChild(QQuickItem, "systemStatsCustomMetricPanelRoleTarget") is target
         assert int(item.property("paintedMetricCount")) == 4
-        assert observed_counts[:4] == sorted(observed_counts[:4], reverse=True)
-        assert observed_counts[3] < observed_counts[0] - 1  # More than one panel retires.
-        assert observed_counts[4:] == [
-            observed_counts[2], observed_counts[1], observed_counts[0], 4
-        ]
+        # The authored 430px four-panel stack admits whole cards through two
+        # distinct thresholds. Reversing only Y must reconstruct every row,
+        # with identical roles and no reflow of the remaining panel heights.
+        assert observed_counts == [3, 2, 1, 1, 1, 2, 3, 4]
     finally:
         item.setParentItem(None)
         item.setParent(None)
@@ -779,7 +812,7 @@ def test_system_stats_y_only_reflow_preserves_panel_size_and_corner_uniform_scal
     try:
         qt_app.processEvents()
         baseline = (cpu.width(), cpu.height())
-        assert not bool(item.property("uniformScaleTransform"))
+        assert bool(item.property("uniformScaleTransform"))
         for logical_height in (350., 280., 240., 190., 280., height):
             if logical_height != height:
                 assert model.set_content_extent(width, logical_height)
@@ -787,7 +820,7 @@ def test_system_stats_y_only_reflow_preserves_panel_size_and_corner_uniform_scal
                 assert model.clear_content_extent()
             item.setHeight(logical_height)
             qt_app.processEvents()
-            assert not bool(item.property("uniformScaleTransform"))
+            assert bool(item.property("uniformScaleTransform"))
             assert float(item.property("presentationScale")) == pytest.approx(1.0)
             assert (cpu.width(), cpu.height()) == pytest.approx(baseline, abs=0.02)
             assert item.width() == pytest.approx(width)
@@ -801,6 +834,19 @@ def test_system_stats_y_only_reflow_preserves_panel_size_and_corner_uniform_scal
         assert bool(item.property("uniformScaleTransform"))
         assert float(item.property("presentationScale")) == pytest.approx(1.25, abs=0.002)
         assert (cpu.width(), cpu.height()) == pytest.approx(baseline, abs=0.02)
+        # A subsequent Y-only content reflow at the established corner scale
+        # must keep that scale constant instead of switching it on/off at each
+        # logical height change (a prior cause of shrinking and handle jumps).
+        assert model.set_content_extent(width, 240.)
+        item.setHeight(300.)
+        qt_app.processEvents()
+        assert float(item.property("presentationScale")) == pytest.approx(1.25, abs=0.002)
+        assert int(item.property("paintedMetricCount")) == 1
+        assert (cpu.width(), cpu.height()) == pytest.approx(baseline, abs=0.02)
+        group = item.findChild(QQuickItem, "systemStatsCustomMetricPanelRoleTarget")
+        assert group is not None
+        bottom = group.mapToItem(item, 0.0, group.height()).y()
+        assert bottom <= item.height() - 18.0 * 1.25 + 0.02
     finally:
         item.setParentItem(None)
         item.setParent(None)
