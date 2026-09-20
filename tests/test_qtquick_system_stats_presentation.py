@@ -202,6 +202,7 @@ def test_system_stats_family_is_public_and_default_leaves_are_explicit() -> None
     assert descriptor is not None
     assert descriptor.custom_layout_resize_mode == "ordinary_uniform"
     assert descriptor.content_extent_axes == ("horizontal", "vertical")
+    assert descriptor.content_extent_minimum_size == (440, 190)
     assert tuple(role.role_id for role in descriptor.custom_child_roles) == (
         "header",
         "header_separator",
@@ -241,7 +242,8 @@ def test_system_stats_registry_icon_and_qml_are_presentation_only() -> None:
         "https://",
     ):
         assert forbidden not in qml
-    assert "uniformScaleTransform: true" in qml
+    assert "Math.abs(width - systemStatsModel.authoredWidth) > 0.5" in qml
+    assert "Math.abs(height - systemStatsModel.authoredHeight) > 0.5" in qml
     assert "Behavior on width" in qml
     assert "customEditableChildRoles" in qml
     assert '"roleId": "metric_panels"' in qml
@@ -512,10 +514,13 @@ def test_metric_edit_stack_encloses_every_enabled_panel_without_ghost_targets(
                     "header": {"alignment": "right" if flipped else "left"},
                 })
                 qt_app.processEvents()
-                assert target.isVisible() == bool(enabled)
-                active = [all_panels[key] for key in enabled]
+                count = int(item.property("paintedMetricCount"))
+                assert 0 <= count <= len(enabled)
+                painted = enabled[:count]
+                assert target.isVisible() == bool(painted)
+                active = [all_panels[key] for key in painted]
                 for key, panel in all_panels.items():
-                    assert panel.isVisible() == (key in enabled)
+                    assert panel.isVisible() == (key in painted)
                 if not active:
                     continue
                 def box(child):
@@ -528,7 +533,14 @@ def test_metric_edit_stack_encloses_every_enabled_panel_without_ghost_targets(
                 boxes = [box(panel) for panel in active]
                 expected = (min(b[0] for b in boxes), min(b[1] for b in boxes),
                             max(b[2] for b in boxes), max(b[3] for b in boxes))
-                assert box(target) == pytest.approx(expected, abs=0.02)
+                edit_box = box(target)
+                assert edit_box[:3] == pytest.approx(expected[:3], abs=0.02)
+                # The handle continuously tracks the requested stack until the
+                # card bottom, even if a whole trailing panel has to hide.
+                assert edit_box[3] >= expected[3] - 0.02
+                assert edit_box[3] <= float(item.property("metricPaintBottom")) + 0.02
+                if count == len(enabled):
+                    assert edit_box == pytest.approx(expected, abs=0.02)
                 # The one group edit moves every real card by the same delta,
                 # without separately displacing the label/value/accent/track.
                 assert all(panel.x() == pytest.approx(active[0].x()) for panel in active)
@@ -544,6 +556,64 @@ def test_metric_edit_stack_encloses_every_enabled_panel_without_ghost_targets(
         item.setParent(None)
         item.deleteLater(); component.deleteLater(); engine.deleteLater()
         model.retire(); qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_system_stats_y_compaction_hides_complete_panels_without_republishing_geometry(qt_app) -> None:
+    """Only painted full panels are admitted; the retained Edit target never leaves the card."""
+    model = _model()
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(
+        str(QML_ROOT / "SystemStatsPresentation.qml")
+    ))
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
+    item = component.createWithInitialProperties({"systemStatsModel": model})
+    assert isinstance(item, QQuickItem)
+    item.setWidth(model.authoredWidth)
+    item.setHeight(model.authoredHeight)
+    panels = [item.findChild(QQuickItem, "systemStats" + suffix + "Panel")
+              for suffix in ("Cpu", "Ram", "Uptime", "Network")]
+    target = item.findChild(QQuickItem, "systemStatsCustomMetricPanelRoleTarget")
+    assert all(panel is not None for panel in panels) and target is not None
+    try:
+        qt_app.processEvents()
+        assert int(item.property("paintedMetricCount")) == 4
+        assert all(panel.isVisible() for panel in panels)
+        before = dict(model.customChildGeometry)
+        observed_counts = []
+        for height in (350., 280., 240., 190., 240., 280., 350., 430.):
+            assert model.set_content_extent(float(model.authoredWidth), height)
+            item.setHeight(height)
+            qt_app.processEvents()
+            count = int(item.property("paintedMetricCount"))
+            observed_counts.append(count)
+            assert 0 <= count <= 4
+            assert target.isVisible() == (count > 0)
+            assert [panel.isVisible() for panel in panels] == [i < count for i in range(4)]
+            if count:
+                bottom = float(item.property("metricPaintBottom"))
+                assert target.y() + target.height() <= bottom + 0.02
+                for panel in panels[:count]:
+                    assert panel.y() + panel.height() <= bottom + 0.02
+            assert dict(model.customChildGeometry) == before
+            assert item.findChild(QQuickItem, "systemStatsCustomMetricPanelRoleTarget") is target
+        assert int(item.property("paintedMetricCount")) == 4
+        assert observed_counts[:4] == sorted(observed_counts[:4], reverse=True)
+        assert observed_counts[3] < observed_counts[0] - 1  # More than one panel retires.
+        assert observed_counts[4:] == [
+            observed_counts[2], observed_counts[1], observed_counts[0], 4
+        ]
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        model.retire()
+        qt_app.processEvents()
 
 
 @pytest.mark.qt
@@ -685,4 +755,57 @@ def test_system_stats_selected_edit_exposes_one_live_metric_stack_and_no_ghost_r
         window.hide()
         root.setParentItem(None); root.setParent(None); root.deleteLater()
         context.deleteLater(); factory.deleteLater(); window.deleteLater()
+        qt_app.processEvents()
+
+@pytest.mark.qt
+def test_system_stats_y_only_reflow_preserves_panel_size_and_corner_uniform_scale(qt_app) -> None:
+    """An outer Y-side handle must not become a uniform resize or reflow feedback loop."""
+    model = _model()
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "SystemStatsPresentation.qml"))
+    )
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
+    item = component.createWithInitialProperties({"systemStatsModel": model})
+    assert isinstance(item, QQuickItem)
+    width, height = float(model.authoredWidth), float(model.authoredHeight)
+    item.setWidth(width)
+    item.setHeight(height)
+    cpu = item.findChild(QQuickItem, "systemStatsCpuPanel")
+    assert cpu is not None
+    try:
+        qt_app.processEvents()
+        baseline = (cpu.width(), cpu.height())
+        assert not bool(item.property("uniformScaleTransform"))
+        for logical_height in (350., 280., 240., 190., 280., height):
+            if logical_height != height:
+                assert model.set_content_extent(width, logical_height)
+            else:
+                assert model.clear_content_extent()
+            item.setHeight(logical_height)
+            qt_app.processEvents()
+            assert not bool(item.property("uniformScaleTransform"))
+            assert float(item.property("presentationScale")) == pytest.approx(1.0)
+            assert (cpu.width(), cpu.height()) == pytest.approx(baseline, abs=0.02)
+            assert item.width() == pytest.approx(width)
+            assert float(model.authoredHeight) == pytest.approx(logical_height)
+        # Corner/wheel scale retains the existing single authored-scene scale.
+        model.set_content_extent(width, 280.)
+        item.setHeight(280.)
+        item.setWidth(width * 1.25)
+        item.setHeight(350.)
+        qt_app.processEvents()
+        assert bool(item.property("uniformScaleTransform"))
+        assert float(item.property("presentationScale")) == pytest.approx(1.25, abs=0.002)
+        assert (cpu.width(), cpu.height()) == pytest.approx(baseline, abs=0.02)
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        model.retire()
         qt_app.processEvents()

@@ -56,8 +56,12 @@ from .host import (
 _IMAGE_ROOT = Path(__file__).resolve().parents[3] / "images"
 _PROVIDER_LOGOS = {
     "spotify": "Spotify_Primary_Logo_RGB_Black.png",
-    "spotify_browser": "Spotify_Primary_Logo_RGB_Black.png",
+    # A generic browser AUMID cannot prove the site. Never show a Spotify logo
+    # for YouTube Music or any other tab selected through the browser fallback.
+    "spotify_browser": "",
     "musicbee": "icons8-musicbee-96.png",
+    "yt_music": "YouTube_Music_Icon_RGB.png",
+    "apple_music": "Apple_Music_Icon_RGB.png",
 }
 
 
@@ -1074,7 +1078,7 @@ class MediaPresentationModel(QObject):
     def on_system_mute_runtime_snapshot(
         self, snapshot: SystemMuteRuntimeSnapshot
     ) -> None:
-        """Project one accepted system-mute revision without owning its poll."""
+        """Project one accepted event-driven system-mute revision."""
 
         if not self.is_active:
             return

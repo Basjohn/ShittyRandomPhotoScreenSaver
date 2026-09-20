@@ -48,6 +48,12 @@ When adding a semantic Edit child, declare the role independently of provider da
 
 Historical caution: [R-88](../Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md). Current execution/testing status belongs in `Current_Plan.md`, not in this guide.
 
+### Semantic icons and audio-session ingress
+
+- [ ] Prefer retained wireframe vector icons over emoji for new navigation/chrome: QPainter or the already proven retained vector owner, inheriting the parent control's existing semantic normal/hover/selected/disabled colours. Preserve the existing shadow and interaction owners, no icon-specific timer or polling, and no duplicate theme-state cache. Replace older emoji glyphs only in a bounded, test-backed related pass.
+- [ ] When a family cannot paint a complete repeated section at a reduced Y extent, hide whole trailing sections using **only family-owned paint readiness**, without changing the configured data/monitoring subset, shrinking the user's saved CUSTOM block on each visibility edge or feeding visible row count back into preferred parent size. Keep the selected Edit target bounded to the same painted card and retain its identity across hide/reveal.
+- [ ] Distinguish Windows endpoint (system master) volume from one selected application's Windows mixer session. Only the shared system owner may register endpoint callbacks for Media/OSD; a separately scoped Media application-session observer exists only with a live Media volume consumer and must retire on source/endpoint change and dormancy. Its callback is read-only, coalesced to one Qt GUI wake, and never attempts to synchronize an unrelated browser tab or remote playback device. Source-only evidence of no polling does not prove the listener has zero GUI admission cost: selected-session `GetAllSessions()` and COM registration currently run synchronously at the source edge on the owning GUI apartment. Verify that bounded start/switch/retirement cost on native Windows before describing it as performance-neutral. Do not move live COM interfaces across apartments to hide the cost. Use application-owned event context to avoid slider feedback; never introduce a session-volume poll or per-display COM registration.
+
 ## 2. Destination chain
 
 ```text
@@ -69,7 +75,7 @@ No extra accelerated widget window. No `QQuickWidget`.
 
 ### Immediate consumers of this guide
 
-- [ ] **OSD:** use the current system-audio/Media shared owner only after proving native COM callback admission and device rebind; existing backend acquires its endpoint at import and runtime currently has a 30-second consumer poll. Use the one shared event subscription, bounded latest-only GUI admission, no OSD state poll, and no new audio authority, callback-per-display or Quick window; retire the existing Media poll only after native callback/device parity. See [OSD decomposition](../Future_Work/System_Volume_OSD.md).
+- [ ] **OSD:** consume the existing shared system-audio source after the event-driven Media owner passes its live Windows gate. Core Audio endpoint/callback and volume/mute actions have exactly one GUI-apartment owner across display and overlapping runtime-generation leases. The legacy process-global endpoint/poll must not be restored to solve OSD availability. OSD only adds an opt-in retained presentation lease, no second system-audio source, per-display COM callback or extra Quick window. Follow [OSD decomposition](../Future_Work/System_Volume_OSD.md).
 - [ ] **Games You Follow:** verify the current Web API key can access the explicit follow-set route **before** building a provider/card. Stable `steam_progress` compatibility ID, one Steam owner/last-good private cache, real-Qt X/Y row variant and singleton Edit roles from v1. No owned/recent/wishlist substitute or article scraping. See [live decomposition](../Future_Work/Steam_Games_You_Follow.md).
 
 ## 3. Proven ownership patterns

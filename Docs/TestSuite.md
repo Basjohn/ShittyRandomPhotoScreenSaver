@@ -1,5 +1,10 @@
 # Test Suite Guide
 
+### System-audio owner / OSD source gate
+
+The read-only native callback registration module runs directly on Windows with `python -m pytest tests/test_core_audio_callback_native_probe.py -q --tb=short`; no environment-variable gate is used. The new shared system-audio source and Media lease integration are covered by `tests/test_audio_shared_source.py`, `tests/test_audio_event_qt_bridge.py`, `tests/test_audio_event_session.py`, `tests/test_system_mute_runtime.py` and `tests/test_media_generation_recreation.py`. Native registration proves no external event arrival by itself; end-to-end external volume/mute and output-switch checks remain a separate, bounded acceptance requirement before considering the migrated Media source production accepted.
+
+
 Last updated: 2026-09-20
 
 This file is the **current test/acceptance authority** for SRPSS. It describes what deserves trust now, how to classify evidence, and which architecture contracts must stay guarded. It is not a checkpoint diary or migration changelog; source control and `Docs/Historical_Bugs/` preserve chronology.

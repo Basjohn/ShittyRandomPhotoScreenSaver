@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import core.media.provider_registry as provider_registry
@@ -26,7 +27,7 @@ from core.settings.models import MediaWidgetSettings
 
 def test_spotify_browser_provider_uses_explicit_browser_host_identities() -> None:
     assert normalize_provider_id(" Spotify_Browser ") == "spotify_browser"
-    assert get_media_provider_display_name("spotify_browser") == "Spotify Browser (GSMTC)"
+    assert get_media_provider_display_name("spotify_browser") == "Browser Media (GSMTC)"
     assert provider_matches_source_app_user_model_id("spotify_browser", "Chrome.exe")
     assert provider_matches_source_app_user_model_id("spotify_browser", "MSEdge")
     assert provider_matches_source_app_user_model_id(
@@ -451,3 +452,32 @@ def test_session_selection_rejects_unrelated_and_false_positive_sources() -> Non
 
     assert controller._select_media_session(_Manager([unrelated, near_match], unrelated)) is None
 
+
+
+def test_new_media_providers_require_explicit_gsmtc_identity_and_keep_old_failover():
+    from core.media.provider_registry import MEDIA_PROVIDER_REGISTRY
+
+    assert normalize_provider_id("apple_music") == "apple_music"
+    assert normalize_provider_id("yt_music") == "yt_music"
+    assert provider_matches_source_app_user_model_id("apple_music", "AppleMusic.exe")
+    assert provider_matches_source_app_user_model_id(
+        "apple_music", "AppleInc.AppleMusicWin_nzyj5cx40ttqa!App"
+    )
+    assert not provider_matches_source_app_user_model_id("apple_music", "AppleTV.exe")
+    assert not provider_matches_source_app_user_model_id("apple_music", "chrome.exe")
+    assert provider_supports_app_volume("apple_music")
+    assert provider_matches_source_app_user_model_id(
+        "yt_music", "Chrome._crx_cinhimbnkkaeohfgghhklpknlkffjgod"
+    )
+    assert not provider_matches_source_app_user_model_id("yt_music", "chrome.exe")
+    assert not provider_matches_source_app_user_model_id("yt_music", "Spotify Browser")
+    assert not provider_supports_app_volume("yt_music")
+    assert get_provider_failover_candidates("spotify") == ("spotify_browser", "musicbee")
+    assert get_provider_failover_candidates("apple_music") == ()
+    assert get_provider_failover_candidates("yt_music") == ()
+    for provider_id, filename in (
+        ("yt_music", "YouTube_Music_Icon_RGB.png"),
+        ("apple_music", "Apple_Music_Icon_RGB.png"),
+    ):
+        assert provider_id in MEDIA_PROVIDER_REGISTRY
+        assert (Path(__file__).resolve().parents[1] / "images" / filename).exists()

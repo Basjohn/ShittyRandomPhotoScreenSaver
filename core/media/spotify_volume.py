@@ -60,6 +60,11 @@ class SpotifyVolumeController:
     # Public API
     # ------------------------------------------------------------------
 
+    @property
+    def process_targets(self) -> tuple[str, ...]:
+        """Immutable, exact session identities for the shared event listener."""
+        return self._process_targets
+
     def is_available(self) -> bool:
         """Return True when pycaw/Core Audio integration is available."""
 
@@ -107,7 +112,15 @@ class SpotifyVolumeController:
         clamped = float(max(0.0, min(1.0, level)))
         try:
             # This is ISimpleAudioVolume.SetMasterVolume on the SESSION, not system master
-            volume_iface.SetMasterVolume(clamped, None)  # type: ignore[attr-defined]
+            # Use an identifiable event context so callbacks from our own
+            # optimistic slider write do not tug the UI back during a drag.
+            from core.media.audio_event_context import SESSION_VOLUME_EVENT_CONTEXT
+            try:
+                from comtypes import GUID
+                context = GUID(SESSION_VOLUME_EVENT_CONTEXT)
+            except ImportError:  # pycaw-less fake-controller test environments
+                context = None
+            volume_iface.SetMasterVolume(clamped, context)  # type: ignore[attr-defined]
             logger.debug("[SPOTIFY_VOL] Set Spotify session volume to %.3f (session=%s)", clamped, session_name)
             self._last_pid = getattr(getattr(volume_iface, "_session", None), "ProcessId", None)
             return True

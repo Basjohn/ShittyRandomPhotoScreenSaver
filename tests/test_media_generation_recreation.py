@@ -158,6 +158,23 @@ class _VolumeControllerFactory:
 
 
 class _MuteBackend:
+    def __init__(self) -> None:
+        self.callback = None
+        self.revision = 0
+
+    def start(self, callback) -> bool:
+        from core.media.audio_event_session import AudioEventState
+        self.callback = callback
+        self.revision += 1
+        callback(AudioEventState(self.revision, True, 0.5, False, 0, "initial"))
+        return True
+
+    def stop(self) -> None:
+        self.callback = None
+
+    def request_snapshot(self) -> bool:
+        return True
+
     def is_available(self) -> bool:
         return True
 

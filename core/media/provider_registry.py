@@ -74,8 +74,8 @@ MEDIA_PROVIDER_REGISTRY: dict[str, MediaProviderDescriptor] = {
     ),
     "spotify_browser": MediaProviderDescriptor(
         provider_id="spotify_browser",
-        display_name="Spotify Browser (GSMTC)",
-        header_name="SPOTIFY BROWSER",
+        display_name="Browser Media (GSMTC)",
+        header_name="BROWSER MEDIA",
         description=(
             "Uses the active GSMTC session from a supported browser. Windows "
             "identifies the browser host, not the website or tab."
@@ -92,6 +92,28 @@ MEDIA_PROVIDER_REGISTRY: dict[str, MediaProviderDescriptor] = {
         description="MusicBee via its Windows GSMTC plugin.",
         source_app_user_model_ids=frozenset({"musicbee.exe", "musicbee"}),
         process_exe_names=frozenset({"musicbee.exe"}),
+        supports_app_volume=True,
+    ),
+    "yt_music": MediaProviderDescriptor(
+        provider_id="yt_music",
+        display_name="YouTube Music (PWA)",
+        header_name="YOUTUBE MUSIC",
+        description=(
+            "YouTube Music installed as a Chrome PWA. Requires GSMTC to expose "
+            "its own app identity; a generic browser session is intentionally "
+            "not mistaken for a YouTube Music tab."
+        ),
+        source_app_user_model_ids=frozenset({"cinhimbnkkaeohfgghhklpknlkffjgod"}),
+        process_exe_names=frozenset(),
+        supports_app_volume=False,
+    ),
+    "apple_music": MediaProviderDescriptor(
+        provider_id="apple_music",
+        display_name="Apple Music",
+        header_name="APPLE MUSIC",
+        description="Apple Music for Windows via its explicit native GSMTC identity.",
+        source_app_user_model_ids=frozenset({"applemusic.exe", "applemusic"}),
+        process_exe_names=frozenset({"applemusic.exe"}),
         supports_app_volume=True,
     ),
 }
@@ -263,6 +285,16 @@ def provider_matches_source_app_user_model_id(
         return False
     if descriptor.provider_id == "spotify_browser":
         return _resolve_browser_process_exe_name(source_id) is not None
+    if descriptor.provider_id == "yt_music":
+        # Chrome's public YouTube Music PWA id, not a generic Chrome/Edge tab.
+        # Only admit a source whose own identity includes this specific app id.
+        return "cinhimbnkkaeohfgghhklpknlkffjgod" in _source_id_tokens(source_id)
+    if descriptor.provider_id == "apple_music":
+        # Store installs may expose a package AUMID rather than AppleMusic.exe.
+        # A known package-family prefix is sufficient, but never match another
+        # Apple app, its metadata, or a generic browser-host identity.
+        if re.fullmatch(r"appleinc\.applemusicwin_[a-z0-9]+![a-z0-9._-]+", source_id):
+            return True
     return (
         source_id in descriptor.source_app_user_model_ids
         or _source_id_basename(source_id) in descriptor.source_app_user_model_ids
@@ -322,11 +354,12 @@ def get_provider_failover_candidates(provider: object) -> tuple[str, ...]:
     normalized = normalize_provider_id(provider)
     if normalized is None:
         return ()
-    return tuple(
-        provider_id
-        for provider_id in MEDIA_PROVIDER_REGISTRY
-        if provider_id != normalized
-    )
+    # New providers are explicitly selectable, never silently substituted
+    # for a user's existing Spotify/MusicBee provider during normal failover.
+    legacy = ("spotify", "spotify_browser", "musicbee")
+    if normalized in legacy:
+        return tuple(provider_id for provider_id in legacy if provider_id != normalized)
+    return ()
 
 
 def iter_media_providers() -> Iterable[MediaProviderDescriptor]:

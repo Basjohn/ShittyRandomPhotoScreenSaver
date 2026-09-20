@@ -374,3 +374,74 @@ def test_shared_lease_requires_generation_or_thread_manager() -> None:
 # all deleted in the Qt Quick cutover. Shared volume-owner injection/reuse and
 # the disabled-builds-no-owner contract are covered by the widget_runtime_services
 # cells above and shared_media_volume_owner_count().
+
+
+def test_event_listener_is_shared_fenced_by_provider_and_never_echoes_a_write(monkeypatch):
+    """One local-session observer follows the same existing Media lease owner."""
+    from core.media import session_volume_listener
+
+    class _EventController(_Controller):
+        @property
+        def process_targets(self):
+            return ("spotify.exe",) if self.provider == "spotify" else ("musicbee.exe",)
+
+    class _EventFactory:
+        def __init__(self):
+            self.controllers = []
+
+        def __call__(self, provider):
+            controller = _EventController(provider)
+            self.controllers.append(controller)
+            return controller
+
+    class _Listener:
+        created = []
+
+        def __init__(self, *, on_volume, on_disconnected):
+            self.on_volume = on_volume
+            self.on_disconnected = on_disconnected
+            self.started = []
+            self.closed = False
+            self.__class__.created.append(self)
+
+        def start(self, targets):
+            self.started.append(targets)
+            return True
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(session_volume_listener, "SessionVolumeListener", _Listener)
+    manager = _ThreadManager()
+    factory = _EventFactory()
+    first_consumer = _Consumer(manager)
+    second_consumer = _Consumer(manager)
+    first = _lease(first_consumer, factory)
+    second = _lease(second_consumer, factory)
+
+    assert first.start() and second.start()
+    assert len(_Listener.created) == 1
+    listener = _Listener.created[-1]
+    assert listener.started == [("spotify.exe",)]
+    assert len(manager.jobs) == 1
+
+    # An external mixer event is authoritative and invalidates a pending read.
+    listener.on_volume(0.27, False)
+    assert first_consumer.snapshots[-1].source == "session_event"
+    assert second_consumer.snapshots[-1].level == pytest.approx(0.27)
+    manager.complete()
+    assert first_consumer.snapshots[-1].level == pytest.approx(0.27)
+
+    delayed = []
+    monkeypatch.setattr(ThreadManager, "single_shot", staticmethod(
+        lambda delay, callback, *args, **kwargs: delayed.append(callback)
+    ))
+    assert first.set_volume_optimistic(0.64)
+    listener.on_volume(0.10, False)
+    assert first_consumer.snapshots[-1].level == pytest.approx(0.64)
+
+    first.retire()
+    assert not listener.closed
+    second.retire()
+    assert listener.closed
+    assert shared_media_volume_owner_count() == 0
