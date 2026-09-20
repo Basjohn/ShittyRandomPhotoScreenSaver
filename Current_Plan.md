@@ -6,6 +6,11 @@ This file contains only active work and directly relevant evidence. `Spec.md`, `
 
 The independent fragment and particle minimum-energy settings are implemented with curated/default and user-authored preset protection. Focused pure-Python settings/preset gates were previously reported green. The remaining Sphere-specific operator gate is the native Windows settings/preset run and active-music observation of independent floor effects, Reset and Custom Save/reopen. Do not retune authored values on the operator's behalf; promote a reproduced defect here if one appears.
 
+## Future Work transitions | active
+
+- [ ] Implement Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Slide Perspective Push and organic transition ideas in ambition-first order. Detailed ownership, checkpoints and acceptance: `Docs/Future_Work/Transition_Expansion.md`.
+- [~] Awaiting validation after implementation: operator visual acceptance and mixed-display/heavy-load freshness. Preserve the unrelated Sphere floor acceptance above.
+
 ## Handoff and regression rules
 
 When an accepted behavior changes, select only the relevant targeted tests and physical observations; do not re-accept unrelated OSD, Media or widget systems. Keep full superseding GODZIPs with the canonical three `.godzip/` files, manifest-backed replace/delete instructions and no temporary scripts or compiled artifacts. Test commands belong in chat, not an added documentation file.
