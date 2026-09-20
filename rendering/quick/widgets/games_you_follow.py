@@ -118,16 +118,20 @@ class FollowedStoryRows(QAbstractListModel):
 
 @dataclass(frozen=True)
 class FollowedPresentationConfig:
-    base_width: float = 520.0
-    base_height: float = 360.0
-    font_family: str = "Inter"
-    font_size: int = 17
-    story_cap: int = 8
-    headline_chars: int = 180
-    headline_alignment: str = "left"
-    show_artwork: bool = True
-    artwork_shape: str = "wide"
-    show_refresh_frame: bool = False
+    # Resolved presentation contract: no local defaults. Every field is supplied
+    # explicitly by the canonical-aware ``from_widgets_mapping`` projection so the
+    # steam_progress canonical authority stays the only product-default source
+    # (see core/settings/defaults_authority_audit.py).
+    base_width: float
+    base_height: float
+    font_family: str
+    font_size: int
+    story_cap: int
+    headline_chars: int
+    headline_alignment: str
+    show_artwork: bool
+    artwork_shape: str
+    show_refresh_frame: bool
 
     @classmethod
     def from_widgets_mapping(cls, widgets: Mapping[str, object]) -> "FollowedPresentationConfig":
@@ -213,7 +217,7 @@ class GamesYouFollowPresentationModel(QObject):
                  visual_style: SteamCardStyleProjection | None = None,
                  widgets: Mapping[str, object] | None = None) -> None:
         super().__init__()
-        self.config = config or FollowedPresentationConfig()
+        self.config = config or FollowedPresentationConfig.from_widgets_mapping(widgets or {})
         self._visual_style = visual_style or followed_visual_style(widgets or {})
         defaults = require_canonical_default("widgets.steam_progress")
         card_values = (widgets or {}).get("steam_progress", {})
