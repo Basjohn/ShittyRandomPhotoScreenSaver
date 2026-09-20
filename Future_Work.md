@@ -509,7 +509,7 @@ This ranking contains dormant ideas only. Active/promoted work is deliberately a
 7. other 3D visualizer experiments;
 8. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use without changing ownership.
 
-Games You Follow and System volume/mute OSD have their own focused design contracts; active sequencing belongs only in the active plan.
+Games You Follow and the system volume/mute OSD are implemented. Their durable product contracts live in `Docs/Reference/`; reopen either only for a concrete defect or an explicitly requested extension.
 
 Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if their first prototypes are abandoned. Their intended identities should not collapse into generic `shatter`, `pixel dissolve`, or `audio sphere` effects.
 
@@ -524,8 +524,3 @@ Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a q
 - [ ] Only promote this UI polish for a demonstrated Settings layout issue; preserve lazy Settings bodies and current owner.
 
 Use FlowContainers in additional Settings sections only where they materially improve alignment and space usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct otherwise lazy bodies.
-
-## 10.2 System volume/mute OSD | promoted to active plan
-
-- [ ] Implement only through `Current_Plan.md` B0–B3 and [the OSD live decomposition](Docs/Future_Work/System_Volume_OSD.md). The candidate is an opt-in ordinary Quick widget; no separate audio authority or permanent overlay window. **Existing system-mute runtime currently polls every 30 seconds when admitted and the backend acquires its endpoint at module import**; OSD needs no state poll: prove Core Audio event delivery, COM lifetime and output-device rebind before GUI work; retire the existing Media poll only once native callback parity is accepted.
-- [ ] Preserve external-volume/mute response, Media coexistence, burst coalescing, default-device rebind, single restartable idle deadline, off-state dormancy, theme, CUSTOM X/Y edit/slot/Restore and native/perf proof exactly as routed by the decomposition. Do not implement a polling fallback for OSD.

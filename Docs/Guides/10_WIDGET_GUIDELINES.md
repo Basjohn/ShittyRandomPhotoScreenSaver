@@ -39,7 +39,7 @@ When adding a semantic Edit child, declare the role independently of provider da
 
 ### Mandatory current Edit, role, and performance checklist
 
-- [ ] **Choose a purposeful editable unit.** System Stats has only header, top separator and one entire painted metric-stack group; it does not expose thin metric-value/accent subhandles. Repeated feeds generally keep authored rows together, with optional **one semantic column order per widget** (as accepted in Reddit/Gmail), not free-position geometry for every row. An OSD exposes only meaningful singleton chrome; Games You Follow initially exposes header/refresh/overflow, not per-story free-placement.
+- [ ] **Choose a purposeful editable unit.** System Stats has only header, top separator and one entire painted metric-stack group; it does not expose thin metric-value/accent subhandles. Repeated feeds generally keep authored rows together, with optional **one semantic column order per widget** (as accepted in Reddit/Gmail), not free-position geometry for every row. An OSD exposes only meaningful singleton chrome; Games You Follow exposes stable `header`, `refresh`, `story_tiles` (one grouped role), and `overflow_summary`, never per-story free-placement.
 - [ ] **Declare stable role identity.** `customEditableChildRoles` must not depend on live normalization/preferred dimensions, provider contents or temporary visibility: array reallocation retires a selected QML Repeater delegate and can break a gesture. Use existing retained family `normalizationTarget` and named live properties for *selected-only* reads; readiness and alternate painted-target resolution live inside that delegate. Never replace an unavailable saved role with unrelated status text. Do not add off-Edit observers.
 - [ ] **Map the actual paint, not the model's guess.** Shared selected mapping projects all four corners through inherited QQuickItem geometry and clips against ancestor paint surfaces. For QML `Scale`/`Translate` applied to a target or ancestor, expose `customEditMappingDependency` from the **applied transform object's properties**, not just the upstream source input. Never enumerate non-bindable `QQuickItem.transform` in an active binding or add a per-pointer scene scan. Transparency of a semantic geometry carrier alone does not make its painted descendants unavailable.
 - [ ] **Separate parent and child authority.** Outer handles alone change the parent/custom `content_extent`; child X/Y edits are independent deltas from live family authored rails, not inside-out parent minimums or new persisted layout roots. A child's painted ink must stay inside the actual declared card/accessory surface even when collision is OFF. Test flip and opposite-axis resize in the same unsaved Edit session, Undo/Cancel/Restore/slots/reopen and later display generations.
@@ -73,10 +73,10 @@ It is not a provider, SettingsManager, cache owner or business controller.
 
 No extra accelerated widget window. No `QQuickWidget`.
 
-### Immediate consumers of this guide
+### Current consumers of this guide
 
-- [ ] **OSD:** the independently opt-in `system_audio_osd` family consumes the accepted shared system-audio owner through one neutral runtime lease and one retained Quick presentation. Core Audio endpoint/callback and volume/mute actions have exactly one GUI-apartment owner across display and overlapping runtime-generation leases. The legacy process-global endpoint/poll must not be restored to solve OSD availability. OSD only adds an opt-in retained presentation lease, no second system-audio source, per-display COM callback or extra Quick window. Follow [OSD decomposition](../Future_Work/System_Volume_OSD.md).
-- [ ] **Games You Follow:** verify the current Web API key can access the explicit follow-set route **before** building a provider/card. Stable `steam_progress` compatibility ID, one Steam owner/last-good private cache, real-Qt X/Y row variant and singleton Edit roles from v1. No owned/recent/wishlist substitute or article scraping. See [live decomposition](../Future_Work/Steam_Games_You_Follow.md).
+- **System audio OSD:** independent opt-in presentation of the existing shared GUI-apartment Core Audio source; no endpoint poll, per-display callback, alternative window or second source. See [current OSD reference](../Reference/System_Volume_OSD.md).
+- **Games You Follow:** linked followed-set membership through the existing Steam credential owner, one generation-shared source/lease/deadline, retained news tiles and four stable grouped CUSTOM roles with independent X/Y and flip. The first complete scan is durable; post-coverage maintenance updates at most eight apps per admitted session. See [current product reference](../Reference/Steam_Games_You_Follow.md).
 
 ## 3. Proven ownership patterns
 
@@ -130,7 +130,7 @@ backend abstraction.
 ### Steam cards
 
 Use current neutral Steam models/runtime/cache/privacy/provenance seams. Friend Pulse is a retained public card;
-do not manufacture a Quick port for the unfinished Steam Journey/Progress scaffold.
+do not resurrect the retired Steam Journey scaffold as a parallel widget; `steam_progress` is the implemented Games You Follow identity.
 
 ### System Stats
 
@@ -394,8 +394,8 @@ ordinary QML projects the order across every retained delegate without
 provider refresh or Repeater recreation. Reddit's `01HR` and `AGO` are separate
 semantic columns for this feature even though the current presentation groups
 them in one age cell. Gmail sender/subject/timestamp likewise keep one
-widget-wide order. This UI is **not yet implemented**; introducing it requires
-a separate retained Qt acceptance gate, not a source-only role assertion.
+widget-wide order. Reddit/Gmail semantic column-rail editing is implemented; changes to it require
+a retained Qt acceptance gate, not a source-only role assertion.
 
 ### Non-CUSTOM authored stacking
 

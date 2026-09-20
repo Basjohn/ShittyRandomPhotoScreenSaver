@@ -201,7 +201,7 @@ cache record remains eligible for cache-first presentation regardless of age. Fr
 and whether presentation is marked cached/stale; a failed/private/rate-limited/malformed refresh must not overwrite,
 freshen, or delete the last-good record. Cache removal requires an explicit user/account/cache reset, schema
 rejection/corruption, or a proven semantic identity change. Do not improve nominal freshness by blanking useful stale
-content. Friend Pulse is the current Steam example and Games You Follow must inherit the same rule if admitted.
+content. Friend Pulse and Games You Follow both use this cache-first rule.
 
 ## State / actions
 
@@ -459,8 +459,8 @@ Slide adds no effect-local timer, clock, worker or resource owner; true Perspect
 
 ## Optional feature extension contracts
 
-- A system-master-volume/mute OSD, if admitted, is one opt-in ordinary retained Qt Quick widget inside the single display scene. Current system audio endpoint/action authority is reused; cross-thread COM notifications must be queued and coalesced to the GUI thread, default output rebinding/retirement tested, and disabled OSD must not cause additional backend acquisition or continuous work. One event-owned hide deadline/fade and the ordinary CUSTOM owner govern its presentation. The existing mute runtime's admitted poll and process-global endpoint import lifetime must be explicitly reconciled, never assumed away.
-- Games You Follow is a feasibility-gated `steam_progress`-identity Steam card for only explicitly followed games, with existing-key follow-source proof mandatory, secure action and validated images, bounded shared Steam fetching and non-expiring last-good account-private cache. One retained Quick model, two authored row variants and current ordinary CUSTOM edit/extent contract own visuals; no surrogate follow source or second Steam backend.
+- The independently opt-in system-master-volume/mute OSD is an ordinary retained Qt Quick widget inside the single display scene. It shares the event-driven Core Audio endpoint/action authority with Media, coalesces notifications onto GUI publication, uses one event-owned visibility deadline/fade and the ordinary CUSTOM owner, and has no separate audio poll/endpoint/window. The old import-owned process-global mute runtime/poll is retired; do not restore it. See `Docs/Reference/System_Volume_OSD.md`.
+- Games You Follow is the default-off `steam_progress`-identity ordinary Steam card for explicitly followed games. Its source uses the existing linked identity/key, globally date-ranked discovered news, secure identity-derived article action, verified cached art and a bounded account-private last-good cache. Initial complete coverage is followed by persisted-cursor maintenance of up to eight apps per refresh session. One retained Quick model and four grouped CUSTOM roles own presentation; no surrogate follow source or second Steam backend. See `Docs/Reference/Steam_Games_You_Follow.md`.
 - A new transition identity enters the one canonical transition registry and lazy Quick render host. Effect-local resources remain removable/dormant, canonical Settings owns persistence, and neither a parallel experimental engine nor permanent second architecture is required. Existing Slide modifiers stay in Slide. Accepted Voxel Sphere isolation and Bubble/Visualizer goldens are unaffected by this transition extension rule.
 
 ## Lifecycle

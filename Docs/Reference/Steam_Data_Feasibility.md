@@ -1,13 +1,12 @@
 # Steam Data Feasibility
 
 This document records the supported-source pass for the Steam widget family. Achievement Pulse, Abandonment Issues,
-and Friend Pulse are normally visible, disabled-by-default cards; this document is the supported-source boundary for Games You
-Follow. The Steam account/cache and family presentation contracts remain in their respective current owners.
+Friend Pulse and Games You Follow are ordinarily registered, default-off cards. This document records their supported source boundaries. The Steam account/cache and family presentation contracts remain in their respective current owners.
 
 ## Rules
 
 - Achievement Pulse, Abandonment Issues, Friend Pulse, and Steam Settings are visible without a development flag.
-  `--devsteam` exposes only unfinished Games You Follow; `steam_progress` remains its compatibility key.
+  Games You Follow uses the persisted `steam_progress` identity and is not an unfinished `--devsteam` scaffold.
 - User Steam API keys/profile identifiers are credentials, not settings.
 - Publisher-key endpoints are excluded from client runtime, even if they would solve a product problem.
 - Unknown/private/unavailable data is a first-class state. Do not infer dates, ownership, friends, or progress from absence.
@@ -31,8 +30,8 @@ Follow. The Steam account/cache and family presentation contracts remain in thei
 | Owned library | `IPlayerService/GetOwnedGames/v1` | Conditional; locally proven | app id, title/icon when appinfo is included, playtime forever, `rtime_last_played` when returned | Returns owned games only when owned-game details are visible to caller. Valve's method page does not promise the response field list, so runtime validation remains required | Library index and Abandonment candidate foundation; cannot fabricate missing apps or dates |
 | Per-app achievements | `ISteamUserStats/GetPlayerAchievements/v1` + `GetSchemaForGame/v2` | Conditional | achievement list, unlock state/time, schema totals/names, achieved/unachieved icon URLs when supplied | Requires user key, profile id, app id; per-app availability and icon fields may vary | Achievement Pulse uses schema display names/icons; Abandonment ranking reuses bounded cache hints, then its worker may fetch exactly the committed selected app for enabled count/latest-unlock shelves |
 | Friends | `ISteamUser/GetFriendList/v1` + `GetPlayerSummaries/v2` | Conditional | relationship list, persona/avatar/current game summary | Private friends list returns unauthorized; unavailable must not become “everyone offline” | Friend Pulse uses this through cache-first, privacy-aware projection |
-| Followed games | `IStoreService/GetGamesFollowed/v1` | **Target source; existing-key fixture/live proof still required** | followed AppIDs for linked SteamID64 | Steam protocol metadata marks the method as requiring a Web API key. Intended SRPSS route is the existing user Web API key + linked SteamID64; if that route is rejected, the feature stays dev-gated rather than adding another auth model | Games You Follow follow-set authority; never substitute owned/recent/wishlist semantics |
-| App news | `ISteamNews/GetNewsForApp/v2` | Transport/schema proven; product use conditional | app id, stable item id, title/body, date, feed metadata, tags, URL | Public app-specific endpoint; not personalized and not library-wide. Publisher-only `GetNewsForAppAuthed` remains excluded | Games You Follow may fan out only across the bounded accepted followed-AppID set after G0 budget/URL/image evidence |
+| Followed games | `IStoreService/GetGamesFollowed/v1` | **Implemented linked follow-set source** | followed AppIDs for linked SteamID64 | The existing linked SteamID64 and user Web API key are the implemented account authority; an authentication failure retains last-good state and never triggers a second auth model | Games You Follow follow-set authority; never substitute owned/recent/wishlist semantics |
+| App news | `ISteamNews/GetNewsForApp/v2` | Implemented bounded per-app source; not personalized | app id, stable item id, title/body, date, feed metadata, tags, URL | Public app-specific endpoint; not personalized and not library-wide. Publisher-only `GetNewsForAppAuthed` remains excluded | Games You Follow uses bounded requests for actual followed AppIDs |
 | General per-game last played | `IPlayerService/GetOwnedGames/v1` `rtime_last_played` | Conditional; locally proven | Unix timestamp plus explicit verified/unknown provenance | A redacted controlled-account probe found the field on every returned owned row and a positive timestamp on every played row. Missing, zero, non-numeric, or future values remain unknown; account privacy/unavailability is not “never played” | Abandonment Issues may make smart age claims only for individually verified rows |
 | Single-game playtime | `IPlayerService/GetSingleGamePlaytime/v1` | Unavailable | app playtime only for associated app key | Requires Web API key associated with that app | Not a general client feature |
 | Publisher app ownership / authed news | publisher-only endpoints | Excluded | none | Requires publisher key and secure server, never direct clients | Must not be called or exposed as fallback |
@@ -71,13 +70,11 @@ Follow. The Steam account/cache and family presentation contracts remain in thei
 
 ### Games You Follow
 
-**Implementation route:** `Current_Plan.md` C0–C3 and [`Docs/Future_Work/Steam_Games_You_Follow.md`](../Future_Work/Steam_Games_You_Follow.md) own the live G0-to-release checklist. Existing Web API key acceptance for `GetGamesFollowed/v1` is **not yet proven**, so no `steam_progress` product implementation or alternate follow-source path is authorized by this reference. The retained Qt Quick singleton-role and independent X/Y extent contract is a required first-implementation gate, not a retrofit.
+The implemented default-off `steam_progress` card uses linked SteamID64 plus the existing Web API key to retrieve explicit followed AppIDs via `IStoreService/GetGamesFollowed/v1`. It does not infer follows from owned/recent/wishlist data. `ISteamNews/GetNewsForApp/v2` is **per app**, not Steam's personalized What's New feed; the product ranks discovered, validated articles globally by published UTC time after progressive bounded coverage, without claiming exact personalized-feed parity or guaranteed language identification.
 
-- The follow-set authority is no longer speculative: target `IStoreService/GetGamesFollowed/v1` using the **existing** user Web API key + linked SteamID64. Current protocol metadata marks it Web-API-key gated. G0 still requires exact fixture/live proof that SRPSS's existing credential path is accepted before product code is admitted.
-- The public app-news transport and stable item/date/url/feed fields are proven for a bounded app-specific request.
-- Production remains blocked on that existing-credential live proof, safe source-article URL/redirect policy, per-follow-set response/candidate budget, and malformed/noise/failure fixtures. It must not scan the whole library frequently by default or pretend public app news is personalized progress.
-- Cache policy is cache-first and non-expiring: last-good followed AppIDs and last-good admitted news remain visible indefinitely as cached/stale evidence when refresh fails. Freshness affects refresh and labeling only. Never replace stale followed data with owned/recent/wishlist games.
-- Publisher `NEWS_AUTHED` endpoints remain excluded; no QR/Steam Guard auth, second Steam session, Store scraping, cookies, browser automation, or implicit semantic substitution is an allowed fallback.
+The first full followed-set news coverage persists in an account-private last-good cache. Later ordinary maintenance revisits up to eight apps per refresh session using the shared owner and a persisted cursor; membership is normally revalidated daily, not on every news slice. Cache freshness governs work admission, not deletion. Failure does not replace or freshen successful records. Article clicks resolve validated app/news identity to a canonical Steam target through the existing action handoff, never launch untrusted provider URLs. See [Games You Follow product reference](Steam_Games_You_Follow.md) for precise limits and the retained QML/CUSTOM contract.
+
+Publisher `NEWS_AUTHED` endpoints remain excluded; no QR/Steam Guard auth, second Steam session, Store scraping, cookies, browser automation or implicit semantic substitution is an allowed fallback.
 
 ## Implementation Consequences
 

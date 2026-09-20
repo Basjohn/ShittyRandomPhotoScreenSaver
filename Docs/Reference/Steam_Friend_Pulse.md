@@ -55,8 +55,8 @@ message rows/menu, second Steam session, QR auth or message backoff traffic rema
 Friend Pulse is a normal visible Steam-family member, disabled by default at its ordinary member toggle. The implementation
 also exposes a default-on themed `Show Friends Online Count` option that renders `X FRIEND(S) ONLINE` in the top-right
 summary area from the already-owned snapshot count; it adds no source work. Shared CUSTOM side-axis reflow and Restore Size
-are current architecture, not Friend Pulse-local geometry systems. `--devsteam` now owns only unfinished Games You Follow.
-Live/installed acceptance debt is tracked only in `Current_Plan.md`; this document describes the landed product contract.
+are current architecture, not Friend Pulse-local geometry systems. Games You Follow is the implemented default-off `steam_progress` member, not another Friend Pulse source.
+New acceptance debt belongs in `Current_Plan.md` only when an actual new defect or changed behavior requires it.
 
 ## 1. Current implementation owners
 
@@ -64,8 +64,7 @@ Current source and ownership boundaries:
 
 - `core/settings/widget_family_catalog.py` already registers `friend_pulse` inside the Steam family;
 - canonical defaults already contain `widgets.friend_pulse` and the Steam family connection settings;
-- `ui/tabs/widgets_tab_steam.py` exposes Friend Pulse normally and keeps only unfinished Games You Follow behind the
-  Steam dev gate;
+- `ui/tabs/widgets_tab_steam.py` exposes both Friend Pulse and the default-off Games You Follow member through canonical Settings;
 - `rendering/widget_descriptors.py` already exposes the stable Settings member identity;
 - `core/steam/backend.py` already declares `FRIEND_LIST` and `PLAYER_SUMMARIES` as conditional client-safe sources;
 - `core/steam/request_policy.py`, Steam cache/credential/redaction infrastructure and shared request ownership already
