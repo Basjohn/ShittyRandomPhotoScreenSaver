@@ -83,8 +83,12 @@ Item {
             x: staticFace.centerX - width / 2.0
             y: staticFace.centerY - height / 2.0
             opacity: 0.0
+            readonly property string customEditMappingDependency: [
+                analogueFaceCoreAppliedScale.xScale, analogueFaceCoreAppliedScale.yScale,
+                analogueFaceCoreAppliedScale.origin.x, analogueFaceCoreAppliedScale.origin.y
+            ].join("|")
             transform: [
-                Scale { origin.x: faceCoreEditTarget.width / 2.0; origin.y: faceCoreEditTarget.height / 2.0; xScale: analogueFace.childWidthScale("clock_face"); yScale: analogueFace.childHeightScale("clock_face") }
+                Scale { id: analogueFaceCoreAppliedScale; origin.x: faceCoreEditTarget.width / 2.0; origin.y: faceCoreEditTarget.height / 2.0; xScale: analogueFace.childWidthScale("clock_face"); yScale: analogueFace.childHeightScale("clock_face") }
             ]
         }
 
@@ -299,9 +303,13 @@ Item {
             Separator {
                 id: analogueSeparator
                 objectName: "clockAnalogueSeparator"
+                readonly property string customEditMappingDependency: [
+                    analogueSeparatorAppliedScale.xScale, analogueSeparatorAppliedScale.yScale,
+                    analogueSeparatorAppliedTranslation.x, analogueSeparatorAppliedTranslation.y
+                ].join("|")
                 transform: [
-                    Scale { origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("separator"); yScale: analogueFace.childHeightScale("separator") },
-                    Translate { x: analogueFace.childOffsetX("separator"); y: analogueFace.childOffsetY("separator") }
+                    Scale { id: analogueSeparatorAppliedScale; origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("separator"); yScale: analogueFace.childHeightScale("separator") },
+                    Translate { id: analogueSeparatorAppliedTranslation; x: analogueFace.childOffsetX("separator"); y: analogueFace.childOffsetY("separator") }
                 ]
                 width: parent.width * 0.77
                 height: analogueFace.clockModel.separatorThickness * analogueFace.fontResizeFactor
@@ -318,9 +326,13 @@ Item {
         ShadowedText {
             id: analogueCalendar
             objectName: "clockAnalogueCalendar"
+            readonly property string customEditMappingDependency: [
+                analogueCalendarAppliedScale.xScale, analogueCalendarAppliedScale.yScale,
+                analogueCalendarAppliedTranslation.x, analogueCalendarAppliedTranslation.y
+            ].join("|")
             transform: [
-                Scale { origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("calendar_text"); yScale: analogueFace.childHeightScale("calendar_text") },
-                Translate { x: analogueFace.childOffsetX("calendar_text"); y: analogueFace.childOffsetY("calendar_text") }
+                Scale { id: analogueCalendarAppliedScale; origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("calendar_text"); yScale: analogueFace.childHeightScale("calendar_text") },
+                Translate { id: analogueCalendarAppliedTranslation; x: analogueFace.childOffsetX("calendar_text"); y: analogueFace.childOffsetY("calendar_text") }
             ]
             width: footer.width
             height: visible ? implicitHeight : 0.0
@@ -341,9 +353,13 @@ Item {
         ShadowedText {
             id: analogueTimezone
             objectName: "clockAnalogueTimezone"
+            readonly property string customEditMappingDependency: [
+                analogueTimezoneAppliedScale.xScale, analogueTimezoneAppliedScale.yScale,
+                analogueTimezoneAppliedTranslation.x, analogueTimezoneAppliedTranslation.y
+            ].join("|")
             transform: [
-                Scale { origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("timezone_text"); yScale: analogueFace.childHeightScale("timezone_text") },
-                Translate { x: analogueFace.childOffsetX("timezone_text"); y: analogueFace.childOffsetY("timezone_text") }
+                Scale { id: analogueTimezoneAppliedScale; origin.x: 0.0; origin.y: 0.0; xScale: analogueFace.childWidthScale("timezone_text"); yScale: analogueFace.childHeightScale("timezone_text") },
+                Translate { id: analogueTimezoneAppliedTranslation; x: analogueFace.childOffsetX("timezone_text"); y: analogueFace.childOffsetY("timezone_text") }
             ]
             width: footer.width
             height: visible ? implicitHeight : 0.0

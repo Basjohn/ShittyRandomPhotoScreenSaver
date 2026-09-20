@@ -154,30 +154,26 @@ OverlayWidget {
         : Math.max(canonicalAuthoredHeight,
                    contentColumn.childrenRect.height + redditRoot.shellInset)
 
+    // Stable retained semantic roles. Visibility is evaluated by the selected
+    // Edit mapper, not by rebuilding this role list during content transitions.
     customEditableChildRoles: {
         const roles = []
-        const normW = childNormalizationWidth
-        const normH = childNormalizationHeight
         roles.push({
             "roleId": "header",
             "target": headerFrame,
             // A semantic header relocation follows the already-admitted
             // parent rail; it is not a new content-size requirement.
 
-            "normalizationWidth": normW,
-            "normalizationHeight": normH,
+            "normalizationTarget": redditRoot,
             "semanticCornerInsetX": 0.0,
             "semanticCornerInsetY": 0.0
         })
-        if (refreshTarget.visible) {
-            roles.push({
-                "roleId": "refresh",
-                "target": refreshTarget,
+        roles.push({
+            "roleId": "refresh",
+            "target": refreshTarget,
 
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-        }
+            "normalizationTarget": redditRoot
+        })
         return roles
     }
 

@@ -344,9 +344,8 @@ class SystemStatsPresentationModel(QObject):
         if descriptor is None or not descriptor.custom_child_roles:
             raise RuntimeError("System Stats CUSTOM child-role descriptor is missing")
         self._custom_child_roles = child_role_map(descriptor.custom_child_roles)
-        # One descriptor-normalized record per repeated semantic role. This
-        # remains constant-size regardless of enabled metrics and never couples
-        # edit geometry to sample/runtime ownership.
+        # Three descriptor-normalized records: header, separator, metric stack.
+        # The count never depends on enabled metrics or runtime samples.
         self._custom_child_geometry: dict[str, CustomChildSize] = {
             role_id: CustomChildSize() for role_id in self._custom_child_roles
         }
@@ -436,11 +435,11 @@ class SystemStatsPresentationModel(QObject):
     def set_custom_child_geometry(self, child_geometry: object) -> bool:
         """Project shared System Stats child geometry into retained state.
 
-        Geometry is supplied only by the global CUSTOM layout owner. Repeated
-        metric panels and their internals consume shared semantic role records;
-        CPU/RAM/Uptime/Network identities never become persistence keys. The
-        narrow signal keeps sparse edit traffic separate from 10 s sample
-        invalidation and from broad config/layout state.
+        Geometry is supplied only by the global CUSTOM layout owner. Every
+        enabled metric panel consumes the same `metric_panels` record, while
+        its internal QML layout remains family-authored. CPU/RAM/Uptime/Network
+        identities are never persistence keys. The narrow signal keeps sparse
+        edit traffic separate from 10 s sampling and broad config state.
         """
 
         raw = child_geometry if isinstance(child_geometry, Mapping) else {}

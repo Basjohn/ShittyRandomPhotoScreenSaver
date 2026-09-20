@@ -33,6 +33,21 @@ Before adding `FooRuntimeService`, answer:
 
 Do not add a service merely for naming symmetry.
 
+### Edit child role and QML paint contract
+
+When adding a semantic Edit child, declare the role independently of provider data and temporary QML visibility. The shared selected Edit mapper follows the actual target through ancestor geometry, nested QML transforms and clip; the role's readiness may toggle without removing its retained delegate. Use a stable descriptor with a selected-Edit-resolved target for Repeater content or two alternate visual positions of the SAME semantic role. Do not silently point a saved role at status/placeholder text. Preserve intentional transparent geometry carriers when they represent painted descendants. Keep real X/Y reflow, flipped semantic alignment, painted containment and authored layout in family QML, not in a family-specific Python observer or repair loop. The existing CUSTOM session alone owns Edit/Save/Undo/slots. A Qt retained scene test must compare actual painted QQuickItem identity and projected/clipped bounds through Save/reopen, not merely role-name existence; test temporary hide/reveal without losing semantic identity.
+
+### Mandatory current Edit, role, and performance checklist
+
+- [ ] **Choose a purposeful editable unit.** System Stats has only header, top separator and one entire painted metric-stack group; it does not expose thin metric-value/accent subhandles. Repeated feeds generally keep authored rows together, with optional **one semantic column order per widget** (as accepted in Reddit/Gmail), not free-position geometry for every row. An OSD exposes only meaningful singleton chrome; Games You Follow initially exposes header/refresh/overflow, not per-story free-placement.
+- [ ] **Declare stable role identity.** `customEditableChildRoles` must not depend on live normalization/preferred dimensions, provider contents or temporary visibility: array reallocation retires a selected QML Repeater delegate and can break a gesture. Use existing retained family `normalizationTarget` and named live properties for *selected-only* reads; readiness and alternate painted-target resolution live inside that delegate. Never replace an unavailable saved role with unrelated status text. Do not add off-Edit observers.
+- [ ] **Map the actual paint, not the model's guess.** Shared selected mapping projects all four corners through inherited QQuickItem geometry and clips against ancestor paint surfaces. For QML `Scale`/`Translate` applied to a target or ancestor, expose `customEditMappingDependency` from the **applied transform object's properties**, not just the upstream source input. Never enumerate non-bindable `QQuickItem.transform` in an active binding or add a per-pointer scene scan. Transparency of a semantic geometry carrier alone does not make its painted descendants unavailable.
+- [ ] **Separate parent and child authority.** Outer handles alone change the parent/custom `content_extent`; child X/Y edits are independent deltas from live family authored rails, not inside-out parent minimums or new persisted layout roots. A child's painted ink must stay inside the actual declared card/accessory surface even when collision is OFF. Test flip and opposite-axis resize in the same unsaved Edit session, Undo/Cancel/Restore/slots/reopen and later display generations.
+- [ ] **Retain guide chrome and avoid storms.** Selected child snap guides are one retained item per axis with no-op updates; never recreate one-guide Repeaters from fresh arrays on every pointer sample. The separate outer peer/centre guide path may use multiple lines; only rewrite it on measured evidence of genuine no-op delegate churn. No per-pointer Settings writes, QML warnings, binding loops, normal-runtime Edit probes, provider wakeups or repeated equal model/layout publications. Preserve live effective drag and precise snap rather than throttling away the problem.
+- [ ] **Execute real Qt and cost gates.** Test exact painted QQuickItem identity/bounds (including applied transform and clip), retained delegate identity through repeated normalization and visibility changes, correct host teardown and no warning stream. A test fixture may not use unsupported `QQuickTranslate*` Python conversion, inspect a retired QQuickItem, compare clipped paint with unclipped bounds or require a deliberately retired child-driven parent-size object. Measure active Edit versus normal runtime cost separately; syntax/source checks alone do not prove performance neutrality.
+
+Historical caution: [R-88](../Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md). Current execution/testing status belongs in `Current_Plan.md`, not in this guide.
+
 ## 2. Destination chain
 
 ```text
@@ -51,6 +66,11 @@ The presentation host creates/retires retained items and applies outer geometry,
 It is not a provider, SettingsManager, cache owner or business controller.
 
 No extra accelerated widget window. No `QQuickWidget`.
+
+### Immediate consumers of this guide
+
+- [ ] **OSD:** use the current system-audio/Media shared owner only after proving native COM callback admission and device rebind; existing backend acquires its endpoint at import and runtime currently has a 30-second consumer poll. Use the one shared event subscription, bounded latest-only GUI admission, no OSD state poll, and no new audio authority, callback-per-display or Quick window; retire the existing Media poll only after native callback/device parity. See [OSD decomposition](../Future_Work/System_Volume_OSD.md).
+- [ ] **Games You Follow:** verify the current Web API key can access the explicit follow-set route **before** building a provider/card. Stable `steam_progress` compatibility ID, one Steam owner/last-good private cache, real-Qt X/Y row variant and singleton Edit roles from v1. No owned/recent/wishlist substitute or article scraping. See [live decomposition](../Future_Work/Steam_Games_You_Follow.md).
 
 ## 3. Proven ownership patterns
 

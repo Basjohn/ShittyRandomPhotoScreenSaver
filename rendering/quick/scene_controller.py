@@ -705,10 +705,17 @@ class QuickSceneController(QObject):
             or state.screen_index != self._window.screen_index
         ):
             return False
-        root.setProperty("dimmingEnabled", state.dimming_enabled)
-        root.setProperty("dimmingOpacity", state.dimming_opacity)
-        root.setProperty("pixelShiftX", float(state.pixel_shift_x))
-        root.setProperty("pixelShiftY", float(state.pixel_shift_y))
+        # Do not notify the retained scene about unrelated auxiliary state
+        # edges (including the native cursor). Read actual root properties,
+        # not a parallel cache that could survive a scene reconstruction.
+        for name, value in (
+            ("dimmingEnabled", state.dimming_enabled),
+            ("dimmingOpacity", state.dimming_opacity),
+            ("pixelShiftX", float(state.pixel_shift_x)),
+            ("pixelShiftY", float(state.pixel_shift_y)),
+        ):
+            if root.property(name) != value:
+                root.setProperty(name, value)
         return True
 
     def _publish_jedi_mode_event(
@@ -807,15 +814,22 @@ class QuickSceneController(QObject):
         root = self._scene_root
         if root is None or not self._readiness.admission_open:
             return False
-        root.setProperty("contextMenuShadowEnabled", bool(style.enabled))
-        root.setProperty("contextMenuShadowColor", QColor(*style.color))
-        root.setProperty("contextMenuShadowBlur", float(style.blur))
-        root.setProperty("contextMenuShadowOffsetX", float(style.offset_x))
-        root.setProperty("contextMenuShadowOffsetY", float(style.offset_y))
-        root.setProperty("contextMenuShadowExtendLeft", float(style.extend_left))
-        root.setProperty("contextMenuShadowExtendTop", float(style.extend_top))
-        root.setProperty("contextMenuShadowExtendRight", float(style.extend_right))
-        root.setProperty("contextMenuShadowExtendBottom", float(style.extend_bottom))
+        # Theme re-projection is an owner edge, not permission to invalidate
+        # every retained menu property. Read the actual QML destination instead
+        # of storing a second style snapshot across display generations.
+        for name, value in (
+            ("contextMenuShadowEnabled", bool(style.enabled)),
+            ("contextMenuShadowColor", QColor(*style.color)),
+            ("contextMenuShadowBlur", float(style.blur)),
+            ("contextMenuShadowOffsetX", float(style.offset_x)),
+            ("contextMenuShadowOffsetY", float(style.offset_y)),
+            ("contextMenuShadowExtendLeft", float(style.extend_left)),
+            ("contextMenuShadowExtendTop", float(style.extend_top)),
+            ("contextMenuShadowExtendRight", float(style.extend_right)),
+            ("contextMenuShadowExtendBottom", float(style.extend_bottom)),
+        ):
+            if root.property(name) != value and not root.setProperty(name, value):
+                raise RuntimeError(f"DisplayScene.qml rejected context-menu property {name}")
         return True
 
     def apply_context_menu_palette_style(
@@ -849,7 +863,9 @@ class QuickSceneController(QObject):
             "contextSubmenuIndicatorFillColor": style.submenu_indicator_fill,
         }
         for name, rgba in properties.items():
-            root.setProperty(name, QColor(*rgba))
+            color = QColor(*rgba)
+            if root.property(name) != color and not root.setProperty(name, color):
+                raise RuntimeError(f"DisplayScene.qml rejected context-menu property {name}")
         return True
 
     def bind_context_menu_model(self, model: QuickContextMenuModel) -> bool:
@@ -863,7 +879,12 @@ class QuickSceneController(QObject):
             or model.runtime_generation != self._readiness.runtime_generation
         ):
             return False
-        root.setProperty("contextMenuModel", model)
+        # Rebinding the same generation's retained QObject must not emit a
+        # redundant model-property change or provoke QML to re-evaluate its
+        # entry delegates.  Observe the destination, not a shadow owner cache.
+        if root.property("contextMenuModel") != model:
+            if not root.setProperty("contextMenuModel", model):
+                raise RuntimeError("DisplayScene.qml rejected context-menu model")
         if self._context_menu_trace_model is not model:
             previous = self._context_menu_trace_model
             if previous is not None:

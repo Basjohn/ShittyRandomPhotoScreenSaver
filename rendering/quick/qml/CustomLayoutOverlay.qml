@@ -1093,37 +1093,40 @@ Item {
                             running: true
                         }
 
-                        property var childVerticalGuides: []
-                        property var childHorizontalGuides: []
+                        // One line per axis. Keep the two guide items retained
+                        // throughout a selected Edit session: assigning a fresh
+                        // array to a Repeater on every snapped pointer sample
+                        // used to retire/recreate its delegate (and repeat the
+                        // QML model/paint work) even when the snap was unchanged.
+                        // These properties are transient chrome, never layout or
+                        // persistence authority; the whole layer is Edit-only.
+                        property bool childVerticalGuideActive: false
+                        property real childVerticalGuidePosition: 0.0
+                        property string childVerticalGuideKind: ""
+                        property bool childHorizontalGuideActive: false
+                        property real childHorizontalGuidePosition: 0.0
+                        property string childHorizontalGuideKind: ""
 
-                        Repeater {
-                            model: childRoleLayer.childVerticalGuides
-                            delegate: Rectangle {
-                                required property var modelData
-                                readonly property bool semantic:
-                                    String(modelData.kind || "").indexOf("semantic-margin-") === 0
-                                objectName: "customLayoutChildVerticalGuide"
-                                x: Number(modelData.position)
-                                width: semantic ? 3 : 2
-                                height: childRoleLayer.height
-                                color: semantic ? "#dc8bc8ff" : "#b45ea8ff"
-                                z: 1
-                            }
+                        Rectangle {
+                            objectName: "customLayoutChildVerticalGuide"
+                            readonly property bool semantic:
+                                childRoleLayer.semanticSnapKind(childRoleLayer.childVerticalGuideKind)
+                            visible: childRoleLayer.childVerticalGuideActive
+                            x: childRoleLayer.childVerticalGuidePosition
+                            width: semantic ? 3 : 2
+                            height: childRoleLayer.height
+                            color: semantic ? "#dc8bc8ff" : "#b45ea8ff"
                         }
 
-                        Repeater {
-                            model: childRoleLayer.childHorizontalGuides
-                            delegate: Rectangle {
-                                required property var modelData
-                                readonly property bool semantic:
-                                    String(modelData.kind || "").indexOf("semantic-margin-") === 0
-                                objectName: "customLayoutChildHorizontalGuide"
-                                y: Number(modelData.position)
-                                width: childRoleLayer.width
-                                height: semantic ? 3 : 2
-                                color: semantic ? "#dc8bc8ff" : "#b45ea8ff"
-                                z: 1
-                            }
+                        Rectangle {
+                            objectName: "customLayoutChildHorizontalGuide"
+                            readonly property bool semantic:
+                                childRoleLayer.semanticSnapKind(childRoleLayer.childHorizontalGuideKind)
+                            visible: childRoleLayer.childHorizontalGuideActive
+                            y: childRoleLayer.childHorizontalGuidePosition
+                            width: childRoleLayer.width
+                            height: semantic ? 3 : 2
+                            color: semantic ? "#dc8bc8ff" : "#b45ea8ff"
                         }
 
                         NumberAnimation on opacity {
@@ -1159,6 +1162,90 @@ Item {
                         // axis under rotation or an inherited negative scale.
                         // This function is called only by the selected Edit layer;
                         // it creates no normal-runtime observer or geometry owner.
+                        // mapToItem() projects the actual complete transform chain,
+                        // but does not subscribe a QML binding to that chain.
+                        // QQuickItem.transform is a NON-BINDABLE LIST: reading it
+                        // in this binding produces a Qt warning for every ancestor
+                        // on every drag sample. Bind to ordinary geometry and to
+                        // a family's explicit bindable customEditMappingDependency
+                        // on the APPLIED Scale/Translate/Rotation object properties.
+                        // Source inputs alone can notify before the painted matrix
+                        // changes, leaving the proxy one transform behind. Never
+                        // enumerate node.transform in a reactive expression.
+                        function appendMappingChain(values, start) {
+                            // Shared ancestors are observed once per role evaluation.
+                            // The mapped rectangle stays derived from the retained
+                            // scene, not a second edit-time layout authority.
+                            const seen = values._mappingSeen || (values._mappingSeen = [])
+                            let node = start
+                            while (node !== null && node !== undefined
+                                    && typeof node.mapToItem === "function") {
+                                if (seen.indexOf(node) !== -1)
+                                    break
+                                seen.push(node)
+                                values.push(node.x, node.y, node.width, node.height,
+                                    node.scale, node.rotation, node.transformOrigin,
+                                    node.visible, node.clip, node.parent)
+                                // Families with a QML transform expose its
+                                // applied object properties once on that item.
+                                // Undefined on ordinary QQuickItems is harmless.
+                                values.push(node.customEditMappingDependency || "")
+                                node = node.parent
+                            }
+                        }
+
+                        // Project a target quad through every real ancestor
+                        // clip, not merely the containment role declared for
+                        // gesture limits. Clip in the clipping item's LOCAL
+                        // rectangle, then project surviving vertices back into
+                        // Edit coordinates; axis-aligned screen intersections
+                        // alone overstate paint under rotation.
+                        function clipMappedPolygon(points, clipItem) {
+                            let polygon = []
+                            for (let i = 0; i < points.length; ++i)
+                                polygon.push(editFrame.mapToItem(
+                                    clipItem, points[i].x, points[i].y))
+                            for (let edge = 0; edge < 4; ++edge) {
+                                if (polygon.length === 0) break
+                                const result = []
+                                const bound = edge === 0 || edge === 2
+                                    ? (edge === 0 ? 0.0 : clipItem.width)
+                                    : (edge === 1 ? 0.0 : clipItem.height)
+                                function inside(p) {
+                                    return edge === 0 ? p.x >= bound
+                                        : edge === 1 ? p.y >= bound
+                                        : edge === 2 ? p.x <= bound : p.y <= bound
+                                }
+                                function crossing(p, q) {
+                                    const pAxis = edge === 0 || edge === 2 ? p.x : p.y
+                                    const qAxis = edge === 0 || edge === 2 ? q.x : q.y
+                                    const denominator = qAxis - pAxis
+                                    if (Math.abs(denominator) < 1.0e-12) return p
+                                    const factor = (bound - pAxis) / denominator
+                                    return Qt.point(p.x + factor * (q.x - p.x),
+                                        p.y + factor * (q.y - p.y))
+                                }
+                                let previous = polygon[polygon.length - 1]
+                                for (let i = 0; i < polygon.length; ++i) {
+                                    const current = polygon[i]
+                                    if (inside(current)) {
+                                        if (!inside(previous))
+                                            result.push(crossing(previous, current))
+                                        result.push(current)
+                                    } else if (inside(previous)) {
+                                        result.push(crossing(previous, current))
+                                    }
+                                    previous = current
+                                }
+                                polygon = result
+                            }
+                            const mapped = []
+                            for (let i = 0; i < polygon.length; ++i)
+                                mapped.push(clipItem.mapToItem(
+                                    editFrame, polygon[i].x, polygon[i].y))
+                            return mapped
+                        }
+
                         function mappedItemBounds(item) {
                             if (!item || !item.visible
                                     || !(item.width > 0.0) || !(item.height > 0.0)
@@ -1173,11 +1260,30 @@ Item {
                                     || !isFinite(c.x) || !isFinite(c.y)
                                     || !isFinite(d.x) || !isFinite(d.y))
                                 return Qt.rect(0.0, 0.0, 0.0, 0.0)
-                            const x0 = Math.min(a.x, b.x, c.x, d.x)
-                            const y0 = Math.min(a.y, b.y, c.y, d.y)
+                            let points = [a, b, d, c]
+                            let ancestor = item
+                            while (ancestor !== null && ancestor !== undefined
+                                    && typeof ancestor.mapToItem === "function") {
+                                // Existence is stable; paint/readiness can change
+                                // without tearing down the Edit role or gesture.
+                                if (!ancestor.visible)
+                                    return Qt.rect(0.0, 0.0, 0.0, 0.0)
+                                if (ancestor.clip) {
+                                    points = clipMappedPolygon(points, ancestor)
+                                    if (points.length === 0)
+                                        return Qt.rect(0.0, 0.0, 0.0, 0.0)
+                                }
+                                ancestor = ancestor.parent
+                            }
+                            const x0 = Math.min.apply(null, points.map(p => p.x))
+                            const y0 = Math.min.apply(null, points.map(p => p.y))
+                            const x1 = Math.max.apply(null, points.map(p => p.x))
+                            const y1 = Math.max.apply(null, points.map(p => p.y))
+                            if (!isFinite(x0) || !isFinite(y0)
+                                    || !isFinite(x1) || !isFinite(y1))
+                                return Qt.rect(0.0, 0.0, 0.0, 0.0)
                             return Qt.rect(x0, y0,
-                                Math.max(0.0, Math.max(a.x, b.x, c.x, d.x) - x0),
-                                Math.max(0.0, Math.max(a.y, b.y, c.y, d.y) - y0))
+                                Math.max(0.0, x1 - x0), Math.max(0.0, y1 - y0))
                         }
 
                         function itemRectInFrame(item) {
@@ -1348,19 +1454,45 @@ Item {
                         }
 
                         function publishChildGuide(horizontal, target, kind) {
-                            const payload = target === null ? [] : [{
-                                "position": Number(target),
-                                "kind": String(kind || "child")
-                            }]
-                            if (horizontal)
-                                childHorizontalGuides = payload
-                            else
-                                childVerticalGuides = payload
+                            // The same retained guide handles move and resize
+                            // snapping for every family. Never create per-sample
+                            // guide lists or force a new delegate while hovering
+                            // on the same snap line. Hide without discarding the
+                            // previous coordinate; reveal updates it before paint.
+                            if (horizontal) {
+                                if (target === null) {
+                                    if (childHorizontalGuideActive)
+                                        childHorizontalGuideActive = false
+                                } else {
+                                    const position = Number(target)
+                                    const guideKind = String(kind || "child")
+                                    if (childHorizontalGuidePosition !== position)
+                                        childHorizontalGuidePosition = position
+                                    if (childHorizontalGuideKind !== guideKind)
+                                        childHorizontalGuideKind = guideKind
+                                    if (!childHorizontalGuideActive)
+                                        childHorizontalGuideActive = true
+                                }
+                            } else {
+                                if (target === null) {
+                                    if (childVerticalGuideActive)
+                                        childVerticalGuideActive = false
+                                } else {
+                                    const position = Number(target)
+                                    const guideKind = String(kind || "child")
+                                    if (childVerticalGuidePosition !== position)
+                                        childVerticalGuidePosition = position
+                                    if (childVerticalGuideKind !== guideKind)
+                                        childVerticalGuideKind = guideKind
+                                    if (!childVerticalGuideActive)
+                                        childVerticalGuideActive = true
+                                }
+                            }
                         }
 
                         function clearChildGuides(frame) {
-                            childVerticalGuides = []
-                            childHorizontalGuides = []
+                            publishChildGuide(false, null, "")
+                            publishChildGuide(true, null, "")
                             if (frame) {
                                 frame.hasSnapX = false
                                 frame.hasSnapY = false
@@ -1538,12 +1670,12 @@ Item {
                             if (frame.hasResizeSnapX && horizontal
                                     && Math.abs(edgeX - frame.resizeSnapXTarget) > 1.0) {
                                 frame.hasResizeSnapX = false
-                                childVerticalGuides = []
+                                publishChildGuide(false, null, "")
                             }
                             if (frame.hasResizeSnapY && vertical
                                     && Math.abs(edgeY - frame.resizeSnapYTarget) > 1.0) {
                                 frame.hasResizeSnapY = false
-                                childHorizontalGuides = []
+                                publishChildGuide(true, null, "")
                             }
                         }
 
@@ -1564,12 +1696,12 @@ Item {
                             if (frame.hasSnapX
                                     && Math.abs(x + frame.snapXFeature - frame.snapXTarget) > 1.0) {
                                 frame.hasSnapX = false
-                                childVerticalGuides = []
+                                publishChildGuide(false, null, "")
                             }
                             if (frame.hasSnapY
                                     && Math.abs(y + frame.snapYFeature - frame.snapYTarget) > 1.0) {
                                 frame.hasSnapY = false
-                                childHorizontalGuides = []
+                                publishChildGuide(true, null, "")
                             }
                         }
 
@@ -2287,7 +2419,27 @@ Item {
                                 id: childRoleFrame
                                 required property var modelData
                                 readonly property string roleId: String(modelData.roleId || "")
-                                readonly property var targetItem: modelData.target || null
+                                // Alternate retained targets express a semantic
+                                // role with two layout-specific paint objects. Read
+                                // readiness on the selected Edit delegate, never in
+                                // customEditableChildRoles (which would rebuild
+                                // every delegate during a visibility transition).
+                                readonly property var targetItem: {
+                                    if (modelData.targetSource) {
+                                        const source = modelData.targetSource
+                                        // Reading count observes item creation and
+                                        // retirement only while this role is selected.
+                                        const count = source.count
+                                        const sourceModel = source.model
+                                        const index = Number(modelData.targetIndex || 0)
+                                        return sourceModel !== undefined && count > index
+                                            ? source.itemAt(index) : null
+                                    }
+                                    if (modelData.alternateTarget)
+                                        return modelData.target && modelData.target.visible
+                                            ? modelData.target : modelData.alternateTarget
+                                    return modelData.target || null
+                                }
                                 readonly property var occupiedItem:
                                     modelData.occupiedTarget || targetItem
                                 readonly property var geometryDependencies:
@@ -2339,16 +2491,34 @@ Item {
                                     requirementTarget !== null
                                         ? Number(requirementTarget.requiredContentHeight || 0.0)
                                         : 0.0
-                                readonly property real normalizationWidth: Math.max(
-                                    1.0,
-                                    Number(modelData.normalizationWidth
-                                        || (editFrame.width / Math.max(1.0e-6, editFrame.resizeScale)))
-                                )
-                                readonly property real normalizationHeight: Math.max(
-                                    1.0,
-                                    Number(modelData.normalizationHeight
-                                        || (editFrame.height / Math.max(1.0e-6, editFrame.resizeScale)))
-                                )
+                                // A semantic role is stable even if its family
+                                // changes the authored normalization baseline. Read
+                                // live values on this retained Edit delegate, not
+                                // while constructing the Repeater's role array:
+                                // changing the array retires an active gesture.
+                                // Clock uses preferredContent*; other families may
+                                // expose childNormalization* with an optional named
+                                // width for a genuinely different accessory rail.
+                                readonly property real normalizationWidth: {
+                                    const source = modelData.normalizationTarget || null
+                                    const propertyName = modelData.normalizationWidthProperty
+                                        || "childNormalizationWidth"
+                                    const live = source ? source[propertyName] : 0.0
+                                    const preferred = source && !live ? source.preferredContentWidth : 0.0
+                                    return Math.max(1.0, Number(
+                                        modelData.normalizationWidth || live || preferred
+                                            || (editFrame.width / Math.max(1.0e-6, editFrame.resizeScale))))
+                                }
+                                readonly property real normalizationHeight: {
+                                    const source = modelData.normalizationTarget || null
+                                    const propertyName = modelData.normalizationHeightProperty
+                                        || "childNormalizationHeight"
+                                    const live = source ? source[propertyName] : 0.0
+                                    const preferred = source && !live ? source.preferredContentHeight : 0.0
+                                    return Math.max(1.0, Number(
+                                        modelData.normalizationHeight || live || preferred
+                                            || (editFrame.height / Math.max(1.0e-6, editFrame.resizeScale))))
+                                }
                                 readonly property bool movable:
                                     customLayoutOverlay.sessionModel !== null
                                         && customLayoutOverlay.sessionModel.childMovable(
@@ -2411,55 +2581,29 @@ Item {
                                     targetItem !== null
                                         ? Number(targetItem.customEditPlacementCompensationY || 0.0)
                                         : 0.0
-                                // mapToItem itself does not expose ancestor geometry
-                                // as QML binding dependencies. Families therefore
-                                // declare only object references to the few retained
-                                // ancestors that can reflow a role. Reading their
-                                // geometry here invalidates mapping event-by-event
-                                // without rebuilding the role model or polling.
+                                // Only an actual selected Edit role owns these
+                                // bindings. Observe every inherited transform on
+                                // both the target and the Edit frame, including the
+                                // uniform authored card and nested QML transforms.
+                                // geometryDependencies retains extra *non-ancestor*
+                                // reflow sources from family QML; duplicate ancestors
+                                // add no publication or persistence authority.
                                 readonly property string mappingDependency: {
-                                    // mapToItem does not register ancestor transforms
-                                    // or normalized CUSTOM-state reads as bindings.
-                                    // Keep the components separate: x + 10 and y - 10
-                                    // must not cancel and leave the Edit proxy at a
-                                    // stale position while the painted child moves.
-                                    // This exists only in the selected Edit delegate.
-                                    const values = [editFrame.width, editFrame.height,
-                                                    editFrame.childStateRevision]
-                                    if (targetItem !== null) {
-                                        values.push(targetItem.x, targetItem.y,
-                                            targetItem.width, targetItem.height,
-                                            targetItem.scale, targetItem.rotation)
-                                        values.push(String(
-                                            targetItem.customEditMappingDependency || ""
-                                        ))
-                                    }
-                                    if (occupiedItem !== null && occupiedItem !== targetItem) {
-                                        values.push(occupiedItem.x, occupiedItem.y,
-                                            occupiedItem.width, occupiedItem.height,
-                                            occupiedItem.scale, occupiedItem.rotation)
-                                        values.push(String(
-                                            occupiedItem.customEditMappingDependency || ""
-                                        ))
-                                    }
-                                    if (containmentTarget !== null) {
-                                        values.push(containmentTarget.x, containmentTarget.y,
-                                            containmentTarget.width, containmentTarget.height,
-                                            containmentTarget.scale, containmentTarget.rotation)
-                                    }
+                                    const values = [editFrame.childStateRevision]
+                                    childRoleLayer.appendMappingChain(values, targetItem)
+                                    if (occupiedItem !== null && occupiedItem !== targetItem)
+                                        childRoleLayer.appendMappingChain(values, occupiedItem)
+                                    if (containmentTarget !== null)
+                                        childRoleLayer.appendMappingChain(values, containmentTarget)
+                                    childRoleLayer.appendMappingChain(values, editFrame)
                                     for (let i = 0; i < geometryDependencies.length; ++i) {
                                         const dependency = geometryDependencies[i]
-                                        if (dependency)
-                                            values.push(dependency.x, dependency.y,
-                                                dependency.width, dependency.height,
-                                                dependency.scale, dependency.rotation)
+                                        if (dependency !== null && dependency !== undefined)
+                                            childRoleLayer.appendMappingChain(values, dependency)
                                     }
-                                    // Family-specific dependencies may themselves be
-                                    // component-wise strings. Do not coerce them back to
-                                    // Number: opposite ancestor deltas would cancel again.
-                                    // String equality avoids an unnecessary remap
-                                    // for an unchanged dependency value. A fresh JS
-                                    // array would invalidate bindings on every read.
+                                    // Component strings, not a numerical sum: an
+                                    // equal-and-opposite x/y transform must change
+                                    // the dependency and remap the same delegate.
                                     return values.join("|")
                                 }
                                 readonly property rect mappedTargetBounds: {

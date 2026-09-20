@@ -6,11 +6,9 @@ Stable widget/family id: `system_stats`
 
 ## 0. Decision
 
-The old blanket “no system usage widget” position is retired.
-
-A small System Stats card is acceptable **only if its own measurement cost is beneath meaningful product noise and it
-remains completely dormant without an admitted card consumer**. The existing `--usage` telemetry is useful evidence and
-must remain diagnostics-only; it is intentionally much broader than this product needs.
+System Stats is admitted only while its measurement cost remains beneath meaningful product noise and it is
+completely dormant without an active card consumer. `--usage` is separate, broader diagnostic telemetry, not
+the System Stats product sampler.
 
 The admitted source set is intentionally small: CPU/RAM cleared the source-cost gate, while the persistent GPU/VRAM candidate did not. System uptime and aggregate network receive/transmit counters ride the **same** sampler pulse; no second cadence or hardware/provider layer exists.
 
@@ -55,7 +53,7 @@ The card should help a user answer “is the machine busy?” without becoming p
 
 ## 2. Explicit non-goals
 
-Version 1 must not collect or display:
+The product sampler must not collect or display:
 
 - SRPSS process RSS/USS/private memory;
 - process tree / child enumeration;
@@ -148,10 +146,10 @@ operator request rather than this document acting as a dormant invitation.
 
 One small product sampler owner coordinates the admitted source set.
 
-Recommended ownership:
+Current owner:
 
 ```text
-SystemStatsSamplerService  (one per RUN/runtime generation)
+SystemStatsRuntimeService  (one per runtime generation)
     lease_count
     generation
     current immutable snapshot
@@ -172,8 +170,8 @@ Do not create one sampler per display/card.
 - Settings being open does not acquire a lease;
 - catalogue/descriptor import does not construct the sampler.
 
-A future second system-stat card may justify shared infrastructure then. Do not prebuild a generic monitoring framework
-now.
+The single runtime-generation service already shares accepted snapshots among display leases. Do not build an
+additional generic monitoring framework without another demonstrated consumer.
 
 ## 6. Dormancy contract
 
@@ -290,26 +288,27 @@ System Stats uses the same ordinary retained-card rules as the mature widgets:
 - shared edit-mode ownership;
 - no family-specific layout manager or theme cascade.
 
-CUSTOM child editing follows the same descriptor/session/persistence owner as the other retained widgets. System Stats
-does **not** persist geometry per CPU/RAM/Uptime/Network panel. Its stable role set is:
+CUSTOM child editing uses the same descriptor/session/persistence owner as the other retained widgets. The stable role set is:
 
 ```text
 header
 header_separator
 metric_panels
-metric_accents
-metric_labels
-metric_details
-metric_values
-metric_tracks
 ```
 
-`header` and `header_separator` are singleton chrome. Every `metric_*` role is one shared geometry record projected onto
-all structurally equivalent enabled panels. The panel container and its nested semantic roles may overlap by design, so
-that containment pair is excluded only from selected-Edit hard peer collision; unrelated roles still use the global
-Child Collision preference. The header separator keeps its truthful painted line for collision while exposing a larger
-Edit hit proxy. Child geometry lives only in the ordinary CUSTOM `size_payload.child_geometry` carrier and Restore Size
-returns it to the authored identity without mutating metric-selection Settings.
+`header` owns the header position, size and semantic left/right orientation. Flipping it also reverses the authored
+label/detail/value/accent placement inside every enabled metric card without creating separately movable label or
+value proxies. `header_separator` owns the visible horizontal line; its larger Edit hit surface tracks the actual
+painted stroke. `metric_panels` is **one editable block** enclosing the entire visible CPU/Memory/Uptime/Network
+stack and the gaps between enabled cards. Moving or scaling it projects the same geometry record onto all enabled
+cards and scales their shared gaps with their height. The metric internals retain their QML-authored positions
+relative to their own card; they do not have their own CUSTOM Edit handles or persisted role geometries.
+
+The three-role semantic array remains stable when the metric subset, panel extent or authored normalization changes. Its retained selected Edit delegate reads `childNormalizationWidth`/`childNormalizationHeight` on the family root; repeated CPU/Memory/Uptime/Network samples do not reconstruct Edit roles. All metric cards share the same family-owned group reflow and the shared CUSTOM owner persists only its block geometry.
+
+These three roles persist through the ordinary CUSTOM `size_payload.child_geometry` carrier; Restore Size returns
+them to the authored geometry without changing metric-selection Settings. Old per-metric child edit records do not
+participate in the current layout. They are not repurposed as independent label/value/track layout authorities.
 
 The sampling edge remains separate from editing: accepted runtime samples emit `sampleChanged`, while CUSTOM geometry
 publishes only `customGeometryChanged`. Dragging/resizing child roles must not start/stop/wake the sampler, and a 10-second

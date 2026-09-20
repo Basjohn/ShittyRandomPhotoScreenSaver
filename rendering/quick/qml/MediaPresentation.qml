@@ -47,7 +47,7 @@ OverlayWidget {
         const value = childRecord(roleId)
         return (value && value.x_offset !== undefined ? Number(value.x_offset) : 0.0)
             * (roleId === "volume_bar"
-                ? canonicalPreferredCardWidth + canonicalVolumeAccessoryExtent
+                ? volumeChildNormalizationWidth
                 : childNormalizationWidth)
     }
     function childOffsetY(roleId) {
@@ -76,116 +76,89 @@ OverlayWidget {
         return value && value.anchor !== undefined ? String(value.anchor) : ""
     }
 
+    // Stable retained semantic roles. Visibility is evaluated by the selected
+    // Edit mapper, not by rebuilding this role list during content transitions.
     customEditableChildRoles: {
         const roles = []
-        const normW = childNormalizationWidth
-        const normH = childNormalizationHeight
-        if (headerFrame.visible) {
-            roles.push({
-                "roleId": "header",
-                "target": headerFrame,
-                "geometryDependencies": [mediaColumn, headerSlot],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (trackMetadata.visible) {
-            roles.push({
-                "roleId": "metadata",
-                "target": trackMetadata,
-                "geometryDependencies": [mediaColumn, mainBand, metadata],
-                "collisionIgnoreRoleIds": ["artist"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (trackMetadata.visible && trackMetadata.artistEditTarget.visible) {
-            roles.push({
-                "roleId": "artist",
-                "target": trackMetadata.artistEditTarget,
-                "geometryDependencies": [mediaColumn, mainBand, metadata, trackMetadata],
-                "collisionIgnoreRoleIds": ["metadata"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (playbackState.visible) {
-            roles.push({
-                "roleId": "playback_state",
-                "target": playbackState,
-                "geometryDependencies": [mediaColumn, mainBand, metadata],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (artworkFrame.visible) {
-            roles.push({
-                "roleId": "artwork",
-                "target": artworkFrame,
-                "geometryDependencies": [mediaColumn, mainBand],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (progressBand.visible) {
-            roles.push({
-                "roleId": "seek_bar",
-                "target": progressTrack,
-                "geometryDependencies": [mediaColumn, progressBand],
-                // Seek-height changes reflow the retained controls slot below it.
-                // Movement does not use this exception, so free placement still
-                // cannot cross the controls surface.
-                "resizeReflowRoleIds": ["transport_controls"],
-                "resizeReflowAxes": ["vertical"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (appVolumeSlider.visible) {
-            roles.push({
-                "roleId": "volume_bar",
-                "target": appVolumeTrack,
-                "geometryDependencies": [appVolumeSlider],
-                "containmentTarget": appVolumeSlider,
+        roles.push({
+            "roleId": "header",
+            "target": headerFrame,
+            "geometryDependencies": [mediaColumn, headerSlot],
+            "normalizationTarget": mediaRoot,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "metadata",
+            "target": trackMetadata,
+            "geometryDependencies": [mediaColumn, mainBand, metadata],
+            "collisionIgnoreRoleIds": ["artist"],
+            "normalizationTarget": mediaRoot,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "artist",
+            "target": trackMetadata.artistEditTarget,
+            "geometryDependencies": [mediaColumn, mainBand, metadata, trackMetadata],
+            "collisionIgnoreRoleIds": ["metadata"],
+            "normalizationTarget": mediaRoot,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "playback_state",
+            "target": playbackState,
+            "geometryDependencies": [mediaColumn, mainBand, metadata],
+            "normalizationTarget": mediaRoot,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "artwork",
+            "target": artworkFrame,
+            "geometryDependencies": [mediaColumn, mainBand],
+            "normalizationTarget": mediaRoot,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "seek_bar",
+            "target": progressTrack,
+            "geometryDependencies": [mediaColumn, progressBand],
+            // Seek-height changes reflow the retained controls slot below it.
+            // Movement does not use this exception, so free placement still
+            // cannot cross the controls surface.
+            "resizeReflowRoleIds": ["transport_controls"],
+            "resizeReflowAxes": ["vertical"],
+            "normalizationTarget": mediaRoot,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "volume_bar",
+            "target": appVolumeTrack,
+            "geometryDependencies": [appVolumeSlider],
+            "containmentTarget": appVolumeSlider,
 
-                // Existing volume CUSTOM offsets were normalized against the
-                // former root+accessory baseline. Preserve those saved offsets;
-                // its *legal containment* is now independently the lane itself.
-                "normalizationWidth": canonicalPreferredCardWidth
-                    + canonicalVolumeAccessoryExtent,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (controlsRow.visible) {
-            roles.push({
-                "roleId": "transport_controls",
-                "target": controlsRow,
-                "geometryDependencies": [mediaColumn, controlsBandSlot],
-                "resizeReflowGate": controlsRow,
-                "collisionIgnoreRoleIds": ["mute_button"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
-        if (systemMuteButton.visible) {
-            roles.push({
-                "roleId": "mute_button",
-                "target": systemMuteButton,
-                "geometryDependencies": [mediaColumn, controlsBandSlot, controlsRow],
-                "collisionIgnoreRoleIds": ["transport_controls"],
-                "normalizationWidth": normW,
-                "normalizationHeight": normH,
-                "requirementTarget": null
-            })
-        }
+            // Existing volume CUSTOM offsets were normalized against the
+            // former root+accessory baseline. Preserve those saved offsets;
+            // its *legal containment* is now independently the lane itself.
+            "normalizationTarget": mediaRoot,
+            "normalizationWidthProperty": "volumeChildNormalizationWidth",
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "transport_controls",
+            "target": controlsRow,
+            "geometryDependencies": [mediaColumn, controlsBandSlot],
+            "resizeReflowGate": controlsRow,
+            "collisionIgnoreRoleIds": ["mute_button"],
+            "normalizationTarget": mediaRoot,
+            "requirementTarget": null
+        })
+        roles.push({
+            "roleId": "mute_button",
+            "target": systemMuteButton,
+            "geometryDependencies": [mediaColumn, controlsBandSlot, controlsRow],
+            "collisionIgnoreRoleIds": ["transport_controls"],
+            "normalizationTarget": mediaRoot,
+            "requirementTarget": null
+        })
         for (let i = 0; i < roles.length; ++i) {
             if (roles[i].roleId !== "volume_bar") {
                 roles[i].containmentTarget = mediaColumn
@@ -219,6 +192,8 @@ OverlayWidget {
     )
     readonly property real canonicalVolumeAccessoryExtent:
         mediaModel.appVolumeAvailable ? 48.0 : 0.0
+    readonly property real volumeChildNormalizationWidth:
+        canonicalPreferredCardWidth + canonicalVolumeAccessoryExtent
     readonly property real canonicalCardContentWidth: Math.max(
         1.0, canonicalPreferredCardWidth - mediaRoot.shellInset
     )
@@ -1022,9 +997,15 @@ OverlayWidget {
                     anchors.right: parent.right
                     anchors.rightMargin: 4.0
                     transform: Translate {
+                        id: mutePaintTranslation
                         x: mediaRoot.childOffsetX("mute_button")
                         y: mediaRoot.childOffsetY("mute_button")
                     }
+                    // Read the applied translation after Qt updates its binding.
+                    // The non-bindable QQuickItem.transform list is never read.
+                    readonly property string customEditMappingDependency: [
+                        mutePaintTranslation.x, mutePaintTranslation.y
+                    ].join("|")
                     radius: Math.max(8.0, Math.min(12.0, height * 0.32))
                     border.width: mediaRoot.scaleAwareStrokeWidth(1.25)
                     border.color: mediaRoot.mediaModel.systemMuteBorderColor

@@ -102,10 +102,13 @@ def test_media_friend_stats_project_widget_flip_from_existing_header_record_only
     assert 'customEditPlacementCompensationX: x - (' in friend
     assert '!== friendRoot.headerFlipped ? Text.AlignRight : Text.AlignLeft' in friend
     stats = source('SystemStatsPresentation.qml')
-    assert 'function semanticTextRight(roleId, authored)' in stats
-    assert '!== headerFlipped' in stats
-    assert 'statsRoot.headerFlipped ? 16.0 : baseX' in stats
-    assert 'statsRoot.headerFlipped ? panel.width - 18.0 - width : 18.0' in stats
+    assert 'readonly property bool headerFlipped: childAlignment("header", "left") === "right"' in stats
+    assert 'statsRoot.headerFlipped' in stats
+    assert 'function metricRoleX(roleId, panelWidth, roleWidth)' in stats
+    assert 'headerFlipped ? 16.0 : panelWidth - 16.0 - valueLaneWidth' in stats
+    assert 'headerFlipped ? panelWidth - 18.0 - roleWidth : 18.0' in stats
+    assert 'statsRoot.metricRoleX("metric_values", panel.width, width)' in stats
+    assert 'statsRoot.metricRoleX("metric_labels", panel.width, width)' in stats
     media = source('MediaPresentation.qml')
     assert 'mediaRoot.headerFlipped && mediaRoot.artworkOnAuthoredRail' in media
     assert 'artworkFrame.authoredArtworkWidth + 16.0' in media
@@ -153,7 +156,7 @@ def test_dense_steam_flip_moves_semantic_regions_without_pixel_mirror_or_parent_
     assert 'artworkFollowsParentRightRail && !headerFlipped' in achievement
     assert 'achievementRoot.headerFlipped' in achievement
     assert 'titleParentReflowWidth' in achievement
-    assert 'gameTitle.x + gameTitle.width' not in achievement.split('id: customChildRequirement', 1)[0] or 'gameTitle.x + gameTitle.width' in achievement
+    assert 'id: customChildRequirement' not in achievement
     assert 'titleParentReflowWidth' in achievement
     assert 'achievementRoot.progressParentReflowY' in achievement
     assert 'abandonmentModel.customHeaderAlignment === "right"' in abandonment

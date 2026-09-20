@@ -31,6 +31,10 @@ The Qt Quick runtime is operator-accepted and is the sole production presentatio
 
 Performance/freshness changes are evidence-gated and symptom-driven. Treat the accepted golden as a regression reference and use `Docs/Guardrails/Performance_Optimization_Contract.md` for the current admission criteria; checkpoint sequencing belongs in the active plan and handoff.
 
+## Current feature-extension boundary
+
+The current live checklist (`Current_Plan.md`) routes the wider churn audit and two next widgets: an opt-in master-volume/mute OSD and feasibility-gated Steam Games You Follow. Their independently owned live decompositions are `Docs/Future_Work/System_Volume_OSD.md` and `Docs/Future_Work/Steam_Games_You_Follow.md`. Neither is implemented by adding this documentation. Both must use the one ordinary retained Quick host, shared CUSTOM owner, stable Edit semantics, and lifecycle/Settings authority already used by current cards. New transitions instead enter the canonical transition registry/host with lazy, self-contained implementations rather than a second experimental runtime.
+
 ## Visualizer geometry
 
 Visualizer mode identity now has two useful sets: five established carded technical modes (Spectrum, Oscilloscope, Sine, Bubble, DevCurve) plus the separately registered experimental Sphere. All registered modes use the current scale/extent ownership model; Sphere is FRAMELESS + VIEWPORT_RECT and dormant by default.
@@ -46,6 +50,8 @@ Bubble is included and its capability policy is no longer an accepted place to h
 **Visualizer preservation rule:** wide/tall adaptation may not globally compress Bubble renderer-facing head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme full-expansion visual tail is too large, fix only that proven tail. Audio analysis remains one persistent newest-source serial lane with retained DSP state; performance work may not lower authored cadence or increase visible staleness.
 
 ## Ordinary widget pattern
+
+Ordinary family QML owns painted internal reflow. The selected Edit overlay reads retained semantic targets and their actual mapped paint; the single CUSTOM owner owns geometry, Undo and persistence. Repeated-content families may use one semantic block (System Stats metric stack) or representative painted targets (Friend Pulse rows/grid). A role list never observes changing dimensions, visibility or provider data just to describe an unchanged role: the selected delegate reads live bindable normalization and transform state. This prevents delegate retirement mid-drag without creating a normal-runtime observer or second layout authority.
 
 ```text
 canonical settings/capability

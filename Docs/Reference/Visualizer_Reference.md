@@ -4,6 +4,8 @@ Current visualizer behavior and accepted presentation architecture.
 
 ## 1. Modes
 
+Visualizer uses its own logical production and viewport/scale geometry; the ordinary-widget retained-child semantic Edit role and normalization contracts do not apply to its paint or cadence. A widget Edit performance fix must not introduce a second Visualizer scheduler, alter Bubble temporal fidelity, or substitute a QML child-role rectangle for the renderer-owned viewport.
+
 Canonical current mode ids remain owned by the settings/mode registry:
 
 - `spectrum`

@@ -96,13 +96,16 @@ class QuickAuxiliaryController(QObject):
                 else {"pixel_shift_x": 0, "pixel_shift_y": 0}
             ),
         )
-        if (
-            normalized_enabled
-            and not self._paused
-            and (changed or not self._pixel_shift_timer.isActive())
-        ):
-            self._pixel_shift_timer.start(max(1, int(60_000 / rate)))
-        else:
+        # A repeated identical configuration must not stop (or restart) a
+        # running timer: doing so silently disables pixel shift or postpones
+        # every scheduled step when Settings republishes the same values.
+        # Only an actual rate change or a missing timer needs admission.
+        if normalized_enabled and not self._paused:
+            interval = max(1, int(60_000 / rate))
+            if (not self._pixel_shift_timer.isActive()
+                    or self._pixel_shift_timer.interval() != interval):
+                self._pixel_shift_timer.start(interval)
+        elif self._pixel_shift_timer.isActive():
             self._pixel_shift_timer.stop()
         return changed
 
@@ -205,7 +208,7 @@ class QuickAuxiliaryController(QObject):
 
     def _advance_pixel_shift(self) -> None:
         state = self._state
-        if not state.admission_open or not state.pixel_shift_enabled:
+        if not state.admission_open or not state.pixel_shift_enabled or self._paused:
             return
         defer_check = self._pixel_shift_defer_check
         if defer_check is not None and defer_check():

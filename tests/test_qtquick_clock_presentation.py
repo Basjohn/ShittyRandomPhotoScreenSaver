@@ -919,3 +919,252 @@ def test_clock_custom_font_resizes_footer_and_analogue_ink_proportionally(qt_app
             factory.deleteLater()
             owner.deleteLater()
             qt_app.processEvents()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("face_mode,role_targets", [
+    ("digital", {
+        "time_text": "clockDigitalTime",
+        "separator": "clockDigitalSeparator",
+        "calendar_text": "clockDigitalCalendar",
+        "timezone_text": "clockDigitalTimezone",
+    }),
+    ("analog", {
+        "clock_face": "clockAnalogueFaceCoreEditTarget",
+        "separator": "clockAnalogueSeparator",
+        "calendar_text": "clockAnalogueCalendar",
+        "timezone_text": "clockAnalogueTimezone",
+    }),
+])
+def test_clock_selected_edit_proxies_follow_actual_applied_transforms_in_both_faces(
+    qt_app, face_mode: str, role_targets: dict[str, str],
+) -> None:
+    """Actual Clock QML + CUSTOM overlay, not a mock target or a source literal.
+
+    Every mode-appropriate role must retain its QQuickItem and Edit delegate
+    through independent live X/Y and scale changes. No transform-list reads or
+    second owner are needed: each selected target exposes applied QML values.
+    """
+    from PySide6.QtCore import QRect, qInstallMessageHandler
+    from PySide6.QtQuick import QQuickWindow
+
+    from rendering.custom_child_geometry import CustomChildRoleDescriptor
+    from rendering.custom_layout_session import (
+        CustomLayoutKey, CustomLayoutSession, CustomLayoutSessionItem,
+    )
+    from rendering.quick.custom_layout_overlay import RetainedCustomLayoutOverlay
+
+    window = QQuickWindow()
+    window.setGeometry(0, 0, 1100, 850)
+    factory = QuickSceneFactory()
+    context, root, host = _create_host(factory, window)
+    root.setParent(window.contentItem())
+    root.setParentItem(window.contentItem())
+    root.setWidth(1100.0)
+    root.setHeight(850.0)
+    ticker = _FakeTicker()
+    model = _model(
+        [datetime(2026, 8, 25, 13, 24, 30)], ticker,
+        config=_clock_config(display_mode=face_mode),
+    )
+    presentation = RetainedClockPresentation(
+        host=host, model=model,
+        geometry=OverlayWidgetGeometry(90.0, 65.0, 540.0, 560.0),
+        display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1100.0, 850.0),
+        display_identity="display:clock-edit-mapping",
+    )
+    edit_root = _find_visual_item(root, "customLayoutOverlay")
+    assert edit_root is not None
+    overlay = RetainedCustomLayoutOverlay(edit_root)
+    bounds = QRect(90, 65, 540, 560)
+    session = CustomLayoutSession()
+    session.add_item(CustomLayoutSessionItem(
+        source_key=CustomLayoutKey("clock", "display:clock-edit-mapping"),
+        model_identity="clock", baseline_global_rect=bounds,
+        current_global_rect=bounds, baseline_size_payload={},
+        current_size_payload={}, baseline_enabled=True, current_enabled=True,
+        custom_child_roles=tuple(
+            CustomChildRoleDescriptor(role, movable=role != "clock_face")
+            for role in role_targets
+        ),
+    ))
+    messages: list[str] = []
+
+    def collect_warning(_level, _context, message):
+        messages.append(str(message))
+
+    previous_handler = qInstallMessageHandler(collect_warning)
+    try:
+        presentation.activate(object())
+        overlay.bind_session(
+            session, display_identity="display:clock-edit-mapping",
+            display_origin=QPoint(0, 0),
+            presentation_item_resolver=lambda _item: presentation.item,
+        )
+        window.show()
+        assert overlay.model.selectItem(0)
+        qt_app.processEvents()
+        frame = _find_visual_item(edit_root, "customLayoutEditFrame-clock")
+        assert frame is not None
+        assert frame.setProperty("childEditingLocked", False)
+        qt_app.processEvents()
+
+        def verify_painted_role(role_id: str, role_item: QQuickItem, target: QQuickItem) -> None:
+            assert _find_visual_item(edit_root, f"customLayoutChildRole-clock-{role_id}") is role_item
+            assert role_item.property("targetItem") == target
+            assert role_item.property("targetReady") is True, role_id
+            def projected_bounds(item: QQuickItem):
+                corners = [
+                    item.mapToItem(frame, px, py)
+                    for px, py in (
+                        (0.0, 0.0), (item.width(), 0.0),
+                        (0.0, item.height()), (item.width(), item.height()),
+                    )
+                ]
+                xs = [point.x() for point in corners]
+                ys = [point.y() for point in corners]
+                return min(xs), min(ys), max(xs), max(ys)
+
+            # Clock's real card is clipped. Check the visible painted footprint,
+            # not the invisible part of a scaled/moved child outside the card.
+            # These two faces use only positive axis-aligned transforms.
+            x0, y0, x1, y1 = projected_bounds(target)
+            ancestor = target
+            while ancestor is not None:
+                if ancestor.clip():
+                    cx0, cy0, cx1, cy1 = projected_bounds(ancestor)
+                    x0, y0 = max(x0, cx0), max(y0, cy0)
+                    x1, y1 = min(x1, cx1), min(y1, cy1)
+                ancestor = ancestor.parentItem()
+            assert x1 > x0 and y1 > y0, role_id
+            assert (
+                role_item.x(), role_item.y(), role_item.width(), role_item.height()
+            ) == pytest.approx((
+                x0, y0, x1 - x0, y1 - y0,
+            ), abs=0.02), role_id
+
+        for role_id, painted_name in role_targets.items():
+            target = _find_visual_item(presentation.item, painted_name)
+            role_item = _find_visual_item(edit_root, f"customLayoutChildRole-clock-{role_id}")
+            assert target is not None and role_item is not None, (face_mode, role_id)
+            verify_painted_role(role_id, role_item, target)
+            # The Clock model's existing variant-local child owner is the only
+            # input; QML supplies actual Scale/Translate paint and the shared
+            # selected-Edit mapper independently projects it.
+            if role_id == "clock_face":
+                samples = (
+                    {"width_scale": 1.17, "height_scale": 1.17},
+                    {"width_scale": 0.89, "height_scale": 0.89},
+                )
+            else:
+                samples = (
+                    {"width_scale": 1.17, "height_scale": 0.88,
+                     "x_offset": 0.07, "y_offset": -0.06},
+                    {"width_scale": 0.91, "height_scale": 1.11,
+                     "x_offset": -0.04, "y_offset": 0.08},
+                )
+            for payload in samples:
+                before = role_item.property("mappingDependency")
+                assert model.set_custom_child_geometry({role_id: payload})
+                qt_app.processEvents()
+                assert role_item.property("mappingDependency") != before, role_id
+                verify_painted_role(role_id, role_item, target)
+            assert model.set_custom_child_geometry({})
+            qt_app.processEvents()
+            verify_painted_role(role_id, role_item, target)
+        if face_mode == "digital":
+            # Real-world compact-X/Y regression: the unwrapped time glyph used
+            # to overflow its smaller assigned Text.width while the selected
+            # Edit proxy stayed attached to that width. The card clipped the
+            # glyph, and Reset/re-edit appeared to jump. Test actual painted
+            # geometry through shrink, authored-size restore and re-shrink.
+            time_target = _find_visual_item(presentation.item, "clockDigitalTime")
+            column = _find_visual_item(presentation.item, "clockDigitalContent")
+            face = _find_visual_item(presentation.item, "clockDigitalFace")
+            time_role = _find_visual_item(edit_root, "customLayoutChildRole-clock-time_text")
+            assert time_target is not None and column is not None
+            assert face is not None and time_role is not None
+            retained = host.presentation_for_model_identity("clock")
+            assert retained is not None
+            retained.apply_custom_layout_size_payload({"font_size": 78})
+            qt_app.processEvents()
+            assert _find_visual_item(
+                edit_root, "customLayoutChildRole-clock-time_text"
+            ) is time_role, "Clock role recreated by an intrinsic font-size update"
+            for width, height in (
+                (378.0, 168.0), (351.0, 456.0),
+                (540.0, 560.0), (378.0, 168.0),
+            ):
+                presentation.set_geometry(OverlayWidgetGeometry(
+                    90.0, 65.0, width, height,
+                ))
+                qt_app.processEvents()
+                # Keep the intrinsic, unwrapped glyph within its true painted
+                # item, rather than using a narrower Edit rect as a mask.
+                assert float(time_target.property("implicitWidth")) <= (
+                    time_target.width() + 0.02
+                )
+                # The whole authored content stack must fit the assigned card
+                # before per-role offsets are applied. Its scale is only a
+                # derived paint fit, not a second CUSTOM geometry authority.
+                start = column.mapToItem(face, 0.0, 0.0)
+                end = column.mapToItem(face, column.width(), column.height())
+                # This checks visual containment of the Column's *layout box*,
+                # not Edit-to-painted-target agreement. Qt's centering and
+                # fractional font metrics can place that non-painted box less
+                # than one device-independent pixel across an edge (-0.375px
+                # on the accepted compact Windows run). Reject meaningful
+                # overflow without treating subpixel raster rounding as a
+                # geometry failure. The exact mapped target assertion below
+                # deliberately retains its independent 0.02px tolerance.
+                layout_edge_slack = 1.0
+                assert start.x() >= -layout_edge_slack
+                assert start.y() >= -layout_edge_slack
+                assert end.x() <= face.width() + layout_edge_slack
+                assert end.y() <= face.height() + layout_edge_slack
+                verify_painted_role("time_text", time_role, time_target)
+                assert _find_visual_item(
+                    edit_root, "customLayoutChildRole-clock-time_text"
+                ) is time_role, "Clock role recreated during an ordinary compact resize"
+            assert model.set_custom_child_geometry({
+                "time_text": {"x_offset": 0.01, "y_offset": 0.02}
+            })
+            qt_app.processEvents()
+            assert model.set_custom_child_geometry({})  # Reset child state.
+            presentation.set_geometry(OverlayWidgetGeometry(
+                90.0, 65.0, 351.0, 456.0,
+            ))
+            qt_app.processEvents()
+            verify_painted_role("time_text", time_role, time_target)
+        # Closing Edit must retire its delegates. Subsequent normal Clock
+        # model updates still paint, but cannot resurrect a selected mapper or
+        # add a second observer to the existing one-second ticker.
+        overlay.clear_session()
+        qt_app.processEvents()
+        for index in range(12):
+            assert model.set_custom_child_geometry({
+                "separator": {"x_offset": (index + 1) * 0.002}
+            })
+            qt_app.processEvents()
+            assert _find_visual_item(
+                edit_root, "customLayoutChildRole-clock-separator"
+            ) is None
+        assert len(ticker.subscribers) == 1
+        assert not [
+            msg for msg in messages
+            if "CustomLayoutOverlay.qml" in msg
+            and ("non-bindable" in msg or "Binding loop" in msg)
+        ], (face_mode, messages[:5], len(messages))
+    finally:
+        qInstallMessageHandler(previous_handler)
+        overlay.clear_session()
+        presentation.retire()
+        window.hide()
+        host.retire_all()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        factory.deleteLater()
+        window.deleteLater()
+        qt_app.processEvents()

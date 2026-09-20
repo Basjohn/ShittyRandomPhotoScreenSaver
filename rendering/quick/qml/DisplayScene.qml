@@ -121,9 +121,15 @@ Item {
         anchors.fill: parent
         z: 5
         transform: Translate {
+            id: pixelShiftPaintTranslation
             x: displayScene.pixelShiftX
             y: displayScene.pixelShiftY
         }
+        // Subscribe to the applied transform, not to pixelShiftX/Y inputs
+        // which may notify before this Translate has updated its paint matrix.
+        readonly property string customEditMappingDependency: [
+            pixelShiftPaintTranslation.x, pixelShiftPaintTranslation.y
+        ].join("|")
 
         Item {
             id: ordinaryWidgetShadowHost

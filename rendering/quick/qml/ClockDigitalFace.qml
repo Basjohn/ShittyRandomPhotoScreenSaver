@@ -47,16 +47,31 @@ Item {
     Column {
         id: contentColumn
         objectName: "clockDigitalContent"
-        width: parent.width
+        // Clock's outer rect and font-size payload remain owned by CUSTOM.
+        // When the outer card is independently trimmed in X/Y, preserve the
+        // natural, unwrapped text stack and fit its PAINT inside the assigned
+        // content area. Merely shrinking Text.width clips glyphs while leaving
+        // the Edit proxy attached to the smaller, unpainted rectangle.
+        // At or above intrinsic size this is exactly the old layout (scale 1).
+        width: Math.max(parent.width, digitalFace.preferredContentWidth)
+        height: digitalFace.preferredContentHeight
         anchors.centerIn: parent
+        transformOrigin: Item.Center
+        scale: Math.min(1.0,
+            Math.max(1.0, parent.width) / Math.max(1.0, width),
+            Math.max(1.0, parent.height) / Math.max(1.0, height))
         spacing: 4.0 * digitalFace.fontResizeFactor
 
         ShadowedText {
             id: timeText
             objectName: "clockDigitalTime"
+            readonly property string customEditMappingDependency: [
+                digitalTimeAppliedScale.xScale, digitalTimeAppliedScale.yScale,
+                digitalTimeAppliedTranslation.x, digitalTimeAppliedTranslation.y
+            ].join("|")
             transform: [
-                Scale { origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("time_text"); yScale: digitalFace.childHeightScale("time_text") },
-                Translate { x: digitalFace.childOffsetX("time_text"); y: digitalFace.childOffsetY("time_text") }
+                Scale { id: digitalTimeAppliedScale; origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("time_text"); yScale: digitalFace.childHeightScale("time_text") },
+                Translate { id: digitalTimeAppliedTranslation; x: digitalFace.childOffsetX("time_text"); y: digitalFace.childOffsetY("time_text") }
             ]
             width: contentColumn.width
             height: implicitHeight
@@ -84,9 +99,13 @@ Item {
             Separator {
                 id: digitalSeparator
                 objectName: "clockDigitalSeparator"
+                readonly property string customEditMappingDependency: [
+                    digitalSeparatorAppliedScale.xScale, digitalSeparatorAppliedScale.yScale,
+                    digitalSeparatorAppliedTranslation.x, digitalSeparatorAppliedTranslation.y
+                ].join("|")
                 transform: [
-                    Scale { origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("separator"); yScale: digitalFace.childHeightScale("separator") },
-                    Translate { x: digitalFace.childOffsetX("separator"); y: digitalFace.childOffsetY("separator") }
+                    Scale { id: digitalSeparatorAppliedScale; origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("separator"); yScale: digitalFace.childHeightScale("separator") },
+                    Translate { id: digitalSeparatorAppliedTranslation; x: digitalFace.childOffsetX("separator"); y: digitalFace.childOffsetY("separator") }
                 ]
                 width: separatorBand.width * 0.77
                 height: digitalFace.clockModel.separatorThickness * digitalFace.fontResizeFactor
@@ -103,9 +122,13 @@ Item {
         ShadowedText {
             id: calendarText
             objectName: "clockDigitalCalendar"
+            readonly property string customEditMappingDependency: [
+                digitalCalendarAppliedScale.xScale, digitalCalendarAppliedScale.yScale,
+                digitalCalendarAppliedTranslation.x, digitalCalendarAppliedTranslation.y
+            ].join("|")
             transform: [
-                Scale { origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("calendar_text"); yScale: digitalFace.childHeightScale("calendar_text") },
-                Translate { x: digitalFace.childOffsetX("calendar_text"); y: digitalFace.childOffsetY("calendar_text") }
+                Scale { id: digitalCalendarAppliedScale; origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("calendar_text"); yScale: digitalFace.childHeightScale("calendar_text") },
+                Translate { id: digitalCalendarAppliedTranslation; x: digitalFace.childOffsetX("calendar_text"); y: digitalFace.childOffsetY("calendar_text") }
             ]
             width: contentColumn.width
             height: visible ? implicitHeight : 0.0
@@ -126,9 +149,13 @@ Item {
         ShadowedText {
             id: timezoneText
             objectName: "clockDigitalTimezone"
+            readonly property string customEditMappingDependency: [
+                digitalTimezoneAppliedScale.xScale, digitalTimezoneAppliedScale.yScale,
+                digitalTimezoneAppliedTranslation.x, digitalTimezoneAppliedTranslation.y
+            ].join("|")
             transform: [
-                Scale { origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("timezone_text"); yScale: digitalFace.childHeightScale("timezone_text") },
-                Translate { x: digitalFace.childOffsetX("timezone_text"); y: digitalFace.childOffsetY("timezone_text") }
+                Scale { id: digitalTimezoneAppliedScale; origin.x: 0.0; origin.y: 0.0; xScale: digitalFace.childWidthScale("timezone_text"); yScale: digitalFace.childHeightScale("timezone_text") },
+                Translate { id: digitalTimezoneAppliedTranslation; x: digitalFace.childOffsetX("timezone_text"); y: digitalFace.childOffsetY("timezone_text") }
             ]
             width: contentColumn.width
             height: visible ? implicitHeight : 0.0

@@ -27,16 +27,11 @@ OverlayWidget {
     // Digital's text and the optional footer elements retain their own roles.
     customEditableChildRoles: {
         const roles = []
-        const normW = Math.max(1.0, clockRoot.preferredContentWidth)
-        const normH = Math.max(1.0, clockRoot.preferredContentHeight)
         if (_isDigital) {
             roles.push({ "roleId": "time_text", "target": digitalFace.customTimeTarget })
-            if (clockRoot.clockModel.showSeparator)
-                roles.push({ "roleId": "separator", "target": digitalFace.customSeparatorTarget })
-            if (clockRoot.clockModel.calendarText.length > 0)
-                roles.push({ "roleId": "calendar_text", "target": digitalFace.customCalendarTarget })
-            if (clockRoot.clockModel.timezoneText.length > 0)
-                roles.push({ "roleId": "timezone_text", "target": digitalFace.customTimezoneTarget })
+            roles.push({ "roleId": "separator", "target": digitalFace.customSeparatorTarget })
+            roles.push({ "roleId": "calendar_text", "target": digitalFace.customCalendarTarget })
+            roles.push({ "roleId": "timezone_text", "target": digitalFace.customTimezoneTarget })
         } else {
             roles.push({
                 "roleId": "clock_face",
@@ -46,16 +41,17 @@ OverlayWidget {
                 "containmentTarget": analogueFace,
                 "geometryDependencies": [analogueFace]
             })
-            if (clockRoot.clockModel.showSeparator)
-                roles.push({ "roleId": "separator", "target": analogueFace.customSeparatorTarget })
-            if (clockRoot.clockModel.calendarText.length > 0)
-                roles.push({ "roleId": "calendar_text", "target": analogueFace.customCalendarTarget })
-            if (clockRoot.clockModel.timezoneText.length > 0)
-                roles.push({ "roleId": "timezone_text", "target": analogueFace.customTimezoneTarget })
+            roles.push({ "roleId": "separator", "target": analogueFace.customSeparatorTarget })
+            roles.push({ "roleId": "calendar_text", "target": analogueFace.customCalendarTarget })
+            roles.push({ "roleId": "timezone_text", "target": analogueFace.customTimezoneTarget })
         }
         for (let i = 0; i < roles.length; ++i) {
-            roles[i].normalizationWidth = normW
-            roles[i].normalizationHeight = normH
+            // The actual preferred extent may change as the intrinsic digital
+            // text changes. Observe it on the *delegate*, not on this list:
+            // rebuilding the list would retire the in-flight Edit gesture.
+            roles[i].normalizationTarget = clockRoot
+            roles[i].normalizationWidthProperty = "preferredContentWidth"
+            roles[i].normalizationHeightProperty = "preferredContentHeight"
         }
         return roles
     }

@@ -982,8 +982,8 @@ def test_real_manager_owner_and_scene_host_keep_one_retained_runtime_chain(
     assert service.is_retired() is True
 
 
-def test_backlog_child_requirement_does_not_count_live_parent_rail_twice(qt_app, tmp_path) -> None:
-    """Parent-only X expansion may move BACKLOG but not grow its child floor."""
+def test_backlog_parent_reflow_does_not_republish_outer_extent(qt_app, tmp_path) -> None:
+    """Live BACKLOG right-rail motion must not feed back into parent size."""
     model = _model()
     model.activate()
     model.on_abandonment_presentation(
@@ -996,17 +996,28 @@ def test_backlog_child_requirement_does_not_count_live_parent_rail_twice(qt_app,
         target = item.property("customEditableChildRequirementTarget")
         if isinstance(target, QJSValue):
             target = target.toQObject()
-        assert target is not None
-        baseline_right = float(target.property("backlogRight"))
-        baseline_floor = float(target.property("requiredContentWidth"))
+        assert target is None
+        canvas = _find_visual_item(item, "abandonmentAuthoredCanvas")
+        backlog = _find_visual_item(item, "abandonmentArchiveTab")
+        assert canvas is not None and backlog is not None
+        baseline_x = backlog.mapToItem(canvas, 0.0, 0.0).x()
         width, height = float(model.baseAuthoredWidth), float(model.baseAuthoredHeight)
+        assert float(item.property("backlogParentReflowX")) == pytest.approx(0.0)
         for extra in (90.0, 220.0, 310.0):
             assert model.set_content_extent(width + extra, height)
             item.setWidth(model.authoredWidth)
             item.setHeight(model.authoredHeight)
-            qt_app.processEvents()
-            assert float(target.property("backlogRight")) == pytest.approx(baseline_right)
-            assert float(target.property("requiredContentWidth")) == pytest.approx(baseline_floor)
+            for _ in range(3):
+                qt_app.processEvents()
+                assert float(model.authoredWidth) == pytest.approx(width + extra)
+                assert float(model.baseAuthoredWidth) == pytest.approx(width)
+                assert float(item.property("backlogParentReflowX")) == pytest.approx(extra)
+                assert backlog.mapToItem(canvas, 0.0, 0.0).x() == pytest.approx(baseline_x + extra)
+        assert model.clear_content_extent()
+        item.setWidth(model.authoredWidth)
+        item.setHeight(model.authoredHeight)
+        qt_app.processEvents()
+        assert backlog.mapToItem(canvas, 0.0, 0.0).x() == pytest.approx(baseline_x)
     finally:
         item.deleteLater()
         component.deleteLater()
@@ -1037,8 +1048,14 @@ def test_semantic_header_flip_exchanges_abandonment_rails_without_mirroring_artw
         age = find("abandonmentAgeStamp")
         shelves = find("abandonmentLedgerGroup")
         backlog = find("abandonmentArchiveTab")
-        assert all(obj is not None for obj in
-                   (canvas, art, image, title, flavour, age, shelves, backlog))
+        painted = {
+            "canvas": canvas, "artwork": art, "image": image,
+            "title": title, "flavour": flavour, "age": age,
+            "shelves": shelves, "backlog": backlog,
+        }
+        assert all(obj is not None for obj in painted.values()), [
+            name for name, obj in painted.items() if obj is None
+        ]
         def pos(obj):
             return obj.mapToItem(canvas, 0.0, 0.0).x()
         text_roles = (title, flavour, age, shelves)
@@ -1067,8 +1084,7 @@ def test_semantic_header_flip_exchanges_abandonment_rails_without_mirroring_artw
         from PySide6.QtQml import QJSValue
         if isinstance(req, QJSValue):
             req = req.toQObject()
-        assert req is not None
-        required_before = float(req.property("requiredContentWidth"))
+        assert req is None
         art_before = pos(art)
         backlog_before = pos(backlog)
         assert model.set_content_extent(base_width + 120.0, base_height)
@@ -1077,7 +1093,12 @@ def test_semantic_header_flip_exchanges_abandonment_rails_without_mirroring_artw
         qt_app.processEvents()
         assert pos(art) == pytest.approx(art_before + 120.0)
         assert pos(backlog) == pytest.approx(backlog_before)
-        assert float(req.property("requiredContentWidth")) == pytest.approx(required_before, abs=1.5)
+        for _ in range(3):
+            qt_app.processEvents()
+            assert float(model.authoredWidth) == pytest.approx(base_width + 120.0)
+            assert float(model.baseAuthoredWidth) == pytest.approx(base_width)
+            assert pos(art) == pytest.approx(art_before + 120.0)
+            assert pos(backlog) == pytest.approx(backlog_before)
 
         assert model.clear_content_extent()
         item.setWidth(model.authoredWidth)

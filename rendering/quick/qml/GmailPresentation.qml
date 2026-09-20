@@ -226,28 +226,24 @@ OverlayWidget {
         }
     }
 
+    // Stable retained semantic roles. Visibility is evaluated by the selected
+    // Edit mapper, not by rebuilding this role list during content transitions.
     customEditableChildRoles: {
         const roles = []
-        const normW = childNormalizationWidth
-        const normH = childNormalizationHeight
         roles.push({
             "roleId": "header",
             "target": headerFrame,
 
-            "normalizationWidth": normW,
-            "normalizationHeight": normH,
+            "normalizationTarget": gmailRoot,
             "semanticCornerInsetX": 0.0,
             "semanticCornerInsetY": 0.0
         })
-        if (refreshTarget.visible) {
-            roles.push({
-                "roleId": "refresh",
-                "target": refreshTarget,
+        roles.push({
+            "roleId": "refresh",
+            "target": refreshTarget,
 
-                "normalizationWidth": normW,
-                "normalizationHeight": normH
-            })
-        }
+            "normalizationTarget": gmailRoot
+        })
         return roles
     }
 

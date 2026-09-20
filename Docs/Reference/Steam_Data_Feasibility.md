@@ -1,8 +1,8 @@
 # Steam Data Feasibility
 
 This document records the supported-source pass for the Steam widget family. Achievement Pulse, Abandonment Issues,
-and Friend Pulse are normally visible, disabled-by-default cards; this document remains the source gate for Games You
-Follow.
+and Friend Pulse are normally visible, disabled-by-default cards; this document is the supported-source boundary for Games You
+Follow. The Steam account/cache and family presentation contracts remain in their respective current owners.
 
 ## Rules
 
@@ -70,6 +70,8 @@ Follow.
 - Guilt Desaturater is optional presentation only: it prepares bucketed local artwork off the UI thread and never changes eligibility or source meaning.
 
 ### Games You Follow
+
+**Implementation route:** `Current_Plan.md` C0–C3 and [`Docs/Future_Work/Steam_Games_You_Follow.md`](../Future_Work/Steam_Games_You_Follow.md) own the live G0-to-release checklist. Existing Web API key acceptance for `GetGamesFollowed/v1` is **not yet proven**, so no `steam_progress` product implementation or alternate follow-source path is authorized by this reference. The retained Qt Quick singleton-role and independent X/Y extent contract is a required first-implementation gate, not a retrofit.
 
 - The follow-set authority is no longer speculative: target `IStoreService/GetGamesFollowed/v1` using the **existing** user Web API key + linked SteamID64. Current protocol metadata marks it Web-API-key gated. G0 still requires exact fixture/live proof that SRPSS's existing credential path is accepted before product code is admitted.
 - The public app-news transport and stable item/date/url/feed fields are proven for a bounded app-specific request.
