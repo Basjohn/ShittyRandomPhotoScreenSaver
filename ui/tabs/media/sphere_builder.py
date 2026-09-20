@@ -154,7 +154,7 @@ def build_sphere_ui(tab, parent_layout) -> None:
         value = QLabel()
 
         def update(number):
-            value.setText(f"{number / divisor:.2f}{suffix}")
+            value.setText(f"{number / divisor:.3f}{suffix}" if divisor == 1000.0 else f"{number / divisor:.2f}{suffix}")
 
         update(control.value())
         control.valueChanged.connect(update)
@@ -346,6 +346,15 @@ def build_sphere_ui(tab, parent_layout) -> None:
         100.0,
         25,
     )
+    particle_energy_floor_control = slider(
+        particle_flow, "sphere_particle_energy_floor", "sphere_particle_energy_floor",
+        "Particle Energy Floor:", 1000, "", 1000.0,
+    )
+    particle_energy_floor_control.setToolTip(
+        "Minimum live pre-AGC acoustic energy for a qualified intake/outtake cohort. "
+        "The default 0.075 preserves the existing authoring floor. The typed/onset "
+        "qualifiers and hysteretic presence gate remain authoritative."
+    )
     particle_amount_control.setToolTip(
         "Scales the number of voxels selected after a qualified cohort has already been admitted. It never changes onset thresholds, event qualification, acoustic impact or particle velocity."
     )
@@ -353,7 +362,7 @@ def build_sphere_ui(tab, parent_layout) -> None:
     def apply_flow_dependency(enabled: bool) -> None:
         # UI dependency only: preserve authored sub-control state while the master
         # is off. Runtime semantics remain exactly the existing Sphere-local gate.
-        for control in (density_control, velocity_control, outtake_control, particle_amount_control):
+        for control in (density_control, velocity_control, outtake_control, particle_amount_control, particle_energy_floor_control):
             control.setEnabled(bool(enabled))
 
     flow_master.toggled.connect(apply_flow_dependency)
@@ -369,6 +378,12 @@ def build_sphere_ui(tab, parent_layout) -> None:
         "Fragment Interpolation:",
         "Smooth fragment travel (visual only)",
         "Keeps audio/onset admission instantaneous but interpolates detached cube displacement over a few rendered frames. It does not smooth the audio signal, reduce packet strength, blur frames, or add motion blur.",
+    )
+    slider(reaction, "sphere_fragment_energy_floor", "sphere_fragment_energy_floor", "Fragment Energy Floor:", 1000, "", 1000.0)
+    tab.sphere_fragment_energy_floor.setToolTip(
+        "Minimum live pre-AGC acoustic energy required to admit a qualified "
+        "fragmentation packet. 0.00 preserves the existing typed/onset thresholds. "
+        "Does not change packet amplitude, particle qualification, or tracer travel."
     )
     slider(reaction, "sphere_fragment_strength", "sphere_fragment_strength", "Fragment Strength:", 900, "", 100.0)
     tab.sphere_fragment_strength.setToolTip(

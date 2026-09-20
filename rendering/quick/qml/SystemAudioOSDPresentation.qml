@@ -11,11 +11,14 @@ OverlayWidget {
     preferredContentHeight: osdModel.authoredHeight
     // The host initializes fadeOpacity to zero before scene admission. The
     // retained model/host updates it only on event/deadline/Edit edges.
+    // One event-edge animation owned by the retained QML shell. Closing the
+    // inactivity deadline starts a gentle fade instead of hiding the widget
+    // abruptly. No extra timer, frame driver or permanent render demand.
     Behavior on fadeOpacity {
-        NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-    }
-    onCustomLayoutInputBlockedChanged: {
-        fadeOpacity = customLayoutInputBlocked || osdModel.revealed ? 1.0 : 0.0
+        NumberAnimation {
+            duration: (osdModel.revealed || osdRoot.customLayoutInputBlocked) ? 170 : 1150
+            easing.type: Easing.InOutCubic
+        }
     }
 
     Item {
@@ -45,6 +48,12 @@ OverlayWidget {
             width: osdBody.glyphSize
             height: width
             y: (parent.height - height) / 2
+            // A volume-key burst changes the bar, not the speaker silhouette.
+            // Repaint Canvas only when the glyph state/size actually changes.
+            property bool paintMuted: osdModel.muted
+            onPaintMutedChanged: requestPaint()
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
             onPaint: {
                 const context = getContext("2d")
                 context.clearRect(0, 0, width, height)
@@ -62,7 +71,7 @@ OverlayWidget {
                 context.closePath()
                 context.stroke()
                 context.beginPath()
-                if (osdModel.muted) {
+                if (speakerGlyph.paintMuted) {
                     context.moveTo(width * .65, height * .34)
                     context.lineTo(width * .91, height * .66)
                     context.moveTo(width * .91, height * .34)
@@ -72,10 +81,6 @@ OverlayWidget {
                     context.quadraticCurveTo(width * .85, height * .5, width * .65, height * .65)
                 }
                 context.stroke()
-            }
-            Connections {
-                target: osdRoot.osdModel
-                function onStateChanged() { speakerGlyph.requestPaint() }
             }
         }
 

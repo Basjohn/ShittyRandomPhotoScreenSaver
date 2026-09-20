@@ -24,6 +24,8 @@ _SPHERE_SETTING_KEYS = (
     "sphere_shadow_distance",
     "sphere_shadow_size",
     "sphere_fade_incoming_blocks",
+    "sphere_fragment_energy_floor",
+    "sphere_particle_energy_floor",
     "sphere_fragment_strength",
     "sphere_particle_distance",
     "sphere_particle_amount",
@@ -53,7 +55,7 @@ def load_sphere_mode_settings(tab, config) -> None:
         elif hasattr(control, "setChecked"):
             control.setChecked(bool(value))
         else:
-            control.setValue(round(float(value) * 100))
+            control.setValue(round(float(value) * (1000 if key in ("sphere_fragment_energy_floor", "sphere_particle_energy_floor") else 100)))
 
     for key, attr, button_attr in (
         ("sphere_fill_color", "_sphere_fill_color", "sphere_fill_color_btn"),
@@ -96,6 +98,8 @@ def collect_sphere_mode_settings(tab) -> dict:
         "sphere_taste_the_rainbow_surfaces": tab.sphere_taste_the_rainbow_surfaces.isChecked(),
         "sphere_taste_the_rainbow_edges": tab.sphere_taste_the_rainbow_edges.isChecked(),
         "sphere_light_direction": tab.sphere_light_direction.currentText(),
+        "sphere_fragment_energy_floor": tab.sphere_fragment_energy_floor.value() / 1000.0,
+        "sphere_particle_energy_floor": tab.sphere_particle_energy_floor.value() / 1000.0,
         "sphere_fragment_strength": tab.sphere_fragment_strength.value() / 100.0,
         "sphere_particle_distance": tab.sphere_particle_distance.value() / 100.0,
         "sphere_particle_amount": tab.sphere_particle_amount.value() / 100.0,

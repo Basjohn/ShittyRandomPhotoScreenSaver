@@ -140,7 +140,7 @@ def test_fetch_json_refuses_publisher_only_endpoint() -> None:
     assert result.payload is None
 
 
-def test_redact_params_only_hides_secret_like_identity_fields() -> None:
+def test_redact_params_hides_account_and_selected_app_identity() -> None:
     redacted = redact_params(
         {
             "key": "abc",
@@ -152,5 +152,5 @@ def test_redact_params_only_hides_secret_like_identity_fields() -> None:
 
     assert redacted["key"].startswith("<key:")
     assert redacted["steamids"].startswith("<steamids:")
-    assert redacted["appid"] == 730
+    assert str(redacted["appid"]).startswith("<appid:")
     assert redacted["relationship"] == "friend"

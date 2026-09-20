@@ -54,3 +54,37 @@ def test_settings_are_canonical_and_custom_editor_is_descriptor_routed():
     assert '"preferred_height": int(' in section
     for forbidden in ('os.environ', 'setenv(', 'getenv(', 'QTimer(', 'GetSpeakers('):
         assert forbidden not in section
+
+
+def test_osd_has_one_foreground_lane_without_relayering_visualizers():
+    scene = _source("rendering/quick/qml/DisplayScene.qml")
+    host = _source("rendering/quick/widgets/host.py")
+    controller = _source("rendering/quick/scene_controller.py")
+    osd = _source("rendering/quick/qml/SystemAudioOSDPresentation.qml")
+    assert 'objectName: "systemAudioOSDShadowHost"' in scene
+    assert 'objectName: "systemAudioOSDForegroundHost"' in scene
+    assert scene.index('id: visualizerPresentationLoader') < scene.index('id: systemAudioOSDShadowHost')
+    assert scene.index('id: systemAudioOSDForegroundHost') < scene.index('id: retainedContextMenu')
+    assert 'z: 29' in scene and 'z: 30' in scene
+    assert '_paint_host_for_identity' in host
+    assert '_shadow_host_for_identity' in host
+    assert 'foreground_host_item=osd_foreground_host_item' in controller
+    assert 'foreground_shadow_host_item=osd_shadow_host_item' in controller
+    assert 'duration: (osdModel.revealed || osdRoot.customLayoutInputBlocked) ? 170 : 1150' in osd
+    assert 'onCustomLayoutInputBlockedChanged:' not in osd
+    assert 'QTimer {' not in osd
+    assert 'property bool paintMuted: osdModel.muted' in osd
+    assert 'function onStateChanged() { speakerGlyph.requestPaint() }' not in osd
+    assert 'Timer {' not in osd
+
+
+def test_osd_semantic_palette_uses_shared_widget_theme_resolver():
+    model = _source("rendering/quick/widgets/system_audio_osd.py")
+    roles = _source("ui/widget_visual_roles.py")
+    assert 'resolve_card_surface_colors(' in model
+    assert 'resolve_primary_text_color(' in model
+    assert 'resolve_rgba_role(' in model
+    assert 'configured_rgba_override(' in model
+    assert '"system_audio_osd.accent": "widget.accent"' in roles
+    assert '"system_audio_osd.track": "widget.panel"' in roles
+    assert 'from ui.widget_theme_active import get_active_widget_theme' in model

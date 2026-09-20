@@ -496,9 +496,19 @@ class QuickSceneController(QObject):
         )
         if ordinary_widget_shadow_host_item is None:
             raise RuntimeError("DisplayScene.qml has no ordinary widget shadow host")
+        osd_foreground_host_item = root.findChild(
+            QQuickItem, "systemAudioOSDForegroundHost",
+        )
+        osd_shadow_host_item = root.findChild(
+            QQuickItem, "systemAudioOSDShadowHost",
+        )
+        if osd_foreground_host_item is None or osd_shadow_host_item is None:
+            raise RuntimeError("DisplayScene.qml has no foreground OSD paint hosts")
         self._ordinary_widget_host = OrdinaryWidgetPresentationHost(
             host_item=ordinary_widget_host_item,
             shadow_host_item=ordinary_widget_shadow_host_item,
+            foreground_host_item=osd_foreground_host_item,
+            foreground_shadow_host_item=osd_shadow_host_item,
             context=context,
             create_overlay_item=factory.create_overlay_widget,
             create_shadow_item=factory.create_overlay_card_shadow,

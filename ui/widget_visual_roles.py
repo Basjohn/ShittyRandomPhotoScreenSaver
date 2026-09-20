@@ -103,6 +103,12 @@ WIDGET_VISUAL_ROLE_PARENTS: Mapping[str, str] = {
     "system_stats.metric.border": "widget.outline",
     "system_stats.metric.track": "widget.panel",
 
+    # System OSD inherits the retained Widget Theme, not the Settings-window
+    # palette. Optional roles are sparse: old themes inherit the shared roles.
+    "system_audio_osd.track": "widget.panel",
+    "system_audio_osd.accent": "widget.accent",
+    "system_audio_osd.icon": "widget.icon",
+
     # Media internal surfaces.  These are intentionally semantic, not GUI controls.
     "media.transport.surface": "widget.panel",
     "media.transport.border": "widget.outline",

@@ -44,6 +44,8 @@ _SPHERE_PARAMETER_KEYS = (
     "sphere_shadow_distance",
     "sphere_shadow_size",
     "sphere_fade_incoming_blocks",
+    "sphere_fragment_energy_floor",
+    "sphere_particle_energy_floor",
     "sphere_fragment_strength",
     "sphere_particle_distance",
     "sphere_particle_amount",
@@ -135,6 +137,9 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"{key} must contain numeric RGB/RGBA channels") from exc
             setattr(host, f"_{key}", rgba)
+    for key in ('sphere_fragment_energy_floor', 'sphere_particle_energy_floor'):
+        if key in kwargs:
+            setattr(host, f'_{key}', _sphere_bounded(kwargs[key], 0.0, 1.0, key))
     if 'sphere_fragment_strength' in kwargs:
         host._sphere_fragment_strength = _sphere_bounded(kwargs['sphere_fragment_strength'], 0.0, 9.0, 'sphere_fragment_strength')
     if 'sphere_particle_distance' in kwargs:

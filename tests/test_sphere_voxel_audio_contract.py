@@ -1767,3 +1767,86 @@ def test_rejected_three_band_rise_packet_authority_is_absent_from_sphere_runtime
     assert "def _spectral_onset" in source
     assert "analysis_spectrum" in source
     assert "get_smoothed_bars" not in source
+
+
+def test_authored_sphere_fragment_and_particle_energy_floors_are_independent() -> None:
+    """Only admission changes; qualified packet/cohort strength remains owned by events."""
+    render_state, sphere_runtime = _load_plain_visualizer_modules()
+    reactive = render_state.VisualizerEnergyState(
+        bass=0.45, mid=0.52, high=0.28, overall=0.44,
+    )
+    presence = render_state.VisualizerEnergyState(
+        bass=0.50, mid=0.55, high=0.35, overall=0.50,
+    )
+
+    def event_at(fragment_floor: float | None, particle_floor: float | None):
+        runtime = sphere_runtime.SphereFrameRuntime()
+        settings = dict(_params(render_state).entries)
+        if fragment_floor is not None:
+            settings["sphere_fragment_energy_floor"] = fragment_floor
+        if particle_floor is not None:
+            settings["sphere_particle_energy_floor"] = particle_floor
+        parameters = render_state.FrozenFields(tuple(sorted(settings.items())))
+        _resolve(
+            runtime, render_state, ts=10.0, reactive=reactive,
+            presence=presence, params=parameters,
+        )
+        frame = _resolve(
+            runtime, render_state, ts=10.05, reactive=reactive,
+            presence=presence, scheduler=_Scheduler(kick=_Event(1.0)),
+            params=parameters,
+        )
+        assert frame is not None
+        return frame, runtime._packet_sources_since_diag["kick"]
+
+    baseline, baseline_packets = event_at(None, None)  # older user presets
+    defaults, defaults_packets = event_at(0.0, 0.075)
+    assert baseline_packets == defaults_packets == 1
+    assert baseline.section_drives == defaults.section_drives
+    assert baseline.particle_cohorts == defaults.particle_cohorts
+    assert len(defaults.particle_cohorts) == 1
+
+    no_fragments, packet_count = event_at(0.99, 0.075)
+    assert packet_count == 0
+    assert not any(no_fragments.section_drives)
+    assert len(no_fragments.particle_cohorts) == 1  # separate particle gate
+
+    no_particles, packet_count = event_at(0.0, 0.99)
+    assert packet_count == 1
+    assert no_particles.section_drives == baseline.section_drives
+    assert no_particles.particle_cohorts == ()  # separate fragment gate
+
+    both_filtered, packet_count = event_at(0.99, 0.99)
+    assert packet_count == 0
+    assert not any(both_filtered.section_drives)
+    assert both_filtered.particle_cohorts == ()
+
+
+def test_sphere_energy_floor_persistence_and_preset_parity() -> None:
+    """New keys reach canonical defaults, presets, typed settings and configure."""
+    import json
+    from core.settings.default_settings import DEFAULT_SETTINGS
+
+    defaults = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
+    assert defaults["sphere_fragment_energy_floor"] == 0.0
+    assert defaults["sphere_particle_energy_floor"] == 0.075
+    snapshot = json.loads(
+        (ROOT / "core/settings/defaults_snapshot.json").read_text(encoding="utf-8")
+    )
+    assert snapshot == DEFAULT_SETTINGS
+
+    for path in sorted((ROOT / "presets/visualizer_modes/sphere").glob("*.json")):
+        sphere = json.loads(path.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
+        assert sphere["sphere_fragment_energy_floor"] == 0.0, path.name
+        assert sphere["sphere_particle_energy_floor"] == 0.075, path.name
+
+    required_sources = (
+        "core/settings/models/_spotify_visualizer.py",
+        "widgets/spotify_visualizer/config_applier.py",
+        "ui/tabs/media/sphere_builder.py",
+        "ui/tabs/media/sphere_settings_binding.py",
+    )
+    for relative_path in required_sources:
+        source = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert 'sphere_fragment_energy_floor' in source, relative_path
+        assert 'sphere_particle_energy_floor' in source, relative_path

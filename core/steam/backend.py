@@ -33,7 +33,7 @@ STEAM_USER_AGENT = "SRPSS-Steam/0.1"
 
 _SECRET_PARAM_KEYS = frozenset({
     "key", "steamid", "steamids", "steamid1", "steamid2", "steamid_friend",
-    "profile_identifier",
+    "profile_identifier", "appid",
 })
 
 
@@ -107,6 +107,14 @@ SOURCE_EVIDENCE: dict[SteamSourceId, SteamSourceEvidence] = {
         public_without_key=True,
         notes=("Public app-specific news; not a personalized library-wide update feed.",),
     ),
+    SteamSourceId.GAMES_FOLLOWED: SteamSourceEvidence(
+        source_id=SteamSourceId.GAMES_FOLLOWED,
+        status=SteamSourceStatus.CONDITIONAL,
+        endpoint="IStoreService/GetGamesFollowed/v1",
+        requires_user_key=False,
+        public_without_key=True,
+        notes=("Only SteamID is listed in endpoint metadata; actual access and response shape must pass G0 live probe.",),
+    ),
     SteamSourceId.SINGLE_GAME_PLAYTIME: SteamSourceEvidence(
         source_id=SteamSourceId.SINGLE_GAME_PLAYTIME,
         status=SteamSourceStatus.UNAVAILABLE,
@@ -177,7 +185,14 @@ def build_endpoint(source_id: SteamSourceId, *, api_key: str | None = None, stea
         if not api_key:
             raise ValueError(f"Steam source {source_id.value} requires an API key")
         endpoint_params["key"] = api_key
-    if source_id in {
+    if source_id == SteamSourceId.GAMES_FOLLOWED:
+        # G0-only endpoint: never merge it with owned/wishlist/recent sources.
+        # Metadata lists SteamID as its input, not a Web API key; admission
+        # still requires an explicitly authorized real-account response.
+        if not isinstance(steamid, str) or not steamid.isdecimal() or len(steamid) != 17:
+            raise ValueError("Followed-games probe requires the verified SteamID64")
+        endpoint_params["steamid"] = steamid
+    elif source_id in {
         SteamSourceId.RECENTLY_PLAYED,
         SteamSourceId.OWNED_GAMES,
         SteamSourceId.PLAYER_ACHIEVEMENTS,
@@ -282,7 +297,7 @@ def fetch_json(
             attempted_sources=(endpoint.source_id,),
         )
     except Exception as exc:
-        logger.warning("[STEAM] Source request failed source=%s url=%s error=%s", endpoint.source_id.value, safe_url, exc)
+        logger.warning("[STEAM] Source request failed source=%s url=%s error_type=%s", endpoint.source_id.value, safe_url, type(exc).__name__)
         return SteamResult(
             status=SteamResultStatus.NETWORK_ERROR,
             source_id=endpoint.source_id,
@@ -316,6 +331,8 @@ def _default_open(request: urllib.request.Request, timeout: float) -> Any:
 
 
 def _source_url(source_id: SteamSourceId) -> str:
+    if source_id == SteamSourceId.GAMES_FOLLOWED:
+        return "https://api.steampowered.com/IStoreService/GetGamesFollowed/v1/"
     if source_id == SteamSourceId.APP_NEWS:
         return "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
     if source_id == SteamSourceId.RECENTLY_PLAYED:

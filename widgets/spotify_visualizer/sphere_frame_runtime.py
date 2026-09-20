@@ -1108,7 +1108,10 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 amplitude = 0.46 + 0.46 * math.sqrt(onset_strength)
                 candidates.append((amplitude + 0.16, "onset", amplitude))
 
-            if candidates:
+            # Authored acoustic floors are post-qualification admission gates.
+            # With their defaults, the accepted typed/onset event contract is identical.
+            fragment_energy_floor = _clamp01(float(parameters.get("sphere_fragment_energy_floor", 0.0)))
+            if candidates and intake_energy >= fragment_energy_floor:
                 _priority, packet_source, packet_amplitude = max(candidates, key=lambda item: item[0])
                 packet_section = self._section_for_change(
                     bass=bass_now,
@@ -1187,10 +1190,18 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                     0.26 + 0.38 * math.sqrt(onset_strength),
                     onset_strength,
                 ))
+            particle_energy_floor = _clamp01(float(parameters.get(
+                "sphere_particle_energy_floor", _INCOMING_AUTHOR_FLOOR
+            )))
+            # Even at the minimum slider value, real PCM silence cannot
+            # author a detached cohort. The existing release floor is the
+            # absolute presence guard; above it the authored floor may tune
+            # cohort admission independently of fragmentation.
+            effective_particle_floor = max(_INCOMING_GATE_CLOSE + 1.0e-6, particle_energy_floor)
             typed_force_gate = bool(
-                incoming_candidates and intake_energy >= _INCOMING_TYPED_FORCE_FLOOR
+                incoming_candidates and intake_energy >= effective_particle_floor
             )
-            authoring_presence = intake_energy >= _INCOMING_AUTHOR_FLOOR
+            authoring_presence = intake_energy >= effective_particle_floor
             if incoming_candidates and authoring_presence and (self._incoming_gate_open or typed_force_gate):
                 _incoming_priority, incoming_source, incoming_section, incoming_strength, event_confidence = max(
                     incoming_candidates, key=lambda item: item[0]
