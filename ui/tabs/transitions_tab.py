@@ -27,6 +27,8 @@ from core.settings.capability_activation import (
 from core.logging.logger import get_logger
 from rendering.transition_registry import (
     canonicalize_transition_name,
+    is_transition_available,
+    transition_unavailability_reason,
     get_transition_setting_names,
 )
 from ui.tabs import shared_styles
@@ -1609,18 +1611,28 @@ class TransitionsTab(QWidget):
             self._save_settings()
 
     def _apply_transition_pill_visibility(self) -> None:
-        """Show/hide transition pills and pool rows to match activation."""
+        """Reconcile descriptor admission, activation and quarantined controls."""
         deactivated_current = False
         current = self._current_transition or self.transition_combo.currentText()
         for name, button in self._nav_buttons.items():
             if name == _SETUP_NAV_KEY:
                 continue
+            available = is_transition_available(name)
             activated = self._transition_activated(name)
-            button.setVisible(activated)
-            # The random pool only lists activated transitions.
+            # Quarantined Tendril remains visibly disabled so the pending
+            # removal is explicit; ordinary inactive effects remain hidden.
+            button.setVisible(available and activated or name == "Tendril Reveal")
+            button.setEnabled(available and activated)
+            button.setToolTip(transition_unavailability_reason(name) if not available else "")
             pool_row = getattr(self, "_pool_checkboxes", {}).get(name)
             if pool_row is not None:
-                pool_row.setVisible(activated)
+                pool_row.setVisible(available and activated or name == "Tendril Reveal")
+                pool_row.setEnabled(available and activated)
+                pool_row.setToolTip(transition_unavailability_reason(name) if not available else "")
+            activation_row = getattr(self, "_activation_checkboxes", {}).get(name)
+            if activation_row is not None:
+                activation_row.setEnabled(available)
+                activation_row.setToolTip(transition_unavailability_reason(name) if not available else "")
             if not activated and name == current:
                 deactivated_current = True
         if not getattr(self, "_loading", False) and deactivated_current:
@@ -1630,6 +1642,8 @@ class TransitionsTab(QWidget):
             self._on_nav_selected(_SETUP_NAV_KEY)
 
     def _transition_activated(self, name: str) -> bool:
+        if not is_transition_available(name):
+            return False
         checkbox = getattr(self, "_activation_checkboxes", {}).get(name)
         if checkbox is not None:
             return bool(checkbox.isChecked())

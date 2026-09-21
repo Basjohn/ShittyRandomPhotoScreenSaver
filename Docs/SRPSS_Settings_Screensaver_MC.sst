@@ -69,15 +69,15 @@
     "transitions": {
       "activation": {
         "3D Block Spins": true,
-        "Blinds": true,
+        "Blinds": false,
         "Block Puzzle Flip": false,
         "Burn": true,
         "Crossfade": false,
         "Crumble": true,
         "Diffuse": false,
-        "Directional Pixel Accretion": false,
-        "Exploding Tiles": false,
-        "Glass Shatter": false,
+        "Directional Pixel Accretion": true,
+        "Exploding Tiles": true,
+        "Glass Shatter": true,
         "Ink Bloom": false,
         "Melt Drip": false,
         "Particle": true,
@@ -122,11 +122,11 @@
         "smoke_enabled": true
       },
       "crumble": {
-        "crack_complexity": 1.0,
-        "debris": 0.65,
-        "depth": 0.85,
-        "piece_count": 16,
-        "thickness": 0.65,
+        "crack_complexity": 1.8,
+        "debris": 0.85,
+        "depth": 0.45,
+        "piece_count": 35,
+        "thickness": 0.15,
         "weighting": "Random Choice"
       },
       "diffuse": {
@@ -138,39 +138,39 @@
       "durations": {
         "3D Block Spins": 9000,
         "Blinds": 4000,
-        "Block Puzzle Flip": 5000,
-        "Burn": 8535,
-        "Crossfade": 5000,
+        "Block Puzzle Flip": 6000,
+        "Burn": 8000,
+        "Crossfade": 8000,
         "Crumble": 12000,
-        "Diffuse": 5500,
-        "Directional Pixel Accretion": 1800,
-        "Exploding Tiles": 2000,
-        "Glass Shatter": 2000,
-        "Ink Bloom": 2200,
-        "Melt Drip": 2000,
+        "Diffuse": 8500,
+        "Directional Pixel Accretion": 8800,
+        "Exploding Tiles": 8000,
+        "Glass Shatter": 8000,
+        "Ink Bloom": 7200,
+        "Melt Drip": 4000,
         "Particle": 10524,
         "Ripple": 7200,
-        "Slide": 5000,
+        "Slide": 5500,
         "Tendril Reveal": 2200,
-        "Warp Dissolve": 6000,
-        "Wipe": 4000
+        "Warp Dissolve": 7000,
+        "Wipe": 4500
       },
       "exploding_tiles": {
-        "columns": 18,
-        "depth": 0.85,
+        "columns": 25,
+        "depth": 1.1,
         "direction": "Random",
         "force": 1.0,
-        "thickness": 0.55
+        "thickness": 0.65
       },
       "glass_shatter": {
-        "depth": 0.75,
+        "depth": 1.0,
         "direction": "Random",
         "dispersion": 0.3,
         "refraction": 0.45,
-        "shards": 90,
+        "shards": 95,
         "sheen": 0.65,
-        "thickness": 0.55,
-        "transparency": 0.35
+        "thickness": 0.15,
+        "transparency": 0.15
       },
       "ink_bloom": {
         "depth": 0.65,
@@ -619,6 +619,7 @@
         "media": true,
         "reddit": true,
         "steam": true,
+        "system_audio_osd": true,
         "system_stats": true,
         "visualizers": true,
         "weather": true
@@ -1683,6 +1684,7 @@
           255
         ],
         "sphere_finish": "Neutral",
+        "sphere_fragment_energy_floor": 0.0,
         "sphere_fragment_interpolation_enabled": true,
         "sphere_fragment_strength": 1.1475,
         "sphere_gloss": 0.2,
@@ -1692,6 +1694,7 @@
         "sphere_light_tracer_enabled": true,
         "sphere_particle_amount": 1.0,
         "sphere_particle_distance": 1.35,
+        "sphere_particle_energy_floor": 0.075,
         "sphere_particle_outtake_enabled": false,
         "sphere_perspective_strength": 1.0,
         "sphere_rotation_speed": 0.32,
@@ -1722,6 +1725,7 @@
         "show_connection_info_icon": true
       },
       "steam_progress": {
+        "artwork_shape": "wide",
         "bg_color": [
           35,
           35,
@@ -1745,12 +1749,61 @@
         "enabled": false,
         "font_family": "Inter",
         "font_size": 14,
+        "headline_alignment": "left",
+        "headline_truncation_chars": 180,
         "margin": 30,
         "monitor": "ALL",
         "position": "Top Right",
-        "preferred_height": 180,
-        "preferred_width": 420,
-        "show_background": true
+        "preferred_height": 360,
+        "preferred_width": 520,
+        "show_artwork": true,
+        "show_background": true,
+        "show_refresh_frame": false,
+        "story_cap": 8
+      },
+      "system_audio_osd": {
+        "accent_color": [
+          102,
+          192,
+          244,
+          255
+        ],
+        "bar_thickness": 9,
+        "bg_color": [
+          23,
+          28,
+          38,
+          225
+        ],
+        "border_color": [
+          174,
+          204,
+          226,
+          230
+        ],
+        "color": [
+          242,
+          248,
+          252,
+          245
+        ],
+        "enabled": true,
+        "font_family": "Inter",
+        "font_size": 20,
+        "inactivity_ms": 1800,
+        "margin": 30,
+        "monitor": "1",
+        "position": "Top Center",
+        "preferred_height": 68,
+        "preferred_width": 380,
+        "show_background": true,
+        "text_position": "right_of_bar",
+        "track_color": [
+          32,
+          42,
+          56,
+          230
+        ]
       },
       "system_stats": {
         "bg_color": [

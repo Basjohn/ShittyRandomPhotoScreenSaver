@@ -8,6 +8,7 @@ from importlib import import_module
 
 from rendering.transition_registry import (
     get_transition_descriptor_for_runtime_identity,
+    is_transition_available,
 )
 from .render_contract import QuickTransitionRenderer
 
@@ -107,6 +108,8 @@ def canonical_enabled_transition_ids(values: Iterable[object]) -> frozenset[str]
         descriptor = get_transition_descriptor_for_runtime_identity(value)
         if descriptor is None:
             raise ValueError(f"unknown canonical transition: {value!r}")
+        if not is_transition_available(descriptor.setting_name):
+            continue
         enabled.add(descriptor.stable_id)
     return frozenset(enabled)
 
@@ -122,6 +125,8 @@ def resolve_quick_transition_renderer(
     if canonical is None:
         raise ValueError(f"unknown canonical transition: {transition_id!r}")
     stable_id = canonical.stable_id
+    if not is_transition_available(canonical.setting_name):
+        return None
     if stable_id not in enabled_transition_ids:
         return None
     descriptor = _BY_ID.get(stable_id)

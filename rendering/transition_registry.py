@@ -39,6 +39,8 @@ class TransitionDescriptor:
     startup_compile: bool = False
     include_in_cycle: bool = True
     requires_hw_accel: bool = False
+    available: bool = True
+    unavailable_reason: Optional[str] = None
     random_pool_name: Optional[str] = None
     legacy_names: tuple[str, ...] = ()
 
@@ -120,6 +122,8 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         stable_id="tendril_reveal",
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
+        available=False,
+        unavailable_reason="Pending removal: Tendril Reveal is unavailable.",
     ),
     TransitionDescriptor(
         setting_name="Melt Drip",
@@ -332,4 +336,17 @@ def is_transition_available_for_hw(setting_name: str, hw_accel_enabled: bool) ->
     descriptor = get_transition_descriptor(setting_name)
     if descriptor is None:
         return False
-    return hw_accel_enabled or not descriptor.requires_hw_accel
+    return descriptor.available and (hw_accel_enabled or not descriptor.requires_hw_accel)
+
+
+def is_transition_available(setting_name: str) -> bool:
+    """Return descriptor-level admission, independent of hardware state."""
+    descriptor = get_transition_descriptor(setting_name)
+    return bool(descriptor and descriptor.available)
+
+
+def transition_unavailability_reason(setting_name: str) -> str:
+    descriptor = get_transition_descriptor(setting_name)
+    if descriptor is None or descriptor.available:
+        return ""
+    return descriptor.unavailable_reason or "This transition is unavailable."
