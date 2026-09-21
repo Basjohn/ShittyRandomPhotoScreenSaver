@@ -1,7 +1,10 @@
-"""Analytic 3D viscous film, rounded ligaments and gravity-driven droplets.
+"""Screen-space cohesive viscous film for Melt / Drip.
 
-The bounded implicit surface is ray-intersected in the existing render pass.
-There is no evolving simulation, screen-space opacity wipe or extra clock.
+Melt is intentionally not a general fluid simulation.  One continuous moving
+meniscus owns the silhouette, with attached rivulets, shallow refraction and
+wet material response confined to the front band.  The photographed source is
+kept readable away from that band: no ray-marched pseudo-volume, detached
+primitive droplets, or large-scale texture shredding is allowed.
 """
 
 MELT_FRAGMENT_SOURCE = r"""#version 410 core
@@ -11,122 +14,124 @@ uniform sampler2D uOldTex,uNewTex;
 uniform vec2 uItemSize,uDirection;
 uniform float uProgress,uSeed,uDetail,uDepth,uGloss;
 
-float crossSize,flowSize,wet,count;
-float hash1(float n){return fract(sin(n*127.1+mod(uSeed,997.)*1.73)*43758.5453);}
-float smoothUnion(float a,float b,float k){
-    float h=clamp(.5+.5*(b-a)/k,0.,1.);
-    return mix(b,a,h)-k*h*(1.-h);
+float hash1(float n){
+    return fract(sin(n*127.1+mod(uSeed,997.)*1.73)*43758.5453);
 }
-float baseAt(float t){return 1.18-1.78*smoothstep(.025,.88,t);}
-float edgeAt(float x,float t){
-    float soften=smoothstep(.05,.25,t);
-    return (baseAt(t)+soften*(.044*sin(x/crossSize*10.+mod(uSeed,17.))+.023*sin(x/crossSize*23.+1.7)))*flowSize;
+
+// The source coating drains in the authored gravity direction.  It begins
+// beyond the viewport and leaves before the exact endpoint, avoiding a final
+// frame cut while preserving exact source/destination endpoints.
+float baseFront(float t){
+    float p=smoothstep(.015,.985,t);
+    return 1.045-1.205*pow(p,1.34);
 }
-vec2 imageUv(vec2 q){return .5+vec2(uDirection.y,-uDirection.x)*(q.x/crossSize-.5)+uDirection*(q.y/flowSize-.5);}
-float capsule(vec3 q,vec3 a,vec3 b,float ra,float rb){
-    vec3 ab=b-a;
-    float h=clamp(dot(q-a,ab)/max(dot(ab,ab),.000001),0.,1.);
-    return length(q-a-ab*h)-mix(ra,rb,h);
-}
-// Each lane owns one mass and a thinning connection to the continuous film.
-// Only neighboring lanes can intersect this camera ray: three candidates,
-// independent of quality/density, instead of a loop over all fluid volumes.
-float liquid(vec3 q){
-    float base=edgeAt(q.x,uProgress);
-    float h=(.008+.040*uDepth)*wet+.0001;
-    float corrugation=.005*wet*sin(q.x*11.+uProgress*4.)*sin(q.y*7.-uProgress*2.);
-    float body=max(q.y-base,abs(q.z+h-corrugation)-h);
-    float pitch=crossSize/count;
-    float k=min(.022,pitch*.12)*wet+.00001;
-    float lane=floor(q.x/crossSize*count);
-    for(int offset=-1;offset<=1;offset++){
-        float id=lane+float(offset);
-        if(id<0.||id>=count)continue;
-        // Irregular active lanes prevent an evenly spaced fringe. Broad
-        // attached lobes and slender late filaments have different masses.
-        if(hash1(id+83.)<.24)continue;
-        float center=(id+.5+.26*(hash1(id+9.)-.5))/count*crossSize;
-        float r=min(pitch*.29,.045+.047*hash1(id+31.))*(.67+.39*hash1(id+101.))*(.78+.22*uDepth)*wet;
-        float birth=.08+.14*hash1(id+61.),release=.40+.27*hash1(id+17.);
-        float t=min(uProgress,release),grow=smoothstep(birth,release,t);
-        float lengthen=(.12+.32*hash1(id+43.))*flowSize;
-        float initial=edgeAt(center,release)+lengthen;
-        float age=max(0.,uProgress-release),remaining=1.-release;
-        float acceleration=max(.2,(1.35*flowSize+r-initial-.35*remaining)/(remaining*remaining));
-        float y=edgeAt(center,t)+lengthen*grow+.35*age+acceleration*age*age;
-        float bend=min(.025,pitch*.10)*wet*sin(id*3.7+uProgress*2.8);
-        vec3 bulb=vec3(center+bend,y,r*.35);
-        vec3 a=vec3(center,edgeAt(center,uProgress)-.02,r*.10);
-        float neck=1.-smoothstep(release-.11,release+.035,uProgress);
-        float size=smoothstep(birth-.06,birth+.10,uProgress);
-        float radius=r*size;
-        if(neck>.0001){
-            vec3 middle=mix(a,bulb,.55);
-            middle.x+=min(.035,pitch*.12)*wet*sin(id*2.3+uProgress*3.);
-            float upper=capsule(q,a,middle,radius*1.05*neck,radius*.35*neck);
-            float lower=capsule(q,middle,bulb,radius*.35*neck,radius*.50*neck);
-            float stem=smoothUnion(upper,lower,k*.40);
-            body=smoothUnion(body,stem,k);
-        }
-        // Rounded lower mass stretches under load, then relaxes after pinch.
-        vec3 d=q-bulb;
-        float elongation=1.25+.55*neck+.12*sin(age*12.+id);
-        d.y/=elongation;
-        body=smoothUnion(body,length(d)-radius,k*.65);
+
+// One single-valued front owns every finger.  Local protrusions can stretch
+// and narrow but cannot detach into islands because there is no second body.
+float frontAt(float x,float t,float count){
+    float p=smoothstep(.015,.985,t);
+    float late=1.-smoothstep(.78,.965,p);
+    float detailN=clamp((uDetail-.5)/1.5,0.,1.);
+    float front=baseFront(t);
+
+    // Broad non-periodic-looking contour motion keeps the body from reading as
+    // a ruler-straight wipe without turning the photograph itself into waves.
+    front+=(.0045+.0065*detailN)*late*
+           (sin(x*12.3+mod(uSeed,17.)*.37)
+            +.42*sin(x*27.1+1.8+mod(uSeed,11.)*.51));
+
+    for(int i=0;i<12;i++){
+        float fi=float(i);
+        if(fi>=count)continue;
+        float center=(fi+.50+.48*(hash1(fi+7.)-.5))/count;
+        float width=(.34+.38*hash1(fi+29.))/count;
+        float dx=(x-center)/max(width,.0001);
+        float lobe=exp(-2.25*dx*dx);
+        float core=exp(-5.2*dx*dx);
+
+        float birth=.055+.25*hash1(fi+53.);
+        float grow=smoothstep(birth,birth+.22,p);
+        float drain=1.-smoothstep(.66+.12*hash1(fi+71.),.955,p);
+        float length=(.045+.185*hash1(fi+43.))*grow*drain;
+
+        // A narrow core inside the broader shoulder reads as a viscous finger
+        // with a neck rather than a row of identical semicircular scallops.
+        front+=length*(.58*lobe+.42*core);
     }
-    return body;
+    return front;
 }
-vec3 surfaceNormal(vec3 q){
-    const float e=.0007;
-    vec2 h=vec2(e,0.);
-    return normalize(vec3(liquid(q+h.xyy)-liquid(q-h.xyy),liquid(q+h.yxy)-liquid(q-h.yxy),liquid(q+h.yyx)-liquid(q-h.yyx)));
-}
+
 void main(){
     vec2 screen=vec2(vUv.x,1.-vUv.y);
     if(uProgress<=0.){FragColor=texture(uOldTex,screen);return;}
     if(uProgress>=1.){FragColor=texture(uNewTex,screen);return;}
-    float aspect=uItemSize.x/uItemSize.y;
-    crossSize=abs(uDirection.y)*aspect+abs(uDirection.x);
-    flowSize=abs(uDirection.x)*aspect+abs(uDirection.y);
-    count=clamp(round((4.+3.*uDetail)*sqrt(crossSize)),5.,18.);
-    wet=smoothstep(.015,.20,uProgress);
+
+    vec2 gravity=normalize(uDirection);
+    vec2 tangent=vec2(gravity.y,-gravity.x);
     vec2 delta=screen-.5;
-    vec2 q2=vec2(dot(delta,vec2(uDirection.y,-uDirection.x))*crossSize,dot(delta,uDirection)*flowSize);
-    vec3 origin=vec3(crossSize*.5,flowSize*.5,3.);
-    vec3 ray=normalize(vec3(q2,-3.));
-    // All geometry lies in this shallow optical volume. Starting at its
-    // front keeps the ray budget bounded; empty space exits the back plane.
-    float distance=(3.-.24)/(-ray.z);
-    float farDistance=(3.+.18)/(-ray.z);
-    vec3 p=origin+ray*distance;
-    bool hit=false;
-    for(int step=0;step<52;step++){
-        float d=liquid(p);
-        if(d<.00065){hit=true;break;}
-        distance+=max(.0004,d*.72);
-        if(distance>farDistance)break;
-        p=origin+ray*distance;
-    }
+    float cross=dot(delta,tangent)+.5;
+    float flow=dot(delta,gravity)+.5;
+
+    float crossPixels=max(1.,abs(tangent.x)*uItemSize.x+abs(tangent.y)*uItemSize.y);
+    float flowPixels=max(1.,abs(gravity.x)*uItemSize.x+abs(gravity.y)*uItemSize.y);
+    float detailN=clamp((uDetail-.5)/1.5,0.,1.);
+    float count=clamp(round((7.+4.*detailN)*sqrt(crossPixels/1440.)),6.,12.);
+
+    float front=frontAt(cross,uProgress,count);
+    float signedDepth=front-flow; // positive inside the remaining source film
+    float aa=max(1.35/flowPixels,.00075);
+    float sourceMask=smoothstep(-aa,aa,signedDepth);
+    if(sourceMask<=.00001){FragColor=texture(uNewTex,screen);return;}
+
+    float wet=smoothstep(.025,.16,uProgress)*(1.-smoothstep(.90,.985,uProgress));
+    float eps=max(1.75/crossPixels,.0012);
+    float slope=(frontAt(clamp(cross+eps,0.,1.),uProgress,count)
+                -frontAt(clamp(cross-eps,0.,1.),uProgress,count))/(2.*eps);
+    vec2 localNormal=normalize(vec2(-slope,1.));
+    vec2 screenNormal=tangent*localNormal.x+gravity*localNormal.y;
+
+    // Optical deformation is intentionally shallow and front-local.  This is
+    // the key anti-shred contract: readable source pixels away from the wet
+    // edge are sampled at their original coordinates.
+    float bandWidth=.038+.052*uDepth;
+    float meniscus=sourceMask*(1.-smoothstep(0.,bandWidth,max(signedDepth,0.)));
+    float narrowBand=sourceMask*(1.-smoothstep(0.,.014+.018*uDepth,max(signedDepth,0.)));
+    float activeMeniscus=meniscus*wet;
+    float activeNarrow=narrowBand*wet;
+    float ripple=sin(cross*33.7+flow*9.1+mod(uSeed,13.)*.43-uProgress*2.7)
+                 *(.00035+.00105*uDepth)*activeMeniscus;
+    vec2 refractOffset=screenNormal*((.0008+.0033*uDepth)*activeMeniscus)
+                       +tangent*ripple;
+    float pull=(.0012+.0050*uDepth)*activeMeniscus*(.35+.65*uProgress);
+    vec2 materialUv=clamp(screen+refractOffset-gravity*pull,0.,1.);
+
+    vec3 source0=texture(uOldTex,materialUv).rgb;
+    // A tiny gravity-aligned streak softens the meniscus like viscous material
+    // without producing the broad rectangular smears of the rejected volume.
+    float streak=(.0010+.0038*uDepth)*activeMeniscus;
+    vec3 source1=texture(uOldTex,clamp(materialUv-gravity*streak,0.,1.)).rgb;
+    vec3 sourceColor=mix(source0,source1,.34*activeMeniscus);
     vec3 destination=texture(uNewTex,screen).rgb;
-    if(!hit){FragColor=vec4(destination,1.);return;}
-    vec3 n=surfaceNormal(p),view=-ray;
-    vec3 light=normalize(vec3(-.45,-.65,1.));
-    // Material advection moves the photo with the draining liquid. Near a
-    // stretched ligament the backtrace lengthens instead of painting a
-    // stationary picture on top of a visibility mask.
-    float front=edgeAt(p.x,uProgress);
-    float pull=max(0.,p.y-front);
-    vec2 material=p.xy;
-    material.y-=flowSize*.12*uProgress*uProgress+pull*.78;
-    material.y-=.12*flowSize*wet*smoothstep(front-.35*flowSize,front+.03*flowSize,p.y);
-    material.x+=.009*wet*sin(p.y*10.+p.x*4.-uProgress*4.);
-    vec3 color=texture(uOldTex,clamp(imageUv(material),0.,1.)).rgb;
-    float diffuse=.56+.44*max(dot(n,light),0.);
-    float specular=pow(max(dot(n,normalize(light+view)),0.),22.+100.*uGloss);
-    float fresnel=pow(1.-max(dot(n,view),0.),4.);
-    float occlusion=clamp(liquid(p+n*.018)/.018,.40,1.);
-    color*=mix(1.,diffuse*(.82+.18*occlusion),wet);
-    color+=vec3(.90,.96,1.)*(specular*.68+fresnel*.20)*uGloss*wet;
-    FragColor=vec4(color,1.);
+
+    // Build a shallow screen-space surface normal from the front slope and a
+    // restrained micro-ripple.  Depth fattens/darkens the lip; Gloss controls
+    // only the wet highlight response rather than changing the silhouette.
+    vec3 n=normalize(vec3(screenNormal*.52,
+                          1.0+(.08+.12*uDepth)*sin(cross*21.1+mod(uSeed,7.))));
+    vec3 light=normalize(vec3(-.42,-.55,1.0));
+    vec3 halfV=normalize(light+vec3(0.,0.,1.));
+    float ndl=max(dot(n,light),0.);
+    float spec=pow(max(dot(n,halfV),0.),18.+76.*uGloss);
+    float rim=pow(1.-clamp(n.z,0.,1.),2.6);
+
+    vec3 liquidColor=sourceColor*(1.-activeMeniscus*(.035+.085*uDepth));
+    liquidColor*=1.-activeMeniscus*(.06-.08*ndl);
+    float transmission=activeNarrow*(.025+.065*uDepth);
+    liquidColor=mix(liquidColor,destination,transmission);
+    liquidColor+=vec3(.96,.985,1.)*
+                 (spec*(.055+.34*uGloss)*activeMeniscus
+                  +rim*(.025+.055*uGloss)*activeNarrow);
+
+    FragColor=vec4(mix(destination,liquidColor,sourceMask),1.);
 }
 """

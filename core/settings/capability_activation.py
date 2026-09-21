@@ -347,6 +347,42 @@ def normalize_transition_capability_state(transitions_config: Dict[str, Any]) ->
 
     changed = False
 
+    # Registry/default authority is also the retirement boundary. Persisted keys
+    # for capabilities that no longer exist must not survive indefinitely or
+    # become eligible again through a stale manual/random choice. Keep only the
+    # canonical root and canonical transition names, plus the two runtime-owned
+    # random bookkeeping leaves that are deliberately outside product defaults.
+    canonical_root = require_canonical_default("transitions")
+    if isinstance(canonical_root, Mapping):
+        allowed_root = set(canonical_root) | {"random_choice", "last_random_choice"}
+        for key in tuple(transitions_config):
+            if key not in allowed_root:
+                transitions_config.pop(key, None)
+                changed = True
+
+    canonical_names = set(get_transition_setting_names())
+    for mapping_key in (TRANSITION_ACTIVATION_KEY, TRANSITION_POOL_KEY, "durations"):
+        mapping = transitions_config.get(mapping_key)
+        if not isinstance(mapping, dict):
+            continue
+        for key in tuple(mapping):
+            if key not in canonical_names:
+                mapping.pop(key, None)
+                changed = True
+
+    for transient_key in ("random_choice", "last_random_choice"):
+        choice = transitions_config.get(transient_key)
+        if choice is not None and not canonicalize_transition_name(choice, fallback=""):
+            transitions_config.pop(transient_key, None)
+            changed = True
+
+    raw_manual = transitions_config.get(TRANSITION_MANUAL_TYPE_KEY)
+    if raw_manual is not None and not canonicalize_transition_name(raw_manual, fallback=""):
+        transitions_config[TRANSITION_MANUAL_TYPE_KEY] = (
+            get_default_activated_transition(transitions_config)
+        )
+        changed = True
+
     # Invariant 1: at least one activated transition.
     if not get_activated_transition_names(transitions_config):
         set_transition_activated(transitions_config, DEFAULT_RECOVERY_TRANSITION, True)

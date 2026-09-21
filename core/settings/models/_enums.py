@@ -30,7 +30,6 @@ class TransitionType(Enum):
     EXPLODING_TILES = "Exploding Tiles"
     PIXEL_ACCRETION = "Directional Pixel Accretion"
     INK_BLOOM = "Ink Bloom"
-    TENDRIL_REVEAL = "Tendril Reveal"
     MELT_DRIP = "Melt Drip"
 
 

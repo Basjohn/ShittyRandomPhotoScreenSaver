@@ -201,7 +201,7 @@ Performance rules:
 
 # 2. Activated transition expansion
 
-Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Slide Perspective Push, Ink Bloom, Tendril Reveal and Melt Drip are implemented through the canonical Quick path. They are no longer dormant implementation ideas. The six new capabilities start deactivated; operator visual quality and representative heavy-load/mixed-display acceptance remain open.
+Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Slide Perspective Push, Ink Bloom and Melt Drip are implemented through the canonical Quick path. They are no longer dormant implementation ideas. Tendril Reveal was rejected and retired completely; it is not dormant future work. The remaining expansion capabilities start deactivated; operator visual quality and representative heavy-load/mixed-display acceptance remain open.
 
 - Current appearance, controls and resource contracts: `Docs/Reference/Transitions.md`.
 - Remaining actionable acceptance: `Current_Plan.md` and `Docs/Future_Work/Transition_Expansion.md`.

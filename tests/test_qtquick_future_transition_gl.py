@@ -17,7 +17,7 @@ def capture(qt_app):
 @pytest.mark.qt
 @pytest.mark.parametrize("effect", [
     "glass_shatter", "exploding_tiles", "pixel_accretion",
-    "ink_bloom", "tendril_reveal", "melt_drip", "slide", "crumble",
+    "ink_bloom", "melt_drip", "slide", "crumble",
 ])
 def test_driver_endpoints_continuity_repeatability_and_retirement(capture, effect):
     run = capture.run(effect)
@@ -44,7 +44,6 @@ def test_driver_endpoints_continuity_repeatability_and_retirement(capture, effec
     ("exploding_tiles", "depth", 1.5),
     ("pixel_accretion", "travel", .9),
     ("ink_bloom", "detail", 2.0),
-    ("tendril_reveal", "detail", 2.0),
     ("melt_drip", "detail", 2.0),
 ])
 def test_authored_controls_change_rendered_pixels(capture, effect, field, value):
@@ -62,12 +61,12 @@ def test_direction_changes_actual_rendered_motion(capture, effect):
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize("effect", ["glass_shatter", "exploding_tiles", "pixel_accretion", "ink_bloom", "tendril_reveal", "melt_drip"])
+@pytest.mark.parametrize("effect", ["glass_shatter", "exploding_tiles", "pixel_accretion", "ink_bloom", "melt_drip"])
 def test_seed_affects_real_geometry_and_each_detail_limit_settles(capture, effect):
     a = capture.render(capture.run(effect, parameters={"seed": 112}), .32)[0]
     b = capture.render(capture.run(effect, parameters={"seed": 3099}), .32)[0]
     assert np.abs(np.asarray(a, dtype=np.int16)-np.asarray(b, dtype=np.int16)).mean() > .1
-    if effect in {"ink_bloom", "tendril_reveal", "melt_drip"}:
+    if effect in {"ink_bloom", "melt_drip"}:
         for detail in (.5, 2.0):
             run = capture.run(effect, parameters={"seed": 112, "detail": detail})
             first = np.asarray(capture.render(run, .0001)[0], dtype=np.int16)
@@ -105,7 +104,7 @@ def test_complete_fracture_geometry_leaves_extreme_aspects_before_retirement(qt_
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize("effect", ("ink_bloom", "tendril_reveal"))
+@pytest.mark.parametrize("effect", ("ink_bloom",))
 @pytest.mark.parametrize("field", ("depth", "gloss"))
 def test_organic_material_controls_reach_the_rendered_geometry(capture,effect,field):
     a=np.asarray(capture.render(capture.run(effect,parameters={field:0.}),.40)[0],dtype=np.int16)

@@ -7,6 +7,7 @@ they never query/rebind the endpoint or invoke GUI/QML themselves.
 from __future__ import annotations
 
 import threading
+import weakref
 from typing import Callable
 
 
@@ -39,13 +40,16 @@ class CoreAudioCallbackProbe:
         from pycaw.pycaw import (AudioUtilities, IAudioEndpointVolume,
                                  IAudioEndpointVolumeCallback, IMMNotificationClient)
 
-        parent = self
+        parent_ref = weakref.ref(self)
         binding_token = self._binding_token + 1
 
         class VolumeCallback(COMObject):
             _com_interfaces_ = [IAudioEndpointVolumeCallback]
 
             def OnNotify(self, notification):
+                parent = parent_ref()
+                if parent is None:
+                    return 0
                 data = notification.contents
                 if parent._active and binding_token == parent._binding_token:
                     try:
@@ -58,6 +62,9 @@ class CoreAudioCallbackProbe:
             _com_interfaces_ = [IMMNotificationClient]
 
             def OnDefaultDeviceChanged(self, flow, role, device_id):
+                parent = parent_ref()
+                if parent is None:
+                    return 0
                 # GetSpeakers selects the default multimedia *render* endpoint.
                 if (parent._active and binding_token == parent._binding_token
                         and int(flow) == 0 and int(role) == 1):

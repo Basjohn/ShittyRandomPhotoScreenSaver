@@ -158,12 +158,38 @@ class QuickTransitionController(QObject):
         return True
 
     def close(self) -> None:
+        """Terminalize this runtime owner without publishing a destination.
+
+        ``cancel_current`` is a live-runtime operation: it snaps to the authored
+        destination and dispatches finalization callbacks. Runtime retirement is
+        different. Once the display generation is retiring, no transition
+        completion may republish image state or call back into the dying scene.
+        Drop the retained run silently, release its pacing demand, and close
+        admission. Ordinary explicit cancellation semantics remain unchanged.
+        """
+
         if self._closed:
             return
         self._closing = True
         try:
-            self.cancel_current(reason="runtime-retirement")
             self._timer.stop()
+            if self._active_run is not None:
+                self._active_run = None
+                self._on_finalized = None
+                # Clear the retained scene run while scene admission is still
+                # alive. This is presentation terminalization only: unlike
+                # ``_finalize`` it publishes no destination and dispatches no
+                # completion callback.
+                self.run_changed.emit(None)
+                try:
+                    self._frame_pacer.set_transition_active(False)
+                except Exception as exc:
+                    logger.exception(
+                        "[QUICK] Transition pacing retirement release failed: %s",
+                        exc,
+                    )
+            else:
+                self._on_finalized = None
         finally:
             self._closing = False
             self._closed = True

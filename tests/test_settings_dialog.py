@@ -726,3 +726,85 @@ def test_import_settings_reload_all_tabs_after_success(
     dialog._on_import_settings_clicked()
 
     assert reloaded == [True]
+
+
+def test_settings_dialog_restores_visualizer_builder_semantically_at_top(
+    qapp, settings_manager, animation_manager
+):
+    """Round-trip state restores tab + builder, never a stale pixel offset."""
+    settings_manager.set("ui.last_tab_index", 4)
+    settings_manager.set(
+        "ui.tab_state",
+        {"visualizers": {"view_state": {"page": "mode", "mode_id": "bubble"}}},
+    )
+    # A legacy pixel scroll value may still exist in profiles from older builds.
+    # It is deliberately ignored by the semantic restore contract.
+    settings_manager.set("ui.last_tab_scroll", {"visualizers": 321})
+
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    qapp.processEvents()
+
+    assert dialog._tab_key_for_index(dialog.content_stack.currentIndex()) == "visualizers"
+    visualizers = dialog.visualizers_tab
+    assert visualizers.get_view_state() == {"page": "mode", "mode_id": "bubble"}
+    qapp.processEvents()
+    assert visualizers._scroll_area.verticalScrollBar().value() == 0
+
+
+def test_settings_dialog_restores_widgets_pill_semantically_at_top(
+    qapp, settings_manager, animation_manager
+):
+    settings_manager.set("ui.last_tab_index", 3)
+    settings_manager.set(
+        "ui.tab_state",
+        {"widgets": {"view_state": {"subtab_id": "reddit", "subtab_scrolls": {7: 999}}}},
+    )
+
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    qapp.processEvents()
+
+    assert dialog._tab_key_for_index(dialog.content_stack.currentIndex()) == "widgets"
+    widgets = dialog.widgets_tab
+    assert widgets.get_view_state().get("subtab_id") == "reddit"
+    qapp.processEvents()
+    assert widgets._scroll_area.verticalScrollBar().value() == 0
+
+
+def test_settings_dialog_restores_transitions_pill_semantically_at_top(
+    qapp, settings_manager, animation_manager
+):
+    settings_manager.set("ui.last_tab_index", 2)
+    settings_manager.set("ui.last_tab_key", "transitions")
+    settings_manager.set(
+        "ui.tab_state",
+        {"transitions": {"view_state": {"pill": "Slide"}}},
+    )
+
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    qapp.processEvents()
+
+    assert dialog._tab_key_for_index(dialog.content_stack.currentIndex()) == "transitions"
+    transitions = dialog.transitions_tab
+    assert transitions.get_view_state() == {"pill": "Slide"}
+    qapp.processEvents()
+    assert transitions._scroll_area.verticalScrollBar().value() == 0
+
+
+def test_settings_dialog_restores_themes_pill_semantically_at_top(
+    qapp, settings_manager, animation_manager
+):
+    settings_manager.set("ui.last_tab_index", 6)
+    settings_manager.set("ui.last_tab_key", "themes")
+    settings_manager.set(
+        "ui.tab_state",
+        {"themes": {"view_state": {"page": "widgets"}}},
+    )
+
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    qapp.processEvents()
+
+    assert dialog._tab_key_for_index(dialog.content_stack.currentIndex()) == "themes"
+    themes = dialog.themes_tab
+    assert themes.get_view_state() == {"page": "widgets"}
+    qapp.processEvents()
+    assert themes._scroll_area.verticalScrollBar().value() == 0

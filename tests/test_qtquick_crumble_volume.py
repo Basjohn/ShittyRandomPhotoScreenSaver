@@ -41,6 +41,12 @@ def test_closed_fracture_and_instanced_debris_have_no_flat_particle_shortcut():
         and "gl_PointSize" not in DEBRIS_VERTEX
     )
     assert len(CRUMBLE_CHIP_VERTICES) // 6 == 24 and "broken" in CRUMBLE_FRAGMENT
+    # Debris must be a mutated solid family rather than repeated identical
+    # square/diamond chips.  The shader derives independent XYZ shape scales
+    # from per-instance metadata and keeps the whole family deliberately small.
+    assert "vec3 shape=" in DEBRIS_VERTEX
+    assert "aPosition*shape*scale" in DEBRIS_VERTEX
+    assert "(.006+.014*aMeta.y)" in DEBRIS_VERTEX
 
 
 def test_debris_metadata_is_bounded_seeded_and_tied_to_static_fracture():
@@ -50,6 +56,9 @@ def test_debris_metadata_is_bounded_seeded_and_tied_to_static_fracture():
         first == _debris_instances(12.5, shards, 0.65) and 12 <= len(first) // 6 <= 512
     )
     assert first != _debris_instances(19.5, shards, 0.65)
+    size_metadata = first[5::6]
+    assert len({round(value, 4) for value in size_metadata}) > 8
+    assert max(size_metadata) - min(size_metadata) > 0.4
 
 
 @pytest.mark.qt

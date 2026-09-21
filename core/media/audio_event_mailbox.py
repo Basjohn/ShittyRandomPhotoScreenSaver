@@ -56,8 +56,11 @@ class AudioEventMailbox:
                     and token == self._endpoint_token)
 
     def _post(self) -> bool:
+        post_wake = self._post_wake
+        if post_wake is None:
+            return False
         try:
-            admitted = self._post_wake()
+            admitted = post_wake()
         except Exception:
             admitted = False
         if admitted:
@@ -134,7 +137,10 @@ class AudioEventMailbox:
                 self._last_delivered = item if item.kind == "volume" else None
         if item is None:
             return False
-        self._deliver(item)
+        deliver = self._deliver
+        if deliver is None:
+            return False
+        deliver(item)
         return True
 
     def retire(self) -> None:
@@ -145,7 +151,13 @@ class AudioEventMailbox:
             self._pending = None
             self._last_delivered = None
             self._handover_pending = False
-            # A queued wake may still run; drain will discard it harmlessly.
+            # Break retained bound-method cycles deterministically. In particular,
+            # the Qt bridge's post callback points back to the bridge and session
+            # listeners deliver through bound methods that can otherwise retain
+            # COM session wrappers until an unrelated later GC pass. A queued wake
+            # may still run; ``drain`` observes retired state and discards it.
+            self._post_wake = None
+            self._deliver = None
 
     def _require_ui_thread(self) -> None:
         if threading.get_ident() != self._ui_thread_id:

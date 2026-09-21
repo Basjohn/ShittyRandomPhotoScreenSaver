@@ -2893,6 +2893,7 @@ class DisplayManager(QObject):
             chosen.presenter.set_external_stack_obstacles(None)
             chosen.runtime.scene_controller.set_visualizer_double_click_admission(None)
             chosen.runtime.scene_controller.set_visualizer_middle_click_admission(None)
+            chosen.runtime.scene_controller.set_visualizer_volume_wheel_handler(None)
         self._quick_visualizer_owner = None
         self._quick_visualizer_unit = None
         return True
@@ -4469,7 +4470,11 @@ class DisplayManager(QObject):
                         unit.runtime.describe_runtime_state(),
                     )
                 unit.quiesce()
-                unit.clear()
+                # Do not call the live ``clear`` contract during runtime
+                # destruction. If a transition is active, ``clear`` cancels to
+                # destination and dispatches finalization callbacks into the
+                # generation we are tearing down. ``close_runtime`` owns silent
+                # transition terminalization and scene retirement.
                 self._begin_quick_unit_retirement(unit)
                 self._release_quick_visualizer_routes(unit)
             except Exception as exc:
@@ -4692,14 +4697,32 @@ class _QuickVisualizerFailoverTopology:
         owner = manager._quick_visualizer_owner
         if manager._quick_visualizer_unit is not display or owner is None:
             return True
-        manager._release_quick_visualizer_routes(display)
+        # Keep both manager and display-unit ownership attached until logical
+        # retirement is confirmed. Dropping manager routing first can strand a
+        # live owner on failure; dropping only manager routing on success leaves
+        # a retired owner attached to QuickDisplayUnit, which is later mistaken
+        # for a live owner by the display destruction barrier.
+        manager._disconnect_quick_visualizer_media_route()
+        display.presenter.set_layout_observer(None)
+        display.presenter.set_external_stack_obstacles(None)
+        display.runtime.scene_controller.set_visualizer_double_click_admission(None)
+        display.runtime.scene_controller.set_visualizer_middle_click_admission(None)
+        display.runtime.scene_controller.set_visualizer_volume_wheel_handler(None)
         if not owner.is_retired:
             owner.retire()
         return bool(owner.is_retired)
 
     def detach_owner(self, display) -> None:
-        # _release_quick_visualizer_routes already cleared the single-owner slot.
-        return None
+        manager = self._manager
+        owner = manager._quick_visualizer_owner
+        if manager._quick_visualizer_unit is not display or owner is None:
+            return
+        display.detach_visualizer_owner(owner)
+        manager._release_quick_visualizer_routes(display)
+        # The QML shell is retained for this display generation, but an owner
+        # retirement must make that shell unequivocally inert so a later Settings
+        # round-trip cannot expose stale input/render admission.
+        display.runtime.scene_controller.discard_unowned_visualizer_admission()
 
     def current_token(self) -> int:
         return int(self._manager._quick_visualizer_failover_token)

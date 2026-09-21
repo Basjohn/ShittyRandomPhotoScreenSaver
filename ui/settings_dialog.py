@@ -724,7 +724,6 @@ class SettingsDialog(QDialog):
         self._is_maximized = False
         self._drag_pos = QPoint()
         self._dragging = False
-        self._tab_scroll_cache: Dict[str, int] = {}
         self._tab_widgets: Dict[str, QWidget] = {}
         self._tab_builders: Dict[str, Any] = {}
         self._built_tab_indices: set[int] = set()
@@ -740,13 +739,11 @@ class SettingsDialog(QDialog):
         # AccentPolicy owner; the target state replaces the previous one directly,
         # while same-mode Glass changes stay native no-ops because Qt owns tint.
         self._native_backdrop_mode: str | None = None
-        stored_scroll = self._settings.get('ui.last_tab_scroll', {})
-        if isinstance(stored_scroll, dict):
-            for key, value in stored_scroll.items():
-                try:
-                    self._tab_scroll_cache[str(key)] = int(value)
-                except (TypeError, ValueError):
-                    pass
+        # Navigation persistence restores semantic location (tab / section), not
+        # arbitrary pixel offsets. Every restored section opens at its top so a
+        # runtime -> Settings -> runtime round-trip is deterministic even after
+        # lazy hydration changes content height. ``ui.last_tab_scroll`` remains
+        # a tolerated legacy schema member but is intentionally ignored.
         self._suppress_scroll_capture: bool = False
         self._tab_keys = ["sources", "display", "transitions", "widgets", "visualizers", "accessibility", "themes", "about"]
         self._force_initial_sources_tab = os.getenv(
@@ -802,7 +799,13 @@ class SettingsDialog(QDialog):
         stored_key = self._settings.get('ui.last_tab_key', None)
         if isinstance(stored_key, str) and stored_key in self._tab_keys:
             return self._tab_keys.index(stored_key)
-        legacy_keys = ("sources", "display", "transitions", "widgets", "accessibility", "about")
+        # Pre-Themes sidebar order still included Visualizers. Preserve that
+        # semantic index mapping for profiles which have not yet written the
+        # stable ``ui.last_tab_key`` introduced later.
+        legacy_keys = (
+            "sources", "display", "transitions", "widgets",
+            "visualizers", "accessibility", "about",
+        )
         stored = self._settings.get('ui.last_tab_index', 0)
         try: legacy_index = int(stored)
         except Exception: legacy_index = 0
@@ -1215,9 +1218,10 @@ class SettingsDialog(QDialog):
         for scroll in widget.findChildren(QScrollArea):
             scroll.viewport().setAutoFillBackground(False)
 
-        # Restore view state + scroll as soon as the tab exists so subsections pick up saved positions.
+        # Restore semantic view state as soon as the tab exists, then anchor the
+        # selected section at its top. Pixel scroll offsets are never restored.
         self._restore_tab_view_state(index, widget)
-        self._restore_scroll_for_tab(index, widget)
+        self._reset_scroll_for_tab(index, widget)
 
         if is_perf_metrics_enabled():
             elapsed_ms = (time.perf_counter() - build_start) * 1000.0
@@ -1351,8 +1355,6 @@ class SettingsDialog(QDialog):
         self._ensure_tab_built(index)
         previous_index = self.content_stack.currentIndex()
         if previous_index >= 0:
-            if not self._suppress_scroll_capture:
-                self._remember_scroll_for_tab(previous_index)
             self._capture_tab_view_state(previous_index)
         if index < 0 or index >= len(self.tab_buttons):
             return
@@ -1378,7 +1380,7 @@ class SettingsDialog(QDialog):
                 except Exception:
                     logger.debug("[SETTINGS] Exception suppressed")
             self._restore_tab_view_state(index, current_widget)
-            self._restore_scroll_for_tab(index, current_widget)
+            self._reset_scroll_for_tab(index, current_widget)
             self._style_tab_widget(current_widget)
             self._save_last_tab(index)
             logger.debug(f"Switched to tab {index}")
@@ -1500,24 +1502,9 @@ class SettingsDialog(QDialog):
             return self._tab_keys[index]
         return f"tab_{index}"
 
-    def _remember_scroll_for_tab(self, index: int) -> None:
-        scroll = self._tab_scroll_widgets.get(index)
-        if scroll is None:
-            return
-        try:
-            value = scroll.verticalScrollBar().value()
-        except Exception:
-            logger.debug("[SETTINGS] Exception suppressed")
-            return
-        key = self._tab_key_for_index(index)
-        self._tab_scroll_cache[key] = value
-        try:
-            self._settings.set('ui.last_tab_scroll', dict(self._tab_scroll_cache))
-            self._settings.save()
-        except Exception:
-            logger.debug("Failed to persist tab scroll positions", exc_info=True)
+    def _reset_scroll_for_tab(self, index: int, widget: Optional[QWidget]) -> None:
+        """Open the selected semantic section at its top after layout settles."""
 
-    def _restore_scroll_for_tab(self, index: int, widget: Optional[QWidget]) -> None:
         if index < 0:
             return
         if self._tab_scroll_widgets.get(index) is None and widget is not None:
@@ -1525,18 +1512,18 @@ class SettingsDialog(QDialog):
         scroll = self._tab_scroll_widgets.get(index)
         if scroll is None:
             return
-        key = self._tab_key_for_index(index)
-        value = self._tab_scroll_cache.get(key, 0)
-        if value <= 0:
-            return
         scrollbar = scroll.verticalScrollBar()
 
         def _apply_scroll() -> None:
             try:
                 self._suppress_scroll_capture = True
-                scrollbar.setValue(value)
+                scrollbar.setValue(0)
             except Exception:
-                logger.debug("Failed to restore scroll for tab %s", key, exc_info=True)
+                logger.debug(
+                    "Failed to reset scroll for tab %s",
+                    self._tab_key_for_index(index),
+                    exc_info=True,
+                )
             finally:
                 self._suppress_scroll_capture = False
 
@@ -1626,8 +1613,6 @@ class SettingsDialog(QDialog):
             current_index = self.content_stack.currentIndex()
             if current_index >= 0:
                 self._capture_tab_view_state(current_index)
-                if not self._suppress_scroll_capture:
-                    self._remember_scroll_for_tab(current_index)
         except Exception:
             logger.debug("Failed to capture tab state on close", exc_info=True)
         

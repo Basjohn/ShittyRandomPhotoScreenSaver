@@ -4,13 +4,16 @@ from __future__ import annotations
 
 
 def _chip_vertices() -> tuple[float, ...]:
+    # Deliberately asymmetric base chip.  Per-instance anisotropic scaling in
+    # DEBRIS_VERTEX mutates it further, so debris reads as irregular fragments
+    # rather than a repeated box/diamond primitive.
     points = (
-        (0.0, 0.0, 0.62),
-        (0.58, 0.0, 0.0),
-        (0.0, 0.48, 0.0),
-        (-0.58, 0.0, 0.0),
-        (0.0, -0.48, 0.0),
-        (0.0, 0.0, -0.62),
+        (0.05, -0.04, 0.56),
+        (0.62, 0.06, 0.03),
+        (0.10, 0.43, -0.04),
+        (-0.47, 0.02, 0.08),
+        (-0.06, -0.52, -0.02),
+        (-0.09, 0.04, -0.48),
     )
     faces = (
         (0, 1, 2),
@@ -87,7 +90,7 @@ layout(location=0) in vec3 aPosition;layout(location=1) in vec3 aNormal;layout(l
 vec3 rotateAxis(vec3 p,vec3 a,float t){float c=cos(t),s=sin(t);return p*c+cross(a,p)*s+a*dot(a,p)*(1.-c);}
 float hash1(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7))+uSeed)*43758.5453123);}
 float rank(vec2 c,float v){float m=uWeightMode;if(m==3.)m=hash1(vec2(uSeed,.37))<.34?0.:hash1(vec2(uSeed,.37))<.67?1.:2.;if(m<.5)return c.y;if(m<1.5)return 1.-c.y;if(m<2.5)return mix(c.y,1.-c.y,step(.5,hash1(c+19.)));return v;}
-void main(){float begin=.30+clamp(rank(aParent,aMeta.x),0.,1.)*.28+(hash1(aParent)-.5)*.04,raw=clamp((uProgress-begin)/max(.001,.98-begin),0.,1.);if(raw<=0.){gl_Position=vec4(2.,2.,2.,1.);vMotion=0.;return;}float local=raw*raw*(3.-2.*raw),aspect=uItemSize.x/uItemSize.y,scale=(.012+.026*aMeta.y)*uDebris*smoothstep(0.,.09,local);vec3 axis=normalize(vec3(fract(aMeta.x*17.)*2.-1.,fract(aMeta.y*29.)*2.-1.,.55));vec3 p=rotateAxis(aPosition*scale,axis,local*(6.+7.*aMeta.x));vec2 c=vec2((aEdge.x-.5)*aspect,.5-aEdge.y),spray=normalize(vec2(aEdge.x-.5,.5-aEdge.y)+vec2(.0001));p.xy+=c+vec2(spray.x*aspect,-spray.y)*local*(.35+.55*aMeta.x);p.y-=local*local*(2.7+1.8*aMeta.y);p.z+=uDepth*(.26+local*.24)*(1.-local*.35)*local;float w=max(1.55,3.15-p.z);vec2 uv=vec2(p.x/aspect,-p.y)*3.15/w+.5;vec4 q=uMatrix*vec4(uv*uItemSize,0.,1.);q*=w;q.z=clamp(-p.z/5.,-.9,.9)*q.w;gl_Position=q;vNormal=rotateAxis(aNormal,axis,local*(6.+7.*aMeta.x));vRock=aPosition;vMotion=local;}"""
+void main(){float begin=.30+clamp(rank(aParent,aMeta.x),0.,1.)*.28+(hash1(aParent)-.5)*.04,raw=clamp((uProgress-begin)/max(.001,.98-begin),0.,1.);if(raw<=0.){gl_Position=vec4(2.,2.,2.,1.);vMotion=0.;return;}float local=raw*raw*(3.-2.*raw),aspect=uItemSize.x/uItemSize.y;float sizeSeed=fract(aMeta.y*23.17+aMeta.x*11.83),shapeSeed=fract(aMeta.y*41.71+aMeta.x*7.29);vec3 shape=vec3(.52+.70*sizeSeed,.46+.76*shapeSeed,.42+.62*fract(sizeSeed*5.31+shapeSeed*3.17));float scale=(.006+.014*aMeta.y)*uDebris*smoothstep(0.,.09,local);vec3 axis=normalize(vec3(fract(aMeta.x*17.)*2.-1.,fract(aMeta.y*29.)*2.-1.,.55));vec3 p=rotateAxis(aPosition*shape*scale,axis,local*(6.+7.*aMeta.x));vec2 c=vec2((aEdge.x-.5)*aspect,.5-aEdge.y),spray=normalize(vec2(aEdge.x-.5,.5-aEdge.y)+vec2(.0001));p.xy+=c+vec2(spray.x*aspect,-spray.y)*local*(.35+.55*aMeta.x);p.y-=local*local*(2.7+1.8*aMeta.y);p.z+=uDepth*(.26+local*.24)*(1.-local*.35)*local;float w=max(1.55,3.15-p.z);vec2 uv=vec2(p.x/aspect,-p.y)*3.15/w+.5;vec4 q=uMatrix*vec4(uv*uItemSize,0.,1.);q*=w;q.z=clamp(-p.z/5.,-.9,.9)*q.w;gl_Position=q;vNormal=rotateAxis(normalize(aNormal/shape),axis,local*(6.+7.*aMeta.x));vRock=aPosition*shape;vMotion=local;}"""
 
 DEBRIS_FRAGMENT = """#version 410 core
 in vec3 vNormal;in vec3 vRock;in float vMotion;out vec4 FragColor;void main(){float d=.16+.84*max(dot(normalize(vNormal),normalize(vec3(-.4,.62,.7))),0.),grain=fract(sin(dot(vRock,vec3(41.3,67.7,17.1)))*43758.5);vec3 rock=mix(vec3(.09,.065,.042),vec3(.31,.22,.14),d);rock*=.82+.22*grain;FragColor=vec4(rock*(.72+.28*vMotion),1.);}"""

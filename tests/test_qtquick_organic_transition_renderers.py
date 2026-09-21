@@ -7,11 +7,10 @@ import pytest
 
 from rendering.quick.transitions.implementations.ink_bloom import QuickInkBloomRenderer, ink_bloom_parameters
 from rendering.quick.transitions.implementations.melt_drip import QuickMeltDripRenderer, melt_drip_parameters
-from rendering.quick.transitions.implementations.tendril_reveal import QuickTendrilRevealRenderer, tendril_reveal_parameters
 
 
-@pytest.mark.parametrize("resolver", (ink_bloom_parameters, tendril_reveal_parameters))
-def test_organic_effects_require_bounded_explicit_materials(resolver):
+def test_ink_bloom_requires_bounded_explicit_materials():
+    resolver = ink_bloom_parameters
     valid = {"seed": 412, "detail": 1.45, "depth": .65, "gloss": .6}
     params = resolver(valid)
     assert params.seed == 412
@@ -43,7 +42,6 @@ def test_melt_drip_requires_one_resolved_cardinal_gravity_direction(direction, e
 
 def test_organic_renderers_are_distinct_lazy_local_surfaces():
     for constructor, name in ((QuickInkBloomRenderer, "ink_bloom"),
-                              (QuickTendrilRevealRenderer, "tendril_reveal"),
                               (QuickMeltDripRenderer, "melt_drip")):
         renderer = constructor()
         assert renderer.transition_id == name

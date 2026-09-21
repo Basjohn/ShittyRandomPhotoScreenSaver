@@ -187,19 +187,26 @@ def test_runs_require_explicit_interruption_and_are_generation_fenced(qt_app):
     assert controller.is_active is False
 
 
-def test_close_finalizes_active_destination_and_closes_admission(qt_app):
+def test_close_silently_abandons_active_run_and_closes_admission(qt_app):
     controller, _timer, pacer, _clock = _controller(qt_app)
     completions = []
-    controller.start(_request(), on_finalized=completions.append)
+    run_changes = []
+    controller.run_changed.connect(run_changes.append)
+    run = controller.start(_request(), on_finalized=completions.append)
 
     controller.close()
     controller.close()
 
-    assert len(completions) == 1
-    assert completions[0].outcome is TransitionOutcome.CANCELLED_TO_DESTINATION
-    assert completions[0].reason == "runtime-retirement"
+    # Runtime retirement is not a live interruption. It must not publish the
+    # destination or dispatch completion callbacks into a dying display scene.
+    assert completions == []
+    assert run_changes == [run, None]
     assert pacer.transition_demands == [True, False]
-    assert controller.describe()["closed"] is True
+    state = controller.describe()
+    assert state["closed"] is True
+    assert state["active"] is False
+    assert state["completion_count"] == 0
+    assert state["last_completion"] is None
     with pytest.raises(RuntimeError, match="closed"):
         controller.start(_request())
 
@@ -249,3 +256,18 @@ def test_runtime_owns_transition_lifecycle_without_renderer_dispatch():
     for source in (runtime_source, scene_source):
         assert "transition_id ==" not in source
         assert "transition_id in" not in source
+
+
+def test_full_runtime_teardown_never_uses_live_clear_transition_contract():
+    lifecycle_source = (ROOT / "engine" / "engine_lifecycle.py").read_text(encoding="utf-8")
+    teardown_start = lifecycle_source.index("def teardown_display_runtime")
+    teardown_source = lifecycle_source[teardown_start:]
+    assert 'getattr(manager, "clear_all"' not in teardown_source
+    assert 'getattr(manager, "quiesce_all"' in teardown_source
+
+    manager_source = (ROOT / "engine" / "display_manager.py").read_text(encoding="utf-8")
+    cleanup_start = manager_source.index("    def cleanup(self) -> None:")
+    cleanup_end = manager_source.index("    def retire_runtime(self) -> None:", cleanup_start)
+    cleanup_source = manager_source[cleanup_start:cleanup_end]
+    assert "unit.clear()" not in cleanup_source
+    assert "self._begin_quick_unit_retirement(unit)" in cleanup_source
