@@ -211,6 +211,31 @@ def quick_smoke(args):
                 and sum(r > b*1.25 for r, g, b in colors) >= 2)
 
     smoke._TRANSITION_MIDPOINT_ORACLES[effect] = mixed_image_domains
+    if effect == "crumble":
+        # The first telemetry sample (~35%) now sees the deliberately intact,
+        # cracked wall. Require fissures there, then sample the later fall;
+        # demanding an early destination reveal would erase the crack stage.
+        def cracked_wall(source, destination, midpoint, progress, direction):
+            if not source or not destination or not midpoint:
+                return False
+            colors = [smoke._argb_components(value)[1:] for value in midpoint]
+            if progress < .43:
+                fissures = sum(max(rgb) < 30 for rgb in colors)
+                intact = sum(b > r*1.25 for r, g, b in colors)
+                return fissures >= 3 and intact >= len(colors)*.6
+            return mixed_image_domains(source, destination, midpoint, progress, direction)
+
+        def crack_then_fall(source, destination, progresses, colors, direction):
+            if len(progresses) != 2 or len(colors) != 2:
+                return False
+            if not mixed_image_domains(source, destination, colors[0], progresses[0], direction):
+                return False
+            late = [smoke._argb_components(value)[1:] for value in colors[1]]
+            return progresses[1] >= .75 and sum(r > b*1.25 for r, g, b in late) >= len(late)*.8
+
+        smoke._TRANSITION_MIDPOINT_ORACLES[effect] = cracked_wall
+        smoke._TRANSITION_PIXEL_PROBES[effect] = (.55, .82)
+        smoke._TRANSITION_PROBE_ORACLES[effect] = crack_then_fall
     args.output_dir.mkdir(parents=True, exist_ok=True)
     forwarded = ["--windows", str(args.windows), "--generations", "2", "--hide-show-cycles", "1",
                  "--size", f"{args.width}x{args.height}", "--phase-delay-ms", "500",

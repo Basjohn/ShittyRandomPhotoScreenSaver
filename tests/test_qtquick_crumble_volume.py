@@ -88,10 +88,10 @@ def test_real_driver_each_crumble_control_changes_the_volume(qt_app, field, valu
     capture = TransitionCapture(320, 180)
     try:
         base = np.asarray(
-            capture.render(capture.run("crumble"), 0.32)[0], dtype=np.int16
+            capture.render(capture.run("crumble"), 0.53)[0], dtype=np.int16
         )
         changed = np.asarray(
-            capture.render(capture.run("crumble", parameters={field: value}), 0.32)[0],
+            capture.render(capture.run("crumble", parameters={field: value}), 0.53)[0],
             dtype=np.int16,
         )
         assert np.abs(base - changed).mean() > 0.08, field
@@ -142,3 +142,27 @@ def test_crumble_failed_instance_deletion_keeps_handle_and_releases_other_resour
     monkeypatch.setattr(crumble.gl, "glDeleteBuffers", lambda *args: None)
     renderer.release_resources()
     assert renderer._debris_vbo == 0 and released == [True, True]
+
+
+@pytest.mark.qt
+def test_cracks_grow_before_the_intact_wall_or_debris_moves(qt_app):
+    capture=TransitionCapture(640,360)
+    try:
+        run=capture.run("crumble",parameters={"weight_mode":0.0})
+        source=np.asarray(capture.images[0],dtype=np.int16)
+        dark_counts=[]
+        for progress in (.06,.15,.26):
+            pixels=np.asarray(capture.render(run,progress)[0],dtype=np.int16)
+            dark=(pixels[:,:,:3].sum(axis=2)<source[:,:,:3].sum(axis=2)*.45)
+            dark_counts.append(int(dark.sum()))
+            # The photo itself stays registered and still: almost all changed
+            # pixels are the narrow growing fissures, not movement or a fade.
+            assert np.all(pixels==source,axis=2).mean()>.90
+        assert 0<dark_counts[0]<dark_counts[1]<dark_counts[2]
+        assert dark_counts[2]>640*360*.005
+        no_debris=capture.run("crumble",parameters={"weight_mode":0.0,"debris":0.0})
+        assert capture.render(run,.26)[0].tobytes()==capture.render(no_debris,.26)[0].tobytes()
+        falling=np.asarray(capture.render(run,.55)[0],dtype=np.int16)
+        assert np.all(falling==source,axis=2).mean()<.65
+    finally:
+        capture.close()

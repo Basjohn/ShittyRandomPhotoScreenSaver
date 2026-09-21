@@ -85,6 +85,37 @@ def _debris_instances(seed: float, shards, amount: float) -> tuple[float, ...]:
     return tuple(values)
 
 
+def _crumble_vertices(shards, aspect: float) -> tuple[float, ...]:
+    """Add crack coordinates on the real polygon borders of the shared solids.
+
+    Each front fan triangle has exactly one external polygon edge. Distance
+    from that edge and distance along it interpolate across the face; fan
+    diagonals receive no crack. Shared edges use the same orientation/phase.
+    The prism itself is unchanged, including its closed sides and bevels.
+    """
+    solid = fracture_vertices(shards, aspect)
+    result = []
+    for start in range(0, len(solid), 36):
+        triangle = [solid[start + offset:start + offset + 12] for offset in (0, 12, 24)]
+        if triangle[0][9] == 0.0:
+            a, b = sorted((triangle[1][:2], triangle[2][:2]))
+            dx, dy = (b[0] - a[0]) * aspect, b[1] - a[1]
+            length = math.hypot(dx, dy)
+            phase = (a[0] + b[0]) * 63.55 + (a[1] + b[1]) * 155.85
+            # Viewport borders are not fractures between pieces.
+            outer = ((a[0] == b[0] and a[0] in (0.0, 1.0)) or
+                     (a[1] == b[1] and a[1] in (0.0, 1.0)))
+            for vertex in triangle:
+                x, y = (vertex[0] - a[0]) * aspect, vertex[1] - a[1]
+                distance = abs(dx * y - dy * x) / length
+                along = (x * dx + y * dy) / (length * length)
+                result.extend((*vertex, 10.0 if outer else distance, along, phase))
+        else:
+            for vertex in triangle:
+                result.extend((*vertex, 10.0, 0.0, 0.0))
+    return tuple(result)
+
+
 class QuickCrumbleRenderer:
     transition_id = "crumble"
 
@@ -130,7 +161,7 @@ class QuickCrumbleRenderer:
             self._debris_vbo = 0
         shards = fracture_cells(seed, pieces, aspect, complexity)
         self._chunk_vao, self._chunk_count = self._resources.mesh(
-            "chunks", fracture_vertices(shards, aspect), (2, 2, 1, 3, 1, 1, 1, 1)
+            "chunks", _crumble_vertices(shards, aspect), (2, 2, 1, 3, 1, 1, 1, 1, 3)
         )
         if debris <= 0.0:
             self._debris_count = 0

@@ -184,7 +184,6 @@ def test_external_malformed_new_transition_sections_repair_before_save(
         "Exploding Tiles",
         "Directional Pixel Accretion",
         "Ink Bloom",
-        "Tendril Reveal",
         "Melt Drip",
     )
     for name in names:
@@ -201,7 +200,6 @@ def test_external_malformed_new_transition_sections_repair_before_save(
         "exploding_tiles",
         "pixel_accretion",
         "ink_bloom",
-        "tendril_reveal",
         "melt_drip",
     ):
         external[section] = "bad"
@@ -216,7 +214,6 @@ def test_external_malformed_new_transition_sections_repair_before_save(
     assert tab.pixel_tile_size_spin.value() == canonical["pixel_accretion"]["tile_size"]
     assert tab.pixel_travel_spin.value() == pytest.approx(canonical["pixel_accretion"]["travel"])
     assert tab.ink_bloom_detail_spin.value() == pytest.approx(canonical["ink_bloom"]["detail"])
-    assert tab.tendril_reveal_detail_spin.value() == pytest.approx(canonical["tendril_reveal"]["detail"])
     assert tab.melt_drip_detail_spin.value() == pytest.approx(canonical["melt_drip"]["detail"])
 
     # An unrelated duration write must serialize repaired controls rather than
@@ -228,7 +225,6 @@ def test_external_malformed_new_transition_sections_repair_before_save(
     assert persisted["exploding_tiles"]["columns"] == canonical["exploding_tiles"]["columns"]
     assert persisted["pixel_accretion"]["tile_size"] == canonical["pixel_accretion"]["tile_size"]
     assert persisted["ink_bloom"]["detail"] == pytest.approx(canonical["ink_bloom"]["detail"])
-    assert persisted["tendril_reveal"]["detail"] == pytest.approx(canonical["tendril_reveal"]["detail"])
     assert persisted["melt_drip"]["detail"] == pytest.approx(canonical["melt_drip"]["detail"])
 
 

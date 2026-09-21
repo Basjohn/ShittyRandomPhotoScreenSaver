@@ -25,6 +25,7 @@ from core.settings.default_contract import require_canonical_default
 from rendering.transition_registry import (
     canonicalize_transition_name,
     get_transition_setting_names,
+    is_transition_available,
 )
 from core.settings.widget_family_catalog import (
     get_family_id_for_widget,
@@ -179,6 +180,8 @@ def is_transition_activated(
     canonical = canonicalize_transition_name(transition_name, fallback="")
     if not canonical or canonical == "Random":
         return True
+    if not is_transition_available(canonical):
+        return False
     activation = _as_mapping(_as_mapping(transitions_config).get(TRANSITION_ACTIVATION_KEY))
     canonical_default = bool(
         require_canonical_default(f"transitions.{TRANSITION_ACTIVATION_KEY}.{canonical}")

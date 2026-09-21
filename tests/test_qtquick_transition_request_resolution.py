@@ -147,7 +147,6 @@ _FUTURE_TRANSITIONS = (
     ("Exploding Tiles", "exploding_tiles", {"direction": "Diagonal TL-BR", "columns": 22, "depth": 1.0}),
     ("Directional Pixel Accretion", "pixel_accretion", {"direction": "Diagonal BR-TL", "tile_size": 12, "travel": 0.6}),
     ("Ink Bloom", "ink_bloom", {"detail": 1.4, "direction": None}),
-    ("Tendril Reveal", "tendril_reveal", {"detail": 0.8, "direction": None}),
     ("Melt Drip", "melt_drip", {"detail": 1.2, "direction": "Top to Bottom"}),
 )
 

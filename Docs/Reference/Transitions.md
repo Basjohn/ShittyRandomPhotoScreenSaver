@@ -4,7 +4,7 @@ All effects use the canonical transition catalog, Settings activation and Random
 
 ## Expanded effects
 
-These six capabilities are implemented and **deactivated by default** while operator visual/load acceptance is open in `Current_Plan.md` and `Docs/Future_Work/Transition_Expansion.md`. Existing activated effects and settings retain their values.
+These capabilities are **deactivated by default**. Tendril Reveal is additionally unavailable and pending removal after operator rejection; Melt remains visually rejected and is retained for possible rework. Remaining visual/load acceptance is open in `Current_Plan.md` and `Docs/Future_Work/Transition_Expansion.md`. Existing activated effects and settings retain their values.
 
 | Effect | Appearance | Controls |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ These six capabilities are implemented and **deactivated by default** while oper
 | Exploding Tiles | Closed beveled cubes use full ray-exit departure, thickness and force to release in a directional/radial wave. | Direction including Center Out, 6–48 columns, depth, thickness 0–1, force 0.5–2, duration |
 | Directional Pixel Accretion | Destination micro-tiles translate along one event direction, then settle in sequence over the source. Slight temporary height and oversize give the landing front depth. | Eight directions or Random, physical tile size, travel, duration |
 | Ink Bloom | A raised mesh surface transports vortical marbled pigment with image-derived wet reflections and normals. | Detail, depth/gloss 0–1, duration |
-| Tendril Reveal | Seeded curved branch tubes grow from common roots; their continuous canopy samples the same Bezier paths before settling into destination. | Detail, depth/gloss 0–1, duration |
+| Tendril Reveal | Rejected and pending removal. Visible but greyed out; excluded from activation and runtime selection. | Unavailable |
 | Melt Drip | A bounded implicit 3D liquid volume forms a round wet film, ligaments and pinched gravity drops while the source photo advects through the fluid. | Gravity direction, detail, depth/gloss 0–1, duration |
 
 **Slide -> Motion Style -> Perspective Push** is an option in the existing Slide identity. It uses an aspect-correct view-ray/tilted-plane intersection for the outgoing image, with shallow translation/tilt/depth and the existing sealed coverage partition. Linear, Elastic, Wobble and Flex keep their existing authored math. Perspective Push does not add a scene, mesh owner, transition ID or clock.
@@ -20,7 +20,7 @@ These six capabilities are implemented and **deactivated by default** while oper
 ## Implementation contracts
 
 - Direction and seed resolve once before request admission. Renderers consume explicit immutable parameters; no per-frame Settings access or random choices.
-- Glass and Crumble share deterministic closed fracture prisms. Glass uses screen-space transmission/refraction and analytic offscreen departure without a shrink retirement; Crumble keeps rough stone sides and real chip instancing tied to parent polygon seams and release weighting. Crumble accepts 4–128 pieces, depth 0.2–1.5 and thickness/debris 0–1; its float seed remains intact across its deterministic geometry and debris.
+- Glass and Crumble share deterministic closed fracture prisms. Glass uses screen-space transmission/refraction and analytic offscreen departure without a shrink retirement; Crumble first draws growing recessed cracks along those same polygon borders while the image stays still, then releases thick chunks and their seam debris. Rough stone sides and release weighting remain. Crumble accepts 4–128 pieces, depth 0.2–1.5 and thickness/debris 0–1; its float seed remains intact across its deterministic geometry and debris.
 - Exploding Tiles uses one immutable closed beveled-cube mesh and `gl_InstanceID`; Accretion uses one immutable micro-quad mesh, a viewport-derived grid capped at 60,000 instances, and a bounded flight interval so early tiles land before later ones start. Neither uploads evolving instance arrays.
 - Ink transports bounded vortical pigment over a raised mesh. Tendril uploads bounded tube topology and samples that same finite Bezier path set for its canopy. Melt ray-intersects a bounded implicit volume with 52 steps and at most three neighboring lanes; it has no full fluid simulation or opacity wipe. Melt direction is gravity: its upper source film recedes and drops travel along that direction.
 - `rendering/quick/transitions/mesh_support.py` owns only the small shared context-local program/VAO/VBO primitives, image underlay and viewport-scoped depth clear. It is imported by admitted implementations. No always-resident 3D engine or dependency on Sphere exists.
