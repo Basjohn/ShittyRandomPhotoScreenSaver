@@ -127,6 +127,55 @@ def test_slide_resolution_falls_back_to_canonical_motion_style(invalid):
     assert dict(spec.parameters) == {"motion_style": "Linear"}
 
 
+@pytest.mark.parametrize("direction", ("left", "right", "up", "down"))
+def test_perspective_push_keeps_the_existing_cardinal_coverage_owner(direction):
+    """The 3D source mapping may distort UVs, never coverage ownership."""
+
+    horizontal = direction in {"left", "right"}
+    for progress in (index / 79.0 for index in range(80)):
+        for pixel in range(97):
+            axis = (pixel + 0.5) / 97.0
+            coordinate = (axis, 0.41) if horizontal else (0.41, axis)
+            owner, uv = _slide_partition_sample(
+                direction, progress, coordinate, "Perspective Push"
+            )
+            assert owner in {"source", "destination"}
+            assert all(0.0 <= value <= 1.0 for value in uv)
+
+
+def test_perspective_push_shader_ray_intersects_a_tilted_card_under_the_partition():
+    from rendering.quick.transitions.implementations.slide import _SLIDE_FRAGMENT_SOURCE
+
+    assert "perspectivePushUv" in _SLIDE_FRAGMENT_SOURCE
+    assert "rayOrigin" in _SLIDE_FRAGMENT_SOURCE
+    assert "rayDirection" in _SLIDE_FRAGMENT_SOURCE
+    assert "dot(cardCenter - rayOrigin, normal)" in _SLIDE_FRAGMENT_SOURCE
+    assert "float destinationOwns" in _SLIDE_FRAGMENT_SOURCE
+    assert "u_motionStyle == 4" in _SLIDE_FRAGMENT_SOURCE
+
+
+@pytest.mark.parametrize("direction", ("left", "right", "up", "down"))
+def test_perspective_push_ray_plane_reference_is_identity_at_exact_endpoints(direction):
+    from rendering.quick.transitions.implementations.slide import _slide_perspective_card_uv
+
+    for uv in ((0.03, 0.17), (0.5, 0.5), (0.94, 0.81)):
+        assert _slide_perspective_card_uv(uv, direction, 0.0, (1920.0, 1080.0)) == pytest.approx(uv)
+        assert _slide_perspective_card_uv(uv, direction, 1.0, (1080.0, 1920.0)) == pytest.approx(uv)
+
+
+@pytest.mark.parametrize("direction", ("left", "right", "up", "down"))
+def test_perspective_push_ray_plane_reference_is_aspect_and_axis_sensitive(direction):
+    from rendering.quick.transitions.implementations.slide import _slide_perspective_card_uv
+
+    uv = (0.31, 0.73)
+    landscape = _slide_perspective_card_uv(uv, direction, 0.53, (1920.0, 1080.0))
+    portrait = _slide_perspective_card_uv(uv, direction, 0.53, (1080.0, 1920.0))
+    assert landscape != pytest.approx(uv)
+    assert portrait != pytest.approx(uv)
+    if direction in {"left", "right"}:
+        assert landscape != pytest.approx(portrait)
+
+
 @pytest.mark.qt
 def test_real_gl_elastic_peak_keeps_varied_destination_interior_texels(qt_app):
     """A real fragment draw guards against an overshoot-wide edge smear."""

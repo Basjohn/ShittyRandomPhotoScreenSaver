@@ -84,4 +84,10 @@ def test_transition_registry_owns_each_authored_progress_curve() -> None:
         "crumble": EasingCurve.LINEAR,
         "particle": EasingCurve.LINEAR,
         "burn": EasingCurve.LINEAR,
+        "glass_shatter": EasingCurve.LINEAR,
+        "exploding_tiles": EasingCurve.LINEAR,
+        "pixel_accretion": EasingCurve.LINEAR,
+        "ink_bloom": EasingCurve.LINEAR,
+        "tendril_reveal": EasingCurve.LINEAR,
+        "melt_drip": EasingCurve.LINEAR,
     }

@@ -8,7 +8,7 @@ The independent fragment and particle minimum-energy settings are implemented wi
 
 ## Future Work transitions | active
 
-- [ ] Implement Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Slide Perspective Push and organic transition ideas in ambition-first order. Detailed ownership, checkpoints and acceptance: `Docs/Future_Work/Transition_Expansion.md`.
+- [~] Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Slide Perspective Push, Ink Bloom, Tendril Reveal and Melt Drip are implemented. Validate their appearance at authored duration with actual photos; six new capabilities remain deactivated by default. Ownership and remaining acceptance: `Docs/Future_Work/Transition_Expansion.md`; product reference: `Docs/Reference/Transitions.md`.
 - [~] Awaiting validation after implementation: operator visual acceptance and mixed-display/heavy-load freshness. Preserve the unrelated Sphere floor acceptance above.
 
 ## Handoff and regression rules

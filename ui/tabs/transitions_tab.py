@@ -7,6 +7,8 @@ Allows users to configure transition settings:
 - Direction (for directional transitions)
 - Easing curves
 """
+from collections.abc import Mapping
+import math
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -85,6 +87,15 @@ class TransitionsTab(QWidget):
         self._dir_slide: str = str(_transition_default("slide.direction"))
         self._dir_wipe: str = str(_transition_default("wipe.direction"))
         self._dir_blockspin: str = str(_transition_default("blockspin.direction"))
+        self._direction_by_type = {
+            name: str(_transition_default(f"{name}.direction"))
+            for name in (
+                "glass_shatter",
+                "exploding_tiles",
+                "pixel_accretion",
+                "melt_drip",
+            )
+        }
         # Per-transition pool membership for random/switch behaviour.
         self._pool_by_type = {}
         self._duration_by_type = {}
@@ -168,10 +179,75 @@ class TransitionsTab(QWidget):
                 self.transition_combo.blockSignals(True)
                 self.transition_combo.setCurrentText(new_type)
                 self.transition_combo.blockSignals(False)
+
+            # External writes can arrive while a specific page is already
+            # visible.  Refresh the in-memory duration/direction authorities
+            # and only hydrate controls that have actually been built; this
+            # keeps a later duration commit from writing stale parameters.
+            self._refresh_external_transition_state(cfg)
+
+            # Checkbox signals are blocked above, so their normal retirement
+            # callback cannot run.  Retire pages explicitly at this seam.
+            for name in tuple(getattr(self, "_built_transition_pages", ())):
+                if not self._transition_activated(name):
+                    self._retire_transition_page(name)
         finally:
             self._loading = False
         # Reconcile pill visibility (may redirect to SETUP if current deactivated).
         self._apply_transition_pill_visibility()
+        self._update_specific_settings()
+
+    def _refresh_external_transition_state(self, transitions_config: dict) -> None:
+        """Refresh live state without building any lazy transition page."""
+        canonical = _transition_defaults_root()
+        try:
+            default_duration = int(
+                transitions_config.get("duration_ms", canonical["duration_ms"])
+            )
+        except (TypeError, ValueError):
+            default_duration = int(canonical["duration_ms"])
+        durations_cfg = transitions_config.get("durations", canonical["durations"])
+        if not isinstance(durations_cfg, dict):
+            durations_cfg = dict(canonical["durations"])
+        self._duration_by_type = {}
+        for name in _TRANSITION_SETTING_NAMES:
+            if name == "Ripple":
+                raw = durations_cfg.get(
+                    "Ripple", durations_cfg.get("Rain Drops", default_duration)
+                )
+            else:
+                raw = durations_cfg.get(name, default_duration)
+            try:
+                self._duration_by_type[name] = int(raw)
+            except (TypeError, ValueError):
+                self._duration_by_type[name] = default_duration
+
+        def _section(name: str) -> dict:
+            section = transitions_config.get(name, canonical[name])
+            return section if isinstance(section, dict) else dict(canonical[name])
+
+        self._dir_slide = str(_section("slide").get("direction", canonical["slide"]["direction"]))
+        self._dir_wipe = str(_section("wipe").get("direction", canonical["wipe"]["direction"]))
+        self._dir_blockspin = str(
+            _section("blockspin").get("direction", canonical["blockspin"]["direction"])
+        )
+        for name in self._direction_by_type:
+            section = _section(name)
+            self._direction_by_type[name] = str(
+                section.get("direction", canonical[name]["direction"])
+            )
+
+        current = self._current_transition or self.transition_combo.currentText()
+        duration = self._duration_by_type.get(current)
+        if duration is not None:
+            self.duration_slider.blockSignals(True)
+            try:
+                self.duration_slider.setValue(duration)
+                self.duration_value_label.setText(f"{duration} ms")
+            finally:
+                self.duration_slider.blockSignals(False)
+
+        self._hydrate_built_transition_groups(transitions_config, canonical)
     
     def load_from_settings(self) -> None:
         """Reload all UI controls from settings manager (called after preset change)."""
@@ -329,6 +405,7 @@ class TransitionsTab(QWidget):
         self._specific_group_host_layout.setSpacing(20)
         layout.addWidget(self._specific_group_host)
         self._built_transition_pages: set[str] = set()
+        self._transition_page_attr_names: dict[str, set[str]] = {}
 
         # Shared groups toggled as a set against the SETUP page. Per-transition
         # specific groups live inside self._specific_group_host and are shown
@@ -467,6 +544,12 @@ class TransitionsTab(QWidget):
         "Crumble": "_build_crumble_group",
         "Particle": "_build_particle_group",
         "Burn": "_build_burn_group",
+        "Glass Shatter": "_build_glass_shatter_group",
+        "Exploding Tiles": "_build_exploding_tiles_group",
+        "Directional Pixel Accretion": "_build_pixel_accretion_group",
+        "Ink Bloom": "_build_ink_bloom_group",
+        "Tendril Reveal": "_build_tendril_reveal_group",
+        "Melt Drip": "_build_melt_drip_group",
     }
 
     _SPECIFIC_GROUP_ATTRS = {
@@ -479,7 +562,24 @@ class TransitionsTab(QWidget):
         "Crumble": "crumble_group",
         "Particle": "particle_group",
         "Burn": "burn_group",
+        "Glass Shatter": "glass_shatter_group",
+        "Exploding Tiles": "exploding_tiles_group",
+        "Directional Pixel Accretion": "pixel_accretion_group",
+        "Ink Bloom": "ink_bloom_group",
+        "Tendril Reveal": "tendril_reveal_group",
+        "Melt Drip": "melt_drip_group",
     }
+
+    _DIRECTIONAL_TRANSITIONS = frozenset(
+        {
+            "Slide",
+            "Wipe",
+            "Glass Shatter",
+            "Exploding Tiles",
+            "Directional Pixel Accretion",
+            "Melt Drip",
+        }
+    )
 
     def _ensure_transition_page(self, name: str) -> None:
         """Lazily build one transition's specific settings group + hydrate it."""
@@ -492,23 +592,73 @@ class TransitionsTab(QWidget):
         group_attr = self._SPECIFIC_GROUP_ATTRS.get(name)
         if group_attr and hasattr(self, group_attr):
             return  # already built
-        getattr(self, builder_name)()
+        attrs_before_build = set(vars(self))
+        try:
+            getattr(self, builder_name)()
+            self._transition_page_attr_names[name] = set(vars(self)) - attrs_before_build
+            self._hydrate_transition_page(name)
+        except Exception:
+            # Builders attach their group before hydration.  Roll back both
+            # the host child and every widget reference so a retry starts from
+            # a clean lazy-page boundary.
+            self._retire_transition_page(name)
+            raise
         self._built_transition_pages.add(name)
-        self._hydrate_transition_page(name)
+
+    @staticmethod
+    def _widget_belongs_to_group(widget: object, group: object) -> bool:
+        """Return whether a QObject widget is a descendant of ``group``."""
+        if widget is group:
+            return True
+        try:
+            parent = widget.parentWidget()
+            while parent is not None:
+                if parent is group:
+                    return True
+                parent = parent.parentWidget()
+        except (AttributeError, RuntimeError):
+            # A stale Qt wrapper may already be deleted; it is safe to drop
+            # the Python reference while retiring the page.
+            return False
+        return False
+
+    def _clear_transition_page_refs(self, group: QWidget) -> None:
+        """Drop instance attributes pointing into a retired lazy page."""
+        for attr, value in tuple(vars(self).items()):
+            if attr.startswith("_") and attr not in {"_specific_group_host_layout"}:
+                continue
+            if self._widget_belongs_to_group(value, group):
+                try:
+                    delattr(self, attr)
+                except AttributeError:
+                    pass
 
     def _retire_transition_page(self, name: str) -> None:
         """Destroy a built transition page cleanly (on deactivation)."""
         group_attr = self._SPECIFIC_GROUP_ATTRS.get(name)
         if not group_attr or not hasattr(self, group_attr):
+            self._transition_page_attr_names.pop(name, None)
             return
         group = getattr(self, group_attr)
+        tracked_attrs = self._transition_page_attr_names.pop(name, set())
+        # Clear references while the parent relationship is still available;
+        # the tracked set also covers a wrapper whose QObject was already
+        # deleted by Qt before this retirement callback ran.
+        self._clear_transition_page_refs(group)
+        for attr in tracked_attrs:
+            if hasattr(self, attr):
+                try:
+                    delattr(self, attr)
+                except AttributeError:
+                    pass
         try:
             self._specific_group_host_layout.removeWidget(group)
             group.setParent(None)
             group.deleteLater()
         except Exception as e:
             logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
-        delattr(self, group_attr)
+        if hasattr(self, group_attr):
+            delattr(self, group_attr)
         self._built_transition_pages.discard(name)
 
     def _hydrate_transition_page(self, name: str) -> None:
@@ -524,6 +674,55 @@ class TransitionsTab(QWidget):
         finally:
             self._loading = previous_loading
 
+    @staticmethod
+    def _new_transition_section(
+        transitions_config: Mapping[str, object],
+        section_name: str,
+        canonical: Mapping[str, object],
+    ) -> Mapping[str, object]:
+        section = transitions_config.get(section_name, canonical)
+        if isinstance(section, Mapping):
+            return section
+        logger.warning(
+            "[TRANSITIONS_TAB] Repaired malformed transition section %s",
+            section_name,
+        )
+        return canonical
+
+    @staticmethod
+    def _new_transition_number(
+        section: Mapping[str, object],
+        field_name: str,
+        section_name: str,
+        canonical_value: object,
+        widget: object,
+        converter,
+    ):
+        raw = section.get(field_name, canonical_value)
+        try:
+            value = converter(raw)
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError
+        except (TypeError, ValueError, OverflowError):
+            logger.warning(
+                "[TRANSITIONS_TAB] Repaired malformed transition field %s.%s",
+                section_name,
+                field_name,
+            )
+            value = converter(canonical_value)
+
+        # The controls own the same ranges used by request admission.  Clamp
+        # through those ranges so hydration adds no second numeric contract.
+        lower = widget.minimum()
+        upper = widget.maximum()
+        clamped = max(lower, min(upper, value))
+        if clamped != value:
+            logger.warning(
+                "[TRANSITIONS_TAB] Repaired out-of-range transition field %s",
+                f"{section_name}.{field_name}",
+            )
+        return clamped
+
     def _hydrate_built_transition_groups(self, transitions_config: dict, canonical_transitions: dict) -> None:
         """Hydrate only the transition-specific groups that are currently built.
 
@@ -538,6 +737,57 @@ class TransitionsTab(QWidget):
             style = slide.get('motion_style', canonical_slide['motion_style'])
             index = self.slide_motion_style_combo.findText(str(style))
             self.slide_motion_style_combo.setCurrentIndex(max(0, index))
+
+        if hasattr(self, 'glass_shatter_group'):
+            canonical = canonical_transitions['glass_shatter']
+            cfg = self._new_transition_section(transitions_config, 'glass_shatter', canonical)
+            self.glass_shards_spin.setValue(self._new_transition_number(
+                cfg, 'shards', 'glass_shatter', canonical['shards'], self.glass_shards_spin, int,
+            ))
+            self.glass_depth_spin.setValue(self._new_transition_number(
+                cfg, 'depth', 'glass_shatter', canonical['depth'], self.glass_depth_spin, float,
+            ))
+
+        if hasattr(self, 'exploding_tiles_group'):
+            canonical = canonical_transitions['exploding_tiles']
+            cfg = self._new_transition_section(transitions_config, 'exploding_tiles', canonical)
+            self.exploding_tiles_columns_spin.setValue(self._new_transition_number(
+                cfg, 'columns', 'exploding_tiles', canonical['columns'], self.exploding_tiles_columns_spin, int,
+            ))
+            self.exploding_tiles_depth_spin.setValue(self._new_transition_number(
+                cfg, 'depth', 'exploding_tiles', canonical['depth'], self.exploding_tiles_depth_spin, float,
+            ))
+
+        if hasattr(self, 'pixel_accretion_group'):
+            canonical = canonical_transitions['pixel_accretion']
+            cfg = self._new_transition_section(transitions_config, 'pixel_accretion', canonical)
+            self.pixel_tile_size_spin.setValue(self._new_transition_number(
+                cfg, 'tile_size', 'pixel_accretion', canonical['tile_size'], self.pixel_tile_size_spin, int,
+            ))
+            self.pixel_travel_spin.setValue(self._new_transition_number(
+                cfg, 'travel', 'pixel_accretion', canonical['travel'], self.pixel_travel_spin, float,
+            ))
+
+        if hasattr(self, 'ink_bloom_group'):
+            canonical = canonical_transitions['ink_bloom']
+            cfg = self._new_transition_section(transitions_config, 'ink_bloom', canonical)
+            self.ink_bloom_detail_spin.setValue(self._new_transition_number(
+                cfg, 'detail', 'ink_bloom', canonical['detail'], self.ink_bloom_detail_spin, float,
+            ))
+
+        if hasattr(self, 'tendril_reveal_group'):
+            canonical = canonical_transitions['tendril_reveal']
+            cfg = self._new_transition_section(transitions_config, 'tendril_reveal', canonical)
+            self.tendril_reveal_detail_spin.setValue(self._new_transition_number(
+                cfg, 'detail', 'tendril_reveal', canonical['detail'], self.tendril_reveal_detail_spin, float,
+            ))
+
+        if hasattr(self, 'melt_drip_group'):
+            canonical = canonical_transitions['melt_drip']
+            cfg = self._new_transition_section(transitions_config, 'melt_drip', canonical)
+            self.melt_drip_detail_spin.setValue(self._new_transition_number(
+                cfg, 'detail', 'melt_drip', canonical['detail'], self.melt_drip_detail_spin, float,
+            ))
 
         if hasattr(self, 'flip_group'):
             canonical_block_flip = canonical_transitions['block_flip']
@@ -726,11 +976,126 @@ class TransitionsTab(QWidget):
         slide_layout.setContentsMargins(0, 12, 0, 0)
         motion_row = self._aligned_row(slide_layout, "Motion Style:")
         self.slide_motion_style_combo = StyledComboBox(size_variant="compact")
-        self.slide_motion_style_combo.addItems(["Linear", "Elastic", "Wobble", "Flex"])
+        self.slide_motion_style_combo.addItems(
+            ["Linear", "Elastic", "Wobble", "Flex", "Perspective Push"]
+        )
         self.slide_motion_style_combo.currentTextChanged.connect(self._save_settings)
         motion_row.addWidget(self.slide_motion_style_combo)
         motion_row.addStretch()
         self._specific_group_host_layout.addWidget(self.slide_group)
+
+    def _build_glass_shatter_group(self) -> None:
+        self.glass_shatter_group = QGroupBox("Glass Shatter Settings")
+        self._style_group_box(self.glass_shatter_group)
+        layout = QVBoxLayout(self.glass_shatter_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        shards_row = self._aligned_row(layout, "Shard Count:")
+        self.glass_shards_spin = QSpinBox()
+        self.glass_shards_spin.setRange(24, 180)
+        self.glass_shards_spin.setValue(int(_transition_default("glass_shatter.shards")))
+        self.glass_shards_spin.valueChanged.connect(self._save_settings)
+        shards_row.addWidget(self.glass_shards_spin)
+        shards_row.addStretch()
+        depth_row = self._aligned_row(layout, "Depth:")
+        self.glass_depth_spin = QDoubleSpinBox()
+        self.glass_depth_spin.setDecimals(2)
+        self.glass_depth_spin.setRange(0.2, 1.5)
+        self.glass_depth_spin.setSingleStep(0.05)
+        self.glass_depth_spin.setValue(float(_transition_default("glass_shatter.depth")))
+        self.glass_depth_spin.valueChanged.connect(self._save_settings)
+        depth_row.addWidget(self.glass_depth_spin)
+        depth_row.addStretch()
+        self._specific_group_host_layout.addWidget(self.glass_shatter_group)
+
+    def _build_exploding_tiles_group(self) -> None:
+        self.exploding_tiles_group = QGroupBox("Exploding Tiles Settings")
+        self._style_group_box(self.exploding_tiles_group)
+        layout = QVBoxLayout(self.exploding_tiles_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        columns_row = self._aligned_row(layout, "Tile Columns:")
+        self.exploding_tiles_columns_spin = QSpinBox()
+        self.exploding_tiles_columns_spin.setRange(6, 48)
+        self.exploding_tiles_columns_spin.setValue(int(_transition_default("exploding_tiles.columns")))
+        self.exploding_tiles_columns_spin.valueChanged.connect(self._save_settings)
+        columns_row.addWidget(self.exploding_tiles_columns_spin)
+        columns_row.addStretch()
+        depth_row = self._aligned_row(layout, "Depth:")
+        self.exploding_tiles_depth_spin = QDoubleSpinBox()
+        self.exploding_tiles_depth_spin.setDecimals(2)
+        self.exploding_tiles_depth_spin.setRange(0.2, 1.5)
+        self.exploding_tiles_depth_spin.setSingleStep(0.05)
+        self.exploding_tiles_depth_spin.setValue(float(_transition_default("exploding_tiles.depth")))
+        self.exploding_tiles_depth_spin.valueChanged.connect(self._save_settings)
+        depth_row.addWidget(self.exploding_tiles_depth_spin)
+        depth_row.addStretch()
+        self._specific_group_host_layout.addWidget(self.exploding_tiles_group)
+
+    def _build_pixel_accretion_group(self) -> None:
+        self.pixel_accretion_group = QGroupBox("Directional Pixel Accretion Settings")
+        self._style_group_box(self.pixel_accretion_group)
+        layout = QVBoxLayout(self.pixel_accretion_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        tile_row = self._aligned_row(layout, "Tile Size:")
+        self.pixel_tile_size_spin = QSpinBox()
+        self.pixel_tile_size_spin.setRange(4, 32)
+        self.pixel_tile_size_spin.setValue(int(_transition_default("pixel_accretion.tile_size")))
+        self.pixel_tile_size_spin.valueChanged.connect(self._save_settings)
+        tile_row.addWidget(self.pixel_tile_size_spin)
+        tile_row.addStretch()
+        travel_row = self._aligned_row(layout, "Travel:")
+        self.pixel_travel_spin = QDoubleSpinBox()
+        self.pixel_travel_spin.setDecimals(2)
+        self.pixel_travel_spin.setRange(0.1, 1.0)
+        self.pixel_travel_spin.setSingleStep(0.05)
+        self.pixel_travel_spin.setValue(float(_transition_default("pixel_accretion.travel")))
+        self.pixel_travel_spin.valueChanged.connect(self._save_settings)
+        travel_row.addWidget(self.pixel_travel_spin)
+        travel_row.addStretch()
+        self._specific_group_host_layout.addWidget(self.pixel_accretion_group)
+
+    def _build_organic_detail_group(self, *, attr: str, title: str, section: str) -> None:
+        group = QGroupBox(title)
+        self._style_group_box(group)
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        detail_row = self._aligned_row(layout, "Detail:")
+        spin = QDoubleSpinBox()
+        spin.setDecimals(2)
+        spin.setRange(0.5, 2.0)
+        spin.setSingleStep(0.05)
+        spin.setValue(float(_transition_default(f"{section}.detail")))
+        spin.valueChanged.connect(self._save_settings)
+        detail_row.addWidget(spin)
+        detail_row.addStretch()
+        setattr(self, attr, group)
+        setattr(self, f"{section}_detail_spin", spin)
+        self._specific_group_host_layout.addWidget(group)
+
+    def _build_ink_bloom_group(self) -> None:
+        self._build_organic_detail_group(
+            attr="ink_bloom_group", title="Ink Bloom Settings", section="ink_bloom"
+        )
+
+    def _build_tendril_reveal_group(self) -> None:
+        self._build_organic_detail_group(
+            attr="tendril_reveal_group", title="Tendril Reveal Settings", section="tendril_reveal"
+        )
+
+    def _build_melt_drip_group(self) -> None:
+        self.melt_drip_group = QGroupBox("Melt Drip Settings")
+        self._style_group_box(self.melt_drip_group)
+        layout = QVBoxLayout(self.melt_drip_group)
+        layout.setContentsMargins(0, 12, 0, 0)
+        detail_row = self._aligned_row(layout, "Detail:")
+        self.melt_drip_detail_spin = QDoubleSpinBox()
+        self.melt_drip_detail_spin.setDecimals(2)
+        self.melt_drip_detail_spin.setRange(0.5, 2.0)
+        self.melt_drip_detail_spin.setSingleStep(0.05)
+        self.melt_drip_detail_spin.setValue(float(_transition_default("melt_drip.detail")))
+        self.melt_drip_detail_spin.valueChanged.connect(self._save_settings)
+        detail_row.addWidget(self.melt_drip_detail_spin)
+        detail_row.addStretch()
+        self._specific_group_host_layout.addWidget(self.melt_drip_group)
 
     def _build_blockspin_group(self) -> None:
         _aligned_row = self._aligned_row
@@ -1377,6 +1742,16 @@ class TransitionsTab(QWidget):
             getattr(self, 'burn_smoke_density_slider', None),
             getattr(self, 'burn_ash_check', None),
             getattr(self, 'burn_ash_density_slider', None),
+            # Future transition pages (lazy; absent until selected)
+            getattr(self, 'glass_shards_spin', None),
+            getattr(self, 'glass_depth_spin', None),
+            getattr(self, 'exploding_tiles_columns_spin', None),
+            getattr(self, 'exploding_tiles_depth_spin', None),
+            getattr(self, 'pixel_tile_size_spin', None),
+            getattr(self, 'pixel_travel_spin', None),
+            getattr(self, 'ink_bloom_detail_spin', None),
+            getattr(self, 'tendril_reveal_detail_spin', None),
+            getattr(self, 'melt_drip_detail_spin', None),
         ]:
             if w is not None and hasattr(w, 'blockSignals'):
                 w.blockSignals(True)
@@ -1446,6 +1821,19 @@ class TransitionsTab(QWidget):
             self._dir_slide = slide_dir
             self._dir_wipe = wipe_dir
             self._dir_blockspin = blockspin_dir
+            for section in ("glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip"):
+                canonical_section = canonical_transitions.get(section, {})
+                persisted_section = transitions_config.get(section, {})
+                if not isinstance(canonical_section, dict):
+                    canonical_section = {}
+                if not isinstance(persisted_section, dict):
+                    persisted_section = {}
+                self._direction_by_type[section] = str(
+                    persisted_section.get(
+                        "direction", canonical_section["direction"]
+                    )
+                    or canonical_section["direction"]
+                )
             
             # Note: GPU acceleration is controlled globally in Display tab
 
@@ -1497,8 +1885,8 @@ class TransitionsTab(QWidget):
         """
         transition = self._current_transition or self.transition_combo.currentText()
 
-        # Show/hide direction for directional transitions (Slide/Wipe only)
-        show_direction = transition in ["Slide", "Wipe"]
+        # Show/hide direction for transitions that resolve one event vector.
+        show_direction = transition in self._DIRECTIONAL_TRANSITIONS
         self.direction_group.setVisible(show_direction)
 
         # Populate direction options per transition
@@ -1507,7 +1895,6 @@ class TransitionsTab(QWidget):
             try:
                 self.direction_combo.clear()
                 if transition == "Slide":
-                    # Slide: no diagonals
                     slide_items = [
                         "Left to Right",
                         "Right to Left",
@@ -1536,6 +1923,38 @@ class TransitionsTab(QWidget):
                     idx = self.direction_combo.findText(self._dir_wipe)
                     if idx < 0:
                         idx = self.direction_combo.findText("Random") if self._dir_wipe == "Random" else 0
+                    self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition in {"Glass Shatter", "Exploding Tiles"}:
+                    self.direction_combo.addItems([
+                        "Left to Right", "Right to Left", "Top to Bottom",
+                        "Bottom to Top", "Diagonal TL-BR", "Diagonal TR-BL",
+                        "Center Out", "Random",
+                    ])
+                    current = self._direction_by_type["glass_shatter" if transition == "Glass Shatter" else "exploding_tiles"]
+                    idx = self.direction_combo.findText(current)
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random")
+                    self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "Directional Pixel Accretion":
+                    self.direction_combo.addItems([
+                        "Left to Right", "Right to Left", "Top to Bottom",
+                        "Bottom to Top", "Diagonal TL-BR", "Diagonal TR-BL",
+                        "Diagonal BL-TR", "Diagonal BR-TL", "Random",
+                    ])
+                    current = self._direction_by_type["pixel_accretion"]
+                    idx = self.direction_combo.findText(current)
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Random")
+                    self.direction_combo.setCurrentIndex(max(0, idx))
+                elif transition == "Melt Drip":
+                    self.direction_combo.addItems([
+                        "Left to Right", "Right to Left", "Top to Bottom",
+                        "Bottom to Top", "Random",
+                    ])
+                    current = self._direction_by_type["melt_drip"]
+                    idx = self.direction_combo.findText(current)
+                    if idx < 0:
+                        idx = self.direction_combo.findText("Top to Bottom")
                     self.direction_combo.setCurrentIndex(max(0, idx))
             finally:
                 self.direction_combo.blockSignals(False)
@@ -1643,6 +2062,14 @@ class TransitionsTab(QWidget):
             self._dir_slide = cur_dir
         elif cur_type == "Wipe":
             self._dir_wipe = cur_dir
+        elif cur_type == "Glass Shatter":
+            self._direction_by_type["glass_shatter"] = cur_dir
+        elif cur_type == "Exploding Tiles":
+            self._direction_by_type["exploding_tiles"] = cur_dir
+        elif cur_type == "Directional Pixel Accretion":
+            self._direction_by_type["pixel_accretion"] = cur_dir
+        elif cur_type == "Melt Drip":
+            self._direction_by_type["melt_drip"] = cur_dir
         if hasattr(self, 'blockspin_direction_combo'):
             self._dir_blockspin = (
                 self.blockspin_direction_combo.currentText()
@@ -1743,6 +2170,46 @@ class TransitionsTab(QWidget):
         else:
             burn = _existing_subdict('burn')
 
+        if hasattr(self, 'glass_shatter_group'):
+            glass_shatter = {
+                'shards': self.glass_shards_spin.value(),
+                'depth': float(self.glass_depth_spin.value()),
+                'direction': self._direction_by_type['glass_shatter'],
+            }
+        else:
+            glass_shatter = _existing_subdict('glass_shatter')
+        if hasattr(self, 'exploding_tiles_group'):
+            exploding_tiles = {
+                'columns': self.exploding_tiles_columns_spin.value(),
+                'depth': float(self.exploding_tiles_depth_spin.value()),
+                'direction': self._direction_by_type['exploding_tiles'],
+            }
+        else:
+            exploding_tiles = _existing_subdict('exploding_tiles')
+        if hasattr(self, 'pixel_accretion_group'):
+            pixel_accretion = {
+                'tile_size': self.pixel_tile_size_spin.value(),
+                'travel': float(self.pixel_travel_spin.value()),
+                'direction': self._direction_by_type['pixel_accretion'],
+            }
+        else:
+            pixel_accretion = _existing_subdict('pixel_accretion')
+        if hasattr(self, 'ink_bloom_group'):
+            ink_bloom = {'detail': float(self.ink_bloom_detail_spin.value()), 'direction': None}
+        else:
+            ink_bloom = _existing_subdict('ink_bloom')
+        if hasattr(self, 'tendril_reveal_group'):
+            tendril_reveal = {'detail': float(self.tendril_reveal_detail_spin.value()), 'direction': None}
+        else:
+            tendril_reveal = _existing_subdict('tendril_reveal')
+        if hasattr(self, 'melt_drip_group'):
+            melt_drip = {
+                'detail': float(self.melt_drip_detail_spin.value()),
+                'direction': self._direction_by_type['melt_drip'],
+            }
+        else:
+            melt_drip = _existing_subdict('melt_drip')
+
         config = {
             'type': cur_type,
             'duration_ms': cur_duration,
@@ -1770,6 +2237,12 @@ class TransitionsTab(QWidget):
             'crumble': crumble,
             'particle': particle,
             'burn': burn,
+            'glass_shatter': glass_shatter,
+            'exploding_tiles': exploding_tiles,
+            'pixel_accretion': pixel_accretion,
+            'ink_bloom': ink_bloom,
+            'tendril_reveal': tendril_reveal,
+            'melt_drip': melt_drip,
         }
         # Preserve engine-managed transient random-choice bookkeeping.
         for transient_key in ('random_choice', 'last_random_choice'):

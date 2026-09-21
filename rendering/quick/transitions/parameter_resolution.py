@@ -33,6 +33,34 @@ class ResolvedPhaseCInputs:
         return dict(self.parameters)
 
 
+_DIRECTION_MAP = {
+    "Left to Right": "left",
+    "Right to Left": "right",
+    "Top to Bottom": "down",
+    "Bottom to Top": "up",
+    "Diagonal TL-BR": "diag_tl_br",
+    "Diagonal TR-BL": "diag_tr_bl",
+    "Diagonal TL to BR": "diag_tl_br",
+    "Diagonal TR to BL": "diag_tr_bl",
+}
+
+
+def _resolve_direction(
+    raw: object,
+    *,
+    choices: tuple[str, ...],
+    mapping: Mapping[str, str],
+    rng: _RandomSource,
+) -> str:
+    text = str(raw or "Random")
+    if text == "Random":
+        return str(rng.choice(choices))
+    resolved = mapping.get(text)
+    if resolved is None:
+        raise ValueError(f"unknown transition direction: {raw!r}")
+    return resolved
+
+
 def _mapping(settings: Mapping[str, object], name: str) -> Mapping[str, object]:
     value = settings.get(name, {})
     return value if isinstance(value, Mapping) else {}
@@ -519,6 +547,159 @@ def _resolve_burn(
     )
 
 
+_FRACTURE_DIRECTION_MAP = {
+    **_DIRECTION_MAP,
+    "Center Out": "center_out",
+    "center_out": "center_out",
+    "left": "left",
+    "right": "right",
+    "up": "up",
+    "down": "down",
+    "diag_tl_br": "diag_tl_br",
+    "diag_tr_bl": "diag_tr_bl",
+}
+_FRACTURE_DIRECTIONS = (
+    "left",
+    "right",
+    "up",
+    "down",
+    "diag_tl_br",
+    "diag_tr_bl",
+    "center_out",
+)
+_PIXEL_DIRECTION_MAP = {
+    **_FRACTURE_DIRECTION_MAP,
+    "Diagonal BL-TR": "diag_bl_tr",
+    "Diagonal BR-TL": "diag_br_tl",
+    "diag_bl_tr": "diag_bl_tr",
+    "diag_br_tl": "diag_br_tl",
+}
+_PIXEL_DIRECTIONS = (
+    "left",
+    "right",
+    "up",
+    "down",
+    "diag_tl_br",
+    "diag_tr_bl",
+    "diag_bl_tr",
+    "diag_br_tl",
+)
+
+
+def _seed(rng: _RandomSource) -> int:
+    """Generate one deterministic per-request seed; it is never persisted."""
+
+    return int(rng.randint(1, 65535))
+
+
+def _resolve_detail(
+    cfg: Mapping[str, object],
+    defaults: Mapping[str, object],
+) -> float:
+    default_detail = float(defaults["detail"])
+    return max(0.5, min(2.0, _number(_value(cfg, defaults, "detail"), default_detail)))
+
+
+def _resolve_glass_shatter(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "glass_shatter")
+    defaults = _canonical("glass_shatter")
+    direction = _resolve_direction(
+        _value(cfg, defaults, "direction"),
+        choices=_FRACTURE_DIRECTIONS,
+        mapping=_FRACTURE_DIRECTION_MAP,
+        rng=rng,
+    )
+    default_shards = int(defaults["shards"])
+    default_depth = float(defaults["depth"])
+    shards = max(24, min(180, _integer(_value(cfg, defaults, "shards"), default_shards)))
+    depth = max(0.2, min(1.5, _number(_value(cfg, defaults, "depth"), default_depth)))
+    return _finish(direction, {"seed": _seed(rng), "shards": shards, "depth": depth})
+
+
+def _resolve_exploding_tiles(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "exploding_tiles")
+    defaults = _canonical("exploding_tiles")
+    direction = _resolve_direction(
+        _value(cfg, defaults, "direction"),
+        choices=_FRACTURE_DIRECTIONS,
+        mapping=_FRACTURE_DIRECTION_MAP,
+        rng=rng,
+    )
+    default_columns = int(defaults["columns"])
+    default_depth = float(defaults["depth"])
+    columns = max(6, min(48, _integer(_value(cfg, defaults, "columns"), default_columns)))
+    depth = max(0.2, min(1.5, _number(_value(cfg, defaults, "depth"), default_depth)))
+    return _finish(
+        direction,
+        {"seed": _seed(rng), "columns": columns, "depth": depth},
+    )
+
+
+def _resolve_pixel_accretion(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "pixel_accretion")
+    defaults = _canonical("pixel_accretion")
+    direction = _resolve_direction(
+        _value(cfg, defaults, "direction"),
+        choices=_PIXEL_DIRECTIONS,
+        mapping=_PIXEL_DIRECTION_MAP,
+        rng=rng,
+    )
+    default_tile_size = int(defaults["tile_size"])
+    default_travel = float(defaults["travel"])
+    tile_size = max(4, min(32, _integer(_value(cfg, defaults, "tile_size"), default_tile_size)))
+    travel = max(0.1, min(1.0, _number(_value(cfg, defaults, "travel"), default_travel)))
+    return _finish(
+        direction,
+        {"seed": _seed(rng), "tile_size": tile_size, "travel": travel},
+    )
+
+
+def _resolve_organic(
+    transition_id: str,
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, transition_id)
+    defaults = _canonical(transition_id)
+    return _finish(
+        None,
+        {"seed": _seed(rng), "detail": _resolve_detail(cfg, defaults)},
+    )
+
+
+def _resolve_melt_drip(
+    settings: Mapping[str, object],
+    rng: _RandomSource,
+) -> ResolvedPhaseCInputs:
+    cfg = _mapping(settings, "melt_drip")
+    defaults = _canonical("melt_drip")
+    direction = _resolve_direction(
+        _value(cfg, defaults, "direction"),
+        choices=("left", "right", "up", "down"),
+        mapping={
+            **_DIRECTION_MAP,
+            "left": "left",
+            "right": "right",
+            "up": "up",
+            "down": "down",
+        },
+        rng=rng,
+    )
+    return _finish(
+        direction,
+        {"seed": _seed(rng), "detail": _resolve_detail(cfg, defaults)},
+    )
+
+
 _RESOLVERS = {
     "blinds": _resolve_blinds,
     "diffuse": _resolve_diffuse,
@@ -526,6 +707,12 @@ _RESOLVERS = {
     "crumble": _resolve_crumble,
     "particle": _resolve_particle,
     "burn": _resolve_burn,
+    "glass_shatter": _resolve_glass_shatter,
+    "exploding_tiles": _resolve_exploding_tiles,
+    "pixel_accretion": _resolve_pixel_accretion,
+    "ink_bloom": lambda settings, rng: _resolve_organic("ink_bloom", settings, rng),
+    "tendril_reveal": lambda settings, rng: _resolve_organic("tendril_reveal", settings, rng),
+    "melt_drip": _resolve_melt_drip,
 }
 
 

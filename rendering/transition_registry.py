@@ -92,6 +92,42 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         compositor_transition_class="GLCompositorSlideTransition",
     ),
     TransitionDescriptor(
+        setting_name="Glass Shatter",
+        stable_id="glass_shatter",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
+        setting_name="Exploding Tiles",
+        stable_id="exploding_tiles",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
+        setting_name="Directional Pixel Accretion",
+        stable_id="pixel_accretion",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
+        setting_name="Ink Bloom",
+        stable_id="ink_bloom",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
+        setting_name="Tendril Reveal",
+        stable_id="tendril_reveal",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
+        setting_name="Melt Drip",
+        stable_id="melt_drip",
+        easing_curve=EasingCurve.LINEAR,
+        requires_hw_accel=True,
+    ),
+    TransitionDescriptor(
         setting_name="Crossfade",
         stable_id="crossfade",
         easing_curve=EasingCurve.QUAD_IN_OUT,

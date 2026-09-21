@@ -29,12 +29,12 @@ Depth clears must stay within the transition viewport and restore scissor state;
 ## Resumable checkpoints
 
 - [x] Trace current source and pin comparison HEAD; commit this decomposition before substantial implementation.
-- [ ] Glass Shatter vertical slice: registry/default/Settings/request, lazy renderer, deterministic fracture and visual proof.
-- [ ] Exploding Tiles and Pixel Accretion: bounded instancing, Settings/request integration, no per-frame mesh upload, visual proof.
-- [ ] Slide Perspective Push: same identity, unchanged established styles, coverage and visual proof.
-- [ ] Organic effects: canonical integration and distinct bounded shaders with visual proof.
-- [ ] Focused dormancy/activation, default parity, request, lifecycle/fence and real-GL checks; inspect and push narrow confirmed slices.
-- [ ] Reconcile live docs/backlog into durable transition reference after implementation.
+- [x] Glass Shatter vertical slice: registry/default/Settings/request, lazy renderer, deterministic fracture and visual proof.
+- [x] Exploding Tiles and Pixel Accretion: bounded instancing, Settings/request integration, no per-frame mesh upload, visual proof.
+- [x] Slide Perspective Push: same identity, unchanged established styles, coverage and visual proof.
+- [x] Organic effects: canonical integration and distinct bounded shaders with visual proof.
+- [x] Focused dormancy/activation, default parity, request, lifecycle/fence and real-GL checks. Existing build scripts include both implementation and shader packages; frozen/installed validation remains an operator gate.
+- [x] Reconcile live docs/backlog into `Docs/Reference/Transitions.md`.
 - [~] Awaiting operator validation: aesthetic quality/motion at actual duration, extreme aspects/DPR, both displays, repeated interruption and representative heavy-load Visualizer freshness. Do not declare these passed from shader compilation or screenshots.
 
 ## Acceptance evidence
@@ -46,3 +46,13 @@ Lifecycle: lazy import/resource dormancy, partial initialization failure, legal 
 Real GL: render through `QuickTransitionRenderHost`, inspect a progression/contact sheet with textured image fixtures, verify endpoints and destination/source underlays, GL errors and release. Exercise portrait and landscape, variant/direction changes, repeat seed reproducibility, and compile every shader on installed driver.
 
 Performance: bounded vertices/instances and static uploads; measure cold generation/initialization separately from warmed rendering at representative sizes. Use nonblocking GPU timing/readback only in test tools, never runtime. Heavy external-load and mixed-display physical acceptance remains open until actual evidence arrives; do not tune Visualizer cadence or reaction to compensate.
+
+## Current evidence and remaining work
+
+All seven effects have driver-rendered textured progressions, exact and near-endpoint checks, seed/option sensitivity, repeatability and disable cleanup. Glass has portrait capture; both instanced effects have 4K captures with bounded grids. Each effect passes the production threaded QQuickWindow smoke across two generations and hide/show on the currently connected single display (DPR 1.5). The request for two windows reported only one physical screen, so it does not close two-display acceptance.
+
+- [ ] Operator: activate each new capability in Transitions SETUP, select it and tune/accept duration, glass sheen/depth, tile density and organic detail using actual photos.
+- [ ] Operator: repeat with both displays connected and active music/representative heavy external load; compare Visualizer freshness, frame-spacing tails and transition first-use behavior to the accepted baseline. Cold shader/mesh admission remains measurable work, not an established performance-neutral claim.
+- [ ] Operator: verify the installed/frozen build including activation/Settings round-trip and repeated switch/interrupt/retire.
+
+The new generic lazy Settings transaction also fixes external-update hydration and explicit external-deactivation retirement. Existing operator `.sst` changes were preserved; only new transition additions belong to this implementation checkpoint.

@@ -68,6 +68,30 @@ _IMPLEMENTATIONS = (
         transition_id="burn",
         module_name="rendering.quick.transitions.implementations.burn",
     ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="glass_shatter",
+        module_name="rendering.quick.transitions.implementations.glass_shatter",
+    ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="exploding_tiles",
+        module_name="rendering.quick.transitions.implementations.exploding_tiles",
+    ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="pixel_accretion",
+        module_name="rendering.quick.transitions.implementations.pixel_accretion",
+    ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="ink_bloom",
+        module_name="rendering.quick.transitions.implementations.ink_bloom",
+    ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="tendril_reveal",
+        module_name="rendering.quick.transitions.implementations.tendril_reveal",
+    ),
+    QuickTransitionImplementationDescriptor(
+        transition_id="melt_drip",
+        module_name="rendering.quick.transitions.implementations.melt_drip",
+    ),
 )
 _BY_ID = {descriptor.transition_id: descriptor for descriptor in _IMPLEMENTATIONS}
 

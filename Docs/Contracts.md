@@ -329,6 +329,8 @@ explicit family exception.
 
 ## Transition / visualizer
 
+The expanded transition catalog and Slide Perspective Push are described in `Docs/Reference/Transitions.md`. Shared mesh primitives are lazy, context-local and clock-free; per-effect geometry/material/state remain local. The new effects do not change Sphere, Bubble, Visualizer cadence or the single-surface presentation contract.
+
 Transitions: canonical registry/settings -> activation/admission -> immutable request/run -> lazy Quick implementation
 -> display render node. Old compositor transition pixels are debris after caller proof.
 

@@ -286,6 +286,8 @@ The following are **not** valid “fixes” absent contradictory evidence: Pytho
 
 ### 6.6 Transitions
 
+Expansion gates: `test_qtquick_glass_shatter.py` (fracture coverage, bounded topology, depth scissor and failed cleanup), `test_qtquick_instanced_transition_effects.py` (bounded grids, translation/settlement), `test_qtquick_organic_transition_renderers.py` (local contracts/driver compilation), `test_qtquick_future_transition_gl.py` (actual endpoint/near-endpoint pixels, seed/option/direction sensitivity and retirement), plus `test_qtquick_slide_motion.py` for established styles and projective math. Registry/request/default/Settings tests remain the integration authority.
+
 Quick transition ownership is current. Do not restore old compositor transition presenters to satisfy stale tests.
 
 Protect:

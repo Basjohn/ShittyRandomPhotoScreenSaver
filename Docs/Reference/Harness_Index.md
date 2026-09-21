@@ -103,6 +103,16 @@ These harnesses are **not scheduled work** and rapid-switch startup hitching alo
 
 ## 2. Quick transition regression harnesses
 
+For the expanded effects, render deterministic textured progressions through the production GL host:
+
+```powershell
+C:/Python311/python.exe tools/transition_contact_sheet.py --effect glass_shatter --direction center_out --output-dir <output-directory>
+C:/Python311/python.exe tools/transition_contact_sheet.py --effect pixel_accretion --width 3840 --height 2160 --output-dir <output-directory>
+C:/Python311/python.exe tools/transition_contact_sheet.py --effect glass_shatter --quick-smoke --windows 2 --output-dir <output-directory>
+```
+
+The tool accepts optional `--source` / `--destination` photos. `--quick-smoke` reuses the existing threaded Quick harness for two generations and hide/show; inspect reported physical-screen count because a request for two windows cannot prove two-display behavior when only one screen is connected. Effect IDs and ownership are in `Docs/Reference/Transitions.md`. Offscreen timing and captures do not close operator heavy-load/freshness acceptance.
+
 These commands are retained regression/acceptance harnesses for the current Quick transition implementations; they are not an implementation checklist.
 
 ### Blinds

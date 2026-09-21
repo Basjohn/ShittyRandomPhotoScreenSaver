@@ -65,9 +65,15 @@
       "Crossfade": false,
       "Crumble": true,
       "Diffuse": false,
+      "Directional Pixel Accretion": false,
+      "Exploding Tiles": false,
+      "Glass Shatter": false,
+      "Ink Bloom": false,
+      "Melt Drip": false,
       "Particle": true,
       "Ripple": true,
       "Slide": true,
+      "Tendril Reveal": false,
       "Warp Dissolve": true,
       "Wipe": true
     },
@@ -124,11 +130,35 @@
       "Crossfade": 5000,
       "Crumble": 12000,
       "Diffuse": 5500,
+      "Directional Pixel Accretion": 1800,
+      "Exploding Tiles": 2000,
+      "Glass Shatter": 2000,
+      "Ink Bloom": 2200,
+      "Melt Drip": 2000,
       "Particle": 10524,
       "Ripple": 7200,
       "Slide": 5000,
+      "Tendril Reveal": 2200,
       "Warp Dissolve": 6000,
       "Wipe": 4000
+    },
+    "exploding_tiles": {
+      "columns": 18,
+      "depth": 0.85,
+      "direction": "Random"
+    },
+    "glass_shatter": {
+      "depth": 0.75,
+      "direction": "Random",
+      "shards": 90
+    },
+    "ink_bloom": {
+      "detail": 1.0,
+      "direction": null
+    },
+    "melt_drip": {
+      "detail": 1.0,
+      "direction": "Top to Bottom"
     },
     "particle": {
       "direction": "Random",
@@ -146,6 +176,11 @@
       "use_3d_shading": true,
       "wobble": true
     },
+    "pixel_accretion": {
+      "direction": "Random",
+      "tile_size": 10,
+      "travel": 0.4
+    },
     "pool": {
       "3D Block Spins": true,
       "Blinds": false,
@@ -154,9 +189,15 @@
       "Crossfade": false,
       "Crumble": true,
       "Diffuse": true,
+      "Directional Pixel Accretion": false,
+      "Exploding Tiles": false,
+      "Glass Shatter": false,
+      "Ink Bloom": false,
+      "Melt Drip": false,
       "Particle": true,
       "Ripple": true,
       "Slide": false,
+      "Tendril Reveal": false,
       "Warp Dissolve": true,
       "Wipe": true
     },
@@ -167,6 +208,10 @@
     "slide": {
       "direction": "Random",
       "motion_style": "Linear"
+    },
+    "tendril_reveal": {
+      "detail": 1.0,
+      "direction": null
     },
     "type": "3D Block Spins",
     "wipe": {
