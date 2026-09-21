@@ -1,6 +1,21 @@
-# Transition expansion | active implementation
+# Transition expansion | visual rework
 
 Operator request: implement the transitions in `Future_Work.md`, most ambitious first, emphasizing real 3D and visual quality. Comparison HEAD: `25bf2c103b325b568139984bd84192167410d8dd`. Unrelated operator `.sst` edits are outside these checkpoints.
+
+## Reopened after operator rejection
+
+The operator rejected the appearance of Glass Shatter, Exploding Tiles, Ink Bloom, Tendril Reveal and Melt Drip at `dec139da`. Earlier rendering checks establish technical integration only; they do not establish aesthetic acceptance. Supplied screenshots show flat opaque shards and a soft stretched wipe. Source confirms planar glass, premature in-viewport shrink, weak tile impulse/thickness, and fullscreen mask-only organic effects. Pixel Accretion and Slide are outside this corrective slice.
+
+- [ ] Glass: closed extruded fracture prisms with bevel normals, visible thickness under tumble, screen-space transmission/refraction, optional dispersion and sheen. Expose thickness, transparency, refraction, dispersion and sheen independently in canonical Settings. Replace shrink retirement with continuous trajectories carrying the entire solid beyond the viewport; preserve image continuity before release.
+- [ ] Tiles: proportionate beveled solids, distinct front/side materials, strong out-of-plane tumble, explosive impulse and gravity. Expose thickness and force. Every tile must leave the frame geometrically; no premature shrink/fade substitute.
+- [ ] Melt: shaped liquid sheet with rounded menisci, stretched necks and detached falling droplets, true depth and lit surfaces. Direction remains authored; expose depth/gloss alongside detail.
+- [ ] Tendril: curling parent/child growth with round cross-sections, depth and occlusion, varied branching and coherent destination reveal. Expose depth/gloss alongside detail.
+- [ ] Ink: swirling pigment, irregular wet lobes and a raised lit boundary with materially distinct interior; expose depth/gloss alongside detail. Avoid a generic feathered mask with a renamed identity.
+- [ ] Validate production rendering with detailed image fixtures, inspected mid/late motion, near-endpoint continuity, authored material isolation, full-geometry departure, finite topology, resource retirement and inherited GL state. Update stale tests which explicitly blessed the rejected shrink mechanism.
+- [ ] Narrow checkpoint commits/pushes after confirmed slices; reconcile references and actionable remaining validation.
+- [ ] Awaiting operator acceptance after correction: actual-duration aesthetics, both displays and heavy-load freshness. Automated image differences are not aesthetic acceptance.
+
+All new material values resolve once through canonical defaults/UI/request admission. Renderers retain existing context resources and monotonic progress; no clocks, evolving CPU fluid simulations, parallel surfaces or fallback effects. Geometry is static within a run; deformation/motion is analytical on the GPU. The existing mesh helper may support concrete shared needs only. Performance evidence must distinguish cold geometry/shaders from warm draws.
 
 ## Current owners and invariants
 
@@ -29,10 +44,10 @@ Depth clears must stay within the transition viewport and restore scissor state;
 ## Resumable checkpoints
 
 - [x] Trace current source and pin comparison HEAD; commit this decomposition before substantial implementation.
-- [x] Glass Shatter vertical slice: registry/default/Settings/request, lazy renderer, deterministic fracture and visual proof.
-- [x] Exploding Tiles and Pixel Accretion: bounded instancing, Settings/request integration, no per-frame mesh upload, visual proof.
+- [x] Glass Shatter vertical slice: registry/default/Settings/request, lazy renderer and deterministic fracture. Appearance reopened above.
+- [x] Exploding Tiles and Pixel Accretion: bounded instancing, Settings/request integration, no per-frame mesh upload. Tile appearance reopened above.
 - [x] Slide Perspective Push: same identity, unchanged established styles, coverage and visual proof.
-- [x] Organic effects: canonical integration and distinct bounded shaders with visual proof.
+- [x] Organic effects: canonical integration and bounded shaders. Appearance rejected; reopened above.
 - [x] Focused dormancy/activation, default parity, request, lifecycle/fence and real-GL checks. Existing build scripts include both implementation and shader packages; frozen/installed validation remains an operator gate.
 - [x] Reconcile live docs/backlog into `Docs/Reference/Transitions.md`.
 - [~] Awaiting operator validation: aesthetic quality/motion at actual duration, extreme aspects/DPR, both displays, repeated interruption and representative heavy-load Visualizer freshness. Do not declare these passed from shader compilation or screenshots.
