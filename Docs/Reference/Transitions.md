@@ -8,29 +8,31 @@ These six capabilities are implemented and **deactivated by default** while oper
 
 | Effect | Appearance | Controls |
 | --- | --- | --- |
-| Glass Shatter | Seeded irregular Voronoi shards carry the original image through arbitrary-axis rotation, perspective and depth. Cool edges, normal-based sheen and restrained transmission separate glass from solid tiles. | Direction including Center Out, 24–180 shards, depth, duration |
-| Exploding Tiles | Regular shallow cuboids release in a directional/radial wave, rotate in real 3D, show shaded sides and leave the image plane. | Direction including Center Out, 6–48 columns, depth, duration |
+| Glass Shatter | Seeded closed beveled prisms depart geometrically offscreen. Screen-space destination transmission, refraction, dispersion and sheen make the glass material independent of the printed source face. | Direction including Center Out, 24–180 shards, depth, thickness/transparency/refraction/dispersion/sheen 0–1, duration |
+| Exploding Tiles | Closed beveled cubes use full ray-exit departure, thickness and force to release in a directional/radial wave. | Direction including Center Out, 6–48 columns, depth, thickness 0–1, force 0.5–2, duration |
 | Directional Pixel Accretion | Destination micro-tiles translate along one event direction, then settle in sequence over the source. Slight temporary height and oversize give the landing front depth. | Eight directions or Random, physical tile size, travel, duration |
-| Ink Bloom | Connected domain-warped pigment fronts reveal destination with a narrow wet edge. | Detail, duration |
-| Tendril Reveal | Seeded branches extend from a common root, fork, then thicken into the destination. | Detail, duration |
-| Melt Drip | A gravity-directed boundary develops rounded drips while surviving source imagery stretches near the front. | Direction, detail, duration |
+| Ink Bloom | A raised mesh surface transports vortical marbled pigment with image-derived wet reflections and normals. | Detail, depth/gloss 0–1, duration |
+| Tendril Reveal | Seeded curved branch tubes grow from common roots; their continuous canopy samples the same Bezier paths before settling into destination. | Detail, depth/gloss 0–1, duration |
+| Melt Drip | A bounded implicit 3D liquid volume forms a round wet film, ligaments and pinched gravity drops while the source photo advects through the fluid. | Gravity direction, detail, depth/gloss 0–1, duration |
 
 **Slide -> Motion Style -> Perspective Push** is an option in the existing Slide identity. It uses an aspect-correct view-ray/tilted-plane intersection for the outgoing image, with shallow translation/tilt/depth and the existing sealed coverage partition. Linear, Elastic, Wobble and Flex keep their existing authored math. Perspective Push does not add a scene, mesh owner, transition ID or clock.
 
 ## Implementation contracts
 
 - Direction and seed resolve once before request admission. Renderers consume explicit immutable parameters; no per-frame Settings access or random choices.
-- Glass builds one deterministic convex-cell mesh per run/aspect. Texture coordinates stay attached to the original fracture coordinates. GPU motion is analytic; there is no CPU physics simulation.
-- Exploding Tiles uses one immutable cuboid mesh and `gl_InstanceID`. Accretion uses one immutable micro-quad mesh, a viewport-derived grid capped at 60,000 instances, and a bounded flight interval so early tiles land before later ones start. Neither uploads evolving instance arrays.
+- Glass and Crumble share deterministic closed fracture prisms. Glass uses screen-space transmission/refraction and analytic offscreen departure without a shrink retirement; Crumble keeps rough stone sides and real chip instancing tied to parent polygon seams and release weighting. Crumble accepts 4–128 pieces, depth 0.2–1.5 and thickness/debris 0–1; its float seed remains intact across its deterministic geometry and debris.
+- Exploding Tiles uses one immutable closed beveled-cube mesh and `gl_InstanceID`; Accretion uses one immutable micro-quad mesh, a viewport-derived grid capped at 60,000 instances, and a bounded flight interval so early tiles land before later ones start. Neither uploads evolving instance arrays.
+- Ink transports bounded vortical pigment over a raised mesh. Tendril uploads bounded tube topology and samples that same finite Bezier path set for its canopy. Melt ray-intersects a bounded implicit volume with 52 steps and at most three neighboring lanes; it has no full fluid simulation or opacity wipe. Melt direction is gravity: its upper source film recedes and drops travel along that direction.
 - `rendering/quick/transitions/mesh_support.py` owns only the small shared context-local program/VAO/VBO primitives, image underlay and viewport-scoped depth clear. It is imported by admitted implementations. No always-resident 3D engine or dependency on Sphere exists.
 - The mesh effects draw the destination (departure effects) or source (accretion) beneath the pieces. Exact full-image endpoint draws are supplemented by near-endpoint continuity tests so endpoint branches cannot hide pops.
 - The shared Quick host restores GL state on exceptions. Depth clearing intersects the active scissor and viewport, then restores scissor state. Partial cleanup retains failed handles for retry; disable/context retirement releases owned resources.
 - New Settings pages follow the same lazy build, hydrate, save and retirement owner. Canonical defaults and generated snapshots remain under the existing Settings authority.
+- Crumble's weighting menu names the actual release order: Top, Bottom, Random Weighted, Random Choice and Age Weighted. Former Bias Old Image/Bias New Image values both resolved to Top; reopening and saving replaces those misleading labels. The unused mosaic request field has been removed.
 
 ## Verification and remaining acceptance
 
-`tests/test_qtquick_future_transition_gl.py` renders through the real driver and production host to check exact/near endpoints, repeatability, parameter and direction sensitivity, and resource retirement. The focused fracture/instanced tests cover topology, bounded counts, flight/settlement and depth-clear cleanup; existing registry/request/Settings/run/fence suites cover integration.
+`tests/test_qtquick_future_transition_gl.py` renders through the real driver and production host to check exact/near endpoints, repeatability, parameter and direction sensitivity, and resource retirement. Focused `crumble_volume`, `melt_surface`, `organic_surfaces`, `transition_material_settings` and `tile_departure` tests cover bounded topology, material controls and continuous departure; registry/request/Settings/run/fence suites cover integration.
 
-`tools/transition_contact_sheet.py` produces textured progression frames and optional supplied-image contact sheets. Its `--quick-smoke` mode reuses the existing threaded QQuickWindow lifecycle harness. See `Docs/Reference/Harness_Index.md` for commands. Diagnostic timing includes context/driver effects and is not a claim of heavy-load or mixed-display performance neutrality.
+`tools/transition_contact_sheet.py` produces textured progression frames, optional supplied-image contact sheets, and a 60-frame/two-second WebP with `--animate`. It accepts `--source` and `--destination` photos; `--quick-smoke` reuses the existing threaded QQuickWindow lifecycle harness. See `Docs/Reference/Harness_Index.md` for commands. Diagnostic timing includes context/driver effects and is not a claim of performance neutrality.
 
 Operator acceptance still needs actual photographs at authored duration, preferred glass sheen/tile density, both displays and representative heavy external load with active Visualizers. Automated pixel/scene evidence cannot close those perceptual/freshness gates.

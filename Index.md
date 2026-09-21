@@ -53,7 +53,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
-| transitions | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
+| transitions and material surfaces | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
 | active transition expansion | `Docs/Future_Work/Transition_Expansion.md` |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
 | logging / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |

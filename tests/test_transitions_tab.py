@@ -133,7 +133,8 @@ def test_glass_shatter_page_is_lazy_and_round_trips_authored_controls(
     tab._save_settings()
 
     section = settings_manager.get("transitions", {})["glass_shatter"]
-    assert section == {"shards": 120, "depth": 1.1, "direction": "Center Out"}
+    assert section == {**get_default_settings()["transitions"]["glass_shatter"],
+                       "shards": 120, "depth": 1.1, "direction": "Center Out"}
 
 
 def test_external_transition_edit_hydrates_built_page_before_duration_save(

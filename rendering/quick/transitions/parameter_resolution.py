@@ -216,6 +216,7 @@ def _resolve_crumble(
             default_pieces,
         ),
     )
+    piece_count = min(128, piece_count)
     default_complexity = float(defaults["crack_complexity"])
     complexity = max(
         0.5,
@@ -229,10 +230,8 @@ def _resolve_crumble(
     )
     default_weighting = str(defaults["weighting"])
     weighting = str(_value(cfg, defaults, "weighting") or default_weighting)
-    # Deliberately preserve CURRENT old factory semantics. The Settings UI
-    # exposes "Bias Old Image" / "Bias New Image", but the old factory does
-    # not recognize either spelling and falls through to 0.0. H0 may repair
-    # that UX deliberately; parameter resolution must not silently change presentation.
+    # Former Bias labels both executed Top Weighted. The Settings page writes
+    # the actual release-order label when it next saves an existing profile.
     weight_mode = {
         "Top Weighted": 0.0,
         "Bottom Weighted": 1.0,
@@ -248,7 +247,8 @@ def _resolve_crumble(
             "seed": float(rng.random()) * 1000.0,
             "piece_count": piece_count,
             "crack_complexity": complexity,
-            "mosaic_mode": False,
+            "depth": max(.2, min(1.5, _number(_value(cfg, defaults, "depth"), float(defaults["depth"])))),
+            **_surface_values(cfg, defaults, ("thickness", "debris")),
             "weight_mode": weight_mode,
         },
     )
@@ -600,6 +600,12 @@ def _resolve_detail(
     return max(0.5, min(2.0, _number(_value(cfg, defaults, "detail"), default_detail)))
 
 
+def _surface_values(cfg: Mapping[str, object], defaults: Mapping[str, object],
+                    names: tuple[str, ...]) -> dict[str, float]:
+    return {name: max(0.0, min(1.0, _number(_value(cfg, defaults, name), float(defaults[name]))))
+            for name in names}
+
+
 def _resolve_glass_shatter(
     settings: Mapping[str, object],
     rng: _RandomSource,
@@ -616,7 +622,8 @@ def _resolve_glass_shatter(
     default_depth = float(defaults["depth"])
     shards = max(24, min(180, _integer(_value(cfg, defaults, "shards"), default_shards)))
     depth = max(0.2, min(1.5, _number(_value(cfg, defaults, "depth"), default_depth)))
-    return _finish(direction, {"seed": _seed(rng), "shards": shards, "depth": depth})
+    return _finish(direction, {"seed": _seed(rng), "shards": shards, "depth": depth,
+                               **_surface_values(cfg, defaults, ("thickness", "transparency", "refraction", "dispersion", "sheen"))})
 
 
 def _resolve_exploding_tiles(
@@ -637,7 +644,9 @@ def _resolve_exploding_tiles(
     depth = max(0.2, min(1.5, _number(_value(cfg, defaults, "depth"), default_depth)))
     return _finish(
         direction,
-        {"seed": _seed(rng), "columns": columns, "depth": depth},
+        {"seed": _seed(rng), "columns": columns, "depth": depth,
+         **_surface_values(cfg, defaults, ("thickness",)),
+         "force": max(.5, min(2., _number(_value(cfg, defaults, "force"), float(defaults["force"]))))},
     )
 
 
@@ -672,7 +681,8 @@ def _resolve_organic(
     defaults = _canonical(transition_id)
     return _finish(
         None,
-        {"seed": _seed(rng), "detail": _resolve_detail(cfg, defaults)},
+        {"seed": _seed(rng), "detail": _resolve_detail(cfg, defaults),
+         **_surface_values(cfg, defaults, ("depth", "gloss"))},
     )
 
 
@@ -696,7 +706,8 @@ def _resolve_melt_drip(
     )
     return _finish(
         direction,
-        {"seed": _seed(rng), "detail": _resolve_detail(cfg, defaults)},
+        {"seed": _seed(rng), "detail": _resolve_detail(cfg, defaults),
+         **_surface_values(cfg, defaults, ("depth", "gloss"))},
     )
 
 

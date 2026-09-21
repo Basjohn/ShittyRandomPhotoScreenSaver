@@ -286,7 +286,7 @@ The following are **not** valid “fixes” absent contradictory evidence: Pytho
 
 ### 6.6 Transitions
 
-Expansion gates: `test_qtquick_glass_shatter.py` (fracture coverage, bounded topology, depth scissor and failed cleanup), `test_qtquick_instanced_transition_effects.py` (bounded grids, translation/settlement), `test_qtquick_organic_transition_renderers.py` (local contracts/driver compilation), `test_qtquick_future_transition_gl.py` (actual endpoint/near-endpoint pixels, seed/option/direction sensitivity and retirement), plus `test_qtquick_slide_motion.py` for established styles and projective math. Registry/request/default/Settings tests remain the integration authority.
+Expansion gates: `test_qtquick_glass_shatter.py` (fracture coverage, bounded topology, depth scissor and failed cleanup), `test_qtquick_instanced_transition_effects.py` and `test_qtquick_tile_departure.py` (closed cube topology, ray-exit departure and material controls), `test_qtquick_crumble_volume.py` (closed fracture solids, parent-bound chip debris and release weighting), `test_qtquick_melt_surface.py` (bounded implicit liquid surface), `test_qtquick_organic_surfaces.py` (raised Ink and Bezier-coupled Tendril topology), `test_qtquick_transition_material_settings.py` (canonical material ranges), and `test_qtquick_future_transition_gl.py` (actual endpoint/near-endpoint pixels, seed/option/direction sensitivity and retirement). `test_qtquick_organic_transition_renderers.py` no longer owns actual-driver compilation. Registry/request/default/Settings tests remain the integration authority.
 
 Quick transition ownership is current. Do not restore old compositor transition presenters to satisfy stale tests.
 

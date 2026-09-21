@@ -232,6 +232,7 @@ def main(argv=None):
     parser.add_argument("--destination", type=Path)
     parser.add_argument("--quick-smoke", action="store_true")
     parser.add_argument("--windows", type=int, choices=(1, 2), default=2)
+    parser.add_argument("--animate", action="store_true", help="also export a two-second, 60-frame WebP motion preview")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.quick_smoke:
@@ -268,6 +269,10 @@ def main(argv=None):
             draw.text((x+8, y+7), f"{args.effect}  {progress:.0%}", fill=(235, 240, 248))
             frame.save(args.output_dir/f"{args.effect}_{progress:.2f}.png")
         sheet.save(args.output_dir/f"{args.effect}_contact.png")
+        if args.animate:
+            motion = [capture.render(run, index/59)[0] for index in range(60)]
+            motion[0].save(args.output_dir/f"{args.effect}_motion.webp", save_all=True,
+                           append_images=motion[1:], duration=34, loop=0, quality=85, method=4)
     finally:
         capture.close()
     report["retired"] = True
