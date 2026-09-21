@@ -9,6 +9,7 @@ The independent fragment and particle minimum-energy settings are implemented wi
 ## Future Work transitions | active
 
 - [ ] Rework operator-rejected Glass Shatter, Exploding Tiles, Ink Bloom, Tendril Reveal and Melt Drip: substantial geometry, materials and motion, with customizable optics. Execute the corrective checklists in `Docs/Future_Work/Transition_Expansion.md`; previous GL tests did not establish aesthetic acceptance.
+- [ ] Upgrade Crumble in the same pass: solid wall chunks, broken side material and surrounding falling debris, sharing the fracture geometry while preserving its own collapse behavior and settings.
 - [ ] Validate and checkpoint each corrective slice; update `Docs/Reference/Transitions.md` with the actual behavior and controls. Pixel Accretion and Slide remain outside this rework.
 - [~] Awaiting validation after correction: operator visual acceptance and mixed-display/heavy-load freshness. Preserve the unrelated Sphere floor acceptance above.
 
