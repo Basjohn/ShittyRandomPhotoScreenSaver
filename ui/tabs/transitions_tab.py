@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QGroupBox, QScrollArea, QPushButton, QButtonGroup,
     QSpinBox, QDoubleSpinBox,
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import QTimer, Signal, Qt
 from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
@@ -50,6 +50,13 @@ logger = get_logger(__name__)
 _TRANSITION_SETTING_NAMES = get_transition_setting_names()
 
 _SETUP_NAV_KEY = "__setup__"
+_MELT_SETTINGS_LABEL = "Melt Drip (WIP - VERY SHITTY)"
+
+
+def _transition_settings_label(name: str) -> str:
+    """Return presentation-only Settings text without changing stable IDs."""
+
+    return _MELT_SETTINGS_LABEL if name == "Melt Drip" else name
 
 
 def _transition_default(path: str):
@@ -304,6 +311,7 @@ class TransitionsTab(QWidget):
         scroll.setFrameShape(QScrollArea.NoFrame)
         scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
         shared_styles.bind_shared_styles(scroll, "SLIDER_STYLE")
+        self._scroll_area = scroll
         
         # Layout helpers are instance methods (see below) so lazy per-transition
         # page builders can reuse them; local aliases keep the rest of this
@@ -357,7 +365,7 @@ class TransitionsTab(QWidget):
 
         _add_nav_pill(_SETUP_NAV_KEY, "Setup")
         for name in _TRANSITION_SETTING_NAMES:
-            _add_nav_pill(name, name)
+            _add_nav_pill(name, _transition_settings_label(name))
         layout.addWidget(nav_container)
 
         # Duration group (slider: short → long)
@@ -467,7 +475,7 @@ class TransitionsTab(QWidget):
         activation_grid_host = FlowContainer(h_spacing=18, v_spacing=8)
         self._activation_checkboxes = {}
         for name in _TRANSITION_SETTING_NAMES:
-            row = QCheckBox(name)
+            row = QCheckBox(_transition_settings_label(name))
             row.setProperty("circleIndicator", True)
             row.setMinimumWidth(_MODULE_ROW_MIN_WIDTH)
             row.setChecked(True)
@@ -514,7 +522,7 @@ class TransitionsTab(QWidget):
         pool_grid_host = FlowContainer(h_spacing=18, v_spacing=8)
         self._pool_checkboxes = {}
         for name in _TRANSITION_SETTING_NAMES:
-            row = QCheckBox(name)
+            row = QCheckBox(_transition_settings_label(name))
             row.setProperty("circleIndicator", True)
             row.setMinimumWidth(_MODULE_ROW_MIN_WIDTH)
             row.toggled.connect(
@@ -550,7 +558,6 @@ class TransitionsTab(QWidget):
         "Exploding Tiles": "_build_exploding_tiles_group",
         "Directional Pixel Accretion": "_build_pixel_accretion_group",
         "Ink Bloom": "_build_ink_bloom_group",
-        "Tendril Reveal": "_build_tendril_reveal_group",
         "Melt Drip": "_build_melt_drip_group",
     }
 
@@ -568,7 +575,6 @@ class TransitionsTab(QWidget):
         "Exploding Tiles": "exploding_tiles_group",
         "Directional Pixel Accretion": "pixel_accretion_group",
         "Ink Bloom": "ink_bloom_group",
-        "Tendril Reveal": "tendril_reveal_group",
         "Melt Drip": "melt_drip_group",
     }
 
@@ -775,13 +781,6 @@ class TransitionsTab(QWidget):
             cfg = self._new_transition_section(transitions_config, 'ink_bloom', canonical)
             self.ink_bloom_detail_spin.setValue(self._new_transition_number(
                 cfg, 'detail', 'ink_bloom', canonical['detail'], self.ink_bloom_detail_spin, float,
-            ))
-
-        if hasattr(self, 'tendril_reveal_group'):
-            canonical = canonical_transitions['tendril_reveal']
-            cfg = self._new_transition_section(transitions_config, 'tendril_reveal', canonical)
-            self.tendril_reveal_detail_spin.setValue(self._new_transition_number(
-                cfg, 'detail', 'tendril_reveal', canonical['detail'], self.tendril_reveal_detail_spin, float,
             ))
 
         if hasattr(self, 'melt_drip_group'):
@@ -1023,10 +1022,6 @@ class TransitionsTab(QWidget):
             ("depth", "Liquid Depth:", 0., 1., "Height and surface relief of the spreading pigment."),
             ("gloss", "Wet Gloss:", 0., 1., "Wet reflections on the ink surface."),
         ),
-        "tendril_reveal": (
-            ("depth", "Growth Depth:", 0., 1., "Depth of the curling, rounded branches."),
-            ("gloss", "Surface Gloss:", 0., 1., "Reflections on the curved growth surfaces."),
-        ),
         "melt_drip": (
             ("depth", "Liquid Depth:", 0., 1., "Thickness and relief of the liquid sheet and falling drops."),
             ("gloss", "Wet Gloss:", 0., 1., "Reflections on the rounded liquid surfaces."),
@@ -1142,13 +1137,8 @@ class TransitionsTab(QWidget):
             attr="ink_bloom_group", title="Ink Bloom Settings", section="ink_bloom"
         )
 
-    def _build_tendril_reveal_group(self) -> None:
-        self._build_organic_detail_group(
-            attr="tendril_reveal_group", title="Tendril Reveal Settings", section="tendril_reveal"
-        )
-
     def _build_melt_drip_group(self) -> None:
-        self.melt_drip_group = QGroupBox("Melt Drip Settings")
+        self.melt_drip_group = QGroupBox(f"{_MELT_SETTINGS_LABEL} Settings")
         self._style_group_box(self.melt_drip_group)
         layout = QVBoxLayout(self.melt_drip_group)
         layout.setContentsMargins(0, 12, 0, 0)
@@ -1570,6 +1560,40 @@ class TransitionsTab(QWidget):
             return _SETUP_NAV_KEY
         return key
 
+    def _reset_view_scroll(self) -> None:
+        """Anchor semantic Transition navigation at the top of its section."""
+
+        scroll = getattr(self, "_scroll_area", None)
+        if scroll is None:
+            return
+        scroll.verticalScrollBar().setValue(0)
+        QTimer.singleShot(0, lambda: scroll.verticalScrollBar().setValue(0))
+
+    def get_view_state(self) -> dict[str, str]:
+        """Persist the selected Transition pill, never a pixel scroll offset."""
+
+        return {"pill": self._current_nav_key()}
+
+    def restore_view_state(self, state: dict) -> None:
+        """Restore an admitted Transition pill and start it at the section top."""
+
+        requested = _SETUP_NAV_KEY
+        if isinstance(state, dict):
+            value = state.get("pill")
+            if isinstance(value, str) and value in getattr(self, "_nav_buttons", {}):
+                requested = value
+        admitted = self._admit_nav_key(requested)
+        button = getattr(self, "_nav_buttons", {}).get(admitted)
+        previous_loading = getattr(self, "_loading", False)
+        self._loading = True
+        try:
+            if button is not None:
+                button.setChecked(True)
+            self._on_nav_selected(admitted)
+        finally:
+            self._loading = previous_loading
+        self._reset_view_scroll()
+
     def _on_nav_selected(self, key: str) -> None:
         """Show either the SETUP page or one transition's settings groups."""
         # Admission first: a deactivated transition redirects to SETUP before any
@@ -1585,6 +1609,7 @@ class TransitionsTab(QWidget):
         for group in getattr(self, "_transition_setting_groups", []):
             group.setVisible(not show_setup)
         if show_setup:
+            self._reset_view_scroll()
             return
         # ``_current_transition`` is the authoritative edited/manual selection.
         # The hidden combo is only a passive mirror kept for legacy readers.
@@ -1609,6 +1634,7 @@ class TransitionsTab(QWidget):
         # browsing while Random is on leaves Random enabled.
         if not getattr(self, "_loading", False):
             self._save_settings()
+        self._reset_view_scroll()
 
     def _apply_transition_pill_visibility(self) -> None:
         """Reconcile descriptor admission, activation and quarantined controls."""
@@ -1619,14 +1645,12 @@ class TransitionsTab(QWidget):
                 continue
             available = is_transition_available(name)
             activated = self._transition_activated(name)
-            # Quarantined Tendril remains visibly disabled so the pending
-            # removal is explicit; ordinary inactive effects remain hidden.
-            button.setVisible(available and activated or name == "Tendril Reveal")
+            button.setVisible(available and activated)
             button.setEnabled(available and activated)
             button.setToolTip(transition_unavailability_reason(name) if not available else "")
             pool_row = getattr(self, "_pool_checkboxes", {}).get(name)
             if pool_row is not None:
-                pool_row.setVisible(available and activated or name == "Tendril Reveal")
+                pool_row.setVisible(available and activated)
                 pool_row.setEnabled(available and activated)
                 pool_row.setToolTip(transition_unavailability_reason(name) if not available else "")
             activation_row = getattr(self, "_activation_checkboxes", {}).get(name)
@@ -1832,7 +1856,6 @@ class TransitionsTab(QWidget):
             getattr(self, 'pixel_tile_size_spin', None),
             getattr(self, 'pixel_travel_spin', None),
             getattr(self, 'ink_bloom_detail_spin', None),
-            getattr(self, 'tendril_reveal_detail_spin', None),
             getattr(self, 'melt_drip_detail_spin', None),
         ]:
             if w is not None and hasattr(w, 'blockSignals'):
@@ -2287,10 +2310,6 @@ class TransitionsTab(QWidget):
             ink_bloom = {'detail': float(self.ink_bloom_detail_spin.value()), 'direction': None}
         else:
             ink_bloom = _existing_subdict('ink_bloom')
-        if hasattr(self, 'tendril_reveal_group'):
-            tendril_reveal = {'detail': float(self.tendril_reveal_detail_spin.value()), 'direction': None}
-        else:
-            tendril_reveal = _existing_subdict('tendril_reveal')
         if hasattr(self, 'melt_drip_group'):
             melt_drip = {
                 'detail': float(self.melt_drip_detail_spin.value()),
@@ -2302,7 +2321,6 @@ class TransitionsTab(QWidget):
         for section, values in (("crumble", crumble), ("glass_shatter", glass_shatter),
                                 ("exploding_tiles", exploding_tiles),
                                 ("ink_bloom", ink_bloom),
-                                ("tendril_reveal", tendril_reveal),
                                 ("melt_drip", melt_drip)):
             if hasattr(self, f"{section}_group"):
                 for field, *_ in self._SURFACE_CONTROLS[section]:
@@ -2339,7 +2357,6 @@ class TransitionsTab(QWidget):
             'exploding_tiles': exploding_tiles,
             'pixel_accretion': pixel_accretion,
             'ink_bloom': ink_bloom,
-            'tendril_reveal': tendril_reveal,
             'melt_drip': melt_drip,
         }
         # Preserve engine-managed transient random-choice bookkeeping.

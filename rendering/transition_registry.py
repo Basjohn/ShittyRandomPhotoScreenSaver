@@ -118,14 +118,6 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
-        setting_name="Tendril Reveal",
-        stable_id="tendril_reveal",
-        easing_curve=EasingCurve.LINEAR,
-        requires_hw_accel=True,
-        available=False,
-        unavailable_reason="Pending removal: Tendril Reveal is unavailable.",
-    ),
-    TransitionDescriptor(
         setting_name="Melt Drip",
         stable_id="melt_drip",
         easing_curve=EasingCurve.LINEAR,
@@ -216,7 +208,7 @@ def iter_transition_descriptors() -> tuple[TransitionDescriptor, ...]:
 
 
 def get_transition_descriptor(value: str) -> Optional[TransitionDescriptor]:
-    canonical = canonicalize_transition_name(value)
+    canonical = canonicalize_transition_name(value, fallback="")
     if canonical == "Random":
         return None
     return _BY_SETTING_NAME.get(canonical) or _BY_STABLE_ID.get(canonical)

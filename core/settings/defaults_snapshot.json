@@ -73,7 +73,6 @@
       "Particle": true,
       "Ripple": true,
       "Slide": true,
-      "Tendril Reveal": false,
       "Warp Dissolve": true,
       "Wipe": true
     },
@@ -141,7 +140,6 @@
       "Particle": 10524,
       "Ripple": 7200,
       "Slide": 5500,
-      "Tendril Reveal": 2200,
       "Warp Dissolve": 7000,
       "Wipe": 4500
     },
@@ -211,7 +209,6 @@
       "Particle": true,
       "Ripple": true,
       "Slide": false,
-      "Tendril Reveal": false,
       "Warp Dissolve": true,
       "Wipe": true
     },
@@ -222,12 +219,6 @@
     "slide": {
       "direction": "Random",
       "motion_style": "Linear"
-    },
-    "tendril_reveal": {
-      "depth": 0.65,
-      "detail": 1.0,
-      "direction": null,
-      "gloss": 0.6
     },
     "type": "3D Block Spins",
     "wipe": {

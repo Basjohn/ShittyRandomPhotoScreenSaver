@@ -77,8 +77,8 @@ def test_future_transition_parameters_are_bounded_and_seeded_once(
         assert params["detail"] == pytest.approx(2.0)
 
 
-@pytest.mark.parametrize("transition_id", ("ink_bloom", "tendril_reveal"))
-def test_organic_transition_parameters_have_no_direction_authority(transition_id):
+def test_ink_bloom_parameters_have_no_direction_authority():
+    transition_id = "ink_bloom"
     rng = _Rng()
     rng.randint_values = [4321]
     resolved = resolve_parameterized_phase_c_inputs(

@@ -1,7 +1,9 @@
 """Import-free B0 source checks: bounded callback admission, no Qt or COM."""
 from __future__ import annotations
 
+import gc
 import threading
+import weakref
 
 import pytest
 
@@ -100,6 +102,27 @@ def test_device_handover_preempts_old_endpoint_and_requires_gui_rebind():
     assert wakes == ["wake", "wake"]
     assert box.drain() and outputs[-1].volume == pytest.approx(0.9)
     assert not box.push_volume(0, 0.3, False)
+
+
+
+def test_retire_severs_bound_callback_cycles_deterministically():
+    class Owner:
+        def post(self):
+            return True
+
+        def deliver(self, _item):
+            return None
+
+    owner = Owner()
+    owner_ref = weakref.ref(owner)
+    box = AudioEventMailbox(post_wake=owner.post, deliver=owner.deliver)
+    del owner
+    gc.collect()
+    assert owner_ref() is not None  # mailbox callbacks retain the owner while live
+
+    box.retire()
+    gc.collect()
+    assert owner_ref() is None
 
 
 def test_late_callback_after_retirement_and_queued_wake_are_inert():

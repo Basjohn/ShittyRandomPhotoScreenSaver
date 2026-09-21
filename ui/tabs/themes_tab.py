@@ -11,7 +11,7 @@ Internal navigation:
 from __future__ import annotations
 from typing import Optional
 from time import perf_counter_ns
-from PySide6.QtCore import QLineF, QSignalBlocker, QRectF, QSize, Qt
+from PySide6.QtCore import QLineF, QSignalBlocker, QTimer, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QLabel, QListWidget,
     QListWidgetItem, QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
@@ -134,6 +134,7 @@ class ThemesTab(QWidget):
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setStyleSheet(shared_styles.SCROLL_AREA_STYLE)
+        self._scroll_area=scroll
         content=QWidget(); layout=QVBoxLayout(content)
         layout.setContentsMargins(24,24,24,24); layout.setSpacing(16)
         title=QLabel("Themes")
@@ -173,11 +174,34 @@ class ThemesTab(QWidget):
         )
         return button
 
+    def _reset_view_scroll(self) -> None:
+        scroll=getattr(self,"_scroll_area",None)
+        if scroll is None:
+            return
+        scroll.verticalScrollBar().setValue(0)
+        QTimer.singleShot(0,lambda:scroll.verticalScrollBar().setValue(0))
+
+    def get_view_state(self) -> dict[str,str]:
+        page=self._page_stack.currentIndex()
+        return {"page":"widgets" if page == _WIDGET_THEMES_PAGE else "settings"}
+
+    def restore_view_state(self,state:dict) -> None:
+        page_name=state.get("page") if isinstance(state,dict) else None
+        page_index=_WIDGET_THEMES_PAGE if page_name == "widgets" else _SETTING_THEMES_PAGE
+        button=self._nav_group.button(page_index)
+        if button is not None:
+            button.setChecked(True)
+        self._select_page(page_index)
+
     def _select_page(self,page_index):
         if page_index in (_SETTING_THEMES_PAGE,_WIDGET_THEMES_PAGE):
             self._page_stack.setCurrentIndex(page_index)
+            button=self._nav_group.button(page_index)
+            if button is not None and not button.isChecked():
+                button.setChecked(True)
             if page_index == _WIDGET_THEMES_PAGE:
                 self._refresh_widget_theme_page_from_state()
+            self._reset_view_scroll()
 
     def _build_setting_themes_page(self):
         page=QWidget(); page_layout=QVBoxLayout(page)

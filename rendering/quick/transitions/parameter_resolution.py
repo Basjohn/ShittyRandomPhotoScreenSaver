@@ -722,7 +722,6 @@ _RESOLVERS = {
     "exploding_tiles": _resolve_exploding_tiles,
     "pixel_accretion": _resolve_pixel_accretion,
     "ink_bloom": lambda settings, rng: _resolve_organic("ink_bloom", settings, rng),
-    "tendril_reveal": lambda settings, rng: _resolve_organic("tendril_reveal", settings, rng),
     "melt_drip": _resolve_melt_drip,
 }
 

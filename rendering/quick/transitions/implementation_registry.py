@@ -86,10 +86,6 @@ _IMPLEMENTATIONS = (
         module_name="rendering.quick.transitions.implementations.ink_bloom",
     ),
     QuickTransitionImplementationDescriptor(
-        transition_id="tendril_reveal",
-        module_name="rendering.quick.transitions.implementations.tendril_reveal",
-    ),
-    QuickTransitionImplementationDescriptor(
         transition_id="melt_drip",
         module_name="rendering.quick.transitions.implementations.melt_drip",
     ),

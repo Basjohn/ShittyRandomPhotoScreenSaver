@@ -229,7 +229,6 @@ def resolve_quick_transition_spec(
         "exploding_tiles",
         "pixel_accretion",
         "ink_bloom",
-        "tendril_reveal",
         "melt_drip",
     }:
         resolved = resolve_parameterized_phase_c_inputs(

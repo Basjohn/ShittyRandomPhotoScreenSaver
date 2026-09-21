@@ -487,6 +487,43 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             )
         self._update_rainbow_visibility()
 
+    def _reset_view_scroll(self) -> None:
+        scroll = self._scroll_area
+        if scroll is None:
+            return
+
+        def _apply() -> None:
+            scroll.verticalScrollBar().setValue(0)
+
+        self._schedule_owned_single_shot(0, _apply)
+
+    def get_view_state(self) -> Dict[str, Any]:
+        """Persist the selected Visualizer builder, never a pixel scroll offset."""
+
+        if self._page_stack.currentWidget() is self._mode_page:
+            return {
+                "page": "mode",
+                "mode_id": str(self._active_visualizer_mode_id),
+            }
+        return {"page": "setup"}
+
+    def restore_view_state(self, state: Dict[str, Any]) -> None:
+        if not isinstance(state, dict):
+            self._select_setup_page()
+            return
+        page = str(state.get("page", "setup") or "setup").strip().lower()
+        mode_id = str(state.get("mode_id", "") or "").strip().lower()
+        if page == "mode" and mode_id in self._vis_body_host.enabled_modes:
+            previous_loading = self._loading
+            self._loading = True
+            try:
+                self._select_mode_page(mode_id)
+            finally:
+                self._loading = previous_loading
+        else:
+            self._select_setup_page()
+        self._reset_view_scroll()
+
     def set_family_capability_available(self, available: bool) -> None:
         """Mirror external Widget-family capability without owning that state.
 
@@ -512,6 +549,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._park_custom_accessories()
         self._setup_pill.setChecked(True)
         self._page_stack.setCurrentWidget(self._setup_page)
+        self._reset_view_scroll()
 
     def _select_mode_page(self, mode_id: str) -> None:
         target = str(mode_id or "").strip().lower()
@@ -551,6 +589,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._update_rainbow_visibility()
         self._page_stack.setCurrentWidget(self._mode_page)
         self._mode_pills[target].setChecked(True)
+        self._reset_view_scroll()
         # A mode change is a discrete authority change, not slider chatter: persist
         # it immediately so any subsequent preset interaction reads the same mode.
         self._save_settings_now()

@@ -195,7 +195,6 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         self._widget_section_descriptors = get_widgets_tab_settings_section_descriptors()
         self._widget_defaults = self._load_widget_defaults()
         self._current_subtab = get_default_widget_section_index(self._widget_section_descriptors)
-        self._subtab_scroll_cache: Dict[int, int] = {}
         self._scroll_area: Optional[QScrollArea] = None
         self._subtab_content_built: set[int] = set()
         self._subtab_content_building: set[int] = set()
@@ -1207,15 +1206,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         subtab_id = admitted
         if self._lazy_sections:
             self._build_lazy_subtab_content(int(subtab_id))
-        prev = self._current_subtab
-        # Save outgoing subtab scroll position
         sa = getattr(self, '_scroll_area', None)
-        if sa is not None and prev != subtab_id:
-            try:
-                self._subtab_scroll_cache[prev] = sa.verticalScrollBar().value()
-            except Exception:
-                pass
-
         self._current_subtab = int(subtab_id)
         for idx, container in enumerate(self._subtab_containers):
             if container is None:
@@ -1225,11 +1216,10 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             except Exception:
                 pass
 
-        # Restore incoming subtab scroll position (deferred so layout settles)
-        if sa is not None and subtab_id in self._subtab_scroll_cache:
-            saved = self._subtab_scroll_cache[subtab_id]
+        # Semantic section restoration always starts at the section top.
+        if sa is not None:
             def _restore() -> None:
-                sa.verticalScrollBar().setValue(saved)
+                sa.verticalScrollBar().setValue(0)
 
             self._schedule_owned_single_shot(0, _restore)
 
@@ -1244,27 +1234,13 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         state: Dict[str, Any] = {"subtab": current_subtab}
         if 0 <= current_subtab < len(self._widget_section_descriptors):
             state["subtab_id"] = self._widget_section_descriptors[current_subtab].section_id
-        # Snapshot current subtab's scroll position into cache before saving
-        sa = getattr(self, "_scroll_area", None)
-        if sa is not None:
-            try:
-                self._subtab_scroll_cache[self._current_subtab] = sa.verticalScrollBar().value()
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-        state["subtab_scrolls"] = dict(self._subtab_scroll_cache)
         return state
 
     def restore_view_state(self, state: Dict[str, Any]) -> None:
         if not isinstance(state, dict):
             return
-        # Restore per-subtab scroll cache
-        saved_scrolls = state.get("subtab_scrolls")
-        if isinstance(saved_scrolls, dict):
-            for k, v in saved_scrolls.items():
-                try:
-                    self._subtab_scroll_cache[int(k)] = int(v)
-                except (TypeError, ValueError):
-                    pass
+        # Legacy ``subtab_scrolls`` is intentionally ignored. Persist semantic
+        # section identity only; the admitted section always opens at its top.
         subtab_id = resolve_widget_section_index_from_view_state(state, self._widget_section_descriptors)
         # Never restore navigation onto a deactivated family's page.
         subtab_id = self._admit_section_index(subtab_id)

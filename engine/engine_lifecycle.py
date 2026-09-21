@@ -140,9 +140,11 @@ def teardown_display_runtime(
     quiesce = getattr(manager, "quiesce_all", None)
     if callable(quiesce):
         quiesce()
-    clear = getattr(manager, "clear_all", None)
-    if callable(clear):
-        clear()
+    # Full runtime teardown must never route through ``clear_all``. Clearing is
+    # a live-runtime operation: an active transition is cancelled to its
+    # destination and completion callbacks are dispatched. During replacement
+    # or terminal destruction the retiring generation must instead be fenced,
+    # then let each Quick runtime silently terminalize its retained transition.
 
     thread_manager = getattr(engine, "thread_manager", None)
     cancel_generation_callbacks = getattr(
