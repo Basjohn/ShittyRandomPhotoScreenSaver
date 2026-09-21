@@ -84,7 +84,9 @@ _WIPE_DIRECTION_MAP = {
     "Diagonal TL-BR": "diag_tl_br",
     "Diagonal TR-BL": "diag_tr_bl",
 }
-_SLIDE_MOTION_STYLES = frozenset({"Linear", "Elastic", "Wobble", "Flex"})
+_SLIDE_MOTION_STYLES = frozenset(
+    {"Linear", "Elastic", "Wobble", "Flex", "Perspective Push"}
+)
 
 
 def _mapping(value: object) -> Mapping[str, Any]:
@@ -223,6 +225,12 @@ def resolve_quick_transition_spec(
         "crumble",
         "particle",
         "burn",
+        "glass_shatter",
+        "exploding_tiles",
+        "pixel_accretion",
+        "ink_bloom",
+        "tendril_reveal",
+        "melt_drip",
     }:
         resolved = resolve_parameterized_phase_c_inputs(
             transition_id,

@@ -449,6 +449,8 @@ another display must not require or construct a duplicate Media presentation on 
 
 ## Transitions
 
+Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Ink Bloom, Tendril Reveal and Melt Drip use the canonical catalog and lazy Quick host, initially deactivated pending operator acceptance. Glass and Tiles extend the inline real-3D mesh path; Accretion uses bounded instanced translating micro-tiles. Slide Perspective Push remains one Slide motion option and uses a true tilted-plane projective mapping with sealed coverage. See `Docs/Reference/Transitions.md` for appearance, ownership and limits; live acceptance stays in `Current_Plan.md`.
+
 Transitions resolve canonical settings/admission into immutable request/run state and lazy Quick rendering. Old
 `GLCompositor*Transition` pixels are not destination authority after caller proof.
 

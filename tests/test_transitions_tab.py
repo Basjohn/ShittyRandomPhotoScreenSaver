@@ -1,6 +1,7 @@
 """Tests for TransitionsTab behaviour (UI-level transition settings)."""
 import pytest
 import uuid
+from copy import deepcopy
 from PySide6.QtWidgets import QApplication
 
 from ui.tabs.transitions_tab import TransitionsTab
@@ -114,6 +115,146 @@ def test_transition_combo_uses_registry_order(qapp, settings_manager, qtbot):
 
     combo_items = [tab.transition_combo.itemText(i) for i in range(tab.transition_combo.count())]
     assert combo_items == get_transition_setting_names()
+
+
+def test_glass_shatter_page_is_lazy_and_round_trips_authored_controls(
+    qapp, settings_manager, qtbot
+):
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    assert not hasattr(tab, "glass_shatter_group")
+
+    tab._activation_checkboxes["Glass Shatter"].setChecked(True)
+    tab._on_nav_selected("Glass Shatter")
+    assert hasattr(tab, "glass_shatter_group")
+    tab.glass_shards_spin.setValue(120)
+    tab.glass_depth_spin.setValue(1.1)
+    tab.direction_combo.setCurrentText("Center Out")
+    tab._save_settings()
+
+    section = settings_manager.get("transitions", {})["glass_shatter"]
+    assert section == {"shards": 120, "depth": 1.1, "direction": "Center Out"}
+
+
+def test_external_transition_edit_hydrates_built_page_before_duration_save(
+    qapp, settings_manager, qtbot
+):
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._activation_checkboxes["Glass Shatter"].setChecked(True)
+    tab._on_nav_selected("Glass Shatter")
+    assert hasattr(tab, "glass_shatter_group")
+
+    external = deepcopy(settings_manager.get("transitions", {}))
+    external["glass_shatter"]["shards"] = 120
+    external["glass_shatter"]["depth"] = 1.2
+    external["durations"]["Glass Shatter"] = 2345
+    settings_manager.set("transitions", external)
+    qapp.processEvents()
+
+    assert tab.glass_shards_spin.value() == 120
+    assert tab.glass_depth_spin.value() == pytest.approx(1.2)
+    assert tab._duration_by_type["Glass Shatter"] == 2345
+
+    # A duration-only save must preserve the externally authored controls.
+    tab._duration_by_type["Glass Shatter"] = 2450
+    tab._save_settings()
+    persisted = settings_manager.get("transitions", {})
+    assert persisted["glass_shatter"]["shards"] == 120
+    assert persisted["glass_shatter"]["depth"] == pytest.approx(1.2)
+
+    # External deactivation bypasses the checkbox signal, so the live page
+    # must still be retired at the settings refresh seam.
+    external = deepcopy(persisted)
+    external["activation"]["Glass Shatter"] = False
+    settings_manager.set("transitions", external)
+    qapp.processEvents()
+    assert not hasattr(tab, "glass_shatter_group")
+    assert tab._current_nav_key() == "__setup__"
+
+
+def test_external_malformed_new_transition_sections_repair_before_save(
+    qapp, settings_manager, qtbot
+):
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    names = (
+        "Glass Shatter",
+        "Exploding Tiles",
+        "Directional Pixel Accretion",
+        "Ink Bloom",
+        "Tendril Reveal",
+        "Melt Drip",
+    )
+    for name in names:
+        tab._activation_checkboxes[name].setChecked(True)
+        tab._on_nav_selected(name)
+
+    external = deepcopy(settings_manager.get("transitions", {}))
+    external["glass_shatter"] = {
+        "shards": "bad",
+        "depth": "bad",
+        "direction": "Center Out",
+    }
+    for section in (
+        "exploding_tiles",
+        "pixel_accretion",
+        "ink_bloom",
+        "tendril_reveal",
+        "melt_drip",
+    ):
+        external[section] = "bad"
+    settings_manager.set("transitions", external)
+    qapp.processEvents()
+
+    canonical = get_default_settings()["transitions"]
+    assert tab.glass_shards_spin.value() == canonical["glass_shatter"]["shards"]
+    assert tab.glass_depth_spin.value() == pytest.approx(canonical["glass_shatter"]["depth"])
+    assert tab.exploding_tiles_columns_spin.value() == canonical["exploding_tiles"]["columns"]
+    assert tab.exploding_tiles_depth_spin.value() == pytest.approx(canonical["exploding_tiles"]["depth"])
+    assert tab.pixel_tile_size_spin.value() == canonical["pixel_accretion"]["tile_size"]
+    assert tab.pixel_travel_spin.value() == pytest.approx(canonical["pixel_accretion"]["travel"])
+    assert tab.ink_bloom_detail_spin.value() == pytest.approx(canonical["ink_bloom"]["detail"])
+    assert tab.tendril_reveal_detail_spin.value() == pytest.approx(canonical["tendril_reveal"]["detail"])
+    assert tab.melt_drip_detail_spin.value() == pytest.approx(canonical["melt_drip"]["detail"])
+
+    # An unrelated duration write must serialize repaired controls rather than
+    # resurrecting malformed external sections.
+    tab._duration_by_type["Melt Drip"] = 2400
+    tab._save_settings()
+    persisted = settings_manager.get("transitions", {})
+    assert persisted["glass_shatter"]["shards"] == canonical["glass_shatter"]["shards"]
+    assert persisted["exploding_tiles"]["columns"] == canonical["exploding_tiles"]["columns"]
+    assert persisted["pixel_accretion"]["tile_size"] == canonical["pixel_accretion"]["tile_size"]
+    assert persisted["ink_bloom"]["detail"] == pytest.approx(canonical["ink_bloom"]["detail"])
+    assert persisted["tendril_reveal"]["detail"] == pytest.approx(canonical["tendril_reveal"]["detail"])
+    assert persisted["melt_drip"]["detail"] == pytest.approx(canonical["melt_drip"]["detail"])
+
+
+def test_lazy_transition_page_rolls_back_failed_hydration_and_can_retry(
+    qapp, settings_manager, qtbot, monkeypatch
+):
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._activation_checkboxes["Glass Shatter"].setChecked(True)
+
+    original_hydrate = tab._hydrate_transition_page
+
+    def fail_once(_name):
+        raise RuntimeError("test hydration failure")
+
+    monkeypatch.setattr(tab, "_hydrate_transition_page", fail_once)
+    with pytest.raises(RuntimeError, match="test hydration failure"):
+        tab._ensure_transition_page("Glass Shatter")
+    assert not hasattr(tab, "glass_shatter_group")
+    assert not hasattr(tab, "glass_shards_spin")
+    assert "Glass Shatter" not in tab._built_transition_pages
+
+    monkeypatch.setattr(tab, "_hydrate_transition_page", original_hydrate)
+    tab._ensure_transition_page("Glass Shatter")
+    assert hasattr(tab, "glass_shatter_group")
+    assert hasattr(tab, "glass_shards_spin")
+    assert "Glass Shatter" in tab._built_transition_pages
 
 
 def test_transition_easing_control_and_saved_preference_are_retired(

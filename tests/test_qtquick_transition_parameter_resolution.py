@@ -41,6 +41,55 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
     assert resolved.parameter_dict() == {"feather": pytest.approx(0.04)}
 
 
+@pytest.mark.parametrize(
+    ("transition_id", "section", "expected_direction", "expected_keys"),
+    [
+        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth"}),
+        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth"}),
+        ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel"}),
+        ("melt_drip", "melt_drip", "down", {"seed", "detail"}),
+    ],
+)
+def test_future_transition_parameters_are_bounded_and_seeded_once(
+    transition_id, section, expected_direction, expected_keys
+):
+    rng = _Rng()
+    rng.choice_values = [expected_direction]
+    rng.randint_values = [1234]
+    resolved = resolve_parameterized_phase_c_inputs(
+        transition_id,
+        {section: {"direction": "Random", "shards": 999, "columns": 999,
+                   "depth": 99.0, "tile_size": 99, "travel": 9.0,
+                   "detail": 9.0}},
+        random_source=rng,
+    )
+    assert resolved.direction == expected_direction
+    params = resolved.parameter_dict()
+    assert set(params) == expected_keys
+    assert params["seed"] == 1234
+    if transition_id == "glass_shatter":
+        assert params["shards"] == 180 and params["depth"] == pytest.approx(1.5)
+    elif transition_id == "exploding_tiles":
+        assert params["columns"] == 48 and params["depth"] == pytest.approx(1.5)
+    elif transition_id == "pixel_accretion":
+        assert params["tile_size"] == 32 and params["travel"] == pytest.approx(1.0)
+    else:
+        assert params["detail"] == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize("transition_id", ("ink_bloom", "tendril_reveal"))
+def test_organic_transition_parameters_have_no_direction_authority(transition_id):
+    rng = _Rng()
+    rng.randint_values = [4321]
+    resolved = resolve_parameterized_phase_c_inputs(
+        transition_id,
+        {transition_id: {"detail": 0.5, "direction": "ignored"}},
+        random_source=rng,
+    )
+    assert resolved.direction is None
+    assert resolved.parameter_dict() == {"detail": pytest.approx(0.5), "seed": 4321}
+
+
 def test_diffuse_resolves_shape_name_and_block_size():
     resolved = resolve_parameterized_phase_c_inputs(
         "diffuse",

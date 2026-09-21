@@ -164,18 +164,13 @@ Prefer shared, dependency-light primitives for the parts the two consumers have 
 - GL-state restoration helpers that compose with the existing Quick render fence;
 - tiny presentation-neutral normal/lighting math only after identical semantics are demonstrated.
 
-**Instancing is a second-consumer extraction candidate, not current infrastructure work.** When the next real instanced
-consumer (for example Extruded Spectrum, Exploding Tiles or Reactive Particle Field) is implemented, compare its static
-mesh + instance-buffer layout/upload/lifetime machinery with Voxel Sphere. Extract only the smallest identical helper if
-the concrete implementations genuinely match; do not pre-build a generic instancing engine from Sphere alone.
+**Instancing now has concrete transition consumers.** Exploding Tiles and Directional Pixel Accretion derive their bounded cells from `gl_InstanceID`; they do not need Sphere's instance-buffer upload machinery. They share only small context-local program/static-mesh/underlay/depth primitives with Glass Shatter. Sphere's distinct shell-instance state remains local. A later consumer must still justify any further extraction from matching source, not hypothetical reuse.
 
 Keep the transition run, source/destination texture ownership, fracture/tile per-run state, Visualizer audio/logical state,
 Sphere deformation/materials and every feature's authored shader semantics local. Do **not** grow a generic camera tree,
 material hierarchy, physics engine or always-resident "SRPSS 3D engine". Heavy shared resources remain lazy and dormant.
 
-Future **Glass Shatter**, **Exploding Tiles**, Slide **Perspective Push**, the optional tiny-Z pile in **Directional Pixel
-Accretion**, and later page-curl/fold/cloth-like ideas should inspect this substrate first instead of inventing another 3D
-resource/depth foundation. Extract only what their concrete implementation proves reusable.
+The current transition expansion reuses this substrate. Later page-curl/fold/cloth-like ideas should inspect both existing mesh consumers and the small shared transition helpers before adding resource/depth machinery. Extract only what a concrete implementation proves reusable.
 
 For a **deactivated** transition: keep cheap metadata available, exclude it from Random/Cycle, do not
 import heavy implementation solely for catalog construction, do not compile effect shaders, do not
@@ -204,181 +199,13 @@ Performance rules:
 
 ---
 
-# 2. Slide — remaining Perspective Push option
+# 2. Activated transition expansion
 
-- [ ] If requested, add Perspective Push as one option within the existing Slide descriptor/renderer/Settings owner, not a new effect ID; validate render/perf/retirement and unchanged older Slide modifiers.
+Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Slide Perspective Push, Ink Bloom, Tendril Reveal and Melt Drip are implemented through the canonical Quick path. They are no longer dormant implementation ideas. The six new capabilities start deactivated; operator visual quality and representative heavy-load/mixed-display acceptance remain open.
 
-Linear / Elastic / Wobble / Flex are landed current architecture and are intentionally absent from future work.
-The only surviving Slide idea here is **Perspective Push**: a restrained true-3D presentation option inside the one
-canonical Slide transition, not a separate transition identity.
-
-Source may tilt slightly away and/or destination may push into plane while moving. Use shallow card geometry, modest
-perspective, restrained yaw/pitch/Z and a sealed-coverage strategy. It shares Slide's one canonical progress/coverage
-owner and must collapse exactly to the destination at completion.
-
-Do not add a second clock, transition ID, Random/Cycle entry or independent lifecycle. If implemented, first inspect the
-current landed Slide implementation and the proven Quick 3D resource/depth seams rather than reviving the old proposal.
-
----
-
-# 3. Glass Shatter
-
-- [ ] If requested, implement Glass Shatter via the canonical transition catalog, one lazy local 3D renderer and existing Quick host; prove resource cleanup, deterministic shards and heavy-run neutrality before admission.
-
-Old image fractures into convincing glass-like shards that break away in a selected direction or from
-a **Center Out** impact, revealing destination beneath.
-
-Initial modes:
-
-- Left;
-- Right;
-- Up;
-- Down;
-- diagonal TL -> BR;
-- diagonal TR -> BL;
-- Center Out.
-
-Directional activation should use centroid projection + bounded seeded jitter. Center Out uses radial
-distance + jitter. The eye should read one coherent break wave, not random disappearance.
-
-Generate one deterministic fracture mesh once per run. Candidate: seeded normalized sites,
-Voronoi/Delaunay-style cells (or bounded irregular substitute), triangulated once and uploaded in
-compact buffers with per-shard centroid/activation/launch/rotation/Z/edge metadata.
-
-After activation, shards have analytic XY impulse, real Z travel, arbitrary 3D rotation axis,
-angular velocity, optional gravity, and directional/radial launch bias. Avoid frame-by-frame CPU physics.
-
-Glass appearance should prioritize convincing bounded rendering:
-
-- true perspective/depth;
-- source texture continuously mapped across original fracture coordinates;
-- bright edge/Fresnel response;
-- cool/white edge tint;
-- specular from transformed normal;
-- subtle transmissive/desaturated body;
-- optional tiny refraction offset;
-- backside darkening/alternate sheen;
-- destination full-screen underneath.
-
-Planar shards with real 3D rotation are acceptable initially. Add shallow extrusion only if it
-materially improves the look. No ray tracing or unbounded blur/refraction.
-
-Validation: deterministic fracture, directional/Center Out falloff, exact endpoints, destination
-always underneath departed shards, actual depth/rotation, bounded resources, clean dormancy/release,
-and later eyes-on glass/specular/edge quality.
-
----
-
-# 4. Exploding Tiles
-
-- [ ] If requested, integrate an instanced bounded Exploding Tiles renderer through the canonical transition path; avoid separate staging/presentation machinery.
-
-Structured tiles launch out of the image plane with real 3D rotation/depth while progressively
-revealing destination.
-
-Distinct from Block Puzzle Flip (pieces leave the plane), Crumble (regular rather than organic), and
-Glass Shatter (solid regular pieces rather than irregular glass).
-
-Strong candidate for instancing: one quad or shallow cuboid mesh; per instance derive grid coordinate,
-UV rectangle, activation delay, seeded rotation, launch vector, Z impulse and optional shrink from
-`gl_InstanceID`, grid size and seed.
-
-Modes may include Center Out, cardinals, diagonals, and later seeded impact point.
-
-Bounded visual additions: key light, mild specular, shaded side faces, short motion ghost, slight
-scale reduction, destination underlay.
-
----
-
-# 5. Directional Pixel Accretion
-
-- [ ] If requested, implement one deterministic, lazily loaded Directional Pixel Accretion transition in the existing registry/Quick host with bounded update/resource cost and removal proof.
-
-Working name: **Directional Pixel Accretion**. Alternatives: Pixel Build, Pixel Drift Build,
-Pixel Cascade.
-
-Destination rapidly assembles from many visible micro-tiles. At run start one direction resolves and
-**every micro-tile follows that same event direction**.
-
-For a bottom-left event:
-
-```text
-one destination micro-tile slides into target
-        ↓
-another follows from the same direction and lands next/over it
-        ↓
-thousands rapidly accrete in a coherent directional wave
-        ↓
-complete destination image
-```
-
-Actual translation is essential; this must not become a pixel dissolve/reveal.
-
-Target directions should include at least the eight compass directions. Random resolves once per run.
-
-Preferred implementation: one instanced micro-quad draw over fullscreen source underlay.
-
-For an NxM grid:
-
-- derive row/column from `gl_InstanceID`;
-- derive deterministic activation variation from row/column/seed;
-- derive target position/UV analytically;
-- derive local progress from canonical time + activation rank;
-- translate from offset along event vector into final target;
-- sample destination texture using final tile UV rectangle.
-
-Example only: 2560x1440 at 8x8 visual micro-tiles is about 57,600 instances. The actual adaptive cap
-must be measured; 4K should enlarge visual tile size as needed.
-
-Primary activation rank:
-
-```text
-rank = projection(target_position, event_direction)
-```
-
-Add small bounded seeded variation and optional low-frequency orthogonal noise so the front is coherent
-but organic.
-
-To sell the "another slides on top" piling feeling: use tiny analytic Z/depth or deterministic ordering,
-slight temporary oversize/height bump, then exact target bounds.
-
-Optional ghost/motion trail: one/two faded echo instances or a second instanced draw for short offset
-copies. Avoid full-screen multi-sample motion blur.
-
-Endpoints: exact source at 0; source remains underneath during run; exact fullscreen destination at 1.
-
----
-
-# 6. Organic-feeling transition ideas
-
-General goal: effects that feel grown, fluid, torn, burned, cellular or materially organic rather than
-rectangular UI animations.
-
-## 6.1 Organic Growth / Ink Bloom
-
-- [ ] If requested, prototype a bounded shader/local state using the current transition host; reject unbounded growth or a second frame cadence.
-
-Destination grows through several irregular connected fronts like ink, lichen or pigment spreading.
-
-Cheap candidate: small seeded growth centers + distance field + domain-warped FBM/noise + advancing
-threshold + thin wet/colored edge. Do not CPU flood-fill each frame.
-
-## 6.2 Tendril / Vein Reveal
-
-Branching lines spread and thicken until destination takes over.
-
-Candidates: flow field + warped ridge noise, several analytic branch seeds, or one deterministic
-low-resolution growth mask generated once and animated by threshold.
-
-## 6.3 Melt / Drip
-
-Source softens/runs in a gravity direction while destination is revealed.
-
-Candidate: seeded per-column/region thresholds, bounded UV stretch near melt front, a few analytic
-rounded drips, destination underlay, no general fluid simulation.
-
-Avoid raymarching for prestige, unbounded iterative simulation, per-pixel CPU state, and giant blur
-chains.
+- Current appearance, controls and resource contracts: `Docs/Reference/Transitions.md`.
+- Remaining actionable acceptance: `Current_Plan.md` and `Docs/Future_Work/Transition_Expansion.md`.
+- Do not reimplement these effects from old backlog proposals or broaden this activation to the Visualizer ideas below.
 
 ---
 
@@ -500,18 +327,15 @@ other viewport-derived invariants. The feature therefore belongs at the shared V
 
 This ranking contains dormant ideas only. Active/promoted work is deliberately absent; `Current_Plan.md` is the sole active sequencing authority.
 
-1. **Directional Pixel Accretion**;
-2. **Glass Shatter**;
-3. **Exploding Tiles**;
-4. **Slide Perspective Push** — remaining optional Slide modifier;
-5. **Deformable 3D Sphere / Blob Sphere experiment**;
-6. **Organic Growth / Ink Bloom** prototype;
-7. other 3D visualizer experiments;
-8. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use without changing ownership.
+1. **Deformable 3D Sphere / Blob Sphere experiment**;
+2. other 3D visualizer experiments;
+3. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use without changing ownership.
+
+Activated transitions are tracked in the live plan, not this dormant ranking.
 
 Games You Follow and the system volume/mute OSD are implemented. Their durable product contracts live in `Docs/Reference/`; reopen either only for a concrete defect or an explicitly requested extension.
 
-Glass Shatter, Directional Pixel Accretion and the Deformable 3D Sphere are worth preserving even if their first prototypes are abandoned. Their intended identities should not collapse into generic `shatter`, `pixel dissolve`, or `audio sphere` effects.
+The Deformable 3D Sphere idea is worth preserving even if its first prototype is abandoned. Its identity should not collapse into a generic audio sphere. Current Glass Shatter and Accretion identities are owned by the transition reference.
 
 Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a queued feature. Reconsider only if a future renderer architecture independently justifies the capability; begin from the rejected-experiment record rather than reviving 2026-09-02 debris.
 

@@ -26,6 +26,12 @@ class TransitionType(Enum):
     CRUMBLE = "Crumble"
     PARTICLE = "Particle"
     BURN = "Burn"
+    GLASS_SHATTER = "Glass Shatter"
+    EXPLODING_TILES = "Exploding Tiles"
+    PIXEL_ACCRETION = "Directional Pixel Accretion"
+    INK_BLOOM = "Ink Bloom"
+    TENDRIL_REVEAL = "Tendril Reveal"
+    MELT_DRIP = "Melt Drip"
 
 
 class WidgetPosition(Enum):

@@ -53,7 +53,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
-| transitions | `Docs/Guides/Transition_Change_Checklist.md` |
+| transitions | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
 | active transition expansion | `Docs/Future_Work/Transition_Expansion.md` |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
 | logging / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |
@@ -92,4 +92,3 @@ Any production change that touches Bubble reaction/timing requires active-music 
 ## Documentation hygiene
 
 Do not add another inventory/changelog/history layer. Closed decompositions are consolidated into current contracts or Historical Bugs and then deleted from the live docs tree. Persisted-input compatibility bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated — not a backlog); caller-dead residue is deleted outright, not tracked in a register. When paths move, update this router and all live cross-references in the same checkpoint.
-

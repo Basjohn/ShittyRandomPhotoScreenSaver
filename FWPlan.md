@@ -10,10 +10,6 @@ See `Current_Plan.md`. Games You Follow and the system-audio OSD are implemented
 
 ## Dormant product/effect options (not permission to implement automatically)
 
-- [ ] **Directional Pixel Accretion**: design a bounded, deterministic Quick transition inside the existing canonical registry and lazy renderer seam. See `Future_Work.md`.
-- [ ] **Glass Shatter** and **Exploding Tiles**: use native current transition path with per-implementation resources, bounded geometry and documented clean retirement, not a separate experimental engine.
-- [ ] **Slide Perspective Push**: extend the existing Slide option owner if it remains a modifier, not a new transition ID.
-- [ ] **Organic Growth / Ink Bloom**: bounded shader variant only if performance and visual value justify it.
 - [ ] **Deformable Blob Sphere and other 3D Visualizers**: own distinct mode/renderer lifecycle; do not mutate the accepted Voxel Sphere or Bubble reaction contract.
 - [ ] **CUSTOM Visualizer quarter-turn:** keep separate until explicitly requested; preserve per-mode authored/preset authority and native golden proof.
 - [ ] **Settings FlowContainer polish:** only for a demonstrated layout problem, not speculative restructuring.

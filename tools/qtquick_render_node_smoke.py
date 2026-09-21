@@ -257,7 +257,7 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--slide-motion-style",
-        choices=("Linear", "Elastic", "Wobble", "Flex"),
+        choices=("Linear", "Elastic", "Wobble", "Flex", "Perspective Push"),
         default="Linear",
     )
     parser.add_argument("--output", type=Path)

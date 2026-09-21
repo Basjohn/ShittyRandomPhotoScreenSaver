@@ -140,3 +140,60 @@ def test_admitted_random_choice_and_block_flip_geometry_are_frozen() -> None:
     assert spec.duration_ms == 777
     assert spec.direction == "diag_tl_br"
     assert spec.parameters == (("cols", 11), ("rows", 7))
+
+
+_FUTURE_TRANSITIONS = (
+    ("Glass Shatter", "glass_shatter", {"direction": "Center Out", "shards": 120, "depth": 1.1}),
+    ("Exploding Tiles", "exploding_tiles", {"direction": "Diagonal TL-BR", "columns": 22, "depth": 1.0}),
+    ("Directional Pixel Accretion", "pixel_accretion", {"direction": "Diagonal BR-TL", "tile_size": 12, "travel": 0.6}),
+    ("Ink Bloom", "ink_bloom", {"detail": 1.4, "direction": None}),
+    ("Tendril Reveal", "tendril_reveal", {"detail": 0.8, "direction": None}),
+    ("Melt Drip", "melt_drip", {"detail": 1.2, "direction": "Top to Bottom"}),
+)
+
+
+@pytest.mark.parametrize("setting_name,transition_id,section", _FUTURE_TRANSITIONS)
+def test_new_transition_ids_resolve_through_manual_and_random_admission(
+    setting_name, transition_id, section
+) -> None:
+    durations = {setting_name: 2100}
+    activation = {setting_name: True}
+    pool = {setting_name: True}
+    manual = resolve_quick_transition_spec(
+        _Settings(
+            {
+                "type": setting_name,
+                "random_always": False,
+                "activation": activation,
+                "durations": durations,
+                transition_id: section,
+            },
+            hw_accel=True,
+        ),
+        random_source=_Rng("left"),
+    )
+    assert manual is not None
+    assert manual.transition_id == transition_id
+    assert manual.duration_ms == 2100
+    assert dict(manual.parameters)["seed"] == 1
+
+    random = resolve_quick_transition_spec(
+        _Settings(
+            {
+                "type": "Crossfade",
+                "random_always": True,
+                "random_choice": setting_name,
+                "activation": activation,
+                "pool": pool,
+                "durations": durations,
+                transition_id: section,
+            },
+            hw_accel=True,
+        ),
+        random_source=_Rng("left"),
+    )
+    assert random is not None
+    assert random.transition_id == transition_id
+    assert random.selected_from_random is True
+    assert random.duration_ms == 2100
+    assert dict(random.parameters)["seed"] == 1

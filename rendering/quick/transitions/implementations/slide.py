@@ -19,7 +19,13 @@ _DIRECTION_VECTORS = {
     "up": (0.0, -1.0),
     "down": (0.0, 1.0),
 }
-_MOTION_STYLE_CODES = {"Linear": 0, "Elastic": 1, "Wobble": 2, "Flex": 3}
+_MOTION_STYLE_CODES = {
+    "Linear": 0,
+    "Elastic": 1,
+    "Wobble": 2,
+    "Flex": 3,
+    "Perspective Push": 4,
+}
 
 
 _SLIDE_FRAGMENT_SOURCE = """#version 410 core
@@ -31,6 +37,7 @@ uniform sampler2D uNewTex;
 uniform float u_progress;
 uniform vec2 u_direction;
 uniform int u_motionStyle;
+uniform vec2 uItemSize;
 
 float settledSegment(float q) {
     return q*q*q*(q*(6.0*q - 15.0) + 10.0);
@@ -41,6 +48,40 @@ float elasticArrival(float t) {
     if (t < 0.78) return 1.018 * settledSegment(t / 0.78);
     if (t < 0.90) return mix(1.018, 0.995, settledSegment((t - 0.78) / 0.12));
     return mix(0.995, 1.0, settledSegment((t - 0.90) / 0.10));
+}
+
+// Intersect the view ray for this output pixel with a shallow, tilted source
+// card.  This is a projective image mapping, not an affine UV skew: a plane
+// nearer the virtual camera expands and a plane farther away contracts.
+vec3 rotateRodrigues(vec3 value, vec3 axis, float angle) {
+    return value * cos(angle) + cross(axis, value) * sin(angle)
+        + axis * dot(axis, value) * (1.0 - cos(angle));
+}
+vec2 perspectivePushUv(vec2 localUv, vec2 direction, float t) {
+    float aspect = uItemSize.x / max(uItemSize.y, 1.0);
+    vec2 screen = (localUv - 0.5) * vec2(2.0 * aspect, 2.0);
+    vec3 rayOrigin = vec3(0.0, 0.0, 2.4);
+    vec3 rayDirection = normalize(vec3(screen, -2.4));
+    float envelope = sin(3.141592653589793 * t);
+    envelope *= envelope;
+    vec2 physicalDirection = normalize(vec2(direction.x * aspect, direction.y));
+    vec3 cardCenter = vec3(-physicalDirection * (0.25 * envelope), -0.10 * envelope);
+    vec3 axis = abs(direction.x) > 0.5
+        ? vec3(0.0, 1.0, 0.0)
+        : vec3(1.0, 0.0, 0.0);
+    float tilt = 0.32 * envelope * (direction.x + direction.y);
+    vec3 normal = rotateRodrigues(vec3(0.0, 0.0, 1.0), axis, tilt);
+    float denom = dot(rayDirection, normal);
+    float distance = dot(cardCenter - rayOrigin, normal) / denom;
+    vec3 hit = rayOrigin + rayDirection * distance;
+    vec3 tangent = abs(direction.x) > 0.5
+        ? normalize(cross(axis, normal))
+        : normalize(cross(normal, axis));
+    vec3 relative = hit - cardCenter;
+    vec2 card = abs(direction.x) > 0.5
+        ? vec2(dot(relative, tangent), dot(relative, axis))
+        : vec2(dot(relative, axis), dot(relative, tangent));
+    return clamp(card * vec2(0.5 / aspect, 0.5) + 0.5, 0.0, 1.0);
 }
 
 void main() {
@@ -87,7 +128,18 @@ void main() {
         ? step(1.0 - travel, axis)
         : 1.0 - step(travel, axis));
 
+    if (u_motionStyle == 4) {
+        // The destination remains a full, moving underlay.  The partition
+        // remains the sole coverage owner while the outgoing source uses its
+        // true plane intersection above.
+        localUv = travel > 1.0 ? clamp(shiftedUv, 0.0, 1.0) : fract(shiftedUv);
+    }
+    // Keep the established styles on their exact shared sample. Perspective
+    // Push replaces only the outgoing card's image mapping.
     vec4 oldColor = texture(uOldTex, localUv);
+    if (u_motionStyle == 4) {
+        oldColor = texture(uOldTex, perspectivePushUv(localUv, u_direction, t));
+    }
     vec4 newColor = texture(uNewTex, localUv);
     FragColor = mix(oldColor, newColor, destinationOwns);
 }
@@ -125,6 +177,76 @@ def _slide_direction_vector(direction: object) -> tuple[float, float]:
     if vector is None:
         raise ValueError(f"unknown canonical Slide direction: {direction!r}")
     return vector
+
+
+def _slide_perspective_card_uv(
+    local_uv: tuple[float, float], direction: object, progress: float,
+    logical_size: tuple[float, float],
+) -> tuple[float, float]:
+    """CPU reference for Perspective Push's aspect-correct ray/plane mapping."""
+
+    x, y = (float(value) for value in local_uv)
+    width, height = (float(value) for value in logical_size)
+    if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0) or width <= 0.0 or height <= 0.0:
+        raise ValueError("Perspective Push requires normalized UVs and positive size")
+    dx, dy = _slide_direction_vector(direction)
+    t = max(0.0, min(1.0, float(progress)))
+    envelope = math.sin(math.pi * t) ** 2
+    aspect = width / height
+    ray_origin = (0.0, 0.0, 2.4)
+    ray_direction = _normalize3(((x - 0.5) * 2.0 * aspect, (y - 0.5) * 2.0, -2.4))
+    physical_direction = _normalize2((dx * aspect, dy))
+    card_center = (-physical_direction[0] * 0.25 * envelope, -physical_direction[1] * 0.25 * envelope, -0.10 * envelope)
+    axis = (0.0, 1.0, 0.0) if dx else (1.0, 0.0, 0.0)
+    normal = _rodrigues((0.0, 0.0, 1.0), axis, 0.32 * envelope * (dx + dy))
+    distance = _dot3(_subtract3(card_center, ray_origin), normal) / _dot3(ray_direction, normal)
+    hit = _add3(ray_origin, _scale3(ray_direction, distance))
+    tangent = _normalize3(_cross3(axis, normal) if dx else _cross3(normal, axis))
+    relative = _subtract3(hit, card_center)
+    card = (
+        (_dot3(relative, tangent), _dot3(relative, axis))
+        if dx else (_dot3(relative, axis), _dot3(relative, tangent))
+    )
+    return (
+        max(0.0, min(1.0, card[0] * 0.5 / aspect + 0.5)),
+        max(0.0, min(1.0, card[1] * 0.5 + 0.5)),
+    )
+
+
+def _normalize2(value: tuple[float, float]) -> tuple[float, float]:
+    length = math.hypot(*value)
+    return (value[0] / length, value[1] / length)
+
+
+def _normalize3(value: tuple[float, float, float]) -> tuple[float, float, float]:
+    length = math.sqrt(_dot3(value, value))
+    return tuple(component / length for component in value)  # type: ignore[return-value]
+
+
+def _dot3(left: tuple[float, float, float], right: tuple[float, float, float]) -> float:
+    return sum(a * b for a, b in zip(left, right))
+
+
+def _cross3(left: tuple[float, float, float], right: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (left[1] * right[2] - left[2] * right[1], left[2] * right[0] - left[0] * right[2], left[0] * right[1] - left[1] * right[0])
+
+
+def _subtract3(left: tuple[float, float, float], right: tuple[float, float, float]) -> tuple[float, float, float]:
+    return tuple(a - b for a, b in zip(left, right))  # type: ignore[return-value]
+
+
+def _add3(left: tuple[float, float, float], right: tuple[float, float, float]) -> tuple[float, float, float]:
+    return tuple(a + b for a, b in zip(left, right))  # type: ignore[return-value]
+
+
+def _scale3(value: tuple[float, float, float], scale: float) -> tuple[float, float, float]:
+    return tuple(component * scale for component in value)  # type: ignore[return-value]
+
+
+def _rodrigues(value: tuple[float, float, float], axis: tuple[float, float, float], angle: float) -> tuple[float, float, float]:
+    cosine, sine = math.cos(angle), math.sin(angle)
+    crossed, dot = _cross3(axis, value), _dot3(axis, value)
+    return tuple(value[index] * cosine + crossed[index] * sine + axis[index] * dot * (1.0 - cosine) for index in range(3))  # type: ignore[return-value]
 
 
 def _slide_partition_sample(
