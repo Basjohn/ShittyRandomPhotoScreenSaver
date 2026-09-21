@@ -6,12 +6,13 @@ This file contains only active work and directly relevant evidence. `Spec.md`, `
 
 The independent fragment and particle minimum-energy settings are implemented with curated/default and user-authored preset protection. Focused pure-Python settings/preset gates were previously reported green. The remaining Sphere-specific operator gate is the native Windows settings/preset run and active-music observation of independent floor effects, Reset and Custom Save/reopen. Do not retune authored values on the operator's behalf; promote a reproduced defect here if one appears.
 
-## Future Work transitions | active
+## Future Work transitions | awaiting visual acceptance
 
-- [ ] Rework operator-rejected Glass Shatter, Exploding Tiles, Ink Bloom, Tendril Reveal and Melt Drip: substantial geometry, materials and motion, with customizable optics. Execute the corrective checklists in `Docs/Future_Work/Transition_Expansion.md`; previous GL tests did not establish aesthetic acceptance.
-- [ ] Upgrade Crumble in the same pass: solid wall chunks, broken side material and surrounding falling debris, sharing the fracture geometry while preserving its own collapse behavior and settings.
-- [ ] Validate and checkpoint each corrective slice; update `Docs/Reference/Transitions.md` with the actual behavior and controls. Pixel Accretion and Slide remain outside this rework.
-- [~] Awaiting validation after correction: operator visual acceptance and mixed-display/heavy-load freshness. Preserve the unrelated Sphere floor acceptance above.
+The corrective material/geometry pass is implemented and reference docs are current. Focused automated gates and two-display Quick recreation/hide-show checks pass. `Docs/Future_Work/Transition_Expansion.md` owns detailed evidence; `Docs/Reference/Transitions.md` owns current behavior and controls.
+
+- [~] Awaiting operator visual acceptance: review rebuilt Melt, Glass, Tiles, Ink, Tendril and Crumble with actual photos at authored durations. The earlier rejected Melt designs have been replaced; test success does not establish aesthetic acceptance.
+- [ ] Observe both displays with active music and representative heavy external load; confirm Visualizer freshness and transition first-use behavior against the accepted baseline.
+- [ ] Validate the installed/frozen build, material save/reopen/Reset and repeated switch/interrupt/retire.
 
 ## Handoff and regression rules
 

@@ -18,7 +18,6 @@ from rendering.quick.transitions.render_contract import QuickTransitionRenderFra
 from rendering.quick.transitions.state import TransitionRequest, TransitionRun
 
 from rendering.quick.transitions.implementations import burn as burn_module
-from rendering.quick.transitions.implementations import crumble as crumble_module
 from rendering.quick.transitions.implementations import diffuse as diffuse_module
 from rendering.quick.transitions.implementations import particle as particle_module
 from rendering.quick.transitions.implementations import ripple as ripple_module
@@ -26,10 +25,22 @@ from rendering.quick.transitions.implementations import slide as slide_module
 
 
 _IDENTITY_MATRIX = (
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 1.0, 0.0,
-    0.0, 0.0, 0.0, 1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
 )
 _FAKE_PROGRAM = 41
 
@@ -175,9 +186,7 @@ def test_diffuse_request_parameters_reach_intended_uniforms(monkeypatch):
     assert recorder.uniforms["u_shapeMode"] == 4
     # block_size drives the authored grid geometry: ceil(1920/32), ceil(1080/32).
     assert recorder.uniforms["u_grid"] == (60.0, 34.0)
-    assert recorder.uniforms["u_progress"] == pytest.approx(
-        frame.sample.eased_progress
-    )
+    assert recorder.uniforms["u_progress"] == pytest.approx(frame.sample.eased_progress)
     assert recorder.uniforms["u_resolution"] == (1920.0, 1080.0)
     assert recorder.uniforms["uOldTex"] == 0
     assert recorder.uniforms["uNewTex"] == 1
@@ -193,70 +202,16 @@ def test_ripple_request_parameters_reach_intended_uniforms(monkeypatch):
     assert recorder.uniforms["u_ripple_count"] == 6
     assert recorder.uniforms["u_ripple_seed"] == pytest.approx(123.5)
     assert recorder.uniforms["u_resolution"] == (1920.0, 1080.0)
-    assert recorder.uniforms["u_progress"] == pytest.approx(
-        frame.sample.eased_progress
-    )
+    assert recorder.uniforms["u_progress"] == pytest.approx(frame.sample.eased_progress)
 
 
 def test_slide_frozen_motion_style_reaches_the_renderer(monkeypatch):
     recorder = _RecordingGL()
     _install(monkeypatch, slide_module, recorder)
-    frame = _frame(
-        "slide", "Slide", {"motion_style": "Elastic"}, direction="left"
-    )
+    frame = _frame("slide", "Slide", {"motion_style": "Elastic"}, direction="left")
     slide_module.QuickSlideRenderer().render(frame)
     assert recorder.uniforms["u_motionStyle"] == 1
     assert recorder.uniforms["u_progress"] == pytest.approx(frame.sample.eased_progress)
-
-
-def _crumble_params(**overrides) -> dict:
-    params = {
-        "seed": 55.0,
-        "piece_count": 20,
-        "crack_complexity": 1.5,
-        "mosaic_mode": True,
-        "weight_mode": 2.0,
-    }
-    params.update(overrides)
-    return params
-
-
-def test_crumble_request_parameters_reach_intended_uniforms(monkeypatch):
-    recorder = _RecordingGL()
-    _install(monkeypatch, crumble_module, recorder)
-    frame = _frame("crumble", "Crumble", _crumble_params())
-
-    crumble_module.QuickCrumbleRenderer().render(frame)
-
-    assert recorder.uniforms["u_seed"] == pytest.approx(55.0)
-    assert recorder.uniforms["u_piece_count"] == pytest.approx(20.0)
-    assert recorder.uniforms["u_crack_complexity"] == pytest.approx(1.5)
-    assert recorder.uniforms["u_weight_mode"] == pytest.approx(2.0)
-
-
-def test_crumble_mosaic_optional_upload_contract_when_uniform_exists(monkeypatch):
-    # C-T7: only the optional uniform-upload contract is tested. When the
-    # uniform location exists the renderer uploads mosaic_mode as 1.0/0.0.
-    for mosaic, expected in ((True, 1.0), (False, 0.0)):
-        recorder = _RecordingGL()
-        _install(monkeypatch, crumble_module, recorder)
-        frame = _frame(
-            "crumble", "Crumble", _crumble_params(mosaic_mode=mosaic)
-        )
-        crumble_module.QuickCrumbleRenderer().render(frame)
-        assert recorder.uniforms["u_mosaic_mode"] == pytest.approx(expected)
-
-
-def test_crumble_skips_mosaic_upload_when_uniform_absent(monkeypatch):
-    # When the shader does not declare u_mosaic_mode (location -1), the renderer
-    # must not attempt to upload it.
-    recorder = _RecordingGL(absent=frozenset({"u_mosaic_mode"}))
-    _install(monkeypatch, crumble_module, recorder)
-    frame = _frame("crumble", "Crumble", _crumble_params())
-
-    crumble_module.QuickCrumbleRenderer().render(frame)
-
-    assert "u_mosaic_mode" not in recorder.uniforms
 
 
 def _particle_params(**overrides) -> dict:
@@ -318,9 +273,7 @@ def test_particle_boolean_controls_toggle_their_uniforms(monkeypatch):
     frame = _frame(
         "particle",
         "Particle",
-        _particle_params(
-            use_3d_shading=False, texture_mapping=True, wobble=False
-        ),
+        _particle_params(use_3d_shading=False, texture_mapping=True, wobble=False),
     )
 
     particle_module.QuickParticleRenderer().render(frame)
@@ -352,9 +305,7 @@ def test_burn_covers_all_authored_uniforms_and_run_clock_time(monkeypatch):
     recorder = _RecordingGL()
     _install(monkeypatch, burn_module, recorder)
     # duration 2000ms at linear 0.5 -> u_time = 0.5 * 2000/1000 = 1.0s.
-    frame = _frame(
-        "burn", "Burn", _burn_params(), duration_ms=2000, linear=0.5
-    )
+    frame = _frame("burn", "Burn", _burn_params(), duration_ms=2000, linear=0.5)
 
     burn_module.QuickBurnRenderer().render(frame)
 

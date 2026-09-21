@@ -1,9 +1,8 @@
-"""Lazy, instanced shallow-cuboid renderer for Exploding Tiles."""
+"""Lazy, instanced beveled-slab renderer for Exploding Tiles."""
 
 from __future__ import annotations
 
 from OpenGL import GL as gl
-
 from rendering.gl_programs.exploding_tiles_program import (
     EXPLODING_TILES_BOX_VERTICES,
     EXPLODING_TILES_FRAGMENT_SOURCE,
@@ -35,7 +34,7 @@ class QuickExplodingTilesRenderer:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
             self._initialize()
-            seed, columns, depth = exploding_tiles_parameters(
+            seed, columns, depth, thickness, force = exploding_tiles_parameters(
                 frame.run.request.parameter_dict()
             )
             grid = exploding_tiles_grid(columns, frame.viewport[2], frame.viewport[3])
@@ -48,7 +47,20 @@ class QuickExplodingTilesRenderer:
                 "tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE
             )
             uniforms = self._resources.uniforms(
-                "tiles", ("uMatrix", "uItemSize", "uOldTex", "uGrid", "uDirection", "uProgress", "uSeed", "uDepth", "uCenterOut")
+                "tiles",
+                (
+                    "uMatrix",
+                    "uItemSize",
+                    "uOldTex",
+                    "uGrid",
+                    "uDirection",
+                    "uProgress",
+                    "uSeed",
+                    "uDepth",
+                    "uThickness",
+                    "uForce",
+                    "uCenterOut",
+                ),
             )
             bind_frame(program, uniforms, frame)
             gl.glUniform2f(uniforms["uGrid"], *grid)
@@ -56,9 +68,11 @@ class QuickExplodingTilesRenderer:
             gl.glUniform1f(uniforms["uProgress"], progress)
             gl.glUniform1f(uniforms["uSeed"], float(seed))
             gl.glUniform1f(uniforms["uDepth"], depth)
+            gl.glUniform1f(uniforms["uThickness"], thickness)
+            gl.glUniform1f(uniforms["uForce"], force)
             gl.glUniform1i(uniforms["uCenterOut"], 1 if center_out else 0)
             vao, count = self._resources.mesh(
-                "cuboid", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2)
+                "beveled_slab", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2)
             )
             gl.glBindVertexArray(vao)
             gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, grid[0] * grid[1])

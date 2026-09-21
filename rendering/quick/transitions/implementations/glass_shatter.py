@@ -4,8 +4,9 @@ from __future__ import annotations
 from OpenGL import GL as gl
 
 from rendering.gl_programs.glass_shatter_program import (
-    GLASS_FRAGMENT, GLASS_VERTEX, fracture_cells, fracture_vertices,
+    GLASS_FRAGMENT, GLASS_VERTEX,
 )
+from ..fracture_geometry import fracture_cells, fracture_vertices
 from ..mesh_support import MeshResources, bind_frame, direction_vector
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -35,10 +36,13 @@ class QuickGlassShatterRenderer:
             if key != self._geometry_key:
                 resources.drop_mesh("shards")
                 vertices = fracture_vertices(fracture_cells(int(params["seed"]), int(params["shards"]), aspect), aspect)
-                self._vao, self._count = resources.mesh("shards", vertices, (2, 2, 1, 1))
+                self._vao, self._count = resources.mesh("shards", vertices, (2, 2, 1, 3, 1, 1, 1, 1))
                 self._geometry_key = key
             program = resources.program("glass", GLASS_VERTEX, GLASS_FRAGMENT)
-            uniforms = resources.uniforms("glass", ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uDepth", "uDirection", "uRadial"))
+            uniforms = resources.uniforms("glass", (
+                "uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uDepth", "uDirection", "uRadial",
+                "uThickness", "uTransparency", "uRefraction", "uDispersion", "uSheen",
+            ))
             resources.begin_depth(frame)
             bind_frame(program, uniforms, frame)
             radial = frame.run.request.direction == "center_out"
@@ -47,6 +51,8 @@ class QuickGlassShatterRenderer:
             gl.glUniform1i(uniforms["uRadial"], int(radial))
             gl.glUniform1f(uniforms["uProgress"], progress)
             gl.glUniform1f(uniforms["uDepth"], float(params["depth"]))
+            for name in ("thickness", "transparency", "refraction", "dispersion", "sheen"):
+                gl.glUniform1f(uniforms["u" + name.capitalize()], float(params[name]))
             gl.glBindVertexArray(self._vao)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
         except Exception:

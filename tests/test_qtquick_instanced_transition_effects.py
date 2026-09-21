@@ -18,13 +18,13 @@ def _load(name: str):
     return module
 
 
-def test_exploding_tiles_owns_one_deterministic_shallow_cuboid() -> None:
+def test_exploding_tiles_owns_one_deterministic_solid_mesh() -> None:
     effect = _load("exploding_tiles_program")
     first = effect.exploding_tiles_box_vertices()
     assert first == effect.exploding_tiles_box_vertices()
     assert len(first) == effect.EXPLODING_TILES_VERTEX_COUNT * effect.EXPLODING_TILES_VERTEX_STRIDE_FLOATS
     positions = [first[index:index + 3] for index in range(0, len(first), 8)]
-    assert {round(position[2], 5) for position in positions} == {-0.03, 0.03}
+    assert {round(position[2], 5) for position in positions} == {-0.5, -0.38, 0.38, 0.5}
 
 
 @pytest.mark.parametrize("parameters", (
@@ -44,29 +44,12 @@ def test_exploding_tiles_grid_is_aspect_aware_and_bounded() -> None:
     assert effect.exploding_tiles_grid(48, 400, 4000) == (48, 48)
 
 
-def test_exploding_tiles_keep_dormant_source_coverage_then_shrink_to_nothing() -> None:
+def test_exploding_tiles_remain_full_size_and_depart_geometrically() -> None:
     effect = _load("exploding_tiles_program")
-    assert effect.exploding_tile_state(.04, .10) == (0.0, 1.0)
-    local, shrink = effect.exploding_tile_state(.96, .10)
-    assert local == 1.0
-    assert shrink == 0.0
-
-
-def test_exploding_tiles_shader_is_instanced_depth_cuboids_with_gpu_motion() -> None:
-    effect = _load("exploding_tiles_program")
-    source = effect.EXPLODING_TILES_VERTEX_SOURCE
-    assert "gl_InstanceID" in source
-    assert "rotateAxis" in source
-    assert "uDepth" in source
-    assert "projected *= cameraW" in source
-    assert "vUv = gridUv" in source
-    assert "1. - gridUv.y" not in source
-    assert "float shrink = 1. - smoothstep(.76, 1., local)" in source
-    renderer = (ROOT / "rendering/quick/transitions/implementations/exploding_tiles.py").read_text(encoding="utf-8")
-    assert "glDrawArraysInstanced" in renderer
-    assert "draw_image(frame, frame.source_texture_id)" in renderer
-    assert "draw_image(frame, frame.destination_texture_id)" in renderer
-    assert "glBufferData" not in renderer
+    assert effect.exploding_tile_state(.04, .10) == 0.0
+    assert effect.exploding_tile_state(.98, .10) == 1.0
+    # Actual departure/retirement is checked against driver pixels across
+    # directions/aspects in test_qtquick_future_transition_gl.
 
 
 def test_pixel_accretion_adapts_high_resolution_grid_to_hard_instance_cap() -> None:

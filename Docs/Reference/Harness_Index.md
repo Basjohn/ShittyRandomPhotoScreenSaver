@@ -108,10 +108,11 @@ For the expanded effects, render deterministic textured progressions through the
 ```powershell
 C:/Python311/python.exe tools/transition_contact_sheet.py --effect glass_shatter --direction center_out --output-dir <output-directory>
 C:/Python311/python.exe tools/transition_contact_sheet.py --effect pixel_accretion --width 3840 --height 2160 --output-dir <output-directory>
+C:/Python311/python.exe tools/transition_contact_sheet.py --effect melt_drip --source <source-photo> --destination <destination-photo> --animate --output-dir <output-directory>
 C:/Python311/python.exe tools/transition_contact_sheet.py --effect glass_shatter --quick-smoke --windows 2 --output-dir <output-directory>
 ```
 
-The tool accepts optional `--source` / `--destination` photos. `--quick-smoke` reuses the existing threaded Quick harness for two generations and hide/show; inspect reported physical-screen count because a request for two windows cannot prove two-display behavior when only one screen is connected. Effect IDs and ownership are in `Docs/Reference/Transitions.md`. Offscreen timing and captures do not close operator heavy-load/freshness acceptance.
+The tool accepts optional `--source` / `--destination` photos. `--animate` writes a 60-frame, two-second WebP progression. `--quick-smoke` reuses the existing threaded Quick harness for two generations and hide/show; inspect reported physical-screen count because a request for two windows cannot prove two-display behavior when only one screen is connected. Effect IDs and ownership are in `Docs/Reference/Transitions.md`. Offscreen timing and captures do not close operator heavy-load/freshness acceptance.
 
 These commands are retained regression/acceptance harnesses for the current Quick transition implementations; they are not an implementation checklist.
 
@@ -162,12 +163,12 @@ Effect-specific midpoint/contrast oracles supplement exact endpoints:
 
 - Diffuse: shape-specific spatial properties must reject a plain wipe/crossfade substitute;
 - Ripple: count1/count3/count8 produce distinct radial/ring structure;
-- Crumble: weighting changes deterministic old/new piece distribution;
+- Crumble: release weighting changes deterministic closed-prism departure, rough broken sides and parent-bound chip debris;
 - Particle: direction/mode changes centroid/angular/radial structure;
 - Burn: front/core/glow/char progression is distinct from a wipe; smoke/ash toggles prove their own
   regions but do not replace core-burn proof.
 
-Do not invent a visual `mosaic_mode` oracle while the canonical Crumble shader does not consume it.
+Do not restore retired mosaic assumptions: Crumble owns weighted parent release and polygon-seam debris, not a mosaic mode.
 
 ## 4. Transition request/uniform and GL-state tests
 

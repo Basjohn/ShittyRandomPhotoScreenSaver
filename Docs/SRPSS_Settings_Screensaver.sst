@@ -118,7 +118,10 @@
       },
       "crumble": {
         "crack_complexity": 1.0,
+        "debris": 0.65,
+        "depth": 0.85,
         "piece_count": 16,
+        "thickness": 0.65,
         "weighting": "Random Choice"
       },
       "diffuse": {
@@ -150,20 +153,31 @@
       "exploding_tiles": {
         "columns": 18,
         "depth": 0.85,
-        "direction": "Random"
+        "direction": "Random",
+        "force": 1.0,
+        "thickness": 0.55
       },
       "glass_shatter": {
         "depth": 0.75,
         "direction": "Random",
-        "shards": 90
+        "dispersion": 0.3,
+        "refraction": 0.45,
+        "shards": 90,
+        "sheen": 0.65,
+        "thickness": 0.55,
+        "transparency": 0.35
       },
       "ink_bloom": {
+        "depth": 0.65,
         "detail": 1.0,
-        "direction": null
+        "direction": null,
+        "gloss": 0.6
       },
       "melt_drip": {
+        "depth": 0.7,
         "detail": 1.0,
-        "direction": "Top to Bottom"
+        "direction": "Top to Bottom",
+        "gloss": 0.65
       },
       "particle": {
         "direction": "Random",
@@ -215,8 +229,10 @@
         "motion_style": "Linear"
       },
       "tendril_reveal": {
+        "depth": 0.65,
         "detail": 1.0,
-        "direction": null
+        "direction": null,
+        "gloss": 0.6
       },
       "type": "3D Block Spins",
       "wipe": {

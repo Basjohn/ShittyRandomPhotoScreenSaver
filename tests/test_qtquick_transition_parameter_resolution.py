@@ -44,10 +44,10 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
 @pytest.mark.parametrize(
     ("transition_id", "section", "expected_direction", "expected_keys"),
     [
-        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth"}),
-        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth"}),
+        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen"}),
+        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force"}),
         ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel"}),
-        ("melt_drip", "melt_drip", "down", {"seed", "detail"}),
+        ("melt_drip", "melt_drip", "down", {"seed", "detail", "depth", "gloss"}),
     ],
 )
 def test_future_transition_parameters_are_bounded_and_seeded_once(
@@ -87,7 +87,7 @@ def test_organic_transition_parameters_have_no_direction_authority(transition_id
         random_source=rng,
     )
     assert resolved.direction is None
-    assert resolved.parameter_dict() == {"detail": pytest.approx(0.5), "seed": 4321}
+    assert resolved.parameter_dict() == {"detail": pytest.approx(0.5), "seed": 4321, "depth": .65, "gloss": .6}
 
 
 def test_diffuse_resolves_shape_name_and_block_size():
@@ -129,7 +129,10 @@ def test_crumble_preserves_current_factory_weighting_fallthroughs():
         )
         params = resolved.parameter_dict()
         assert params["weight_mode"] == expected
-        assert params["mosaic_mode"] is False
+        assert "mosaic_mode" not in params
+        assert params["depth"] == .85
+        assert params["thickness"] == .65
+        assert params["debris"] == .65
 
 
 def test_particle_preserves_current_numeric_semantics_for_ui_indices():

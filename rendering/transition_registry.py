@@ -171,8 +171,6 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         stable_id="crumble",
         easing_curve=EasingCurve.LINEAR,
         gl_program_key=CRUMBLE,
-        program_attr="crumble_program",
-        uniforms_attr="crumble_uniforms",
         compositor_transition_class="GLCompositorCrumbleTransition",
         requires_hw_accel=True,
     ),

@@ -131,7 +131,7 @@ class TransitionsTab(QWidget):
         """
         if getattr(self, "_writing_settings", False) or getattr(self, "_loading", False):
             return
-        if not (key == "transitions" or (isinstance(key, str) and key.startswith("transitions."))):
+        if not (key in ("*", "transitions") or (isinstance(key, str) and key.startswith("transitions."))):
             return
         cfg = self._settings.get("transitions")
         if not isinstance(cfg, dict):
@@ -789,6 +789,16 @@ class TransitionsTab(QWidget):
                 cfg, 'detail', 'melt_drip', canonical['detail'], self.melt_drip_detail_spin, float,
             ))
 
+        for section, controls in self._SURFACE_CONTROLS.items():
+            if hasattr(self, f"{section}_group"):
+                canonical = canonical_transitions[section]
+                cfg = self._new_transition_section(transitions_config, section, canonical)
+                for field, *_ in controls:
+                    spin = getattr(self, f"{section}_{field}_spin")
+                    spin.setValue(self._new_transition_number(
+                        cfg, field, section, canonical[field], spin, float,
+                    ))
+
         if hasattr(self, 'flip_group'):
             canonical_block_flip = canonical_transitions['block_flip']
             block_flip = transitions_config.get('block_flip', canonical_block_flip)
@@ -848,6 +858,10 @@ class TransitionsTab(QWidget):
             self.crumble_piece_count_spin.setValue(crumble.get('piece_count', canonical_crumble['piece_count']))
             self.crumble_complexity_spin.setValue(crumble.get('crack_complexity', canonical_crumble['crack_complexity']))
             weight = crumble.get('weighting', canonical_crumble['weighting'])
+            # These former labels both executed Top Weighted; preserve the
+            # behavior while retiring the misleading spelling on the next save.
+            if weight in ("Bias Old Image", "Bias New Image"):
+                weight = "Top Weighted"
             try:
                 idx = self.crumble_weight_combo.findText(weight)
                 if idx < 0:
@@ -984,6 +998,53 @@ class TransitionsTab(QWidget):
         motion_row.addStretch()
         self._specific_group_host_layout.addWidget(self.slide_group)
 
+    # Presentation only: ranges/labels live here; values always come from the
+    # canonical defaults, never from this control description.
+    _SURFACE_CONTROLS = {
+        "crumble": (
+            ("depth", "Collapse Depth:", .2, 1.5, "Out-of-plane movement and tumble of falling wall chunks."),
+            ("thickness", "Wall Thickness:", 0., 1., "Thickness of the solid wall and its broken edges."),
+            ("debris", "Crumbling Debris:", 0., 1., "Small solid fragments released around falling chunks. Zero disables debris geometry and drawing."),
+        ),
+        "glass_shatter": (
+            ("thickness", "Glass Thickness:", 0., 1., "Thickness of the solid shards and their beveled edges. Zero makes a thin pane."),
+            ("transparency", "Transparency:", 0., 1., "How much of the next image is visible through moving glass. Zero keeps opaque image faces."),
+            ("refraction", "Refraction:", 0., 1., "Bending of the next image through the glass. Visible with transparency; zero disables distortion."),
+            ("dispersion", "Color Dispersion:", 0., 1., "Prismatic color separation in refraction. Zero disables it."),
+            ("sheen", "Reflections / Sheen:", 0., 1., "Reflections, rim glints and bevel highlights. Zero removes the optical highlights."),
+        ),
+        "exploding_tiles": (
+            ("thickness", "Tile Thickness:", 0., 1., "Solid tile thickness relative to tile size, with beveled edges."),
+            ("force", "Explosion Force:", .5, 2., "Strength of the outward launch and tumble. Tiles travel beyond the screen edge."),
+        ),
+        "ink_bloom": (
+            ("depth", "Liquid Depth:", 0., 1., "Height and surface relief of the spreading pigment."),
+            ("gloss", "Wet Gloss:", 0., 1., "Wet reflections on the ink surface."),
+        ),
+        "tendril_reveal": (
+            ("depth", "Growth Depth:", 0., 1., "Depth of the curling, rounded branches."),
+            ("gloss", "Surface Gloss:", 0., 1., "Reflections on the curved growth surfaces."),
+        ),
+        "melt_drip": (
+            ("depth", "Liquid Depth:", 0., 1., "Thickness and relief of the liquid sheet and falling drops."),
+            ("gloss", "Wet Gloss:", 0., 1., "Reflections on the rounded liquid surfaces."),
+        ),
+    }
+
+    def _build_surface_controls(self, layout, section: str) -> None:
+        for field, label, low, high, tooltip in self._SURFACE_CONTROLS[section]:
+            row = self._aligned_row(layout, label)
+            spin = QDoubleSpinBox()
+            spin.setDecimals(2)
+            spin.setRange(low, high)
+            spin.setSingleStep(.05)
+            spin.setValue(float(_transition_default(f"{section}.{field}")))
+            spin.setToolTip(tooltip)
+            spin.valueChanged.connect(self._save_settings)
+            row.addWidget(spin)
+            row.addStretch()
+            setattr(self, f"{section}_{field}_spin", spin)
+
     def _build_glass_shatter_group(self) -> None:
         self.glass_shatter_group = QGroupBox("Glass Shatter Settings")
         self._style_group_box(self.glass_shatter_group)
@@ -1005,6 +1066,7 @@ class TransitionsTab(QWidget):
         self.glass_depth_spin.valueChanged.connect(self._save_settings)
         depth_row.addWidget(self.glass_depth_spin)
         depth_row.addStretch()
+        self._build_surface_controls(layout, "glass_shatter")
         self._specific_group_host_layout.addWidget(self.glass_shatter_group)
 
     def _build_exploding_tiles_group(self) -> None:
@@ -1028,6 +1090,7 @@ class TransitionsTab(QWidget):
         self.exploding_tiles_depth_spin.valueChanged.connect(self._save_settings)
         depth_row.addWidget(self.exploding_tiles_depth_spin)
         depth_row.addStretch()
+        self._build_surface_controls(layout, "exploding_tiles")
         self._specific_group_host_layout.addWidget(self.exploding_tiles_group)
 
     def _build_pixel_accretion_group(self) -> None:
@@ -1067,6 +1130,7 @@ class TransitionsTab(QWidget):
         spin.valueChanged.connect(self._save_settings)
         detail_row.addWidget(spin)
         detail_row.addStretch()
+        self._build_surface_controls(layout, section)
         setattr(self, attr, group)
         setattr(self, f"{section}_detail_spin", spin)
         self._specific_group_host_layout.addWidget(group)
@@ -1095,6 +1159,7 @@ class TransitionsTab(QWidget):
         self.melt_drip_detail_spin.valueChanged.connect(self._save_settings)
         detail_row.addWidget(self.melt_drip_detail_spin)
         detail_row.addStretch()
+        self._build_surface_controls(layout, "melt_drip")
         self._specific_group_host_layout.addWidget(self.melt_drip_group)
 
     def _build_blockspin_group(self) -> None:
@@ -1212,7 +1277,7 @@ class TransitionsTab(QWidget):
         crumble_complexity_row = _aligned_row(crumble_layout, "Crack Complexity:")
         self.crumble_complexity_spin = QDoubleSpinBox()
         self.crumble_complexity_spin.setDecimals(2)
-        self.crumble_complexity_spin.setRange(0.2, 5.0)
+        self.crumble_complexity_spin.setRange(0.5, 2.0)
         self.crumble_complexity_spin.setSingleStep(0.1)
         self.crumble_complexity_spin.setValue(float(_transition_default("crumble.crack_complexity")))
         self.crumble_complexity_spin.valueChanged.connect(self._save_settings)
@@ -1223,13 +1288,16 @@ class TransitionsTab(QWidget):
         self.crumble_weight_combo = StyledComboBox(size_variant="compact")
         self.crumble_weight_combo.addItems([
             "Random Choice",
-            "Bias Old Image",
-            "Bias New Image",
+            "Top Weighted",
+            "Bottom Weighted",
+            "Random Weighted",
+            "Age Weighted",
         ])
         self.crumble_weight_combo.currentTextChanged.connect(self._save_settings)
         crumble_weight_row.addWidget(self.crumble_weight_combo)
         crumble_weight_row.addStretch()
 
+        self._build_surface_controls(crumble_layout, "crumble")
         self._specific_group_host_layout.addWidget(self.crumble_group)
 
     def _build_particle_group(self) -> None:
@@ -1757,6 +1825,13 @@ class TransitionsTab(QWidget):
                 w.blockSignals(True)
                 blockers.append(w)
 
+        for section, controls in self._SURFACE_CONTROLS.items():
+            for field, *_ in controls:
+                spin = getattr(self, f"{section}_{field}_spin", None)
+                if spin is not None:
+                    spin.blockSignals(True)
+                    blockers.append(spin)
+
         # Also block the SETUP page controls while applying their state.
         for w in (
             list(getattr(self, '_activation_checkboxes', {}).values())
@@ -2209,6 +2284,15 @@ class TransitionsTab(QWidget):
             }
         else:
             melt_drip = _existing_subdict('melt_drip')
+
+        for section, values in (("crumble", crumble), ("glass_shatter", glass_shatter),
+                                ("exploding_tiles", exploding_tiles),
+                                ("ink_bloom", ink_bloom),
+                                ("tendril_reveal", tendril_reveal),
+                                ("melt_drip", melt_drip)):
+            if hasattr(self, f"{section}_group"):
+                for field, *_ in self._SURFACE_CONTROLS[section]:
+                    values[field] = float(getattr(self, f"{section}_{field}_spin").value())
 
         config = {
             'type': cur_type,

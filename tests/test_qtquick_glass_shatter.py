@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from rendering.gl_programs.glass_shatter_program import fracture_cells, fracture_vertices
+from rendering.quick.transitions.fracture_geometry import fracture_cells, fracture_vertices
 from rendering.quick.transitions import mesh_support
 
 
@@ -29,10 +29,13 @@ def test_fracture_is_repeatable_gap_free_bounded_and_convex(aspect, count):
             assert 0 <= a[0] <= 1 and 0 <= a[1] <= 1
             assert (b[0]-a[0])*(cy-a[1])-(b[1]-a[1])*(cx-a[0]) >= -1e-12
     vertices = fracture_vertices(cells, aspect)
-    assert len(vertices) % 18 == 0
+    assert len(vertices) % 36 == 0
     assert all(math.isfinite(v) for v in vertices)
-    # Planar Voronoi subdivision is linear in site count, even at the hard cap.
-    assert len(vertices) // 6 < count * 24
+    # Closed bevel/wall/back geometry stays linear in the planar subdivision.
+    assert len(vertices) // 12 < count * 192
+    rows = [vertices[i:i+12] for i in range(0, len(vertices), 12)]
+    assert {row[9] for row in rows} == {0., 1., 2., 3.}
+    assert {row[4] for row in rows} == {0., -.22, -.78, -1.}
 
 
 def test_fracture_hard_cap_and_global_random_independence():
@@ -40,6 +43,26 @@ def test_fracture_hard_cap_and_global_random_independence():
     before = random.getstate()
     assert len(fracture_cells(1, 10_000, 1.7)) == 180
     assert random.getstate() == before
+
+
+def test_each_fracture_prism_is_closed_with_real_side_volume():
+    from collections import Counter
+    import numpy as np
+
+    for shard in fracture_cells(713, 24, 16/9):
+        rows = np.asarray(fracture_vertices((shard,), 16/9)).reshape(-1, 12)
+        inset = 1. - .07 * rows[:, 8] * .55
+        points = np.column_stack(((rows[:, 0]-rows[:, 2]) * (16/9) * inset,
+                                  (rows[:, 3]-rows[:, 1]) * inset,
+                                  rows[:, 4] * rows[:, 11] * .65 * .55))
+        triangles = points.reshape(-1, 3, 3)
+        edges = Counter()
+        for triangle in triangles:
+            for a, b in zip(triangle, (triangle[1], triangle[2], triangle[0])):
+                edges[tuple(sorted((tuple(a.round(9)), tuple(b.round(9)))))] += 1
+        assert set(edges.values()) == {2}, "an open sheet cannot show a solid broken edge"
+        volume = np.einsum("ij,ij->i", triangles[:, 0], np.cross(triangles[:, 1], triangles[:, 2])).sum()/6
+        assert volume > 0., "closed outward winding must enclose actual volume"
 
 
 class _DepthGL:

@@ -83,7 +83,9 @@ def _parameters(effect: str, case: str) -> dict[str, object]:
             "seed": 123.25,
             "piece_count": 14,
             "crack_complexity": 1.0,
-            "mosaic_mode": False,
+            "depth": .85,
+            "thickness": .65,
+            "debris": .65,
             "weight_mode": weight_mode,
         }
     if effect == "particle":
