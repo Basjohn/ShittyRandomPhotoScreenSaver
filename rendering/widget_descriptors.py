@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Mapping
 
 from core.dev_gates import gate_signature, is_named_gate_enabled
 
-from core.settings.defaults import get_default_settings
+from core.settings.defaults import get_default_setting
 from rendering.custom_child_geometry import (
     CustomChildRoleDescriptor,
     freeform_artwork_child_role,
@@ -1435,13 +1435,10 @@ def _canonical_monitor_value_for_widget(
     widget_id: str,
     widgets_config: Mapping[str, Any] | None,
 ) -> str:
-    defaults = get_default_settings()["widgets"]
-    if not isinstance(defaults, Mapping):
-        raise KeyError("canonical widget defaults mapping is unavailable")
     settings_key = get_effective_monitor_settings_key_for_widget(
         widget_id, widgets_config
     )
-    section = defaults.get(settings_key)
+    section = get_default_setting(f"widgets.{settings_key}", missing=None)
     if not isinstance(section, Mapping) or "monitor" not in section:
         raise KeyError(
             f"canonical widget monitor route is missing for {widget_id!r} via {settings_key!r}"
@@ -2583,7 +2580,7 @@ def restore_widget_family_to_application_default_layout(
 
     defaults_candidate = default_widgets_config
     if not isinstance(defaults_candidate, Mapping):
-        defaults_candidate = get_default_settings()["widgets"]
+        defaults_candidate = get_default_setting("widgets")
     if not isinstance(defaults_candidate, Mapping):
         raise TypeError("canonical widget defaults must be a mapping")
 
@@ -2666,7 +2663,7 @@ def restore_all_widget_positions_to_application_defaults(
 
     defaults_candidate = default_widgets_config
     if not isinstance(defaults_candidate, Mapping):
-        defaults_candidate = get_default_settings()["widgets"]
+        defaults_candidate = get_default_setting("widgets")
     if not isinstance(defaults_candidate, Mapping):
         raise TypeError("canonical widget defaults must be a mapping")
 

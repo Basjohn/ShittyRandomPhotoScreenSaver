@@ -35,6 +35,10 @@ Use `require_canonical_default(...)`, `get_default_settings(...)`, typed-model d
 resolved config already passed into a runtime owner. If a missing value is genuinely algorithmic/session/
 presentation policy rather than a user-facing product setting, keep it local and name it as such.
 
+The resolved defaults tree is built once per profile and every accessor returns a private copy. Runtime paths
+(context menu, transition batches, widget routing/construction) read one section or leaf with
+`get_default_setting("dotted.key")` rather than copying the whole tree with `get_default_settings()`.
+
 `None` is a real persisted value when the schema permits it; it is not interchangeable with a missing key.
 
 ### Test expectations

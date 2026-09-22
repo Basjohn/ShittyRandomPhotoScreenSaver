@@ -101,13 +101,32 @@ def get_canonical_default(
     contain dots.
     """
 
+    # Read-only, cached canonical tree: we only traverse it and deep-copy the
+    # single leaf value returned below, so the shared tree is never mutated.
+    return lookup_default_path(
+        _canonical_defaults_readonly(_resolve_profile(application)),
+        key,
+        missing=missing,
+    )
+
+
+def lookup_default_path(
+    tree: Mapping[str, Any],
+    key: str,
+    *,
+    missing: Any = MISSING_DEFAULT,
+) -> Any:
+    """Deep-copy the value at dotted *key* in a read-only defaults tree.
+
+    Shared by the raw and resolved default lookups so both keep one dotted-path
+    rule (a literal dotted key wins over traversal).
+    """
+
     key_text = str(key or "").strip()
     if not key_text:
         return missing
 
-    # Read-only, cached canonical tree: we only traverse it and deep-copy the
-    # single leaf value returned below, so the shared tree is never mutated.
-    current: Any = _canonical_defaults_readonly(_resolve_profile(application))
+    current: Any = tree
     parts = key_text.split(".")
     index = 0
     while index < len(parts):
@@ -145,6 +164,7 @@ __all__ = [
     "NORMAL_PROFILE",
     "get_canonical_default",
     "get_raw_default_settings",
+    "lookup_default_path",
     "merge_default_overrides",
     "require_canonical_default",
 ]

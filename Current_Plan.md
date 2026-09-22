@@ -60,7 +60,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 - [~] TX-02 — Random rotation no longer writes Settings or overwrites authored Slide/Wipe directions (session-memory pick handed to the batch resolver; visible Random behaviour unchanged). Physical: two-display Random batches still share one transition + direction; Settings shows the authored direction after a Random session.
 - [ ] Operator: decide TX-02 direction semantics — should Random mode honour an explicitly authored fixed Slide/Wipe direction? (The persistence fix above does not depend on the answer.)
-- [ ] LC-06 — canonical defaults memoized per profile; callers keep private copies.
+- [~] LC-06 — canonical defaults are built once per profile (callers still get private copies); context menu, transition batches and widget routing read sections. Physical: context-menu open/close feel and Settings round-trip `[LIFECYCLE]` construction time.
 - [ ] TX-01 — 3D transition first-frame geometry off the render-thread critical path.
 - [ ] PR-01 — no-op visualizer presentation writes skipped; `request_present()` stays once per publication.
 - [ ] PR-03 — background telemetry off the per-frame dataclass `replace()` path.
