@@ -46,17 +46,6 @@ no second clock, no timer.
 
 ---
 
-## VZ-02 — Env-var debug hook read on every authored tick · P2 · R1 · Risk Low
-
-**Evidence.** `consume_engine_bars()` executes `import os` and
-`float(os.environ.get("SRPSS_SPOTIFY_VIS_DEBUG_CONST", "0.0"))` every tick (`tick_pipeline.py:1124-1132`) and, if
-set, silently replaces live bars with a constant. Env-flag behaviour gates are banned (project policy); this one sits
-on the protected authored clock and can override audio authority invisibly.
-
-- [ ] Delete the hook and any test that depends on it (caller proof first). No replacement flag.
-
----
-
 ## VZ-03 — Per-tick phase instrumentation always on · P3 · R1 · Risk Low
 
 **Evidence.** `logical_tick()` allocates a closure, a dict and nine `perf_counter()` samples every tick

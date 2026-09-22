@@ -42,7 +42,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
-- [R-88 — Qt Quick CUSTOM Edit paint, role lifetime, false test oracles and child-guide churn](R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md) — **SHARED EDIT/FAMILY GEOMETRY AND CHILD-GUIDE GATES ACCEPTED**; wider project/outer-guide churn remains a separately evidenced audit.
+- [R-88 — Qt Quick CUSTOM Edit paint, role lifetime, false test oracles and child-guide churn](R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md) — **SHARED EDIT/FAMILY GEOMETRY AND CHILD-GUIDE GATES ACCEPTED**; wider project/outer-guide churn remains a separately evidenced audit (candidates: `Docs/Future_Work/Runtime_Audit/00_Index.md`).
 - [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md)
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md)
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md)

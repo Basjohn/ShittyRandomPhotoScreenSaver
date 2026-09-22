@@ -1121,16 +1121,6 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     # Always drive the bars from audio to avoid Spotify bridge flakiness.
     widget._fallback_logged = False
 
-    # Debug constant-bar mode
-    import os
-    try:
-        _DEBUG_CONST_BARS = float(os.environ.get("SRPSS_SPOTIFY_VIS_DEBUG_CONST", "0.0"))
-    except Exception:
-        _DEBUG_CONST_BARS = 0.0
-    if _DEBUG_CONST_BARS > 0.0:
-        const_val = max(0.0, min(1.0, _DEBUG_CONST_BARS))
-        smoothed = [const_val] * widget._bar_count
-
     # Check if bars changed
     bar_count = widget._bar_count
     display_bars = widget._display_bars

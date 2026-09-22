@@ -71,9 +71,7 @@ needs evidence before it is worth doing.
 | PR-03 | Custom background node replaces a 44-field frozen telemetry dataclass ~4× per transition frame on the render thread (≈9.8 µs each) | P2 | R1–R2 | Low | measured |
 | PR-02 | Ordinary runtime connects `frameSwapped` to a queued per-frame GUI Python callback that republishes unchanged readiness | P2 | R1 | Low–Med | source + measured |
 | PR-04 | Transition finalization deep-copies the 33 MB destination (`QImage.copy()`) during blocked sync and re-uploads it for the native branch although the custom node already uploaded it | P2 | R2 *est* | Medium | source; needs frame-trace |
-| VZ-02 | `os.environ.get("SRPSS_SPOTIFY_VIS_DEBUG_CONST")` is read on every authored logical tick (banned env-flag mechanism on the protected clock) | P2 | R1 | Low | source |
 | LC-01 | `gc.freeze()` runs once for generation 0 only; every replacement generation loses the gen-2 protection and retired gen-0 cyclic graph stays pinned until exit | P2 | R2 *est* | Medium | source; fold into R-84 exit run |
-| LC-02 | Caller-dead `DisplayManager` multi-display sync with a GUI-thread `time.sleep(0.001)` busy-wait (+ SPSC queue, `utils/lockfree`) | P2 | R1 | Low | caller proof |
 | PW-05 | Feed and Games-You-Follow each hand-roll parentless deadline `QTimer`s because `ThreadManager.single_shot` returns no cancel handle | P2 | R1 | Low | source |
 | VZ-05 | Config-static render extras (~30–90 keys) are re-collected and re-frozen every tick for every mode | P2 | R1–R2 *est* | Medium | source; measure |
 | VZ-03 | Tick phase breakdown (closure + dict + 9 timestamps) is recorded every tick though only read when perf-gated | P3 | R1 | Low | source |
@@ -81,14 +79,12 @@ needs evidence before it is worth doing.
 | PW-03 | Family models notify 30–67 properties through one `stateChanged` (Clock 1 Hz, Media per event) — the single-notify shape R-84 fixed for the context menu | P3 | R1 | Low | source |
 | PW-04 | `FeedRowsModel.replace_rows` resets the whole list on any change; other families update in place | P3 | R1 | Low | source |
 | PW-06 | `ProcessSupervisor` heartbeat spawns a new OS thread every 3 s (`threading.Timer` re-armed per check) | P3 | R1 | Low | source |
-| PR-06 | Render nodes log a full traceback on every frame while a render failure persists | P3 | R1 | Low | source |
 | PR-07 | `QuickSceneFactory` compiles every family QML component at startup (≈290 ms of 517 ms dev compile), active or not | P3 | R1 | Low | measured |
-| LC-03 | Caller-dead engine app-shared `AnimationManager` | P3 | R1 | Low | caller proof |
 | LC-04 | Recurring-timer gap oracle is not reset on stop/rebase and its classifier still names retired QWidget owners (R-87 "172,987 ms `unknown_ui_thread_stall`" anomaly) | P3 | R1 | Low | source |
 | LC-05 | Context-menu entries are refreshed *after* the menu is shown; operator-reported "2 QImage tasks per menu open" not yet reproduced | P3 | R1 | Low | source; open question |
 | PR-05 | Any unrelated scene frame (widget animation, transition, menu) re-runs the Python visualizer render callback; local idle windows show 110–116 draws/s vs ~90 revisions/s | P3 | ? | High | log; architecture — operator only |
 | ST-01 | `DisplayManager` is a 4.9k-line owner of ~12 concerns | P3 | R1 | Medium | source |
-| DC-01..04 | Doc/source contradictions (Spec Melt, R-88 routing, stale comments) | P2/P3 | R1 | Low | source |
+| DC-03..04 | Doc/source contradictions (retired-owner comments in the timer-gap classifier; `frameSwapped` guardrail vs source) | P3 | R1 | Low | source |
 
 Parked / rejected candidates are listed in 06 §Considered and rejected so they are not re-audited.
 
@@ -96,8 +92,6 @@ Parked / rejected candidates are listed in 06 §Considered and rejected so they 
 
 Each wave is independently committable. Nothing below overrides `Current_Plan.md` ordering.
 
-- [ ] **Wave A — zero-behaviour hygiene (one checkpoint):** VZ-02, LC-02, LC-03, PR-06, DC-01, DC-02, DC-03.
-  Removes a banned env hook from the authored clock and a forbidden GUI sleep pattern; caller proof per R-77.
 - [ ] **Wave B — measured runtime wins and the one authority defect:** TX-02 (after the operator direction
   decision) → LC-06 → TX-01 → PR-01 → PR-03 → PW-01 → VZ-01. Each is its own checkpoint with its acceptance lane (doc
   sections list the exact bar).

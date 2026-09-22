@@ -32,7 +32,6 @@ from PySide6.QtGui import QImage
 from core.events import EventSystem
 from core.resources import ResourceManager
 from core.threading import ThreadManager
-from core.animation import AnimationManager
 from core.settings import SettingsManager
 from core.settings.default_contract import require_canonical_default
 from core.logging.logger import get_logger
@@ -146,7 +145,6 @@ class ScreensaverEngine(QObject):
         self.event_system: Optional[EventSystem] = None
         self.resource_manager: Optional[ResourceManager] = None
         self.thread_manager: Optional[ThreadManager] = None
-        self.animation_manager: Optional[AnimationManager] = None
         self.settings_manager: Optional[SettingsManager] = None
         
         # Engine components
@@ -433,14 +431,6 @@ class ScreensaverEngine(QObject):
             ThreadManager.set_app_shared(self.thread_manager)
             logger.debug("ThreadManager initialized")
 
-            # Animation manager
-            self.animation_manager = AnimationManager(
-                resource_manager=self.resource_manager,
-                owner="engine:app_shared",
-            )
-            AnimationManager.set_app_shared(self.animation_manager)
-            logger.debug("AnimationManager initialized")
-            
             # Settings manager (skip if pre-assigned, e.g. by tests)
             if self.settings_manager is None:
                 self.settings_manager = SettingsManager()

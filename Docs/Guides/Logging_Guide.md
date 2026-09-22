@@ -258,6 +258,8 @@ The main log is the spine. The sidecars are the detailed forensic payload. And t
 ## Guardrails
 
 - no per-frame routine INFO stream;
+- a render node that keeps failing logs the first traceback per failure signature, then counts
+  (`rendering/quick/render_failure_log.py`); telemetry still records every failed frame;
 - no logging-driven repaint/cadence/control flow;
 - no UI-thread normal file/rotation work;
 - only the explicit saturated WARNING+ emergency path may write synchronously;

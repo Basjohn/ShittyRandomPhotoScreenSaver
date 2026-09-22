@@ -18,6 +18,7 @@ from ..image_state import PresentationImage
 from ..transitions.render_contract import QuickTransitionRenderFrame
 from ..transitions.render_host import QuickTransitionRenderHost
 from ..transitions.state import TransitionRun, TransitionSample
+from ..render_failure_log import RenderFailureLog
 from .gl_resources import compile_program
 from .image_textures import PresentationTextureHost
 from .telemetry import RenderNodeTelemetry
@@ -174,6 +175,7 @@ class BackgroundRenderNode(QSGRenderNode):
         self._telemetry = telemetry or RenderNodeTelemetry()
         self._screen_index = int(screen_index)
         self._frame_trace = frame_trace
+        self._failure_log = RenderFailureLog(logger, "Background render node")
         self._trace_render_sequence = 0
         self._logical_size = (0.0, 0.0)
         self._device_pixel_ratio = 1.0
@@ -283,9 +285,12 @@ class BackgroundRenderNode(QSGRenderNode):
                     revision=trace_sequence,
                     auxiliary=transition_run_id,
                 )
+            if self._failure_log.failing:
+                self._failure_log.note_success()
         except Exception as exc:
-            self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
-            logger.exception("[QUICK] Background render node failed: %s", exc)
+            signature = f"{type(exc).__name__}: {exc}"
+            self._telemetry.note_error(signature)
+            self._failure_log.note_failure(signature, exc)
 
     def release_presentation_textures(self) -> None:
         """Release transition/base image textures while preserving warm GL programs."""

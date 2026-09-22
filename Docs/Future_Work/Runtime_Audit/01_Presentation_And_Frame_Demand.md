@@ -169,17 +169,6 @@ architecture decision with installed A/B, not an optimization.
 
 ---
 
-## PR-06 — Per-frame traceback logging on a persistent render failure · P3 · R1 · Risk Low
-
-`VisualizerRenderNode.render()` (`visualizer/node.py:387-389`) and `BackgroundRenderNode.render()`
-(`render/background_node.py:286-288`) call `logger.exception` on every failing frame. A persistent failure becomes a
-90–330 records/s traceback storm on the render thread (formatting under the GIL) on top of the failure itself.
-
-- [ ] Log the first occurrence per error signature with traceback, then count; telemetry `note_error` unchanged.
-      Do not suppress or reclassify the error (Guardrails "programming defects are not reconciliation policy").
-
----
-
 ## PR-07 — Eager compile of every family QML component at startup · P3 · R1 · Risk Low
 
 `QuickSceneFactory.__init__` (`scene_controller.py:219-234`) compiles all 12 registered family components.
