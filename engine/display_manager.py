@@ -60,6 +60,7 @@ from rendering.quick.state import (
     QuickWindowRole,
 )
 from rendering.quick.transitions.request_resolution import (
+    RandomTransitionSelection,
     ResolvedQuickTransitionSpec,
     resolve_quick_transition_spec,
 )
@@ -225,6 +226,9 @@ class DisplayManager(QObject):
         self._transition_work_pending = False
         self._quick_transition_batch_spec: ResolvedQuickTransitionSpec | None = None
         self._quick_transition_spec_resolved = False
+        # Engine-made Random pick for the next resolved batch; kept until the
+        # engine replaces it so Previous (no new pick) reuses the current one.
+        self._random_transition_selection: RandomTransitionSelection | None = None
         self._quick_transition_paths: dict[int, str] = {}
         self._quick_batch_expected_screens: set[int] = set()
         self._quick_batch_published_screens: set[int] = set()
@@ -3726,6 +3730,19 @@ class DisplayManager(QObject):
         self._reset_quick_transition_batch()
         return True
 
+    def set_random_transition_selection(
+        self,
+        selection: RandomTransitionSelection | None,
+    ) -> None:
+        """Adopt the engine's Random pick for batches resolved from now on."""
+
+        if selection is not None and not isinstance(
+            selection,
+            RandomTransitionSelection,
+        ):
+            raise TypeError("selection must be a RandomTransitionSelection")
+        self._random_transition_selection = selection
+
     def _resolve_quick_transition_batch_spec(
         self,
     ) -> ResolvedQuickTransitionSpec | None:
@@ -3733,7 +3750,8 @@ class DisplayManager(QObject):
 
         if not self._quick_transition_spec_resolved:
             self._quick_transition_batch_spec = resolve_quick_transition_spec(
-                self.settings_manager
+                self.settings_manager,
+                random_selection=self._random_transition_selection,
             )
             self._quick_transition_spec_resolved = True
         return self._quick_transition_batch_spec

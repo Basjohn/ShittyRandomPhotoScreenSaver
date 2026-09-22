@@ -58,7 +58,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 `Docs/Future_Work/Runtime_Audit/00_Index.md` holds the prioritized, source-cited candidate register, its per-item acceptance bars and the historical-bug cross-audit. The operator admitted Wave A (zero-behaviour hygiene, landed) and Wave B in the index order. Waves C/D stay candidates until promoted here.
 
-- [ ] TX-02 — stop Random rotation writing Settings (carry the choice in the batch spec, anti-repeat in memory) while keeping today's visible Random-mode direction behaviour.
+- [~] TX-02 — Random rotation no longer writes Settings or overwrites authored Slide/Wipe directions (session-memory pick handed to the batch resolver; visible Random behaviour unchanged). Physical: two-display Random batches still share one transition + direction; Settings shows the authored direction after a Random session.
 - [ ] Operator: decide TX-02 direction semantics — should Random mode honour an explicitly authored fixed Slide/Wipe direction? (The persistence fix above does not depend on the answer.)
 - [ ] LC-06 — canonical defaults memoized per profile; callers keep private copies.
 - [ ] TX-01 — 3D transition first-frame geometry off the render-thread critical path.

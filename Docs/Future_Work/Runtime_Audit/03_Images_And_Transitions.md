@@ -64,52 +64,29 @@ per Transitions.md.
 
 ---
 
-## TX-02 — Random selection writes user settings every rotation and clobbers authored directions · P1 · R2 · Risk Medium
+## TX-02 — Random selection wrote user settings every rotation and clobbered authored directions · P1 · R2 · Risk Medium
 
-**Evidence (source + measurement).** With `random_always=True` (the canonical default), every rotation runs
-`_prepare_random_transition_if_needed()` (`screensaver_engine.py:1546-1641`), which:
+**Was:** every Random rotation made 2–6 `settings_manager.set()` calls (each deep-copying the whole store and fanning
+out `settings_changed`) plus `save()` (≈1.9 ms idle + a file rewrite), used persisted `random_choice` as engine →
+DisplayManager IPC, and overwrote the user-authored `transitions.slide.direction` / `transitions.wipe.direction` with
+the last random pick.
 
-- calls `settings_manager.set()` 2–6 times — `transitions.random_choice`, `transitions.last_random_choice`, and for
-  Slide/Wipe **`transitions.slide.direction` / `transitions.wipe.direction`** plus their `last_direction` — then
-  `save()`;
-- each `set()` deep-copies the *entire* settings store for the ordered writer (`json_store.py:217-255`) and fans
-  `settings_changed` out synchronously; the store is ≈2,600 objects for the operator's profile. Measured on a copy
-  of that profile: **≈1.9 ms per rotation (idle)** on the GUI thread, plus one full settings-file rewrite per rotation;
-- the Quick request resolver then reads `random_choice` back from Settings (`request_resolution.py:176-190`): the
-  persisted store is being used as in-process IPC between the engine and DisplayManager.
+**Now (implemented):** the engine keeps `RandomTransitionHistory` (current pick, anti-repeat choice and per-transition
+direction) in session memory and hands a `RandomTransitionSelection` to `DisplayManager.set_random_transition_selection`;
+`resolve_quick_transition_spec(random_selection=...)` resolves one batch spec from it and ignores any persisted
+`random_choice`. Visible Random behaviour is unchanged: a random Slide/Wipe direction with anti-repeat, shared by every
+display of the batch; Previous reuses the current pick. Only the first pick of a session no longer avoids the previous
+session's last pick. Normalization repair writes (rare) are unchanged; existing profiles are not auto-repaired.
 
-**Correctness defect.** `transitions.slide.direction` (canonical default `'Random'`) and `transitions.wipe.direction`
-(canonical default `'Bottom to Top'`) are **user-authored product settings**. The resolver already randomizes a
-`'Random'` direction per request (`request_resolution.py:118-131, 243-261`), so the engine's pre-selection is
-redundant, overrides an explicitly authored fixed direction while Random is on, and permanently replaces the user's
-value with the last random pick. Turning Random off afterwards leaves Slide/Wipe on a direction the user never chose.
-This violates the Defaults_Canonical_Schema_Dedup invariant "one persisted product setting has one canonical path"
-(engine-managed history such as `random_choice`/`last_*` is acknowledged there as session state; the authored
-`direction` keys are not).
-
-**Proposal.**
-
-1. Stop writing `transitions.slide.direction` / `transitions.wipe.direction` from the engine. Directions resolve in
-   the request resolver from the user's authored value (which may be `'Random'`).
-2. Carry the chosen Random transition id in memory through the existing batch spec
-   (`DisplayManager._resolve_quick_transition_batch_spec`, `display_manager.py:3733-3743` already shares one spec
-   across displays) instead of round-tripping through persistence.
-3. Keep anti-repeat memory (`last_random_choice`, per-transition `last_direction`) in memory; persist it at most once
-   per session/teardown if the operator wants cross-session anti-repeat (decision below).
-4. Keep fail-closed semantics: empty effective pool → no transition this rotation (R-65: destination withheld, loud).
-
-**Operator decision.** Should Random mode honour an explicitly authored fixed Slide/Wipe direction, or always
-randomize direction? (Current code always randomizes in Random mode; the fix above honours the authored value and
-randomizes only when it is `'Random'`.)
-
-**Existing-profile repair.** Profiles already clobbered cannot be distinguished from a user choice; do **not**
-auto-rewrite them. Note it in release notes instead.
-
-- [ ] Decision recorded.
-- [ ] Focused: transition request resolution tests, `tests/test_settings_manager.py`, defaults-authority tests; new bar
-      that a Random rotation performs zero `set()` on authored transition keys.
-- [ ] Physical: Random rotation across two displays still shares one choice per batch; manual transition cycle and
-      context-menu transition selection unchanged.
+- [x] Focused: `test_transition_distribution.py` (400 rotations → zero `set()`/`save()`, authored directions intact,
+      choice + direction anti-repeat), `test_qtquick_transition_request_resolution.py` (stale persisted `random_choice`
+      ignored; direction override leaves authored value), `test_qtquick_h_cutover.py` (DisplayManager seam, Previous
+      reuse), activation-admission tests.
+- [ ] Operator decision: should Random honour an explicitly authored fixed Slide/Wipe direction? (Today: always
+      random, as before. Honouring it is a one-line change in the engine's direction pick.)
+- [ ] Physical: Random rotation across two displays still shares one transition + direction per batch; manual cycle
+      (C) and context-menu transition selection unchanged; Settings shows the authored Slide/Wipe direction after a
+      Random session.
 
 ---
 

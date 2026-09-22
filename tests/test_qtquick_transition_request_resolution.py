@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from rendering.quick.transitions.request_resolution import (
+    RandomTransitionSelection,
     resolve_quick_transition_spec,
 )
 
@@ -103,15 +104,71 @@ def test_random_choice_fails_closed_when_not_currently_admissible(
             {
                 "type": "Crossfade",
                 "random_always": True,
-                "random_choice": choice,
                 "pool": pool,
                 "activation": activation,
             },
             hw_accel=hw_accel,
+        ),
+        random_selection=(
+            None if choice is None else RandomTransitionSelection(choice)
+        ),
+    )
+
+    assert spec is None
+
+
+def test_persisted_random_choice_is_not_a_selection_authority() -> None:
+    """A stale persisted ``random_choice`` from older builds is ignored (TX-02)."""
+
+    spec = resolve_quick_transition_spec(
+        _Settings(
+            {
+                "type": "Crossfade",
+                "random_always": True,
+                "random_choice": "Slide",
+                "pool": {"Slide": True},
+            }
         )
     )
 
     assert spec is None
+
+
+@pytest.mark.parametrize(
+    ("name", "section", "authored", "picked", "expected"),
+    [
+        ("Slide", "slide", "Right to Left", "Top to Bottom", "down"),
+        ("Wipe", "wipe", "Bottom to Top", "Diagonal TR-BL", "diag_tr_bl"),
+    ],
+)
+def test_random_selection_direction_overrides_without_touching_authored_value(
+    name,
+    section,
+    authored,
+    picked,
+    expected,
+) -> None:
+    transitions = {
+        "type": "Crossfade",
+        "random_always": True,
+        "pool": {name: True},
+        section: {"direction": authored},
+    }
+
+    spec = resolve_quick_transition_spec(
+        _Settings(transitions),
+        random_selection=RandomTransitionSelection(name, direction=picked),
+    )
+
+    assert spec is not None
+    assert spec.direction == expected
+    assert transitions[section] == {"direction": authored}
+
+    manual = resolve_quick_transition_spec(
+        _Settings({**transitions, "type": name, "random_always": False}),
+    )
+    assert manual is not None
+    assert manual.direction != expected
 
 
 def test_admitted_random_choice_and_block_flip_geometry_are_frozen() -> None:
@@ -120,7 +177,6 @@ def test_admitted_random_choice_and_block_flip_geometry_are_frozen() -> None:
             {
                 "type": "Crossfade",
                 "random_always": True,
-                "random_choice": "Block Puzzle Flip",
                 "pool": {"Block Puzzle Flip": True},
                 "activation": {"Block Puzzle Flip": True},
                 "durations": {"Block Puzzle Flip": 777},
@@ -130,7 +186,8 @@ def test_admitted_random_choice_and_block_flip_geometry_are_frozen() -> None:
                     "cols": 11,
                 },
             }
-        )
+        ),
+        random_selection=RandomTransitionSelection("Block Puzzle Flip"),
     )
 
     assert spec is not None
@@ -181,7 +238,6 @@ def test_new_transition_ids_resolve_through_manual_and_random_admission(
             {
                 "type": "Crossfade",
                 "random_always": True,
-                "random_choice": setting_name,
                 "activation": activation,
                 "pool": pool,
                 "durations": durations,
@@ -189,6 +245,7 @@ def test_new_transition_ids_resolve_through_manual_and_random_admission(
             },
             hw_accel=True,
         ),
+        random_selection=RandomTransitionSelection(setting_name),
         random_source=_Rng("left"),
     )
     assert random is not None

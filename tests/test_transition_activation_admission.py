@@ -70,6 +70,25 @@ class _FakeSettingsManager:
         return
 
 
+def _engine_stub(settings):
+    from engine.screensaver_engine import RandomTransitionHistory, ScreensaverEngine
+
+    engine = SimpleNamespace(
+        settings_manager=settings,
+        display_manager=None,
+        _random_transition_history=RandomTransitionHistory(),
+    )
+    engine._prepare_random_transition_if_needed = (
+        lambda: ScreensaverEngine._prepare_random_transition_if_needed(engine)
+    )
+    engine._publish_random_transition_selection = (
+        lambda selection: ScreensaverEngine._publish_random_transition_selection(
+            engine, selection
+        )
+    )
+    return engine
+
+
 def test_engine_disables_random_when_effective_pool_empties():
     from engine.screensaver_engine import ScreensaverEngine
 
@@ -82,12 +101,13 @@ def test_engine_disables_random_when_effective_pool_empties():
         "activation": {"Burn": False},  # the only pooled member is deactivated
     }
     settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
-    engine = type("EngineStub", (), {"settings_manager": settings})()
+    engine = _engine_stub(settings)
 
-    ScreensaverEngine._prepare_random_transition_if_needed(engine)
+    engine._prepare_random_transition_if_needed()
 
-    # Random turned off (empty effective pool) and no random_choice prepared.
+    # Random turned off (empty effective pool) and no random pick prepared.
     assert settings.get("transitions.random_always") is False
+    assert engine._random_transition_history.current is None
     assert settings.get("transitions.random_choice") is None
     # A deterministic activated manual selection was persisted.
     manual = settings.get("transitions.type")
@@ -104,9 +124,9 @@ def test_engine_zero_activated_state_repairs_and_selects_activated():
         "activation": {name: False for name in get_transition_setting_names()},
     }
     settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
-    engine = type("EngineStub", (), {"settings_manager": settings})()
+    engine = _engine_stub(settings)
 
-    ScreensaverEngine._prepare_random_transition_if_needed(engine)
+    engine._prepare_random_transition_if_needed()
 
     # Zero-activated repaired: Crossfade reactivated in canonical state.
     assert is_transition_activated(transitions, "Crossfade")

@@ -62,7 +62,7 @@ needs evidence before it is worth doing.
 | ID | Finding | Pri | Reward | Risk | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | TX-01 | 3D transitions build fracture/mesh geometry in Python on the render thread on the first transition frame (Glass default ≈25 ms; Crumble default ≈11 ms; 128-piece Crumble ≈40 ms), GIL held, per display | P1 | R3 | Low | measured |
-| TX-02 | Random-transition selection round-trips through persisted Settings every rotation (2–6 `set()` each deep-copying the full store + `save()` + file rewrite) **and overwrites the user-authored Slide/Wipe `direction` settings** with the last random pick | P1 | R2 | Medium | source + measured 1.9 ms idle |
+| TX-02 | `[~]` Random rotation used persisted Settings as scratch space (2–6 `set()` + `save()` per rotation) **and overwrote the user-authored Slide/Wipe `direction`**; now session memory handed to the batch resolver — physical check + direction-semantics decision open | P1 | R2 | Medium | source + measured 1.9 ms idle |
 | PR-01 | Every visualizer publication (~90 Hz) re-resolves presentation (≈49 µs), rewrites ~25 QML root properties + 3 QColors, commits viewport metrics twice and resets the CUSTOM override, even when nothing changed | P1 | R2 | Low | measured + CHK27 |
 | LC-06 | `get_default_settings()` rebuilds and re-normalizes all canonical defaults (≈5.5 ms) on every call; called twice per context-menu open, per image batch, and per enabled widget × display at every runtime construction | P1 | R2 | Low | measured |
 | PW-02 | Media refresh (the Visualizer's play/pause truth) shares the generic 4-worker IO pool with every network provider and RSS; `requests` timeouts do not bound DNS | P1 | R3 | Medium | source; needs fault injection |
@@ -92,9 +92,8 @@ Parked / rejected candidates are listed in 06 §Considered and rejected so they 
 
 Each wave is independently committable. Nothing below overrides `Current_Plan.md` ordering.
 
-- [ ] **Wave B — measured runtime wins and the one authority defect:** TX-02 (after the operator direction
-  decision) → LC-06 → TX-01 → PR-01 → PR-03 → PW-01 → VZ-01. Each is its own checkpoint with its acceptance lane (doc
-  sections list the exact bar).
+- [~] **Wave B (admitted) — measured runtime wins and the one authority defect:** TX-02 → LC-06 → TX-01 → PR-01 →
+  PR-03 → PW-01 → VZ-01. Each is its own checkpoint with its acceptance lane (doc sections list the exact bar).
 - [ ] **Wave C — evidence first, then decide:** PW-02 (IO starvation fault injection), LC-01 (piggy-back on the
   pending R-84 3–5-cycle Settings churn run: grep `[PERF][GC_POLICY] generation=2`), PR-04 (`--frame-trace` around
   one transition end), VZ-05 (per-tick capture timing already recorded in `_tick_phase_ms`).

@@ -62,12 +62,46 @@ from core.settings.capability_activation import (
     is_transition_activated,
     normalize_transition_capability_state,
 )
+from rendering.quick.transitions.request_resolution import RandomTransitionSelection
 from utils.image_cache import ImageCache
 from utils.image_prefetcher import ImagePrefetcher
 
 logger = get_logger(__name__)
 
 _JEDI_MODE_EVENT = "widget.jedi_mode_requested"
+
+_RANDOM_SLIDE_DIRECTIONS = ('Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top')
+_RANDOM_WIPE_DIRECTIONS = (
+    'Left to Right',
+    'Right to Left',
+    'Top to Bottom',
+    'Bottom to Top',
+    'Diagonal TL-BR',
+    'Diagonal TR-BL',
+)
+
+
+class RandomTransitionHistory:
+    """Session memory for Random rotation: current pick plus anti-repeat history.
+
+    Random rotation must not use persisted Settings as scratch space: authored
+    Slide/Wipe directions stay the user's, and a rotation costs no store copy,
+    change fan-out or file rewrite.
+    """
+
+    __slots__ = ("current", "last_choice", "last_directions")
+
+    def __init__(self) -> None:
+        self.current: RandomTransitionSelection | None = None
+        self.last_choice: str | None = None
+        self.last_directions: dict[str, str] = {}
+
+    def pick_direction(self, transition_name: str, choices: tuple[str, ...]) -> str:
+        last = self.last_directions.get(transition_name)
+        candidates = [d for d in choices if d != last] if last in choices else list(choices)
+        direction = random.choice(candidates)
+        self.last_directions[transition_name] = direction
+        return direction
 
 
 class EngineState(Enum):
@@ -149,6 +183,8 @@ class ScreensaverEngine(QObject):
         
         # Engine components
         self.display_manager: Optional[DisplayManager] = None
+        # Random rotation history is session memory; it never writes Settings.
+        self._random_transition_history = RandomTransitionHistory()
         self.image_queue: Optional[ImageQueue] = None
         
         # Image sources
@@ -791,6 +827,9 @@ class ScreensaverEngine(QObject):
             )
             
             display_manager = self.display_manager
+            display_manager.set_random_transition_selection(
+                self._random_transition_history.current
+            )
 
             def _connect_runtime_signal(signal_name: str, callback) -> None:
                 signal = getattr(display_manager, signal_name)
@@ -1242,8 +1281,9 @@ class ScreensaverEngine(QObject):
             # Resolve the batch transition *before* queue/history mutation.  The
             # transition is image-independent, so there is no reason to advance
             # image truth and only then discover that the selected transition
-            # cannot be admitted.  Random selection is persisted once here and
-            # the display manager caches the resolved spec for the whole batch.
+            # cannot be admitted.  Random selection happens once here (session
+            # memory, never persisted) and the display manager caches the
+            # resolved spec for the whole batch.
             transition_choice = None
             try:
                 transition_choice = self._prepare_random_transition_if_needed()
@@ -1575,60 +1615,53 @@ class ScreensaverEngine(QObject):
                 if is_transition_available_for_hw(name, hw)
             ]
 
+            history = self._random_transition_history
             if not available:
                 # Effective pool (activated ∩ saved pool ∩ hardware) is empty.
                 # FAIL CLOSED: never broaden Random beyond the saved pool and
                 # never run an out-of-pool transition merely because hardware
-                # filtering removed every pooled candidate. Clear any stale
-                # pre-resolved choice and select nothing this rotation.
-                self.settings_manager.set('transitions.random_choice', None)
+                # filtering removed every pooled candidate. Clear the current
+                # pick and select nothing this rotation.
+                history.current = None
+                self._publish_random_transition_selection(None)
                 logger.info(
                     "Random transition selection failed closed: empty effective "
                     "pool (activated ∩ saved pool ∩ hardware)."
                 )
                 return None
-            # Avoid immediate repeats when runtime history contains a valid
-            # canonical transition. Invalid/retired history means "no prior
-            # choice"; it is not a product-default selection.
-            last_type = canonicalize_transition_name(
-                self.settings_manager.get('transitions.last_random_choice', None),
-                fallback="",
-            )
+            # Avoid immediate repeats of this session's previous pick.
+            last_type = history.last_choice
             candidates = [t for t in available if t != last_type] if last_type in available else available
             if not candidates:
                 candidates = available
             choice = random.choice(candidates)
-            
-            # Also choose random parameters for transitions that need them
-            # This ensures all displays use the SAME random parameters
+
+            # Slide/Wipe directions are picked with the transition so every
+            # display of the batch shares them. They ride in the selection;
+            # the authored direction settings are never overwritten.
+            direction = None
             if choice == "Slide":
-                directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top']
-                last_dir = self.settings_manager.get('transitions.slide.last_direction', None)
-                candidates = [d for d in directions if d != last_dir] if last_dir in directions else directions
-                direction = random.choice(candidates) if candidates else random.choice(directions)
-                # Persist under nested slide key (no diagonals)
-                self.settings_manager.set('transitions.slide.direction', direction)
-                self.settings_manager.set('transitions.slide.last_direction', direction)
+                direction = history.pick_direction(choice, _RANDOM_SLIDE_DIRECTIONS)
             elif choice == "Wipe":
-                # Choose a random wipe direction and persist it
-                wipe_directions = ['Left to Right', 'Right to Left', 'Top to Bottom', 'Bottom to Top', 
-                                  'Diagonal TL-BR', 'Diagonal TR-BL']
-                last_wipe_dir = self.settings_manager.get('transitions.wipe.last_direction', None)
-                candidates = [d for d in wipe_directions if d != last_wipe_dir] if last_wipe_dir in wipe_directions else wipe_directions
-                wdir = random.choice(candidates) if candidates else random.choice(wipe_directions)
-                # Persist under nested wipe key
-                self.settings_manager.set('transitions.wipe.direction', wdir)
-                self.settings_manager.set('transitions.wipe.last_direction', wdir)
-            
-            # Persist chosen type for this rotation so all displays share it
-            self.settings_manager.set('transitions.random_choice', choice)
-            self.settings_manager.set('transitions.last_random_choice', choice)
-            self.settings_manager.save()
+                direction = history.pick_direction(choice, _RANDOM_WIPE_DIRECTIONS)
+
+            history.last_choice = choice
+            selection = RandomTransitionSelection(transition_name=choice, direction=direction)
+            history.current = selection
+            self._publish_random_transition_selection(selection)
             logger.info(f"Random transition choice for this rotation: {choice}")
             return choice
         except Exception as e:
             logger.debug(f"Random transition selection failed: {e}")
             return None
+
+    def _publish_random_transition_selection(
+        self,
+        selection: RandomTransitionSelection | None,
+    ) -> None:
+        display_manager = self.display_manager
+        if display_manager is not None:
+            display_manager.set_random_transition_selection(selection)
 
     def _get_primary_display_size(self):
         """Return primary display size (width, height) for pre-scaling, or None.

@@ -1162,6 +1162,74 @@ def test_display_manager_resolves_one_transition_spec_and_commits_on_finalize(
         qt_app.processEvents()
 
 
+def test_display_manager_shares_engine_random_selection_across_batch_and_previous(
+    qt_app,
+) -> None:
+    """TX-02: the engine's in-memory Random pick, not persisted Settings, drives batches."""
+
+    from rendering.quick.transitions.request_resolution import RandomTransitionSelection
+
+    transitions = {
+        "type": "Crossfade",
+        "random_always": True,
+        "pool": {"Slide": True, "Wipe": True},
+        "durations": {"Slide": 275, "Wipe": 300},
+        "slide": {"direction": "Right to Left"},
+        "wipe": {"direction": "Bottom to Top"},
+        # Stale value left by older builds; it must not select anything.
+        "random_choice": "Crossfade",
+    }
+
+    class _Settings:
+        def get(self, key: str, default=None):
+            if key == "transitions":
+                return transitions
+            if key == "display.hw_accel":
+                return False
+            return default
+
+        def get_bool(self, key: str, default: bool = False) -> bool:
+            return bool(self.get(key, default))
+
+    manager = DisplayManager(settings_manager=_Settings(), runtime_generation=704)
+    try:
+        manager.set_transition_work_pending(True)
+        assert manager._resolve_quick_transition_batch_spec() is None
+
+        manager._reset_quick_transition_batch()
+        manager.set_random_transition_selection(
+            RandomTransitionSelection("Slide", direction="Top to Bottom")
+        )
+        spec = manager._resolve_quick_transition_batch_spec()
+        assert spec is not None
+        assert (spec.transition_id, spec.direction) == ("slide", "down")
+        assert manager._resolve_quick_transition_batch_spec() is spec
+
+        # Previous/implicit batches make no new pick and reuse the current one.
+        manager._reset_quick_transition_batch()
+        again = manager._resolve_quick_transition_batch_spec()
+        assert again is not None
+        assert (again.transition_id, again.direction) == ("slide", "down")
+
+        manager._reset_quick_transition_batch()
+        manager.set_random_transition_selection(
+            RandomTransitionSelection("Wipe", direction="Diagonal TL-BR")
+        )
+        wipe = manager._resolve_quick_transition_batch_spec()
+        assert wipe is not None
+        assert (wipe.transition_id, wipe.direction) == ("wipe", "diag_tl_br")
+
+        assert transitions["slide"] == {"direction": "Right to Left"}
+        assert transitions["wipe"] == {"direction": "Bottom to Top"}
+        with pytest.raises(TypeError):
+            manager.set_random_transition_selection("Slide")
+    finally:
+        manager.displays = []
+        manager.disconnect_monitor_detection()
+        manager.deleteLater()
+        qt_app.processEvents()
+
+
 def _visualizer_item(display_identity: str, extent: tuple[float, float]):
     return CustomLayoutSessionItem(
         source_key=CustomLayoutKey("spotify_visualizer", display_identity),
