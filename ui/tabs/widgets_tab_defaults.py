@@ -363,7 +363,9 @@ def _on_clear_selected_caches(tab: WidgetsTab) -> None:
         tab,
         "Clear Selected Caches",
         "Clear these caches: " + ", ".join(selected_labels) + "?\n\n"
-        "Cached content may be downloaded or rebuilt again when its widget refreshes.",
+        "Cached content may be downloaded or rebuilt again when its widget refreshes.\n"
+        "Live widgets can keep displaying already-loaded data or rewrite the cache; "
+        "close the screensaver before a durable disk reset.",
         yes_text="Clear Caches",
         no_text="Cancel",
         default_to_yes=False,
@@ -397,17 +399,29 @@ def _on_clear_selected_caches(tab: WidgetsTab) -> None:
                 if result.skipped_files:
                     _set_cache_status(
                         target,
-                        f"Cleared {result.removed_files} files; {result.skipped_files} were in use or protected.",
+                        f"Cleared {result.removed_files} disk files; {result.skipped_files} could not "
+                        "be cleared. Live widgets can retain or recreate cached content.",
                         state="warning",
                     )
                 elif result.removed_files:
                     _set_cache_status(
                         target,
-                        f"Cleared {result.removed_files} files ({_format_byte_count(result.removed_bytes)}).",
+                        f"Cleared {result.removed_files} disk files ({_format_byte_count(result.removed_bytes)}). "
+                        "Live widgets can retain or recreate cached content.",
                         state="success",
                     )
                 else:
-                    _set_cache_status(target, "The selected caches were already empty.", state="success")
+                    inspected = tuple(str(item.path) for family in selected_ids
+                                      if family in descriptor_map
+                                      for item in descriptor_map[family].targets)
+                    _set_cache_status(
+                        target,
+                        "No matching disk-cache files found in: "
+                        + ("; ".join(inspected) if inspected else "selected cache targets")
+                        + ". Visible widgets may still hold content in memory or rewrite cache files; "
+                        "close the screensaver before resetting persisted content.",
+                        state="warning",
+                    )
             except RuntimeError:
                 return
 
@@ -930,7 +944,8 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     for index, descriptor in enumerate(descriptors):
         checkbox = QCheckBox(descriptor.label)
         checkbox.setProperty("circleIndicator", True)
-        checkbox.setToolTip(descriptor.description)
+        checkbox.setToolTip(descriptor.description + "\nDisk targets: "
+                           + "; ".join(str(target.path) for target in descriptor.targets))
         checkbox.toggled.connect(lambda _checked, owner=tab: _update_cache_clear_button_state(owner))
         tab.cache_family_checks[descriptor.family_id] = checkbox
         cache_grid.addWidget(checkbox, index // 2, index % 2)

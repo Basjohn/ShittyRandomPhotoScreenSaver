@@ -116,6 +116,26 @@ OverlayWidget {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             opacity: feedRoot.feedModel.interactionEnabled ? 0.9 : 0.45
+            readonly property bool canActivate: visible
+                && feedRoot.feedModel.interactionEnabled
+                && !feedRoot.feedModel.refreshing
+                && !feedRoot.customLayoutInputBlocked
+
+            Rectangle {
+                objectName: "feedRefreshHoverFrame"
+                anchors.fill: parent
+                radius: 6.0
+                color: "transparent"
+                border.color: feedRoot.feedModel.textColor
+                border.width: refreshHover.hovered && refreshTarget.canActivate
+                    ? feedRoot.scaleAwareStrokeWidth(1.5) : 0.0
+            }
+            HoverHandler {
+                id: refreshHover
+                enabled: refreshTarget.canActivate
+                blocking: false
+                cursorShape: Qt.PointingHandCursor
+            }
 
             Canvas {
                 id: refreshCanvas
@@ -142,7 +162,8 @@ OverlayWidget {
             }
 
             TapHandler {
-                enabled: feedRoot.feedModel.interactionEnabled && !feedRoot.feedModel.refreshing
+                enabled: refreshTarget.canActivate
+                acceptedButtons: Qt.LeftButton
                 onTapped: feedRoot.refreshRequested()
             }
         }

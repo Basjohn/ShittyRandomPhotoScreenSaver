@@ -8,6 +8,7 @@ from typing import Iterable, Sequence
 
 from core.logging.logger import get_logger
 from core.settings.storage_paths import get_app_data_dir
+from core.steam.friend_pulse_pins import PIN_FILE_NAME
 
 logger = get_logger(__name__)
 
@@ -25,6 +26,9 @@ class CacheFamilyDescriptor:
     label: str
     description: str
     targets: tuple[CacheTarget, ...]
+    # User-authored state can share a legacy cache directory. It must survive
+    # a content-cache reset even when all provider records and artwork are purged.
+    protected_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -91,8 +95,10 @@ def get_cache_family_descriptors(
         CacheFamilyDescriptor(
             "steam",
             "Steam Data And Artwork",
-            "Account-scoped API responses and public artwork. Steam credentials are never included.",
+            "Account-scoped API responses, followed-game news/name metadata, game art "
+            "and inline article images. Credentials and pinned friends are retained.",
             (CacheTarget(app_root / "steam" / "cache", recursive=True),),
+            protected_names=frozenset({PIN_FILE_NAME, PIN_FILE_NAME + ".tmp"}),
         ),
     )
 
@@ -122,6 +128,8 @@ def clear_cache_families(
         descriptor = available[family_id]
         for target in descriptor.targets:
             for candidate in _iter_target_files(target):
+                if candidate.name in descriptor.protected_names:
+                    continue
                 if candidate.is_symlink():
                     skipped_files += 1
                     errors.append(f"{descriptor.label}: skipped symbolic link {candidate.name}")
@@ -164,7 +172,11 @@ def clear_cache_families(
 
 def _iter_target_files(target: CacheTarget) -> tuple[Path, ...]:
     path = Path(target.path)
-    if path.is_file() or path.is_symlink():
+    # Never recurse into a substituted/symlinked cache root. The ordinary
+    # per-member guard below likewise protects nested redirected directories.
+    if path.is_symlink():
+        return (path,)
+    if path.is_file():
         return (path,)
     if not path.exists() or not path.is_dir():
         return ()

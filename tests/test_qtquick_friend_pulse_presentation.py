@@ -437,6 +437,13 @@ def test_friend_pulse_qml_builds_real_rows(qt_app) -> None:
         assert int(rows.property("count")) == 1
         row = _find_visual_item(item, "friendPulseRow_0")
         assert row is not None
+        row_contact = _find_visual_item(item, "friendPulseRowContactShadow_0")
+        avatar_contact = _find_visual_item(item, "friendPulseRowAvatarContactShadow_0")
+        avatar_frame = _find_visual_item(item, "friendPulseRowAvatar_0")
+        assert all(part is not None for part in (
+            row_contact, avatar_contact, avatar_frame))
+        assert row_contact.width() == pytest.approx(row.width())
+        assert avatar_contact.width() == pytest.approx(avatar_frame.width())
         assert float(row.property("height")) == 50.0
         baseline_row_width = float(row.property("width"))
         baseline_view_width = float(rows.property("width"))
@@ -616,6 +623,13 @@ def test_friend_pulse_qml_builds_centered_dynamic_avatar_grid(qt_app) -> None:
                 "friendPulseGridTile_2",
             )
         }
+        grid_contact = _find_visual_item(item, "friendPulseGridContactShadow_0")
+        avatar_contact = _find_visual_item(item, "friendPulseGridAvatarContactShadow_0")
+        avatar_frame = _find_visual_item(item, "friendPulseGridAvatar_0")
+        assert all(part is not None for part in (
+            grid_contact, avatar_contact, avatar_frame))
+        assert grid_contact.width() == pytest.approx(tiles["friendPulseGridTile_0"].width())
+        assert avatar_contact.width() == pytest.approx(avatar_frame.width())
         assert set(tiles) == {
             "friendPulseGridTile_0",
             "friendPulseGridTile_1",

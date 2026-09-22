@@ -32,6 +32,8 @@ presence dot is retired. Strict mode groups anonymously and exposes neither name
 
 The semantic Edit roles are stable while the authored card baseline, roster, names or viewport changes; the selected Edit delegate reads `baseAuthoredWidth`/`baseAuthoredHeight` on the retained root instead of publishing a new role list. Repeated row/grid targets represent the first actual painted item rather than independently persisting every row.
 
+The shared outer card and branded header retain their existing directional shadows. Each visible row/grid surface and avatar has a light static contact shadow with the same signed global card-shadow direction and theme color, gated by the existing card-shadow enablement; it does not alter row/avatar geometry or the existing avatar desaturation mask. Names and other `ShadowedText` labels use the already-projected signed text-shadow offsets and the separate global text-shadow enablement. These shallow inner contact shadows are not independently blurred, animated, persisted or painted by a new image-effect layer. The existing event-change glow remains separate and is not used as a permanent frame shadow.
+
 The source/cache/runtime path is cache-first, uses existing Steam locks/request coordination/backoff/redaction, and has
 one Friend Pulse owner per runtime generation shared by every display. A coherent successful FriendList/PlayerSummaries
 cache has **no age-expiry semantics**: freshness decides whether refresh is due and whether presentation is marked
@@ -43,7 +45,7 @@ last-good account cache.
 Validated Steam IDs are permitted in the user's account-private Friend Pulse cache and the shared runtime owner. The
 owner maps them to opaque fingerprints, strips them before delivering presentation snapshots, and QML emits only a row
 index. Hover reveals a separate pin/favourite affordance; any number of accepted friends may be pinned and the
-account-private persistence stores opaque friend fingerprints rather than presentation IDs. An admitted friend avatar
+account-private persistence stores opaque friend fingerprints rather than presentation IDs. The user-owned `friend_pulse_pins.json` file (and its atomic temporary write) lives inside the profile-private Steam cache directory for historical placement but is **not disposable cache**: Widgets → General → Steam cache clearing excludes it while still removing provider snapshots and cached art. An admitted friend avatar
 requests a directed Steam chat with public-profile fallback. Each friend also has one small three-dot action menu offering
 View Profile, Start Chat, Copy Steam ID, and View Game in Store when a current AppID exists. The popup is retained once per
 card, revalidates the current row in Python and uses the shared pointer-suppression seam. No Join Game item is shown because

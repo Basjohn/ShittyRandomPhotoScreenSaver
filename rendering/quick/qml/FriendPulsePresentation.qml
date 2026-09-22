@@ -495,6 +495,23 @@ OverlayWidget {
             border.color: friendRoot.friendPulseModel.rowBorderColor
             border.width: friendRoot.friendStrokeWidth(1.0)
             antialiasing: true
+            // Negative z paints the contact shadow behind the existing row
+            // surface without wrapping/replacing its stable edit role target.
+            Rectangle {
+                objectName: "friendPulseRowContactShadow_" + index
+                z: -1
+                visible: friendRoot.cardShadowEnabled && activityRow.visible
+                x: Math.max(-3.0, Math.min(3.0,
+                    friendRoot.cardShadowOffsetX * 0.45))
+                y: Math.max(-3.0, Math.min(3.0,
+                    friendRoot.cardShadowOffsetY * 0.45))
+                width: parent.width
+                height: parent.height
+                radius: parent.radius
+                color: Qt.rgba(friendRoot.cardShadowColor.r,
+                    friendRoot.cardShadowColor.g, friendRoot.cardShadowColor.b,
+                    friendRoot.cardShadowColor.a * 0.22)
+            }
             HoverHandler { id: activityRowHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
             function triggerEventGlow() {
@@ -546,6 +563,22 @@ OverlayWidget {
                 fragmentShader: "shaders/widget_glow.frag.qsb"
             }
 
+            // Contact-only avatar shadow: no extra offscreen image layer or
+            // render-loop work; direction follows the shared card shadow vector.
+            Rectangle {
+                objectName: "friendPulseRowAvatarContactShadow_" + index
+                visible: friendRoot.cardShadowEnabled && rowAvatarFrame.visible
+                x: rowAvatarFrame.x + Math.max(-3.0, Math.min(3.0,
+                    friendRoot.cardShadowOffsetX * 0.45))
+                y: rowAvatarFrame.y + Math.max(-3.0, Math.min(3.0,
+                    friendRoot.cardShadowOffsetY * 0.45))
+                width: rowAvatarFrame.width
+                height: rowAvatarFrame.height
+                radius: rowAvatarFrame.radius
+                color: Qt.rgba(friendRoot.cardShadowColor.r,
+                    friendRoot.cardShadowColor.g, friendRoot.cardShadowColor.b,
+                    friendRoot.cardShadowColor.a * 0.22)
+            }
             Rectangle {
                 id: rowAvatarFrame
                 objectName: "friendPulseRowAvatar_" + index
@@ -763,6 +796,21 @@ OverlayWidget {
                 border.color: friendRoot.friendPulseModel.rowBorderColor
                 border.width: friendRoot.friendStrokeWidth(1.0)
                 antialiasing: true
+                Rectangle {
+                    objectName: "friendPulseGridContactShadow_" + index
+                    z: -1
+                    visible: friendRoot.cardShadowEnabled && gridTile.visible
+                    x: Math.max(-3.0, Math.min(3.0,
+                        friendRoot.cardShadowOffsetX * 0.45))
+                    y: Math.max(-3.0, Math.min(3.0,
+                        friendRoot.cardShadowOffsetY * 0.45))
+                    width: parent.width
+                    height: parent.height
+                    radius: parent.radius
+                    color: Qt.rgba(friendRoot.cardShadowColor.r,
+                        friendRoot.cardShadowColor.g, friendRoot.cardShadowColor.b,
+                        friendRoot.cardShadowColor.a * 0.22)
+                }
                 HoverHandler { id: gridTileHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
 
                 function triggerEventGlow() {
@@ -812,6 +860,22 @@ OverlayWidget {
                     visible: opacity > 0.001
                     z: 5
                     fragmentShader: "shaders/widget_glow.frag.qsb"
+                }
+                // Contact-only avatar shadow: no extra offscreen image layer or
+                // render-loop work; direction follows the shared card shadow vector.
+                Rectangle {
+                    objectName: "friendPulseGridAvatarContactShadow_" + index
+                    visible: friendRoot.cardShadowEnabled && gridAvatarFrame.visible
+                    x: gridAvatarFrame.x + Math.max(-3.0, Math.min(3.0,
+                        friendRoot.cardShadowOffsetX * 0.45))
+                    y: gridAvatarFrame.y + Math.max(-3.0, Math.min(3.0,
+                        friendRoot.cardShadowOffsetY * 0.45))
+                    width: gridAvatarFrame.width
+                    height: gridAvatarFrame.height
+                    radius: gridAvatarFrame.radius
+                    color: Qt.rgba(friendRoot.cardShadowColor.r,
+                        friendRoot.cardShadowColor.g, friendRoot.cardShadowColor.b,
+                        friendRoot.cardShadowColor.a * 0.22)
                 }
                 Rectangle {
                     id: gridAvatarFrame
