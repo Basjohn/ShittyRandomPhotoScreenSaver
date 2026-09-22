@@ -29,6 +29,7 @@ from core.settings.widget_family_catalog import (
     get_widget_family_descriptors,  # noqa: F401 - compatibility re-export
 )
 from rendering.games_followed_child_roles import FOLLOWED_CHILD_ROLES
+from rendering.feed_child_roles import FEED_CONTENT_EXTENT_MINIMUM, FEED_CUSTOM_CHILD_ROLES
 from rendering.custom_layout_contract import (
     get_custom_layout_restore_entry,
     load_custom_layout_map,
@@ -1852,6 +1853,9 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="ordinary_uniform",
+        content_extent_axes=("horizontal", "vertical"),
+        content_extent_minimum_size=FEED_CONTENT_EXTENT_MINIMUM,
+        custom_child_roles=FEED_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
         widget_id="gmail",

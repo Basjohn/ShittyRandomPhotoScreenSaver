@@ -256,6 +256,15 @@ def build_feeds_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.feeds_custom1_show_images.setChecked(tab._default_bool("feeds_custom_1", "show_images"))
     tab.feeds_custom1_show_images.stateChanged.connect(tab._save_settings)
     content_layout.addWidget(tab.feeds_custom1_show_images)
+
+    tab.feeds_custom1_show_subtitle = QCheckBox("Show Feed Subtitle")
+    tab.feeds_custom1_show_subtitle.setProperty("circleIndicator", True)
+    tab.feeds_custom1_show_subtitle.setChecked(tab._default_bool("feeds_custom_1", "show_subtitle"))
+    tab.feeds_custom1_show_subtitle.setToolTip(
+        "Show the feed/publisher title as small metadata below the branded header when it differs from the configured name."
+    )
+    tab.feeds_custom1_show_subtitle.stateChanged.connect(tab._save_settings)
+    content_layout.addWidget(tab.feeds_custom1_show_subtitle)
     finalize_bucket_body(content_toggle, content_body)
 
     layout_toggle, layout_body, layout_controls = build_bucket_toggle(
@@ -389,6 +398,7 @@ def load_feeds_settings(tab: "WidgetsTab", widgets: Mapping[str, Any]) -> None:
     tab.feeds_custom1_item_limit.setValue(tab._config_int("feeds_custom_1", values, "item_limit"))
     tab.feeds_custom1_refresh_minutes.setValue(tab._config_int("feeds_custom_1", values, "refresh_minutes"))
     tab.feeds_custom1_show_images.setChecked(tab._config_bool("feeds_custom_1", values, "show_images"))
+    tab.feeds_custom1_show_subtitle.setChecked(tab._config_bool("feeds_custom_1", values, "show_subtitle"))
     tab._set_combo_text(tab.feeds_custom1_position, tab._config_str("feeds_custom_1", values, "position"))
     tab._set_combo_text(
         tab.feeds_custom1_monitor_combo,
@@ -423,6 +433,7 @@ def save_feeds_settings(tab: "WidgetsTab") -> dict[str, Any]:
             "item_limit": int(tab.feeds_custom1_item_limit.value()),
             "refresh_minutes": int(tab.feeds_custom1_refresh_minutes.value()),
             "show_images": bool(tab.feeds_custom1_show_images.isChecked()),
+            "show_subtitle": bool(tab.feeds_custom1_show_subtitle.isChecked()),
             "position": tab.feeds_custom1_position.currentText(),
             "monitor": tab._monitor_value_from_combo("feeds_custom_1", tab.feeds_custom1_monitor_combo),
             "margin": int(tab.feeds_custom1_margin.value()),

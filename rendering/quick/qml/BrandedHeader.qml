@@ -12,8 +12,10 @@ Item {
     property string frameObjectName: "brandedHeaderFrame"
     property string logoObjectName: "brandedHeaderLogo"
     property string textObjectName: "brandedHeaderText"
+    property string secondaryTextObjectName: "brandedHeaderSecondaryText"
 
     property string label: ""
+    property string secondaryLabel: ""
     property url logoSource: ""
     property bool logoDesaturated: false
     property bool logoTintEnabled: false
@@ -28,11 +30,15 @@ Item {
     property color borderColor: "white"
     property real borderWidth: 1.0
     property color textColor: "white"
+    property color secondaryTextColor: Qt.rgba(textColor.r, textColor.g, textColor.b, textColor.a * 0.72)
     property string fontFamily: "Inter"
     // Media established the accepted baseline: 20 pt family text * 0.82.
     // Keep the branded header itself family-invariant; whole-widget scaling owns
     // enlargement/shrinkage rather than per-widget font-size quirks.
     property real fontPointSize: 16.4
+    property real secondaryFontPointSize: 10.5
+    // Optional metadata only. Primary branded labels remain unelided.
+    property real secondaryMaximumWidth: 0.0
 
     property bool textShadowEnabled: true
     property color textShadowColor: "#54000000"
@@ -89,8 +95,9 @@ Item {
         anchors.fill: parent
         radius: header.cornerRadius
         color: header.fillColor
-        border.color: header.borderColor
-        border.width: header.borderWidth
+        border.color: headerHover.hovered && header.interactionEnabled
+            ? "white" : header.borderColor
+        border.width: header.borderWidth + (headerHover.hovered && header.interactionEnabled ? 0.5 : 0.0)
         clip: false
     }
 
@@ -138,24 +145,54 @@ Item {
             }
         }
 
-        ShadowedText {
-            id: labelText
-            objectName: header.textObjectName
+        Column {
+            id: textColumn
             anchors.verticalCenter: parent.verticalCenter
-            // Header labels are presentation chrome, not content metadata: one
-            // shared all-caps language regardless of provider/source casing.
-            text: header.label.toUpperCase()
-            color: header.textColor
-            font.family: header.fontFamily
-            font.pointSize: header.fontPointSize
-            font.bold: true
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideNone
-            shadowEnabled: header.textShadowEnabled
-            shadowColor: header.textShadowColor
-            shadowOffsetX: header.textShadowOffsetX
-            shadowOffsetY: header.textShadowOffsetY
+            spacing: 0.0
+
+            ShadowedText {
+                id: labelText
+                objectName: header.textObjectName
+                // Header labels are presentation chrome, not content metadata: one
+                // shared all-caps language regardless of provider/source casing.
+                text: header.label.toUpperCase()
+                color: header.textColor
+                font.family: header.fontFamily
+                font.pointSize: header.fontPointSize
+                font.bold: true
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideNone
+                shadowEnabled: header.textShadowEnabled
+                shadowColor: header.textShadowColor
+                shadowOffsetX: header.textShadowOffsetX
+                shadowOffsetY: header.textShadowOffsetY
+            }
+
+            ShadowedText {
+                id: secondaryText
+                objectName: header.secondaryTextObjectName
+                visible: text.length > 0
+                text: header.secondaryLabel
+                color: header.secondaryTextColor
+                font.family: header.fontFamily
+                font.pointSize: header.secondaryFontPointSize
+                width: header.secondaryMaximumWidth > 0.0
+                    ? Math.min(implicitWidth, header.secondaryMaximumWidth) : implicitWidth
+                verticalAlignment: Text.AlignVCenter
+                elide: header.secondaryMaximumWidth > 0.0 ? Text.ElideRight : Text.ElideNone
+                shadowEnabled: header.textShadowEnabled
+                shadowColor: header.textShadowColor
+                shadowOffsetX: header.textShadowOffsetX
+                shadowOffsetY: header.textShadowOffsetY
+            }
         }
+    }
+
+    HoverHandler {
+        id: headerHover
+        enabled: header.interactionEnabled
+        blocking: false
+        cursorShape: Qt.PointingHandCursor
     }
 
     TapHandler {

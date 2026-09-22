@@ -56,7 +56,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | transitions and material surfaces | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
 | active transition expansion | `Docs/Future_Work/Transition_Expansion.md` |
 | active Feeds implementation/decomposition | `Docs/Future_Work/Feeds.md` |
-| current Feeds F2 architecture contract | `Docs/Reference/Feeds.md` |
+| current FEEDS vertical-slice architecture (source/cache/artwork/header/CUSTOM) | `Docs/Reference/Feeds.md` |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
 | logging / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |
 | documentation maintenance | `Docs/Guides/Documentation_Maintenance.md` |

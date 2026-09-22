@@ -145,7 +145,7 @@ OverlayWidget {
         radius: 7.0
         color: followedModel.showRefreshFrame ? followedModel.headerFillColor : "transparent"
         border.color: refreshHover.hovered && canActivate
-            ? followedModel.accentColor
+            ? "white"
             : followedModel.showRefreshFrame ? followedModel.headerBorderColor : "transparent"
         border.width: refreshHover.hovered && canActivate
             ? followsRoot.scaleAwareStrokeWidth(1.5)
@@ -163,7 +163,8 @@ OverlayWidget {
             text: "↻"
             textFormat: Text.PlainText
             font.pixelSize: Math.min(parent.width, parent.height) * 0.8
-            color: followedModel.primaryColor
+            color: refreshHover.hovered && refreshGlyph.canActivate
+                ? "white" : followedModel.primaryColor
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             shadowEnabled: followedModel.textShadowEnabled
@@ -324,6 +325,7 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryArtworkContactShadow" + storySlot
                     parent: tileFrame
+                    z: 0
                     visible: tile.showArt && followsRoot.cardShadowEnabled
                     x: tile.artX + Math.max(-3.0, Math.min(3.0,
                         followsRoot.cardShadowOffsetX * 0.45))
@@ -339,6 +341,7 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryArtworkFallback" + storySlot
                     parent: tileFrame
+                    z: 1
                     visible: tile.showArt
                     x: tile.artX
                     y: 8.0
@@ -364,6 +367,7 @@ OverlayWidget {
                 ArtworkFadeImage {
                     objectName: "followedStoryArtwork" + storySlot
                     parent: tileFrame
+                    z: 2
                     visible: tile.showArt
                     x: tile.artX
                     y: 8.0
@@ -378,6 +382,7 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryArtworkOutline" + storySlot
                     parent: tileFrame
+                    z: 3
                     visible: tile.showArt
                     x: tile.artX
                     y: 8.0
@@ -392,6 +397,7 @@ OverlayWidget {
                     id: game
                     objectName: "followedStoryGame" + storySlot
                     parent: tileFrame
+                    z: 4
                     visible: storyGame.length > 0
                     x: tile.textX
                     y: 7.0
@@ -414,6 +420,7 @@ OverlayWidget {
                     id: headline
                     objectName: "followedStoryHeadline" + storySlot
                     parent: tileFrame
+                    z: 4
                     x: tile.textX
                     y: game.visible ? 24.0 : 10.0
                     width: tile.textW
@@ -468,6 +475,7 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryInlineContactShadow1" + storySlot
                     parent: tileFrame
+                    z: 0
                     visible: tile.inlineCount >= 1 && followsRoot.cardShadowEnabled
                     x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 0.0
                         + Math.max(-3.0, Math.min(3.0, followsRoot.cardShadowOffsetX * 0.45))
@@ -483,6 +491,7 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryInlineImageFrame1" + storySlot
                     parent: tileFrame
+                    z: 2
                     visible: tile.showInline
                     x: tile.inlineX
                     y: tile.inlineY
@@ -510,6 +519,7 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryInlineContactShadow2" + storySlot
                     parent: tileFrame
+                    z: 0
                     visible: tile.inlineCount >= 2 && followsRoot.cardShadowEnabled
                     x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 1.0
                         + Math.max(-3.0, Math.min(3.0, followsRoot.cardShadowOffsetX * 0.45))
@@ -525,6 +535,7 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryInlineImageFrame2" + storySlot
                     parent: tileFrame
+                    z: 2
                     visible: tile.inlineCount >= 2
                     x: tile.inlineX + tile.inlineW + tile.inlineGap
                     y: tile.inlineY
@@ -552,6 +563,7 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryInlineContactShadow3" + storySlot
                     parent: tileFrame
+                    z: 0
                     visible: tile.inlineCount >= 3 && followsRoot.cardShadowEnabled
                     x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 2.0
                         + Math.max(-3.0, Math.min(3.0, followsRoot.cardShadowOffsetX * 0.45))
@@ -567,6 +579,7 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryInlineImageFrame3" + storySlot
                     parent: tileFrame
+                    z: 2
                     visible: tile.inlineCount >= 3
                     x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 2.0
                     y: tile.inlineY
@@ -594,6 +607,7 @@ OverlayWidget {
                 ShadowedText {
                     objectName: "followedStoryPreview" + storySlot
                     parent: tileFrame
+                    z: 4
                     visible: storyPreview.length > 0 && tile.height >= 108.0 && tile.textW >= 105.0
                         && tile.inlineCount < 2
                     x: tile.textX + (tile.inlineCount === 1 && !followsRoot.headerFlipped
@@ -619,6 +633,7 @@ OverlayWidget {
                 ShadowedText {
                     objectName: "followedStorySource" + storySlot
                     parent: tileFrame
+                    z: 4
                     x: tile.textX
                     y: tile.height - 23.0
                     width: tile.textW
@@ -643,11 +658,12 @@ OverlayWidget {
                 Rectangle {
                     objectName: "followedStoryHoverOutline" + storySlot
                     parent: tileFrame
+                    z: 10
                     anchors.fill: parent
                     radius: tileFrame.radius
                     color: "transparent"
                     visible: tileHover.hovered && tile.canActivate
-                    border.color: followedModel.primaryColor
+                    border.color: "white"
                     border.width: followsRoot.scaleAwareStrokeWidth(1.75)
                 }
                 TapHandler {

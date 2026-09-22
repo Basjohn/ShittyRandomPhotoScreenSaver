@@ -22,14 +22,14 @@ def _item(item_id: str, *, image: str = "", width=None, height=None) -> FeedItem
     )
 
 
-def test_grid_uses_all_or_none_validated_local_imagery():
+def test_grid_admits_each_local_image_without_suppressing_other_stories():
     snap = _snapshot(_item("a", image="https://cdn/a.jpg"), _item("b", image="https://cdn/b.jpg"))
     partial = project_feed(
         snap, view_mode="grid", item_limit=10,
         local_artwork_by_item={"a": "file:///cache/a.jpg"},
     )
-    assert partial.image_mode == "none"
-    assert [row.image_source for row in partial.rows] == ["", ""]
+    assert partial.image_mode == "sparse"
+    assert [row.image_source for row in partial.rows] == ["file:///cache/a.jpg", ""]
     assert [row.image_candidate_url for row in partial.rows] == ["https://cdn/a.jpg", "https://cdn/b.jpg"]
 
     complete = project_feed(
@@ -40,14 +40,14 @@ def test_grid_uses_all_or_none_validated_local_imagery():
     assert [row.image_source for row in complete.rows] == ["file:///cache/a.jpg", "file:///cache/b.jpg"]
 
 
-def test_grid_stays_text_coherent_when_one_item_has_no_advertised_image():
+def test_grid_missing_art_card_reflows_to_text_without_hiding_other_art():
     snap = _snapshot(_item("a", image="https://cdn/a.jpg"), _item("b"))
     projected = project_feed(
         snap, view_mode="grid", item_limit=10,
         local_artwork_by_item={"a": "file:///cache/a.jpg"},
     )
-    assert projected.image_mode == "none"
-    assert all(not row.image_source for row in projected.rows)
+    assert projected.image_mode == "sparse"
+    assert [row.image_source for row in projected.rows] == ["file:///cache/a.jpg", ""]
 
 
 def test_list_may_use_sparse_thumbnails_without_creating_grid_holes():
@@ -91,22 +91,18 @@ def test_preferred_image_candidate_prefers_usable_declared_media_over_tiny_asset
     assert preferred_image_candidate(item) == "https://cdn/hero.jpg"
 
 
-def test_grid_coherence_uses_only_geometry_visible_rows_not_hidden_overflow():
+def test_grid_artwork_is_stable_across_geometry_and_does_not_suppress_available_items():
     snap = _snapshot(_item("a", image="https://cdn/a.jpg"),
                      _item("b", image="https://cdn/b.jpg"),
-                     _item("hidden-without-image"))
-    ready = project_feed(
-        snap, view_mode="grid", item_limit=3, visible_item_capacity=2,
+                     _item("c"))
+    shown = project_feed(
+        snap, view_mode="grid", item_limit=3,
         local_artwork_by_item={"a": "file:///cache/a.png", "b": "file:///cache/b.png"},
     )
-    assert ready.image_mode == "complete"
-    assert [row.image_source for row in ready.rows] == ["file:///cache/a.png", "file:///cache/b.png", ""]
-    resized = project_feed(
-        snap, view_mode="grid", item_limit=3, visible_item_capacity=3,
-        local_artwork_by_item={"a": "file:///cache/a.png", "b": "file:///cache/b.png"},
-    )
-    assert resized.image_mode == "none"
-    assert not any(row.image_source for row in resized.rows)
-    zero = project_feed(snap, view_mode="grid", item_limit=3, visible_item_capacity=0,
-                        local_artwork_by_item={"a": "file:///cache/a.png"})
-    assert zero.image_mode == "none"
+    assert shown.image_mode == "sparse"
+    assert [row.image_source for row in shown.rows] == [
+        "file:///cache/a.png", "file:///cache/b.png", ""]
+    # QML visibility alone chooses which rows acquire an Image source. The
+    # projection and retained model do not change on geometry-only resize.
+    assert project_feed(snap, view_mode="grid", item_limit=3,
+                        local_artwork_by_item={"a": "file:///cache/a.png", "b": "file:///cache/b.png"}) == shown

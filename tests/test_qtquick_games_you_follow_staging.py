@@ -424,6 +424,10 @@ def test_followed_mixed_artwork_preserves_game_identity_and_retained_qml_rail(qt
             assert game.property("text") == f"Named game {10000 + slot}"
             if tile.isVisible():
                 assert game.isVisible() and fallback.isVisible() and artwork.isVisible()
+                # The clipped-frame repair must never let the semantic fallback
+                # tint/cover a successfully loaded main image. Explicit sibling
+                # stacking is part of the retained visual contract.
+                assert artwork.z() > fallback.z()
                 assert bool(artwork.property("source")) == (slot != 1)
         assert model.accept_snapshot(replace(snapshot, artwork_paths=("", "", "")))
         qt_app.processEvents()

@@ -334,7 +334,8 @@ OverlayWidget {
                     anchors.fill: parent
                     radius: 6.0
                     color: "transparent"
-                    border.color: gmailRoot.gmailModel.headerBorderColor
+                    border.color: refreshHover.hovered && refreshTarget.canActivate
+                        ? "white" : gmailRoot.gmailModel.headerBorderColor
                     border.width: refreshHover.hovered && refreshTarget.canActivate
                         ? gmailRoot.scaleAwareStrokeWidth(1.5) : 0.0
                 }
@@ -350,7 +351,8 @@ OverlayWidget {
                     anchors.fill: parent
                     text: gmailRoot.gmailModel.refreshing ? "◌" : "↻"
                     opacity: 0.7
-                    color: gmailRoot.gmailModel.textColor
+                    color: refreshHover.hovered && refreshTarget.canActivate
+                        ? "white" : gmailRoot.gmailModel.textColor
                     font.family: gmailRoot.gmailModel.fontFamily
                     font.pointSize: gmailRoot.gmailModel.fontSize
                         * gmailRoot.childHeightScale("refresh")
@@ -515,6 +517,31 @@ OverlayWidget {
                         width: Math.max(1.0, parent.width - menuButton.width
                             - envelope.width - envelopeGap - 6.0)
                         height: parent.height
+                        readonly property bool canActivate: gmailRoot.gmailModel.interactionEnabled
+                            && messageRow.messageId.length > 0
+                            && !gmailRoot.customLayoutInputBlocked
+
+                        Rectangle {
+                            objectName: "gmailMessageHoverFrame_" + messageRow.index
+                            anchors.fill: parent
+                            anchors.margins: 2.0
+                            radius: 4.0
+                            color: messageHover.hovered && openArea.canActivate
+                                ? Qt.rgba(gmailRoot.gmailModel.textColor.r,
+                                          gmailRoot.gmailModel.textColor.g,
+                                          gmailRoot.gmailModel.textColor.b, 0.065)
+                                : "transparent"
+                            // Text-dense Gmail rows use a surface/text affordance rather
+                            // than an inset stroke: a border intersects the timestamp rail
+                            // at compact sizes and falsely becomes content decoration.
+                            border.width: 0.0
+                        }
+                        HoverHandler {
+                            id: messageHover
+                            enabled: openArea.canActivate
+                            blocking: false
+                            cursorShape: Qt.PointingHandCursor
+                        }
 
                         ShadowedText {
                             id: timestampText
@@ -581,9 +608,11 @@ OverlayWidget {
                                 anchors.verticalCenter: parent.verticalCenter
                                 height: parent.height
                                 text: messageRow.messageSubject
-                                color: messageRow.messageUnread
-                                    ? gmailRoot.gmailModel.textColor
-                                    : gmailRoot.gmailModel.readSubjectColor
+                                color: messageHover.hovered && openArea.canActivate
+                                    ? "white"
+                                    : messageRow.messageUnread
+                                        ? gmailRoot.gmailModel.textColor
+                                        : gmailRoot.gmailModel.readSubjectColor
                                 font.family: gmailRoot.gmailModel.fontFamily
                                 font.pointSize: gmailRoot.gmailModel.fontSize
                                 font.weight: messageRow.messageUnread ? Font.DemiBold : Font.Normal
@@ -597,7 +626,7 @@ OverlayWidget {
                         }
 
                         TapHandler {
-                            enabled: gmailRoot.gmailModel.interactionEnabled
+                            enabled: openArea.canActivate
                             acceptedButtons: Qt.LeftButton
                             onTapped: gmailRoot.openMessageRequested(messageRow.messageId)
                         }
@@ -651,7 +680,8 @@ OverlayWidget {
                         gmailRoot.gmailModel.separatorThickness
                             * gmailRoot.extentSeparatorScale
                     ) : 0.0
-                    color: gmailRoot.gmailModel.separatorColor
+                    color: messageHover.hovered && openArea.canActivate
+                        ? "white" : gmailRoot.gmailModel.separatorColor
                 }
             }
         }
@@ -723,7 +753,7 @@ OverlayWidget {
                     height: Math.max(30.0, gmailRoot.gmailModel.fontSize * 1.8)
                     radius: 3.0
                     color: actionHover.hovered
-                        ? gmailRoot.gmailModel.actionPopupHoverColor : "transparent"
+                        ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : "transparent"
 
                     Row {
                         anchors.fill: parent
@@ -755,7 +785,7 @@ OverlayWidget {
                                 if (popupAction.modelData === "spam") return "Mark as Spam"
                                 return "Delete"
                             }
-                            color: gmailRoot.gmailModel.actionPopupTextColor
+                            color: actionHover.hovered ? "white" : gmailRoot.gmailModel.actionPopupTextColor
                             font.family: gmailRoot.gmailModel.fontFamily
                             font.pixelSize: 12.0
                             verticalAlignment: Text.AlignVCenter
@@ -766,6 +796,7 @@ OverlayWidget {
                     HoverHandler {
                         id: actionHover
                         enabled: gmailRoot.gmailModel.interactionEnabled
+                        cursorShape: Qt.PointingHandCursor
                     }
 
                     TapHandler {

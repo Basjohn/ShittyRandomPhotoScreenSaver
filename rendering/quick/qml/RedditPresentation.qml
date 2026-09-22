@@ -254,7 +254,8 @@ OverlayWidget {
                     anchors.fill: parent
                     radius: 6.0
                     color: "transparent"
-                    border.color: redditRoot.redditModel.headerBorderColor
+                    border.color: refreshHover.hovered && refreshTarget.canActivate
+                        ? "white" : redditRoot.redditModel.headerBorderColor
                     border.width: refreshHover.hovered && refreshTarget.canActivate
                         ? redditRoot.scaleAwareStrokeWidth(1.5) : 0.0
                 }
@@ -271,7 +272,8 @@ OverlayWidget {
                     horizontalAlignment: Text.AlignHCenter
                     text: redditRoot.redditModel.refreshing ? "◌" : "↻"
                     opacity: 0.7
-                    color: redditRoot.redditModel.textColor
+                    color: refreshHover.hovered && refreshTarget.canActivate
+                        ? "white" : redditRoot.redditModel.textColor
                     font.family: redditRoot.redditModel.fontFamily
                     font.pointSize: redditRoot.redditModel.fontSize
                     font.bold: true
@@ -370,6 +372,32 @@ OverlayWidget {
                 width: contentColumn.width
                 visible: index < redditRoot.effectiveVisibleCount
                 height: visible ? redditRoot.extentRowHeight : 0.0
+                readonly property bool canActivate: visible
+                    && redditRoot.redditModel.interactionEnabled
+                    && postUrl.length > 0
+                    && !redditRoot.customLayoutInputBlocked
+
+                Rectangle {
+                    objectName: "redditPostHoverFrame_" + postRow.index
+                    anchors.fill: parent
+                    anchors.margins: 2.0
+                    radius: 4.0
+                    color: postHover.hovered && postRow.canActivate
+                        ? Qt.rgba(redditRoot.redditModel.textColor.r,
+                                  redditRoot.redditModel.textColor.g,
+                                  redditRoot.redditModel.textColor.b, 0.065)
+                        : "transparent"
+                    // Text-dense repeated rows advertise clickability through the
+                    // surface plus title emphasis, never a stroke cutting through
+                    // compact timestamp/title rails.
+                    border.width: 0.0
+                }
+                HoverHandler {
+                    id: postHover
+                    enabled: postRow.canActivate
+                    blocking: false
+                    cursorShape: Qt.PointingHandCursor
+                }
 
                 Item {
                     id: ageText
@@ -456,7 +484,8 @@ OverlayWidget {
                     horizontalAlignment: Text.AlignLeft
                     height: parent.height
                     text: postRow.postTitle
-                    color: redditRoot.redditModel.textColor
+                    color: postHover.hovered && postRow.canActivate
+                        ? "white" : redditRoot.redditModel.textColor
                     font.family: redditRoot.redditModel.fontFamily
                     font.pointSize: redditRoot.redditModel.fontSize
                     font.weight: Font.DemiBold
@@ -478,11 +507,12 @@ OverlayWidget {
                     height: redditRoot.scaleAwareStrokeWidth(
                         redditRoot.extentSeparatorThickness
                     )
-                    color: redditRoot.redditModel.separatorColor
+                    color: postHover.hovered && postRow.canActivate
+                        ? "white" : redditRoot.redditModel.separatorColor
                 }
 
                 TapHandler {
-                    enabled: redditRoot.redditModel.interactionEnabled
+                    enabled: postRow.canActivate
                     acceptedButtons: Qt.LeftButton
                     onTapped: redditRoot.openPostRequested(postRow.postUrl)
                 }

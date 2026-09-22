@@ -749,6 +749,18 @@ OverlayWidget {
                 color: mediaRoot.mediaModel.progressTrackColor
 
                 Rectangle {
+                    objectName: "mediaProgressHoverWash"
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: progressSeekArea.containsMouse && progressSeekArea.enabled
+                        ? Qt.rgba(mediaRoot.mediaModel.progressFillColor.r,
+                                  mediaRoot.mediaModel.progressFillColor.g,
+                                  mediaRoot.mediaModel.progressFillColor.b, 0.18)
+                        : "transparent"
+                    z: 2
+                }
+
+                Rectangle {
                     visible: mediaRoot.mediaModel.progressShadowEnabled
                     x: 0.0
                     y: 2.0
@@ -790,6 +802,8 @@ OverlayWidget {
                     anchors.fill: parent
                     enabled: mediaRoot.mediaModel.interactionEnabled
                         && mediaRoot.mediaModel.canSeek
+                    hoverEnabled: enabled
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     acceptedButtons: Qt.LeftButton
                     onReleased: function(mouse) {
                         mediaRoot.seekFractionRequested(
@@ -875,7 +889,8 @@ OverlayWidget {
                         opacity: mediaRoot.mediaModel.canPrevious
                             ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
                             : 0.25
-                        scale: previousTap.pressed ? 1.08 : 1.0
+                        scale: previousTap.pressed ? 1.10
+                            : (previousHover.hovered && previousTap.enabled ? 1.055 : 1.0)
 
                         Text {
                             anchors.centerIn: parent
@@ -885,6 +900,13 @@ OverlayWidget {
                             font.pointSize: mediaRoot.mediaModel.fontSize
                                 * mediaRoot.mediaModel.customTransportHeightScale
                             font.bold: true
+                        }
+
+                        HoverHandler {
+                            id: previousHover
+                            enabled: previousTap.enabled
+                            blocking: false
+                            cursorShape: Qt.PointingHandCursor
                         }
 
                         TapHandler {
@@ -911,7 +933,8 @@ OverlayWidget {
                         opacity: mediaRoot.mediaModel.canPlayPause
                             ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
                             : 0.25
-                        scale: playPauseTap.pressed ? 1.08 : 1.0
+                        scale: playPauseTap.pressed ? 1.10
+                            : (playPauseHover.hovered && playPauseTap.enabled ? 1.055 : 1.0)
 
                         Text {
                             anchors.centerIn: parent
@@ -921,6 +944,13 @@ OverlayWidget {
                             font.pointSize: mediaRoot.mediaModel.fontSize * 0.9
                                 * mediaRoot.mediaModel.customTransportHeightScale
                             font.bold: true
+                        }
+
+                        HoverHandler {
+                            id: playPauseHover
+                            enabled: playPauseTap.enabled
+                            blocking: false
+                            cursorShape: Qt.PointingHandCursor
                         }
 
                         TapHandler {
@@ -947,7 +977,8 @@ OverlayWidget {
                         opacity: mediaRoot.mediaModel.canNext
                             ? (mediaRoot.mediaModel.interactionEnabled ? 1.0 : 0.68)
                             : 0.25
-                        scale: nextTap.pressed ? 1.08 : 1.0
+                        scale: nextTap.pressed ? 1.10
+                            : (nextHover.hovered && nextTap.enabled ? 1.055 : 1.0)
 
                         Text {
                             anchors.centerIn: parent
@@ -957,6 +988,13 @@ OverlayWidget {
                             font.pointSize: mediaRoot.mediaModel.fontSize
                                 * mediaRoot.mediaModel.customTransportHeightScale
                             font.bold: true
+                        }
+
+                        HoverHandler {
+                            id: nextHover
+                            enabled: nextTap.enabled
+                            blocking: false
+                            cursorShape: Qt.PointingHandCursor
                         }
 
                         TapHandler {
@@ -1108,6 +1146,13 @@ OverlayWidget {
                         }
                     }
 
+                    HoverHandler {
+                        id: systemMuteHover
+                        enabled: systemMuteTap.enabled
+                        blocking: false
+                        cursorShape: Qt.PointingHandCursor
+                    }
+
                     TapHandler {
                         id: systemMuteTap
                         enabled: mediaRoot.mediaModel.interactionEnabled
@@ -1203,8 +1248,11 @@ OverlayWidget {
                 }
     
                 MouseArea {
+                    objectName: "mediaAppVolumeInputArea"
                     anchors.fill: parent
                     enabled: mediaRoot.mediaModel.interactionEnabled
+                    hoverEnabled: enabled
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {
                         mediaRoot.appVolumeLevelRequested(
