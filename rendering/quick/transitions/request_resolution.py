@@ -12,7 +12,7 @@ from core.settings.capability_activation import (
     is_transition_activated,
     resolve_manual_transition_selection,
 )
-from core.settings.defaults import get_default_settings
+from core.settings.defaults import get_default_setting
 from core.settings.settings_manager import SettingsManager
 from rendering.transition_registry import (
     canonicalize_transition_name,
@@ -159,12 +159,10 @@ def resolve_quick_transition_spec(
     """
 
     rng = random_source if random_source is not None else random
-    all_defaults = get_default_settings()
-    defaults = _mapping(all_defaults.get("transitions"))
-    display_defaults = _mapping(all_defaults.get("display"))
+    defaults = _mapping(get_default_setting("transitions", missing=None))
     canonical_type = defaults.get("type")
     canonical_random = defaults.get("random_always")
-    canonical_hw = display_defaults.get("hw_accel")
+    canonical_hw = get_default_setting("display.hw_accel", missing=None)
     if not isinstance(canonical_type, str) or not canonical_type:
         raise KeyError("canonical transition defaults missing type")
     if not isinstance(canonical_random, bool):

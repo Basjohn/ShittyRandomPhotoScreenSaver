@@ -20,14 +20,17 @@ Excluded from reset:
 """
 from typing import Dict, Any, Mapping
 from copy import deepcopy
+from functools import lru_cache
 
 from .default_settings import DEFAULT_SETTINGS
 from .default_profile_overrides import PROFILE_DEFAULT_OVERRIDES
 from .default_contract import (
     MC_PROFILE,
+    MISSING_DEFAULT,
     NORMAL_PROFILE,
     get_canonical_default,
     get_raw_default_settings,
+    lookup_default_path,
     merge_default_overrides,
     require_canonical_default,
 )
@@ -67,10 +70,17 @@ def get_profile_default_overrides() -> Dict[str, Dict[str, Any]]:
     return deepcopy(PROFILE_DEFAULT_OVERRIDES)
 
 
-def get_default_settings(application: str | None = None) -> Dict[str, Any]:
-    """Return canonical defaults resolved for Normal or MC profile behavior."""
+@lru_cache(maxsize=2)
+def _resolved_defaults_readonly(profile: str) -> Dict[str, Any]:
+    """Resolved canonical tree for one profile, built once.
 
-    defaults = get_raw_default_settings(application)
+    The result depends only on the immutable editable defaults data and the
+    profile, so rebuilding it (~5 ms, visualizer normalization included) on
+    every runtime call bought nothing. Callers MUST treat it as read-only; the
+    public accessors below hand out private deep copies.
+    """
+
+    defaults = get_raw_default_settings(profile)
 
     widgets = defaults.get("widgets")
     if isinstance(widgets, Mapping):
@@ -84,6 +94,47 @@ def get_default_settings(application: str | None = None) -> Dict[str, Any]:
             )
 
     return defaults
+
+
+def _resolve_profile(application: str | None) -> str:
+    return MC_PROFILE if application == MC_PROFILE else NORMAL_PROFILE
+
+
+def get_default_settings(application: str | None = None) -> Dict[str, Any]:
+    """Return a private copy of canonical defaults resolved for Normal or MC."""
+
+    return deepcopy(_resolved_defaults_readonly(_resolve_profile(application)))
+
+
+_RAISE_IF_MISSING = object()
+
+
+def get_default_setting(
+    key: str,
+    application: str | None = None,
+    *,
+    missing: Any = _RAISE_IF_MISSING,
+) -> Any:
+    """Return a private copy of one resolved default by dotted path.
+
+    Unlike :func:`get_canonical_default` (raw editable data), this reads the
+    resolved tree, so ``widgets.spotify_visualizer`` values match
+    :func:`get_default_settings`. Only the addressed subtree is copied, which
+    keeps runtime readers (context menu, transition batches, widget routing)
+    off the whole-tree copy. A missing key raises ``KeyError`` unless
+    *missing* is given.
+    """
+
+    value = lookup_default_path(
+        _resolved_defaults_readonly(_resolve_profile(application)),
+        key,
+        missing=MISSING_DEFAULT,
+    )
+    if value is MISSING_DEFAULT:
+        if missing is _RAISE_IF_MISSING:
+            raise KeyError(f"Canonical defaults are missing key: {key}")
+        return missing
+    return value
 
 
 CANONICAL_DEFAULTS = get_default_settings(NORMAL_PROFILE)

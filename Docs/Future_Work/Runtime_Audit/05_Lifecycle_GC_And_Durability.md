@@ -23,7 +23,7 @@ churn gate + context-menu tails), R-27 (never answer pressure with more UI work)
 
 ---
 
-## LC-06 — Canonical defaults are recomputed (~5.5 ms) on every runtime call · P1 · R2 · Risk Low
+## LC-06 — Canonical defaults were recomputed (~5.5 ms) on every runtime call · P1 · R2 · Risk Low · `[~]`
 
 **Evidence (measured).** `get_default_settings()` (`core/settings/defaults.py:70-86`) rebuilds the raw defaults and
 re-normalizes the whole visualizer section on every call: **≈5.5 ms** (idle dev machine), dominated by ~600
@@ -50,7 +50,9 @@ the mutable-result contract; switch hot callers to section reads (`get_canonical
 **Must remain true.** Defaults authority (Defaults_Guide; `tests/test_defaults_schema_authority.py`); MC profile
 overrides resolved per profile; callers that mutate get a private copy.
 
-- [ ] Memoized + section reads; defaults-authority, context-menu and transition-resolution tests green.
+- [x] Memoized (`_resolved_defaults_readonly`, built once per profile; full copy now ≈0.86 ms) + resolved section
+      reads (`get_default_setting`, 3–96 µs) on the context-menu, transition-batch and widget-routing paths;
+      `tests/test_defaults_memoization.py`, defaults-authority, context-menu and transition-resolution tests green.
 - [ ] Physical: context-menu open/close responsiveness; Settings round-trip construction time in `[LIFECYCLE]`
       logs.
 

@@ -480,9 +480,8 @@ def test_resolved_runtime_consumers_do_not_rebuild_product_defaults() -> None:
     # Visualizer card Settings are repaired against canonical Widgets state at
     # admission, then supplied as one complete presentation payload. Resize/QML
     # consumers do not maintain another colour/shadow/border default table.
-    assert 'canonical_widgets = get_default_settings()["widgets"]' in display_manager
+    assert 'canonical_global = get_default_setting("widgets.global")' in display_manager
     assert 'QuickShadowSnapshot.from_mapping(self._shadow_values_snapshot)' in display_manager
-    assert 'canonical_global = canonical_widgets["global"]' in display_manager
     assert "technical_config=resolve_technical_config(technical_cache, mode)" in display_manager
     assert "_DEFAULT_BACKGROUND_COLOR" not in presentation
     assert "_DEFAULT_BORDER_COLOR" not in presentation

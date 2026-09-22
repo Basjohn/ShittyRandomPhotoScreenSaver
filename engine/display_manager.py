@@ -26,7 +26,7 @@ from core.settings.capability_activation import (
     get_effective_random_pool,
     is_widget_family_effective,
 )
-from core.settings.defaults import get_default_settings
+from core.settings.defaults import get_default_setting
 from core.settings.default_contract import require_canonical_default
 from rendering.display_modes import DisplayMode
 from rendering.transition_registry import (
@@ -836,7 +836,7 @@ class DisplayManager(QObject):
 
         from core.settings.settings_manager import SettingsManager
 
-        defaults = get_default_settings()["transitions"]
+        defaults = get_default_setting("transitions")
         transitions = (
             self.settings_manager.get("transitions")
             if self.settings_manager is not None
@@ -846,8 +846,7 @@ class DisplayManager(QObject):
             transitions = dict(defaults) if isinstance(defaults, dict) else {}
         canonical_type = defaults.get("type")
         canonical_random = defaults.get("random_always")
-        display_defaults = get_default_settings()["display"]
-        canonical_hw = display_defaults.get("hw_accel")
+        canonical_hw = get_default_setting("display.hw_accel", missing=None)
         if not isinstance(canonical_type, str) or not canonical_type:
             raise KeyError("canonical transition defaults missing type")
         if not isinstance(canonical_random, bool):
@@ -2477,7 +2476,6 @@ class DisplayManager(QObject):
 
         mode = str(model.mode)
         technical_cache = build_technical_cache(None, model)
-        canonical_widgets = get_default_settings()["widgets"]
 
         from core.settings.shadow_direction import (
             resolve_directional_extensions,
@@ -2501,7 +2499,7 @@ class DisplayManager(QObject):
         from ui.widget_theme_active import get_active_widget_theme
 
         widget_theme = get_active_widget_theme()
-        canonical_global = canonical_widgets["global"]
+        canonical_global = get_default_setting("widgets.global")
         persisted_global = widgets.get("global")
         global_widgets = dict(canonical_global)
         if isinstance(persisted_global, Mapping):
