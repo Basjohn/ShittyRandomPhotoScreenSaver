@@ -150,6 +150,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --life - Enable widget/worker/engine lifecycle diagnostics
     - --cache - Enable image-cache/prefetch/cache-authority diagnostics
     - --steam - Enable Steam widget family diagnostics
+    - --feeds - Enable FEEDS source/artwork/runtime sidecar diagnostics
     - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
     - --devsteam - Show the unfinished Steam Journey scaffold
     
@@ -158,7 +159,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--verbose", "-v", "--perf", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam", "--feeds",
         "--noupdates", "--frame-trace",
         "--fresh", "--devsteam",
     }
@@ -766,6 +767,7 @@ def main(*, entrypoint: str = "main"):
         lifecycle=logging_profile.lifecycle,
         cache_trace=logging_profile.cache_trace,
         steam_trace=logging_profile.steam_trace,
+        feeds_trace=logging_profile.feeds_trace,
         diagnostic_build=diagnostic_build,
     )
     # Deep publication->Quick->draw timing is intentionally separate from the

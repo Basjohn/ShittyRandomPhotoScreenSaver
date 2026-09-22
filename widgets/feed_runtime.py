@@ -7,7 +7,8 @@ while the Feeds family is dormant.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
+from threading import Event
 import time
 import weakref
 from typing import Any, Callable
@@ -21,6 +22,8 @@ class FeedRuntimeConfig:
     widget_id: str
     source_spec: FeedSourceSpec
     refresh_minutes: int
+    show_images: bool
+    view_mode: str
 
     @classmethod
     def from_custom(cls, config: CustomFeedConfig) -> "FeedRuntimeConfig":
@@ -28,6 +31,8 @@ class FeedRuntimeConfig:
             widget_id=config.widget_id,
             source_spec=config.source_spec(),
             refresh_minutes=max(5, min(24 * 60, int(config.refresh_minutes))),
+            show_images=bool(config.show_images),
+            view_mode=config.view_mode,
         )
 
 
@@ -39,7 +44,9 @@ class _SourceState:
     last_result: FeedRefreshResult | None = None
     in_flight: bool = False
     work_token: int = 0
+    work_cancel: Event = field(default_factory=Event)
     due_at: float = 0.0
+    artwork_attempted_at: float | None = None
 
 
 _SHARED: dict[tuple[str, object], "_FeedFamilyOwner"] = {}
@@ -128,8 +135,16 @@ class _FeedFamilyOwner:
                 pass
 
     def _release_source_if_idle(self, state: _SourceState) -> None:
-        if not state.in_flight and not self._active_leases_for_state(state):
-            self._release_source(state)
+        if state.in_flight or self._active_leases_for_state(state):
+            return
+        self._release_source(state)
+        # A retired endpoint must not remain in a still-active family owner.
+        # An inactive but attached lease retains its immutable last-good result
+        # for cache-first reactivation without opening an HTTP transport.
+        if not any(lease.config.source_spec.cache_key == state.spec.cache_key
+                   for lease in self._leases):
+            if self._states.get(state.spec.cache_key) is state:
+                del self._states[state.spec.cache_key]
 
     def _state_for(self, lease: "FeedRuntimeLease") -> _SourceState:
         config = lease.config
@@ -179,7 +194,14 @@ class _FeedFamilyOwner:
                 # object; network state is constructed only when actually due.
                 self._submit(state, cache_only=True, force=False)
             else:
-                self._admit_due_work()
+                # Reactivation is an event: resume an interrupted optional
+                # artwork batch only if this accepted snapshot still needs it.
+                # A due feed refresh takes precedence over an artwork job.
+                if state.due_at <= self._now() + 0.001:
+                    self._admit_due_work()
+                elif self._artwork_needed(state):
+                    state.artwork_attempted_at = state.last_result.snapshot.fetched_at
+                    self._submit(state, cache_only=False, force=False, artwork_only=True)
         self._reschedule()
         return True
 
@@ -187,6 +209,10 @@ class _FeedFamilyOwner:
         self._active.discard(lease)
         state = self._states.get(lease.config.source_spec.cache_key)
         if state is not None:
+            if not self._active_leases_for_state(state):
+                # The cancellation token belongs to this endpoint's current
+                # job, not the whole generation or another active source.
+                state.work_cancel.set()
             self._recompute_state_cadence(state)
             self._release_source_if_idle(state)
         if not self._active:
@@ -197,6 +223,9 @@ class _FeedFamilyOwner:
     def detach(self, lease: "FeedRuntimeLease") -> None:
         self.deactivate(lease)
         self._leases.discard(lease)
+        state = self._states.get(lease.config.source_spec.cache_key)
+        if state is not None:
+            self._release_source_if_idle(state)
         if not self._leases:
             self.retire()
 
@@ -207,9 +236,14 @@ class _FeedFamilyOwner:
         self._deadline_token += 1
         self._cancel_deadline()
         for state in self._states.values():
+            state.work_cancel.set()
             state.work_token += 1
+            was_in_flight = state.in_flight
             state.in_flight = False
-            self._release_source(state)
+            # Never close a requests.Session from the GUI while its worker is
+            # inside iter_content(); the completion callback closes it instead.
+            if not was_in_flight:
+                self._release_source(state)
         self._states.clear()
         for lease in tuple(self._leases):
             lease._owner = None
@@ -250,30 +284,99 @@ class _FeedFamilyOwner:
 
             owner_ref = weakref.ref(self)
 
+            # Only one job per state can run at a time. The callback reads the
+            # current per-job event so a retained HTTP session also honors
+            # cancellation on later refreshes after an ordinary cache hit.
+            def _still_needed() -> bool:
+                owner = owner_ref()
+                return bool(owner is not None and not owner._retired
+                            and not state.work_cancel.is_set())
+
             def _make_transport():
                 from core.feeds.transport import FeedHttpTransport
-                return FeedHttpTransport(
-                    should_continue=lambda: bool(
-                        (owner := owner_ref()) is not None and not owner._retired
-                    )
-                )
+                return FeedHttpTransport(should_continue=_still_needed)
 
-            state.source = FeedSource(state.spec, transport_factory=_make_transport)
+            state.source = FeedSource(
+                state.spec, transport_factory=_make_transport,
+                should_continue=_still_needed,
+            )
         return state.source
 
-    def _submit(self, state: _SourceState, *, cache_only: bool, force: bool) -> None:
+    def _artwork_needed(self, state: _SourceState) -> bool:
+        snapshot = state.last_result.snapshot if state.last_result is not None else None
+        return bool(
+            snapshot is not None
+            and state.artwork_attempted_at != snapshot.fetched_at
+            and any(item.images for item in snapshot.document.items)
+            and any(lease.config.show_images and lease.config.view_mode != "compact"
+                    for lease in self._active_leases_for_state(state))
+        )
+
+    @staticmethod
+    def _warm_artwork(
+        result: FeedRefreshResult, *, cancel: Event,
+        protected: tuple[str, ...],
+    ) -> FeedRefreshResult:
+        """One event-admitted follow-on job, never a per-image timer/owner.
+
+        The main source response has already been published cache-first. Optional
+        imagery runs on the SAME bounded family IO lane, and emits only one
+        complete result at the end. All four attempts share one wall-clock cap.
+        """
+        snapshot = result.snapshot
+        if snapshot is None:
+            return result
+        from core.feeds.artwork import ArtworkCancelled, FeedArtworkCache
+        from core.feeds.artwork_transport import ArtworkFetchError, fetch_artwork_bytes
+        from core.settings.storage_paths import detect_current_profile, get_feed_cache_dir
+        cache = FeedArtworkCache(get_feed_cache_dir(detect_current_profile()) / "artwork")
+        deadline = time.monotonic() + 8.0
+        def needed() -> bool:
+            return not cancel.is_set()
+        def fetch(url: str) -> bytes:
+            if not needed():
+                raise ArtworkCancelled()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.1:
+                raise ArtworkFetchError("shared artwork deadline exhausted")
+            return fetch_artwork_bytes(url, still_needed=needed,
+                                       max_seconds=min(7.5, remaining))
+        try:
+            warm = cache.warm(snapshot.document.items, fetch_bytes=fetch,
+                              still_needed=needed, protected_sources=protected)
+        except ArtworkCancelled:
+            raise
+        except (OSError, ValueError):
+            return result  # Images cannot invalidate established article text.
+        return replace(result, local_artwork_by_item=tuple(warm.local_by_item.items()))
+
+    def _submit(self, state: _SourceState, *, cache_only: bool, force: bool,
+                artwork_only: bool = False) -> None:
         if self._retired or state.in_flight or not self._active_leases_for_state(state):
             return
         state.in_flight = True
+        state.work_cancel = Event()
         state.work_token += 1
         token = state.work_token
+        cancel = state.work_cancel
         cache_key = state.spec.cache_key
         owner_ref = weakref.ref(self)
+        base_artwork_result = state.last_result if artwork_only else None
+        # Capture protection on the GUI thread rather than reading mutable
+        # family/lease state from a worker while a different source retires.
+        protected = tuple(uri for current in self._states.values()
+                          if current.last_result is not None
+                          for _item_id, uri in current.last_result.local_artwork_by_item)
 
         def _work() -> FeedRefreshResult:
             owner = owner_ref()
-            if owner is None or owner._retired:
-                raise RuntimeError("feed owner retired")
+            if owner is None or owner._retired or cancel.is_set():
+                raise RuntimeError("feed source no longer active")
+            if artwork_only:
+                if base_artwork_result is None:
+                    raise RuntimeError("missing accepted feed artwork source")
+                return owner._warm_artwork(base_artwork_result, cancel=cancel,
+                                           protected=protected)
             source = owner._source_for(state)
             return source.load_cached() if cache_only else source.refresh(force=force)
 
@@ -285,11 +388,20 @@ class _FeedFamilyOwner:
                 if getattr(task_result, "success", False)
                 else None
             )
+            owner = owner_ref()
+            if owner is None or owner._retired:
+                # Completion runs only after the worker returns. An obsolete
+                # session can now be closed without racing its HTTP read.
+                _FeedFamilyOwner._release_source(state)
+                return
 
             def _deliver() -> None:
                 owner = owner_ref()
-                if owner is not None:
-                    owner._complete(cache_key, token, result, cache_only=cache_only)
+                if owner is None or owner._retired:
+                    _FeedFamilyOwner._release_source(state)
+                else:
+                    owner._complete(cache_key, state, token, cancel, result,
+                                    cache_only=cache_only, artwork_only=artwork_only)
 
             _deliver._srpss_runtime_generation = self._generation
             try:
@@ -313,30 +425,75 @@ class _FeedFamilyOwner:
     def _complete(
         self,
         cache_key: str,
+        submitted_state: _SourceState,
         token: int,
+        cancel: Event,
         result: object,
         *,
         cache_only: bool,
+        artwork_only: bool = False,
     ) -> None:
         if self._retired:
             return
         state = self._states.get(cache_key)
-        if state is None or token != state.work_token or not state.in_flight:
+        if (state is not submitted_state or token != state.work_token
+            or not state.in_flight):
+            self._release_source(submitted_state)
             return
         state.in_flight = False
+        if cancel.is_set():
+            # An interrupted artwork batch is not a completed attempt. Its
+            # next admitted consumer may resume via activation, not a timer.
+            if artwork_only:
+                state.artwork_attempted_at = None
+            # Reattached consumers must get fresh work; no canceled result may
+            # publish or persist a synthetic network failure/backoff.
+            self._release_source(state)
+            if self._active_leases_for_state(state):
+                if state.last_result is None:
+                    self._submit(state, cache_only=True, force=False)
+                else:
+                    self._update_due(state, state.last_result)
+                    self._admit_due_work()
+            else:
+                self._release_source_if_idle(state)
+            self._reschedule()
+            return
         if isinstance(result, FeedRefreshResult):
+            previous = state.last_result
+            # An unchanged conditional response keeps already-admitted local art
+            # until a new grouped artwork generation is ready.
+            if (not artwork_only and previous is not None and result.snapshot is not None
+                and previous.snapshot is not None
+                and previous.snapshot.document == result.snapshot.document
+                and previous.local_artwork_by_item):
+                result = replace(result, local_artwork_by_item=previous.local_artwork_by_item)
             state.last_result = result
+            if not artwork_only and not cache_only:
+                # A 304 or an identical ordinary refresh must not reissue the
+                # same optional image requests at every source cadence. Only a
+                # changed document is eligible for another artwork batch.
+                if (previous is not None and previous.snapshot is not None
+                    and result.snapshot is not None
+                    and previous.snapshot.document == result.snapshot.document
+                    and state.artwork_attempted_at is not None):
+                    state.artwork_attempted_at = result.snapshot.fetched_at
+                else:
+                    state.artwork_attempted_at = None
             for lease in self._active_leases_for_state(state):
                 lease._accept(result, from_cache=cache_only)
-            self._update_due(state, result)
-        else:
+            if not artwork_only:
+                self._update_due(state, result)
+        elif not artwork_only:
             state.due_at = self._now() + 60.0
 
-        if cache_only and self._active_leases_for_state(state):
-            # Cache-first means paint accepted disk state first, then refresh only
-            # if it is actually due. No startup network request for a fresh cache.
-            if state.due_at <= self._now() + 0.001:
-                self._submit(state, cache_only=False, force=False)
+        if cache_only and self._active_leases_for_state(state) and state.due_at <= self._now() + 0.001:
+            # Publish last-good text first; fetch due source before its imagery.
+            self._submit(state, cache_only=False, force=False)
+        elif not artwork_only and self._artwork_needed(state):
+            snapshot = state.last_result.snapshot
+            state.artwork_attempted_at = snapshot.fetched_at
+            self._submit(state, cache_only=False, force=False, artwork_only=True)
         self._release_source_if_idle(state)
         self._reschedule()
 

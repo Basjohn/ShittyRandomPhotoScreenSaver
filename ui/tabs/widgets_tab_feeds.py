@@ -251,6 +251,11 @@ def build_feeds_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     row.addWidget(tab.feeds_custom1_refresh_minutes)
     row.addStretch()
 
+    tab.feeds_custom1_show_images = QCheckBox("Show Locally Cached Article Images")
+    tab.feeds_custom1_show_images.setProperty("circleIndicator", True)
+    tab.feeds_custom1_show_images.setChecked(tab._default_bool("feeds_custom_1", "show_images"))
+    tab.feeds_custom1_show_images.stateChanged.connect(tab._save_settings)
+    content_layout.addWidget(tab.feeds_custom1_show_images)
     finalize_bucket_body(content_toggle, content_body)
 
     layout_toggle, layout_body, layout_controls = build_bucket_toggle(
@@ -383,6 +388,7 @@ def load_feeds_settings(tab: "WidgetsTab", widgets: Mapping[str, Any]) -> None:
     _set_view_combo(tab, values.get("view_mode", tab._widget_default("feeds_custom_1", "view_mode")))
     tab.feeds_custom1_item_limit.setValue(tab._config_int("feeds_custom_1", values, "item_limit"))
     tab.feeds_custom1_refresh_minutes.setValue(tab._config_int("feeds_custom_1", values, "refresh_minutes"))
+    tab.feeds_custom1_show_images.setChecked(tab._config_bool("feeds_custom_1", values, "show_images"))
     tab._set_combo_text(tab.feeds_custom1_position, tab._config_str("feeds_custom_1", values, "position"))
     tab._set_combo_text(
         tab.feeds_custom1_monitor_combo,
@@ -416,6 +422,7 @@ def save_feeds_settings(tab: "WidgetsTab") -> dict[str, Any]:
             "view_mode": view_mode,
             "item_limit": int(tab.feeds_custom1_item_limit.value()),
             "refresh_minutes": int(tab.feeds_custom1_refresh_minutes.value()),
+            "show_images": bool(tab.feeds_custom1_show_images.isChecked()),
             "position": tab.feeds_custom1_position.currentText(),
             "monitor": tab._monitor_value_from_combo("feeds_custom_1", tab.feeds_custom1_monitor_combo),
             "margin": int(tab.feeds_custom1_margin.value()),

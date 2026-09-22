@@ -12,7 +12,7 @@ import time
 from typing import Any
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QAbstractListModel, QModelIndex, QObject, Property, Qt, Signal
+from PySide6.QtCore import QAbstractListModel, QModelIndex, QObject, Property, Qt, Signal, Slot
 from PySide6.QtGui import QColor
 
 from core.feeds.config import CustomFeedConfig
@@ -290,6 +290,9 @@ class FeedPresentationModel(QObject):
         self._runtime_service: object | None = None
         self._rows = FeedRowsModel(self)
         self._display: FeedDisplay | None = None
+        self._snapshot = None
+        self._local_artwork_by_item: dict[str, str] = {}
+        self._visible_item_capacity: int | None = None
         self._view_state = "loading" if config.custom.configured else "missing"
         self._status_text = ""
         self._refreshing = False
@@ -337,6 +340,8 @@ class FeedPresentationModel(QObject):
             if callable(detach):
                 detach(self)
         self._rows.replace_rows(())
+        self._snapshot = None
+        self._local_artwork_by_item.clear()
 
     def is_feed_consumer_alive(self) -> bool:
         return self._active and not self._retired
@@ -349,13 +354,9 @@ class FeedPresentationModel(QObject):
             old_view_state = self._view_state
             old_status_text = self._status_text
             old_refreshing = self._refreshing
-            display = project_feed(
-                snapshot,
-                view_mode=self.config.custom.view_mode,
-                item_limit=self.config.custom.item_limit,
-                show_images=self.config.custom.show_images,
-                local_artwork_by_item={},
-            )
+            self._snapshot = snapshot
+            self._local_artwork_by_item = dict(result.local_artwork_by_item)
+            display = self._project_accepted_snapshot()
             display_changed = display != self._display
             self._display = display
             rows_changed = self._rows.replace_rows(display.rows)
@@ -381,6 +382,30 @@ class FeedPresentationModel(QObject):
         self._view_state = "error"
         self._status_text = "FEED UNAVAILABLE"
         self.stateChanged.emit()
+
+    def _project_accepted_snapshot(self) -> FeedDisplay:
+        return project_feed(
+            self._snapshot,
+            view_mode=self.config.custom.view_mode,
+            item_limit=self.config.custom.item_limit,
+            show_images=self.config.custom.show_images,
+            local_artwork_by_item=self._local_artwork_by_item,
+            visible_item_capacity=self._visible_item_capacity,
+        )
+
+    @Slot(int)
+    def setVisibleCapacity(self, capacity: int) -> None:
+        """QML geometry event only; no I/O, image validation or scheduler."""
+        bounded = max(0, min(self.config.custom.item_limit, int(capacity)))
+        if self._retired or bounded == self._visible_item_capacity:
+            return
+        self._visible_item_capacity = bounded
+        if self._snapshot is not None:
+            display = self._project_accepted_snapshot()
+            if display != self._display:
+                self._display = display
+                self._rows.replace_rows(display.rows)
+                self.stateChanged.emit()
 
     def request_refresh(self) -> bool:
         if not self._active or self._runtime_service is None:
@@ -441,6 +466,10 @@ class FeedPresentationModel(QObject):
     @Property(str, notify=stateChanged)
     def viewMode(self) -> str:
         return self.config.custom.view_mode
+
+    @Property(bool, notify=stateChanged)
+    def showImages(self) -> bool:
+        return bool(self.config.custom.show_images)
 
     @Property(str, notify=stateChanged)
     def viewState(self) -> str:

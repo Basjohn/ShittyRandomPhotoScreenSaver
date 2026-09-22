@@ -78,6 +78,7 @@ Existing sidecars remain the first destinations for their domains:
 - `--life` → `screensaver_lifecycle.log`
 - `--cache` → `screensaver_cache.log`
 - `--steam` → `screensaver_steam.log`
+- `--feeds` → `screensaver_feeds.log`
 
 Do not create a new sidecar merely because one logger is noisy. Add a family only when a
 distinct high-volume domain has a coherent correlation workflow.

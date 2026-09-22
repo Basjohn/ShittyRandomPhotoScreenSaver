@@ -25,6 +25,7 @@ from core.logging.tags import (
     LOG_FAMILY_CACHE,
     LOG_FAMILY_FIELD,
     LOG_FAMILY_GEOMETRY,
+    LOG_FAMILY_FEEDS,
     LOG_FAMILY_LIFECYCLE,
     LOG_FAMILY_PERF,
     LOG_FAMILY_SETTINGS,
@@ -55,6 +56,7 @@ _SETTINGS_LOGGING_ENABLED: bool = False
 _LIFECYCLE_LOGGING_ENABLED: bool = False
 _CACHE_LOGGING_ENABLED: bool = False
 _STEAM_LOGGING_ENABLED: bool = False
+_FEEDS_LOGGING_ENABLED: bool = False
 # Logging defaults to disabled for frozen builds unless explicitly enabled via
 # the general logging config file next to the executable.
 _LOGGING_DISABLED: bool = _IS_FROZEN
@@ -727,6 +729,7 @@ class LoggingBootstrapProfile:
     lifecycle: bool = False
     cache_trace: bool = False
     steam_trace: bool = False
+    feeds_trace: bool = False
 
 
 def resolve_logging_bootstrap_profile(
@@ -752,6 +755,7 @@ def resolve_logging_bootstrap_profile(
             lifecycle=True,
             cache_trace=True,
             steam_trace=True,
+            feeds_trace=True,
         )
     viz = "--viz" in args
     handle_attribution = "--handle-attribution" in args
@@ -769,6 +773,7 @@ def resolve_logging_bootstrap_profile(
         lifecycle="--life" in args,
         cache_trace="--cache" in args,
         steam_trace="--steam" in args,
+        feeds_trace="--feeds" in args,
     )
 
 def _parse_bool_token(value: Optional[str]) -> Optional[bool]:
@@ -2133,6 +2138,34 @@ class SteamLogFilter(logging.Filter):
         return any(token in msg for token in self._MESSAGE_TOKENS)
 
 
+class FeedsLogFilter(logging.Filter):
+    """Filter for opt-in FEEDS acquisition/artwork/runtime diagnostics."""
+
+    _NAME_PREFIXES = (
+        "core.feeds",
+        "widgets.feed_runtime",
+        "rendering.quick.widgets.feeds",
+        "ui.tabs.widgets_tab_feeds",
+    )
+    _MESSAGE_TOKENS = (
+        "[FEEDS]",
+        "[FEEDS_TAB]",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        explicit = _explicit_log_family_match(record, LOG_FAMILY_FEEDS)
+        if explicit is not None:
+            return explicit
+        name = str(getattr(record, "name", "") or "")
+        if any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
+            return True
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return any(token in msg for token in self._MESSAGE_TOKENS)
+
+
 class DedicatedFamilySuppressFilter(logging.Filter):
     """Suppress INFO/DEBUG records from a family when its sidecar log is active."""
 
@@ -2594,6 +2627,7 @@ def setup_logging(
     lifecycle: bool = False,
     cache_trace: bool = False,
     steam_trace: bool = False,
+    feeds_trace: bool = False,
     diagnostic_build: bool = False,
 ) -> None:
     """
@@ -2613,6 +2647,7 @@ def setup_logging(
         lifecycle: Enables widget/worker/engine lifecycle sidecar diagnostics.
         cache_trace: Enables image-cache/prefetch/cache-authority sidecar diagnostics.
         steam_trace: Enables Steam widget family sidecar diagnostics.
+        feeds_trace: Enables FEEDS source/artwork/runtime sidecar diagnostics.
         diagnostic_build: Forces bounded logging into the dedicated per-user
             diagnostic directory. Ordinary and Media Center release entry
             points never set this flag.
@@ -2621,7 +2656,7 @@ def setup_logging(
     global _USAGE_LOGGING_ENABLED
     global _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED
     global _GEOMETRY_LOGGING_ENABLED, _SETTINGS_LOGGING_ENABLED, _LIFECYCLE_LOGGING_ENABLED
-    global _CACHE_LOGGING_ENABLED, _STEAM_LOGGING_ENABLED, _WIDGET_PERF_VERBOSE
+    global _CACHE_LOGGING_ENABLED, _STEAM_LOGGING_ENABLED, _FEEDS_LOGGING_ENABLED, _WIDGET_PERF_VERBOSE
     global _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
     global _ACTIVE_LOGGING_CONTROLLER
 
@@ -2644,6 +2679,7 @@ def setup_logging(
         lifecycle = diagnostic_profile.lifecycle
         cache_trace = diagnostic_profile.cache_trace
         steam_trace = diagnostic_profile.steam_trace
+        feeds_trace = diagnostic_profile.feeds_trace
         _WIDGET_PERF_VERBOSE = True
 
     debug_enabled = debug or verbose
@@ -2675,6 +2711,8 @@ def setup_logging(
         _CACHE_LOGGING_ENABLED = True
     if steam_trace:
         _STEAM_LOGGING_ENABLED = True
+    if feeds_trace:
+        _FEEDS_LOGGING_ENABLED = True
 
     logging_disabled = _determine_logging_disabled(exe_path_valid)
     if diagnostic_build:
@@ -2701,6 +2739,7 @@ def setup_logging(
             _LIFECYCLE_LOGGING_ENABLED,
             _CACHE_LOGGING_ENABLED,
             _STEAM_LOGGING_ENABLED,
+            _FEEDS_LOGGING_ENABLED,
         )
     )
     if logging_disabled and not debug_enabled and not specific_logging_enabled:
@@ -2773,6 +2812,7 @@ def setup_logging(
     main_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
     main_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
     main_handler.addFilter(DedicatedFamilySuppressFilter(SteamLogFilter(), is_steam_logging_enabled))
+    main_handler.addFilter(DedicatedFamilySuppressFilter(FeedsLogFilter(), is_feeds_logging_enabled))
     main_handler.addFilter(WidgetPerfVisibilityFilter())
     
     console_handler = SuppressingStreamHandler(sys.stdout)
@@ -2791,6 +2831,7 @@ def setup_logging(
     console_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
     console_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
     console_handler.addFilter(DedicatedFamilySuppressFilter(SteamLogFilter(), is_steam_logging_enabled))
+    console_handler.addFilter(DedicatedFamilySuppressFilter(FeedsLogFilter(), is_feeds_logging_enabled))
     console_handler.addFilter(WidgetPerfVisibilityFilter())
     
     # Configure the producer-facing root logger. All real outputs remain
@@ -2930,6 +2971,21 @@ def setup_logging(
         steam_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         steam_handler.addFilter(SteamLogFilter())
         output_handlers.append(steam_handler)
+
+    if _FEEDS_LOGGING_ENABLED:
+        feeds_log_file = log_dir / "screensaver_feeds.log"
+        feeds_handler = DeduplicatingRotatingFileHandler(
+            feeds_log_file,
+            maxBytes=2 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
+        feeds_handler.setFormatter(formatter)
+        # --feeds is useful on its own; diagnostic summaries are INFO and do
+        # not require --debug/--verbose to become visible in the sidecar.
+        feeds_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        feeds_handler.addFilter(FeedsLogFilter())
+        output_handlers.append(feeds_handler)
     
     # Verbose debug log - captures ALL DEBUG/INFO with deduplication.
     # This is the "messy" log for deep debugging when console suppression
@@ -2958,6 +3014,7 @@ def setup_logging(
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(SteamLogFilter(), is_steam_logging_enabled))
+        verbose_handler.addFilter(DedicatedFamilySuppressFilter(FeedsLogFilter(), is_feeds_logging_enabled))
         output_handlers.append(verbose_handler)
 
     # Human console output is deliberately last. All persistent file sinks are
@@ -3042,7 +3099,7 @@ def setup_logging(
 
     root_logger.info("=" * 60)
     root_logger.info(
-        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, usage=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s, steam=%s)",
+        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, usage=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s, steam=%s, feeds=%s)",
         debug_enabled,
         _VERBOSE,
         _PERF_METRICS_ENABLED,
@@ -3053,9 +3110,10 @@ def setup_logging(
         _LIFECYCLE_LOGGING_ENABLED,
         _CACHE_LOGGING_ENABLED,
         _STEAM_LOGGING_ENABLED,
+        _FEEDS_LOGGING_ENABLED,
     )
     root_logger.info(
-        "Specific logs available: always-on Qt/QML=screensaver_qml.log, debug/verbose native faults=native_faults.log, --perf=screensaver_perf.log, --usage=screensaver_usage.log, --handle-attribution=screensaver_usage.log+screensaver_handles.log (Windows attribution), --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
+        "Specific logs available: always-on Qt/QML=screensaver_qml.log, debug/verbose native faults=native_faults.log, --perf=screensaver_perf.log, --usage=screensaver_usage.log, --handle-attribution=screensaver_usage.log+screensaver_handles.log (Windows attribution), --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log, --feeds=screensaver_feeds.log"
     )
     active_specific_logs: list[str] = []
     if _PERF_METRICS_ENABLED:
@@ -3074,6 +3132,8 @@ def setup_logging(
         active_specific_logs.append("cache=screensaver_cache.log")
     if _STEAM_LOGGING_ENABLED:
         active_specific_logs.append("steam=screensaver_steam.log")
+    if _FEEDS_LOGGING_ENABLED:
+        active_specific_logs.append("feeds=screensaver_feeds.log")
     if active_specific_logs:
         root_logger.info("Specific logs active: %s", ", ".join(active_specific_logs))
     root_logger.info("=" * 60)
@@ -3341,3 +3401,9 @@ def is_steam_logging_enabled() -> bool:
     """Return True when Steam widget family diagnostics are enabled."""
 
     return _STEAM_LOGGING_ENABLED
+
+
+def is_feeds_logging_enabled() -> bool:
+    """Return True when FEEDS diagnostics are enabled."""
+
+    return _FEEDS_LOGGING_ENABLED

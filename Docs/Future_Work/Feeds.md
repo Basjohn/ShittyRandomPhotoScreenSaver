@@ -70,7 +70,7 @@ Every few meaningful FEEDS slices, and always before multiplying providers/insta
 ### Audit 1 — F2 CUSTOM 1 candidate
 
 - [x] **Durability:** empty successful responses cannot replace last-good; strict cache shapes/quarantine remain; TEST FEED late callback is weak + `Shiboken.isValid()` fenced; probe/tool share one production viability seam; the product-action boundary independently rejects non-HTTP/S targets instead of trusting QML admission alone.
-- [x] **User adaptability:** dead F2 image toggle removed; Max Items now caps instead of clipping through card bounds; only whole List/Compact rows and Grid cells that fit are painted; responsive text-grid columns and explicit `+N MORE` overflow; no internal scrolling/wheel owner.
+- [x] **User adaptability:** F2 removed the former unwired image toggle; F3 now exposes the functional local-image preference. Max Items caps instead of clipping through card bounds; only whole List/Compact rows and Grid cells that fit are painted; responsive text-grid columns and explicit `+N MORE` overflow; no internal scrolling/wheel owner.
 - [x] **Performance neutrality:** endpoint acquisition shared across future slots/displays; active cadence recomputes after lease retirement; idle source transport is released; cache-only startup avoids importing `requests`/`feedparser` or constructing HTTP transport/session; reactivation reuses retained in-memory last-good without rereading disk merely to recreate source state; no QML network/timer.
 - [ ] Native/physical confirmation of all three pillars before F3.
 
@@ -125,7 +125,7 @@ A provider's technical health is not a ranking of its journalism. For Politics i
 **Goal:** prove one useful widget all the way from Settings to runtime before multiplying surfaces.
 
 - [x] Register `feeds` family dormantly and expose only Custom 1 behind canonical family activation.
-- [x] Settings: enabled, name, URL, List/Grid/Compact selector, **Max Items**, refresh interval and normal card/theme/monitor/position/authored-geometry controls. Imagery control remains hidden until F3 owns a real local artwork warmer.
+- [x] Settings: enabled, name, URL, List/Grid/Compact selector, **Max Items**, refresh interval and normal card/theme/monitor/position/authored-geometry controls. The F3 locally cached article-image preference is available only after the bounded warmer is wired to the current source owner.
 - [x] Settings: asynchronous explicit **TEST FEED** action. Never network-fetch on every keystroke or merely opening Settings.
 - [x] TEST FEED uses the exact production probe seam and reports parser type, valid items, actionable count, image coverage and newest-item evidence. Network failure does not forbid saving a syntactically valid URL.
 - [x] TEST FEED callback is weak-owner and Qt-validity fenced so runtime/Settings replacement cannot touch a destroyed tab.
@@ -142,11 +142,12 @@ A provider's technical health is not a ranking of its journalism. For Politics i
 
 ## F3 | Presentation expansion + all CUSTOM slots
 
+- [~] Before activating another CUSTOM source, verify the shared owner's per-endpoint cancellation/pruning: the final active lease cancels queued/streaming work, its completion cannot publish or convert cancellation into provider backoff, and other active endpoints remain unaffected. A same-endpoint surviving lease must keep its source alive. The source-side candidate and pure regression fixtures are present; the operator reported **45 passed in 2.06s** for the changed-tree focused native selection. Physical in-flight A/B source cancellation, dormancy and lifecycle acceptance remain required.
 - [x] Establish the pure all-or-none image-generation helper for consumers whose product contract requires completely illustrated visible groups. FEEDS Grid keeps that contract when F3 adds the local artwork warmer.
 - [x] Keep Steam Games You Follow separate: its image-optional mixed news requires per-game validated artwork and one stable image rail/placeholder, not an all-or-none gate that suppresses every good image when one article has no artwork. Share only content-neutral primitives with equivalent semantics.
-- [ ] Build Feed Grid using the same all-image/all-text generation rule. Never produce patchwork cards with some image holes.
-- [ ] Build Compact Headlines as a deliberately text-only dense view with no animation/ticker.
-- [ ] Add bounded feed-artwork cache/warmer shared by all feed widgets, with local-file presentation only and count/byte eviction.
+- [~] `project_feed` and the retained Grid model use geometry-visible capacity for one all-image/all-text visible prefix. A fixed image-capable Grid cell height prevents capacity/readiness oscillation. Native visual acceptance of resize, mixed imagery and large/small cards remains open; never produce patchwork cards.
+- [x] Compact Headlines is a deliberately text-only dense view with no animation or ticker.
+- [~] The worker-only `FeedArtworkCache` and vetted, DNS-pinned redirect-validated `artwork_transport` are wired into the existing Custom 1 source-owner IO lane. One event-admitted image batch uses at most four fresh attempts and one eight-second shared deadline, then publishes retained local file URIs as a group; List allows sparse imagery, Grid uses geometry-visible all-or-none admission, Compact remains text-only. Cross-item repeated image URLs are now treated as feed/site chrome so a generic high-resolution hero cannot override article-specific candidates on every row. On-write rotation protects current source image URIs, but native retirement/physical image coverage and concurrent multi-source eviction fencing remain required before Custom 2–4. No new image scheduler, QML network load, article-page scraping or render-time media validation.
 - [ ] A complete current image generation may remain displayed while a replacement generation warms. Do not progressively tear holes into the retained presentation.
 - [ ] Enable Custom 2/3/4 using the same codepath/registry/component; do not clone four providers or four QML implementations.
 - [ ] Runtime monogram icon uses the existing vector icon drawer: first grapheme/letter of configured name, with deterministic small ordinal when active names collide (e.g. `N`, `N²`). No emoji/font-glyph dependency.
@@ -192,6 +193,6 @@ A provider's technical health is not a ranking of its journalism. For Politics i
 - [ ] Deduplicate identical active source endpoints/jobs within a generation where privacy/cache identity allows it.
 - [ ] I/O and parsing remain off GUI. GUI admission is immutable/bounded and only occurs on changed normalized revision or explicit status transition that must be visible.
 - [ ] No Settings writes during refresh, resize, image warming, hover or render.
-- [ ] Final consumer retirement cancels due work, fences queued completion and releases coordinator/source/model ownership.
+- [~] Final consumer retirement cancels due work, fences queued/in-flight completion and releases endpoint transport safely after its worker exits; verify native streaming cancellation, reactivation, unrelated endpoints and last-good preservation before multi-CUSTOM admission.
 - [ ] Heavy transition + active Visualizer + feed refresh acceptance must show no meaningful regression to presentation freshness, Settings entry or teardown.
 - [ ] Cache/artwork maintenance is bounded by count/bytes; no unbounded history accumulation.

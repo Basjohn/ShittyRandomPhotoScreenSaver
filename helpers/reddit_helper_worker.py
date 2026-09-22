@@ -903,6 +903,30 @@ def process_queue(
             processed += 1
             continue
 
+        # The saver can clear its short-lived session ticket before its
+        # asynchronous Quick teardown has actually terminated the process.
+        # Explorer windows can already exist on the other desktop, so shell
+        # presence alone is not proof that Firefox can safely be opened. Only
+        # A saver-origin queue entry carries a scr_click_ source marker since
+        # SESSIONNAME may report "Console" on a Winlogon desktop. The marker
+        # only delays opening; it never elevates link or launch permissions.
+        # Ordinary user-session/Settings links are unaffected.
+        session = str(data.get("session") or "").strip().casefold()
+        source = str(data.get("source") or "").strip().casefold()
+        sender_pid = data.get("pid")
+        if (action == "open_url" and
+            (session in {"winlogon", "services"} or source.startswith("scr_click_"))
+            and type(sender_pid) is int and sender_pid > 0
+            and _is_process_alive(sender_pid)):
+            _defer_entry(
+                entry_path, data,
+                delay_seconds=SESSION_ACTIVE_DEFER_SECONDS,
+                reason="saver_process_active",
+            )
+            logging.info("Deferring secure-desktop URL until its saver process exits")
+            processed += 1
+            continue
+
         success = False
         error = _action_error(action)
         defer_seconds: float | None = None

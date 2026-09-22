@@ -6,6 +6,7 @@ where the browser cannot be opened by the current process.
 """
 from __future__ import annotations
 
+import os
 import webbrowser
 
 from PySide6.QtCore import QUrl
@@ -82,13 +83,22 @@ def open_url(
         source: Safe route label for helper diagnostics.
 
     Returns:
-        True if the URL was queued or opened, False on complete failure.
+        True only after a direct user-desktop open or a queued action with an
+        admitted interactive helper. A saver click fails closed when handoff
+        is unavailable; it must never launch Firefox from the saver desktop.
     """
     if not url:
         return False
 
     diagnostic_build = is_diagnostic_build()
-    direct_requested = bool(prefer_direct or is_mc_build() or diagnostic_build)
+    mc_build = is_mc_build()
+    # Winlogon/Services are not the user's browser desktop. A caller's
+    # prefer_direct or fallback flag must never override that boundary.
+    secure_desktop = (
+        not (mc_build or diagnostic_build)
+        and os.getenv("SESSIONNAME", "").strip().casefold() in {"winlogon", "services"}
+    )
+    direct_requested = bool(not secure_desktop and (prefer_direct or mc_build or diagnostic_build))
     if direct_requested:
         try:
             if QDesktopServices.openUrl(QUrl(url)):
@@ -105,37 +115,64 @@ def open_url(
     # MC and the separate diagnostic product are always interactive: a failed
     # direct route must not enqueue work for the SCR helper, which neither
     # product owns or provisions.
-    if (
-        not is_mc_build()
-        and not diagnostic_build
-        and reddit_helper_bridge.is_bridge_available()
-    ):
-        ok = reddit_helper_bridge.enqueue_url(url, source=source)
-        if ok:
-            try:
-                reddit_helper_runtime.ensure_helper_runtime(
-                    source=f"{source}_url",
-                    owner_pid=None,
-                    idle_exit_seconds=60,
-                    allow_system=True,
-                )
-            except Exception:
-                logger.warning("[URL-LAUNCH] Secure URL handoff helper wake failed source=%s", source, exc_info=True)
-            logger.info("[URL-LAUNCH] Queued secure-desktop URL handoff source=%s", source)
-            return True
-        logger.warning("[URL-LAUNCH] Secure URL handoff enqueue failed source=%s; trying fallback", source)
+    secure_handoff = not (mc_build or diagnostic_build)
+    if secure_handoff:
+        if reddit_helper_bridge.is_bridge_available():
+            # Explicitly mark saver-origin queue entries; SESSIONNAME can be
+            # "Console" even when the process runs on Winlogon's desktop.
+            # The helper must wait for this process to disappear before opening
+            # Firefox, not merely for Explorer to exist on the user desktop.
+            queue_source = f"scr_click_{source}" if not prefer_direct else source
+            ok = reddit_helper_bridge.enqueue_url(url, source=queue_source)
+            if ok:
+                try:
+                    # R-02 invariant: the durable queue admission owns success.
+                    # Request the existing interactive-only scheduled task, but
+                    # never let helper heartbeat/readiness leak back into saver
+                    # teardown. The helper waits for this saver/session boundary
+                    # before opening the browser on the user's desktop.
+                    woke = bool(reddit_helper_runtime.ensure_helper_runtime(
+                        source=f"scr_url_handoff_{source}",
+                        owner_pid=None,
+                        idle_exit_seconds=60,
+                        allow_system=True,
+                    ))
+                    if not woke:
+                        logger.warning(
+                            "[URL-LAUNCH] URL queued; scheduled helper wake was not confirmed "
+                            "source=%s (handoff remains durable)", source,
+                        )
+                except Exception:
+                    logger.warning(
+                        "[URL-LAUNCH] URL queued; scheduled helper wake raised source=%s "
+                        "(handoff remains durable)",
+                        source,
+                        exc_info=True,
+                    )
+                logger.info("[URL-LAUNCH] Queued secure-desktop URL handoff source=%s", source)
+                return True
+            else:
+                logger.error("[URL-LAUNCH] Secure URL handoff enqueue failed source=%s", source)
+        else:
+            logger.error("[URL-LAUNCH] Secure URL handoff queue unavailable source=%s", source)
+        if not (prefer_direct and not secure_desktop and fallback):
+            # No webbrowser/QDesktopServices fallback on the secure desktop,
+            # even if an older caller left fallback=True by default.
+            return False
 
-    if not fallback:
-        logger.error("[URL-LAUNCH] No URL route and fallback disabled source=%s", source)
+    if not fallback or secure_desktop:
+        logger.error("[URL-LAUNCH] No safe URL route and fallback disabled source=%s", source)
         return False
 
     try:
         # new=1 forces a new browser window (not just a tab), which is
         # important for OAuth flows where the user needs to see both the
         # authorization page and the app simultaneously.
-        webbrowser.open(url, new=1)
-        logger.info("[URL-LAUNCH] Opened via webbrowser source=%s", source)
-        return True
+        if webbrowser.open(url, new=1):
+            logger.info("[URL-LAUNCH] Opened via webbrowser source=%s", source)
+            return True
+        logger.warning("[URL-LAUNCH] webbrowser rejected URL source=%s", source)
+        return False
     except Exception as exc:
         logger.error(
             "[URL-LAUNCH] webbrowser.open failed error_type=%s",

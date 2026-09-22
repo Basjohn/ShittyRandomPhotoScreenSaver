@@ -27,7 +27,11 @@ OverlayWidget {
     readonly property int listCapacity: Math.max(1, Math.floor(
         (bodyHeight + listSpacing) / Math.max(1.0, listRowHeight + listSpacing)))
     readonly property real gridSpacing: 6.0
-    readonly property real gridCellHeight: Math.max(84.0, feedModel.fontSize * 5.5)
+    // Reserve an image-capable cell from Settings, not current image readiness.
+    // Readiness-dependent height would make geometry capacity oscillate.
+    readonly property real gridCellHeight: feedModel.showImages
+        ? Math.max(152.0, feedModel.fontSize * 8.8)
+        : Math.max(84.0, feedModel.fontSize * 5.5)
     readonly property int gridColumns: Math.max(1, Math.min(4, Math.floor(
         (Math.max(1.0, width) + gridSpacing) / (240.0 + gridSpacing))))
     readonly property int gridRowCapacity: Math.max(1, Math.floor(
@@ -35,6 +39,10 @@ OverlayWidget {
     readonly property int visibleCapacity: feedModel.viewMode === "grid"
         ? gridColumns * gridRowCapacity : listCapacity
     readonly property int overflowCount: Math.max(0, feedModel.rowCount - visibleCapacity)
+    onVisibleCapacityChanged: {
+        if (feedModel) feedModel.setVisibleCapacity(visibleCapacity)
+    }
+    Component.onCompleted: feedModel.setVisibleCapacity(visibleCapacity)
 
     Item {
         id: header
@@ -205,10 +213,59 @@ OverlayWidget {
                     required property string feedAuthor
                     required property string feedAge
                     required property string feedUrl
+                    required property string feedImageSource
                     visible: index < feedRoot.listCapacity
                     width: listColumn.width
                     height: visible ? feedRoot.listRowHeight : 0.0
+                    readonly property bool canActivate: visible
+                        && feedRoot.feedModel.interactionEnabled
+                        && feedUrl.length > 0
 
+                    Rectangle {
+                        objectName: "feedListHoverFrame" + index
+                        anchors.fill: parent
+                        z: 10
+                        radius: 4.0
+                        color: "transparent"
+                        border.color: feedRoot.feedModel.textColor
+                        border.width: listHover.hovered && parent.canActivate
+                            ? feedRoot.scaleAwareStrokeWidth(1.25) : 0.0
+                    }
+                    HoverHandler {
+                        id: listHover
+                        enabled: parent.canActivate
+                        blocking: false
+                        cursorShape: Qt.PointingHandCursor
+                    }
+
+                    Rectangle {
+                        id: listArtworkFrame
+                        objectName: "feedListArtworkFrame" + index
+                        visible: parent.visible && feedRoot.feedModel.viewMode === "list"
+                            && feedImageSource.length > 0 && parent.width >= 260.0
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 3.0
+                        width: Math.min(54.0, parent.height - 6.0)
+                        height: parent.height - 6.0
+                        radius: 3.0
+                        clip: true
+                        color: "transparent"
+                        Image {
+                            objectName: "feedListArtwork" + index
+                            anchors.fill: parent
+                            source: parent.visible ? feedImageSource : ""
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            color: "transparent"
+                            border.color: feedRoot.feedModel.textColor
+                            border.width: feedRoot.scaleAwareStrokeWidth(0.75)
+                        }
+                    }
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -241,7 +298,8 @@ OverlayWidget {
 
                     ShadowedText {
                         id: ageText
-                        anchors.right: parent.right
+                        anchors.right: listArtworkFrame.visible ? listArtworkFrame.left : parent.right
+                        anchors.rightMargin: listArtworkFrame.visible ? 6.0 : 0.0
                         anchors.top: parent.top
                         anchors.topMargin: 5.0
                         text: feedAge
@@ -257,7 +315,8 @@ OverlayWidget {
 
                     ShadowedText {
                         anchors.left: parent.left
-                        anchors.right: parent.right
+                        anchors.right: listArtworkFrame.visible ? listArtworkFrame.left : parent.right
+                        anchors.rightMargin: listArtworkFrame.visible ? 6.0 : 0.0
                         anchors.top: listTitle.bottom
                         anchors.topMargin: 2.0
                         visible: feedRoot.feedModel.viewMode !== "compact" && text.length > 0
@@ -275,7 +334,8 @@ OverlayWidget {
                     }
 
                     TapHandler {
-                        enabled: feedRoot.feedModel.interactionEnabled && feedUrl.length > 0
+                        enabled: parent.canActivate
+                        acceptedButtons: Qt.LeftButton
                         onTapped: feedRoot.openItemRequested(feedUrl)
                     }
                 }
@@ -298,6 +358,7 @@ OverlayWidget {
                     required property string feedSummary
                     required property string feedAge
                     required property string feedUrl
+                    required property string feedImageSource
                     visible: index < feedRoot.visibleCapacity
                     width: (grid.width - grid.spacing * Math.max(0, grid.columns - 1))
                         / Math.max(1, grid.columns)
@@ -305,15 +366,59 @@ OverlayWidget {
                     radius: 5.0
                     color: Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
                                    feedRoot.feedModel.textColor.b, 0.055)
-                    border.color: Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
-                                          feedRoot.feedModel.textColor.b, 0.16)
-                    border.width: 1.0
+                    border.color: gridHover.hovered && canActivate
+                        ? Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
+                                  feedRoot.feedModel.textColor.b, 0.62)
+                        : Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
+                                  feedRoot.feedModel.textColor.b, 0.16)
+                    border.width: gridHover.hovered && canActivate
+                        ? feedRoot.scaleAwareStrokeWidth(1.25) : feedRoot.scaleAwareStrokeWidth(1.0)
+                    readonly property bool hasArt: visible && feedImageSource.length > 0
+                    readonly property bool canActivate: visible
+                        && feedRoot.feedModel.interactionEnabled
+                        && feedUrl.length > 0
+
+                    HoverHandler {
+                        id: gridHover
+                        enabled: parent.canActivate
+                        blocking: false
+                        cursorShape: Qt.PointingHandCursor
+                    }
+
+                    Rectangle {
+                        id: gridArtworkFrame
+                        objectName: "feedGridArtworkFrame" + index
+                        visible: parent.hasArt
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 7.0
+                        height: Math.max(0.0, parent.height * 0.50)
+                        radius: 3.0
+                        clip: true
+                        color: "transparent"
+                        Image {
+                            objectName: "feedGridArtwork" + index
+                            anchors.fill: parent
+                            source: parent.visible ? feedImageSource : ""
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            cache: true
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            color: "transparent"
+                            border.color: feedRoot.feedModel.textColor
+                            border.width: feedRoot.scaleAwareStrokeWidth(0.75)
+                        }
+                    }
 
                     ShadowedText {
                         id: gridTitle
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        anchors.top: parent.top
+                        anchors.top: parent.hasArt ? gridArtworkFrame.bottom : parent.top
                         anchors.margins: 8.0
                         text: feedTitle
                         color: feedRoot.feedModel.textColor
@@ -335,6 +440,7 @@ OverlayWidget {
                         anchors.top: gridTitle.bottom
                         anchors.bottom: gridAge.top
                         anchors.margins: 8.0
+                        visible: !parent.hasArt
                         text: feedSummary
                         color: Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
                                        feedRoot.feedModel.textColor.b, feedRoot.feedModel.textColor.a * 0.68)
@@ -366,7 +472,8 @@ OverlayWidget {
                     }
 
                     TapHandler {
-                        enabled: feedRoot.feedModel.interactionEnabled && feedUrl.length > 0
+                        enabled: parent.canActivate
+                        acceptedButtons: Qt.LeftButton
                         onTapped: feedRoot.openItemRequested(feedUrl)
                     }
                 }

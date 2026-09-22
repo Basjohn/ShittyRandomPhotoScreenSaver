@@ -1061,8 +1061,7 @@ class _SharedGmailRuntimeOwner:
         if not callable(opener):
             return False
         try:
-            opener(message_id)
-            return True
+            return bool(opener(message_id))
         except Exception:
             logger.debug("[GMAIL_RUNTIME] Message open failed", exc_info=True)
             return False

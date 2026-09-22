@@ -319,3 +319,27 @@ def test_custom_slots_sharing_one_endpoint_share_acquisition_identity():
     assert first.source_id == second.source_id
     assert first.url == second.url
     assert first.display_name != second.display_name
+
+
+def test_retired_feed_fetch_does_not_write_success_or_failure_backoff(tmp_path: Path):
+    """An endpoint losing its final consumer is cancellation, not a bad feed."""
+    from core.feeds.source import FeedRefreshCancelled
+
+    needed = [True]
+
+    class FinishingAfterRetirement:
+        def fetch(self, _url, **_kwargs):
+            needed[0] = False
+            return _ok()
+
+    cache = FeedCacheStore(tmp_path)
+    source = FeedSource(
+        FeedSourceSpec("source", "https://example.test/feed", "source"),
+        transport=FinishingAfterRetirement(), cache=cache,
+        should_continue=lambda: needed[0], now=lambda: 1000.0,
+    )
+    with pytest.raises(FeedRefreshCancelled):
+        source.refresh()
+    # Neither a completed generation nor a manufactured source-health failure
+    # may be persisted after a final-consumer cancellation.
+    assert cache.read("source") is None

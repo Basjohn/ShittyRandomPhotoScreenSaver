@@ -446,3 +446,115 @@ def test_feed_product_action_rejects_non_http_schemes_before_opener():
     ) is True
     assert opened == ["https://example.test/item"]
     assert exited == [True]
+
+class _DeferredManager:
+    """Deterministic worker admission; a specific endpoint may retire in flight."""
+
+    def __init__(self):
+        self.tasks = []
+
+    def submit_io_task(self, work, *, callback, **_kwargs):
+        self.tasks.append((work, callback))
+
+    def finish(self, index):
+        work, callback = self.tasks[index]
+        try:
+            callback(SimpleNamespace(success=True, result=work()))
+        except Exception as exc:
+            callback(SimpleNamespace(success=False, error=exc))
+
+
+def _lease_for_url(manager, *, slot, url, generation=81):
+    config = CustomFeedConfig.from_mapping(slot, {
+        "enabled": True, "name": "Probe", "feed_url": url,
+        "refresh_minutes": 15,
+    })
+    lease = FeedRuntimeLease(
+        config=FeedRuntimeConfig.from_custom(config), generation=generation,
+        manager=manager, ui_dispatch=lambda fn: fn(),
+        schedule=lambda _ms, _fn: (lambda: None), task_priority=0,
+    )
+    consumer = _Consumer(generation)
+    lease.attach_consumer(consumer)
+    return lease, consumer
+
+
+def test_retiring_one_endpoint_cancels_only_its_queued_work_and_prunes_state(monkeypatch):
+    manager = _DeferredManager()
+    sources = {}
+
+    def source_for(_owner, state):
+        source = sources.setdefault(state.spec.cache_key, _Source(_result()))
+        state.source = source
+        return source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    first, abandoned = _lease_for_url(
+        manager, slot="feeds_custom_1", url="https://example.test/one.xml")
+    second, retained = _lease_for_url(
+        manager, slot="feeds_custom_2", url="https://example.test/two.xml")
+    assert first.start() and second.start()
+    owner = first._owner
+    first_key, second_key = first.config.source_spec.cache_key, second.config.source_spec.cache_key
+    assert owner is second._owner and len(manager.tasks) == 2
+    first.retire()
+    assert first_key in owner._states and second_key in owner._states
+    assert owner._states[first_key].work_cancel.is_set()
+    assert not owner._states[second_key].work_cancel.is_set()
+    manager.finish(0)
+    assert first_key not in owner._states
+    assert not abandoned.accepted
+    manager.finish(1)
+    assert len(retained.accepted) == 1
+    assert sources[second_key].cache_calls == 1
+    assert feed_runtime.shared_feed_owner_count() == 1
+    second.retire()
+    assert feed_runtime.shared_feed_owner_count() == 0
+
+
+def test_shared_endpoint_is_cancelled_only_after_its_last_active_lease(monkeypatch):
+    manager = _DeferredManager()
+    source = _Source(_result())
+
+    def source_for(_owner, state):
+        state.source = source
+        return source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    first, first_consumer = _lease_for_url(
+        manager, slot="feeds_custom_1", url="https://example.test/shared.xml")
+    second, second_consumer = _lease_for_url(
+        manager, slot="feeds_custom_2", url="https://example.test/shared.xml")
+    assert first.start() and second.start() and len(manager.tasks) == 1
+    state = next(iter(first._owner._states.values()))
+    first.stop()
+    assert not state.work_cancel.is_set()
+    manager.finish(0)
+    assert not first_consumer.accepted and len(second_consumer.accepted) == 1
+    assert source.cache_calls == 1
+    first.retire()
+    second.retire()
+
+
+def test_cancelled_inflight_source_never_publishes_on_reactivation(monkeypatch):
+    manager = _DeferredManager()
+    source = _Source(_result())
+
+    def source_for(_owner, state):
+        state.source = source
+        return source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    lease, consumer = _lease_for_url(
+        manager, slot="feeds_custom_1", url="https://example.test/reuse.xml")
+    assert lease.start() and len(manager.tasks) == 1
+    lease.stop()
+    assert lease.start()
+    # The old work was canceled; reattachment must wait for its completion,
+    # then issue a new cache-first admission, not publish the abandoned result.
+    assert len(manager.tasks) == 1
+    manager.finish(0)
+    assert len(manager.tasks) == 2 and not consumer.accepted
+    manager.finish(1)
+    assert source.cache_calls == 1 and len(consumer.accepted) == 1
+    lease.retire()

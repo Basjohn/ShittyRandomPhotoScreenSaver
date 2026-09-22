@@ -199,6 +199,53 @@ class TestQueueProcessing:
         assert "retry_count" not in payload
         mock_open.assert_not_called()
 
+    def test_winlogon_link_waits_for_original_saver_process_after_ticket_removed(self, tmp_path: Path):
+        """Explorer existing is not proof that the saver desktop has exited."""
+        import helpers.reddit_helper_worker as worker
+
+        entry_path = tmp_path / "winlogon.json"
+        entry_path.write_text(json.dumps({
+            "action": "open_url", "url": "https://example.com/article",
+            "session": "Winlogon", "pid": 4242, "timestamp": time.time(),
+        }), encoding="utf-8")
+        signals = tmp_path / "signals"
+        signals.mkdir()
+        running = {4242}
+        with patch.object(worker, "_is_process_alive", side_effect=lambda pid: pid in running), \
+             patch.object(worker, "open_url", return_value=True) as opener, \
+             patch.object(worker, "bring_browser_foreground", return_value=False):
+            processed, opened = process_queue(tmp_path, 10, signals, session_ticket_path=None)
+            assert (processed, opened) == (1, False)
+            retained = json.loads(entry_path.read_text(encoding="utf-8"))
+            assert retained["defer_reason"] == "saver_process_active"
+            assert "retry_count" not in retained
+            opener.assert_not_called()
+            running.clear()
+            retained["not_before_ts"] = time.time() - 1.0
+            entry_path.write_text(json.dumps(retained), encoding="utf-8")
+            processed, opened = process_queue(tmp_path, 10, signals, session_ticket_path=None)
+            assert (processed, opened) == (1, True)
+            opener.assert_called_once_with("https://example.com/article")
+            assert not entry_path.exists()
+
+    def test_saver_marked_link_waits_for_exit_even_when_sessionname_reports_console(self, tmp_path: Path):
+        import helpers.reddit_helper_worker as worker
+
+        entry_path = tmp_path / "saver.json"
+        entry_path.write_text(json.dumps({
+            "action": "open_url", "url": "https://example.com/article",
+            "session": "Console", "source": "scr_click_feed:feeds_custom_1",
+            "pid": 4242, "timestamp": time.time(),
+        }), encoding="utf-8")
+        signals = tmp_path / "signals"
+        signals.mkdir()
+        with patch.object(worker, "_is_process_alive", return_value=True), \
+             patch.object(worker, "open_url") as opener:
+            processed, opened = process_queue(tmp_path, 10, signals, session_ticket_path=None)
+        assert (processed, opened) == (1, False)
+        assert json.loads(entry_path.read_text(encoding="utf-8"))["defer_reason"] == "saver_process_active"
+        opener.assert_not_called()
+
     def test_process_queue_expires_old_open_url_entries(self, tmp_path: Path):
         """Very old queued URLs should be quarantined instead of opening later."""
         entry = {

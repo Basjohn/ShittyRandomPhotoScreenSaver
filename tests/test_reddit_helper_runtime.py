@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 
 class TestRedditHelperRuntime:
@@ -222,6 +223,38 @@ class TestRedditHelperRuntime:
 
         assert runtime.ensure_helper_runtime(source="test") is True
         assert launches == []
+
+    def test_secure_saver_link_always_uses_interactive_task_with_user_token(self, monkeypatch):
+        from core.windows import reddit_helper_runtime as runtime
+
+        monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
+        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_helper_healthy", lambda: False)
+        monkeypatch.setattr(runtime, "reap_stale_helper", lambda: False)
+        monkeypatch.setattr(runtime, "_recent_launch_attempt", lambda: False)
+        monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
+        with patch("core.windows.reddit_helper_runtime._run_helper_scheduled_task", return_value=True) as task, \
+             patch("core.windows.reddit_helper_runtime._launch_helper") as direct:
+            assert runtime.ensure_helper_runtime(source="scr_url_handoff_feed:feeds_custom_1",
+                                                  allow_system=True) is True
+            task.assert_called_once_with(source="scr_url_handoff_feed:feeds_custom_1")
+            direct.assert_not_called()
+
+    def test_secure_handoff_rejects_healthy_saver_owned_helper(self, monkeypatch):
+        from core.windows import reddit_helper_runtime as runtime
+
+        monkeypatch.setattr(runtime, "_running_as_system", lambda: False)
+        monkeypatch.setattr(runtime, "is_mc_build", lambda: False)
+        monkeypatch.setattr(runtime, "is_helper_healthy", lambda: True)
+        monkeypatch.setattr(runtime, "read_helper_heartbeat", lambda: {"owner_pid": 4242})
+        monkeypatch.setattr(runtime.reddit_helper_bridge, "is_bridge_available", lambda: True)
+        with patch("core.windows.reddit_helper_runtime._run_helper_scheduled_task") as task, \
+             patch("core.windows.reddit_helper_runtime._launch_helper") as direct:
+            assert runtime.ensure_helper_runtime(
+                source="scr_url_handoff_feed:feeds_custom_1", allow_system=True,
+            ) is False
+            task.assert_not_called()
+            direct.assert_not_called()
 
     def test_ensure_helper_runtime_skips_in_system_context(self, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime

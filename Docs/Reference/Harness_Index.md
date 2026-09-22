@@ -352,6 +352,7 @@ Use only relevant existing diagnostic flag families such as:
 --life
 --cache
 --steam
+--feeds
 ```
 
 Keep observer overhead named. Do not invent another probe family when existing evidence can answer the

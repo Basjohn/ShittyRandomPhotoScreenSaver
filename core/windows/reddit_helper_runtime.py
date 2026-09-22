@@ -468,7 +468,11 @@ def _should_prefer_scheduled_task(*, source: str, running_as_system: bool) -> bo
     if running_as_system:
         return True
     normalized = str(source or "").strip().lower()
-    return normalized.startswith("run_session")
+    # The caller may have a non-SYSTEM token while still running on the
+    # Winlogon saver desktop. Task Scheduler, not that token, owns the user's
+    # interactive-desktop handoff. Ordinary source/dev probes retain their
+    # existing direct-launch behavior outside this explicitly scoped route.
+    return normalized.startswith(("run_session", "scr_url_handoff_"))
 
 
 def _recent_launch_attempt() -> bool:
@@ -562,6 +566,16 @@ def ensure_helper_runtime(
         return False
 
     if is_helper_healthy():
+        # A pre-existing helper born from the saver desktop may still be
+        # emitting a healthy heartbeat. Reusing it on a secure URL handoff
+        # reproduces the Firefox/Winlogon desktop trap. A task-owned helper's
+        # heartbeat has owner_pid=0; a direct saver child has a positive owner.
+        # Do not kill a live helper or start a competing process here.
+        if (str(source).strip().lower().startswith("scr_url_handoff_")
+            and _heartbeat_owner_pid(read_helper_heartbeat()) > 0):
+            logger.error("[REDDIT-HELPER] Refusing saver-owned helper for secure URL handoff")
+            _log_helper_event("bootstrap rejected saver-owned helper for secure URL handoff")
+            return False
         logger.debug("[REDDIT-HELPER] Existing helper heartbeat is healthy (%s)", source)
         _log_helper_event(f"bootstrap reused healthy-helper source={source}")
         return True

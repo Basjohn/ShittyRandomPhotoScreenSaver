@@ -55,6 +55,7 @@ def test_build_preflight_and_onedir_validation_cover_qml_shaders_themes_presets_
         "widgets\\spotify_visualizer\\shaders",
         "Assert-SRPSSOnefileQuickPayloadContract",
         "Assert-SRPSSOnedirQuickPayload",
+        "Assert-SRPSSQmlSourceContract",
     ):
         assert token in layout
 

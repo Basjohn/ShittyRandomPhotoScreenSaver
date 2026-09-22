@@ -323,6 +323,7 @@ OverlayWidget {
                 // rail, not a per-image GPU blur or new animation owner.
                 Rectangle {
                     objectName: "followedStoryArtworkContactShadow" + storySlot
+                    parent: tileFrame
                     visible: tile.showArt && followsRoot.cardShadowEnabled
                     x: tile.artX + Math.max(-3.0, Math.min(3.0,
                         followsRoot.cardShadowOffsetX * 0.45))
@@ -337,6 +338,7 @@ OverlayWidget {
                 }
                 Rectangle {
                     objectName: "followedStoryArtworkFallback" + storySlot
+                    parent: tileFrame
                     visible: tile.showArt
                     x: tile.artX
                     y: 8.0
@@ -361,6 +363,7 @@ OverlayWidget {
                 }
                 ArtworkFadeImage {
                     objectName: "followedStoryArtwork" + storySlot
+                    parent: tileFrame
                     visible: tile.showArt
                     x: tile.artX
                     y: 8.0
@@ -374,6 +377,7 @@ OverlayWidget {
                 // independent semantic outline stays on top of both surfaces.
                 Rectangle {
                     objectName: "followedStoryArtworkOutline" + storySlot
+                    parent: tileFrame
                     visible: tile.showArt
                     x: tile.artX
                     y: 8.0
@@ -387,6 +391,7 @@ OverlayWidget {
                 ShadowedText {
                     id: game
                     objectName: "followedStoryGame" + storySlot
+                    parent: tileFrame
                     visible: storyGame.length > 0
                     x: tile.textX
                     y: 7.0
@@ -408,6 +413,7 @@ OverlayWidget {
                 ShadowedText {
                     id: headline
                     objectName: "followedStoryHeadline" + storySlot
+                    parent: tileFrame
                     x: tile.textX
                     y: game.visible ? 24.0 : 10.0
                     width: tile.textW
@@ -461,6 +467,7 @@ OverlayWidget {
                     ? tile.textX + tile.textW - tile.inlineRailW : tile.textX
                 Rectangle {
                     objectName: "followedStoryInlineContactShadow1" + storySlot
+                    parent: tileFrame
                     visible: tile.inlineCount >= 1 && followsRoot.cardShadowEnabled
                     x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 0.0
                         + Math.max(-3.0, Math.min(3.0, followsRoot.cardShadowOffsetX * 0.45))
@@ -475,6 +482,7 @@ OverlayWidget {
                 }
                 Rectangle {
                     objectName: "followedStoryInlineImageFrame1" + storySlot
+                    parent: tileFrame
                     visible: tile.showInline
                     x: tile.inlineX
                     y: tile.inlineY
@@ -501,6 +509,7 @@ OverlayWidget {
                 }
                 Rectangle {
                     objectName: "followedStoryInlineContactShadow2" + storySlot
+                    parent: tileFrame
                     visible: tile.inlineCount >= 2 && followsRoot.cardShadowEnabled
                     x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 1.0
                         + Math.max(-3.0, Math.min(3.0, followsRoot.cardShadowOffsetX * 0.45))
@@ -515,6 +524,7 @@ OverlayWidget {
                 }
                 Rectangle {
                     objectName: "followedStoryInlineImageFrame2" + storySlot
+                    parent: tileFrame
                     visible: tile.inlineCount >= 2
                     x: tile.inlineX + tile.inlineW + tile.inlineGap
                     y: tile.inlineY
@@ -541,6 +551,7 @@ OverlayWidget {
                 }
                 Rectangle {
                     objectName: "followedStoryInlineContactShadow3" + storySlot
+                    parent: tileFrame
                     visible: tile.inlineCount >= 3 && followsRoot.cardShadowEnabled
                     x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 2.0
                         + Math.max(-3.0, Math.min(3.0, followsRoot.cardShadowOffsetX * 0.45))
@@ -555,6 +566,7 @@ OverlayWidget {
                 }
                 Rectangle {
                     objectName: "followedStoryInlineImageFrame3" + storySlot
+                    parent: tileFrame
                     visible: tile.inlineCount >= 3
                     x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 2.0
                     y: tile.inlineY
@@ -581,6 +593,7 @@ OverlayWidget {
                 }
                 ShadowedText {
                     objectName: "followedStoryPreview" + storySlot
+                    parent: tileFrame
                     visible: storyPreview.length > 0 && tile.height >= 108.0 && tile.textW >= 105.0
                         && tile.inlineCount < 2
                     x: tile.textX + (tile.inlineCount === 1 && !followsRoot.headerFlipped
@@ -605,6 +618,7 @@ OverlayWidget {
                 }
                 ShadowedText {
                     objectName: "followedStorySource" + storySlot
+                    parent: tileFrame
                     x: tile.textX
                     y: tile.height - 23.0
                     width: tile.textW
@@ -628,6 +642,7 @@ OverlayWidget {
                 // underneath retained image content. No animation or timer.
                 Rectangle {
                     objectName: "followedStoryHoverOutline" + storySlot
+                    parent: tileFrame
                     anchors.fill: parent
                     radius: tileFrame.radius
                     color: "transparent"

@@ -298,4 +298,4 @@ class GmailClient:
             url = gmail_thread_url(message_id)
         except (TypeError, ValueError):
             url = f"https://mail.google.com/mail/u/0/#all/{message_id}"
-        return open_url(url)
+        return open_url(url, source="gmail:message")

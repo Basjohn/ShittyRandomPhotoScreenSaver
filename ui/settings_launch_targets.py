@@ -28,6 +28,12 @@ _TARGETS = {
         view_state=MappingProxyType({"subtab_id": "weather"}),
         focus_attr="weather_location",
     ),
+    "gmail_authorization": SettingsLaunchTarget(
+        target_id="gmail_authorization",
+        tab_key="widgets",
+        view_state=MappingProxyType({"subtab_id": "gmail"}),
+        focus_attr="gmail_authorize_btn",
+    ),
 }
 
 
