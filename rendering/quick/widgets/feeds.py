@@ -8,18 +8,25 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from functools import lru_cache
+import base64
 import time
 from typing import Any
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QAbstractListModel, QModelIndex, QObject, Property, Qt, Signal, Slot
-from PySide6.QtGui import QColor
+from PySide6.QtCore import (
+    QAbstractListModel, QBuffer, QIODevice, QModelIndex, QObject, QPointF, QRectF,
+    Property, Qt, Signal, Slot,
+)
+from PySide6.QtGui import QColor, QImage, QPainter, QPen
 
 from core.feeds.config import CustomFeedConfig
 from core.feeds.models import FeedRefreshResult
 from core.feeds.projection import FeedDisplay, FeedDisplayRow, project_feed
 from core.settings.default_contract import require_canonical_default
 from core.settings.shadow_direction import resolve_directional_extensions, resolve_signed_offset
+from rendering.custom_child_geometry import CustomChildSize, child_role_map, clamp_child_geometry
+from rendering.feed_child_roles import FEED_CONTENT_EXTENT_MINIMUM, FEED_CUSTOM_CHILD_ROLES
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
 
 from .host import (
@@ -30,7 +37,11 @@ from .host import (
     OverlayWidgetGeometry,
     RetainedOverlayWidget,
 )
-from .theme_projection import resolve_card_surface_colors, resolve_primary_text_color
+from .theme_projection import (
+    resolve_card_surface_colors,
+    resolve_header_colors,
+    resolve_primary_text_color,
+)
 
 
 def _bounded_int(value: object, default: int, low: int, high: int) -> int:
@@ -86,6 +97,114 @@ def _with_alpha(value: tuple[int, int, int, int], scale: float) -> QColor:
     return color
 
 
+
+
+@lru_cache(maxsize=64)
+def _vector_monogram_data_uri(
+    glyph: str, rgba: tuple[int, int, int, int]
+) -> str:
+    """Rasterize one retained wireframe monogram from vector segments.
+
+    This deliberately follows the Settings retained-vector-icon approach:
+    QPainter owns a small antialiased wireframe once, and QML receives only an
+    immutable in-memory image URI.  The monogram does not depend on emoji or a
+    runtime font glyph, and it creates no Canvas repaint, timer or file cache.
+    """
+
+    label = str(glyph or "F")[:1].upper() or "F"
+    # 14-segment-ish alphabet. Coordinates live inside the rounded wireframe
+    # and are intentionally simple/legible at the 25 px BrandedHeader size.
+    points = {
+        "a1": ((0.29, 0.20), (0.49, 0.20)),
+        "a2": ((0.51, 0.20), (0.71, 0.20)),
+        "b": ((0.74, 0.23), (0.74, 0.47)),
+        "c": ((0.74, 0.53), (0.74, 0.77)),
+        "d1": ((0.29, 0.80), (0.49, 0.80)),
+        "d2": ((0.51, 0.80), (0.71, 0.80)),
+        "e": ((0.26, 0.53), (0.26, 0.77)),
+        "f": ((0.26, 0.23), (0.26, 0.47)),
+        "g1": ((0.29, 0.50), (0.49, 0.50)),
+        "g2": ((0.51, 0.50), (0.71, 0.50)),
+        "h": ((0.29, 0.22), (0.48, 0.47)),
+        "i": ((0.71, 0.22), (0.52, 0.47)),
+        "j": ((0.29, 0.78), (0.48, 0.53)),
+        "k": ((0.71, 0.78), (0.52, 0.53)),
+        "l": ((0.50, 0.23), (0.50, 0.47)),
+        "m": ((0.50, 0.53), (0.50, 0.77)),
+    }
+    glyph_segments = {
+        "0": "a1 a2 b c d1 d2 e f",
+        "1": "b c",
+        "2": "a1 a2 b g1 g2 e d1 d2",
+        "3": "a1 a2 b c g1 g2 d1 d2",
+        "4": "f g1 g2 b c",
+        "5": "a1 a2 f g1 g2 c d1 d2",
+        "6": "a1 a2 f e g1 g2 c d1 d2",
+        "7": "a1 a2 b c",
+        "8": "a1 a2 b c d1 d2 e f g1 g2",
+        "9": "a1 a2 b c d1 d2 f g1 g2",
+        "A": "a1 a2 b c e f g1 g2",
+        "B": "a1 a2 b c d1 d2 e f g1 g2",
+        "C": "a1 a2 d1 d2 e f",
+        "D": "b c d1 d2 e g1 g2 l m",
+        "E": "a1 a2 d1 d2 e f g1 g2",
+        "F": "a1 a2 e f g1 g2",
+        "G": "a1 a2 c d1 d2 e f g2",
+        "H": "b c e f g1 g2",
+        "I": "a1 a2 d1 d2 l m",
+        "J": "b c d1 d2 e",
+        "K": "e f h j i k",
+        "L": "d1 d2 e f",
+        "M": "b c e f h i",
+        "N": "b c e f h k",
+        "O": "a1 a2 b c d1 d2 e f",
+        "P": "a1 a2 b e f g1 g2",
+        "Q": "a1 a2 b c d1 d2 e f k",
+        "R": "a1 a2 b e f g1 g2 k",
+        "S": "a1 a2 c d1 d2 f g1 g2",
+        "T": "a1 a2 l m",
+        "U": "b c d1 d2 e f",
+        "V": "e f j k",
+        "W": "b c e f j k",
+        "X": "h i j k",
+        "Y": "h i m",
+        "Z": "a1 a2 i j d1 d2",
+    }
+    segments = glyph_segments.get(label, glyph_segments["F"]).split()
+
+    color = QColor(*rgba)
+    image = QImage(96, 96, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+    frame_pen = QPen(color)
+    frame_pen.setWidthF(4.0)
+    frame_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    frame_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(frame_pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawRoundedRect(QRectF(6.0, 6.0, 84.0, 84.0), 14.0, 14.0)
+
+    glyph_pen = QPen(color)
+    glyph_pen.setWidthF(7.0)
+    glyph_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    glyph_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(glyph_pen)
+    for segment in segments:
+        (x1, y1), (x2, y2) = points[segment]
+        painter.drawLine(QPointF(x1 * 96.0, y1 * 96.0), QPointF(x2 * 96.0, y2 * 96.0))
+    painter.end()
+
+    buffer = QBuffer()
+    if not buffer.open(QIODevice.OpenModeFlag.WriteOnly):
+        return ""
+    if not image.save(buffer, "PNG"):
+        return ""
+    payload = base64.b64encode(bytes(buffer.data())).decode("ascii")
+    return f"data:image/png;base64,{payload}"
+
+
 def _browser_action_url(value: object) -> str:
     target = str(value or "").strip()
     try:
@@ -120,6 +239,9 @@ class FeedPresentationConfig:
     background_opacity: float
     border_color: tuple[int, int, int, int]
     border_opacity: float
+    header_fill_color: tuple[int, int, int, int]
+    header_border_color: tuple[int, int, int, int]
+    header_text_color: tuple[int, int, int, int]
     preferred_width: int
     preferred_height: int
 
@@ -150,6 +272,14 @@ class FeedPresentationConfig:
             border_color=_rgba(canonical["border_color"], (255, 255, 255, 255)),
             border_opacity=float(canonical["border_opacity"]),
         )
+        header_fill, header_border, header_text = resolve_header_colors(
+            widget_id,
+            values=values,
+            defaults=canonical,
+            fill=background,
+            border=border,
+            text=text,
+        )
         return cls(
             custom=custom,
             font_family=str(values.get("font_family") or canonical["font_family"]),
@@ -163,6 +293,9 @@ class FeedPresentationConfig:
             background_opacity=1.0,
             border_color=border,
             border_opacity=1.0,
+            header_fill_color=header_fill,
+            header_border_color=header_border,
+            header_text_color=header_text,
             preferred_width=_bounded_int(values.get("preferred_width"), int(canonical["preferred_width"]), 320, 1600),
             preferred_height=_bounded_int(values.get("preferred_height"), int(canonical["preferred_height"]), 180, 1800),
         )
@@ -273,8 +406,13 @@ class FeedRowsModel(QAbstractListModel):
         return True
 
 
+_CHILD_ROLE_MAP = child_role_map(FEED_CUSTOM_CHILD_ROLES)
+
+
 class FeedPresentationModel(QObject):
     stateChanged = Signal()
+    contentExtentChanged = Signal()
+    customGeometryChanged = Signal()
 
     def __init__(
         self,
@@ -292,7 +430,8 @@ class FeedPresentationModel(QObject):
         self._display: FeedDisplay | None = None
         self._snapshot = None
         self._local_artwork_by_item: dict[str, str] = {}
-        self._visible_item_capacity: int | None = None
+        self._content_extent: tuple[float, float] | None = None
+        self._custom: dict[str, CustomChildSize] = {}
         self._view_state = "loading" if config.custom.configured else "missing"
         self._status_text = ""
         self._refreshing = False
@@ -390,22 +529,7 @@ class FeedPresentationModel(QObject):
             item_limit=self.config.custom.item_limit,
             show_images=self.config.custom.show_images,
             local_artwork_by_item=self._local_artwork_by_item,
-            visible_item_capacity=self._visible_item_capacity,
         )
-
-    @Slot(int)
-    def setVisibleCapacity(self, capacity: int) -> None:
-        """QML geometry event only; no I/O, image validation or scheduler."""
-        bounded = max(0, min(self.config.custom.item_limit, int(capacity)))
-        if self._retired or bounded == self._visible_item_capacity:
-            return
-        self._visible_item_capacity = bounded
-        if self._snapshot is not None:
-            display = self._project_accepted_snapshot()
-            if display != self._display:
-                self._display = display
-                self._rows.replace_rows(display.rows)
-                self.stateChanged.emit()
 
     def request_refresh(self) -> bool:
         if not self._active or self._runtime_service is None:
@@ -440,6 +564,71 @@ class FeedPresentationModel(QObject):
             if _browser_action_url(row.action_url)
         )
 
+
+    def set_content_extent(self, width: object, height: object) -> bool:
+        """Project CUSTOM x/y extent onto the retained layout, never source work."""
+        if self._retired:
+            return False
+        if width is None or height is None:
+            extent = None
+        else:
+            try:
+                w, h = float(width), float(height)
+            except (TypeError, ValueError):
+                return False
+            if not (w == w and h == h):
+                return False
+            min_w, min_h = FEED_CONTENT_EXTENT_MINIMUM
+            extent = (max(min_w, min(1600.0, w)), max(min_h, min(1800.0, h)))
+        if extent == self._content_extent:
+            return False
+        self._content_extent = extent
+        self.contentExtentChanged.emit()
+        return True
+
+    def set_custom_child_geometry(self, values: object) -> bool:
+        """Project only validated shared CUSTOM payloads; never rebuild rows or source."""
+        if self._retired:
+            return False
+        raw = values if isinstance(values, Mapping) else {}
+        next_geometry: dict[str, CustomChildSize] = {}
+        for name, descriptor in _CHILD_ROLE_MAP.items():
+            value = raw.get(name)
+            if not isinstance(value, Mapping):
+                continue
+            size = clamp_child_geometry(
+                descriptor, value.get("width_scale", 1.0),
+                value.get("height_scale", 1.0), value.get("x_offset", 0.0),
+                value.get("y_offset", 0.0), value.get("alignment"), value.get("anchor"),
+            )
+            if not size.is_authored:
+                next_geometry[name] = size
+        if next_geometry == self._custom:
+            return False
+        self._custom = next_geometry
+        self.customGeometryChanged.emit()
+        return True
+
+    def apply_custom_layout_size_payload(self, payload: Mapping[str, object]) -> None:
+        extent = payload.get("content_extent") if isinstance(payload, Mapping) else None
+        if isinstance(extent, (tuple, list)) and len(extent) == 2:
+            self.set_content_extent(extent[0], extent[1])
+        else:
+            self.set_content_extent(None, None)
+        self.set_custom_child_geometry(payload.get("child_geometry") if isinstance(payload, Mapping) else None)
+
+    @Property("QVariantMap", notify=customGeometryChanged)
+    def customChildGeometry(self) -> dict[str, dict[str, object]]:
+        return {name: size.to_mapping() for name, size in self._custom.items()}
+
+    @Property(float, constant=True)
+    def basePreferredWidth(self) -> float:
+        return float(self.config.preferred_width)
+
+    @Property(float, constant=True)
+    def basePreferredHeight(self) -> float:
+        return float(self.config.preferred_height)
+
     @Property(QObject, constant=True)
     def rowModel(self) -> QObject:
         return self._rows
@@ -447,6 +636,18 @@ class FeedPresentationModel(QObject):
     @Property(int, notify=stateChanged)
     def rowCount(self) -> int:
         return self._rows.rowCount()
+
+    @Property(int, notify=stateChanged)
+    def firstArtworkRowIndex(self) -> int:
+        """First retained row with admitted local artwork, or -1.
+
+        CUSTOM uses this only to place one stable representative artwork edit
+        target over real paint.  It never changes row identity or acquisition.
+        """
+        for index, row in enumerate(self._rows.rows):
+            if row.image_source:
+                return index
+        return -1
 
     @Property(str, notify=stateChanged)
     def displayName(self) -> str:
@@ -460,8 +661,18 @@ class FeedPresentationModel(QObject):
         return "F"
 
     @Property(str, notify=stateChanged)
+    def monogramSource(self) -> str:
+        return _vector_monogram_data_uri(self.monogram, self.config.header_text_color)
+
+    @Property(str, notify=stateChanged)
     def feedTitle(self) -> str:
         return self._display.title if self._display is not None else ""
+
+    @Property(str, notify=stateChanged)
+    def homeUrl(self) -> str:
+        return _browser_action_url(
+            self._display.home_url if self._display is not None else ""
+        )
 
     @Property(str, notify=stateChanged)
     def viewMode(self) -> str:
@@ -470,6 +681,10 @@ class FeedPresentationModel(QObject):
     @Property(bool, notify=stateChanged)
     def showImages(self) -> bool:
         return bool(self.config.custom.show_images)
+
+    @Property(bool, constant=True)
+    def showSubtitle(self) -> bool:
+        return bool(self.config.custom.show_subtitle)
 
     @Property(str, notify=stateChanged)
     def viewState(self) -> str:
@@ -499,6 +714,22 @@ class FeedPresentationModel(QObject):
     def textColor(self) -> QColor:
         return _qcolor(self.config.text_color)
 
+    @Property(QColor, constant=True)
+    def headerFillColor(self) -> QColor:
+        return _qcolor(self.config.header_fill_color)
+
+    @Property(QColor, constant=True)
+    def headerBorderColor(self) -> QColor:
+        return _qcolor(self.config.header_border_color)
+
+    @Property(QColor, constant=True)
+    def headerTextColor(self) -> QColor:
+        return _qcolor(self.config.header_text_color)
+
+    @Property(float, constant=True)
+    def headerBorderWidth(self) -> float:
+        return max(1.0, self.style.card_style.border_width - 3.0)
+
     @Property(bool, constant=True)
     def textShadowEnabled(self) -> bool:
         return self.style.text_shadow_enabled
@@ -515,13 +746,21 @@ class FeedPresentationModel(QObject):
     def textShadowOffsetY(self) -> float:
         return self.style.text_shadow_offset_y
 
-    @Property(float, constant=True)
+    @Property(float, notify=contentExtentChanged)
     def preferredWidth(self) -> float:
-        return float(self.config.preferred_width)
+        return float(self._content_extent[0] if self._content_extent is not None else self.config.preferred_width)
 
-    @Property(float, constant=True)
+    @Property(float, notify=contentExtentChanged)
     def preferredHeight(self) -> float:
-        return float(self.config.preferred_height)
+        return float(self._content_extent[1] if self._content_extent is not None else self.config.preferred_height)
+
+    @Property(float, notify=contentExtentChanged)
+    def contentExtentWidth(self) -> float:
+        return float(self._content_extent[0]) if self._content_extent is not None else 0.0
+
+    @Property(float, notify=contentExtentChanged)
+    def contentExtentHeight(self) -> float:
+        return float(self._content_extent[1]) if self._content_extent is not None else 0.0
 
 
 class RetainedFeedPresentation:
@@ -544,6 +783,7 @@ class RetainedFeedPresentation:
             card_style=model.style.card_style,
         )
         self._retained.add_retirement_callback(model.retire)
+        self._retained.set_custom_layout_size_payload_handler(model.apply_custom_layout_size_payload)
         host.set_widget_input_state_handler(self._retained, self.apply_input_state)
         open_signal = getattr(self._retained.item, "openItemRequested", None)
         if open_signal is not None and hasattr(open_signal, "connect"):

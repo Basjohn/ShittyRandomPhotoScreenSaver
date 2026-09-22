@@ -591,8 +591,13 @@ OverlayWidget {
                 height: width
                 radius: Math.min(width / 2.0, 8.0 * friendRoot.customAvatarScale)
                 color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g,
-                               friendRoot.friendPulseModel.accentColor.b, rowAvatarHover.hovered ? 0.38 : 0.22)
-                border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true
+                               friendRoot.friendPulseModel.accentColor.b, 0.22)
+                border.color: rowAvatarHover.hovered && rowAvatarHover.enabled
+                    ? "white" : friendRoot.friendPulseModel.rowInnerBorderColor
+                border.width: friendRoot.friendStrokeWidth(
+                    rowAvatarHover.hovered && rowAvatarHover.enabled ? 2.25 : 1.0
+                )
+                antialiasing: true
                 Item {
                     id: rowAvatarClip
                     anchors.fill: parent
@@ -622,8 +627,8 @@ OverlayWidget {
                     }
                 }
                 Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.1 * friendRoot.customAvatarScale; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true; z: 2 }
-                HoverHandler { id: rowAvatarHover; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
+                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; antialiasing: true; z: 2 }
+                HoverHandler { id: rowAvatarHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
                 TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendActionRequested(index) }
             }
             Item {
@@ -643,7 +648,8 @@ OverlayWidget {
                         * friendRoot.friendPulseModel.customUsernameWidthScale
                     height: 23.0 * friendRoot.friendPulseModel.customUsernameHeightScale
                     text: primaryText
-                    color: friendRoot.friendPulseModel.textColor
+                    color: rowAvatarHover.hovered && rowAvatarHover.enabled
+                        ? "white" : friendRoot.friendPulseModel.textColor
                     font.family: friendRoot.friendPulseModel.fontFamily
                     font.pointSize: friendRoot.friendPulseModel.fontSize
                         * friendRoot.friendPulseModel.customUsernameHeightScale
@@ -664,10 +670,10 @@ OverlayWidget {
                     text: (secondaryText.length > 0
                         ? secondaryText + "  " + presenceText
                         : presenceText).toUpperCase()
-                    color: rowGameHover.hovered ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor
+                    color: rowGameHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.72; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
-                    HoverHandler { id: rowGameHover; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
+                    HoverHandler { id: rowGameHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.gameActionRequested(index) }
                 }
             }
@@ -677,15 +683,17 @@ OverlayWidget {
                 visible: friendActionAvailable && activityRowHover.hovered
                 width: 22.0; height: 22.0; radius: 6.0
                 anchors.right: rowMenuButton.left; anchors.rightMargin: 2.0; anchors.verticalCenter: parent.verticalCenter
-                color: rowPinHover.hovered || pinned
-                    ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, pinned ? 0.34 : 0.22)
-                    : "transparent"
+                color: pinned
+                    ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.34)
+                    : rowPinHover.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.16) : "transparent"
                 Item {
                     anchors.centerIn: parent; width: 11.0; height: 14.0
-                    Rectangle { x: 2.0; y: 1.0; width: 7.0; height: 7.0; radius: 1.0; rotation: 45; color: pinned ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
-                    Rectangle { x: 4.5; y: 6.0; width: 2.0; height: 7.0; radius: 1.0; color: pinned ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
+                    Rectangle { x: 2.0; y: 1.0; width: 7.0; height: 7.0; radius: 1.0; rotation: 45; color: pinned ? friendRoot.friendPulseModel.accentColor
+                            : rowPinHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
+                    Rectangle { x: 4.5; y: 6.0; width: 2.0; height: 7.0; radius: 1.0; color: pinned ? friendRoot.friendPulseModel.accentColor
+                            : rowPinHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
                 }
-                HoverHandler { id: rowPinHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
+                HoverHandler { id: rowPinHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled }
                 TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendPinToggleRequested(index) }
             }
             Rectangle {
@@ -694,9 +702,9 @@ OverlayWidget {
                 visible: friendActionAvailable
                 width: 24.0; height: 30.0; radius: 7.0
                 anchors.right: parent.right; anchors.rightMargin: 7.0; anchors.verticalCenter: parent.verticalCenter
-                color: rowMenuHover.hovered ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.24) : "transparent"
-                Text { anchors.fill: parent; text: "⋮"; color: friendRoot.friendPulseModel.mutedTextColor; font.pixelSize: 20.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                HoverHandler { id: rowMenuHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
+                color: rowMenuHover.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.14) : "transparent"
+                Text { anchors.fill: parent; text: "⋮"; color: rowMenuHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; font.pixelSize: 20.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                HoverHandler { id: rowMenuHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled }
                 TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.openActionMenu(index, friendActionAvailable, gameActionAvailable, rowMenuButton) }
             }
         }
@@ -889,8 +897,13 @@ OverlayWidget {
                         * friendRoot.customAvatarScale
                     height: width
                     radius: Math.min(width / 2.0, 12.0 * friendRoot.customAvatarScale)
-                    color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, gridAvatarHover.hovered ? 0.38 : 0.22)
-                    border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true
+                    color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.22)
+                    border.color: gridAvatarHover.hovered && gridAvatarHover.enabled
+                        ? "white" : friendRoot.friendPulseModel.rowInnerBorderColor
+                    border.width: friendRoot.friendStrokeWidth(
+                        gridAvatarHover.hovered && gridAvatarHover.enabled ? 2.25 : 1.0
+                    )
+                    antialiasing: true
                     Item {
                         id: gridAvatarClip
                         anchors.fill: parent
@@ -920,8 +933,8 @@ OverlayWidget {
                         }
                     }
                     Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.28 * friendRoot.customAvatarScale; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; border.color: friendRoot.friendPulseModel.rowInnerBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); antialiasing: true; z: 2 }
-                    HoverHandler { id: gridAvatarHover; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
+                    Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; antialiasing: true; z: 2 }
+                    HoverHandler { id: gridAvatarHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendActionRequested(index) }
                 }
                 ShadowedText {
@@ -948,7 +961,8 @@ OverlayWidget {
                         ? canonicalHeight
                             * friendRoot.friendPulseModel.customUsernameHeightScale
                         : 0.0
-                    visible: friendRoot.friendPulseModel.showNames; text: primaryText; color: friendRoot.friendPulseModel.textColor
+                    visible: friendRoot.friendPulseModel.showNames; text: primaryText; color: gridAvatarHover.hovered && gridAvatarHover.enabled
+                        ? "white" : friendRoot.friendPulseModel.textColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.nameFontSize * friendRoot.friendPulseModel.customUsernameHeightScale; font.bold: true
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                     wrap: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 7.0; elide: Text.ElideNone
@@ -964,11 +978,11 @@ OverlayWidget {
                     text: (secondaryText.length > 0
                         ? presenceText + "  " + secondaryText
                         : presenceText).toUpperCase()
-                    color: gridGameHover.hovered ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor
+                    color: gridGameHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.68
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; maximumLineCount: 2; wrap: true; elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
-                    HoverHandler { id: gridGameHover; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
+                    HoverHandler { id: gridGameHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.gameActionRequested(index) }
                 }
                 Rectangle {
@@ -977,15 +991,17 @@ OverlayWidget {
                     visible: friendActionAvailable && gridTileHover.hovered
                     anchors.left: parent.left; anchors.leftMargin: 6.0; anchors.top: parent.top; anchors.topMargin: 6.0
                     width: 22.0; height: 22.0; radius: 6.0
-                    color: gridPinHover.hovered || pinned
-                        ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, pinned ? 0.34 : 0.22)
-                        : "transparent"
+                    color: pinned
+                        ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.34)
+                        : gridPinHover.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.16) : "transparent"
                     Item {
                         anchors.centerIn: parent; width: 11.0; height: 14.0
-                        Rectangle { x: 2.0; y: 1.0; width: 7.0; height: 7.0; radius: 1.0; rotation: 45; color: pinned ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
-                        Rectangle { x: 4.5; y: 6.0; width: 2.0; height: 7.0; radius: 1.0; color: pinned ? friendRoot.friendPulseModel.accentColor : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
+                        Rectangle { x: 2.0; y: 1.0; width: 7.0; height: 7.0; radius: 1.0; rotation: 45; color: pinned ? friendRoot.friendPulseModel.accentColor
+                                : gridPinHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
+                        Rectangle { x: 4.5; y: 6.0; width: 2.0; height: 7.0; radius: 1.0; color: pinned ? friendRoot.friendPulseModel.accentColor
+                                : gridPinHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; antialiasing: true }
                     }
-                    HoverHandler { id: gridPinHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
+                    HoverHandler { id: gridPinHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendPinToggleRequested(index) }
                 }
                 Rectangle {
@@ -994,9 +1010,9 @@ OverlayWidget {
                     visible: friendActionAvailable
                     anchors.right: parent.right; anchors.rightMargin: 6.0; anchors.top: parent.top; anchors.topMargin: 4.0
                     width: 24.0; height: 28.0; radius: 7.0
-                    color: gridMenuHover.hovered ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.24) : "transparent"
-                    Text { anchors.fill: parent; text: "⋮"; color: friendRoot.friendPulseModel.mutedTextColor; font.pixelSize: 20.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    HoverHandler { id: gridMenuHover; enabled: friendRoot.friendPulseModel.interactionEnabled }
+                    color: gridMenuHover.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.14) : "transparent"
+                    Text { anchors.fill: parent; text: "⋮"; color: gridMenuHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; font.pixelSize: 20.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    HoverHandler { id: gridMenuHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.openActionMenu(index, friendActionAvailable, gameActionAvailable, gridMenuButton) }
                 }
             }
@@ -1181,10 +1197,10 @@ OverlayWidget {
                         required property string modelData
                         property bool enabledAction: (modelData === "profile" || modelData === "chat") ? friendRoot.menuFriendActionAvailable : (modelData === "store" ? friendRoot.menuGameActionAvailable : friendRoot.menuFriendActionAvailable)
                         visible: enabledAction; width: parent.width; height: visible ? 29.0 : 0.0; radius: 6.0
-                        color: actionHover.hovered ? Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.22) : "transparent"
+                        color: actionHover.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : "transparent"
                         objectName: "friendPulseAction_" + modelData
-                        Text { anchors.fill: parent; leftPadding: 8.0; text: modelData === "profile" ? "View Profile" : (modelData === "chat" ? "Start Chat" : (modelData === "store" ? "View Game in Store" : "Copy Steam ID")); color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.78; verticalAlignment: Text.AlignVCenter }
-                        HoverHandler { id: actionHover; enabled: parent.enabledAction && friendRoot.friendPulseModel.interactionEnabled }
+                        Text { anchors.fill: parent; leftPadding: 8.0; text: modelData === "profile" ? "View Profile" : (modelData === "chat" ? "Start Chat" : (modelData === "store" ? "View Game in Store" : "Copy Steam ID")); color: actionHover.hovered ? "white" : friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.78; verticalAlignment: Text.AlignVCenter }
+                        HoverHandler { id: actionHover; cursorShape: Qt.PointingHandCursor; enabled: parent.enabledAction && friendRoot.friendPulseModel.interactionEnabled }
                         TapHandler {
                             enabled: parent.enabledAction && friendRoot.friendPulseModel.interactionEnabled
                             acceptedButtons: Qt.LeftButton

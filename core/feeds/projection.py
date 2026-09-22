@@ -4,17 +4,15 @@ This module owns *presentation policy*, not acquisition.  In particular, it
 never downloads artwork and it never exposes remote image URLs as QML image
 sources.  Callers may provide already-validated local artwork by item id.
 
-Grid generations are deliberately all-or-none for imagery: if one visible row
-lacks a validated local source, the whole generation falls back to the coherent
-text-grid presentation.  List mode may use sparse thumbnails because its row
-geometry is authored to tolerate them; Compact is text-only by contract.
+Grid and List each admit validated local artwork per visible story. A story
+without artwork uses its full cell for text rather than leaving an empty image
+slot; one missing image must never suppress unrelated cached images. Compact
+remains text-only. Geometry changes only reproject retained local identities.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal, Mapping
-
-from core.presentation_image_coherence import coherent_image_sources
 
 from .models import FeedEnclosure, FeedItem, FeedSnapshot, FeedViewMode
 
@@ -84,7 +82,6 @@ def project_feed(
     item_limit: int,
     show_images: bool = True,
     local_artwork_by_item: Mapping[str, str] | None = None,
-    visible_item_capacity: int | None = None,
 ) -> FeedDisplay:
     """Project one immutable feed snapshot without mutating source state."""
     if view_mode not in {"list", "grid", "compact"}:
@@ -100,16 +97,14 @@ def project_feed(
         image_sources = ("",) * len(visible)
         image_mode: FeedImageMode = "none"
     elif view_mode == "grid":
-        # F3 image readiness is about the geometry-visible group, not every
-        # requested row.  Hidden overflow must never suppress good visible art.
-        # The retained QML owner must supply its real capacity when imagery is
-        # admitted; omitting it preserves the strict pre-F3 all-rows behavior.
-        visible_count = len(visible) if visible_item_capacity is None else max(
-            0, min(len(visible), int(visible_item_capacity)))
-        ready = coherent_image_sources(requested_local[:visible_count], enabled=True)
-        image_mode = "complete" if ready and all(ready) else "none"
-        image_sources = (ready if image_mode == "complete" else ("",) * visible_count) + (
-            ("",) * (len(visible) - visible_count))
+        # Keep every accepted local image associated with its stable story ID.
+        # The retained QML delegate gates loading by its own current visibility,
+        # so resizing never republishes/reset the rows or touches the source.
+        # An image-less story gets a full text cell, not an empty artwork hole.
+        image_sources = requested_local
+        present = sum(bool(path) for path in image_sources)
+        image_mode = ("complete" if present == len(visible) and present > 0
+                      else "sparse" if present else "none")
     else:
         # List rows are independently authored and do not leave empty image
         # holes when a thumbnail is absent, so sparse local thumbnails are OK.

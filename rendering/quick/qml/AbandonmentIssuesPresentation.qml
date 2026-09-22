@@ -405,6 +405,7 @@ OverlayWidget {
 
             HoverHandler {
                 id: infoHover
+                cursorShape: Qt.PointingHandCursor
                 enabled: abandonmentRoot.abandonmentModel.interactionEnabled
             }
 
@@ -697,18 +698,9 @@ OverlayWidget {
                             layer.enabled: true
                         }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 8.0
-                            color: "transparent"
-                            border.color: artworkHover.hovered
-                                ? abandonmentRoot.abandonmentModel.accentColor
-                                : abandonmentRoot.abandonmentModel.steamArtworkBorderColor
-                            border.width: artworkFrame.artworkStrokeWidth
-                        }
-
                         HoverHandler {
                             id: artworkHover
+                            cursorShape: Qt.PointingHandCursor
                             enabled: abandonmentRoot.abandonmentModel.interactionEnabled
                                 && abandonmentRoot.abandonmentModel.appid > 0
                                 && abandonmentRoot.abandonmentModel.artworkSource.length > 0
@@ -721,6 +713,24 @@ OverlayWidget {
                             acceptedButtons: Qt.LeftButton
                             onTapped: abandonmentRoot.storeRequested()
                         }
+                    }
+
+                    // Sibling of the clipped artwork content: preserve the full
+                    // 2.25px semantic outline just like Achievement Pulse.
+                    Rectangle {
+                        id: artworkHoverBorder
+                        objectName: "abandonmentArtworkHoverBorder"
+                        x: artworkFrame.x
+                        y: artworkFrame.y
+                        width: artworkFrame.width
+                        height: artworkFrame.height
+                        radius: 8.0
+                        color: "transparent"
+                        border.color: artworkHover.hovered
+                            ? "white" : abandonmentRoot.abandonmentModel.steamArtworkBorderColor
+                        border.width: artworkFrame.artworkStrokeWidth
+                        antialiasing: true
+                        z: 4
                     }
                 }
 

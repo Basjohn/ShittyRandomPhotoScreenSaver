@@ -650,6 +650,7 @@
         "refresh_minutes": 15,
         "show_background": true,
         "show_images": true,
+        "show_subtitle": true,
         "view_mode": "list"
       },
       "feeds_custom_2": {
@@ -687,6 +688,7 @@
         "refresh_minutes": 15,
         "show_background": true,
         "show_images": true,
+        "show_subtitle": true,
         "view_mode": "list"
       },
       "feeds_custom_3": {
@@ -724,6 +726,7 @@
         "refresh_minutes": 15,
         "show_background": true,
         "show_images": true,
+        "show_subtitle": true,
         "view_mode": "list"
       },
       "feeds_custom_4": {
@@ -761,6 +764,7 @@
         "refresh_minutes": 15,
         "show_background": true,
         "show_images": true,
+        "show_subtitle": true,
         "view_mode": "list"
       },
       "friend_pulse": {

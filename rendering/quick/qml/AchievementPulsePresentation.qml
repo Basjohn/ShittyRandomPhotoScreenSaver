@@ -422,6 +422,7 @@ OverlayWidget {
 
             HoverHandler {
                 id: infoHover
+                cursorShape: Qt.PointingHandCursor
                 enabled: achievementRoot.achievementModel.interactionEnabled
             }
 
@@ -573,13 +574,13 @@ OverlayWidget {
                     radius: 7.0
                     color: "transparent"
                     border.color: artworkHover.hovered
-                        ? achievementRoot.achievementModel.accentColor
-                        : achievementRoot.achievementModel.steamArtworkBorderColor
+                        ? "white" : achievementRoot.achievementModel.steamArtworkBorderColor
                     border.width: artworkFrame.artworkStrokeWidth
                 }
 
                 HoverHandler {
                     id: artworkHover
+                    cursorShape: Qt.PointingHandCursor
                     enabled: achievementRoot.achievementModel.interactionEnabled
                         && achievementRoot.achievementModel.appid > 0
                         && achievementRoot.achievementModel.artworkSource.length > 0

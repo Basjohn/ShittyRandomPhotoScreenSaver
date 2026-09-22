@@ -25,6 +25,7 @@ class CustomFeedConfig:
     item_limit: int
     refresh_minutes: int
     show_images: bool
+    show_subtitle: bool
 
     @classmethod
     def from_mapping(cls, widget_id: str, value: Mapping[str, object] | None) -> "CustomFeedConfig":
@@ -80,6 +81,22 @@ class CustomFeedConfig:
             show_images = default_show_images
         else:
             show_images = bool(raw_show_images)
+        raw_show_subtitle = raw.get("show_subtitle", defaults["show_subtitle"])
+        default_show_subtitle = bool(defaults["show_subtitle"])
+        if isinstance(raw_show_subtitle, bool):
+            show_subtitle = raw_show_subtitle
+        elif isinstance(raw_show_subtitle, str):
+            normalized_subtitle = raw_show_subtitle.strip().casefold()
+            if normalized_subtitle in {"true", "1", "yes", "on"}:
+                show_subtitle = True
+            elif normalized_subtitle in {"false", "0", "no", "off"}:
+                show_subtitle = False
+            else:
+                show_subtitle = default_show_subtitle
+        elif raw_show_subtitle is None:
+            show_subtitle = default_show_subtitle
+        else:
+            show_subtitle = bool(raw_show_subtitle)
         return cls(
             widget_id=widget_id,
             enabled=enabled,
@@ -89,6 +106,7 @@ class CustomFeedConfig:
             item_limit=max(3, min(40, item_limit)),
             refresh_minutes=max(5, min(24 * 60, refresh_minutes)),
             show_images=show_images,
+            show_subtitle=show_subtitle,
         )
 
     @property

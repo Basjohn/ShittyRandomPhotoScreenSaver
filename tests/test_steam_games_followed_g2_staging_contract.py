@@ -87,3 +87,11 @@ def test_source_identity_and_private_fields_do_not_flow_through_qt_roles():
     assert 'self._article_action(target.kind, target.browser_url)' in source
     assert 'news_hub_target(story.appid)' in source
     assert 'news_article_target(story.appid, story.gid, story.article_url)' in source
+
+
+def test_followed_clipped_content_has_explicit_stacking_above_fallback():
+    qml = QML.read_text("utf-8")
+    assert 'objectName: "followedStoryArtworkFallback" + storySlot\n                    parent: tileFrame\n                    z: 1' in qml
+    assert 'objectName: "followedStoryArtwork" + storySlot\n                    parent: tileFrame\n                    z: 2' in qml
+    assert 'objectName: "followedStoryArtworkOutline" + storySlot\n                    parent: tileFrame\n                    z: 3' in qml
+    assert 'objectName: "followedStoryHoverOutline" + storySlot\n                    parent: tileFrame\n                    z: 10' in qml

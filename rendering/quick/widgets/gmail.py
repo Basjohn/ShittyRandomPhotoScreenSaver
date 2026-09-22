@@ -1243,8 +1243,11 @@ class RetainedGmailPresentation:
 
     def _handle_auth_requested(self) -> bool:
         # Production routes authorization to interactive Settings so the OAuth
-        # browser is never born on the saver/Winlogon desktop. Tests/embedders
-        # without the callback retain the model's ordinary interactive seam.
+        # browser is never born on the saver/Winlogon desktop. Admission remains
+        # identical to every other retained Gmail action: a synthetic/stale QML
+        # signal cannot open Settings before runtime input has been admitted.
+        if not self._model.is_active or not self._model.interactionEnabled:
+            return False
         if self._on_auth_requested is not None:
             return bool(self._on_auth_requested())
         return bool(self._model.request_auth())

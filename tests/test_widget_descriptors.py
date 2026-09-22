@@ -96,6 +96,7 @@ def test_widget_settings_section_descriptors_default_order():
         "media",
         "visualizers",
         "reddit",
+        "feeds",
         "gmail",
         "steam",
         "system_stats",
@@ -681,6 +682,7 @@ def test_service_runtime_contract_queries_follow_descriptor_contract():
     assert get_widget_ids_for_service_runtime_contract("visible_fallback") == (
         "reddit",
         "reddit2",
+        "feeds_custom_1",
         "gmail",
     )
 
@@ -955,6 +957,9 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
     assert descriptors["media"].content_extent_minimum_size == (520, 210)
 
     assert descriptors["gmail"].supports_layout_resize_edit is True
+    assert descriptors["feeds_custom_1"].supports_layout_resize_edit is True
+    assert descriptors["feeds_custom_1"].content_extent_axes == ("horizontal", "vertical")
+    assert descriptors["feeds_custom_1"].content_extent_minimum_size == (320, 180)
     assert descriptors["reddit"].requires_size_reset_affordance is True
 
     ordinary_reflow_families = {
@@ -963,9 +968,11 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
         "reddit",
         "reddit2",
         "gmail",
+        "feeds_custom_1",
         "achievement_pulse",
         "abandonment_issues",
         "friend_pulse",
+        "steam_progress",
         "system_stats",
         "system_audio_osd",
     }

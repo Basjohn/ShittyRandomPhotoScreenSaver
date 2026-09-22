@@ -111,7 +111,10 @@ def test_cached_news_paints_before_one_source_owned_artwork_completion(tmp_path,
     requested = []
     def fetch(url, **_kwargs):
         requested.append(url)
-        return png()
+        out = BytesIO()
+        color = "red" if url.endswith("/1.jpg") else "blue"
+        Image.new("RGB", (32, 24), color).save(out, format="PNG")
+        return out.getvalue()
     monkeypatch.setattr(artwork_transport, "fetch_artwork_bytes", fetch)
     source = Source(content_result())
     monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", lambda owner, state: source)
@@ -141,9 +144,8 @@ def test_cached_news_paints_before_one_source_owned_artwork_completion(tmp_path,
     assert len(final.local_artwork_by_item) == 2
     assert len(requested) == 2
     shown = project_feed(final.snapshot, view_mode="grid", item_limit=3,
-                         local_artwork_by_item=dict(final.local_artwork_by_item),
-                         visible_item_capacity=2)
-    assert shown.has_complete_imagery
+                         local_artwork_by_item=dict(final.local_artwork_by_item))
+    assert shown.image_mode == "complete"
     assert all(row.image_source.startswith("file:") for row in shown.rows)
     assert len(tuple((tmp_path / "artwork").glob("*.png"))) == 2
     assert not any("http" in source for _, source in final.local_artwork_by_item)

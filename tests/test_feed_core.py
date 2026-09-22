@@ -61,6 +61,39 @@ def test_feed_parser_keeps_valid_items_without_images_and_reports_coverage():
     assert document.image_coverage == pytest.approx(0.5)
 
 
+def test_feed_parser_resolves_embedded_relative_images_against_article_url():
+    payload = b'''<?xml version="1.0"?><rss version="2.0"><channel><title>Images</title>
+      <item><guid>relative-1</guid><title>Relative image</title>
+       <link>https://articles.example.test/posts/entry/</link>
+       <description><![CDATA[<img src="images/hero.jpg"/>]]></description></item>
+    </channel></rss>'''
+    document = parse_feed_bytes(payload, source_url="https://feeds.example.test/rss/latest.xml")
+    assert document.items[0].images[0].url == (
+        "https://articles.example.test/posts/entry/images/hero.jpg"
+    )
+
+
+def test_feed_parser_discovers_lazy_and_srcset_article_images_from_feed_markup():
+    payload = b'''<?xml version="1.0"?><rss version="2.0"><channel><title>Images</title>
+      <item><guid>lazy-1</guid><title>Lazy image</title><link>https://example.test/a</link>
+       <description><![CDATA[
+        <picture>
+          <source srcset="/images/a-320.jpg 320w, https://cdn.example.test/a-1280.jpg 1280w"/>
+          <img data-lazy-src="https://cdn.example.test/a-lazy.jpg"
+               data-srcset="https://cdn.example.test/a-640.jpg 640w, https://cdn.example.test/a-960.jpg 960w"/>
+        </picture>
+       ]]></description></item>
+    </channel></rss>'''
+    document = parse_feed_bytes(payload, source_url="https://example.test/feed")
+    urls = tuple(image.url for image in document.items[0].images)
+    assert urls[:5] == (
+        "https://cdn.example.test/a-1280.jpg",
+        "https://example.test/images/a-320.jpg",
+        "https://cdn.example.test/a-lazy.jpg",
+        "https://cdn.example.test/a-960.jpg",
+        "https://cdn.example.test/a-640.jpg",
+    )
+
 def test_feed_parser_handles_atom_from_bytes_without_network():
     document = parse_feed_bytes(ATOM, source_url="https://atom.example/feed")
     assert document.format.startswith("atom")
@@ -287,10 +320,11 @@ def test_successful_feed_generation_survives_cache_write_failure(tmp_path: Path)
 def test_custom_config_boolean_strings_do_not_turn_false_into_true():
     config = CustomFeedConfig.from_mapping(
         "feeds_custom_1",
-        {"enabled": "false", "show_images": "false", "feed_url": "https://example.test/rss"},
+        {"enabled": "false", "show_images": "false", "show_subtitle": "false", "feed_url": "https://example.test/rss"},
     )
     assert config.enabled is False
     assert config.show_images is False
+    assert config.show_subtitle is False
 
 
 def test_empty_success_response_never_replaces_last_good_snapshot(tmp_path: Path):

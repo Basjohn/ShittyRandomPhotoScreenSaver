@@ -42,6 +42,8 @@ def test_f2_admits_only_custom_1_runtime_descriptor():
     assert descriptor.settings_section_id == "feeds"
     assert descriptor.service_backed is True
     assert descriptor.supports_layout_edit_mode is True
+    assert descriptor.content_extent_axes == ("horizontal", "vertical")
+    assert descriptor.content_extent_minimum_size == (320, 180)
     for widget_id in (
         "feeds_custom_2",
         "feeds_custom_3",
@@ -60,6 +62,16 @@ def test_feeds_settings_section_is_lazy_descriptor_owned_and_custom1_only():
     assert descriptor is not None
     assert descriptor.builder_module == "ui.tabs.widgets_tab_feeds"
     assert descriptor.persisted_widget_keys == ("feeds_custom_1",)
+
+
+def test_feed_subtitle_toggle_has_canonical_default_for_every_custom_slot():
+    for index in range(1, 5):
+        assert require_canonical_default(
+            f"widgets.feeds_custom_{index}.show_subtitle"
+        ) is True
+    settings = _text("ui/tabs/widgets_tab_feeds.py")
+    assert 'QCheckBox("Show Feed Subtitle")' in settings
+    assert '"show_subtitle": bool(tab.feeds_custom1_show_subtitle.isChecked())' in settings
 
 
 def test_settings_feed_probe_is_explicit_and_never_bound_to_url_typing():
@@ -90,6 +102,8 @@ def test_f3_exposes_image_control_with_persisted_settings_and_local_only_renderi
     settings = _text("ui/tabs/widgets_tab_feeds.py")
     assert '"show_images": bool(tab.feeds_custom1_show_images.isChecked())' in settings
     assert 'tab.feeds_custom1_show_images.setChecked(tab._config_bool(' in settings
+    assert '"show_subtitle": bool(tab.feeds_custom1_show_subtitle.isChecked())' in settings
+    assert 'tab.feeds_custom1_show_subtitle.setChecked(tab._config_bool(' in settings
     qml = _text("rendering/quick/qml/FeedPresentation.qml")
     assert 'source: parent.visible ? feedImageSource : ""' in qml
 
@@ -114,3 +128,18 @@ def test_feed_presentation_capacity_never_clips_configured_rows_or_steals_edit_w
 def test_feed_settings_describes_item_count_as_a_maximum():
     settings = _text("ui/tabs/widgets_tab_feeds.py")
     assert '"Max Items:"' in settings
+
+
+def test_feed_custom_xy_resize_projects_content_extent_and_reflows_without_io():
+    source = _text("rendering/quick/widgets/feeds.py")
+    qml = _text("rendering/quick/qml/FeedPresentation.qml")
+    assert "def set_content_extent(" in source
+    assert "def apply_custom_layout_size_payload(" in source
+    assert "set_custom_layout_size_payload_handler(model.apply_custom_layout_size_payload)" in source
+    assert "self._content_extent" in source
+    assert "preferredContentWidth: feedModel.preferredWidth" in qml
+    assert "preferredContentHeight: feedModel.preferredHeight" in qml
+    assert "readonly property int gridColumns" in qml
+    assert "readonly property int gridRowCapacity" in qml
+    for forbidden in ("Timer {", "XMLHttpRequest", "NetworkAccess"):
+        assert forbidden not in qml

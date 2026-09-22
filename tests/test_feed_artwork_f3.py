@@ -18,9 +18,9 @@ def _item(identity: str, url: str = "") -> FeedItem:
                     images=(FeedImageCandidate(url),) if url else ())
 
 
-def _picture(*, size=(110, 70)) -> bytes:
+def _picture(*, size=(110, 70), color="white") -> bytes:
     out = BytesIO()
-    Image.new("RGB", size, "white").save(out, format="PNG")
+    Image.new("RGB", size, color).save(out, format="PNG")
     return out.getvalue()
 
 
@@ -50,6 +50,29 @@ def test_cross_item_shared_image_is_treated_as_feed_chrome_not_article_art(tmp_p
     assert not tuple(tmp_path.glob("*.png"))
 
 
+def test_shared_candidate_identity_ignores_per_story_query_decorations(tmp_path):
+    cache = FeedArtworkCache(tmp_path)
+    rows = (
+        FeedItem("a", "A", "https://example.test/a", images=(
+            FeedImageCandidate("https://cdn.example.test/site-hero.jpg?story=a&sig=one", relation="media"),
+            FeedImageCandidate("https://cdn.example.test/a.jpg", relation="content"),
+        )),
+        FeedItem("b", "B", "https://example.test/b", images=(
+            FeedImageCandidate("https://cdn.example.test/site-hero.jpg?story=b&sig=two", relation="media"),
+            FeedImageCandidate("https://cdn.example.test/b.jpg", relation="content"),
+        )),
+    )
+    visited = []
+    outcome = cache.warm(
+        rows,
+        fetch_bytes=lambda url: visited.append(url) or _picture(
+            color="red" if url.endswith("a.jpg") else "blue"),
+        still_needed=lambda: True,
+    )
+    assert set(outcome.local_by_item) == {"a", "b"}
+    assert visited == ["https://cdn.example.test/a.jpg", "https://cdn.example.test/b.jpg"]
+
+
 def test_article_specific_candidate_beats_larger_shared_feed_hero(tmp_path):
     cache = FeedArtworkCache(tmp_path)
     shared = "https://cdn.example.test/site-hero.jpg"
@@ -65,13 +88,69 @@ def test_article_specific_candidate_beats_larger_shared_feed_hero(tmp_path):
     )
     visited = []
     outcome = cache.warm(
-        rows, fetch_bytes=lambda url: visited.append(url) or _picture(),
+        rows, fetch_bytes=lambda url: visited.append(url) or _picture(color="red" if url.endswith("a.jpg") else "blue"),
         still_needed=lambda: True,
     )
     assert outcome.attempts == outcome.newly_cached == 2
     assert visited == ["https://cdn.example.test/a.jpg", "https://cdn.example.test/b.jpg"]
     assert len(set(outcome.local_by_item.values())) == 2
     assert shared not in visited
+
+
+
+def test_distinct_urls_with_identical_bytes_are_rejected_as_shared_chrome_and_fall_back(tmp_path):
+    cache = FeedArtworkCache(tmp_path)
+    rows = (
+        FeedItem("a", "A", "https://example.test/a", images=(
+            FeedImageCandidate("https://cdn.example.test/a-hero.jpg", relation="media"),
+            FeedImageCandidate("https://cdn.example.test/a-unique.jpg", relation="content"),
+        )),
+        FeedItem("b", "B", "https://example.test/b", images=(
+            FeedImageCandidate("https://cdn.example.test/b-hero.jpg", relation="media"),
+            FeedImageCandidate("https://cdn.example.test/b-unique.jpg", relation="content"),
+        )),
+    )
+    visited = []
+    def fetch(url):
+        visited.append(url)
+        if "hero" in url:
+            return _picture(color="purple")
+        return _picture(color="red" if "a-unique" in url else "blue")
+    outcome = cache.warm(rows, fetch_bytes=fetch, still_needed=lambda: True)
+    assert set(outcome.local_by_item) == {"a", "b"}
+    assert len(set(outcome.local_by_item.values())) == 2
+    assert outcome.attempts == 4
+    assert visited[:2] == [
+        "https://cdn.example.test/a-hero.jpg",
+        "https://cdn.example.test/b-hero.jpg",
+    ]
+    assert set(visited[2:]) == {
+        "https://cdn.example.test/a-unique.jpg",
+        "https://cdn.example.test/b-unique.jpg",
+    }
+
+def test_four_visible_grid_items_can_fall_back_from_duplicate_hero_within_one_bounded_warm(tmp_path):
+    cache = FeedArtworkCache(tmp_path)
+    rows = tuple(
+        FeedItem(str(index), f"Story {index}", f"https://example.test/{index}", images=(
+            FeedImageCandidate(f"https://cdn.example.test/{index}-hero.jpg", relation="media"),
+            FeedImageCandidate(f"https://cdn.example.test/{index}-unique.jpg", relation="content"),
+        ))
+        for index in range(4)
+    )
+    visited = []
+    def fetch(url):
+        visited.append(url)
+        if "hero" in url:
+            return _picture(color="purple")
+        index = int(url.rsplit("/", 1)[-1].split("-", 1)[0])
+        return _picture(color=((index * 53 + 17) % 255, (index * 71 + 31) % 255, (index * 89 + 47) % 255))
+
+    outcome = cache.warm(rows, fetch_bytes=fetch, still_needed=lambda: True)
+    assert set(outcome.local_by_item) == {"0", "1", "2", "3"}
+    assert len(set(outcome.local_by_item.values())) == 4
+    assert outcome.attempts == 8
+    assert len(visited) == 8
 
 
 def test_bad_or_large_content_does_not_destroy_existing_local_art_or_feed_rows(tmp_path):
@@ -117,7 +196,7 @@ def test_worker_budget_and_missing_art_are_independent_of_item_validity(tmp_path
     requests = []
     items = [_item(str(n), f"https://cdn.example.test/{n}.png") for n in range(MAX_IMAGES_PER_WARM + 3)]
     items.append(_item("text-only"))
-    outcome = cache.warm(items, fetch_bytes=lambda url: requests.append(url) or _picture(), still_needed=lambda: True)
+    outcome = cache.warm(items, fetch_bytes=lambda url: requests.append(url) or _picture(color=(int(url.rsplit("/", 1)[-1].split(".")[0]) * 17 % 255, 60, 120)), still_needed=lambda: True)
     assert outcome.attempts == outcome.newly_cached == MAX_IMAGES_PER_WARM
     assert len(outcome.local_by_item) == MAX_IMAGES_PER_WARM
     assert "text-only" not in outcome.local_by_item
