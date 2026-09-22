@@ -304,10 +304,7 @@ Expected adaptation at constant scale:
 - Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
 - Sphere uses aspect-correct projection and stays round.
 
-All six registered modes are viewport-resize-capable through their declared presentation policy; the five established carded modes share the card geometry contract, while Sphere uses its frameless viewport policy. The core Bubble capability/reflow path is landed. Do not
-reintroduce a Bubble false gate to conceal an implementation defect. Current G4 audit work is narrower: keep committed
-viewport truth separate from the temporary CUSTOM working override and close the remaining nonbaseline Bubble spatial edge
-cases without changing authored behavior. `Current_Plan.md` owns the exact open correction list.
+All six registered modes are viewport-resize-capable through their declared presentation policy; the five established carded modes share the card geometry contract, while Sphere uses its frameless viewport policy. The core Bubble capability/reflow path is landed. Do not reintroduce a Bubble false gate to conceal an implementation defect. Committed viewport truth remains separate from temporary CUSTOM working geometry; any newly reproduced spatial defect must preserve authored Bubble response and the binding BTF contract rather than reviving phase-specific gates.
 
 ## 12. Bubble / BTF
 
@@ -364,6 +361,8 @@ top/bottom     -> viewport height
 
 Viewport resizing is part of the current CUSTOM contract, not optional QoL and not permission to stretch a
 rendered image. Save/Cancel and layout slots preserve scale and extent separately.
+
+The five established carded modes also admit the shared CUSTOM **content quarter-turn** control. Orientation is layout/presentation state, not a Visualizer setting or preset value: a sparse `content_rotation_quarters_by_mode` map lives inside the existing CUSTOM `size_payload`, keyed by canonical mode ID, with missing/zero meaning 0°. A legacy global `content_rotation_quarters` scalar is interpretation-only compatibility input; new writes use the per-mode map. Odd quarter-turns swap the effective logical viewport axes before authored mode presentation and the shared render contract maps that logical world back into the unchanged physical card. This preserves stored X/Y/extent/uniform scale and avoids stretching finished pixels. Save/Cancel, layout slots, display transfer and Restore semantics remain in the existing CUSTOM owner. Rotation is event-driven and adds no timer, poller, alternate Visualizer cadence or per-frame Settings lookup. Voxel Sphere remains excluded through descriptor capability metadata so this feature cannot couple the isolated frameless 3-D mode back into the carded-mode contract.
 
 ## 14A. Visualizer display admission / semantic mode + preset cycles
 

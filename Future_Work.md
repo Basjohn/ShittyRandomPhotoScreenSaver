@@ -51,7 +51,7 @@ At minimum it must:
 3. define state, cadence, Settings, presentation, GPU/resource and retirement ownership;
 4. classify new primitives as **feature-local**, **justified reusable infrastructure**, or **speculative reuse deferred**
    until another concrete consumer proves the abstraction;
-5. decompose the work into resumable checkpoints that leave the repository coherent whenever practical;
+5. decompose the work into resumable slices that leave the repository coherent whenever practical;
 6. define deterministic/source-level, lifecycle/resource, performance and eyes-on visual acceptance bars separately;
 7. keep an explicit landed/remaining status so partial completion is not mistaken for finished architecture.
 
@@ -209,7 +209,7 @@ Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Slide Perspective P
 
 ---
 
-# 7. Future 3D visualizer experiments
+# 3. Future 3D visualizer experiments
 
 - [ ] Each requested 3D Visualizer has a distinct canonical mode identity and protected settings/preset ownership; the accepted Voxel Sphere remains unchanged unless specifically requested.
 
@@ -223,35 +223,35 @@ reactivity/motion/presets are golden and its architecture remains isolated; do n
 operator explicitly requests that work. The current preservation/isolation contract lives in
 `Docs/Reference/Sphere_Visualizer.md`.
 
-## 7.1 Extruded Spectrum - Unique Mode
+## 3.1 Extruded Spectrum - Unique Mode
 
 Instanced shallow 3D columns: one cuboid mesh, 32–128 instances, per-instance height/color/energy,
 restrained lighting/specular and mild perspective/orthographic depth.
 
-## 7.2 Waveform Ribbon - Unique Mode
+## 3.2 Waveform Ribbon - Unique Mode
 
 Oscilloscope/Sine-like state as a 3D ribbon with a few hundred vertices, amplitude on Y,
 authored phase/history through X/Z twist, neighboring-sample normals and bounded ghost ribbons.
 
-## 7.3 Bubble Depth Field - Unique Mode
+## 3.3 Bubble Depth Field - Unique Mode
 
 Shallow Z/depth presentation option without changing Bubble logical motion **or R-69 response amplitude**. Depth/parallax must not become a viewport-dependent damping term. Prefer instanced billboard
 sphere impostors with analytic normals/specular, per-bubble Z from authored state, depth ordering and
 subtle parallax.
 
-## 7.4 Reactive Particle Field - Unique Mode
+## 3.4 Reactive Particle Field - Unique Mode
 
 Bounded 3D instanced point/quad field driven by existing analysis. Prefer hundreds/low-thousands in
 one/few draws. Persistent state, if truly required, belongs to proper logical/runtime ownership.
 
-## 7.5 Spectrum Terrain - Unique Mode
+## 3.5 Spectrum Terrain - Unique Mode
 
 Spectrum/history mapped onto a modest grid mesh: current spectrum across one axis, short retained
 history into depth, a few thousand vertices, displacement from compact data/texture, normals/lighting.
 
 ---
 
-# 8. Future transition / Visualizer workflow | reusable checklist
+# 4. Future transition / Visualizer workflow | reusable checklist
 
 - [ ] Record the concrete visual contract and rollback reference; classify the idea as a new transition, an option of an existing transition, or a distinct Visualizer mode before coding.
 - [ ] Wire to **canonical** catalog/descriptor/defaults, lazy implementation and the one Qt Quick scene from day one. Use module-local expensive resources, not a parallel experimental engine or a Settings shadow tree.
@@ -262,68 +262,7 @@ history into depth, a few thousand vertices, displacement from compact data/text
 
 ---
 
-## 8.1 CUSTOM Visualizer quarter-turn orientation — deferred design contract
-
-This section owns design constraints only. If active work is admitted, its sequencing and acceptance status belong to the active plan.
-
-Feature request: while CUSTOM Edit mode is active, eligible Visualizers gain a small turn/flip glyph. Each click advances the
-content orientation by one clockwise quarter-turn: `0° -> 90° -> 180° -> 270° -> 0°`. Example: a tall Spectrum whose bars
-currently travel upward can be turned so the same authored/reactive visualizer behaves as a wide logical viewport rotated into
-the tall physical card, with bars travelling right, then down, then left on successive clicks.
-
-This is feasible, but it is **not** a finished-pixel/QML `rotation` feature. Viewport shape is semantic input to Bubble,
-Spectrum, Sine, Oscilloscope and Dev Curve; rotating only the final pixels/vertices would bypass existing wide/tall shape
-profiles and can break reaction amplitude, density, clipping, line thickness, Bubble tails/specular/gradient behaviour and
-other viewport-derived invariants. The feature therefore belongs at the shared Visualizer presentation/layout seam.
-
-- [ ] **Initial scope: carded accepted modes only.** Admit Spectrum, Oscilloscope, Sine Waves, Bubble and Dev Curve. Exclude
-  frameless modes and specifically Voxel Sphere initially. Sphere has experimental unclipped overflow, 3-D lighting/shadow and
-  its own coordinate semantics; do not make this feature a reason to couple Sphere back into accepted-mode architecture.
-- [ ] Add one CUSTOM-layout-owned **per-mode** quarter-turn state inside the existing `size_payload`: a sparse
-  `content_rotation_quarters_by_mode` map keyed only by canonical rotation-capable carded modes, each constrained to
-  `{1,2,3}` with missing/zero meaning `0`. It is **layout/presentation state, not a Visualizer setting or preset technical
-  setting**. The former global `content_rotation_quarters` token is read-only compatibility input and must expand to all
-  capable carded modes so old global semantics survive even when Sphere is active during migration. Do not add a second
-  settings authority or mutate authored preset payloads.
-- [ ] Keep the physical saved geometry authoritative and unchanged. The committed `rect`, monitor route, uniform scale and
-  `viewport_extent` remain exactly what the user edited. For `90°/270°`, resolve an **effective logical content viewport** with
-  width/height swapped, run the existing mode shape/reactivity logic against that logical domain, then apply one shared
-  logical-to-physical quarter-turn transform back into the unchanged card/content clip. `0°/180°` keep the logical axes;
-  `180°` changes direction only. This is the critical distinction that lets a tall card behave like a wide visualizer without
-  rewriting its stored geometry.
-- [ ] Implement the transform once in the common Quick Visualizer render/presentation contract, not separately in five mode
-  renderers. Mode-specific code may need only narrowly proven direction-vector adaptation where a shader currently consumes a
-  screen-space direction directly (for example Bubble gradient/specular direction); prefer deriving those vectors through the
-  common orientation transform rather than adding per-mode orientation settings.
-- [ ] Edit UI: add one themed circular turn glyph to `CustomLayoutOverlay.qml`, visible only for the active Visualizer when the
-  current descriptor admits quarter-turn orientation. It must not steal drag/resize/display-hop input zones. Clicking changes
-  only the **current mode's** working orientation; Cancel restores the admission map, Save commits the full map, and Restore
-  Size must **not** silently reset orientation unless product UX explicitly decides that Restore Size owns orientation too.
-  A live-hover rotate affordance is a separate admission problem: do not let the live QML card mutate persisted CUSTOM state
-  directly. Add it only if a shared live layout-action owner can preserve the same persistence/session authority without a
-  second state owner or recurring hover/poll work.
-- [ ] Save/load/slot contract: existing layout slots already capture the whole `custom_layout` root, so the per-mode orientation
-  map must round trip through ordinary CUSTOM save/load and slot Save/Load without a parallel slot schema. Cross-display hop must
-  preserve the complete map. Legacy layouts/slots with no orientation state load identically to today (`0`); legacy global scalar
-  layouts expand that scalar across every capable carded mode before any per-mode divergence. Version-bump only if the normalizer cannot
-  safely treat the optional size-payload field as backward compatible; do not bump merely because a new optional payload key
-  exists.
-- [ ] **Golden behavioural proof before merge:** with orientation `0`, resolved presentation/render state must be semantically
-  identical to pre-feature behaviour for every accepted mode and curated/Custom preset. Prove quarter-turn does not alter
-  audio/reactivity values, preset technical authority, AGC/floor state, authored mode settings, uniform scale or stored extent.
-  Add pure transform tests for four-click identity, `90+270 == 0`, axis swap only on odd quarters, Save/Cancel/slot round trips,
-  cross-display preservation and legacy-no-token replay. Then run the existing visualizer geometry/reactivity suites plus
-  installed eyes-on checks for extreme wide/tall Bubble, Spectrum, Oscilloscope, Sine and Dev Curve. Bubble's current reaction
-  amplitude/freshness contract remains golden: no compensation that reduces reaction is acceptable.
-- [ ] Performance/lifetime: quarter-turn is event-driven only. No timer, polling, alternate cadence, retained duplicate
-  renderer or per-frame settings lookup. Changing orientation may publish/rebuild the normal immutable presentation snapshot,
-  but must not reconstruct the Visualizer runtime or create a second logical state owner.
-
-**Risk decision:** medium/high implementation risk but architecturally bounded. Do not implement opportunistically during unrelated Visualizer work. If the common logical-to-physical transform cannot be made mode-neutral without mode-specific geometry forks, abandon the feature rather than compromising existing viewport/preset/reactivity contracts.
-
----
-
-# 9. Dormant idea priority — not active sequencing
+# 5. Dormant idea priority — not active sequencing
 
 This ranking contains dormant ideas only. Active/promoted work is deliberately absent; `Current_Plan.md` is the sole active sequencing authority.
 
@@ -341,9 +280,9 @@ Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a q
 
 ---
 
-# 10. Operator-requested UI polish contracts
+# 6. Operator-requested UI polish contracts
 
-## 10.1 Settings FlowContainer polish [LOW]
+## 6.1 Settings FlowContainer polish [LOW]
 
 - [ ] Only promote this UI polish for a demonstrated Settings layout issue; preserve lazy Settings bodies and current owner.
 

@@ -174,6 +174,7 @@ Current proven patterns are deliberately heterogeneous:
 - Abandonment Issues: neutral Steam runtime/data/cache/rotation ownership;
 - Friend Pulse: one runtime-generation Steam friend/cache/avatar owner shared by display leases; cache-first FriendList + bounded PlayerSummaries, account-private pin persistence and retained Grid/Rows presentation. No Steam-chat/message-session backend is part of the product;
 - System Stats: one runtime-generation low-priority sampler shared by display leases; CPU/Memory/Uptime/Network selection suppresses unused underlying observations inside that same owner rather than creating per-metric timers/services.
+- FEEDS Custom 1: one generation-scoped family owner with endpoint-deduplicated source leases, endpoint-isolated durable last-good state, retained List/Grid/Compact QML and event-admitted local artwork. It uses the ordinary shared `content_extent` and child-geometry/Edit owners; repeated article artwork shares one stable semantic geometry role rather than persisting article identities. Custom 2–4 and NEWS remain dormant behind explicit expansion gates.
 
 Do not create services/managers merely for naming symmetry.
 
@@ -201,7 +202,7 @@ cache record remains eligible for cache-first presentation regardless of age. Fr
 and whether presentation is marked cached/stale; a failed/private/rate-limited/malformed refresh must not overwrite,
 freshen, or delete the last-good record. Cache removal requires an explicit user/account/cache reset, schema
 rejection/corruption, or a proven semantic identity change. Do not improve nominal freshness by blanking useful stale
-content. Friend Pulse and Games You Follow both use this cache-first rule.
+content. Friend Pulse, Games You Follow and FEEDS use this cache-first rule.
 
 ## State / actions
 
@@ -463,6 +464,7 @@ Slide adds no effect-local timer, clock, worker or resource owner; true Perspect
 
 - The independently opt-in system-master-volume/mute OSD is an ordinary retained Qt Quick widget inside the single display scene. It shares the event-driven Core Audio endpoint/action authority with Media, coalesces notifications onto GUI publication, uses one event-owned visibility deadline/fade and the ordinary CUSTOM owner, and has no separate audio poll/endpoint/window. The old import-owned process-global mute runtime/poll is retired; do not restore it. See `Docs/Reference/System_Volume_OSD.md`.
 - Games You Follow is the default-off `steam_progress`-identity ordinary Steam card for explicitly followed games. Its source uses the existing linked identity/key, globally date-ranked discovered news, secure identity-derived article action, verified cached art and a bounded account-private last-good cache. Initial complete coverage is followed by persisted-cursor maintenance of up to eight apps per refresh session. One retained Quick model and four grouped CUSTOM roles own presentation; no surrogate follow source or second Steam backend. See `Docs/Reference/Steam_Games_You_Follow.md`.
+- FEEDS Custom 1 is the currently admitted member of the four fixed CUSTOM RSS/Atom identities. It uses the bounded shared Feed transport/parser/cache/source runtime, local-only optional artwork, secure HTTP/S product actions, shared `BrandedHeader`, independent X/Y `content_extent`, and shared semantic child geometry. Semantic colour is the resting border/state language; admitted active clickable boundaries/text use the product-wide bright-white cue, while dense List rows remain borderless with a neutral-white surface wash. See `Docs/Reference/Feeds.md`; future Custom 2–4/NEWS work is gated by `Docs/Future_Work/Feeds.md`.
 - A new transition identity enters the one canonical transition registry and lazy Quick render host. Effect-local resources remain removable/dormant, canonical Settings owns persistence, and neither a parallel experimental engine nor permanent second architecture is required. Existing Slide modifiers stay in Slide. Accepted Voxel Sphere isolation and Bubble/Visualizer goldens are unaffected by this transition extension rule.
 
 ## Lifecycle
@@ -492,7 +494,7 @@ Current source must be reasoned about from present owners/contracts rather than 
 
 ## Documentation roles
 
-- `Current_Plan.md`: current checkpoint/work/next/debt;
+- `Current_Plan.md`: active work/next acceptance debt;
 - `Spec.md`: durable product/architecture;
 - focused docs/guardrails: durable subsystem contracts;
 - `Docs/TestSuite.md`: live test inventory/status ledger;

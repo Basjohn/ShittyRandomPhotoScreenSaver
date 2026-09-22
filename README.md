@@ -40,7 +40,9 @@ A look at the current features. Developer contracts and work-in-progress details
   - **Media Widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
   - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. five established modes (Bubble, Spectrum, Oscilloscope, Curve/Dev Curve and Sine), with an optional isolated experimental Sphere and a preset/Custom system.
   - **Reddit Widgets** showing top posts from up to two configured subreddits, posts can be clicked to take you to their comments because no one reads the articles/links anyway.
-  - **STEAM Widgets** Achievement Pulse (Your glorious work.), Abandonment Issues (Your backlog.) and Friend Pulse (Your people).
+  - **STEAM Widgets** Achievement Pulse (Your glorious work.), Abandonment Issues (Your backlog.), Friend Pulse (Your people.) and Games You Follow (news from the games you actually follow).
+  - **FEEDS** Custom RSS/Atom widget with List/Grid/Compact layouts, optional locally cached article artwork and clickable HTTP/S stories. Custom 1 is the currently admitted slot; the remaining fixed slots/NEWS categories are still gated work.
+  - **System Audio OSD** Optional retained master-volume/mute overlay driven from the shared Windows audio source.
   
 - **Custom Layouts**
 
@@ -57,20 +59,20 @@ A look at the current features. Developer contracts and work-in-progress details
     - **Sources** – folders + RSS/JSON feeds
     - **Display** – mode, interval, sharpen, pan & scan, monitor selection
     - **Transitions** – transition type, duration, directions, per‑type tuning
-    - **Widgets** – clock(s), weather, media, Spotify visualizer, Reddit (You'll need to configure these to your liking! Geolocation is kinda shit.)
+    - **Widgets** – clocks, weather, media, visualizer, Reddit, Gmail, Steam families, FEEDS, System Stats and the optional system-audio OSD (You'll need to configure these to your liking! Geolocation is kinda shit.)
     - **Accessibility** - Join my crippled ass with these features! Background brightness dimming and pixel shifting because maybe you're feeling kinda weird or something.
     - **Presets** - Preset system to get going fast with an auto-saving custom preset for your personalization. 
     - **About** – version, credits, SST/JSON-based settings Import/Export, emergency defaults button and preset import/export.
     
 - **Interaction Mode & Interaction Gating**
-  - Optional "Interaction" mode: mouse movement/clicks no longer exit; only keyboard, context menu or reddit links exit.
-  - Ctrl‑driven halo to interact with overlays (e.g. media controls, Reddit links) while the screensaver stays active.
+  - Optional "Interaction" mode: ordinary mouse movement/clicks no longer exit; explicit external-link actions can hand off to the desktop and exit cleanly.
+  - Ctrl‑driven halo to interact with overlays (e.g. media controls and admitted Reddit/Gmail/FEEDS/Steam actions) while the screensaver stays active.
 
-  Why? Because you can actually click those reddit links! You can actually control Spotify through its controls in the widget! I never clicked the clock or weather though, you probably shouldn't     try it.
+  Why? Because you can actually click the things that are meant to be clicked: Reddit/Gmail/FEEDS/Steam links and media controls. I never clicked the clock or weather though, you probably shouldn't try it.
 
-  Cntrl holding gives you a temporary interaction mode that makes you able to move/see/click the mouse without exiting (but if you click a reddit link we're going to exit and take you to the         comments so you can join everyone else in not reading the article/source)  
+  Ctrl holding gives you a temporary interaction mode that lets you move/see/click the mouse without exiting. An admitted external-link action can then hand off to the desktop and close the saver normally.  
 
-  Interaction Mode on the other hand makes nothing except ESC/RightClick/Reddit links close the screensaver. (This is replicated in the SRPSS_MC release version)
+  Interaction Mode on the other hand keeps ordinary pointer interaction inside the saver; `Esc`/`Q`, the context menu and explicit external-link handoff remain exit paths. (This is replicated in the SRPSS_MC release version)
   While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
 
   MC/Media Center Builds are designed for Interaction Mode especially. These come with it turned on and run in the background with minimal resource usage.
@@ -114,7 +116,7 @@ Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:
 - **Ctrl Halo interaction**
   - Hold `Ctrl` to show a halo/cursor proxy over the active display.
   - While Ctrl/halo is active, mouse clicks can interact with overlay widgets
-    (e.g. media controls, Reddit links) without immediately exiting.
+    (e.g. media controls and admitted Reddit/Gmail/FEEDS/Steam actions) without immediately exiting.
   - Right Click while holding Ctrl and a glorious context menu is born.
 
 ---

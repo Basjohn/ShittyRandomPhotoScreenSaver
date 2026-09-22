@@ -4,18 +4,17 @@
 
 ## Active work
 
-The operator has activated the transition backlog. `Current_Plan.md` and `Docs/Future_Work/Transition_Expansion.md` own ambition-first implementation and acceptance; the remaining Visualizer/UI ideas stay dormant.
+The operator has active work in both FEEDS and transition expansion. `Current_Plan.md` owns sequencing; `Docs/Future_Work/Feeds.md` owns the remaining Custom 1 closure, multi-CUSTOM and NEWS/torrent gates, while `Docs/Future_Work/Transition_Expansion.md` owns transition-specific acceptance. The remaining Visualizer/UI ideas stay dormant.
 
-See `Current_Plan.md`. Games You Follow and the system-audio OSD are implemented products, not backlog items; consult their references only when a concrete defect or extension is requested.
+Games You Follow and the system-audio OSD are implemented products, not backlog items; consult their references only when a concrete defect or extension is requested.
 
 ## Dormant product/effect options (not permission to implement automatically)
 
 - [ ] **Deformable Blob Sphere and other 3D Visualizers**: own distinct mode/renderer lifecycle; do not mutate the accepted Voxel Sphere or Bubble reaction contract.
-- [ ] **CUSTOM Visualizer quarter-turn:** keep separate until explicitly requested; preserve per-mode authored/preset authority and native golden proof.
 - [ ] **Settings FlowContainer polish:** only for a demonstrated layout problem, not speculative restructuring.
 
-## Active-work / checkpoint gate
+## Activation gate
 
 - [ ] Before activating an item, trace current owner and actual production seams; add or update a focused **live checklist** for architecturally substantial work. Do not keep chronology or duplicate the current queue here.
 - [ ] New transitions use **one canonical integration from day one**: cheap catalog entry plus lazily resolved self-contained implementation, shared Settings/default authority, dormancy and deterministic removal proof. Isolation refers to effect-specific resources, not a duplicate preview/runtime/Settings stack or a mandatory permanent 'experimental' quarantine. See `Future_Work.md`.
-- [ ] Preserve Qt Quick/Bubble/Visualizer goldens, natural owner cardinality, retained Edit identity, event-owned dormancy, non-expiring last-good caches, no Settings I/O in gestures and measured performance neutrality. Put checkpoint-only orientation inside `.godzip/` and give cumulative test commands in chat.
+- [ ] Preserve Qt Quick/Bubble/Visualizer goldens, natural owner cardinality, retained Edit identity, event-owned dormancy, non-expiring last-good caches, no Settings I/O in gestures and measured performance neutrality. Put handoff-only orientation inside `.godzip/` and give cumulative test commands in chat.
