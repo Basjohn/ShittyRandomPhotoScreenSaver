@@ -54,12 +54,18 @@ The independent fragment and particle minimum-energy settings are implemented wi
 
 Transition terminalization, Visualizer owner retirement and shared Core Audio callback retirement are accepted current contracts guarded by source/tests and `Docs/Guardrails.md`; they are not active-plan tasks unless a concrete regression reopens them.
 
-## Runtime audit 2026-09-22 | operator admission pending
+## Runtime audit 2026-09-22 | Wave B admitted
 
-`Docs/Future_Work/Runtime_Audit/00_Index.md` holds the prioritized, source-cited candidate register and its historical-bug cross-audit. Nothing in it is admitted work until promoted here. P1 candidates: TX-01 (3D transition first-frame render-thread geometry), TX-02 (Random rotation overwrites authored Slide/Wipe direction and rewrites Settings every rotation), LC-06 (canonical defaults rebuilt per call on context-menu/rotation/construction paths), PR-01 (per-publication visualizer presentation property churn), PW-02 (Media truth/commands share the FIFO IO pool with network work).
+`Docs/Future_Work/Runtime_Audit/00_Index.md` holds the prioritized, source-cited candidate register, its per-item acceptance bars and the historical-bug cross-audit. The operator admitted Wave A (zero-behaviour hygiene, landed) and Wave B in the index order. Waves C/D stay candidates until promoted here.
 
-- [ ] Operator: decide TX-02 direction semantics — should Random mode honour an explicitly authored fixed Slide/Wipe direction?
-- [ ] Operator: admit or reorder Wave A (zero-behaviour hygiene) and Wave B (measured wins).
+- [ ] TX-02 — stop Random rotation writing Settings (carry the choice in the batch spec, anti-repeat in memory) while keeping today's visible Random-mode direction behaviour.
+- [ ] Operator: decide TX-02 direction semantics — should Random mode honour an explicitly authored fixed Slide/Wipe direction? (The persistence fix above does not depend on the answer.)
+- [ ] LC-06 — canonical defaults memoized per profile; callers keep private copies.
+- [ ] TX-01 — 3D transition first-frame geometry off the render-thread critical path.
+- [ ] PR-01 — no-op visualizer presentation writes skipped; `request_present()` stays once per publication.
+- [ ] PR-03 — background telemetry off the per-frame dataclass `replace()` path.
+- [ ] PW-01 — timeline-only Media edges narrow their query scope (refresh count unchanged).
+- [ ] VZ-01 — paused waveform samples synthesized on demand; waveform generation still advances every tick.
 - [ ] When the pending R-84 3–5-cycle Settings churn run happens, also classify LC-01 from its `[PERF][GC_POLICY] generation=2` lines (no separate run).
 - [ ] Operator: supply the log lines behind "2 QImage tasks per context-menu open" (LC-05).
 

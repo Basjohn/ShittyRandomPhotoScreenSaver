@@ -102,30 +102,6 @@ generation warms. No `gc.collect()`, no threshold tuning (Performance contract �
 
 ---
 
-## LC-02 — Caller-dead multi-display transition sync with a GUI-thread sleep loop · P2 · R1 · Risk Low
-
-`DisplayManager.enable_transition_sync`, `_on_display_transition_ready` and `wait_for_all_displays_ready`
-(`engine/display_manager.py:4495-4577`) have no production caller (only `tests/test_multidisplay_sync.py`). The wait
-spins with `time.sleep(0.001)` for up to 1 s on the GUI thread — a forbidden "GUI sleep" pattern kept alive only by a
-test. `utils/lockfree/{spsc_queue,triple_buffer}.py` have no other production user.
-
-- [ ] Remove the three methods, the `_transition_ready_queue`/`_sync_enabled` fields, the SPSC import and
-      `utils/lockfree` (after a repo-wide caller check), and the museum test, in one commit with startup/import
-      closure (R-77).
-
----
-
-## LC-03 — Caller-dead engine app-shared `AnimationManager` · P3 · R1 · Risk Low
-
-`ScreensaverEngine` constructs and registers an app-shared `AnimationManager` (`engine/screensaver_engine.py:436-442`)
-that no production code reads (`AnimationManager.get_app_shared` has no production caller; Settings creates its own
-per dialog, `engine_handlers.py:423`). It is QWidget-era residue from the era when transitions and the visualizer
-shared it (R-27).
-
-- [ ] Remove construction/registration/cleanup (`engine_lifecycle.py:621-626`) with caller proof and tests.
-
----
-
 ## LC-04 — Recurring-timer gap oracle ignores rebase/restart and names retired owners · P3 · R1 · Risk Low
 
 **Evidence.** `ThreadManager.schedule_recurring` keeps `_last_invoke_ts` in the wrapper closure

@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from types import SimpleNamespace
 from typing import List, Optional
-import os
 import threading
 import time
 
@@ -129,13 +128,6 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_last_raw_treble",
     "_prev_raw_bass",
 )
-
-try:
-    _DEBUG_CONST_BARS = float(os.environ.get("SRPSS_SPOTIFY_VIS_DEBUG_CONST", "0.0"))
-except Exception as e:
-    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-    _DEBUG_CONST_BARS = 0.0
-
 
 class VisualizerMode(Enum):
     """Visualization display modes for the Spotify visualizer."""

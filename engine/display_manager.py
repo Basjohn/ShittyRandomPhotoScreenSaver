@@ -63,7 +63,6 @@ from rendering.quick.transitions.request_resolution import (
     ResolvedQuickTransitionSpec,
     resolve_quick_transition_spec,
 )
-from utils.lockfree.spsc_queue import SPSCQueue
 
 logger = get_logger(__name__)
 REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
@@ -223,9 +222,6 @@ class DisplayManager(QObject):
         self._startup_reveal_emitted = False
         self._quick_startup_reveal: QuickStartupRevealCoordinator | None = None
         
-        # Multi-display transition synchronization (lock-free)
-        self._transition_ready_queue: Optional[SPSCQueue] = None
-        self._sync_enabled = False
         self._transition_work_pending = False
         self._quick_transition_batch_spec: ResolvedQuickTransitionSpec | None = None
         self._quick_transition_spec_resolved = False
@@ -4492,90 +4488,6 @@ class DisplayManager(QObject):
             return False
         return False
     
-    # --- Multi-display transition synchronization (lock-free) ---
-    
-    def enable_transition_sync(self, enabled: bool = True) -> None:
-        """
-        Enable synchronized transitions across displays using lock-free SPSC queue.
-        
-        Args:
-            enabled: True to enable sync, False to disable
-        """
-        self._sync_enabled = enabled
-        if enabled and len(self.displays) > 1:
-            # Create SPSC queue for transition ready signals (capacity 20 pending signals)
-            self._transition_ready_queue = SPSCQueue(capacity=20)
-            logger.info(f"[SYNC] Multi-display transition synchronization enabled for {len(self.displays)} displays")
-        else:
-            self._transition_ready_queue = None
-            if enabled:
-                logger.debug("[SYNC] Sync requested but only 1 display, disabling")
-            else:
-                logger.debug("[SYNC] Multi-display transition synchronization disabled")
-    
-    def _on_display_transition_ready(self, display_index: int) -> None:
-        """
-        Called when a display's transition overlay is ready.
-        
-        Producer method for SPSC queue (called from display widgets).
-        
-        Args:
-            display_index: Index of display that's ready
-        """
-        if self._transition_ready_queue is not None:
-            success = self._transition_ready_queue.try_push(display_index)
-            if success:
-                logger.debug(f"[SYNC] Display {display_index} transition ready signal queued")
-            else:
-                logger.warning(f"[SYNC] Failed to queue ready signal for display {display_index} (queue full)")
-    
-    def wait_for_all_displays_ready(self, timeout_sec: float = 1.0) -> bool:
-        """
-        Wait for all displays to signal transition ready (consumer method).
-        
-        Uses lock-free SPSC queue to collect ready signals from each display.
-        Returns early if all displays signal ready before timeout.
-        
-        Args:
-            timeout_sec: Maximum time to wait in seconds
-        
-        Returns:
-            True if all displays ready, False if timeout or sync disabled
-        """
-        if not self._sync_enabled or self._transition_ready_queue is None:
-            return True  # Sync disabled, proceed immediately
-        
-        if len(self.displays) <= 1:
-            return True  # Single display, no sync needed
-        
-        expected_count = len(self.displays)
-        ready_set: Set[int] = set()
-        start_time = time.time()
-        
-        logger.debug(f"[SYNC] Waiting for {expected_count} displays to be ready (timeout={timeout_sec:.2f}s)")
-        
-        while len(ready_set) < expected_count:
-            # Try to pop ready signal from queue
-            success, display_idx = self._transition_ready_queue.try_pop()
-            
-            if success and display_idx is not None:
-                ready_set.add(display_idx)
-                logger.debug(f"[SYNC] Display {display_idx} ready ({len(ready_set)}/{expected_count})")
-            else:
-                # Queue empty, check timeout
-                elapsed = time.time() - start_time
-                if elapsed > timeout_sec:
-                    logger.warning(f"[SYNC] Timeout waiting for displays: {len(ready_set)}/{expected_count} ready after {elapsed:.2f}s")
-                    return False
-                
-                # Do not pump arbitrary Qt events here; synchronized transition
-                # readiness must not become a UI-pressure escape hatch.
-                time.sleep(0.001)
-        
-        elapsed_ms = (time.time() - start_time) * 1000
-        logger.info(f"[SYNC] All {expected_count} displays ready in {elapsed_ms:.1f}ms")
-        return True
-    
     def cleanup(self) -> None:
         """Retire every display generation through its authoritative owner."""
         self._cancel_quick_startup_reveal()
@@ -4677,7 +4589,6 @@ class DisplayManager(QObject):
         self._monitor_resume_revalidation_pending = False
         self._transition_work_pending = False
         self._reset_quick_transition_batch()
-        self._transition_ready_queue = None
         self._display_image_accounting_by_id.clear()
         self._publish_display_image_accounting()
         self._image_accounting_publisher_ref = None

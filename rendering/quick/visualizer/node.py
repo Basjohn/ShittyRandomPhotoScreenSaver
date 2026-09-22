@@ -26,6 +26,7 @@ from .clip_host import (
 )
 from .render_contract import VisualizerModeTraceContext, snapshot_is_render_admissible
 from .render_host import QuickVisualizerRenderHost
+from ..render_failure_log import RenderFailureLog
 from .telemetry import VisualizerRenderNodeTelemetry
 
 
@@ -69,6 +70,7 @@ class VisualizerRenderNode(QSGRenderNode):
         self._released = False
         self._screen_index = -1
         self._frame_trace = current_frame_trace()
+        self._failure_log = RenderFailureLog(logger, "Visualizer render node")
 
     @property
     def identity(self) -> VisualizerRenderIdentity | None:
@@ -366,6 +368,8 @@ class VisualizerRenderNode(QSGRenderNode):
                 logical_revision=snapshot.logical_revision,
                 logical_timestamp=snapshot.logical.logical_timestamp,
             )
+            if self._failure_log.failing:
+                self._failure_log.note_success()
             trace = self._frame_trace
             if trace is not None:
                 trace.record(
@@ -385,8 +389,9 @@ class VisualizerRenderNode(QSGRenderNode):
                 if mode_trace is not None:
                     mode_trace.flush()
         except Exception as exc:
-            self._telemetry.note_error(f"{type(exc).__name__}: {exc}")
-            logger.exception("[QUICK] Visualizer render node failed: %s", exc)
+            signature = f"{type(exc).__name__}: {exc}"
+            self._telemetry.note_error(signature)
+            self._failure_log.note_failure(signature, exc)
 
     def releaseResources(self) -> None:
         """Retire node-owned state on Qt Quick's render/context owner."""

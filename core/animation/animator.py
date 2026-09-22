@@ -13,7 +13,6 @@ even when timer callbacks are delayed.
 """
 import time
 import uuid
-import threading
 from typing import Any, Dict, Optional, Callable, TYPE_CHECKING
 from PySide6.QtCore import QObject, QTimer, Signal, Qt, QThread
 from core.animation.types import (
@@ -294,45 +293,6 @@ class AnimationManager(QObject):
     animation_completed = Signal(str)  # animation_id
     animation_cancelled = Signal(str)  # animation_id
 
-    _app_shared_manager: Optional["AnimationManager"] = None
-    _app_shared_lock = threading.RLock()
-
-    @classmethod
-    def set_app_shared(cls, manager: Optional["AnimationManager"]) -> Optional["AnimationManager"]:
-        """Register the app-shared AnimationManager used by runtime leaf paths."""
-        with cls._app_shared_lock:
-            cls._app_shared_manager = manager
-            return cls._app_shared_manager
-
-    @classmethod
-    def get_app_shared(cls) -> Optional["AnimationManager"]:
-        """Return the currently registered app-shared AnimationManager, if any."""
-        with cls._app_shared_lock:
-            manager = cls._app_shared_manager
-            if manager is not None and getattr(manager, "_shutdown", False):
-                cls._app_shared_manager = None
-                return None
-            return manager
-
-    @classmethod
-    def get_or_create_app_shared(
-        cls,
-        *,
-        fps: int = 60,
-        resource_manager: Optional["ResourceManager"] = None,
-    ) -> "AnimationManager":
-        """Return the app-shared AnimationManager, creating one if necessary."""
-        with cls._app_shared_lock:
-            manager = cls._app_shared_manager
-            if manager is None or getattr(manager, "_shutdown", False):
-                manager = cls(
-                    fps=fps,
-                    resource_manager=resource_manager,
-                    owner="engine:app_shared",
-                )
-                cls._app_shared_manager = manager
-            return manager
-    
     def __init__(
         self,
         fps: int = 60,
@@ -486,10 +446,6 @@ class AnimationManager(QObject):
                 self._timer.deleteLater()
             except RuntimeError:
                 pass
-
-        with self._app_shared_lock:
-            if self._app_shared_manager is self:
-                self._app_shared_manager = None
         
         logger.info("AnimationManager cleanup complete")
 

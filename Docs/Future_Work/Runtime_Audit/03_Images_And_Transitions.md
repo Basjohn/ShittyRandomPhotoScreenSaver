@@ -113,17 +113,6 @@ auto-rewrite them. Note it in release notes instead.
 
 ---
 
-## TX-03 — Stale stagger rationale and constant drift · P3 · R1 · Risk Low
-
-`image_pipeline.py:1483-1485` says "Stagger transition starts by 100ms per display to avoid simultaneous transition
-completions which cause 100+ms UI blocks"; the constant is `TRANSITION_STAGGER_MS = 200` (`core/constants/timing.py:60`)
-and the "UI block" rationale is QWidget-era. The stagger is now authored visible behaviour, so keep it; fix the
-comment and, only if the operator wants simultaneous starts, treat that as a product change with its own review.
-
-- [ ] Comment corrected (docs-only change).
-
----
-
 ## Cross-reference
 
 - PR-04 (transition-end native re-copy/re-upload) lives in 01 because its owner is the retained background node.

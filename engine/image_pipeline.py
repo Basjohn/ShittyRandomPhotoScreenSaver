@@ -1480,8 +1480,8 @@ def load_and_display_image_async(
                         setter(False, screen_index=descriptor.screen_index)
             displayed_paths = []
 
-            # PERF: Stagger transition starts by 100ms per display to avoid
-            # simultaneous transition completions which cause 100+ms UI blocks.
+            # Authored multi-display desync: each further display starts its
+            # transition TRANSITION_STAGGER_MS after the previous one.
             stagger_ms = TRANSITION_STAGGER_MS
             for i, descriptor in enumerate(processing_targets):
                 if i not in processed:

@@ -20,7 +20,6 @@ item) · **Blocked** (needs operator/architecture decision before any work).
 | PW-06 | non-daemon persistent heartbeat thread | R-30: an owned timer/loop kept Python alive after exit | must never keep the process alive; daemon semantics unless join is proven on every exit path |
 | LC-01 | dedicated GC soak | R-84: "last handle-discovery run"; no more discovery soaks | evidence read from the already-requested R-84 3–5-cycle Settings run |
 | TX-02 | repair clobbered Slide/Wipe directions in existing profiles | R-33 / Defaults dedup: never rewrite installed profiles implicitly | stop the writes; no automatic profile repair; release-note only |
-| LC-02 | delete the sync methods | R-77: file/method deadness must be proven as a caller transaction | remove methods + fields + imports + `utils/lockfree` + test in one commit with import-closure proof |
 | TX-01 | global geometry cache | R-51: shared GL handles gave two contexts one deletion identity | precompute **CPU bytes** only; VAO/VBO stay per render context |
 
 ## Item-by-item verdicts
@@ -37,9 +36,7 @@ item) · **Blocked** (needs operator/architecture decision before any work).
 | PR-03 | R-87 retained pixel oracles | diagnostic oracle drift | Safe: snapshot schema and pixel-capture paths unchanged |
 | PR-02 | R-63, R-07, R-27 | reveal regression; black flash; added UI work | Safe with constraints (above); it removes UI work |
 | PR-04 | R-60, R-50, R-52, R-63, CHK21 | texture identity rekey; retained pins; shared-memory lifetime; black flash; losing native steady ownership | Evidence first; any repair keeps one DPR owner, byte budgets, owner-context release and native steady presentation |
-| VZ-02 | R-47, env-flag policy | diagnostic code on the frame path breaking pushes | Safe: deletion only |
 | LC-01 | R-53, R-71, R-84 | forced collection; threshold tuning; extra soak | Safe with constraints: no `gc.collect`, no thresholds; evidence from R-84 run |
-| LC-02 | R-77, R-27 | independent deletion breaking imports | Safe with constraints (transaction removal) |
 | PW-05 | R-65, R-27, R-30 | generation-less delayed claims; rescue timers; timer ownership at exit | Safe: moves timers *into* the generation-owned registry |
 | VZ-05 | R-22, A-06, R-71 | cross-activation bleed; shared mutable snapshot | Safe with constraints: epoch reset inside the activation transaction; immutable reuse only; poison tests |
 | VZ-03 | R-72, instrumentation opt-in rule | tooling in production | Safe |
@@ -47,14 +44,12 @@ item) · **Blocked** (needs operator/architecture decision before any work).
 | PW-03 | R-84, R-88 | notify changes making Edit role arrays depend on moving values | Safe with constraints: `customEditableChildRoles` stays independent of the new signals |
 | PW-04 | R-88 | delegate identity churn | Safe: it reduces delegate churn |
 | PW-06 | R-30, R-84 | exit hang; handle churn | Safe with constraints (above) |
-| PR-06 | R-47 | logging code raising on the frame path | Safe with constraints: the rate limiter must not raise; `note_error` unchanged |
 | PR-07 | R-07, import dormancy | startup reveal ordering; eager family imports | Safe: compile still completes before the owning window is shown |
-| LC-03 | R-30, R-27, R-77 | timer ownership at exit | Safe: removes an idle owner |
 | LC-04 | R-80, R-87 | rolling-history contamination | Safe: resets epochs; diagnostics only |
 | LC-05 | R-84, R-24, U-05 | menu rebuild tails; broad invalidation; focus/Ctrl-halo | Safe with constraints: single-menu enforcement and focus/Ctrl semantics unchanged |
 | PR-05 | R-87 CHK5/CHK10, Compositor_Architecture §6 | second custom-render primitive; composite pass | **Blocked**: operator architecture decision |
 | ST-01 / ST-02 | R-26, U-09, R-79, R-85, R-53, R-88, R-23 | routing/topology/Edit behaviour drift during refactor | Safe only as move-only extractions with existing tests unchanged |
-| DC-01..04 | Documentation_Maintenance | deleting a product requirement to match a bug | Safe: DC-01 is a superseded design; DC-04 fixes source, not the guardrail |
+| DC-03..04 | Documentation_Maintenance | deleting a product requirement to match a bug | Safe: DC-03 goes with LC-04; DC-04 fixes source, not the guardrail |
 
 ## Historical classes checked with no audit item touching them
 

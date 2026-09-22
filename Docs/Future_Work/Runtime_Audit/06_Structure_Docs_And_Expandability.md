@@ -45,31 +45,13 @@ retained-scene tests as the gate. Two small, concrete hygiene items found while 
 
 ## Documentation / source contradictions
 
-### DC-01 — `Spec.md` still describes Melt as a ray-intersected 3D volume · P2 · R1 · Risk Low
-
-`Spec.md:453`: "Melt ray-intersects a bounded implicit 3D liquid volume with advected source imagery and gravity
-drops." Source (`rendering/gl_programs/melt_drip_program.py:1-10`), `Docs/Reference/Transitions.md:15, 24` and
-`Current_Plan.md` all say the ray-marched volume was rejected and replaced by a screen-space cohesive liquid front.
-
-- [ ] Rewrite the Spec sentence to match Transitions.md (superseded design → rewrite cleanly).
-
-### DC-02 — R-88 "live follow-up routing" points to a `Current_Plan.md` section that no longer exists · P2 · R1
-
-`Docs/Historical_Bugs/R-88_…md` routes "bounded wider churn audit" to `Current_Plan.md` section A; the plan has no
-such section, so the churn audit had no owner. This audit now covers it (PW-03 notify granularity, PW-04 Feed model
-reset, PR-01 visualizer property churn, ST-02 hygiene).
-
-- [ ] Point the R-88 line in `Docs/Historical_Bugs.md` / `Docs/Historical_Bugs/README.md` (navigation only, not the
-      frozen body) at this folder.
-
 ### DC-03 — Comments/docstrings naming retired owners · P3 · R1
 
-- `core/threading/manager.py:319-343` (visualizer hands cadence to AnimationManager), `:301-315` (`MediaWidget`), and
-  `get_frame_delivery_snapshot` docstring (`:1035-1042`, "the compositor … on every paint").
-- `engine/display_manager.py:4516-4524` ("called from display widgets") — removed with LC-02.
-- `engine/image_pipeline.py:1483-1485` ("100ms per display"; the constant is 200 ms) — TX-03.
+- `core/threading/manager.py` gap classifier docstring (visualizer hands cadence to AnimationManager) and its
+  `MediaWidget` context branch; `get_frame_delivery_snapshot` ("the compositor … on every paint") now has test callers
+  only.
 
-- [ ] Fix with the owning change (LC-02, LC-04, TX-03); no separate doc tranche.
+- [ ] Fix with LC-04 (same owner); no separate doc tranche.
 
 ### DC-04 — Guardrail vs source conflict (tracked where it is fixed)
 
