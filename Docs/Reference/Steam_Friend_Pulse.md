@@ -34,6 +34,8 @@ The semantic Edit roles are stable while the authored card baseline, roster, nam
 
 The shared outer card and branded header retain their existing directional shadows. Each visible row/grid surface and avatar has a light static contact shadow with the same signed global card-shadow direction and theme color, gated by the existing card-shadow enablement; it does not alter row/avatar geometry or the existing avatar desaturation mask. Names and other `ShadowedText` labels use the already-projected signed text-shadow offsets and the separate global text-shadow enablement. These shallow inner contact shadows are not independently blurred, animated, persisted or painted by a new image-effect layer. The existing event-change glow remains separate and is not used as a permanent frame shadow.
 
+Clickable Friend Pulse actions keep semantic colour at rest and use the product-wide bright-white active-hover cue on the exact admitted target: friend avatar border/name for the friend action and game text for the game action. Pinned/favourite state remains semantic persistent state and must not be conflated with hover. Hover is input/paint only and performs no source/avatar work.
+
 The source/cache/runtime path is cache-first, uses existing Steam locks/request coordination/backoff/redaction, and has
 one Friend Pulse owner per runtime generation shared by every display. A coherent successful FriendList/PlayerSummaries
 cache has **no age-expiry semantics**: freshness decides whether refresh is due and whether presentation is marked

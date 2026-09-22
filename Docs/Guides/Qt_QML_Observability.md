@@ -178,7 +178,7 @@ Permanent coverage should prove:
 - capture remains independent of ordinary logger queue state;
 - a real `QQmlEngine` warning reaches the sidecar through Qt's actual message-handler path (`tests/test_qt_message_capture_qml_runtime.py`).
 
-The fake-handler contract tests are GREEN in the handoff environment. The real-QML probe requires PySide6 and is **AWAITING TEST VALIDATION** in the Windows/runtime environment. Physical/frozen acceptance still matters because even a real local `QQmlEngine` probe cannot prove every scene-graph/driver path.
+The fake-handler tests exercise callback ownership without requiring a live QML engine. The real-QML probe requires PySide6 and must be run in a compatible Windows/runtime environment whenever this capture path changes. Physical/frozen acceptance remains separate because even a local `QQmlEngine` probe cannot prove every scene-graph/driver path.
 
 ## Native presentation-mode diagnosis (PresentMon / ETW) — ephemeral only
 

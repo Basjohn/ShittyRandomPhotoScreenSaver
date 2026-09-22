@@ -1,16 +1,16 @@
 # Transition expansion | visual rework
 
-Operator request: implement the transitions in `Future_Work.md`, most ambitious first, emphasizing real 3D and visual quality. Comparison HEAD: `25bf2c103b325b568139984bd84192167410d8dd`. Unrelated operator `.sst` edits are outside these checkpoints.
+This plan owns the still-open visual correction and acceptance work for the promoted transition expansion. `Docs/Reference/Transitions.md` owns implemented transition behavior; `Current_Plan.md` owns sequencing.
 
-## Latest operator direction
+## Current correction target
 
-The operator rejected Melt again because the detached spherical masses did not read as liquid, then rejected the first continuous 3D replacement because it stretched the photograph into giant directional slabs, especially horizontally. The current candidate removes both failure modes: one shallow screen-space liquid front owns coverage, attached fingers/rivulets deform only the narrow wet meniscus, and dry source pixels remain at original coordinates. Visual acceptance is open; do not restore detached bulb/capsule geometry or whole-image pseudo-volume distortion. Tendril Reveal was rejected and is now fully retired from the capability registry, defaults, Settings, runtime implementation and shaders; legacy persisted state is pruned by canonical transition normalization. Do not reintroduce it as a hidden or greyed capability.
+Two rejected Melt forms establish binding negative controls: detached spherical masses do not read as liquid, and full-image directional pseudo-volume distortion shreds the photograph. The current implementation removes both failure modes: one shallow screen-space liquid front owns coverage, attached fingers/rivulets deform only the narrow wet meniscus, and dry source pixels remain at original coordinates. Visual acceptance is open; do not restore detached bulb/capsule geometry or whole-image pseudo-volume distortion. Tendril Reveal was rejected and is now fully retired from the capability registry, defaults, Settings, runtime implementation and shaders; legacy persisted state is pruned by canonical transition normalization. Do not reintroduce it as a hidden or greyed capability.
 
 - [~] Crumble's separate crack-formation stage now propagates strokes on actual fracture borders while the source image stays still, before chunks and seam debris fall. Debris is now smaller and deterministically shape/size-varied rather than a repeated primitive. Retain solid thickness, bevels and rough sides; operator visual acceptance remains open.
 
-## Reopened after operator rejection
+## Corrective scope
 
-The operator rejected the appearance of Glass Shatter, Exploding Tiles, Ink Bloom, the now-retired Tendril Reveal, and Melt Drip at `dec139da`. Earlier rendering checks establish technical integration only; they do not establish aesthetic acceptance. Supplied screenshots show flat opaque shards and a soft stretched wipe. Source confirms planar glass, premature in-viewport shrink, weak tile impulse/thickness, and fullscreen mask-only organic effects. Pixel Accretion and Slide are outside this corrective slice.
+Earlier appearance testing rejected flat/opaque shard treatment, premature in-viewport shrink, weak tile depth/impulse and mask-like organic effects. Technical integration never substitutes for aesthetic acceptance. Tendril Reveal is retired; Pixel Accretion and Slide are outside this corrective slice.
 
 - [x] Glass: closed extruded fracture prisms with bevel normals, visible thickness under tumble, screen-space transmission/refraction, optional dispersion and sheen. Expose thickness, transparency, refraction, dispersion and sheen independently in canonical Settings. Replace shrink retirement with continuous trajectories carrying the entire solid beyond the viewport; preserve image continuity before release.
 - [x] Tiles: proportionate beveled solids, distinct front/side materials, strong out-of-plane tumble, explosive impulse and gravity. Expose thickness and force. Every tile must leave the frame geometrically; no premature shrink/fade substitute.
@@ -18,7 +18,7 @@ The operator rejected the appearance of Glass Shatter, Exploding Tiles, Ink Bloo
 - [~] Melt rework candidate: use one analytical cohesive screen-space meniscus with attached narrowing fingers/rivulets. Refraction, short gravity-aligned streaking, thickness response and wet highlights are confined to a narrow front band; dry source pixels remain undistorted. No ray-marched pseudo-volume, detached droplets or extra simulation clock. Direction remains authored; depth/gloss/detail retain their existing control authority. Settings deliberately shows `Melt Drip (WIP - VERY SHITTY)` while persistence/runtime identity remains `Melt Drip`. Operator visual acceptance remains open.
 - [x] Ink: swirling pigment, irregular wet lobes and a raised lit boundary with materially distinct interior; expose depth/gloss alongside detail. Avoid a generic feathered mask with a renamed identity.
 - [x] Validate production rendering with detailed image fixtures, inspected mid/late motion, near-endpoint continuity, authored material isolation, full-geometry departure, finite topology, resource retirement and inherited GL state. Update stale tests which explicitly blessed the rejected shrink mechanism.
-- [x] Checkpoint the validated material/geometry pass and reconciled references.
+- [x] Reconcile the validated material/geometry contract into the current transition reference and tests.
 - [ ] Awaiting operator acceptance after correction: actual-duration aesthetics, both displays and heavy-load freshness. Automated image differences are not aesthetic acceptance.
 
 All new material values resolve once through canonical defaults/UI/request admission. Renderers retain existing context resources and monotonic progress; no clocks, evolving CPU fluid simulations, parallel surfaces or fallback effects. Mesh geometry is static within a run; deformation/motion and Melt volume evaluation are analytical on the GPU. The existing mesh helper may support concrete shared needs only. Performance evidence must distinguish cold geometry/shaders from warm draws.
@@ -47,9 +47,8 @@ Feature-local: fracture topology and metadata, tile motion/material shaders, gro
 
 Depth clears must stay within the transition viewport and restore scissor state; the existing host restores depth/cull/program/VAO/buffer/texture state on success and failure. Resources retire on disable/context retirement using the existing legal owner. Per-run buffers may be reused only while their geometry key matches.
 
-## Resumable checkpoints
+## Current implementation and acceptance
 
-- [x] Trace current source and pin comparison HEAD; commit this decomposition before substantial implementation.
 - [x] Glass Shatter vertical slice: registry/default/Settings/request, lazy renderer and deterministic fracture. Appearance reopened above.
 - [x] Exploding Tiles and Pixel Accretion: bounded instancing, Settings/request integration, no per-frame mesh upload. Tile appearance reopened above.
 - [x] Slide Perspective Push: same identity, unchanged established styles, coverage and visual proof.
@@ -68,15 +67,12 @@ Real GL: render through `QuickTransitionRenderHost`, inspect a progression/conta
 
 Performance: bounded vertices/instances and static uploads; measure cold generation/initialization separately from warmed rendering at representative sizes. Use nonblocking GPU timing/readback only in test tools, never runtime. Heavy external-load and mixed-display physical acceptance remains open until actual evidence arrives; do not tune Visualizer cadence or reaction to compensate.
 
-## Current evidence and remaining work
+## Remaining acceptance
 
-The corrective pass has inspected artwork progressions and animated previews. Glass and Crumble share closed beveled fracture solids; material controls have driver-pixel discrimination. Crumble emits solid chips from parent polygon seams with matching release timing. Ink transports pigment across a raised mesh. Tendril's rejected implementation has been retired. Melt has now discarded both rejected rendering models. The current candidate uses one shallow analytical wet front with attached irregular fingers; optical distortion is local to that front so the source image stays readable elsewhere.
+The current material/geometry implementation has deterministic regression, Settings/default-authority and real-GL smoke coverage for its topology, bounded/static allocation, failed-cleanup retry, material round-trip, endpoint continuity and resource retirement. Re-run the affected focused gates after any transition code/settings change; do not preserve a stale aggregate pass count in this plan. Prior two-display smoke establishes lifecycle/rendering evidence only, not representative-load or perceptual acceptance.
 
-The combined focused gate passes 312 tests. Focused regression checks cover closed prism topology, bounded/static allocation, failed cleanup retry, material save/reopen/external update/Reset, exact/near endpoints and removal without a late cut. The combined Settings/GL tests use the shared QApplication fixture: allowing an earlier standalone QGuiApplication made later QWidget checks abort; that test setup defect was corrected. Defaults snapshot/SST authority audits pass. The material pass preserves operator settings/installer changes.
-
-- [x] Final closed-tile departure review and Quick smoke; all six corrected effects pass two generations, hide/show and resource retirement on the two connected physical displays.
-- [ ] Operator: accept/reject appearance and timing with actual photos at authored durations, including new optics and depth controls. Intermediate Melt rejection remains part of the rationale; no automatic check establishes aesthetic acceptance.
-- [ ] Operator: repeat with both displays connected and active music/representative heavy external load; compare Visualizer freshness, frame-spacing tails and transition first-use behavior. The current smoke exercised both MSI G321Q (~165 Hz) and LG TV (60 Hz), both at DPR 1.5. This establishes two-display lifecycle/rendering evidence, not representative-load or perceptual acceptance.
+- [ ] Operator: accept/reject appearance and timing with actual photos at authored durations, including new optics and depth controls. Rejected Melt forms remain negative controls; no automated check establishes aesthetic acceptance.
+- [ ] Operator: repeat with both displays connected and active music/representative heavy external load; compare Visualizer freshness, frame-spacing tails and transition first-use behavior.
 - [ ] Operator: verify the installed/frozen build including activation/Settings round-trip and repeated switch/interrupt/retire.
 
 Cold shader/geometry admission remains measurable work. Offscreen timing is not evidence of performance neutrality under representative load.

@@ -33,7 +33,7 @@ Performance/freshness changes are evidence-gated and symptom-driven. Treat the a
 
 ## Current feature-extension boundary
 
-FEEDS is an active implementation track with a landed Qt-free bounded RSS/Atom transport/parser/cache/projection foundation but no admitted widget runtime yet. Its durable architecture and staged product gates live in `Docs/Reference/Feeds.md` and `Docs/Future_Work/Feeds.md`; do not infer NEWS availability from the research candidate catalog.
+FEEDS is an active product family with one admitted retained widget, `feeds_custom_1`, on the shared bounded RSS/Atom transport/parser/cache/runtime path. Custom 2–4 and all NEWS identities remain dormant behind the expansion/provider gates in `Docs/Future_Work/Feeds.md`; the implemented contract lives in `Docs/Reference/Feeds.md`, and the research NEWS catalog is not product availability.
 
 Games You Follow and the opt-in master-volume/mute OSD are implemented ordinary retained Quick widgets. Their current source, cache, presentation and lifecycle requirements live in `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md`; they do not need a new presentation stack, Settings authority or implementation queue. `Current_Plan.md` contains only currently active work. New transitions instead enter the canonical transition registry/host with lazy, self-contained implementations rather than a second experimental runtime.
 
@@ -69,8 +69,7 @@ Uniform whole-card scaling remains the default normalization contract for new or
 benefit from presentation reflow may opt into the shared `content_extent` side-axis contract instead of inventing local
 resize persistence: side handles change a logical content box, corners/wheel keep one uniform outer transform, family
 policy may supply bounded logical side-drag floors, and Restore Size returns to separately retained authored geometry
-without changing CUSTOM X/Y/display or waking non-CUSTOM stacking. Current consumers include Friend Pulse, Reddit, Gmail,
-System Stats and Media. This is an extension of the same normalization/session architecture, not a second layout system.
+without changing CUSTOM X/Y/display or waking non-CUSTOM stacking. Admission is descriptor-owned per family; consult the current widget runtime descriptors rather than maintaining a fragile exhaustive consumer list here. FEEDS Custom 1 is one current two-axis consumer. This is an extension of the same normalization/session architecture, not a second layout system.
 
 Provider/runtime lifetime remains independent from pixels. Shared owners use real consumer cardinality; lazy Settings
 family bodies and retained presentation wrappers must invalidate queued UI work and clear retained QObject references

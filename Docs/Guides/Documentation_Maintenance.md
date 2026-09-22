@@ -24,14 +24,14 @@ Keep only the small routing authorities at `Docs/` root plus generated evidence 
 
 `Docs/Historical_Bugs/` is the repository's intentional historical documentation home. It has repeatedly prevented regressions because it records mechanisms, falsifiers and forbidden repairs. Preserve it.
 
-Do **not** maintain parallel `Fossils`, `audits`, retired decompositions, dated handoffs or closed investigation reports as another history system. When such a document closes:
+Do **not** create or route new live authority through parallel `Fossils`, `audits`, retired decompositions, dated handoffs or closed investigation reports. Existing legacy Fossils are historical material only and are not current guidance. When such a document closes:
 
 1. move any durable current invariant into the relevant Spec/Architecture/Guardrail/Guide/Reference document;
 2. move any important failed-method/root-cause lesson into an existing/new Historical Bug record;
 3. delete the superseded plan/report from the live documentation tree;
 4. rely on source control for the full chronological body.
 
-A closed implementation decomposition must not remain under `Docs/Future_Work/` merely because moving/deleting it is inconvenient. `Future_Work` means future work.
+A closed implementation decomposition must not remain under `Docs/Future_Work/` merely because moving/deleting it is inconvenient. `Future_Work` means future work. If a maintained Guide/Reference already contains the durable contract, delete any byte-identical or superseded Future Work copy rather than keeping two authorities.
 
 ## These are not changelogs
 

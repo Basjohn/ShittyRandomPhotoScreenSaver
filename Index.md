@@ -10,7 +10,7 @@ exact current source
 -> tests + physical evidence for the claim
 ```
 
-`Current_Plan.md` owns current work admission and sequence. `Spec.md` owns durable product/architecture. `Docs/Historical_Bugs/` is the only intentional historical-document collection; ordinary chronology and retired decompositions belong in source control rather than the live docs tree.
+`Current_Plan.md` owns current work admission and sequence. `Spec.md` owns durable product/architecture. `Docs/Historical_Bugs/` is the maintained historical authority; any legacy material elsewhere (including `Docs/Fossils/`) is non-authoritative and must not be routed as current guidance. Ordinary chronology and retired decompositions belong in source control rather than the live docs tree.
 
 ## Current product and regression references
 
@@ -55,7 +55,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | transitions and material surfaces | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
 | active transition expansion | `Docs/Future_Work/Transition_Expansion.md` |
-| active Feeds implementation/decomposition | `Docs/Future_Work/Feeds.md` |
+| active Feeds acceptance/expansion work | `Docs/Future_Work/Feeds.md` |
 | current FEEDS vertical-slice architecture (source/cache/artwork/header/CUSTOM) | `Docs/Reference/Feeds.md` |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
 | logging / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |
@@ -93,4 +93,4 @@ Any production change that touches Bubble reaction/timing requires active-music 
 
 ## Documentation hygiene
 
-Do not add another inventory/changelog/history layer. Closed decompositions are consolidated into current contracts or Historical Bugs and then deleted from the live docs tree. Persisted-input compatibility bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated — not a backlog); caller-dead residue is deleted outright, not tracked in a register. When paths move, update this router and all live cross-references in the same checkpoint.
+Do not add another inventory/changelog/history layer. Closed decompositions are consolidated into current contracts or Historical Bugs and then deleted from the live docs tree. Persisted-input compatibility bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated — not a backlog); caller-dead residue is deleted outright, not tracked in a register. When paths move, update this router and all live cross-references in the same change.

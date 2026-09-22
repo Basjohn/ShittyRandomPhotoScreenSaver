@@ -204,6 +204,8 @@ Do **not** disable unrelated appearance/content controls merely because the widg
 
 Steam families remain independently scoped. Editing Abandonment must not disable Achievement or Friend Pulse controls.
 
+For families such as FEEDS, alignment flip may be a widget-wide semantic orientation: header/content order and family rails mirror together in QML while image and text pixels themselves remain unmirrored. The persisted intent stays one family-level alignment state, not per-delegate geometry.
+
 ## 9. Reset / Save / Cancel semantics
 
 Keep existing transaction behavior:
@@ -215,7 +217,7 @@ Keep existing transaction behavior:
 - an interrupted child gesture must retire only transient pointer origins, never partially commit a second geometry authority;
 - deleting/reverting CUSTOM for a widget returns to the canonical authored Settings layout.
 
-A future snapped semantic header anchor is part of that same child role committed state and must therefore obey Save / Cancel / Restore Size / slots as one transaction.
+A snapped semantic header anchor is part of that same child-role committed state and therefore obeys Save / Cancel / Restore Size / slots as one transaction.
 
 ## 10. Runtime-performance admission gate
 
