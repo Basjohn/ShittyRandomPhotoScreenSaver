@@ -89,7 +89,7 @@ def test_asset_cache_writes_valid_image_with_injected_fetcher_and_prunes(
     assert asset.image_kind == "jpg"
 
     for idx in range(3):
-        (tmp_path / f"extra_{idx}.png").write_bytes(b"\x89PNG\r\n\x1a\nx")
+        (tmp_path / f"{idx:024x}.png").write_bytes(b"\x89PNG\r\n\x1a\nx")
     removed = prune_asset_cache(tmp_path, max_files=2)
     assert removed >= 2
 

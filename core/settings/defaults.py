@@ -44,6 +44,14 @@ PRESERVE_ON_RESET = frozenset({
     'widgets.weather.location',
     'widgets.weather.latitude',
     'widgets.weather.longitude',
+    'widgets.feeds_custom_1.feed_url',
+    'widgets.feeds_custom_1.name',
+    'widgets.feeds_custom_2.feed_url',
+    'widgets.feeds_custom_2.name',
+    'widgets.feeds_custom_3.feed_url',
+    'widgets.feeds_custom_3.name',
+    'widgets.feeds_custom_4.feed_url',
+    'widgets.feeds_custom_4.name',
     # Custom visualizer snapshots are user-authored state, never product defaults.
     'visualizer_custom_presets',
 })

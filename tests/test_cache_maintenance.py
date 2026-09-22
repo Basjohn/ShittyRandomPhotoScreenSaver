@@ -23,6 +23,7 @@ def test_cache_family_inventory_excludes_credentials_and_settings(tmp_path: Path
     assert [item.family_id for item in descriptors] == [
         "rss",
         "reddit",
+        "feeds",
         "weather",
         "gmail",
         "steam",
@@ -51,6 +52,7 @@ def test_clear_cache_families_removes_only_allowlisted_files(tmp_path: Path) -> 
         app_root / "cache" / "weather.json": b"weather-provider",
         app_root / "cache" / "weather_widget_last.json": b"weather-widget",
         app_root / "cache" / "gmail_cache.json": b"gmail",
+        app_root / "cache" / "feeds" / "feeds_custom_1_deadbeef.json": b"feed-last-good",
         app_root / "steam" / "cache" / "opaque-profile" / "owned_games.json": b"steam",
         app_root / "steam" / "cache" / "opaque-profile" / "art" / "header.png": b"art",
     }

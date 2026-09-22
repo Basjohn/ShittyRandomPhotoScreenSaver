@@ -33,6 +33,8 @@ Performance/freshness changes are evidence-gated and symptom-driven. Treat the a
 
 ## Current feature-extension boundary
 
+FEEDS is an active implementation track with a landed Qt-free bounded RSS/Atom transport/parser/cache/projection foundation but no admitted widget runtime yet. Its durable architecture and staged product gates live in `Docs/Reference/Feeds.md` and `Docs/Future_Work/Feeds.md`; do not infer NEWS availability from the research candidate catalog.
+
 Games You Follow and the opt-in master-volume/mute OSD are implemented ordinary retained Quick widgets. Their current source, cache, presentation and lifecycle requirements live in `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md`; they do not need a new presentation stack, Settings authority or implementation queue. `Current_Plan.md` contains only currently active work. New transitions instead enter the canonical transition registry/host with lazy, self-contained implementations rather than a second experimental runtime.
 
 ## Visualizer geometry

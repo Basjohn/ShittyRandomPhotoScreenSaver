@@ -286,7 +286,7 @@ OverlayWidget {
                     // The accepted Steam artwork interaction contract: the
                     // whole story is the link target, not just its image.
                     border.color: followedModel.accentColor
-                    border.width: followsRoot.scaleAwareStrokeWidth(1.0)
+                    border.width: followsRoot.scaleAwareStrokeWidth(1.25)
                     clip: true
                 }
                 HoverHandler {
@@ -298,7 +298,7 @@ OverlayWidget {
                 // Retain all eight story delegates, but do not acquire a Qt
                 // image for an invisible slot or a temporarily hidden rail.
                 readonly property bool showArt: tile.visible && storyGroup.visible
-                    && followedModel.showArtwork && storyArtwork.length > 0
+                    && followedModel.anyStoryArtwork
                     // Evaluate authored image/text room, never a raw pixel
                     // threshold against the outer scaled card rectangle.
                     && width >= 176.0 && height >= 84.0
@@ -316,6 +316,33 @@ OverlayWidget {
                         textW / 7.0, textW * 3.4 /
                         Math.max(1.0, Math.min(storyTitle.length,
                             followedModel.headlineChars))))))
+                // An image-optional generation reserves the same artwork rail
+                // for every tile. Missing art gets an intentional, restrained
+                // local surface, never a broken/empty image or changing text X.
+                Rectangle {
+                    objectName: "followedStoryArtworkFallback" + storySlot
+                    visible: tile.showArt
+                    x: tile.artX
+                    y: 8.0
+                    width: tile.artWidth
+                    height: Math.max(0.0, tile.height - 16.0)
+                    radius: 4.0
+                    color: followedModel.headerFillColor
+                    border.color: followedModel.headerBorderColor
+                    border.width: followsRoot.scaleAwareStrokeWidth(0.75)
+                    ShadowedText {
+                        anchors.centerIn: parent
+                        width: parent.width - 4.0
+                        text: "STEAM"
+                        textFormat: Text.PlainText
+                        color: followedModel.accentColor
+                        opacity: storyArtwork.length > 0 ? 0.0 : 0.48
+                        font.family: followedModel.fontFamily
+                        font.pixelSize: 9
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
                 ArtworkFadeImage {
                     objectName: "followedStoryArtwork" + storySlot
                     visible: tile.showArt
@@ -323,9 +350,23 @@ OverlayWidget {
                     y: 8.0
                     width: tile.artWidth
                     height: Math.max(0.0, tile.height - 16.0)
-                    source: tile.showArt ? storyArtwork : ""
+                    source: tile.showArt && storyArtwork.length > 0 ? storyArtwork : ""
                     fillMode: followedModel.artworkShape === "portrait"
                         ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+                }
+                // The image itself covers the fallback's original stroke; an
+                // independent semantic outline stays on top of both surfaces.
+                Rectangle {
+                    objectName: "followedStoryArtworkOutline" + storySlot
+                    visible: tile.showArt
+                    x: tile.artX
+                    y: 8.0
+                    width: tile.artWidth
+                    height: Math.max(0.0, tile.height - 16.0)
+                    radius: 4.0
+                    color: "transparent"
+                    border.color: followedModel.headerBorderColor
+                    border.width: followsRoot.scaleAwareStrokeWidth(0.9)
                 }
                 ShadowedText {
                     id: game
@@ -376,12 +417,118 @@ OverlayWidget {
                         ? Text.AlignHCenter : followedModel.headlineAlignment === "right"
                         ? Text.AlignRight : followsRoot.headerFlipped ? Text.AlignRight : Text.AlignLeft
                 }
+                // Pick the number actually visible in this tile, not the number
+                // persisted in the source. X/Y Edit geometry can therefore
+                // restore the preview when a three-image rail becomes too small.
+                // No refresh, new worker, or model re-publication on resize.
+                readonly property real inlineY: headline.y + headline.height + 2.0
+                readonly property real inlineH: Math.min(92.0,
+                    Math.max(0.0, tile.height - inlineY - 27.0))
+                readonly property real inlineGap: 5.0
+                readonly property int inlineAvailable: storyInlineArtwork1.length === 0 ? 0
+                    : storyInlineArtwork2.length === 0 ? 1
+                    : storyInlineArtwork3.length === 0 ? 2 : 3
+                // Two and three image rails consume the body area outright.
+                // A lone image must leave a readable text preview to its side.
+                readonly property int inlineCount: !tile.visible || tile.inlineH < 36.0 ? 0
+                    : tile.inlineAvailable >= 3 && tile.textW >= 3.0 * 76.0 + 2.0 * inlineGap ? 3
+                    : tile.inlineAvailable >= 2 && tile.textW >= 2.0 * 76.0 + inlineGap ? 2
+                    : tile.inlineAvailable >= 1 && tile.textW >= 76.0 + 110.0 + inlineGap ? 1 : 0
+                readonly property bool showInline: tile.inlineCount > 0
+                readonly property real inlineW: tile.inlineCount > 0 ? Math.max(0.0,
+                    Math.min(168.0, tile.inlineH * 1.85,
+                    (tile.textW - (tile.inlineCount === 1 ? 110.0 + inlineGap : 0.0)
+                        - inlineGap * (tile.inlineCount - 1)) / tile.inlineCount)) : 0.0
+                readonly property real inlineRailW: tile.inlineCount > 0
+                    ? tile.inlineW * tile.inlineCount + inlineGap * (tile.inlineCount - 1) : 0.0
+                readonly property real inlineX: followsRoot.headerFlipped
+                    ? tile.textX + tile.textW - tile.inlineRailW : tile.textX
+                Rectangle {
+                    objectName: "followedStoryInlineImageFrame1" + storySlot
+                    visible: tile.showInline
+                    x: tile.inlineX
+                    y: tile.inlineY
+                    width: tile.inlineW
+                    height: tile.inlineH
+                    radius: 3.0
+                    clip: true
+                    color: followedModel.headerFillColor
+                    Image {
+                        objectName: "followedStoryInlineImage1" + storySlot
+                        anchors.fill: parent
+                        source: parent.visible ? storyInlineArtwork1 : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: true
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: "transparent"
+                        border.color: followedModel.headerBorderColor
+                        border.width: followsRoot.scaleAwareStrokeWidth(0.9)
+                    }
+                }
+                Rectangle {
+                    objectName: "followedStoryInlineImageFrame2" + storySlot
+                    visible: tile.inlineCount >= 2
+                    x: tile.inlineX + tile.inlineW + tile.inlineGap
+                    y: tile.inlineY
+                    width: tile.inlineW
+                    height: tile.inlineH
+                    radius: 3.0
+                    clip: true
+                    color: followedModel.headerFillColor
+                    Image {
+                        objectName: "followedStoryInlineImage2" + storySlot
+                        anchors.fill: parent
+                        source: parent.visible ? storyInlineArtwork2 : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: true
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: "transparent"
+                        border.color: followedModel.headerBorderColor
+                        border.width: followsRoot.scaleAwareStrokeWidth(0.9)
+                    }
+                }
+                Rectangle {
+                    objectName: "followedStoryInlineImageFrame3" + storySlot
+                    visible: tile.inlineCount >= 3
+                    x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 2.0
+                    y: tile.inlineY
+                    width: tile.inlineW
+                    height: tile.inlineH
+                    radius: 3.0
+                    clip: true
+                    color: followedModel.headerFillColor
+                    Image {
+                        objectName: "followedStoryInlineImage3" + storySlot
+                        anchors.fill: parent
+                        source: parent.visible ? storyInlineArtwork3 : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: true
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: "transparent"
+                        border.color: followedModel.headerBorderColor
+                        border.width: followsRoot.scaleAwareStrokeWidth(0.9)
+                    }
+                }
                 ShadowedText {
                     objectName: "followedStoryPreview" + storySlot
                     visible: storyPreview.length > 0 && tile.height >= 108.0 && tile.textW >= 105.0
-                    x: tile.textX
-                    y: headline.y + headline.height + 2.0
-                    width: tile.textW
+                        && tile.inlineCount < 2
+                    x: tile.textX + (tile.inlineCount === 1 && !followsRoot.headerFlipped
+                        ? tile.inlineRailW + 6.0 : 0.0)
+                    y: tile.inlineY
+                    width: Math.max(0.0, tile.textW - (tile.inlineCount === 1 ? tile.inlineRailW + 6.0 : 0.0))
                     height: Math.max(0.0, tile.height - y - 27.0)
                     text: storyPreview
                     textFormat: Text.PlainText
@@ -428,7 +575,7 @@ OverlayWidget {
                     color: "transparent"
                     visible: tileHover.hovered && tile.canActivate
                     border.color: followedModel.primaryColor
-                    border.width: followsRoot.scaleAwareStrokeWidth(1.5)
+                    border.width: followsRoot.scaleAwareStrokeWidth(1.75)
                 }
                 TapHandler {
                     acceptedButtons: Qt.LeftButton

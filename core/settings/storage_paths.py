@@ -119,6 +119,13 @@ def get_rss_cache_dir(profile: Optional[str] = None) -> Path:
     return d
 
 
+def get_feed_cache_dir(profile: Optional[str] = None) -> Path:
+    """Return ``<app_data>/cache/feeds/`` for durable widget-feed snapshots."""
+    d = get_cache_dir(profile) / "feeds"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def get_weather_cache_file(profile: Optional[str] = None) -> Path:
     """Return ``<app_data>/cache/weather.json``."""
     return get_cache_dir(profile) / "weather.json"

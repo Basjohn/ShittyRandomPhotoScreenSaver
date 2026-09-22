@@ -27,6 +27,8 @@ from sources.rss.constants import (
 )
 from core.logging.logger import get_logger
 from core.constants import MIN_WALLPAPER_WIDTH, MIN_WALLPAPER_HEIGHT
+from core.feeds.transport import FeedHttpTransport, FeedTransportError
+from core.feeds.normalization import redacted_url_for_log
 from PySide6.QtGui import QImageReader
 
 logger = get_logger(__name__)
@@ -49,6 +51,14 @@ class RSSDownloader:
         self._stop_event = threading.Event()
         # Domain rate limiting: {domain: [timestamp, ...]}
         self._domain_requests: dict = {}
+        # Shared bounded transport fixes the historical feedparser.parse(url)
+        # seam, which had no application timeout or post-decompression size cap.
+        self._feed_transport = FeedHttpTransport(
+            connect_timeout=max(1.0, min(float(timeout), 4.0)),
+            read_timeout=float(timeout),
+            user_agent=self._user_agent(),
+            should_continue=self._should_continue,
+        )
 
     # ------------------------------------------------------------------
     # Shutdown awareness
@@ -139,11 +149,16 @@ class RSSDownloader:
             return None
 
         try:
-            feed = feedparser.parse(url, request_headers={"User-Agent": self._user_agent()})
+            response = self._feed_transport.fetch(url)
+            feed = feedparser.parse(response.payload)
             self._record_domain_request(url)
             return feed
-        except Exception as e:
-            logger.error(f"[RSS_DL] Failed to fetch RSS {url}: {e}")
+        except (FeedTransportError, ValueError) as e:
+            logger.error(
+                "[RSS_DL] Failed to fetch RSS %s: %s",
+                redacted_url_for_log(url),
+                type(e).__name__,
+            )
             return None
 
     def fetch_json(self, url: str) -> Optional[dict]:

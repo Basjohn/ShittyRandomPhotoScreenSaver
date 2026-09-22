@@ -17,6 +17,13 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from core.logging.logger import get_logger
+from core.steam.followed_app_metadata import FollowedAppMetadata, fetch_store_metadata, valid_game_name, FAILED_LOOKUP_RETRY_SECONDS
+from core.steam.followed_news_inline_artwork import (
+    news_inline_refs, validated_inline_ref, inline_image_url, prune_inline_image_cache,
+    MAX_INLINE_IMAGE_FETCHES_PER_REFRESH, MAX_INLINE_IMAGES_PER_STORY,
+)
+
 from core.steam.backend import build_endpoint, fetch_json
 from core.steam.cache import (
     SteamCacheRecord, cache_path_for_profile_key, get_steam_source_refresh_lock,
@@ -29,6 +36,8 @@ from core.steam.credentials import derive_profile_cache_key
 from core.steam.links import news_article_target
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 from core.steam.request_policy import SteamBackoffPolicy, SteamRequestCoordinator, SteamRequestKey
+
+logger = get_logger(__name__)
 
 CACHE_KEY = "games_you_follow_news"
 CACHE_PAYLOAD_VERSION = 1
@@ -66,6 +75,8 @@ class FollowedNewsStory:
     action_available: bool
     preview: str = ""
     game_name: str = ""
+    inline_image_refs: tuple[str, ...] = ()
+    article_url: str = ""  # Validated private source URL; never projected to QML.
 
 
 @dataclass(frozen=True)
@@ -79,6 +90,7 @@ class FollowedNewsSnapshot:
     from_cache: bool = False
     failure: str | None = None
     artwork_paths: tuple[str, ...] = ()  # Transient, validated local cache hits only.
+    inline_image_paths: tuple[tuple[str, ...], ...] = ()  # Local files, aligned to story identity.
     covered_count: int = 0  # Best-effort rolling coverage, never a claim of Steam personalized-feed parity.
     maintenance_pending: bool = False  # Second four-app slice of one post-coverage refresh session.
 
@@ -116,16 +128,40 @@ def _plain_preview(contents: object) -> str:
         return ""
     parser = _NewsText()
     try:
-        parser.feed(contents[:8192])
+        # Remove the *whole* Steam image macro including its path. Removing
+        # just {STEAM_CLAN_IMAGE} leaked /group/hash.png as visible preview.
+        from core.steam.followed_news_inline_artwork import _ABSOLUTE_CLAN_IMAGE, _CLAN_IMAGE, _STANDALONE_IMAGE
+        clean_contents = _ABSOLUTE_CLAN_IMAGE.sub(" ", _STANDALONE_IMAGE.sub(" ", _CLAN_IMAGE.sub(" ", contents[:8192])))
+        parser.feed(clean_contents)
         text = " ".join("".join(parser.parts).split())
         # Steam descriptions use BBCode as well as HTML and image macros.
         # Neither belongs in an ordinary plain-text news preview.
         text = re.sub(r"\{STEAM_[A-Z0-9_]+(?:\s+[^}]*)?\}", " ", text, flags=re.I)
         text = re.sub(r"\[/?[a-z][a-z0-9_]*(?:=[^]\r\n]{0,200})?\]", " ", text, flags=re.I)
         text = re.sub(r"(?:https?://|www\.)\S+", "", text, flags=re.I)
+        # Provider text can also contain an image path *without* its macro.
+        text = re.sub(r"(?<!\w)/?[1-9][0-9]{0,11}/[A-Za-z0-9_-]{8,128}(?:\.(?:png|jpe?g|webp))?(?:\?[^\s]{0,128})?(?:\.\.\.)?", " ", text, flags=re.I)
         return " ".join(c for c in html.unescape(text).split() if c.isprintable())[:320].strip()
     except (ValueError, AssertionError):
         return ""
+
+
+def _cached_preview_and_inline_refs(preview: str, refs: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
+    """Reconcile old *private* news rows with the current image/text contract.
+
+    Earlier records persisted Steam Clan image paths in `preview` without an
+    inline-image field. These records may survive for many rolling four-app
+    batches, so fresh-news normalization alone cannot repair the visible row.
+    Recover only allowlisted relative image identities, never provider URLs;
+    sanitize the previously accepted text in the same cache-read operation.
+    The next ordinary source commit then persists the repaired row without a
+    one-time migration, UI retry loop, or extra network owner.
+    """
+    recovered = news_inline_refs(preview)
+    if not recovered and not re.search(r"(?:\{STEAM_CLAN_IMAGE\}|/[1-9][0-9]{0,11}/)", preview, re.I):
+        return preview, refs
+    merged = tuple(dict.fromkeys((*refs, *recovered)))[:MAX_INLINE_IMAGES_PER_STORY]
+    return _plain_preview(preview), merged
 
 
 def _appid(value: object) -> bool:
@@ -234,12 +270,14 @@ def normalize_app_news(payload: Mapping[str, Any], appid: int) -> tuple[Followed
         ):
             return None
         seen.add(gid)
-        # An API-confirmed appid + decimal GID is the public Steam news identity.
-        # Provider URL can point to a community page or an external syndicated
-        # feed: never pass or launch it. The click route constructs a canonical,
-        # app-bound Steam news URL from these separately validated fields.
-        canonical = f"https://store.steampowered.com/news/app/{appid}/view/{gid}"
-        action = news_article_target(appid, gid, canonical) is not None
+        # The Steam news GID is NOT necessarily the URL's /view/ event ID.
+        # Keep only the exact, validated article URL from this app-bound API
+        # response. External or unrecognized links remain non-clickable.
+        target = news_article_target(appid, gid, row.get("url"))
+        # Every validated app news row can open its app-bound news index. A
+        # verified article URL takes precedence; missing/unsupported URLs never
+        # manufacture a purported article address or disable the whole tile.
+        action = True
         language = _news_language(row, title)
         # An explicit non-English record is NOT a separate selectable story.
         # Unsupported scripts are excluded rather than guessed as English.
@@ -247,7 +285,9 @@ def normalize_app_news(payload: Mapping[str, Any], appid: int) -> tuple[Followed
             continue
         clean_title = re.sub(r"\s*[\[(](?:english|en(?:-us|-gb)?)[\])]\s*$", "", title.strip(), flags=re.I).strip()
         normalized.append(FollowedNewsStory(appid, gid, clean_title or title.strip(), date,
-                                            feed.strip(), action, _plain_preview(row.get("contents"))))
+                                            feed.strip(), action, _plain_preview(row.get("contents")),
+                                            inline_image_refs=news_inline_refs(row.get("contents")),
+                                            article_url=target.browser_url if target else ""))
     return tuple(normalized)
 
 
@@ -277,16 +317,29 @@ def _snapshot_from_cache(path: Path, *, record: SteamResult | None = None) -> Fo
         appid, gid, title, date = row.get("appid"), row.get("gid"), row.get("title"), row.get("published_at")
         feed, action = row.get("feed_name"), row.get("action_available")
         preview, game_name = row.get("preview", ""), row.get("game_name", "")
+        refs = row.get("inline_image_refs", ())
+        article_url = row.get("article_url", "")
+        if type(article_url) is not str:
+            return None
+        target = news_article_target(appid, gid, article_url) if article_url else None
+        # An untrusted old URL cannot become a click target or erase the
+        # otherwise valid private last-good news record. Use the safe app hub.
+        if (not isinstance(refs, (list, tuple)) or len(refs) > MAX_INLINE_IMAGES_PER_STORY
+            or any(not validated_inline_ref(ref) for ref in refs) or len(set(refs)) != len(refs)):
+            return None
         if (not _appid(appid) or type(gid) is not str or not gid.isascii() or not gid.isdecimal()
             or not 1 <= len(gid) <= 32 or not _valid_title(title)
             or type(date) is not int or not 0 < date < 4_102_444_800
             or type(feed) is not str or len(feed) > 80 or type(action) is not bool
             or type(preview) is not str or len(preview) > 320 or not preview.isprintable()
-            or type(game_name) is not str or len(game_name) > 100 or not game_name.isprintable()
+            or type(game_name) is not str or len(game_name) > 160 or not game_name.isprintable()
             or (appid, gid) in seen or follow == 0):
             return None
         seen.add((appid, gid))
-        stories.append(FollowedNewsStory(appid, gid, title, date, feed, action, preview, game_name))
+        preview, normalized_refs = _cached_preview_and_inline_refs(preview, tuple(refs))
+        stories.append(FollowedNewsStory(appid, gid, title, date, feed,
+                                         True, preview, game_name,
+                                         normalized_refs, target.browser_url if target else ""))
     if result.fetched_at is None or not 0 < result.fetched_at <= time.time() + 60:
         return None
     return FollowedNewsSnapshot("available" if stories else "no_usable_news" if follow else "empty_follow_list",
@@ -371,6 +424,10 @@ def _cached_news_buckets(path: Path, followed: tuple[int, ...], *,
                 return {}
             gid, title, date = value.get("gid"), value.get("title"), value.get("published_at")
             feed, preview = value.get("feed_name"), value.get("preview", "")
+            refs = value.get("inline_image_refs", ())
+            if (not isinstance(refs, (tuple, list)) or len(refs) > MAX_INLINE_IMAGES_PER_STORY
+                or any(not validated_inline_ref(ref) for ref in refs) or len(set(refs)) != len(refs)):
+                return {}
             if (value.get("appid") != appid or type(gid) is not str or not gid.isascii()
                 or not gid.isdecimal() or not 1 <= len(gid) <= 32 or gid in seen_gids
                 or not _valid_title(title) or type(date) is not int
@@ -380,8 +437,18 @@ def _cached_news_buckets(path: Path, followed: tuple[int, ...], *,
                 or type(value.get("action_available")) is not bool):
                 return {}
             seen_gids.add(gid)
+            article_url = value.get("article_url", "")
+            if type(article_url) is not str:
+                return {}
+            target = news_article_target(appid, gid, article_url) if article_url else None
+            # Never open an invalid cached article link; retain the news row
+            # and provide its fixed app-bound news index as the click fallback.
+            preview, normalized_refs = _cached_preview_and_inline_refs(preview, tuple(refs))
             selected.append(FollowedNewsStory(
-                appid, gid, title, date, feed, value["action_available"], preview,
+                appid, gid, title, date, feed,
+                True, preview,
+                inline_image_refs=normalized_refs,
+                article_url=target.browser_url if target else "",
             ))
         buckets[appid] = tuple(selected)
     return buckets
@@ -393,7 +460,8 @@ class FollowedNewsSource:
     def __init__(self, *, profile_key: str, cache_root: Path | None = None,
                  coordinator: SteamRequestCoordinator | None = None,
                  backoff: SteamBackoffPolicy | None = None,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.monotonic,
+                 metadata_lookup: Callable[[int], tuple[str, str]] | None = None) -> None:
         if not isinstance(profile_key, str) or not profile_key.startswith("profile_"):
             raise ValueError("Expected an opaque Steam profile cache key")
         self._profile_key = profile_key
@@ -404,64 +472,194 @@ class FollowedNewsSource:
         self._clock = clock
         self._state_lock = threading.RLock()
         self._closed = False
+        self._metadata: FollowedAppMetadata | None = None
+        self._metadata_dirty = False
+        self._owned_names_loaded = False
+        self._owned_names: dict[int, str] = {}
+        self._metadata_lookup = metadata_lookup or fetch_store_metadata
+        self._allow_fixture_metadata = metadata_lookup is not None
 
     def cached(self) -> FollowedNewsSnapshot | None:
         snapshot = _snapshot_from_cache(self._path)
         return self._decorate(snapshot, allow_network=False) if snapshot is not None else None
 
     def _decorate(self, snapshot: FollowedNewsSnapshot, *, allow_network: bool,
-                  allowed_fetch_appids: frozenset[int] = frozenset()) -> FollowedNewsSnapshot:
-        """Worker-only bounded local art/name projection. No GUI or image decode."""
+                  allow_metadata_network: bool = False) -> FollowedNewsSnapshot:
+        """Worker-only, bounded name/artwork projection. No GUI work."""
         if not snapshot.stories or self._closed:
             return snapshot
         from core.settings.storage_paths import get_steam_cache_dir
+        from core.steam.followed_artwork_readiness import valid_local_artwork
         from core.steam.abandonment_cache import load_owned_game_choices_from_cache
         from core.steam.assets import (
             SteamAssetRecord, fetch_steam_app_artwork, find_cached_steam_app_artwork,
+            find_cached_asset, fetch_and_cache_asset, _default_fetch_asset,
         )
-        # The already-owned library can name a followed game; other follows have
-        # no verified name from this endpoint and keep the honest Steam News label.
-        try:
-            names = {
-                appid: title for appid, title in load_owned_game_choices_from_cache(
+        # One canonical per-AppID cache survives changes to owned-library state,
+        # app restarts and failed Store requests. The article is never a name source.
+        if self._metadata is None:
+            self._metadata = FollowedAppMetadata(profile_key=self._profile_key, root=self._cache_root)
+        metadata = self._metadata
+        changed = False
+        if not self._owned_names_loaded:
+            try:
+                self._owned_names = dict(load_owned_game_choices_from_cache(
                     profile_key=self._profile_key, root=self._cache_root, limit=5000,
-                ) if title != f"App {appid}" and len(title) <= 100
-            }
-        except Exception:
-            names = {}
-        try:
-            asset_dir = get_steam_cache_dir(profile_key=self._profile_key) / "assets"
-        except Exception:
-            return replace(snapshot, stories=tuple(
-                replace(story, game_name=names.get(story.appid, ""))
-                for story in snapshot.stories
-            ))
-        paths: dict[int, str] = {}
-        # No repeated work for multiple news stories about the same game.
-        # Only the four admitted source apps may initiate bounded image fetches.
+                ))
+                self._owned_names_loaded = True
+            except Exception:
+                pass  # Retry the one-time local read if local storage was unavailable.
         for story in snapshot.stories:
+            title = self._owned_names.get(story.appid, "")
+            if title and story.appid not in metadata.names:
+                changed |= metadata.remember(story.appid, title)
+        # Preserve last-good names present in old news snapshots. Never replace
+        # an established name with a transient empty Store response.
+        for story in snapshot.stories:
+            if (valid_game_name(story.game_name)
+                and story.game_name not in (f"Steam App {story.appid}", f"App {story.appid}")
+                and story.appid not in metadata.names):
+                changed |= metadata.remember(story.appid, story.game_name)
+        # Hydrate only missing AppIDs belonging to this admitted visible result.
+        # Four is a hard bound per ordinary refresh, independent of story count.
+        if allow_metadata_network:
+            attempted = 0
+            for story in snapshot.stories:
+                if self._closed or attempted >= MAX_NEWS_APPS_PER_REFRESH:
+                    break
+                if (story.appid in metadata.names or
+                    time.time() - metadata.failed_at.get(story.appid, 0) < FAILED_LOOKUP_RETRY_SECONDS):
+                    continue
+                attempted += 1
+                changed |= metadata.hydrate(story.appid, lookup=self._metadata_lookup, now=time.time())
+        try:
+            asset_dir = (self._cache_root / "assets" if self._cache_root is not None
+                         else get_steam_cache_dir(profile_key=self._profile_key) / "assets")
+        except Exception:
+            asset_dir = None
+        paths: dict[int, str] = {}
+        # Reuse validated local cache hits for every story; cap fresh image work
+        # to four AppIDs in this source job, including previously sampled winners.
+        fetched = 0
+        for story in snapshot.stories:
+            if self._closed:
+                return FollowedNewsSnapshot("retired")
             if story.appid in paths:
                 continue
             path = None
-            try:
-                path = find_cached_steam_app_artwork(
-                    cache_dir=asset_dir, appid=story.appid, artwork_shape="wide",
-                )
-                if (path is None and allow_network and story.appid in allowed_fetch_appids
-                    and len(paths) < MAX_NEWS_APPS_PER_REFRESH):
-                    result = fetch_steam_app_artwork(
+            if asset_dir is not None:
+                try:
+                    path = valid_local_artwork(find_cached_steam_app_artwork(
                         cache_dir=asset_dir, appid=story.appid, artwork_shape="wide",
-                    )
-                    if isinstance(result, SteamAssetRecord):
-                        path = result.path
-            except Exception:
-                path = None  # An image failure cannot turn good news into unavailable.
+                    ))
+                    store_art = metadata.artwork_urls.get(story.appid, "")
+                    if path is None and store_art:
+                        path = valid_local_artwork(find_cached_asset(asset_dir, store_art))
+                    # One failed app art source cannot induce retries every six minutes.
+                    retry_due = time.time() - metadata.art_failed_at.get(story.appid, 0.0) >= 86400
+                    if path is None and allow_network and retry_due and fetched < MAX_NEWS_APPS_PER_REFRESH:
+                        fetched += 1
+                        result = fetch_steam_app_artwork(
+                            cache_dir=asset_dir, appid=story.appid, artwork_shape="wide",
+                        )
+                        if isinstance(result, SteamAssetRecord):
+                            path = valid_local_artwork(result.path)
+                        if path is None and store_art:
+                            # The Store's validated header URL can recover titles
+                            # without a library_hero or legacy header asset.
+                            alternative = fetch_and_cache_asset(
+                                cache_dir=asset_dir, url=store_art, fetcher=_default_fetch_asset,
+                            )
+                            if isinstance(alternative, SteamAssetRecord):
+                                path = valid_local_artwork(alternative.path)
+                        if path is None:
+                            metadata.art_failed_at[story.appid] = time.time()
+                            changed = True
+                        elif story.appid in metadata.art_failed_at:
+                            metadata.art_failed_at.pop(story.appid, None)
+                            changed = True
+                except Exception:
+                    path = None  # Image failure never makes an article invalid.
             paths[story.appid] = str(path) if path is not None else ""
+        # News-body thumbnails are distinct from per-game artwork: they live
+        # in the preview rail, never replace the game identity image. Only
+        # allowlisted, URL-free refs from the accepted news payload are used.
+        # Cache hits work offline; new image work shares this admitted source
+        # worker and never causes per-image GUI publication.
+        inline_rows: list[tuple[str, ...]] = []
+        inline_fetched = 0
+        inline_wrote = False
+        inline_dir = asset_dir / "news_inline" if asset_dir is not None else None
+        for story in snapshot.stories:
+            if self._closed:
+                return FollowedNewsSnapshot("retired")
+            row_images: list[str] = []
+            for ref in story.inline_image_refs:
+                if inline_dir is None:
+                    continue
+                url = inline_image_url(ref)
+                if not url:
+                    continue
+                try:
+                    path = valid_local_artwork(find_cached_asset(inline_dir, url))
+                    retry_due = time.time() - metadata.inline_failed_at.get(ref, 0.0) >= 86400
+                    if path is None and allow_network and retry_due and inline_fetched < MAX_INLINE_IMAGE_FETCHES_PER_REFRESH:
+                        inline_fetched += 1
+                        outcome = fetch_and_cache_asset(
+                            cache_dir=inline_dir, url=url,
+                            fetcher=lambda address: _default_fetch_asset(address, timeout_seconds=5.0),
+                            allowed_hosts=("clan.akamai.steamstatic.com",),
+                        )
+                        if isinstance(outcome, SteamAssetRecord):
+                            path = valid_local_artwork(outcome.path)
+                            inline_wrote |= path is not None
+                        if path is None:
+                            metadata.inline_failed_at[ref] = time.time()
+                            if len(metadata.inline_failed_at) > 256:
+                                metadata.inline_failed_at.pop(next(iter(metadata.inline_failed_at)))
+                            changed = True
+                        elif ref in metadata.inline_failed_at:
+                            metadata.inline_failed_at.pop(ref, None)
+                            changed = True
+                    if path is not None:
+                        row_images.append(str(path))
+                except Exception:
+                    # Optional thumbnail failures never invalidate the story.
+                    continue
+            inline_rows.append(tuple(row_images))
+        if inline_wrote and inline_dir is not None:
+            prune_inline_image_cache(
+                inline_dir,
+                protected=frozenset(Path(path) for row in inline_rows for path in row),
+            )
+        if self._closed:
+            return FollowedNewsSnapshot("retired")
+        # One source-worker summary per admitted snapshot, not per image, card,
+        # Qt frame or consumer. Next physical log can distinguish no recovered
+        # source refs, failed CDN warming and projection/presentation problems.
+        inline_refs_count = sum(len(story.inline_image_refs) for story in snapshot.stories)
+        if inline_refs_count:
+            logger.info(
+                "[STEAM][FOLLOWED_INLINE] stories=%d refs=%d local_images=%d "
+                "network_attempts=%d new_local_files=%d cache_only=%s",
+                len(snapshot.stories), inline_refs_count,
+                sum(len(row) for row in inline_rows), inline_fetched,
+                int(inline_wrote), not allow_network,
+            )
+        self._metadata_dirty |= changed
+        if self._metadata_dirty:
+            try:
+                metadata.persist()
+                self._metadata_dirty = False
+            except Exception:
+                pass  # Retry at the next normal worker admission, never per card/frame.
         return replace(
             snapshot,
-            stories=tuple(replace(story, game_name=names.get(story.appid, ""))
-                          for story in snapshot.stories),
+            stories=tuple(replace(story, game_name=metadata.names.get(story.appid)
+                                  or valid_game_name(story.game_name)
+                                  or f"Steam App {story.appid}") for story in snapshot.stories),
             artwork_paths=tuple(paths.get(story.appid, "") for story in snapshot.stories),
+            inline_image_paths=tuple(inline_rows),
         )
 
     def retire(self) -> None:
@@ -496,7 +694,8 @@ class FollowedNewsSource:
                 # Never reissue the followed-set request or any app-news work
                 # while a denied/rate-limited source is cooling down. Cached
                 # rows retain their original fetched_at and private identity.
-                return (replace(previous, status="stale_cache", failure="backoff_active")
+                return (replace(self._decorate(previous, allow_network=False),
+                                status="stale_cache", failure="backoff_active")
                         if previous is not None else FollowedNewsSnapshot("backoff_active"))
             handle = self._coordinator.begin(key)
             if not handle.owner:
@@ -633,7 +832,7 @@ class FollowedNewsSource:
                 )
             # Image work is bounded, off-GUI and outside the source commit lock.
             return self._decorate(snapshot, allow_network=opener is None,
-                                  allowed_fetch_appids=frozenset(selected)) if not self._closed else FollowedNewsSnapshot("retired")
+                                  allow_metadata_network=(opener is None or self._allow_fixture_metadata)) if not self._closed else FollowedNewsSnapshot("retired")
 
     def _finish_failure(self, handle: object, previous: FollowedNewsSnapshot | None,
                         failure: str) -> FollowedNewsSnapshot:
@@ -648,6 +847,7 @@ class FollowedNewsSource:
             if self._closed or result.status is SteamResultStatus.STALE_GENERATION:
                 return FollowedNewsSnapshot("retired")
             self._backoff.record_result(handle.key, result, now=self._clock())
-            if previous is not None:
-                return replace(previous, status="stale_cache", failure=failure)
-            return FollowedNewsSnapshot(failure)
+        if previous is not None:
+            return replace(self._decorate(previous, allow_network=False),
+                           status="stale_cache", failure=failure)
+        return FollowedNewsSnapshot(failure)

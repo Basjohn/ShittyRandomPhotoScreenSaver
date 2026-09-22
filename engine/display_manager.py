@@ -2995,6 +2995,16 @@ class DisplayManager(QObject):
                 return False
             return manager._open_quick_reddit_url(widget_id, url)
 
+        def _open_feed(widget_id: str, url: str) -> bool:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or manager._runtime_generation != generation
+            ):
+                return False
+            return manager._open_quick_feed_url(widget_id, url)
+
         def _open_steam(widget_id: str, action_kind: str, target: str) -> bool:
             manager = manager_ref()
             if (
@@ -3028,6 +3038,7 @@ class DisplayManager(QObject):
         return default_ordinary_family_adapters(
             clock_mode_toggle=_persist_clock_mode,
             reddit_open_requested=_open_reddit,
+            feed_open_requested=_open_feed,
             steam_open_requested=_open_steam,
             settings_target_requested=_open_settings_target,
         )
@@ -3253,6 +3264,57 @@ class DisplayManager(QObject):
             )
         return bool(opened)
 
+    def _open_quick_feed_url(self, widget_id: str, url: str) -> bool:
+        """Route one admitted Feed HTTP(S) item through product authority."""
+
+        if self._retired:
+            return False
+        from rendering.runtime_input import runtime_pointer_input_is_suppressed
+
+        if runtime_pointer_input_is_suppressed(
+            "feedOpenRequested",
+            screen_index="?",
+        ):
+            logger.info(
+                "[FEEDS] Quick URL action suppressed across runtime/edit boundary "
+                "widget=%s",
+                str(widget_id or "feeds_custom_1"),
+            )
+            return False
+        normalized_url = str(url or "").strip()
+        if not normalized_url:
+            return False
+
+        from core.build_profile import is_diagnostic_build
+        from core.mc import is_mc_build
+        from core.windows.secure_url_launcher import open_url
+        from core.widget_product_actions import dispatch_feed_url_product_action
+
+        interactive = bool(is_mc_build() or is_diagnostic_build())
+
+        def _open(target: str) -> bool:
+            return bool(
+                open_url(
+                    target,
+                    prefer_direct=interactive,
+                    source=f"feed:{str(widget_id or 'feeds_custom_1')}",
+                )
+            )
+
+        opened = dispatch_feed_url_product_action(
+            normalized_url,
+            opener=_open,
+            request_saver_exit=self._on_exit_requested,
+            interactive_build=interactive,
+        )
+        if opened:
+            logger.info(
+                "[FEEDS] Quick URL action admitted widget=%s route=%s",
+                str(widget_id or "feeds_custom_1"),
+                "interactive" if interactive else "screensaver-handoff",
+            )
+        return bool(opened)
+
     def _open_quick_steam_target(
         self,
         widget_id: str,
@@ -3285,6 +3347,7 @@ class DisplayManager(QObject):
             normalize_steam_id,
             store_target,
             news_article_target,
+            news_hub_target,
         )
         from core.widget_product_actions import dispatch_steam_link_product_action
         from core.windows.secure_url_launcher import open_steam_target
@@ -3321,17 +3384,55 @@ class DisplayManager(QObject):
             target = friend_profile_target(target_value)
         elif kind == "store":
             target = store_target(target_value)
-        elif kind == "news_article" and widget_id == "steam_progress":
-            # The presentation resolves a private accepted row. The display
-            # manager independently validates the canonical public URL before
-            # dispatching the existing Steam action/secure-helper consequence.
+        elif kind == "news_hub" and widget_id == "steam_progress":
+            # Exact, numeric app-bound index only. Never accept a caller-supplied
+            # arbitrary URL or untrusted redirect from the QML action boundary.
             import re
-            match = re.fullmatch(
-                r"https://store\.steampowered\.com/news/app/([1-9][0-9]*)/view/([0-9]{1,32})",
-                target_value if isinstance(target_value, str) else "",
+            value = target_value if type(target_value) is str else ""
+            hub_match = re.fullmatch(
+                r"https://store\.steampowered\.com/news/app/([1-9][0-9]{0,9})/",
+                value,
             )
-            target = (news_article_target(int(match[1]), match[2], target_value)
-                      if match is not None else None)
+            target = news_hub_target(int(hub_match[1])) if hub_match else None
+            if target is not None and target.browser_url != value:
+                target = None
+        elif kind == "news_article" and widget_id == "steam_progress":
+            # The private model already verified the app/news association.
+            # Independently enforce Steam-only article shape at the final
+            # action boundary; never infer a /view/ event ID from the API GID.
+            import re
+            value = target_value if isinstance(target_value, str) else ""
+            store = re.fullmatch(
+                r"https://store\.steampowered\.com/news/app/([1-9][0-9]*)/view/([0-9]{1,32})",
+                value,
+            )
+            community_app = re.fullmatch(
+                r"https://steamcommunity\.com/app/([1-9][0-9]*)/announcements/detail/([0-9]{1,32})",
+                value,
+            )
+            community_game = re.fullmatch(
+                r"https://steamcommunity\.com/games/[A-Za-z0-9_-]{1,80}/announcements/detail/([0-9]{1,32})",
+                value,
+            )
+            externalpost = re.fullmatch(
+                r"https://(?:steamstore-a\.akamaihd\.net|store\.steampowered\.com)/news/externalpost/([A-Za-z0-9_-]{1,80}(?:%20[A-Za-z0-9_-]+)*)/([0-9]{1,32})",
+                value,
+            )
+            if store or community_app:
+                match = store or community_app
+                target = news_article_target(int(match[1]), match[2], value)
+            elif community_game:
+                # Vanity names do not expose an AppID. The source model did
+                # the AppID-specific admission; the helper independently
+                # verifies the restricted Steam article host/path here.
+                target = news_article_target(1, community_game[1], value)
+            elif externalpost:
+                # The private source verified the AppID association. The
+                # externalpost URL carries no AppID, but its exact Steam-owned
+                # host/path and API GID remain independently validated here.
+                target = news_article_target(1, externalpost[2], value)
+            else:
+                target = None
         else:
             target = None
         if target is None:

@@ -116,26 +116,54 @@ def test_news_cli_is_explicit_private_and_does_not_start_widget(monkeypatch, cap
         main([])
 
 
-def test_news_article_links_only_accept_exact_https_app_and_gid():
-    from core.steam.links import news_article_target
-    canonical = "https://store.steampowered.com/news/app/42/view/123456789"
-    target = news_article_target(42, "123456789", canonical)
-    assert target is not None and target.browser_url == canonical and target.kind == "news_article"
+def test_news_article_links_use_source_event_id_and_constrain_steam_hosts():
+    from core.steam.links import news_article_target, news_hub_target
+    gid = "123456789"
+    store = "https://store.steampowered.com/news/app/42/view/987654321"
+    community = "https://steamcommunity.com/games/Some_Game/announcements/detail/876543210"
+    for url in (store, community,
+                "https://steamcommunity.com/app/42/announcements/detail/876543210"):
+        target = news_article_target(42, gid, url)
+        assert target is not None and target.browser_url == url and target.kind == "news_article"
+    # Syndicated news does not have a Steam /view/ event ID. Steam's public
+    # API supplies an externalpost link whose final number IS the news GID.
+    external = "https://steamstore-a.akamaihd.net/news/externalpost/PCGamesN/123456789"
+    target = news_article_target(42, gid, external)
+    assert target is not None and target.browser_url == external and target.kind == "news_article"
+    spaced = news_article_target(42, gid,
+        "https://steamstore-a.akamaihd.net/news/externalpost/PC Gamer/123456789")
+    assert spaced is not None and spaced.browser_url.endswith("/PC%20Gamer/123456789")
+    assert news_article_target(42, gid, spaced.browser_url) == spaced
     for bad in (
-        "http://store.steampowered.com/news/app/42/view/123456789",
-        "https://store.steampowered.com.evil.example/news/app/42/view/123456789",
-        "https://store.steampowered.com:443/news/app/42/view/123456789",
-        "https://store.steampowered.com@evil.example/news/app/42/view/123456789",
-        "https://store.steampowered.com/news/app/99/view/123456789",
-        "https://store.steampowered.com/news/app/42/view/123456789?redirect=https://evil.example",
-        "https://store.steampowered.com/news/app/42/view/123456789#fragment",
-        "https://store.steampowered.com/news/app/42/view/123456789/../other",
-        "https://steamcommunity.com/games/42/announcements/detail/123456789",
-        "https://[malformed-host]/news/app/42/view/123456789",
+        "http://store.steampowered.com/news/app/42/view/987654321",
+        "https://store.steampowered.com.evil.example/news/app/42/view/987654321",
+        "https://store.steampowered.com:443/news/app/42/view/987654321",
+        "https://store.steampowered.com@evil.example/news/app/42/view/987654321",
+        "https://store.steampowered.com/news/app/99/view/987654321",
+        "https://store.steampowered.com/news/app/42/view/987654321?redirect=https://evil.example",
+        "https://store.steampowered.com/news/app/42/view/987654321#fragment",
+        "https://store.steampowered.com/news/app/42/view/987654321/../other",
+        "https://steamcommunity.com/games/Some_Game/announcements/detail/%31",
+        "https://steamcommunity.com/app/99/announcements/detail/876543210",
+        "https://steamcommunity.com/groups/other/announcements/detail/876543210",
+        "https://steamcommunity.com/games/not/a/real/announcements/detail/876543210",
+        "https://store.steampowered.com/news/externalpost/other/876543210",
+        "https://steamstore-a.akamaihd.net/news/externalpost/PCGamesN/876543210",
+        "https://steamstore-a.akamaihd.net/news/externalpost/PCGamesN/123456789?url=https://evil.example",
+        "https://steamstore-a.akamaihd.net.evil.example/news/externalpost/PCGamesN/123456789",
+        "https://steamstore-a.akamaihd.net/news/externalpost/PCGamesN%2Fattack/123456789",
+        "https://steamstore-a.akamaihd.net/news/externalpost/PCGamesN/123456789/../another",
+        "https://steamstore-a.akamaihd.net/news/externalpost/PCGamesN/123456789#fragment",
+        "https://[malformed-host]/news/app/42/view/987654321",
     ):
-        assert news_article_target(42, "123456789", bad) is None
+        assert news_article_target(42, gid, bad) is None, bad
     for bad_gid in ("../123", "", "0?x", "１２３", 123, "1" * 33):
-        assert news_article_target(42, bad_gid, canonical) is None
+        assert news_article_target(42, bad_gid, store) is None
+    assert news_article_target(42, gid, "") is None
+    hub = news_hub_target(42)
+    assert hub is not None and hub.browser_url == "https://store.steampowered.com/news/app/42/"
+    assert hub.kind == "news_hub"
+    assert all(news_hub_target(bad) is None for bad in ("42", True, 0, -1, 0x100000000))
 
 
 def test_app_news_log_url_redacts_selected_follow_id():

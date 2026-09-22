@@ -34,6 +34,7 @@ from sources.rss.cache import RSSCache
 from sources.rss.parser import RSSParser, ParsedEntry
 from sources.rss.downloader import RSSDownloader
 from sources.rss.health import FeedHealthTracker
+from core.feeds.normalization import redacted_url_for_log
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -252,7 +253,7 @@ class RSSCoordinator:
             is_reddit = "reddit.com" in url.lower()
             if is_reddit:
                 if reddit_count >= MAX_REDDIT_FEEDS_PER_STARTUP:
-                    logger.debug(f"[RSS_COORD] Skipping Reddit feed (limit): {url[:60]}")
+                    logger.debug("[RSS_COORD] Skipping Reddit feed (limit): %s", redacted_url_for_log(url))
                     continue
                 reddit_count += 1
             urls_to_process.append(url)
@@ -272,11 +273,17 @@ class RSSCoordinator:
 
             # Skip unhealthy feeds
             if self._health.should_skip(feed_url):
-                logger.debug(f"[RSS_COORD] Skipping unhealthy feed: {feed_url[:60]}")
+                logger.debug("[RSS_COORD] Skipping unhealthy feed: %s", redacted_url_for_log(feed_url))
                 continue
 
             feed_limit = min(per_feed, total_budget_remaining)
-            logger.info(f"[RSS_COORD] Feed {i+1}/{len(urls_to_process)}: {feed_url[:60]}... (limit={feed_limit})")
+            logger.info(
+                "[RSS_COORD] Feed %d/%d: %s (limit=%d)",
+                i + 1,
+                len(urls_to_process),
+                redacted_url_for_log(feed_url),
+                feed_limit,
+            )
 
             new_images = self._process_single_feed(feed_url, feed_limit, existing_paths)
 
@@ -333,10 +340,14 @@ class RSSCoordinator:
                 feed_data = self._downloader.fetch_rss(request_url)
                 if feed_data is not None:
                     if feed_data.bozo:
-                        logger.warning(f"[RSS_COORD] Feed has parsing errors: {feed_url[:60]}")
+                        logger.warning("[RSS_COORD] Feed has parsing errors: %s", redacted_url_for_log(feed_url))
                     entries = RSSParser.parse_rss(feed_data, feed_url, max_entries=max_images)
         except Exception as e:
-            logger.error(f"[RSS_COORD] Feed fetch/parse failed: {feed_url[:60]} - {e}")
+            logger.error(
+                "[RSS_COORD] Feed fetch/parse failed: %s - %s",
+                redacted_url_for_log(feed_url),
+                type(e).__name__,
+            )
             return []
 
         if not entries:
@@ -385,7 +396,11 @@ class RSSCoordinator:
             new_images.append(meta)
 
         if new_images:
-            logger.info(f"[RSS_COORD] +{len(new_images)} images from {feed_url[:60]}")
+            logger.info(
+                "[RSS_COORD] +%d images from %s",
+                len(new_images),
+                redacted_url_for_log(feed_url),
+            )
 
         return new_images
 
@@ -433,7 +448,7 @@ class RSSCoordinator:
             feed_limit = min(FALLBACK_MAX_PER_FEED_DOWNLOAD, deficit)
             logger.info(
                 "[RSS_COORD] Fallback feed: %s (limit=%s)",
-                feed_url[:60],
+                redacted_url_for_log(feed_url),
                 feed_limit,
             )
 

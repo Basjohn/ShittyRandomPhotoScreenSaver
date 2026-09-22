@@ -82,6 +82,36 @@ def dispatch_reddit_url_product_action(
     return True
 
 
+def dispatch_feed_url_product_action(
+    url: str,
+    *,
+    opener: Callable[[str], bool],
+    request_saver_exit: Callable[[], None],
+    interactive_build: bool,
+) -> bool:
+    """Execute one already-admitted HTTP(S) Feed item action.
+
+    F2 intentionally supports browser URLs only.  Magnet and managed torrent
+    actions are separate future capabilities and must not be smuggled through
+    this generic URL seam.
+    """
+    normalized_url = str(url or "").strip()
+    if not normalized_url:
+        return False
+    from urllib.parse import urlsplit
+    try:
+        parsed = urlsplit(normalized_url)
+    except ValueError:
+        return False
+    if parsed.scheme.casefold() not in {"http", "https"} or not parsed.hostname:
+        return False
+    if not bool(opener(normalized_url)):
+        return False
+    if not bool(interactive_build):
+        request_saver_exit()
+    return True
+
+
 def dispatch_steam_link_product_action(
     target: SteamLinkTarget,
     *,
@@ -101,6 +131,7 @@ def dispatch_steam_link_product_action(
 
 
 __all__ = [
+    "dispatch_feed_url_product_action",
     "dispatch_reddit_url_product_action",
     "dispatch_steam_link_product_action",
     "update_clock_display_mode_override",

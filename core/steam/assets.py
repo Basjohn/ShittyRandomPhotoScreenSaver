@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
+import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -17,6 +19,11 @@ from core.steam.models import SteamResult, SteamResultStatus
 logger = get_logger(__name__)
 
 MAX_STEAM_ASSET_BYTES = 2_000_000
+# Per-profile asset directory: 256 local images AND a 384 MiB budget.
+# Pruning happens on successful worker writes, never on cache reads or paint.
+MAX_STEAM_CACHE_FILES = 256
+MAX_STEAM_CACHE_BYTES = 384 * 1024 * 1024
+_asset_write_lock = threading.RLock()
 STEAM_ASSET_ALLOWED_HOSTS = (
     "cdn.akamai.steamstatic.com",
     "avatars.steamstatic.com",
@@ -51,8 +58,11 @@ def find_cached_asset(cache_dir: Path, url: str) -> Path | None:
     fingerprint = hashlib.sha256(url.encode("utf-8")).hexdigest()[:24]
     for suffix in _ALLOWED_SUFFIX_BY_KIND:
         candidate = cache_dir / f"{fingerprint}.{suffix}"
-        if candidate.is_file() and candidate.stat().st_size > 0:
-            return candidate
+        try:
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return candidate
+        except OSError:  # A concurrent background prune may have retired it.
+            continue
     return None
 
 
@@ -212,6 +222,7 @@ def prepare_desaturated_steam_artwork(
             )
             prepared.save(tmp_path, format="PNG", optimize=True)
         tmp_path.replace(output_path)
+        prune_asset_cache(cache_dir, protected=frozenset((source_path, output_path)))
         return output_path
     except Exception:
         try:
@@ -325,19 +336,23 @@ def cache_asset_from_bytes(
             message="Steam asset did not look like a supported image.",
         )
     fingerprint = hashlib.sha256(url.encode("utf-8")).hexdigest()[:24]
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    path = cache_dir / f"{fingerprint}.{kind}"
-    tmp_path = path.with_name(f"{path.name}.tmp")
-    try:
-        tmp_path.write_bytes(data)
-        tmp_path.replace(path)
-    except Exception:
+    with _asset_write_lock:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        path = cache_dir / f"{fingerprint}.{kind}"
+        tmp_path = path.with_name(f"{path.name}.tmp")
         try:
-            tmp_path.unlink(missing_ok=True)
+            tmp_path.write_bytes(data)
+            tmp_path.replace(path)
         except Exception:
-            pass
-        logger.exception("[STEAM] Failed to write asset cache path=%s", path)
-        raise
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            logger.exception("[STEAM] Failed to write asset cache path=%s", path)
+            raise
+        # The source worker owns disk work; keep the file just admitted even
+        # when the preceding cache is already over budget.
+        prune_asset_cache(cache_dir, protected=frozenset((path,)))
     return SteamAssetRecord(
         url_fingerprint=fingerprint,
         path=path,
@@ -355,6 +370,11 @@ def fetch_and_cache_asset(
 ) -> SteamAssetRecord | SteamResult:
     """Fetch through an injected fetcher, then validate/cache the asset."""
     try:
+        parsed = urlparse(url)
+        if (parsed.scheme != "https" or parsed.hostname not in allowed_hosts
+            or parsed.port not in (None, 443) or parsed.username or parsed.password):
+            return SteamResult(status=SteamResultStatus.ASSET_INVALID,
+                               message="Steam asset URL is not allowed.")
         data = fetcher(url)
     except urllib.error.HTTPError as exc:
         http_status = int(exc.code)
@@ -391,33 +411,58 @@ def fetch_and_cache_asset(
     )
 
 
-def _default_fetch_asset(url: str) -> bytes:
+def _default_fetch_asset(url: str, *, timeout_seconds: float = 12.0) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": "SRPSS-Steam/0.1"})
-    with urllib.request.urlopen(request, timeout=12.0) as response:
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        # urllib follows redirects by default: reject an untrusted final
+        # origin before accepting any response bytes as a local image.
+        final = urlparse(response.geturl())
+        allowed = frozenset((*STEAM_ASSET_ALLOWED_HOSTS, "clan.akamai.steamstatic.com"))
+        if (final.scheme != "https" or final.hostname not in allowed
+            or final.port not in (None, 443) or final.username or final.password):
+            raise ValueError("Steam artwork redirected outside the trusted CDN")
         return response.read(MAX_STEAM_ASSET_BYTES + 1)
 
 
-def prune_asset_cache(cache_dir: Path, *, max_files: int = 256) -> int:
-    """Prune oldest cached Steam asset files beyond max_files."""
-    if not cache_dir.exists():
-        return 0
-    files = [
-        path
-        for path in cache_dir.iterdir()
-        if path.is_file() and not path.name.endswith(".tmp")
-    ]
-    if len(files) <= max_files:
-        return 0
-    removed = 0
-    for path in sorted(files, key=lambda item: item.stat().st_mtime)[
-        : max(0, len(files) - max_files)
-    ]:
-        try:
-            path.unlink()
-            removed += 1
-        except Exception:
-            logger.warning("[STEAM] Failed to prune asset cache file path=%s", path)
-    return removed
+def prune_asset_cache(
+    cache_dir: Path, *, max_files: int = MAX_STEAM_CACHE_FILES,
+    max_bytes: int = MAX_STEAM_CACHE_BYTES,
+    protected: frozenset[Path] = frozenset(),
+) -> int:
+    """Prune file-count and byte budgets, oldest first, on worker writes only.
+
+    Never remove in-progress .tmp files, directories or explicitly protected
+    newly published assets. Normal cache hits do not scan/touch the directory.
+    """
+    with _asset_write_lock:
+        if not cache_dir.is_dir():
+            return 0
+        files: list[tuple[float, Path, int]] = []
+        for path in cache_dir.iterdir():
+            # The asset directory is shared by several Steam consumers; do
+            # not count/delete unrelated user files or cache metadata.
+            if (not path.is_file() or path.is_symlink()
+                or re.fullmatch(r"[0-9a-f]{24}\.(?:png|jpe?g|webp)", path.name) is None):
+                continue
+            try:
+                stat = path.stat()
+                files.append((stat.st_mtime, path, stat.st_size))
+            except OSError:
+                continue
+        count, total, removed = len(files), sum(item[2] for item in files), 0
+        for _, path, size in sorted(files):
+            if count <= max_files and total <= max_bytes:
+                break
+            if path in protected:
+                continue
+            try:
+                path.unlink()
+                removed += 1
+                count -= 1
+                total -= size
+            except OSError:
+                logger.debug("[STEAM] Asset cache prune skipped inaccessible file")
+        return removed
 
 
 def _detect_image_kind(data: bytes) -> str | None:

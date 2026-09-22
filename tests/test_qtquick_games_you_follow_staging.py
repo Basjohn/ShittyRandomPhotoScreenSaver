@@ -26,6 +26,7 @@ def _snapshot(count: int = 8) -> FollowedNewsSnapshot:
         tuple(FollowedNewsStory(
             appid=10000 + n, gid=str(90000 + n), title=f"Update {n}",
             published_at=1700000000 + n, feed_name="News", action_available=True,
+            article_url=f"https://store.steampowered.com/news/app/{10000+n}/view/{80000+n}",
         ) for n in range(count)),
         followed_count=142, checked_count=4,
     )
@@ -294,15 +295,66 @@ def test_followed_story_action_uses_current_private_slot_and_retirement_fence(qt
     assert model.activate(object())
     assert model.accept_snapshot(_snapshot(2))
     assert model.open_story(0)
-    assert requests == [("news_article", "https://store.steampowered.com/news/app/10000/view/90000")]
+    assert requests == [("news_article", "https://store.steampowered.com/news/app/10000/view/80000")]
     assert not model.open_story(-1) and not model.open_story(2)
     assert not model.open_story("0") and not model.open_story(True)
-    assert model.accept_snapshot(_snapshot(1))
+    # The event ID and API GID are intentionally different. A replacement
+    # source revision must not re-open a stale article or synthesize a GID URL.
+    bad = replace(_snapshot(1).stories[0], article_url="https://evil.example/bad")
+    assert model.accept_snapshot(replace(_snapshot(1), stories=(bad,)))
+    assert model.open_story(0)  # Invalid article URL cannot launch; safe game index instead.
+    assert requests[-1] == ("news_hub", "https://store.steampowered.com/news/app/10000/")
+    # A private URL change with identical public rows is a true no-op for the
+    # retained QML model, but the click must use the *new* private snapshot.
+    assert not model.accept_snapshot(_snapshot(1))
     assert not model.open_story(1)
     assert model.open_story(0)
+    # Pre-link-migration rows remain clickable at their game's safe news hub.
+    old = replace(_snapshot(1).stories[0], action_available=True, article_url="")
+    assert not model.accept_snapshot(replace(_snapshot(1), stories=(old,)))
+    assert model.storyRows.data(model.storyRows.index(0, 0), FollowedStoryRows.ActionRole)
+    assert model.open_story(0)
+    assert requests[-1] == ("news_hub", "https://store.steampowered.com/news/app/10000/")
     model.retire()
     assert not model.open_story(0) and not model.request_manual_refresh()
-    assert len(requests) == 2
+    assert len(requests) == 4
+
+
+def test_followed_syndicated_story_opens_steams_original_externalpost_not_news_hub(qt_app) -> None:
+    """The actual private syndicated URL survives the retained click seam."""
+    class Lease:
+        def attach_consumer(self, consumer):
+            self.consumer = consumer
+
+        def set_thread_manager(self, manager, *, generation):
+            pass
+
+        def start(self):
+            return True
+
+        def stop(self):
+            pass
+
+        def request_refresh(self):
+            return True
+
+    model = GamesYouFollowPresentationModel()
+    model.set_runtime_service(Lease())
+    requests: list[tuple[str, str]] = []
+    model.set_article_action(lambda kind, url: requests.append((kind, url)) or True)
+    assert model.activate(object())
+    initial = _snapshot(1)
+    original = initial.stories[0]
+    external = (f"https://steamstore-a.akamaihd.net/news/externalpost/"
+                f"PCGamesN/{original.gid}")
+    news = replace(initial, stories=(replace(original, article_url=external),))
+    assert model.accept_snapshot(news)
+    assert model.open_story(0)
+    assert requests == [("news_article", external)]
+    assert not model.accept_snapshot(initial)  # Public rows unchanged; private URL changed.
+    assert model.open_story(0)
+    assert requests[-1] == ("news_article", original.article_url)
+    model.retire()
 
 
 def test_followed_story_cap_reports_source_overflow_without_replacing_retained_slots(qt_app) -> None:
@@ -318,3 +370,143 @@ def test_followed_story_cap_reports_source_overflow_without_replacing_retained_s
     assert model.accept_snapshot(_snapshot(3))
     assert model.omittedBySetting == 0
     model.retire()
+
+
+def test_followed_mixed_artwork_preserves_game_identity_and_retained_qml_rail(qt_app, tmp_path: Path) -> None:
+    """Native paint gate: a single absent image must not remove any other art."""
+    model = GamesYouFollowPresentationModel()
+    from PySide6.QtGui import QImage
+    art = tmp_path / "local-art.png"
+    png = QImage(4, 4, QImage.Format.Format_ARGB32)
+    png.fill(0xffaacc11)
+    assert png.save(str(art))
+    snapshot = replace(
+        _snapshot(3),
+        stories=tuple(replace(story, game_name=f"Named game {story.appid}")
+                      for story in _snapshot(3).stories),
+        artwork_paths=(str(art), "", str(art)),
+    )
+    rows = model.storyRows
+    resets: list[int] = []
+    rows.modelReset.connect(lambda: resets.append(1))
+    assert model.accept_snapshot(snapshot)
+    assert model.anyStoryArtwork
+    for slot in range(3):
+        assert rows.data(rows.index(slot, 0), FollowedStoryRows.GameRole) == f"Named game {10000 + slot}"
+        assert bool(rows.data(rows.index(slot, 0), FollowedStoryRows.ArtworkRole)) == (slot != 1)
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_ROOT / "GamesYouFollowPresentation.qml")))
+    assert component.status() == QQmlComponent.Status.Ready, [error.toString() for error in component.errors()]
+    root = component.createWithInitialProperties({"followedModel": model})
+    assert isinstance(root, QQuickItem), [error.toString() for error in component.errors()]
+    root.setWidth(model.authoredWidth)
+    root.setHeight(model.authoredHeight)
+    try:
+        qt_app.processEvents()
+        for slot in range(3):
+            tile = _find_visual(root, f"followedStoryTile{slot}")
+            game = _find_visual(root, f"followedStoryGame{slot}")
+            fallback = _find_visual(root, f"followedStoryArtworkFallback{slot}")
+            artwork = _find_visual(root, f"followedStoryArtwork{slot}")
+            assert tile is not None and game is not None and fallback is not None and artwork is not None
+            assert game.property("text") == f"Named game {10000 + slot}"
+            if tile.isVisible():
+                assert game.isVisible() and fallback.isVisible() and artwork.isVisible()
+                assert bool(artwork.property("source")) == (slot != 1)
+        assert model.accept_snapshot(replace(snapshot, artwork_paths=("", "", "")))
+        qt_app.processEvents()
+        assert not model.anyStoryArtwork
+        assert not resets and rows is model.storyRows
+        assert all(rows.data(rows.index(slot, 0), FollowedStoryRows.GameRole) == f"Named game {10000 + slot}"
+                   for slot in range(3))
+    finally:
+        root.deleteLater()
+        engine.deleteLater()
+
+
+def test_followed_inline_article_thumbnails_keep_local_sources_and_retained_slots(qt_app, tmp_path: Path) -> None:
+    """Native gate for image-macro thumbnails as a distinct preview rail.
+
+    This cannot be inferred from a green Python-only source test; QML has to
+    instantiate the real retained delegates without a property-binding error.
+    """
+    from PySide6.QtGui import QImage
+
+    art1 = tmp_path / "news-1.png"
+    art2 = tmp_path / "news-2.png"
+    art3 = tmp_path / "news-3.png"
+    image = QImage(16, 16, QImage.Format.Format_ARGB32)
+    image.fill(0xff808080)
+    assert image.save(str(art1)) and image.save(str(art2)) and image.save(str(art3))
+    source = _snapshot(1)
+    story = replace(source.stories[0], game_name="Limbus Company",
+                    preview="Preview text without URL paths")
+    snapshot = replace(source, stories=(story,), artwork_paths=(str(art1),),
+                       inline_image_paths=((str(art1), str(art2), str(art3)),))
+    model = GamesYouFollowPresentationModel()
+    assert model.accept_snapshot(snapshot)
+    model.set_content_extent(730.0, 440.0)
+    assert model.storyRows.data(model.storyRows.index(0, 0),
+                                FollowedStoryRows.InlineArt1Role) == art1.as_uri()
+    assert model.storyRows.data(model.storyRows.index(0, 0),
+                                FollowedStoryRows.InlineArt2Role) == art2.as_uri()
+    assert model.storyRows.data(model.storyRows.index(0, 0),
+                                FollowedStoryRows.InlineArt3Role) == art3.as_uri()
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_ROOT / "GamesYouFollowPresentation.qml")))
+    assert component.status() == QQmlComponent.Status.Ready, [e.toString() for e in component.errors()]
+    root = component.createWithInitialProperties({"followedModel": model})
+    assert isinstance(root, QQuickItem), [e.toString() for e in component.errors()]
+    root.setWidth(730.0)
+    root.setHeight(440.0)
+    try:
+        qt_app.processEvents()
+        tile = _find_visual(root, "followedStoryTile0")
+        first = _find_visual(root, "followedStoryInlineImage1" + str(0))
+        second = _find_visual(root, "followedStoryInlineImage2" + str(0))
+        third = _find_visual(root, "followedStoryInlineImage3" + str(0))
+        first_frame = _find_visual(root, "followedStoryInlineImageFrame1" + str(0))
+        third_frame = _find_visual(root, "followedStoryInlineImageFrame3" + str(0))
+        outline = _find_visual(root, "followedStoryArtworkOutline0")
+        assert tile is not None and first is not None and second is not None and third is not None
+        assert first_frame is not None and third_frame is not None and outline is not None
+        assert bool(tile.property("canActivate"))  # Hover and tap cannot be inert on a live story.
+        if first_frame.isVisible():
+            assert first.width() > 0 and second.width() > 0 and third.width() > 0
+            # QUrl uses forward slashes on Windows even when tempfile/Path
+            # stringifies with backslashes. Compare path identity, not spelling.
+            assert Path(first.property("source").toLocalFile()) == art1
+            assert Path(second.property("source").toLocalFile()) == art2
+            assert Path(third.property("source").toLocalFile()) == art3
+            assert third_frame.x() > first_frame.x()
+            assert first_frame.y() + first_frame.height() <= tile.height() - 25.0
+        assert outline.isVisible() == bool(tile.property("showArt"))
+        preview = _find_visual(root, "followedStoryPreview0")
+        assert preview is not None
+        if int(tile.property("inlineCount")) >= 2:
+            assert not preview.isVisible()  # No cramped text beside 2-3 images.
+        two = replace(snapshot, inline_image_paths=((str(art1), str(art2)),))
+        assert model.accept_snapshot(two)
+        qt_app.processEvents()
+        if int(tile.property("inlineCount")) == 2:
+            assert not preview.isVisible()
+        lone = replace(snapshot, inline_image_paths=((str(art1),),))
+        assert model.accept_snapshot(lone)
+        qt_app.processEvents()
+        if int(tile.property("inlineCount")) == 1:
+            assert preview.isVisible() and not third_frame.isVisible()
+        assert model.accept_snapshot(replace(snapshot, inline_image_paths=((),)))
+        qt_app.processEvents()
+        assert model.storyRows.data(model.storyRows.index(0, 0),
+                                    FollowedStoryRows.InlineArt1Role) == ""
+        assert model.storyRows.data(model.storyRows.index(0, 0),
+                                    FollowedStoryRows.InlineArt3Role) == ""
+        assert not first_frame.isVisible()
+        assert not third_frame.isVisible()
+        assert not first.property("source").toString()
+    finally:
+        root.deleteLater()
+        engine.deleteLater()

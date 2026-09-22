@@ -560,6 +560,85 @@ class RedditFamilyAdapter:
         )
 
 
+class FeedFamilyAdapter:
+    """Adapter for the bounded general Feeds family.
+
+    F2 deliberately admits only CUSTOM 1.  The remaining stable ids already
+    exist in the neutral family catalog but cannot wake runtime/provider work
+    until their later slices provide explicit descriptors and adapters.
+    """
+
+    def __init__(
+        self,
+        *,
+        on_open_requested: Callable[[str, str], bool] | None = None,
+    ) -> None:
+        self._on_open_requested = on_open_requested
+
+    @property
+    def family_id(self) -> str:
+        return "feeds"
+
+    def enabled_instance_ids(
+        self, widgets_config: Mapping[str, object]
+    ) -> tuple[str, ...]:
+        from core.feeds.config import CustomFeedConfig
+
+        widget_id = "feeds_custom_1"
+        values = widgets_config.get(widget_id, {})
+        if not isinstance(values, Mapping):
+            values = {}
+        config = CustomFeedConfig.from_mapping(widget_id, values)
+        # An enabled but unconfigured slot does not present a dead card and, more
+        # importantly, does not instantiate any Feed runtime/service owner.
+        return (widget_id,) if config.enabled and config.configured else ()
+
+    def build(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        host: OrdinaryWidgetPresentationHost,
+        geometry: OverlayWidgetGeometry,
+        display_bounds: OverlayWidgetGeometry,
+        display_identity: str,
+        shadow_values: Mapping[str, object],
+        runtime_manager: Any,
+        runtime_generation: int | None = None,
+    ) -> BoundFamilyPresentation | None:
+        from .feeds import (
+            FeedPresentationConfig,
+            FeedPresentationModel,
+            FeedPresentationStyle,
+            RetainedFeedPresentation,
+        )
+
+        config = FeedPresentationConfig.from_widgets_mapping(
+            widgets_config, widget_id=widget_id
+        )
+        style = FeedPresentationStyle.project(config, shadow_values)
+        model = FeedPresentationModel(
+            config, style, runtime_generation=runtime_generation
+        )
+        if not _attach_runtime_service(
+            runtime_manager, widget_id, model, widgets_config
+        ):
+            return None
+        open_callback = None
+        if self._on_open_requested is not None:
+            open_callback = (
+                lambda url, wid=widget_id: bool(
+                    self._on_open_requested(wid, str(url))
+                )
+            )
+        return RetainedFeedPresentation(
+            host=host,
+            model=model,
+            geometry=geometry,
+            on_open_requested=open_callback,
+        )
+
+
 class GmailFamilyAdapter:
     """Adapter for the single-instance Gmail family."""
 
@@ -1070,6 +1149,7 @@ def default_ordinary_family_adapters(
         [str, str, str, OverlayWidgetGeometry, Mapping[str, object]], None
     ] | None = None,
     reddit_open_requested: Callable[[str, str], bool] | None = None,
+    feed_open_requested: Callable[[str, str], bool] | None = None,
     steam_open_requested: Callable[[str, str, str], bool] | None = None,
     settings_target_requested: Callable[[str], bool] | None = None,
 ) -> tuple[OrdinaryFamilyAdapter, ...]:
@@ -1086,6 +1166,7 @@ def default_ordinary_family_adapters(
         WeatherFamilyAdapter(on_settings_requested=settings_target_requested),
         MediaFamilyAdapter(),
         RedditFamilyAdapter(on_open_requested=reddit_open_requested),
+        FeedFamilyAdapter(on_open_requested=feed_open_requested),
         GmailFamilyAdapter(),
         GamesYouFollowFamilyAdapter(on_steam_action_requested=steam_open_requested),
         AchievementPulseFamilyAdapter(
@@ -1105,6 +1186,7 @@ __all__ = [
     "AchievementPulseFamilyAdapter",
     "BoundFamilyPresentation",
     "ClockFamilyAdapter",
+    "FeedFamilyAdapter",
     "FriendPulseFamilyAdapter",
     "GamesYouFollowFamilyAdapter",
     "GmailFamilyAdapter",

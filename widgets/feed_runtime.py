@@ -1,0 +1,529 @@
+"""Generation-shared runtime coordinator for general Feed widgets.
+
+One active runtime generation owns one coordinator, one earliest-due timer and
+bounded source jobs. Individual retained cards hold lightweight leases only.
+There is no per-widget polling timer, no QML network work and no source owner
+while the Feeds family is dormant.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+import time
+import weakref
+from typing import Any, Callable
+
+from core.feeds.config import CustomFeedConfig
+from core.feeds.models import FeedRefreshResult, FeedSourceSpec
+
+
+@dataclass(frozen=True)
+class FeedRuntimeConfig:
+    widget_id: str
+    source_spec: FeedSourceSpec
+    refresh_minutes: int
+
+    @classmethod
+    def from_custom(cls, config: CustomFeedConfig) -> "FeedRuntimeConfig":
+        return cls(
+            widget_id=config.widget_id,
+            source_spec=config.source_spec(),
+            refresh_minutes=max(5, min(24 * 60, int(config.refresh_minutes))),
+        )
+
+
+@dataclass
+class _SourceState:
+    spec: FeedSourceSpec
+    refresh_minutes: int
+    source: object | None = None
+    last_result: FeedRefreshResult | None = None
+    in_flight: bool = False
+    work_token: int = 0
+    due_at: float = 0.0
+
+
+_SHARED: dict[tuple[str, object], "_FeedFamilyOwner"] = {}
+
+
+def shared_feed_owner_count() -> int:
+    return len(_SHARED)
+
+
+def _default_schedule(delay_ms: int, callback: Callable[[], None]) -> Callable[[], None]:
+    from PySide6.QtCore import QTimer
+
+    timer = QTimer()
+    timer.setSingleShot(True)
+
+    def _fire() -> None:
+        try:
+            callback()
+        finally:
+            timer.deleteLater()
+
+    timer.timeout.connect(_fire)
+    timer.start(max(1, int(delay_ms)))
+
+    def _cancel() -> None:
+        timer.stop()
+        timer.deleteLater()
+
+    return _cancel
+
+
+class _FeedFamilyOwner:
+    def __init__(
+        self,
+        *,
+        key: tuple[str, object],
+        generation: object,
+        manager: Any,
+        ui_dispatch: Callable[[Callable[[], None]], object],
+        schedule: Callable[[int, Callable[[], None]], object],
+        task_priority: object,
+        now: Callable[[], float] = time.time,
+    ) -> None:
+        self._key = key
+        self._generation = generation
+        self._manager = manager
+        self._ui_dispatch = ui_dispatch
+        self._schedule = schedule
+        self._task_priority = task_priority
+        self._now = now
+        self._leases: weakref.WeakSet[FeedRuntimeLease] = weakref.WeakSet()
+        self._active: weakref.WeakSet[FeedRuntimeLease] = weakref.WeakSet()
+        self._states: dict[str, _SourceState] = {}
+        self._deadline_cancel: Callable[[], None] | None = None
+        self._deadline_token = 0
+        self._retired = False
+
+    @property
+    def is_retired(self) -> bool:
+        return self._retired
+
+    def attach(self, lease: "FeedRuntimeLease") -> None:
+        if self._retired:
+            raise RuntimeError("retired Feed owner")
+        self._leases.add(lease)
+
+    @staticmethod
+    def _same_acquisition_spec(left: FeedSourceSpec, right: FeedSourceSpec) -> bool:
+        return (
+            left.source_id == right.source_id
+            and left.url == right.url
+            and left.cache_key == right.cache_key
+            and left.max_items == right.max_items
+            and left.allow_endpoint_migration == right.allow_endpoint_migration
+        )
+
+    @staticmethod
+    def _release_source(state: _SourceState) -> None:
+        source, state.source = state.source, None
+        transport = getattr(source, "transport", None) if source is not None else None
+        close = getattr(transport, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+
+    def _release_source_if_idle(self, state: _SourceState) -> None:
+        if not state.in_flight and not self._active_leases_for_state(state):
+            self._release_source(state)
+
+    def _state_for(self, lease: "FeedRuntimeLease") -> _SourceState:
+        config = lease.config
+        key = config.source_spec.cache_key
+        state = self._states.get(key)
+        if state is None:
+            state = _SourceState(config.source_spec, config.refresh_minutes)
+            self._states[key] = state
+        elif not self._same_acquisition_spec(state.spec, config.source_spec):
+            # CUSTOM cache identity includes the endpoint fingerprint. A changed
+            # endpoint therefore cannot silently reuse the old state object.
+            self._release_source(state)
+            state = _SourceState(config.source_spec, config.refresh_minutes)
+            self._states[key] = state
+        return state
+
+    def _recompute_state_cadence(self, state: _SourceState) -> None:
+        """Derive one source cadence from *currently active* leases only.
+
+        A short-lived fast consumer must not permanently ratchet a shared source
+        to that interval after it is hidden or retired.  Cadence is therefore a
+        projection of active lease policy, never accumulated mutable history.
+        """
+        active = self._active_leases_for_state(state)
+        if not active:
+            return
+        refresh_minutes = min(lease.config.refresh_minutes for lease in active)
+        if refresh_minutes == state.refresh_minutes:
+            return
+        state.refresh_minutes = refresh_minutes
+        if state.last_result is not None:
+            self._update_due(state, state.last_result)
+
+    def activate(self, lease: "FeedRuntimeLease") -> bool:
+        if self._retired or lease not in self._leases:
+            return False
+        self._active.add(lease)
+        state = self._state_for(lease)
+        self._recompute_state_cadence(state)
+        if state.last_result is not None:
+            lease._accept(state.last_result, from_cache=False)
+        if not state.in_flight:
+            if state.last_result is None:
+                # First admission needs one bounded disk read. Once a source has
+                # an accepted in-memory result, later visibility/reactivation
+                # must not reread the same cache merely to recreate an HTTP
+                # object; network state is constructed only when actually due.
+                self._submit(state, cache_only=True, force=False)
+            else:
+                self._admit_due_work()
+        self._reschedule()
+        return True
+
+    def deactivate(self, lease: "FeedRuntimeLease") -> None:
+        self._active.discard(lease)
+        state = self._states.get(lease.config.source_spec.cache_key)
+        if state is not None:
+            self._recompute_state_cadence(state)
+            self._release_source_if_idle(state)
+        if not self._active:
+            self._cancel_deadline()
+        else:
+            self._reschedule()
+
+    def detach(self, lease: "FeedRuntimeLease") -> None:
+        self.deactivate(lease)
+        self._leases.discard(lease)
+        if not self._leases:
+            self.retire()
+
+    def retire(self) -> None:
+        if self._retired:
+            return
+        self._retired = True
+        self._deadline_token += 1
+        self._cancel_deadline()
+        for state in self._states.values():
+            state.work_token += 1
+            state.in_flight = False
+            self._release_source(state)
+        self._states.clear()
+        for lease in tuple(self._leases):
+            lease._owner = None
+            lease._running = False
+        self._active.clear()
+        self._leases.clear()
+        if _SHARED.get(self._key) is self:
+            del _SHARED[self._key]
+
+    def _cancel_deadline(self) -> None:
+        cancel, self._deadline_cancel = self._deadline_cancel, None
+        if cancel is not None:
+            cancel()
+
+    def _active_leases_for_state(self, state: _SourceState) -> tuple["FeedRuntimeLease", ...]:
+        key = state.spec.cache_key
+        return tuple(
+            lease
+            for lease in self._active
+            if lease.config.source_spec.cache_key == key and lease._running
+        )
+
+    def request_refresh(self, lease: "FeedRuntimeLease") -> bool:
+        if self._retired or lease not in self._active:
+            return False
+        state = self._state_for(lease)
+        self._recompute_state_cadence(state)
+        if state.in_flight:
+            return False
+        state.due_at = 0.0
+        self._cancel_deadline()
+        self._submit(state, cache_only=False, force=True)
+        return True
+
+    def _source_for(self, state: _SourceState):
+        if state.source is None:
+            from core.feeds.source import FeedSource
+
+            owner_ref = weakref.ref(self)
+
+            def _make_transport():
+                from core.feeds.transport import FeedHttpTransport
+                return FeedHttpTransport(
+                    should_continue=lambda: bool(
+                        (owner := owner_ref()) is not None and not owner._retired
+                    )
+                )
+
+            state.source = FeedSource(state.spec, transport_factory=_make_transport)
+        return state.source
+
+    def _submit(self, state: _SourceState, *, cache_only: bool, force: bool) -> None:
+        if self._retired or state.in_flight or not self._active_leases_for_state(state):
+            return
+        state.in_flight = True
+        state.work_token += 1
+        token = state.work_token
+        cache_key = state.spec.cache_key
+        owner_ref = weakref.ref(self)
+
+        def _work() -> FeedRefreshResult:
+            owner = owner_ref()
+            if owner is None or owner._retired:
+                raise RuntimeError("feed owner retired")
+            source = owner._source_for(state)
+            return source.load_cached() if cache_only else source.refresh(force=force)
+
+        _work._srpss_runtime_generation = self._generation
+
+        def _completed(task_result: object) -> None:
+            result = (
+                getattr(task_result, "result", None)
+                if getattr(task_result, "success", False)
+                else None
+            )
+
+            def _deliver() -> None:
+                owner = owner_ref()
+                if owner is not None:
+                    owner._complete(cache_key, token, result, cache_only=cache_only)
+
+            _deliver._srpss_runtime_generation = self._generation
+            try:
+                self._ui_dispatch(_deliver)
+            except Exception:
+                return
+
+        _completed._srpss_runtime_generation = self._generation
+        try:
+            self._manager.submit_io_task(
+                _work,
+                callback=_completed,
+                category="feeds",
+                priority=self._task_priority,
+            )
+        except Exception:
+            state.in_flight = False
+            state.due_at = self._now() + 60.0
+            self._reschedule()
+
+    def _complete(
+        self,
+        cache_key: str,
+        token: int,
+        result: object,
+        *,
+        cache_only: bool,
+    ) -> None:
+        if self._retired:
+            return
+        state = self._states.get(cache_key)
+        if state is None or token != state.work_token or not state.in_flight:
+            return
+        state.in_flight = False
+        if isinstance(result, FeedRefreshResult):
+            state.last_result = result
+            for lease in self._active_leases_for_state(state):
+                lease._accept(result, from_cache=cache_only)
+            self._update_due(state, result)
+        else:
+            state.due_at = self._now() + 60.0
+
+        if cache_only and self._active_leases_for_state(state):
+            # Cache-first means paint accepted disk state first, then refresh only
+            # if it is actually due. No startup network request for a fresh cache.
+            if state.due_at <= self._now() + 0.001:
+                self._submit(state, cache_only=False, force=False)
+        self._release_source_if_idle(state)
+        self._reschedule()
+
+    def _update_due(self, state: _SourceState, result: FeedRefreshResult) -> None:
+        now = self._now()
+        health = result.health
+        if health.backoff_until is not None and health.backoff_until > now:
+            state.due_at = float(health.backoff_until)
+            return
+        success = health.last_success_at
+        if success is not None:
+            state.due_at = max(now, float(success) + state.refresh_minutes * 60.0)
+            return
+        # Cache-first startup with no accepted snapshot must proceed directly to
+        # one bounded network refresh. Real network/parse failures are persisted
+        # by FeedSource with an explicit backoff_until above, so immediate here
+        # cannot spin and avoids leaving a brand-new feed blank for one whole
+        # refresh interval.
+        state.due_at = now
+
+    def _admit_due_work(self) -> None:
+        now = self._now()
+        for state in tuple(self._states.values()):
+            if (
+                not state.in_flight
+                and self._active_leases_for_state(state)
+                and state.due_at <= now
+            ):
+                self._submit(state, cache_only=False, force=False)
+
+    def _reschedule(self) -> None:
+        self._cancel_deadline()
+        if self._retired or not self._active:
+            return
+        candidates = [
+            state.due_at
+            for state in self._states.values()
+            if self._active_leases_for_state(state) and not state.in_flight and state.due_at > 0
+        ]
+        if not candidates:
+            return
+        due_at = min(candidates)
+        delay_ms = max(1, int(round(max(0.001, due_at - self._now()) * 1000.0)))
+        self._deadline_token += 1
+        token = self._deadline_token
+        owner_ref = weakref.ref(self)
+
+        def _due() -> None:
+            owner = owner_ref()
+            if owner is None or owner._retired or token != owner._deadline_token:
+                return
+            owner._deadline_cancel = None
+            owner._admit_due_work()
+            owner._reschedule()
+
+        _due._srpss_runtime_generation = self._generation
+        cancel = self._schedule(delay_ms, _due)
+        self._deadline_cancel = cancel if callable(cancel) else None
+
+
+class FeedRuntimeLease:
+    """One retained feed card's lightweight lease on the shared family owner."""
+
+    def __init__(
+        self,
+        *,
+        config: FeedRuntimeConfig,
+        generation: object = None,
+        manager: Any = None,
+        ui_dispatch: Callable[[Callable[[], None]], object] | None = None,
+        schedule: Callable[[int, Callable[[], None]], object] | None = None,
+        task_priority: object | None = None,
+    ) -> None:
+        self.config = config
+        self._generation = generation
+        self._manager = manager
+        self._ui_dispatch = ui_dispatch
+        self._schedule = schedule
+        self._task_priority = task_priority
+        self._consumer_ref: weakref.ReferenceType | None = None
+        self._owner: _FeedFamilyOwner | None = None
+        self._running = False
+        self._retired = False
+
+    def attach_consumer(self, consumer: object) -> None:
+        if self._retired or self._consumer_ref is not None:
+            raise RuntimeError("Feed lease may be attached only once")
+        self._consumer_ref = weakref.ref(consumer)
+        if self._generation is None:
+            self._generation = getattr(consumer, "_runtime_generation", None)
+
+    def set_thread_manager(self, manager: Any, *, generation: object = None) -> None:
+        if self._retired or self._running:
+            raise RuntimeError("cannot change Feed lease worker after activation")
+        self._manager = manager
+        if generation is not None:
+            self._generation = generation
+
+    def start(self) -> bool:
+        if self._retired or self._consumer_ref is None or self._manager is None:
+            return False
+        if self._running:
+            return True
+        if self._owner is None:
+            ui_dispatch = self._ui_dispatch
+            task_priority = self._task_priority
+            if ui_dispatch is None or task_priority is None:
+                from core.threading.manager import TaskPriority, ThreadManager
+
+                if ui_dispatch is None:
+                    ui_dispatch = ThreadManager.run_on_ui_thread
+                if task_priority is None:
+                    task_priority = TaskPriority.LOW
+
+            key = (
+                ("runtime", self._generation)
+                if self._generation is not None
+                else ("thread_manager", id(self._manager))
+            )
+            owner = _SHARED.get(key)
+            if owner is None or owner.is_retired:
+                owner = _FeedFamilyOwner(
+                    key=key,
+                    generation=self._generation,
+                    manager=self._manager,
+                    ui_dispatch=ui_dispatch,
+                    schedule=self._schedule or _default_schedule,
+                    task_priority=task_priority,
+                )
+                _SHARED[key] = owner
+            self._owner = owner
+            owner.attach(self)
+        self._running = True
+        self._running = bool(self._owner.activate(self))
+        return self._running
+
+    def _accept(self, result: FeedRefreshResult, *, from_cache: bool) -> None:
+        consumer = self._consumer_ref() if self._consumer_ref else None
+        if self._retired or not self._running or consumer is None:
+            return
+        alive = getattr(consumer, "is_feed_consumer_alive", None)
+        if callable(alive) and not bool(alive()):
+            return
+        accept = getattr(consumer, "on_feed_runtime_result", None)
+        if callable(accept):
+            accept(result, from_cache=bool(from_cache))
+
+    def request_refresh(self) -> bool:
+        return bool(self._running and self._owner and self._owner.request_refresh(self))
+
+    def detach_consumer(self, consumer: object | None = None) -> None:
+        """Sever the retained presentation callback without retiring twice.
+
+        Presentation retirement and runtime-manager retirement may occur in either
+        order during generation teardown.  Detaching only clears the weak callback
+        when it matches the supplied consumer; the runtime manager remains the
+        service lifetime authority and performs final ``retire()``.
+        """
+        current = self._consumer_ref() if self._consumer_ref else None
+        if consumer is not None and current is not consumer:
+            return
+        self._consumer_ref = None
+
+    def stop(self) -> None:
+        self._running = False
+        if self._owner is not None:
+            self._owner.deactivate(self)
+
+    def retire(self) -> None:
+        if self._retired:
+            return
+        self._retired = True
+        self.stop()
+        if self._owner is not None:
+            self._owner.detach(self)
+        self._owner = None
+        self._consumer_ref = None
+        self._manager = None
+
+    def is_retired(self) -> bool:
+        return self._retired
+
+    def is_running(self) -> bool:
+        return self._running and not self._retired
+
+
+def reset_shared_feed_runtime_for_tests() -> None:
+    for owner in tuple(_SHARED.values()):
+        owner.retire()
+    _SHARED.clear()

@@ -68,6 +68,12 @@ def get_cache_family_descriptors(
             (CacheTarget(reddit_root, pattern="*_posts.json"),),
         ),
         CacheFamilyDescriptor(
+            "feeds",
+            "Feed Widgets",
+            "Durable last-good RSS/Atom widget snapshots. Feed configuration is preserved.",
+            (CacheTarget(cache_root / "feeds", recursive=True),),
+        ),
+        CacheFamilyDescriptor(
             "weather",
             "Weather",
             "Provider and last-visible weather responses.",

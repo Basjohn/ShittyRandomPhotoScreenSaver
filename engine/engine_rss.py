@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import List, Tuple, TYPE_CHECKING
 
 from core.events import EventType
+from core.feeds.normalization import redacted_url_for_log
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.logging.tags import TAG_RSS
 from sources.base_provider import ImageMetadata, ImageSourceType
@@ -311,7 +312,7 @@ def background_refresh_rss(engine: ScreensaverEngine) -> None:
         random.shuffle(feed_urls)
         feed_url = feed_urls[0]
 
-        logger.debug(f"Background RSS refresh: {feed_url[:60]}...")
+        logger.debug("Background RSS refresh: %s", redacted_url_for_log(feed_url))
 
         coordinator = engine.rss_coordinator
 

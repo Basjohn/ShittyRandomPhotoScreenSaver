@@ -596,6 +596,7 @@
     },
     "family_activation": {
       "clocks": true,
+      "feeds": false,
       "gmail": true,
       "media": true,
       "reddit": true,
@@ -604,6 +605,154 @@
       "system_stats": true,
       "visualizers": true,
       "weather": true
+    },
+    "feeds_custom_1": {
+      "bg_color": [
+        35,
+        35,
+        35,
+        255
+      ],
+      "bg_opacity": 0.3,
+      "border_color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "border_opacity": 1.0,
+      "color": [
+        255,
+        255,
+        255,
+        230
+      ],
+      "enabled": false,
+      "feed_url": "",
+      "font_family": "Inter",
+      "font_size": 14,
+      "item_limit": 12,
+      "margin": 30,
+      "monitor": "1",
+      "name": "Custom 1",
+      "position": "Middle Right",
+      "preferred_height": 420,
+      "preferred_width": 560,
+      "refresh_minutes": 15,
+      "show_background": true,
+      "show_images": true,
+      "view_mode": "list"
+    },
+    "feeds_custom_2": {
+      "bg_color": [
+        35,
+        35,
+        35,
+        255
+      ],
+      "bg_opacity": 0.3,
+      "border_color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "border_opacity": 1.0,
+      "color": [
+        255,
+        255,
+        255,
+        230
+      ],
+      "enabled": false,
+      "feed_url": "",
+      "font_family": "Inter",
+      "font_size": 14,
+      "item_limit": 12,
+      "margin": 30,
+      "monitor": "1",
+      "name": "Custom 2",
+      "position": "Middle Left",
+      "preferred_height": 420,
+      "preferred_width": 560,
+      "refresh_minutes": 15,
+      "show_background": true,
+      "show_images": true,
+      "view_mode": "list"
+    },
+    "feeds_custom_3": {
+      "bg_color": [
+        35,
+        35,
+        35,
+        255
+      ],
+      "bg_opacity": 0.3,
+      "border_color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "border_opacity": 1.0,
+      "color": [
+        255,
+        255,
+        255,
+        230
+      ],
+      "enabled": false,
+      "feed_url": "",
+      "font_family": "Inter",
+      "font_size": 14,
+      "item_limit": 12,
+      "margin": 30,
+      "monitor": "1",
+      "name": "Custom 3",
+      "position": "Top Center",
+      "preferred_height": 420,
+      "preferred_width": 560,
+      "refresh_minutes": 15,
+      "show_background": true,
+      "show_images": true,
+      "view_mode": "list"
+    },
+    "feeds_custom_4": {
+      "bg_color": [
+        35,
+        35,
+        35,
+        255
+      ],
+      "bg_opacity": 0.3,
+      "border_color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "border_opacity": 1.0,
+      "color": [
+        255,
+        255,
+        255,
+        230
+      ],
+      "enabled": false,
+      "feed_url": "",
+      "font_family": "Inter",
+      "font_size": 14,
+      "item_limit": 12,
+      "margin": 30,
+      "monitor": "1",
+      "name": "Custom 4",
+      "position": "Bottom Center",
+      "preferred_height": 420,
+      "preferred_width": 560,
+      "refresh_minutes": 15,
+      "show_background": true,
+      "show_images": true,
+      "view_mode": "list"
     },
     "friend_pulse": {
       "accent_color": [

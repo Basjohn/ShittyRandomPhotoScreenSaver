@@ -26,6 +26,7 @@ class FollowedNewsDisplayRow:
     local_artwork_source: str = ""
     game_label: str = ""
     preview: str = ""
+    local_inline_artwork_sources: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -59,8 +60,10 @@ def project_followed_news(snapshot: FollowedNewsSnapshot) -> FollowedNewsDisplay
             slot=index,
             title=_display_text(story.title, 300),
             source_label=_display_text(story.feed_name, 80) or "Steam News",
-            game_label=_display_text(story.game_name, 100),
+            game_label=_display_text(story.game_name, 160) or f"Steam App {story.appid}",
             preview=_display_text(story.preview, 320),
+            local_inline_artwork_sources=(tuple(Path(path).as_uri() for path in snapshot.inline_image_paths[index][:3] if path)
+                if index < len(snapshot.inline_image_paths) else ()),
             action_enabled=story.action_available,
             local_artwork_source=(Path(snapshot.artwork_paths[index]).as_uri()
                                   if index < len(snapshot.artwork_paths)
