@@ -44,6 +44,7 @@ def test_general_section_renames_only_user_facing_defaults_surface(qt_app, setti
         assert tab.clear_selected_caches_btn.isEnabled() is False
         tab.cache_family_checks["weather"].setChecked(True)
         assert tab.clear_selected_caches_btn.isEnabled() is True
+        assert str(tab._cache_family_descriptors["steam"].targets[0].path) in tab.cache_family_checks["steam"].toolTip()
     finally:
         tab.deleteLater()
 
@@ -95,7 +96,45 @@ def test_general_cache_clear_confirms_selected_scope_and_reports_completion(
         assert "Steam" not in confirmation_messages[0]
         assert tab.clear_selected_caches_btn.text() == "Clear Selected Caches"
         assert tab.clear_selected_caches_btn.isEnabled() is True
-        assert tab.cache_clear_status_label.text() == "Cleared 3 files (1.5 KB)."
+        assert tab.cache_clear_status_label.text().startswith("Cleared 3 disk files (1.5 KB).")
+        assert "retain or recreate" in tab.cache_clear_status_label.text()
         assert "#7fe0a3" in tab.cache_clear_status_label.styleSheet()
+    finally:
+        tab.deleteLater()
+
+
+def test_general_cache_clear_zero_disk_files_reports_actual_scope_and_live_state(
+    qt_app, settings_manager, monkeypatch,
+) -> None:
+    tab = WidgetsTab(
+        settings_manager, lazy_sections=True,
+        initial_view_state={"subtab_id": "defaults"},
+    )
+
+    class _ImmediateManager:
+        def submit_io_task(self, function, *, task_id, callback):
+            assert task_id == "general_clear_selected_caches"
+            callback(SimpleNamespace(success=True, result=function()))
+
+    try:
+        tab.cache_family_checks["steam"].setChecked(True)
+        monkeypatch.setattr(general_tab.StyledPopup, "question",
+                            lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(general_tab, "_get_cache_thread_manager",
+                            lambda _tab: _ImmediateManager())
+        monkeypatch.setattr(general_tab.ThreadManager, "run_on_ui_thread",
+                            lambda callback: callback())
+        monkeypatch.setattr(general_tab, "clear_cache_families",
+                            lambda selected_ids, *, descriptors: CacheClearResult(
+                                selected_ids=tuple(selected_ids), removed_files=0,
+                                removed_bytes=0, skipped_files=0, errors=(),
+                            ))
+        general_tab._on_clear_selected_caches(tab)
+        message = tab.cache_clear_status_label.text()
+        assert "No matching disk-cache files" in message
+        assert str(tab._cache_family_descriptors["steam"].targets[0].path) in message
+        assert "memory" in message and "rewrite" in message
+        assert "already empty" not in message
+        assert "#ffbd70" in tab.cache_clear_status_label.styleSheet()
     finally:
         tab.deleteLater()

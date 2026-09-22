@@ -473,16 +473,43 @@ def test_followed_inline_article_thumbnails_keep_local_sources_and_retained_slot
         outline = _find_visual(root, "followedStoryArtworkOutline0")
         assert tile is not None and first is not None and second is not None and third is not None
         assert first_frame is not None and third_frame is not None and outline is not None
+        contact = _find_visual(root, "followedStoryArtworkContactShadow0")
+        tile_shadow = _find_visual(root, "followedStoryShadow0")
+        inline_contact = _find_visual(root, "followedStoryInlineContactShadow10")
+        assert all(obj is not None for obj in (contact, tile_shadow, inline_contact))
         assert bool(tile.property("canActivate"))  # Hover and tap cannot be inert on a live story.
+        # A 730 x 440 grid may yield a narrow two-image tile. The third
+        # retained role exists, but its QML Image must *not* acquire its local
+        # file until the third frame actually fits and becomes visible.
         if first_frame.isVisible():
-            assert first.width() > 0 and second.width() > 0 and third.width() > 0
-            # QUrl uses forward slashes on Windows even when tempfile/Path
-            # stringifies with backslashes. Compare path identity, not spelling.
+            assert first.width() > 0 and second.width() > 0
             assert Path(first.property("source").toLocalFile()) == art1
-            assert Path(second.property("source").toLocalFile()) == art2
-            assert Path(third.property("source").toLocalFile()) == art3
-            assert third_frame.x() > first_frame.x()
+            if int(tile.property("inlineCount")) >= 2:
+                assert Path(second.property("source").toLocalFile()) == art2
+            else:
+                assert not second.property("source").toString()
+            if int(tile.property("inlineCount")) >= 3:
+                assert third_frame.isVisible()
+                assert Path(third.property("source").toLocalFile()) == art3
+                assert third_frame.x() > first_frame.x()
+            else:
+                assert not third_frame.isVisible()
+                assert not third.property("source").toString()
             assert first_frame.y() + first_frame.height() <= tile.height() - 25.0
+
+        # Exercise the actual three-image painted state too: a tall, broad
+        # single-column card gives this same retained tile enough text width.
+        assert model.set_content_extent(730.0, 1100.0)
+        root.setWidth(730.0)
+        root.setHeight(1100.0)
+        qt_app.processEvents()
+        assert tile.isVisible() and int(tile.property("inlineCount")) == 3
+        assert all(frame.isVisible() for frame in (
+            first_frame, _find_visual(root, "followedStoryInlineImageFrame20"), third_frame))
+        assert Path(first.property("source").toLocalFile()) == art1
+        assert Path(second.property("source").toLocalFile()) == art2
+        assert Path(third.property("source").toLocalFile()) == art3
+        assert third_frame.x() > first_frame.x()
         assert outline.isVisible() == bool(tile.property("showArt"))
         preview = _find_visual(root, "followedStoryPreview0")
         assert preview is not None

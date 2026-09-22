@@ -643,6 +643,22 @@ def test_header_flip_rearranges_reddit_rails_without_mirroring_post_text(qt_app,
         title = _find_visual_item(item, "redditPostTitle_0")
         assert all(v is not None for v in (header, refresh, area, row,
                                            age, age_value, age_ago, title))
+        refresh_frame = _find_visual_item(item, "redditRefreshHoverFrame")
+        refresh_glyph = _find_visual_item(item, "redditRefreshGlyph")
+        assert refresh_frame is not None and refresh_glyph is not None
+        assert refresh_frame.width() == pytest.approx(refresh.width())
+        assert refresh_frame.height() == pytest.approx(refresh.height())
+        assert refresh_glyph.width() == pytest.approx(refresh.width())
+        # The unadmitted test presenter must NOT advertise an actionable hover.
+        # Admit the same pointer state the real display manager sends in
+        # interactive mode; do not weaken QML's input/retirement fence.
+        assert not bool(refresh.property("canActivate"))
+        presentation.apply_input_state({
+            "admission_open": True, "exiting": False,
+            "interaction_mode_enabled": True, "ctrl_held": False,
+        })
+        qt_app.processEvents()
+        assert bool(refresh.property("canActivate"))
         assert row.isVisible()
         authored = (header.x(), refresh.x(), age.x(), title.x())
         assert header.x() < refresh.x() and age.x() < title.x()

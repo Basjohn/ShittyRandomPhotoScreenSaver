@@ -312,14 +312,13 @@ OverlayWidget {
             Item {
                 id: refreshTarget
                 objectName: "gmailRefreshTarget"
-                // The glyph and shadow must stay inside their bounded edit
-                // target, not merely rely on the outer card to conceal escape.
+                // Preserve the authored bounded edit target and paint slot.
                 clip: true
                 readonly property real implicitWidth: Math.max(24.0, refreshGlyph.implicitWidth + 4.0)
+                readonly property bool canActivate: visible
+                    && gmailRoot.gmailModel.interactionEnabled
+                    && !gmailRoot.customLayoutInputBlocked
                 visible: gmailRoot.gmailModel.showRefreshSpiral
-                // Saved offsets are REQUESTS, not permission to escape the
-                // header's actual bounded accessory slot. Keep the edit target
-                // and painted glyph in exactly the same admitted rectangle.
                 width: Math.min(Math.max(1.0, headerArea.width),
                     implicitWidth * gmailRoot.childWidthScale("refresh"))
                 height: Math.min(Math.max(1.0, headerArea.height),
@@ -330,6 +329,21 @@ OverlayWidget {
                 y: Math.max(0.0, Math.min(headerArea.height - height,
                     (headerArea.height - height) / 2.0 + gmailRoot.childOffsetY("refresh")))
 
+                Rectangle {
+                    objectName: "gmailRefreshHoverFrame"
+                    anchors.fill: parent
+                    radius: 6.0
+                    color: "transparent"
+                    border.color: gmailRoot.gmailModel.headerBorderColor
+                    border.width: refreshHover.hovered && refreshTarget.canActivate
+                        ? gmailRoot.scaleAwareStrokeWidth(1.5) : 0.0
+                }
+                HoverHandler {
+                    id: refreshHover
+                    enabled: refreshTarget.canActivate
+                    blocking: false
+                    cursorShape: Qt.PointingHandCursor
+                }
                 ShadowedText {
                     id: refreshGlyph
                     objectName: "gmailRefreshGlyph"
@@ -347,12 +361,11 @@ OverlayWidget {
                     shadowColor: gmailRoot.gmailModel.textShadowColor
                     shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
                     shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
-
-                    TapHandler {
-                        enabled: gmailRoot.gmailModel.interactionEnabled
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: gmailRoot.refreshRequested()
-                    }
+                }
+                TapHandler {
+                    enabled: refreshTarget.canActivate
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: gmailRoot.refreshRequested()
                 }
             }
         }

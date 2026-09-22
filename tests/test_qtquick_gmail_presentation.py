@@ -1032,6 +1032,12 @@ def test_gmail_refresh_edit_target_is_bounded_during_parent_xy_and_child_offsets
         refresh = _find_visual_item(item, "gmailRefreshTarget")
         header = _find_visual_item(item, "gmailHeaderArea")
         assert refresh is not None and header is not None
+        refresh_frame = _find_visual_item(item, "gmailRefreshHoverFrame")
+        refresh_glyph = _find_visual_item(item, "gmailRefreshGlyph")
+        assert refresh_frame is not None and refresh_glyph is not None
+        assert refresh_frame.width() == pytest.approx(refresh.width())
+        assert refresh_frame.height() == pytest.approx(refresh.height())
+        assert refresh_glyph.width() == pytest.approx(refresh.width())
 
         def bounded():
             assert 0.0 <= refresh.x() + 0.01

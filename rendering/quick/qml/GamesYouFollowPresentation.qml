@@ -319,6 +319,22 @@ OverlayWidget {
                 // An image-optional generation reserves the same artwork rail
                 // for every tile. Missing art gets an intentional, restrained
                 // local surface, never a broken/empty image or changing text X.
+                // A static directional contact shadow belongs to the image
+                // rail, not a per-image GPU blur or new animation owner.
+                Rectangle {
+                    objectName: "followedStoryArtworkContactShadow" + storySlot
+                    visible: tile.showArt && followsRoot.cardShadowEnabled
+                    x: tile.artX + Math.max(-3.0, Math.min(3.0,
+                        followsRoot.cardShadowOffsetX * 0.45))
+                    y: 8.0 + Math.max(-3.0, Math.min(3.0,
+                        followsRoot.cardShadowOffsetY * 0.45))
+                    width: tile.artWidth
+                    height: Math.max(0.0, tile.height - 16.0)
+                    radius: 4.0
+                    color: Qt.rgba(followsRoot.cardShadowColor.r,
+                        followsRoot.cardShadowColor.g, followsRoot.cardShadowColor.b,
+                        followsRoot.cardShadowColor.a * 0.22)
+                }
                 Rectangle {
                     objectName: "followedStoryArtworkFallback" + storySlot
                     visible: tile.showArt
@@ -444,6 +460,20 @@ OverlayWidget {
                 readonly property real inlineX: followsRoot.headerFlipped
                     ? tile.textX + tile.textW - tile.inlineRailW : tile.textX
                 Rectangle {
+                    objectName: "followedStoryInlineContactShadow1" + storySlot
+                    visible: tile.inlineCount >= 1 && followsRoot.cardShadowEnabled
+                    x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 0.0
+                        + Math.max(-3.0, Math.min(3.0, followsRoot.cardShadowOffsetX * 0.45))
+                    y: tile.inlineY + Math.max(-3.0, Math.min(3.0,
+                        followsRoot.cardShadowOffsetY * 0.45))
+                    width: tile.inlineW
+                    height: tile.inlineH
+                    radius: 3.0
+                    color: Qt.rgba(followsRoot.cardShadowColor.r,
+                        followsRoot.cardShadowColor.g, followsRoot.cardShadowColor.b,
+                        followsRoot.cardShadowColor.a * 0.22)
+                }
+                Rectangle {
                     objectName: "followedStoryInlineImageFrame1" + storySlot
                     visible: tile.showInline
                     x: tile.inlineX
@@ -470,6 +500,20 @@ OverlayWidget {
                     }
                 }
                 Rectangle {
+                    objectName: "followedStoryInlineContactShadow2" + storySlot
+                    visible: tile.inlineCount >= 2 && followsRoot.cardShadowEnabled
+                    x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 1.0
+                        + Math.max(-3.0, Math.min(3.0, followsRoot.cardShadowOffsetX * 0.45))
+                    y: tile.inlineY + Math.max(-3.0, Math.min(3.0,
+                        followsRoot.cardShadowOffsetY * 0.45))
+                    width: tile.inlineW
+                    height: tile.inlineH
+                    radius: 3.0
+                    color: Qt.rgba(followsRoot.cardShadowColor.r,
+                        followsRoot.cardShadowColor.g, followsRoot.cardShadowColor.b,
+                        followsRoot.cardShadowColor.a * 0.22)
+                }
+                Rectangle {
                     objectName: "followedStoryInlineImageFrame2" + storySlot
                     visible: tile.inlineCount >= 2
                     x: tile.inlineX + tile.inlineW + tile.inlineGap
@@ -494,6 +538,20 @@ OverlayWidget {
                         border.color: followedModel.headerBorderColor
                         border.width: followsRoot.scaleAwareStrokeWidth(0.9)
                     }
+                }
+                Rectangle {
+                    objectName: "followedStoryInlineContactShadow3" + storySlot
+                    visible: tile.inlineCount >= 3 && followsRoot.cardShadowEnabled
+                    x: tile.inlineX + (tile.inlineW + tile.inlineGap) * 2.0
+                        + Math.max(-3.0, Math.min(3.0, followsRoot.cardShadowOffsetX * 0.45))
+                    y: tile.inlineY + Math.max(-3.0, Math.min(3.0,
+                        followsRoot.cardShadowOffsetY * 0.45))
+                    width: tile.inlineW
+                    height: tile.inlineH
+                    radius: 3.0
+                    color: Qt.rgba(followsRoot.cardShadowColor.r,
+                        followsRoot.cardShadowColor.g, followsRoot.cardShadowColor.b,
+                        followsRoot.cardShadowColor.a * 0.22)
                 }
                 Rectangle {
                     objectName: "followedStoryInlineImageFrame3" + storySlot

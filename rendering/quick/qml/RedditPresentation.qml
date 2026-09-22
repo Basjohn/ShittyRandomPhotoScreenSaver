@@ -237,6 +237,9 @@ OverlayWidget {
                 id: refreshTarget
                 objectName: "redditRefreshTarget"
                 readonly property real implicitWidth: Math.max(24.0, refreshGlyph.implicitWidth + 4.0)
+                readonly property bool canActivate: visible
+                    && redditRoot.redditModel.interactionEnabled
+                    && !redditRoot.customLayoutInputBlocked
                 visible: redditRoot.redditModel.showRefreshSpiral
                 width: implicitWidth * redditRoot.childWidthScale("refresh")
                 height: headerArea.height * redditRoot.childHeightScale("refresh")
@@ -244,6 +247,23 @@ OverlayWidget {
                     + redditRoot.childOffsetX("refresh")
                 y: (headerArea.height - height) / 2.0 + redditRoot.childOffsetY("refresh")
 
+                // Retain the authored click box, glyph position and font size.
+                // A paint-only hover frame follows the semantic header border.
+                Rectangle {
+                    objectName: "redditRefreshHoverFrame"
+                    anchors.fill: parent
+                    radius: 6.0
+                    color: "transparent"
+                    border.color: redditRoot.redditModel.headerBorderColor
+                    border.width: refreshHover.hovered && refreshTarget.canActivate
+                        ? redditRoot.scaleAwareStrokeWidth(1.5) : 0.0
+                }
+                HoverHandler {
+                    id: refreshHover
+                    enabled: refreshTarget.canActivate
+                    blocking: false
+                    cursorShape: Qt.PointingHandCursor
+                }
                 ShadowedText {
                     id: refreshGlyph
                     objectName: "redditRefreshGlyph"
@@ -260,11 +280,11 @@ OverlayWidget {
                     shadowColor: redditRoot.redditModel.textShadowColor
                     shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
                     shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
-                    TapHandler {
-                        enabled: redditRoot.redditModel.interactionEnabled
-                        acceptedButtons: Qt.LeftButton
-                        onTapped: redditRoot.refreshRequested()
-                    }
+                }
+                TapHandler {
+                    enabled: refreshTarget.canActivate
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: redditRoot.refreshRequested()
                 }
             }
         }
