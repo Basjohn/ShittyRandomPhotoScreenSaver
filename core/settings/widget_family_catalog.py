@@ -115,6 +115,22 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
         description="Subreddit post feeds, with two independently configured instances.",
     ),
     WidgetFamilyDescriptor(
+        family_id="feeds",
+        label="Feeds",
+        # Only canonical product members belong in the capability catalog.
+        # NEWS ids are reserved in core.feeds.news_candidates until N1 gives
+        # them defaults/runtime descriptors; ghost members would violate schema
+        # completeness and make activation reason about nonexistent widgets.
+        member_widget_ids=(
+            "feeds_custom_1",
+            "feeds_custom_2",
+            "feeds_custom_3",
+            "feeds_custom_4",
+        ),
+        settings_section_id="feeds",
+        description="Durable RSS/Atom feeds with bounded custom slots and curated news categories.",
+    ),
+    WidgetFamilyDescriptor(
         family_id="gmail",
         label="Gmail",
         member_widget_ids=("gmail",),

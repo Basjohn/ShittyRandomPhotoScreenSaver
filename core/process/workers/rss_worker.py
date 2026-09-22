@@ -28,6 +28,7 @@ from core.process.types import (
     WorkerType,
 )
 from core.process.workers.base import BaseWorker
+from core.feeds.normalization import redacted_url_for_log
 
 try:
     import feedparser
@@ -40,6 +41,13 @@ try:
     REQUESTS_AVAILABLE = True
 except ImportError:
     REQUESTS_AVAILABLE = False
+
+try:
+    from core.feeds.transport import FeedHttpTransport
+    FEED_TRANSPORT_AVAILABLE = True
+except ImportError:
+    FeedHttpTransport = None  # type: ignore[assignment]
+    FEED_TRANSPORT_AVAILABLE = False
 
 
 # Source priority weights - higher = process earlier
@@ -86,6 +94,15 @@ class RSSWorker(BaseWorker):
         self._images_downloaded = 0
         self._cache_dir: Optional[Path] = None
         self._save_dir: Optional[Path] = None
+        self._feed_transport = (
+            FeedHttpTransport(
+                connect_timeout=4.0,
+                read_timeout=REQUEST_TIMEOUT_S,
+                user_agent="SRPSS/2.0 (Windows; Screensaver; FeedWorker)",
+            )
+            if FEED_TRANSPORT_AVAILABLE and FeedHttpTransport is not None
+            else None
+        )
     
     @property
     def worker_type(self) -> WorkerType:
@@ -199,9 +216,9 @@ class RSSWorker(BaseWorker):
                     time.sleep(delay)
                     
             except Exception as e:
-                errors.append(f"{feed_url}: {e}")
+                errors.append(f"{redacted_url_for_log(feed_url)}: {type(e).__name__}")
                 if self._logger:
-                    self._logger.error("Feed %s failed: %s", feed_url, e)
+                    self._logger.error("Feed %s failed: %s", redacted_url_for_log(feed_url), type(e).__name__)
         
         return WorkerResponse(
             msg_type=MessageType.RSS_RESULT,
@@ -223,6 +240,8 @@ class RSSWorker(BaseWorker):
             raise RuntimeError("feedparser is required for RSSWorker")
         if not REQUESTS_AVAILABLE:
             raise RuntimeError("requests is required for RSSWorker")
+        if self._feed_transport is None:
+            raise RuntimeError("bounded feed transport is required for RSSWorker")
         
         images: List[Dict] = []
         is_reddit = 'reddit.com' in feed_url.lower()
@@ -246,14 +265,17 @@ class RSSWorker(BaseWorker):
                 images = self._parse_rss_feed(feed_url, max_images)
         except Exception as e:
             if self._logger:
-                self._logger.error("Parse failed for %s: %s", feed_url, e)
+                self._logger.error("Parse failed for %s: %s", redacted_url_for_log(feed_url), type(e).__name__)
             raise
         
         return images
     
     def _parse_rss_feed(self, feed_url: str, max_images: int) -> List[Dict]:
-        """Parse a standard RSS/Atom feed."""
-        feed = feedparser.parse(feed_url)
+        """Parse a standard RSS/Atom feed after a bounded byte fetch."""
+        if self._feed_transport is None:
+            raise RuntimeError("bounded feed transport is unavailable")
+        response = self._feed_transport.fetch(feed_url)
+        feed = feedparser.parse(response.payload)
         
         if feed.bozo and feed.bozo_exception:
             if self._logger:

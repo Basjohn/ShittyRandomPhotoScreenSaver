@@ -64,6 +64,13 @@ class TestPathResolution:
         assert d.exists()
         assert d.name == "rss"
 
+    def test_get_feed_cache_dir(self, tmp_base: Path, monkeypatch):
+        monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_base)
+        d = storage_paths.get_feed_cache_dir("Screensaver")
+        assert d.exists()
+        assert d.name == "feeds"
+        assert d.parent.name == "cache"
+
     def test_get_weather_cache_file(self, tmp_base: Path, monkeypatch):
         monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_base)
         f = storage_paths.get_weather_cache_file("Screensaver")

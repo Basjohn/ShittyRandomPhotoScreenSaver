@@ -7,7 +7,7 @@ construction and activates it only when a real display presenter is admitted.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from collections.abc import Callable
 from pathlib import Path
 from math import isfinite
@@ -18,7 +18,7 @@ from PySide6.QtGui import QColor
 from core.settings.default_contract import require_canonical_default
 from core.steam.games_followed_projection import FollowedNewsDisplay, project_followed_news
 from core.steam.games_followed_source import FollowedNewsSnapshot
-from core.steam.links import news_article_target
+from core.steam.links import news_article_target, news_hub_target
 from rendering.custom_child_geometry import (
     CustomChildSize, clamp_child_geometry, child_role_map,
 )
@@ -51,6 +51,9 @@ class FollowedStoryRows(QAbstractListModel):
     GameRole = SlotRole + 6
     PreviewRole = SlotRole + 7
     ArtworkRole = SlotRole + 8
+    InlineArt1Role = SlotRole + 9
+    InlineArt2Role = SlotRole + 10
+    InlineArt3Role = SlotRole + 11
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -70,6 +73,9 @@ class FollowedStoryRows(QAbstractListModel):
             self.GameRole: b"storyGame",
             self.PreviewRole: b"storyPreview",
             self.ArtworkRole: b"storyArtwork",
+            self.InlineArt1Role: b"storyInlineArtwork1",
+            self.InlineArt2Role: b"storyInlineArtwork2",
+            self.InlineArt3Role: b"storyInlineArtwork3",
         }
 
     def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> object:
@@ -89,6 +95,11 @@ class FollowedStoryRows(QAbstractListModel):
             return "" if row is None else row.preview
         if role == self.ArtworkRole:
             return "" if row is None else row.local_artwork_source
+        if role in (self.InlineArt1Role, self.InlineArt2Role, self.InlineArt3Role):
+            n = role - self.InlineArt1Role
+            if row is None or n >= len(row.local_inline_artwork_sources):
+                return ""
+            return row.local_inline_artwork_sources[n]
         if role == self.TitleRole:
             return "" if row is None else row.title
         if role == self.SourceRole:
@@ -111,7 +122,8 @@ class FollowedStoryRows(QAbstractListModel):
                     self.index(slot, 0), self.index(slot, 0),
                     [self.TitleRole, self.SourceRole, self.PublishedRole,
                      self.FilledRole, self.ActionRole, self.GameRole,
-                     self.PreviewRole, self.ArtworkRole],
+                     self.PreviewRole, self.ArtworkRole,
+                     self.InlineArt1Role, self.InlineArt2Role, self.InlineArt3Role],
                 )
         return True
 
@@ -211,6 +223,7 @@ class GamesYouFollowPresentationModel(QObject):
     customGeometryChanged = Signal()
     displayChanged = Signal()
     layoutChanged = Signal()
+    artworkAvailabilityChanged = Signal()
 
     def __init__(self, config: FollowedPresentationConfig | None = None,
                  *, runtime_generation: int | None = None,
@@ -286,6 +299,16 @@ class GamesYouFollowPresentationModel(QObject):
     @Property(int, notify=displayChanged)
     def selectedStoryCount(self) -> int:
         return len(self._display.rows)
+
+    @Property(bool, notify=artworkAvailabilityChanged)
+    def anyStoryArtwork(self) -> bool:
+        """Any retained story with art enables a uniform rail, including CUSTOM.
+
+        Source changes drive this at admission, never on a render frame.
+        """
+        return self.config.show_artwork and any(
+            row.local_artwork_source for row in self._display.rows
+        )
 
     @Property(int, notify=displayChanged)
     def omittedBySetting(self) -> int:
@@ -415,8 +438,11 @@ class GamesYouFollowPresentationModel(QObject):
             show_artwork=self.config.show_artwork,
         )
         if current != self._layout:
+            prior_artwork = self.anyStoryArtwork
             self._layout = current
             self.layoutChanged.emit()
+            if prior_artwork != self.anyStoryArtwork:
+                self.artworkAvailabilityChanged.emit()
 
     def set_runtime_service(self, service: object) -> None:
         """Attach the neutral generation lease; source identity never enters QML."""
@@ -460,9 +486,14 @@ class GamesYouFollowPresentationModel(QObject):
         if self._retired:
             return False
         projected = project_followed_news(snapshot)
+        rows = projected.rows[:self.config.story_cap]
+        # Image-optional Steam stories keep each validated local hit; a missing
+        # image on one AppID must not suppress every other game in the result.
+        if not self.config.show_artwork:
+            rows = tuple(replace(row, local_artwork_source="") for row in rows)
         projected = FollowedNewsDisplay(
             status=projected.status, status_label=projected.status_label,
-            rows=projected.rows[:self.config.story_cap],
+            rows=rows,
             remaining_followed_count=projected.remaining_followed_count,
             checked_count=projected.checked_count, stale=projected.stale,
             covered_count=projected.covered_count, followed_count=projected.followed_count,
@@ -472,10 +503,13 @@ class GamesYouFollowPresentationModel(QObject):
         self._snapshot = snapshot
         if projected == self._display and self.omittedBySetting == prior_omitted:
             return False
+        prior_artwork = self.anyStoryArtwork
         self._display = projected
         self._rows.apply_display(projected)
         self.displayChanged.emit()
         self._update_layout()
+        if prior_artwork != self.anyStoryArtwork:
+            self.artworkAvailabilityChanged.emit()
         return True
 
     def set_article_action(self, callback: Callable[[str, str], bool] | None) -> None:
@@ -492,11 +526,15 @@ class GamesYouFollowPresentationModel(QObject):
         shown = self._display.rows[slot]
         if not story.action_available or not shown.action_enabled:
             return False
-        canonical = f"https://store.steampowered.com/news/app/{story.appid}/view/{story.gid}"
-        target = news_article_target(story.appid, story.gid, canonical)
+        # Prefer this *current* private story's verified article route. Older
+        # cache entries and unsupported source URLs open the explicit app-news
+        # index; never construct an article address from the news GID.
+        target = news_article_target(story.appid, story.gid, story.article_url)
+        if target is None:
+            target = news_hub_target(story.appid)
         if target is None:
             return False
-        return bool(self._article_action("news_article", target.browser_url))
+        return bool(self._article_action(target.kind, target.browser_url))
 
     def set_content_extent(self, width: object, height: object) -> bool:
         if self._retired:

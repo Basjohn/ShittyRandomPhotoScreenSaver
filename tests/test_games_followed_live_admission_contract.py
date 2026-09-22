@@ -88,12 +88,19 @@ def test_click_refresh_and_artwork_are_card_owned_and_enter_existing_steam_route
     assert "storyGame" in qml and "storyPreview" in qml and "storyPublished" in qml
     assert '"articleRequested", model.open_story' in model
     assert '"refreshRequested", model.request_manual_refresh' in model
-    assert 'self._article_action("news_article", target.browser_url)' in model
+    assert 'self._article_action(target.kind, target.browser_url)' in model
+    assert 'news_hub_target(story.appid)' in model
     assert "GamesYouFollowFamilyAdapter(on_steam_action_requested=steam_open_requested)" in binder
     assert 'kind == "news_article" and widget_id == "steam_progress"' in route
-    assert "news_article_target(int(match[1]), match[2], target_value)" in route
+    assert 'kind == "news_hub" and widget_id == "steam_progress"' in route
+    assert 'news_hub_target(int(hub_match[1]))' in route
+    assert "news_article_target(int(match[1]), match[2], value)" in route
+    assert "news_article_target(1, community_game[1], value)" in route
     assert "self._decorate(snapshot, allow_network=opener is None," in source
-    assert "allowed_fetch_appids=frozenset(selected)" in source
+    # The article batch is not the image-fetch ceiling: existing visible
+    # winners must also become eligible for bounded artwork hydration.
+    assert "fetched < MAX_NEWS_APPS_PER_REFRESH" in source
+    assert "for story in snapshot.stories:" in source
     assert "QTimer(" not in qml and "XMLHttpRequest" not in qml
 
 

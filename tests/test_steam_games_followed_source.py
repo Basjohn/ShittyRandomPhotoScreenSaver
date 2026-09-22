@@ -91,7 +91,8 @@ def test_bounded_fetch_cache_and_private_normalization(tmp_path):
     assert cached is not None and cached.from_cache and cached.stories == snap.stories
     raw = (tmp_path / "private" / "games_you_follow_news.json").read_text("utf-8")
     assert FAKE_STEAMID not in raw and "<script>" not in raw
-    assert "evil.example" not in raw and "https://" not in raw and "contents" not in raw
+    assert "evil.example" not in raw and "contents" not in raw
+    assert "https://store.steampowered.com/news/app/" in raw
     assert "steamid" not in raw.lower() and "api_key" not in raw
 
 
@@ -173,23 +174,105 @@ def test_empty_followed_set_vs_empty_news_vs_denied(tmp_path):
     assert denied.status == "rate_limited" and denied.fetched_at is None and not denied.stories
 
 
-def test_news_normalization_constructs_canonical_link_without_trusting_provider_url_or_html():
+def test_news_normalization_preserves_only_verified_source_article_link():
     appid = 42
+    gid = "123456001"
+    store_url = "https://store.steampowered.com/news/app/42/view/1844115010501932"
+    community_url = "https://steamcommunity.com/games/Test_Game/announcements/detail/1844115010501932"
+    for url in (store_url, community_url):
+        row = {**_story(appid, 1), "url": url}
+        result = normalize_app_news({"appnews": {"appid": appid, "newsitems": [row]}}, appid)
+        assert result is not None and result[0].action_available
+        assert result[0].article_url == url
+        assert result[0].gid == gid  # API identity is not the article view ID.
+        assert "contents" not in vars(result[0])
     row = _story(appid, 1, url=False)
     result = normalize_app_news({"appnews": {"appid": appid, "newsitems": [row]}}, appid)
-    # The public app-news response validates appid/GID; a hostile syndication
-    # link is NEVER opened. Clicks use a separately validated Steam Store URL.
     assert result is not None and result[0].action_available
-    assert "url" not in vars(result[0]) and "contents" not in vars(result[0])
-    bad = (
+    assert result[0].article_url == ""  # Safe news hub, never an invented GID URL.
+    assert all(normalize_app_news(payload, appid) is None for payload in (
         {"appnews": {"appid": 99, "newsitems": []}},
         {"appnews": {"appid": appid, "newsitems": "invalid"}},
         {"appnews": {"appid": appid, "newsitems": [_story(appid, 1)] * 2}},
         {"appnews": {"appid": appid, "newsitems": [{**_story(appid, 1), "date": True}]}},
         {"appnews": {"appid": appid, "newsitems": [{**_story(appid, 1), "gid": "../bad"}]}},
         {"appnews": {"appid": appid, "newsitems": [_story(appid, 1)] * 9}},
-    )
-    assert all(normalize_app_news(payload, appid) is None for payload in bad)
+    ))
+
+
+def test_syndicated_article_link_roundtrips_without_a_fabricated_store_view(tmp_path):
+    """PCGamesN-type Steam API items must click their actual externalpost.
+
+    Unlike the Store view event ID, the externalpost ID MUST equal the news
+    GID. Keep the supplied Steam redirect in the private cache/buckets and
+    never replace it with the game's news index when it is safely admitted.
+    """
+    from core.steam.games_followed_source import _cached_news_buckets
+    appid, gid = 1086940, "1844115010501932"
+    supplied = f"https://steamstore-a.akamaihd.net/news/externalpost/PCGamesN/{gid}"
+    article = {**_story(appid, 0), "gid": gid, "feedlabel": "PCGamesN",
+               "url": supplied, "title": "This Baldur's Gate 3 mod adds a new region"}
+
+    def opener(request, timeout):
+        parsed = urlsplit(request.full_url)
+        if "GetGamesFollowed" in parsed.path:
+            return _Response({"response": {"appids": [appid]}})
+        assert "GetNewsForApp" in parsed.path
+        return _Response({"appnews": {"appid": appid, "newsitems": [article]}})
+
+    source = _source(tmp_path)
+    latest = source.refresh(FAKE_STEAMID, opener=opener)
+    assert len(latest.stories) == 1
+    assert latest.stories[0].article_url == supplied
+    assert source.cached().stories[0].article_url == supplied
+    assert _cached_news_buckets(source._path, (appid,))[appid][0].article_url == supplied
+
+    mismatched = {**article, "url": supplied.replace(gid, "9876543210")}
+    rejected = normalize_app_news(
+        {"appnews": {"appid": appid, "newsitems": [mismatched]}}, appid)
+    assert rejected is not None and rejected[0].article_url == ""
+
+
+def test_news_link_survives_private_cache_and_old_missing_url_uses_hub(tmp_path):
+    from core.steam.cache import read_cache_record, write_cache_record, SteamCacheRecord
+    from core.steam.games_followed_source import _snapshot_from_cache, _cached_news_buckets
+    from dataclasses import replace
+    source = _source(tmp_path)
+    fresh = source.refresh(FAKE_STEAMID, opener=_opener((41,), news_count=1))
+    assert fresh.stories[0].action_available
+    assert source.cached().stories[0].article_url == fresh.stories[0].article_url
+    assert _cached_news_buckets(source._path, (41,))[41][0].article_url == fresh.stories[0].article_url
+    result = read_cache_record(source._path)
+    payload = dict(result.payload)
+    payload["stories"] = [{k: v for k, v in row.items() if k != "article_url"}
+                          for row in payload["stories"]]
+    payload["per_game_stories"] = {key: [{k: v for k, v in row.items() if k != "article_url"}
+                                         for row in rows]
+                                   for key, rows in payload["per_game_stories"].items()}
+    # Previous deployed link-repair builds also persisted a false action flag
+    # when no approved article URL was available. That must no longer suppress
+    # hover/tap on an otherwise validated old article.
+    for row in payload["stories"]:
+        row["action_available"] = False
+    for rows in payload["per_game_stories"].values():
+        for row in rows:
+            row["action_available"] = False
+    write_cache_record(SteamCacheRecord("games_you_follow_news", result.source_id,
+                                        payload, result.fetched_at), source._path)
+    old = _snapshot_from_cache(source._path)
+    assert old is not None and old.stories[0].title == fresh.stories[0].title
+    assert old.stories[0].article_url == "" and old.stories[0].action_available
+    bucket = _cached_news_buckets(source._path, (41,))[41]
+    assert bucket[0].title == fresh.stories[0].title
+    assert bucket[0].article_url == "" and bucket[0].action_available
+    # A forged cached URL may not reach the click seam, even if the cache's
+    # legacy action flag claims the story can be opened.
+    payload["stories"][0]["article_url"] = "https://evil.example/article"
+    write_cache_record(SteamCacheRecord("games_you_follow_news", result.source_id,
+                                        payload, result.fetched_at), source._path)
+    sanitized = _snapshot_from_cache(source._path)
+    assert sanitized is not None and sanitized.stories[0].action_available
+    assert sanitized.stories[0].article_url == ""  # No arbitrary URL reaches the UI.
 
 
 def test_retired_source_drops_network_completions_and_cache_publication(tmp_path):

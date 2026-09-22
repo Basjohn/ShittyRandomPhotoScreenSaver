@@ -19,6 +19,7 @@ from sources.rss.constants import (
 )
 from core.logging.logger import get_logger
 from core.settings.storage_paths import get_feed_health_file
+from core.feeds.normalization import redacted_url_for_log
 
 logger = get_logger(__name__)
 
@@ -79,7 +80,12 @@ class FeedHealthTracker:
         # Exponential backoff: 60, 120, 240, 480, ...
         backoff = FAILURE_BACKOFF_BASE_SECONDS * (2 ** (h["failures"] - 1))
         h["skip_until"] = now + backoff
-        logger.info(f"[FEED_HEALTH] {feed_url}: failure #{h['failures']}, backoff {backoff}s")
+        logger.info(
+            "[FEED_HEALTH] %s: failure #%d, backoff %ds",
+            redacted_url_for_log(feed_url),
+            h["failures"],
+            backoff,
+        )
         self._save()
 
     def get_status(self, feed_urls: list) -> Dict[str, dict]:

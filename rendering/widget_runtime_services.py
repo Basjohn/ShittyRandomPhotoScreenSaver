@@ -238,6 +238,52 @@ _WEATHER_SERVICE_SPEC = RuntimeServiceSpec(
 )
 
 
+def _build_feed_service(widget_id: str, widgets_config: Mapping[str, Any]) -> Any:
+    """Build one lightweight CUSTOM-feed lease without waking network I/O."""
+    from core.feeds.config import CustomFeedConfig
+    from widgets.feed_runtime import FeedRuntimeConfig, FeedRuntimeLease
+
+    values = widgets_config.get(widget_id, {}) if isinstance(widgets_config, Mapping) else {}
+    config = CustomFeedConfig.from_mapping(
+        widget_id, values if isinstance(values, Mapping) else {}
+    )
+    if not config.configured:
+        return None
+    return FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config))
+
+
+def _inject_feed_service(widget: Any, service: Any) -> None:
+    setter = getattr(widget, "set_runtime_service", None)
+    if not callable(setter):
+        raise AttributeError(
+            "Feed consumer cannot accept runtime service (missing set_runtime_service)"
+        )
+    setter(service)
+
+
+def _retire_feed_service(service: Any) -> None:
+    retire = getattr(service, "retire", None)
+    if not callable(retire):
+        raise AttributeError("Feed runtime service has no retire method")
+    retire()
+
+
+def _feed_service_reuse_is_valid(widget: Any, service: Any) -> bool:
+    if getattr(widget, "_runtime_service", None) is not service:
+        return False
+    if bool(getattr(widget, "_retired", False)) or _service_is_retired(service):
+        return False
+    return not bool(getattr(widget, "_active", False)) or _service_is_running(service)
+
+
+_FEED_SERVICE_SPEC = RuntimeServiceSpec(
+    build=_build_feed_service,
+    inject=_inject_feed_service,
+    retire=_retire_feed_service,
+    reuse_is_valid=_feed_service_reuse_is_valid,
+)
+
+
 def _build_abandonment_service(
     widget_id: str, widgets_config: Mapping[str, Any]
 ) -> Any:
@@ -726,6 +772,7 @@ _FOLLOWED_SERVICE_SPEC = RuntimeServiceSpec(
 _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "reddit": _REDDIT_SERVICE_SPEC,
     "reddit2": _REDDIT_SERVICE_SPEC,
+    "feeds_custom_1": _FEED_SERVICE_SPEC,
     "weather": _WEATHER_SERVICE_SPEC,
     "media": _MEDIA_SERVICE_SPEC,
     "spotify_volume": _MEDIA_VOLUME_SERVICE_SPEC,

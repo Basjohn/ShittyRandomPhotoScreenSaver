@@ -55,7 +55,11 @@ def test_g2_quick_has_stable_role_targets_bounded_slots_and_no_side_effects():
     assert 'textFormat: Text.PlainText' in qml
     # Offscreen ordinal slots remain retained but must not acquire Qt images.
     assert 'tile.visible && storyGroup.visible' in qml
-    assert 'source: tile.showArt ? storyArtwork : ""' in qml
+    # A missing per-story image must not remove valid art from other slots;
+    # the native Qt gate verifies the rendered source and fallback geometry.
+    assert 'followedModel.anyStoryArtwork' in qml
+    assert 'storyArtwork.length > 0 ? storyArtwork : ""' in qml
+    assert 'objectName: "followedStoryArtworkFallback" + storySlot' in qml
     # Authored-capacity is owned by the Python parent projection, not a second
     # independently rounded QML calculator. CUSTOM X/Y uses local rail capacity.
     assert 'readonly property int rows: onAuthoredRail ? followedModel.layoutRows' in qml
@@ -80,5 +84,6 @@ def test_source_identity_and_private_fields_do_not_flow_through_qt_roles():
     assert role_source is not None
     for forbidden in ("appId", "steamId", "gid", "providerUrl", "rawHtml", "remoteArtwork"):
         assert forbidden not in role_source
-    assert 'self._article_action("news_article", target.browser_url)' in source
-    assert 'news_article_target(story.appid, story.gid, canonical)' in source
+    assert 'self._article_action(target.kind, target.browser_url)' in source
+    assert 'news_hub_target(story.appid)' in source
+    assert 'news_article_target(story.appid, story.gid, story.article_url)' in source
