@@ -1105,9 +1105,13 @@ class RetainedGmailPresentation:
         geometry: OverlayWidgetGeometry,
         fade_opacity: float = 1.0,
         on_open_inbox_requested: Callable[[], Any] | None = None,
+        on_browser_opened: Callable[[], Any] | None = None,
+        on_auth_requested: Callable[[], Any] | None = None,
     ) -> None:
         self._model = model
         self._on_open_inbox_requested = on_open_inbox_requested
+        self._on_browser_opened = on_browser_opened
+        self._on_auth_requested = on_auth_requested
         self._retained: RetainedOverlayWidget = host.create_family_widget(
             "gmail",
             initial_properties={"gmailModel": model},
@@ -1123,9 +1127,9 @@ class RetainedGmailPresentation:
         )
         host.set_widget_input_state_handler(self._retained, self.apply_input_state)
         self._connect("openInboxRequested", self._handle_open_inbox_requested)
-        self._connect("openMessageRequested", model.request_open)
+        self._connect("openMessageRequested", self._handle_open_message_requested)
         self._connect("refreshRequested", model.request_refresh)
-        self._connect("authRequested", model.request_auth)
+        self._connect("authRequested", self._handle_auth_requested)
         self._connect("actionMenuPointerGesture", self._arm_action_menu_pointer_guard)
         self._connect("actionRequested", model.request_action)
 
@@ -1230,6 +1234,20 @@ class RetainedGmailPresentation:
         ):
             return False
         return bool(self._on_open_inbox_requested())
+
+    def _handle_open_message_requested(self, message_id: str) -> bool:
+        opened = bool(self._model.request_open(str(message_id)))
+        if opened and self._on_browser_opened is not None:
+            self._on_browser_opened()
+        return opened
+
+    def _handle_auth_requested(self) -> bool:
+        # Production routes authorization to interactive Settings so the OAuth
+        # browser is never born on the saver/Winlogon desktop. Tests/embedders
+        # without the callback retain the model's ordinary interactive seam.
+        if self._on_auth_requested is not None:
+            return bool(self._on_auth_requested())
+        return bool(self._model.request_auth())
 
     def retire(self) -> bool:
         return self._retained.retire()

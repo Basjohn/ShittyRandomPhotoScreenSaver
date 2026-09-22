@@ -78,6 +78,7 @@ RUN_FLAG_DESCRIPTIONS = {
     "--life": "Widget/worker/engine lifecycle diagnostics",
     "--cache": "Image-cache/prefetch/cache-authority diagnostics",
     "--steam": "Steam widget-family diagnostics",
+    "--feeds": "FEEDS source/artwork/runtime diagnostics",
     "--noupdates": "Disable automatic Gmail/Reddit/Weather retrievals",
     "--fresh": "Clear current logs before starting",
     "--devsteam": "Show the unfinished Steam Journey scaffold",

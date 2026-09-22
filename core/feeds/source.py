@@ -21,6 +21,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+class FeedRefreshCancelled(RuntimeError):
+    """An unobserved source was retired; not a provider failure or backoff."""
+
+
 _BACKOFF_SECONDS = (60, 5 * 60, 15 * 60, 60 * 60, 6 * 60 * 60)
 
 
@@ -37,6 +42,7 @@ class FeedSource:
         transport: "FeedHttpTransport | None" = None,
         transport_factory: Callable[[], "FeedHttpTransport"] | None = None,
         cache: FeedCacheStore | None = None,
+        should_continue: Callable[[], bool] | None = None,
         now=time.time,
     ) -> None:
         if transport is not None and transport_factory is not None:
@@ -49,6 +55,11 @@ class FeedSource:
         self._transport_factory = transport_factory
         self.cache = cache or FeedCacheStore()
         self.now = now
+        self._should_continue = should_continue
+
+    def _ensure_needed(self) -> None:
+        if self._should_continue is not None and not self._should_continue():
+            raise FeedRefreshCancelled("feed source no longer active")
 
     def _transport_for_refresh(self) -> "FeedHttpTransport":
         if self.transport is None:
@@ -75,10 +86,12 @@ class FeedSource:
         )
 
     def refresh(self, *, force: bool = False) -> FeedRefreshResult:
+        self._ensure_needed()
         now = float(self.now())
         record = self._load_compatible_record()
         if record is None:
             record = FeedCacheRecord(source_id=self.spec.source_id, endpoint_fingerprint=self.fingerprint)
+        self._ensure_needed()
         health = record.health
         if not force and health.backoff_until is not None and now < health.backoff_until:
             return FeedRefreshResult(
@@ -100,6 +113,7 @@ class FeedSource:
                 etag=record.etag if same_endpoint else "",
                 last_modified=record.last_modified if same_endpoint else "",
             )
+            self._ensure_needed()
             if response.status == "not_modified":
                 if record.snapshot is None or not same_endpoint:
                     return self._failure(record, now, "not_modified_without_matching_cache")
@@ -121,6 +135,7 @@ class FeedSource:
                 source_url=response.final_url or self.spec.url,
                 max_items=self.spec.max_items,
             )
+            self._ensure_needed()
             if not document.items:
                 # A syntactically valid but empty replacement is not allowed to
                 # erase established state.  Treat it like a transient source
@@ -139,10 +154,12 @@ class FeedSource:
             self._persist_best_effort(updated)
             return FeedRefreshResult("available", snapshot, updated.health, changed=changed)
         except (FeedTransportError, FeedParseError, ValueError, OSError) as exc:
+            self._ensure_needed()
             return self._failure(record, now, type(exc).__name__)
 
 
     def _persist_best_effort(self, record: FeedCacheRecord) -> bool:
+        self._ensure_needed()
         try:
             self.cache.write(self.spec.cache_key, record)
             return True

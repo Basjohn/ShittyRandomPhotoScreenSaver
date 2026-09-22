@@ -76,7 +76,7 @@ def test_feed_qml_never_loads_remote_images_or_owns_network_cadence():
     assert "Timer {" not in qml
     assert "XMLHttpRequest" not in qml
     assert "NetworkAccess" not in qml
-    assert "feedImageSource" not in qml  # F2 is intentionally coherent text-only.
+    assert 'source: parent.visible ? feedImageSource : ""' in qml  # F3: local URI only.
 
 
 def test_feed_external_action_is_http_only_until_f4():
@@ -86,11 +86,12 @@ def test_feed_external_action_is_http_only_until_f4():
     assert "Magnet and managed torrent" in action
 
 
-def test_f2_does_not_expose_dead_image_toggle_before_local_warmer_exists():
+def test_f3_exposes_image_control_with_persisted_settings_and_local_only_rendering():
     settings = _text("ui/tabs/widgets_tab_feeds.py")
-    assert "feeds_custom1_show_images" not in settings
+    assert '"show_images": bool(tab.feeds_custom1_show_images.isChecked())' in settings
+    assert 'tab.feeds_custom1_show_images.setChecked(tab._config_bool(' in settings
     qml = _text("rendering/quick/qml/FeedPresentation.qml")
-    assert "feedImageSource" not in qml
+    assert 'source: parent.visible ? feedImageSource : ""' in qml
 
 
 def test_legacy_rss_background_log_redacts_feed_query_tokens():

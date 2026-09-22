@@ -50,38 +50,31 @@ class FeedDisplay:
         return bool(self.rows) and self.image_mode == "complete"
 
 
-def preferred_image_candidate(item: FeedItem) -> str:
-    """Return the best feed-advertised image URL for later cache warming.
+def ranked_image_candidates(item: FeedItem) -> tuple[str, ...]:
+    """Rank advertised sources once; workers can try a smaller cached fallback.
 
-    Declared dimensions are preferred when available, then richer Media RSS /
-    content relations over generic HTML discovery.  This is only candidate
-    selection: presentation still requires a validated *local* artwork source.
+    The transport never scrapes article pages.  This is ordering of an already
+    bounded feed-advertised candidate set, not a second discovery authority.
     """
-    if not item.images:
-        return ""
     relation_rank = {
-        "media": 5,
-        "content": 4,
-        "enclosure": 3,
-        "thumbnail": 2,
-        "html": 1,
-        "feed": 0,
+        "media": 5, "content": 4, "enclosure": 3,
+        "thumbnail": 2, "html": 1, "feed": 0,
     }
 
     def key(candidate):
         width = candidate.width or 0
         height = candidate.height or 0
-        pixels = width * height
-        # Avoid preferring declared tracking-pixel-sized assets merely because
-        # they happened to appear before a usable image.
-        usable_declared = int(width >= 120 and height >= 80)
-        return (
-            usable_declared,
-            pixels,
-            relation_rank.get(candidate.relation, 0),
-        )
+        return (int(width >= 120 and height >= 80), width * height,
+                relation_rank.get(candidate.relation, 0))
 
-    return max(item.images, key=key).url
+    return tuple(dict.fromkeys(candidate.url for candidate in sorted(
+        item.images, key=key, reverse=True)))
+
+
+def preferred_image_candidate(item: FeedItem) -> str:
+    """Best feed-advertised URL, never an admitted QML Image source."""
+    ranked = ranked_image_candidates(item)
+    return ranked[0] if ranked else ""
 
 
 def project_feed(
@@ -91,6 +84,7 @@ def project_feed(
     item_limit: int,
     show_images: bool = True,
     local_artwork_by_item: Mapping[str, str] | None = None,
+    visible_item_capacity: int | None = None,
 ) -> FeedDisplay:
     """Project one immutable feed snapshot without mutating source state."""
     if view_mode not in {"list", "grid", "compact"}:
@@ -106,8 +100,16 @@ def project_feed(
         image_sources = ("",) * len(visible)
         image_mode: FeedImageMode = "none"
     elif view_mode == "grid":
-        image_sources = coherent_image_sources(requested_local, enabled=True)
-        image_mode = "complete" if image_sources and all(image_sources) else "none"
+        # F3 image readiness is about the geometry-visible group, not every
+        # requested row.  Hidden overflow must never suppress good visible art.
+        # The retained QML owner must supply its real capacity when imagery is
+        # admitted; omitting it preserves the strict pre-F3 all-rows behavior.
+        visible_count = len(visible) if visible_item_capacity is None else max(
+            0, min(len(visible), int(visible_item_capacity)))
+        ready = coherent_image_sources(requested_local[:visible_count], enabled=True)
+        image_mode = "complete" if ready and all(ready) else "none"
+        image_sources = (ready if image_mode == "complete" else ("",) * visible_count) + (
+            ("",) * (len(visible) - visible_count))
     else:
         # List rows are independently authored and do not leave empty image
         # holes when a thumbnail is absent, so sparse local thumbnails are OK.

@@ -220,6 +220,7 @@ foreach ($RequiredBuildCommand in @(
     'Remove-SRPSSBuildDirectory',
     'Publish-SRPSSDirectory',
     'Assert-SRPSSDefaultsAuthority',
+    'Assert-SRPSSQmlSourceContract',
     'Assert-SRPSSSourceProductAssets',
     'Assert-SRPSSPythonRuntimeDependencies',
     'Assert-SRPSSOnedirQuickPayload',
@@ -234,6 +235,12 @@ try {
     Assert-SRPSSDefaultsAuthority -RepoRoot $Root -PythonExe $VenvPython
 } catch {
     throw "Defaults authority preflight failed: $($_.Exception.Message)"
+}
+
+try {
+    Assert-SRPSSQmlSourceContract -RepoRoot $Root -PythonExe $VenvPython
+} catch {
+    throw "QML source contract preflight failed: $($_.Exception.Message)"
 }
 
 try {

@@ -3035,11 +3035,51 @@ class DisplayManager(QObject):
             manager.settings_target_requested.emit(target)
             return True
 
+        def _open_gmail_inbox() -> bool:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or manager._runtime_generation != generation
+            ):
+                return False
+            from core.build_profile import is_diagnostic_build
+            from core.gmail.gmail_deeplinks import gmail_inbox_url
+            from core.mc import is_mc_build
+            from core.windows.secure_url_launcher import open_url
+
+            interactive = bool(is_mc_build() or is_diagnostic_build())
+            opened = bool(open_url(
+                gmail_inbox_url(),
+                prefer_direct=interactive,
+                fallback=interactive,
+                source="gmail:inbox",
+            ))
+            if opened and not interactive:
+                manager._on_exit_requested()
+            return opened
+
+        def _gmail_browser_opened() -> None:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or manager._runtime_generation != generation
+            ):
+                return
+            from core.build_profile import is_diagnostic_build
+            from core.mc import is_mc_build
+
+            if not (is_mc_build() or is_diagnostic_build()):
+                manager._on_exit_requested()
+
         return default_ordinary_family_adapters(
             clock_mode_toggle=_persist_clock_mode,
             reddit_open_requested=_open_reddit,
             feed_open_requested=_open_feed,
             steam_open_requested=_open_steam,
+            gmail_open_inbox_requested=_open_gmail_inbox,
+            gmail_browser_opened=_gmail_browser_opened,
             settings_target_requested=_open_settings_target,
         )
 

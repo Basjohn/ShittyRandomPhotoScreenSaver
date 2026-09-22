@@ -111,3 +111,6 @@ class FeedRefreshResult:
     health: FeedHealth
     changed: bool = False
     failure: str = ""
+    # Worker-only local file URIs; never persisted with the article snapshot.
+    # Immutable so two retained consumers share exactly one accepted generation.
+    local_artwork_by_item: tuple[tuple[str, str], ...] = ()

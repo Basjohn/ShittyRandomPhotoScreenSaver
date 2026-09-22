@@ -231,8 +231,9 @@ class _RuntimeClient:
         self.actions.append(("mark_read", message_id))
         return True
 
-    def open_message_in_browser(self, message_id: str) -> None:
+    def open_message_in_browser(self, message_id: str) -> bool:
         self.actions.append(("open", message_id))
+        return True
 
 
 class _RuntimeBackend:
@@ -907,11 +908,15 @@ def test_retained_gmail_wrapper_routes_semantic_actions_without_recreation(
     config = _config(group_threads=False)
     model = GmailPresentationModel(config, _style(config), runtime_service=service)
     opened_inbox = []
+    browser_opened = []
+    auth_settings = []
     presentation = RetainedGmailPresentation(
         host=host,
         model=model,
         geometry=OverlayWidgetGeometry(25.0, 30.0, 620.0, 360.0),
         on_open_inbox_requested=lambda: opened_inbox.append("inbox") or True,
+        on_browser_opened=lambda: browser_opened.append("opened"),
+        on_auth_requested=lambda: auth_settings.append("settings") or True,
     )
     item = presentation.item
     engine = QQmlEngine.contextForObject(item).engine()
@@ -929,6 +934,8 @@ def test_retained_gmail_wrapper_routes_semantic_actions_without_recreation(
         item.authRequested.emit()
         item.actionRequested.emit("trash", "one")
         assert opened_inbox == []
+        assert browser_opened == []
+        assert auth_settings == []
         assert service.opens == []
         assert service.refreshes == 0
         assert service.auth_requests == 0
@@ -953,9 +960,11 @@ def test_retained_gmail_wrapper_routes_semantic_actions_without_recreation(
         item.actionRequested.emit("trash", "one")
         item.actionRequested.emit("unknown", "one")
         assert opened_inbox == ["inbox"]
+        assert browser_opened == ["opened"]
+        assert auth_settings == ["settings"]
         assert service.opens == ["one"]
         assert service.refreshes == 1
-        assert service.auth_requests == 1
+        assert service.auth_requests == 0
         assert service.actions == [("trash", "one")]
 
         model.on_gmail_runtime_snapshot(

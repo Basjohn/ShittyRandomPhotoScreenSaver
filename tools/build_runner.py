@@ -42,6 +42,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from versioning import APP_VERSION  # noqa: E402
 from core.settings.defaults_authority_audit import audit_defaults_authority  # noqa: E402
+from core.build_qml_contract import audit_qml_source_contract  # noqa: E402
 from core.visualizer_preset_manifest import (  # noqa: E402
     write_curated_visualizer_preset_manifest,
 )
@@ -383,6 +384,8 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
 
     for issue in audit_defaults_authority(repo_root):
         result.errors.append(f"Defaults authority: {issue.render()}")
+    for issue in audit_qml_source_contract(repo_root):
+        result.errors.append(f"QML source contract: {issue.render(repo_root)}")
 
     for job in jobs:
         if not job.script.is_file():

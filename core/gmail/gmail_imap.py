@@ -388,7 +388,7 @@ class GmailImapClient:
 
     def open_message_in_browser(self, message_id: str) -> bool:
         """Open Gmail inbox as a fallback for IMAP messages."""
-        return open_url(gmail_inbox_url())
+        return open_url(gmail_inbox_url(), source="gmail:inbox")
 
     def test_connection(self) -> bool:
         """Verify credentials by attempting login."""

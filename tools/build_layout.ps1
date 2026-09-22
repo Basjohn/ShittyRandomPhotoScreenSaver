@@ -111,6 +111,29 @@ function Assert-SRPSSDefaultsAuthority {
     }
 }
 
+function Assert-SRPSSQmlSourceContract {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$PythonExe
+    )
+
+    $auditTool = Join-Path $RepoRoot 'tools\check_qml_source_contract.py'
+    if (-not (Test-Path -LiteralPath $auditTool -PathType Leaf)) {
+        throw "QML source contract audit tool is missing: $auditTool"
+    }
+
+    Push-Location $RepoRoot
+    try {
+        & $PythonExe $auditTool
+        if ($LASTEXITCODE -ne 0) {
+            throw "QML source contract audit failed with exit code $LASTEXITCODE"
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 function Publish-SRPSSDirectory {
     [CmdletBinding()]
     param(

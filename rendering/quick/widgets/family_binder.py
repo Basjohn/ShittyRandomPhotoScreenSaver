@@ -642,6 +642,17 @@ class FeedFamilyAdapter:
 class GmailFamilyAdapter:
     """Adapter for the single-instance Gmail family."""
 
+    def __init__(
+        self,
+        *,
+        on_open_inbox_requested: Callable[[], bool] | None = None,
+        on_browser_opened: Callable[[], object] | None = None,
+        on_auth_requested: Callable[[], bool] | None = None,
+    ) -> None:
+        self._on_open_inbox_requested = on_open_inbox_requested
+        self._on_browser_opened = on_browser_opened
+        self._on_auth_requested = on_auth_requested
+
     @property
     def family_id(self) -> str:
         return "gmail"
@@ -681,7 +692,12 @@ class GmailFamilyAdapter:
         ):
             return None
         return RetainedGmailPresentation(
-            host=host, model=model, geometry=geometry
+            host=host,
+            model=model,
+            geometry=geometry,
+            on_open_inbox_requested=self._on_open_inbox_requested,
+            on_browser_opened=self._on_browser_opened,
+            on_auth_requested=self._on_auth_requested,
         )
 
 
@@ -1151,6 +1167,8 @@ def default_ordinary_family_adapters(
     reddit_open_requested: Callable[[str, str], bool] | None = None,
     feed_open_requested: Callable[[str, str], bool] | None = None,
     steam_open_requested: Callable[[str, str, str], bool] | None = None,
+    gmail_open_inbox_requested: Callable[[], bool] | None = None,
+    gmail_browser_opened: Callable[[], object] | None = None,
     settings_target_requested: Callable[[str], bool] | None = None,
 ) -> tuple[OrdinaryFamilyAdapter, ...]:
     """Return the explicit ordered ordinary-family adapters currently wired.
@@ -1167,7 +1185,14 @@ def default_ordinary_family_adapters(
         MediaFamilyAdapter(),
         RedditFamilyAdapter(on_open_requested=reddit_open_requested),
         FeedFamilyAdapter(on_open_requested=feed_open_requested),
-        GmailFamilyAdapter(),
+        GmailFamilyAdapter(
+            on_open_inbox_requested=gmail_open_inbox_requested,
+            on_browser_opened=gmail_browser_opened,
+            on_auth_requested=(
+                (lambda: bool(settings_target_requested("gmail_authorization")))
+                if settings_target_requested is not None else None
+            ),
+        ),
         GamesYouFollowFamilyAdapter(on_steam_action_requested=steam_open_requested),
         AchievementPulseFamilyAdapter(
             on_steam_action_requested=steam_open_requested

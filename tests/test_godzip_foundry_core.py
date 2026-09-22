@@ -439,7 +439,7 @@ def _add_runtime_surface(repo: Path, *, windows_venv: bool = False) -> None:
     flags = [
         "--debug", "-d", "--verbose", "-v", "--perf",
         "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache",
-        "--steam", "--noupdates",
+        "--steam", "--feeds", "--noupdates",
         "--fresh", "--devsteam",
     ]
     (repo / "main.py").write_text(

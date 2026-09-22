@@ -99,6 +99,17 @@ def test_followed_stable_grouped_children_reflow_and_restore_without_delegate_ch
         tiles = tuple(_find_visual(item, f"followedStoryTile{n}") for n in range(8))
         assert all(obj is not None for obj in (header, group, summary, *tiles))
         assert len({id(tile) for tile in tiles}) == 8
+        # Story content is clipped by the frame while the directional outer
+        # shadow remains a sibling. Tiny CUSTOM geometry must never let text or
+        # inline art paint outside its story tile.
+        frame0 = _find_visual(item, "followedStoryFrame0")
+        shadow0 = _find_visual(item, "followedStoryShadow0")
+        headline0 = _find_visual(item, "followedStoryHeadline0")
+        source0 = _find_visual(item, "followedStorySource0")
+        assert frame0 is not None and shadow0 is not None and headline0 is not None and source0 is not None
+        assert bool(frame0.property("clip"))
+        assert headline0.parentItem() is frame0 and source0.parentItem() is frame0
+        assert shadow0.parentItem() is tiles[0]
         initial_header_x = header.x()
         initial_group = (group.x(), group.y(), group.width(), group.height())
         roles = item.property("customEditableChildRoles")

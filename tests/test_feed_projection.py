@@ -89,3 +89,24 @@ def test_preferred_image_candidate_prefers_usable_declared_media_over_tiny_asset
         ),
     )
     assert preferred_image_candidate(item) == "https://cdn/hero.jpg"
+
+
+def test_grid_coherence_uses_only_geometry_visible_rows_not_hidden_overflow():
+    snap = _snapshot(_item("a", image="https://cdn/a.jpg"),
+                     _item("b", image="https://cdn/b.jpg"),
+                     _item("hidden-without-image"))
+    ready = project_feed(
+        snap, view_mode="grid", item_limit=3, visible_item_capacity=2,
+        local_artwork_by_item={"a": "file:///cache/a.png", "b": "file:///cache/b.png"},
+    )
+    assert ready.image_mode == "complete"
+    assert [row.image_source for row in ready.rows] == ["file:///cache/a.png", "file:///cache/b.png", ""]
+    resized = project_feed(
+        snap, view_mode="grid", item_limit=3, visible_item_capacity=3,
+        local_artwork_by_item={"a": "file:///cache/a.png", "b": "file:///cache/b.png"},
+    )
+    assert resized.image_mode == "none"
+    assert not any(row.image_source for row in resized.rows)
+    zero = project_feed(snap, view_mode="grid", item_limit=3, visible_item_capacity=0,
+                        local_artwork_by_item={"a": "file:///cache/a.png"})
+    assert zero.image_mode == "none"

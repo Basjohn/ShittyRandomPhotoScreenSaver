@@ -178,8 +178,9 @@ class _Client:
     def trash_message(self, message_id: str) -> bool:
         return self._action("trash", message_id)
 
-    def open_message_in_browser(self, message_id: str) -> None:
+    def open_message_in_browser(self, message_id: str) -> bool:
         self.actions.append(("open", message_id))
+        return True
 
 
 class _Backend:
