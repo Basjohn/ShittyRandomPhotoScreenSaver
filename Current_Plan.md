@@ -54,6 +54,15 @@ The independent fragment and particle minimum-energy settings are implemented wi
 
 Transition terminalization, Visualizer owner retirement and shared Core Audio callback retirement are accepted current contracts guarded by source/tests and `Docs/Guardrails.md`; they are not active-plan tasks unless a concrete regression reopens them.
 
+## Runtime audit 2026-09-22 | operator admission pending
+
+`Docs/Future_Work/Runtime_Audit/00_Index.md` holds the prioritized, source-cited candidate register and its historical-bug cross-audit. Nothing in it is admitted work until promoted here. P1 candidates: TX-01 (3D transition first-frame render-thread geometry), TX-02 (Random rotation overwrites authored Slide/Wipe direction and rewrites Settings every rotation), LC-06 (canonical defaults rebuilt per call on context-menu/rotation/construction paths), PR-01 (per-publication visualizer presentation property churn), PW-02 (Media truth/commands share the FIFO IO pool with network work).
+
+- [ ] Operator: decide TX-02 direction semantics — should Random mode honour an explicitly authored fixed Slide/Wipe direction?
+- [ ] Operator: admit or reorder Wave A (zero-behaviour hygiene) and Wave B (measured wins).
+- [ ] When the pending R-84 3–5-cycle Settings churn run happens, also classify LC-01 from its `[PERF][GC_POLICY] generation=2` lines (no separate run).
+- [ ] Operator: supply the log lines behind "2 QImage tasks per context-menu open" (LC-05).
+
 ## Handoff and regression rules
 
 When an accepted behavior changes, select only the relevant targeted tests and physical observations; do not re-accept unrelated OSD, Media or widget systems. Keep full superseding GODZIPs with the canonical three `.godzip/` files, manifest-backed replace/delete instructions and no temporary scripts or compiled artifacts. Test commands belong in chat, not an added documentation file.
