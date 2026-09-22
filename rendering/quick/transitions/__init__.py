@@ -2,6 +2,7 @@
 
 from .controller import QuickTransitionController
 from .request_resolution import (
+    RandomTransitionSelection,
     ResolvedQuickTransitionSpec,
     resolve_quick_transition_spec,
 )
@@ -16,6 +17,7 @@ from .state import (
 
 __all__ = [
     "QuickTransitionController",
+    "RandomTransitionSelection",
     "ResolvedQuickTransitionSpec",
     "TransitionCompletion",
     "TransitionOutcome",

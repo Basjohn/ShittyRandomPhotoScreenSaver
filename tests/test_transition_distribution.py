@@ -5,7 +5,8 @@ import threading
 from collections import Counter
 from types import SimpleNamespace
 
-from engine.screensaver_engine import ScreensaverEngine
+from engine.screensaver_engine import RandomTransitionHistory, ScreensaverEngine
+from rendering.quick.transitions.request_resolution import RandomTransitionSelection
 from rendering.transition_registry import get_transition_setting_names
 
 
@@ -13,6 +14,8 @@ class _FakeSettingsManager:
     def __init__(self, *, transitions: dict, hw_accel: bool = True) -> None:
         self._transitions = dict(transitions)
         self._display = {"hw_accel": hw_accel}
+        self.set_keys: list[str] = []
+        self.save_calls = 0
 
     def get(self, key: str, default=None):
         if key == "transitions":
@@ -40,6 +43,7 @@ class _FakeSettingsManager:
         return bool(self.get(key, False))
 
     def set(self, key: str, value) -> None:
+        self.set_keys.append(key)
         if key.startswith("transitions."):
             current = self._transitions
             parts = key.split(".")[1:]
@@ -58,17 +62,38 @@ class _FakeSettingsManager:
         current[parts[-1]] = value
 
     def save(self) -> None:
-        return
+        self.save_calls += 1
 
 
-def _run_random_transition_prepare(settings: _FakeSettingsManager) -> str:
-    engine = type("EngineStub", (), {"settings_manager": settings})()
+class _DisplayManagerStub:
+    def __init__(self) -> None:
+        self.selections: list[RandomTransitionSelection | None] = []
+
+    def set_random_transition_selection(self, selection) -> None:
+        self.selections.append(selection)
+
+
+class _EngineStub:
+    _prepare_random_transition_if_needed = ScreensaverEngine._prepare_random_transition_if_needed
+    _publish_random_transition_selection = ScreensaverEngine._publish_random_transition_selection
+
+    def __init__(self, settings: _FakeSettingsManager) -> None:
+        self.settings_manager = settings
+        self.display_manager = _DisplayManagerStub()
+        self._random_transition_history = RandomTransitionHistory()
+
+
+def _run_random_transition_prepare(
+    settings: _FakeSettingsManager,
+    engine: _EngineStub | None = None,
+) -> str:
     # The engine consumes the resolved transition through the return value
     # (screensaver_engine.py). When an empty effective pool normalizes out of
-    # Random, the manual type is returned directly without writing
-    # transitions.random_choice, so the return value is the canonical result
-    # across all paths (random selection, normalized manual type, fail-closed None).
-    return ScreensaverEngine._prepare_random_transition_if_needed(engine)
+    # Random, the manual type is returned directly, so the return value is the
+    # canonical result across all paths (random selection, normalized manual
+    # type, fail-closed None).
+    engine = engine if engine is not None else _EngineStub(settings)
+    return engine._prepare_random_transition_if_needed()
 
 
 def test_random_transition_pool_can_select_burn_when_hw_accel_enabled() -> None:
@@ -91,11 +116,52 @@ def test_random_transition_pool_can_select_burn_when_hw_accel_enabled() -> None:
         },
     }
     settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
+    engine = _EngineStub(settings)
 
-    choice = _run_random_transition_prepare(settings)
+    choice = _run_random_transition_prepare(settings, engine)
 
     assert choice == "Burn"
-    assert settings.get("transitions.last_random_choice") == "Burn"
+    assert engine._random_transition_history.last_choice == "Burn"
+    assert engine.display_manager.selections == [RandomTransitionSelection("Burn")]
+
+
+def test_random_rotation_never_writes_settings_or_authored_directions() -> None:
+    """TX-02: Random rotation is session memory, not a Settings round-trip."""
+
+    transitions = {
+        "type": "Crossfade",
+        "random_always": True,
+        "pool": {name: name in {"Slide", "Wipe"} for name in get_transition_setting_names()},
+        "activation": {name: True for name in get_transition_setting_names()},
+        "slide": {"direction": "Right to Left"},
+        "wipe": {"direction": "Bottom to Top"},
+    }
+    settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
+    engine = _EngineStub(settings)
+
+    rng_state = random.getstate()
+    random.seed(99)
+    try:
+        choices = [_run_random_transition_prepare(settings, engine) for _ in range(400)]
+    finally:
+        random.setstate(rng_state)
+
+    assert settings.set_keys == []
+    assert settings.save_calls == 0
+    assert settings.get("transitions.slide.direction") == "Right to Left"
+    assert settings.get("transitions.wipe.direction") == "Bottom to Top"
+    assert "random_choice" not in settings.get("transitions")
+
+    selections = engine.display_manager.selections
+    assert [selection.transition_name for selection in selections] == choices
+    assert all(selection.direction is not None for selection in selections)
+    # Transition and per-transition direction anti-repeat both survive the move
+    # from persisted history into session memory.
+    assert all(a != b for a, b in zip(choices, choices[1:]))
+    for name in ("Slide", "Wipe"):
+        directions = [s.direction for s in selections if s.transition_name == name]
+        assert len(set(directions)) > 2
+        assert all(a != b for a, b in zip(directions, directions[1:]))
 
 
 def test_random_transition_distribution_is_approximately_uniform_for_enabled_pool() -> None:

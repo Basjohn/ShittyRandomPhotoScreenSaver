@@ -36,6 +36,19 @@ class _RandomSource(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class RandomTransitionSelection:
+    """One engine-made Random pick shared by every display of an image batch.
+
+    Session memory only: Random rotation never writes Settings.  ``direction``
+    is the Slide/Wipe direction label chosen together with the transition;
+    ``None`` means the authored section direction applies.
+    """
+
+    transition_name: str
+    direction: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ResolvedQuickTransitionSpec:
     """Display-independent transition intent shared by one image batch."""
 
@@ -134,13 +147,15 @@ def _resolve_direction(
 def resolve_quick_transition_spec(
     settings_manager: object | None,
     *,
+    random_selection: RandomTransitionSelection | None = None,
     random_source: _RandomSource | None = None,
 ) -> ResolvedQuickTransitionSpec | None:
     """Resolve the canonical current transition once for all selected displays.
 
-    A Random choice must already have been admitted by the engine for this image
-    batch. Stale, deactivated, out-of-pool or hardware-invalid choices fail
-    closed; this resolver never silently broadens the saved pool.
+    A Random choice must already have been made by the engine and handed over as
+    ``random_selection``. A missing, stale, deactivated, out-of-pool or
+    hardware-invalid choice fails closed; this resolver never silently broadens
+    the saved pool.
     """
 
     rng = random_source if random_source is not None else random
@@ -172,11 +187,17 @@ def resolve_quick_transition_spec(
         transitions.get("random_always", canonical_random),
         canonical_random,
     )
+    random_direction: str | None = None
     if random_enabled:
-        choice = transitions.get("random_choice")
-        selected_name = canonicalize_transition_name(choice, fallback="")
+        if random_selection is None:
+            return None
+        selected_name = canonicalize_transition_name(
+            random_selection.transition_name,
+            fallback="",
+        )
         if not selected_name:
             return None
+        random_direction = random_selection.direction
         hw_enabled = (
             settings_manager.get_bool("display.hw_accel")
             if settings_manager is not None
@@ -241,7 +262,7 @@ def resolve_quick_transition_spec(
     elif transition_id == "slide":
         cfg = _section(transitions, defaults, "slide")
         direction = _resolve_direction(
-            cfg.get("direction"),
+            random_direction if random_direction is not None else cfg.get("direction"),
             choices=("left", "right", "down", "up"),
             mapping=_DIRECTION_MAP,
             rng=rng,
@@ -256,7 +277,7 @@ def resolve_quick_transition_spec(
     elif transition_id == "wipe":
         cfg = _section(transitions, defaults, "wipe")
         direction = _resolve_direction(
-            cfg.get("direction"),
+            random_direction if random_direction is not None else cfg.get("direction"),
             choices=tuple(_WIPE_DIRECTION_MAP.values()),
             mapping=_WIPE_DIRECTION_MAP,
             rng=rng,
@@ -293,4 +314,8 @@ def resolve_quick_transition_spec(
     )
 
 
-__all__ = ["ResolvedQuickTransitionSpec", "resolve_quick_transition_spec"]
+__all__ = [
+    "RandomTransitionSelection",
+    "ResolvedQuickTransitionSpec",
+    "resolve_quick_transition_spec",
+]
