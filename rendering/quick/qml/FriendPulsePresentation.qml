@@ -592,16 +592,16 @@ OverlayWidget {
                 radius: Math.min(width / 2.0, 8.0 * friendRoot.customAvatarScale)
                 color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g,
                                friendRoot.friendPulseModel.accentColor.b, 0.22)
-                border.color: rowAvatarHover.hovered && rowAvatarHover.enabled
-                    ? "white" : friendRoot.friendPulseModel.rowInnerBorderColor
-                border.width: friendRoot.friendStrokeWidth(
-                    rowAvatarHover.hovered && rowAvatarHover.enabled ? 2.25 : 1.0
-                )
                 antialiasing: true
+                // Steam artwork-frame contract (Achievement Pulse, Abandonment
+                // Issues): the image sits inside the resting stroke on a
+                // concentric mask and the outline paints on top, so neither the
+                // image nor a thicker hover stroke can cover or escape the frame.
+                readonly property real imageInset: friendRoot.friendStrokeWidth(1.0)
                 Item {
                     id: rowAvatarClip
                     anchors.fill: parent
-                    anchors.margins: Math.max(1.0, friendRoot.friendStrokeWidth(1.0) / 2.0)
+                    anchors.margins: rowAvatarFrame.imageInset
                     clip: true
                     Image {
                         id: rowAvatarImage
@@ -621,13 +621,25 @@ OverlayWidget {
                     Rectangle {
                         id: rowAvatarMask
                         anchors.fill: parent
-                        radius: Math.max(0.0, rowAvatarFrame.radius - 1.0)
+                        radius: Math.max(0.0, rowAvatarFrame.radius - rowAvatarFrame.imageInset)
                         visible: false
                         layer.enabled: true
                     }
                 }
                 Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.1 * friendRoot.customAvatarScale; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; antialiasing: true; z: 2 }
+                Rectangle {
+                    objectName: "friendPulseRowAvatarOutline_" + index
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: "transparent"
+                    antialiasing: true
+                    z: 2
+                    border.color: rowAvatarHover.hovered && rowAvatarHover.enabled
+                        ? "white" : friendRoot.friendPulseModel.rowInnerBorderColor
+                    border.width: friendRoot.friendStrokeWidth(
+                        rowAvatarHover.hovered && rowAvatarHover.enabled ? 2.25 : 1.0
+                    )
+                }
                 HoverHandler { id: rowAvatarHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
                 TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendActionRequested(index) }
             }
@@ -898,16 +910,13 @@ OverlayWidget {
                     height: width
                     radius: Math.min(width / 2.0, 12.0 * friendRoot.customAvatarScale)
                     color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.22)
-                    border.color: gridAvatarHover.hovered && gridAvatarHover.enabled
-                        ? "white" : friendRoot.friendPulseModel.rowInnerBorderColor
-                    border.width: friendRoot.friendStrokeWidth(
-                        gridAvatarHover.hovered && gridAvatarHover.enabled ? 2.25 : 1.0
-                    )
                     antialiasing: true
+                    // Same artwork-frame contract as the row avatar above.
+                    readonly property real imageInset: friendRoot.friendStrokeWidth(1.0)
                     Item {
                         id: gridAvatarClip
                         anchors.fill: parent
-                        anchors.margins: Math.max(1.0, friendRoot.friendStrokeWidth(1.0) / 2.0)
+                        anchors.margins: gridAvatarFrame.imageInset
                         clip: true
                         Image {
                             id: gridAvatarImage
@@ -927,13 +936,25 @@ OverlayWidget {
                         Rectangle {
                             id: gridAvatarMask
                             anchors.fill: parent
-                            radius: Math.max(0.0, gridAvatarFrame.radius - 1.0)
+                            radius: Math.max(0.0, gridAvatarFrame.radius - gridAvatarFrame.imageInset)
                             visible: false
                             layer.enabled: true
                         }
                     }
                     Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.28 * friendRoot.customAvatarScale; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    Rectangle { anchors.fill: parent; radius: parent.radius; color: "transparent"; antialiasing: true; z: 2 }
+                    Rectangle {
+                        objectName: "friendPulseGridAvatarOutline_" + index
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: "transparent"
+                        antialiasing: true
+                        z: 2
+                        border.color: gridAvatarHover.hovered && gridAvatarHover.enabled
+                            ? "white" : friendRoot.friendPulseModel.rowInnerBorderColor
+                        border.width: friendRoot.friendStrokeWidth(
+                            gridAvatarHover.hovered && gridAvatarHover.enabled ? 2.25 : 1.0
+                        )
+                    }
                     HoverHandler { id: gridAvatarHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && friendActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.friendActionRequested(index) }
                 }
