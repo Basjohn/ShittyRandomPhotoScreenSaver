@@ -81,6 +81,32 @@ def test_real_driver_fall_has_continuous_late_departure_without_an_endpoint_cut(
     assert "discard" not in CRUMBLE_FRAGMENT
 
 
+# Oracle baseline: the fracture roughness/debris these pixel thresholds were
+# calibrated with (the pre-d56d7099 defaults). Product defaults may move freely.
+_CALIBRATED = {
+    "crack_complexity": 1.0,
+    "debris": 0.65,
+    "depth": 0.85,
+    "thickness": 0.65,
+    "piece_count": 16,
+}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Known defect (Current_Plan): fracture_cells clamps spread at .48, so "
+        "crack_complexity above ~1.26 -- including the 1.8 default -- renders "
+        "identically up to the 2.0 maximum. Remove this marker once the "
+        "operator-approved mapping makes the whole range live."
+    ),
+)
+def test_crack_complexity_is_live_across_its_whole_range():
+    from rendering.quick.transitions.fracture_geometry import fracture_cells
+
+    assert fracture_cells(390.1, 35, 16 / 9, 1.5) != fracture_cells(390.1, 35, 16 / 9, 2.0)
+
+
 @pytest.mark.qt
 @pytest.mark.parametrize(
     ("field", "value"),
@@ -94,13 +120,19 @@ def test_real_driver_fall_has_continuous_late_departure_without_an_endpoint_cut(
     ),
 )
 def test_real_driver_each_crumble_control_changes_the_volume(qt_app, field, value):
+    # Compare against the pinned baseline these deltas were calibrated on, not
+    # the moving product defaults (d56d7099 raised complexity/debris to 1.8/0.85,
+    # which left 2.0/1.0 barely different -- or, for complexity, identical).
     capture = TransitionCapture(320, 180)
     try:
         base = np.asarray(
-            capture.render(capture.run("crumble"), 0.53)[0], dtype=np.int16
+            capture.render(capture.run("crumble", parameters=_CALIBRATED), 0.53)[0],
+            dtype=np.int16,
         )
         changed = np.asarray(
-            capture.render(capture.run("crumble", parameters={field: value}), 0.53)[0],
+            capture.render(
+                capture.run("crumble", parameters={**_CALIBRATED, field: value}), 0.53
+            )[0],
             dtype=np.int16,
         )
         assert np.abs(base - changed).mean() > 0.08, field
@@ -157,7 +189,7 @@ def test_crumble_failed_instance_deletion_keeps_handle_and_releases_other_resour
 def test_cracks_grow_before_the_intact_wall_or_debris_moves(qt_app):
     capture=TransitionCapture(640,360)
     try:
-        run=capture.run("crumble",parameters={"weight_mode":0.0})
+        run=capture.run("crumble",parameters={**_CALIBRATED,"weight_mode":0.0})
         source=np.asarray(capture.images[0],dtype=np.int16)
         dark_counts=[]
         for progress in (.06,.15,.26):
@@ -169,7 +201,7 @@ def test_cracks_grow_before_the_intact_wall_or_debris_moves(qt_app):
             assert np.all(pixels==source,axis=2).mean()>.90
         assert 0<dark_counts[0]<dark_counts[1]<dark_counts[2]
         assert dark_counts[2]>640*360*.005
-        no_debris=capture.run("crumble",parameters={"weight_mode":0.0,"debris":0.0})
+        no_debris=capture.run("crumble",parameters={**_CALIBRATED,"weight_mode":0.0,"debris":0.0})
         assert capture.render(run,.26)[0].tobytes()==capture.render(no_debris,.26)[0].tobytes()
         falling=np.asarray(capture.render(run,.55)[0],dtype=np.int16)
         assert np.all(falling==source,axis=2).mean()<.65
