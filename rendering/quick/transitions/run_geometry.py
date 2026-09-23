@@ -24,7 +24,7 @@ from typing import Callable, Hashable, TypeVar
 
 from core.logging.logger import get_logger
 
-from .fracture_geometry import fracture_cells, fracture_vertices
+from .fracture_geometry import crumble_cells, fracture_cells, fracture_vertices
 
 logger = get_logger(__name__)
 
@@ -99,28 +99,50 @@ def crumble_parameters(
     )
 
 
+# Per-run debris grain: (smallest size, largest size, density multiplier).
+_DEBRIS_GRAINS = {
+    "fine": (0.30, 0.85, 1.35),
+    "mixed": (0.35, 1.45, 1.00),
+    "chunky": (0.85, 2.10, 0.70),
+}
+
+
 def debris_instances(seed: float, shards, amount: float) -> tuple[float, ...]:
+    """Seeded chips broken off the real crack borders; ``amount`` drives count and size.
+
+    Each run picks a grain (fine, mixed or chunky) and a hot spot, so debris
+    concentrates along the cracks nearest it instead of an even sprinkle.
+    Metadata: seam point, parent centre, parent variation, size.
+    """
+
     rng = random.Random(seed)
-    count = max(12, min(512, round(len(shards) * (3 + 9 * amount))))
+    grain = sorted(_DEBRIS_GRAINS)[rng.randrange(len(_DEBRIS_GRAINS))]
+    smallest, largest, density = _DEBRIS_GRAINS[grain]
+    hot_x, hot_y = rng.random(), rng.random()
+    count = max(12, min(512, round(len(shards) * (2 + 16 * amount) * density)))
+    edges = []
+    weights = []
+    for shard in shards:
+        polygon = shard.polygon
+        for index, first in enumerate(polygon):
+            second = polygon[(index + 1) % len(polygon)]
+            length = math.hypot(second[0] - first[0], second[1] - first[1])
+            if length <= 0.0:
+                continue
+            mid_x, mid_y = (first[0] + second[0]) * 0.5, (first[1] + second[1]) * 0.5
+            near = math.exp(-math.hypot(mid_x - hot_x, mid_y - hot_y) / 0.30)
+            edges.append((shard, first, second))
+            weights.append(length * (0.25 + near))
+    chosen = rng.choices(edges, weights=weights, k=count)
+    growth = 0.75 + 0.5 * amount
     values = []
-    for index in range(count):
-        shard = shards[index % len(shards)]
-        first = shard.polygon[index % len(shard.polygon)]
-        second = shard.polygon[(index + 1) % len(shard.polygon)]
+    for shard, first, second in chosen:
         fraction = rng.random()
         x = first[0] + (second[0] - first[0]) * fraction
         y = first[1] + (second[1] - first[1]) * fraction
         parent_x, parent_y = shard.center
-        values.extend(
-            (
-                x,
-                y,
-                parent_x,
-                parent_y,
-                shard.variation,
-                0.35 + rng.random() * 0.65,
-            )
-        )
+        size = (smallest + (largest - smallest) * rng.random() ** 1.4) * growth
+        values.extend((x, y, parent_x, parent_y, shard.variation, size))
     return tuple(values)
 
 
@@ -168,7 +190,7 @@ def crumble_geometry_key(parameters: Mapping[str, object], aspect: float) -> tup
 
 def build_crumble_geometry(key: tuple) -> CrumbleGeometry:
     _name, seed, pieces, complexity, aspect, debris = key
-    shards = fracture_cells(seed, pieces, aspect, complexity)
+    shards = crumble_cells(seed, pieces, aspect, complexity)
     chunks = _pack(crumble_vertices(shards, aspect))
     if debris <= 0.0:
         return CrumbleGeometry(chunks, b"")

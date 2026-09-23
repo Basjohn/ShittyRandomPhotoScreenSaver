@@ -50,7 +50,9 @@ def test_closed_fracture_and_instanced_debris_have_no_flat_particle_shortcut():
 
 
 def test_debris_metadata_is_bounded_seeded_and_tied_to_static_fracture():
-    shards = fracture_cells(12, 128, 16 / 9, 2.0)
+    from rendering.quick.transitions.fracture_geometry import crumble_cells
+
+    shards = crumble_cells(12, 128, 16 / 9, 2.0)
     first = _debris_instances(12.5, shards, 0.65)
     assert (
         first == _debris_instances(12.5, shards, 0.65) and 12 <= len(first) // 6 <= 512
@@ -92,19 +94,86 @@ _CALIBRATED = {
 }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known defect (Current_Plan): fracture_cells clamps spread at .48, so "
-        "crack_complexity above ~1.26 -- including the 1.8 default -- renders "
-        "identically up to the 2.0 maximum. Remove this marker once the "
-        "operator-approved mapping makes the whole range live."
-    ),
-)
-def test_crack_complexity_is_live_across_its_whole_range():
-    from rendering.quick.transitions.fracture_geometry import fracture_cells
+def _cell_area_cv(shards, aspect: float) -> float:
+    import statistics
 
-    assert fracture_cells(390.1, 35, 16 / 9, 1.5) != fracture_cells(390.1, 35, 16 / 9, 2.0)
+    areas = [
+        abs(sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(poly, poly[1:] + poly[:1]))) * 0.5 * aspect
+        for poly in (list(shard.polygon) for shard in shards)
+    ]
+    return statistics.pstdev(areas) / statistics.mean(areas)
+
+
+def test_crack_complexity_is_live_across_its_whole_range():
+    """Operator decision 2026-09-23: complexity must visibly mutate the fracture.
+
+    Mean piece-size irregularity rises at every step from 0.5 to 2.0 (the old
+    jittered grid was flat above ~1.26, including the 1.8 default).
+    """
+
+    from rendering.quick.transitions.fracture_geometry import crumble_cells
+
+    aspect = 16 / 9
+    steps = (0.5, 0.875, 1.25, 1.625, 2.0)
+    irregularity = [
+        sum(_cell_area_cv(crumble_cells(seed * 37.1, 35, aspect, c), aspect) for seed in range(16)) / 16
+        for c in steps
+    ]
+    assert all(later > earlier + 0.05 for earlier, later in zip(irregularity, irregularity[1:])), irregularity
+    assert irregularity[-1] > 2.0 * irregularity[0], irregularity
+    assert crumble_cells(390.1, 35, aspect, 1.5) != crumble_cells(390.1, 35, aspect, 2.0)
+
+
+def test_each_run_draws_a_different_crack_layout():
+    """Seeds pick different pattern families, so runs stop repeating one layout."""
+
+    import random
+
+    from rendering.quick.transitions.fracture_geometry import CRUMBLE_PATTERNS, crumble_cells
+
+    aspect = 16 / 9
+    families = {CRUMBLE_PATTERNS[random.Random(seed * 37.1).randrange(len(CRUMBLE_PATTERNS))]
+                for seed in range(12)}
+    assert families == set(CRUMBLE_PATTERNS)
+    per_seed = [_cell_area_cv(crumble_cells(seed * 37.1, 35, aspect, 1.8), aspect) for seed in range(16)]
+    assert max(per_seed) - min(per_seed) > 0.3, per_seed
+
+
+@pytest.mark.parametrize("pieces", (4, 35, 128))
+def test_crumble_cells_tile_the_wall_without_gaps_and_repeat_per_seed(pieces):
+    from rendering.quick.transitions.fracture_geometry import crumble_cells
+
+    aspect = 16 / 9
+    for seed in (1.5, 390.1, 811.0):
+        for complexity in (0.5, 1.8, 2.0):
+            shards = crumble_cells(seed, pieces, aspect, complexity)
+            assert len(shards) == pieces
+            area = sum(
+                abs(sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(p, p[1:] + p[:1]))) * 0.5
+                for p in (list(shard.polygon) for shard in shards)
+            )
+            assert abs(area - 1.0) < 1e-9  # normalized wall: no gap, no overlap
+            assert shards == crumble_cells(seed, pieces, aspect, complexity)
+
+
+def test_glass_fracture_is_untouched_by_the_crumble_mutation():
+    from rendering.quick.transitions.fracture_geometry import crumble_cells, fracture_cells
+
+    assert fracture_cells(12.5, 35, 16 / 9) != crumble_cells(12.5, 35, 16 / 9, 1.0)
+
+
+def test_debris_amount_drives_chip_count_and_size():
+    import statistics
+
+    from rendering.quick.transitions.fracture_geometry import crumble_cells
+    from rendering.quick.transitions.run_geometry import debris_instances as _debris_instances
+
+    shards = crumble_cells(12.5, 35, 16 / 9, 1.8)
+    by_amount = {amount: _debris_instances(12.5, shards, amount) for amount in (0.2, 0.65, 1.0)}
+    counts = [len(values) // 6 for values in by_amount.values()]
+    sizes = [statistics.mean(values[5::6]) for values in by_amount.values()]
+    assert counts[0] < counts[1] < counts[2], counts
+    assert sizes[0] < sizes[1] < sizes[2], sizes
 
 
 @pytest.mark.qt
@@ -141,23 +210,29 @@ def test_real_driver_each_crumble_control_changes_the_volume(qt_app, field, valu
 
 
 def test_crumble_preserves_fractional_seed_identity_and_seam_origins():
-    from rendering.quick.transitions.fracture_geometry import fracture_cells
+    from rendering.quick.transitions.fracture_geometry import crumble_cells
     from rendering.quick.transitions.run_geometry import debris_instances as _debris_instances
     import numpy as np
 
-    first = fracture_cells(12.1, 16, 16 / 9)
-    assert first != fracture_cells(12.9, 16, 16 / 9)
+    first = crumble_cells(12.1, 16, 16 / 9, 1.0)
+    assert first != crumble_cells(12.9, 16, 16 / 9, 1.0)
+    parents = {shard.center: shard for shard in first}
     instances = np.asarray(_debris_instances(12.1, first, 0.65)).reshape(-1, 6)
-    for index, instance in enumerate(instances):
-        shard = first[index % len(first)]
-        assert tuple(instance[2:4]) == shard.center
+    for instance in instances:
+        # Every chip breaks off a real border of its own parent piece.
+        shard = parents[tuple(instance[2:4])]
         assert instance[4] == shard.variation
-        a = np.asarray(shard.polygon[index % len(shard.polygon)])
-        b = np.asarray(shard.polygon[(index + 1) % len(shard.polygon)])
-        edge = b - a
-        point = instance[:2] - a
-        assert abs(edge[0] * point[1] - edge[1] * point[0]) < 1e-12
-        assert -1e-12 <= float(point @ edge) <= float(edge @ edge) + 1e-12
+        on_edge = False
+        for index, corner in enumerate(shard.polygon):
+            a = np.asarray(corner)
+            b = np.asarray(shard.polygon[(index + 1) % len(shard.polygon)])
+            edge = b - a
+            point = instance[:2] - a
+            if (abs(edge[0] * point[1] - edge[1] * point[0]) < 1e-12
+                    and -1e-12 <= float(point @ edge) <= float(edge @ edge) + 1e-12):
+                on_edge = True
+                break
+        assert on_edge
 
 
 def test_crumble_failed_instance_deletion_keeps_handle_and_releases_other_resources(

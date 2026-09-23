@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from rendering.quick.transitions.fracture_geometry import fracture_cells, fracture_vertices
+from rendering.quick.transitions.fracture_geometry import crumble_cells, fracture_cells, fracture_vertices
 from rendering.quick.transitions.mesh_support import pack_floats
 from rendering.quick.transitions.run_geometry import (
     PREPARED_GEOMETRY,
@@ -58,9 +58,9 @@ def test_glass_geometry_matches_the_previous_render_thread_build() -> None:
     assert build_glass_geometry(key).vertices == _ctypes_reference(reference)
 
 
-def test_crumble_geometry_matches_the_previous_render_thread_build() -> None:
+def test_crumble_geometry_matches_the_ctypes_packing_of_its_pure_builders() -> None:
     key = crumble_geometry_key(_CRUMBLE, _ASPECT)
-    shards = fracture_cells(123.25, 35, _ASPECT, 1.0)
+    shards = crumble_cells(123.25, 35, _ASPECT, 1.0)
     geometry = build_crumble_geometry(key)
     assert geometry.chunks == _ctypes_reference(crumble_vertices(shards, _ASPECT))
     assert geometry.debris == _ctypes_reference(debris_instances(123.25, shards, 0.65))

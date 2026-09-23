@@ -38,7 +38,7 @@ recorded; the replacement watchdog armed six times (four Settings, two CUSTOM Ed
 | VZ-04 waveform payload | 38.4 µs/tick for modes that never draw samples | **Do with care** — `[~]` landed | BTF Layer 4 active-music review |
 | PR-04 Stage A — opaque pixels + premultiplied label | soak: 10 transition ends 26.6–90.6 ms; Qt conversion 8.12 → 0.15 ms idle | **Do with care** — `[~]` landed, partial mitigation | post-change frame trace of the whole cycle |
 | PR-04 Stage B — drop `.copy()` | ≈3.8 ms idle / 4.6 ms traced sync per 4K change; lifetime facts pinned | **Done** — `[~]` landed | post-Stage-B trace |
-| Crumble complexity + debris | irregularity 0.31 → 0.38 across the range; debris ≤0.22% of pixels | **Product rework** | geometry rework, not a remap |
+| Crumble complexity + debris | irregularity was 0.31 → 0.38; debris ≤0.22% of pixels | **Product rework** — `[~]` implemented | operator visual acceptance |
 | Melt gloss / detail | gloss ≤3/255 in the wet band; detail ≈5/255 | **Product rework** | intended min/mid/max first |
 | PW-04 Feed model reset | one changed row resets every delegate; 13 FEEDS IO tasks in the soak | **Watch** — FEEDS Custom 2–4 | stable-ID diff only if churn shows |
 | PW-03 Media notify | 0.50 ms per emit × ≈0.25 refreshes/s ≈ 0.13 ms/s | **Close** (measured 2026-09-23) | — |
