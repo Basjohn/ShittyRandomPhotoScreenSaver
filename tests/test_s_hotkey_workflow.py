@@ -453,7 +453,14 @@ def test_engine_start_schedules_bounded_first_image_retry(monkeypatch, qt_app):
     assert scheduled == [180]
 
 
-def test_engine_stop_quiesces_clears_and_fully_cleans_displays():
+def test_engine_stop_quiesces_and_fully_cleans_displays_without_clear_all():
+    """Teardown fences then retires; it never routes through live ``clear_all``.
+
+    ``clear_all`` cancels active transitions to their destination and dispatches
+    completion callbacks, which is a live-runtime operation. A retiring
+    generation must be quiesced and let each Quick runtime terminalize silently
+    (engine_lifecycle.teardown_display_runtime).
+    """
     order: list[str] = []
 
     class _Lock:
@@ -523,5 +530,5 @@ def test_engine_stop_quiesces_clears_and_fully_cleans_displays():
     finally:
         monkeypatch.undo()
 
-    assert order == ["quiesce", "clear", "cleanup"]
+    assert order == ["quiesce", "cleanup"]
     assert engine.display_manager is None

@@ -61,8 +61,20 @@ def fake_core_audio(monkeypatch):
     endpoints = [Endpoint()]
     enumerator = Enumerator()
 
+    queried: list[object] = []
+
+    class ActivatedUnknown:
+        """``Activate`` returns IUnknown; the endpoint comes from QueryInterface."""
+
+        def __init__(self, endpoint):
+            self._endpoint = endpoint
+
+        def QueryInterface(self, interface):
+            queried.append(interface)
+            return self._endpoint
+
     class Speaker:
-        def Activate(self, *_a): return endpoints[-1]
+        def Activate(self, *_a): return ActivatedUnknown(endpoints[-1])
 
     class AudioUtilities:
         @staticmethod
@@ -83,7 +95,13 @@ def fake_core_audio(monkeypatch):
     monkeypatch.setitem(sys.modules, "comtypes", comtypes)
     monkeypatch.setitem(sys.modules, "pycaw", pycaw)
     monkeypatch.setitem(sys.modules, "pycaw.pycaw", inner)
-    monkeypatch.setattr("ctypes.cast", lambda interface, pointer: interface)
+    def _forbidden_cast(*_args, **_kwargs):
+        # ctypes.cast shares a COM pointer without AddRef and ties the source
+        # into a ctypes cycle: a later GC double-releases it (native crash).
+        raise AssertionError("COM interfaces must be obtained via QueryInterface")
+
+    monkeypatch.setattr("ctypes.cast", _forbidden_cast)
+    enumerator.queried = queried
     return endpoints, enumerator
 
 
@@ -206,3 +224,14 @@ def test_actions_are_confined_to_owning_com_apartment(fake_core_audio):
     worker.start(); worker.join()
     assert len(errors) == 2 and all("COM apartment" in item for item in errors)
     source.stop()
+
+
+def test_endpoint_is_query_interfaced_never_ctypes_cast(fake_core_audio):
+    """Regression: cast() over-released the endpoint and crashed on a later GC."""
+    endpoints, enumerator = fake_core_audio
+    probe = CoreAudioCallbackProbe(on_volume=lambda *_a: None, on_default_device=lambda: None)
+    assert probe.start() is True
+    assert [getattr(i, "_iid_", None) for i in enumerator.queried] == ["fake-endpoint"]
+    assert probe.snapshot() == (0.55, False)
+    probe.stop()
+    assert endpoints[-1].unregistered
