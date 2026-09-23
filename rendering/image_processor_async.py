@@ -272,6 +272,16 @@ class AsyncImageProcessor:
             )
             return result
 
+        if scaled.hasAlphaChannel():
+            # Wallpaper pixels are opaque (Guardrails): composite any source
+            # transparency over black, exactly as the cropping/padding branches do.
+            opaque = QImage(screen_size, QImage.Format.Format_ARGB32_Premultiplied)
+            opaque.fill(Qt.GlobalColor.black)
+            painter = QImagePainter(opaque)
+            painter.drawImage(0, 0, scaled)
+            painter.end()
+            scaled = opaque
+
         logger.info(
             "FILL(QImage): Image %sx%s → %sx%s (perfect fit)",
             img_size.width(),

@@ -236,6 +236,15 @@ class ImageWorker(BaseWorker):
             img.load()
             original_size = img.size
             
+            # Wallpaper pixels are opaque (Guardrails): composite any source
+            # transparency over black before scaling, so every display mode
+            # (FILL crops and FIT/SHRINK padding alike) returns opaque RGBA.
+            if img.has_transparency_data:
+                img = Image.alpha_composite(
+                    Image.new("RGBA", img.size, (0, 0, 0, 255)),
+                    img.convert("RGBA"),
+                )
+            
             # Convert to RGBA
             if img.mode != "RGBA":
                 img = img.convert("RGBA")
