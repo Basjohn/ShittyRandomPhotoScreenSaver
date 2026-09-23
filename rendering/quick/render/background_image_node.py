@@ -12,10 +12,18 @@ from PySide6.QtQuick import (
     QSGTexture,
 )
 
+from core.logging.logger import get_logger
+
 from ..image_state import PresentationImage
 from ..transitions.state import TransitionRun
 from .background_node import BackgroundRenderNode, SlideProofState
+from .native_texture_bridge import NativeTextureUnavailable, wrap_gl_texture
 from .telemetry import RenderNodeTelemetry
+
+
+logger = get_logger(__name__)
+# Unexpected adoption failures are logged once per distinct reason per process.
+_REPORTED_FALLBACKS: set[str] = set()
 
 
 class RetainedBackgroundSceneNode(QSGNode):
@@ -56,6 +64,9 @@ class RetainedBackgroundSceneNode(QSGNode):
         self._native_image_source: PresentationImage | None = None
         self._image_identity: str | None = None
         self._image_byte_count = 0
+        # PR-04: the shown texture wraps a GL texture lent by the custom node's
+        # texture host (which still owns and eventually deletes it).
+        self._image_adopted = False
         self._custom_node = BackgroundRenderNode(
             telemetry,
             screen_index=self._screen_index,
@@ -146,6 +157,9 @@ class RetainedBackgroundSceneNode(QSGNode):
         self._native_image_source = None
         # The QSGImageNode owns its QSGTexture.  Qt deletes both with this
         # subtree; do not manually delete the texture and risk double-free.
+        # An adopted texture's GL name was already deleted by its texture host
+        # in releaseResources above; Qt then deletes only the wrapper, which
+        # never owns (or deletes) the GL allocation.
 
     def _synchronize_native_image(
         self,
@@ -170,54 +184,47 @@ class RetainedBackgroundSceneNode(QSGNode):
             new_image_node = True
 
         if self._image_identity != image.identity:
-            # Wallpaper pixels are opaque (composited over black at processing;
-            # the texture is created TextureIsOpaque). Straight and premultiplied
-            # RGBA are byte-identical for opaque pixels, and the premultiplied label
-            # spares Qt a full straight->premultiplied conversion before every
-            # upload (PR-04: 8.1 -> 0.15 ms blocking at 4K).
-            #
-            # No deep copy (PR-04 Stage B): the QImage wraps the immutable
-            # PresentationImage bytes. Qt reads them on the render thread during
-            # this frame's upload, after updatePaintNode returns, while the GUI
-            # thread may already have replaced the item's image
-            # (tests/test_qtquick_native_image_lifetime.py). The node therefore
-            # keeps the PresentationImage for as long as the texture exists.
-            qimage = QImage(
-                image.rgba8,
-                width,
-                height,
-                image.row_stride,
-                QImage.Format.Format_RGBA8888_Premultiplied,
-            )
-            if qimage.isNull():
-                raise RuntimeError("Qt Quick retained background QImage conversion failed")
-            qimage.setDevicePixelRatio(float(image.device_pixel_ratio))
-
-            texture = self._window.createTextureFromImage(
-                qimage,
-                QQuickWindow.CreateTextureOption.TextureIsOpaque,
-            )
+            # PR-04: a transition that just ended has this image resident on
+            # the GPU already; adopt that texture instead of uploading again.
+            texture, fallback_reason = self._adopt_resident_texture(image)
+            adopted = texture is not None
             if texture is None:
-                raise RuntimeError("Qt Quick did not create a retained background texture")
+                texture = self._upload_texture(image, width, height)
 
             previous_identity = self._image_identity
             previous_byte_count = self._image_byte_count
-            # The node owns its texture: setTexture deletes the previous one, so
-            # only now may the previous image's bytes go.
+            previous_adopted = self._image_adopted
+            # The node owns its texture wrapper: setTexture deletes the previous
+            # one, so only now may the previous image's bytes (uploaded) or GL
+            # texture (adopted, deleted by its host) go.
             self._image_node.setTexture(texture)
+            if previous_identity is not None and previous_adopted:
+                self._custom_node.reclaim_presentation_texture(previous_identity)
             self._native_image_source = image
             self._image_identity = image.identity
             self._image_byte_count = image.byte_count
+            self._image_adopted = adopted
 
             if previous_identity is not None:
                 self._telemetry.note_native_background_released(
                     identity=previous_identity,
                     byte_count=previous_byte_count,
+                    adopted=previous_adopted,
                 )
-            self._telemetry.note_native_background_admitted(
-                identity=image.identity,
-                byte_count=image.byte_count,
-            )
+            if adopted:
+                logger.debug("[QUICK] Retained background adopted the transition texture screen=%s",
+                             self._screen_index)
+                self._telemetry.note_native_background_adopted(identity=image.identity)
+            else:
+                if fallback_reason not in (None, "not_resident") and fallback_reason not in _REPORTED_FALLBACKS:
+                    _REPORTED_FALLBACKS.add(fallback_reason)
+                    logger.warning("[QUICK] Retained background uploads instead of adopting: %s",
+                                   fallback_reason)
+                self._telemetry.note_native_background_admitted(
+                    identity=image.identity,
+                    byte_count=image.byte_count,
+                    fallback_reason=fallback_reason,
+                )
 
         if new_image_node:
             # QSGImageNode must have a texture before it enters the scene graph.
@@ -229,6 +236,58 @@ class RetainedBackgroundSceneNode(QSGNode):
         self._image_node.setRect(
             QRectF(0.0, 0.0, logical_width, logical_height)
         )
+
+    def _adopt_resident_texture(
+        self,
+        image: PresentationImage,
+    ) -> tuple[QSGTexture | None, str | None]:
+        """Wrap the custom node's resident GL texture for ``image`` (no pixels move).
+
+        Returns ``(None, reason)`` when the image is not resident (for example
+        the first image, or a change without a transition) or adoption is not
+        possible here; the caller then uploads, attributed by ``reason``.
+        """
+
+        texture_id = self._custom_node.lend_presentation_texture(image)
+        if not texture_id:
+            return None, "not_resident"
+        try:
+            return wrap_gl_texture(texture_id, self._window, image.pixel_size), None
+        except NativeTextureUnavailable as exc:
+            self._custom_node.reclaim_presentation_texture(image.identity)
+            return None, str(exc)
+
+    def _upload_texture(self, image: PresentationImage, width: int, height: int) -> QSGTexture:
+        # Wallpaper pixels are opaque (composited over black at processing;
+        # the texture is created TextureIsOpaque). Straight and premultiplied
+        # RGBA are byte-identical for opaque pixels, and the premultiplied label
+        # spares Qt a full straight->premultiplied conversion before every
+        # upload (PR-04: 8.1 -> 0.15 ms blocking at 4K).
+        #
+        # No deep copy (PR-04 Stage B): the QImage wraps the immutable
+        # PresentationImage bytes. Qt reads them on the render thread during
+        # this frame's upload, after updatePaintNode returns, while the GUI
+        # thread may already have replaced the item's image
+        # (tests/test_qtquick_native_image_lifetime.py). The node therefore
+        # keeps the PresentationImage for as long as the texture exists.
+        qimage = QImage(
+            image.rgba8,
+            width,
+            height,
+            image.row_stride,
+            QImage.Format.Format_RGBA8888_Premultiplied,
+        )
+        if qimage.isNull():
+            raise RuntimeError("Qt Quick retained background QImage conversion failed")
+        qimage.setDevicePixelRatio(float(image.device_pixel_ratio))
+
+        texture = self._window.createTextureFromImage(
+            qimage,
+            QQuickWindow.CreateTextureOption.TextureIsOpaque,
+        )
+        if texture is None:
+            raise RuntimeError("Qt Quick did not create a retained background texture")
+        return texture
 
     def _set_native_visible(self, visible: bool) -> None:
         visible = bool(visible and self._image_node is not None)
@@ -243,9 +302,12 @@ class RetainedBackgroundSceneNode(QSGNode):
         if identity is None:
             return
         byte_count = self._image_byte_count
+        adopted = self._image_adopted
         self._image_identity = None
         self._image_byte_count = 0
+        self._image_adopted = False
         self._telemetry.note_native_background_released(
             identity=identity,
             byte_count=byte_count,
+            adopted=adopted,
         )
