@@ -6,9 +6,9 @@ from rendering.gl_programs.crumble_program import (
     CRUMBLE_VERTEX,
     DEBRIS_VERTEX,
 )
-from rendering.quick.transitions.implementations.crumble import (
-    _crumble_parameters,
-    _debris_instances,
+from rendering.quick.transitions.run_geometry import (
+    crumble_parameters as _crumble_parameters,
+    debris_instances as _debris_instances,
 )
 from rendering.quick.transitions.fracture_geometry import fracture_cells
 import numpy as np
@@ -110,7 +110,7 @@ def test_real_driver_each_crumble_control_changes_the_volume(qt_app, field, valu
 
 def test_crumble_preserves_fractional_seed_identity_and_seam_origins():
     from rendering.quick.transitions.fracture_geometry import fracture_cells
-    from rendering.quick.transitions.implementations.crumble import _debris_instances
+    from rendering.quick.transitions.run_geometry import debris_instances as _debris_instances
     import numpy as np
 
     first = fracture_cells(12.1, 16, 16 / 9)

@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from rendering.quick.transitions.implementations.crumble import _crumble_parameters
+from rendering.quick.transitions.run_geometry import crumble_parameters as _crumble_parameters
 
 
 def _probe(source: str) -> dict[str, object]:

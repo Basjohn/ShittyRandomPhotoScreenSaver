@@ -61,7 +61,7 @@ needs evidence before it is worth doing.
 
 | ID | Finding | Pri | Reward | Risk | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| TX-01 | 3D transitions build fracture/mesh geometry in Python on the render thread on the first transition frame (Glass default ≈25 ms; Crumble default ≈11 ms; 128-piece Crumble ≈40 ms), GIL held, per display | P1 | R3 | Low | measured |
+| TX-01 | `[~]` 3D transitions built fracture/mesh geometry in Python on the render thread at the first transition frame (Glass default ≈25 ms; Crumble ≈11 ms; 128-piece Crumble ≈40 ms); now packed 3× faster and prepared on COMPUTE at batch resolution — frame-trace + physical check open | P1 | R3 | Low | measured |
 | TX-02 | `[~]` Random rotation used persisted Settings as scratch space (2–6 `set()` + `save()` per rotation) **and overwrote the user-authored Slide/Wipe `direction`**; now session memory handed to the batch resolver — physical check + direction-semantics decision open | P1 | R2 | Medium | source + measured 1.9 ms idle |
 | PR-01 | Every visualizer publication (~90 Hz) re-resolves presentation (≈49 µs), rewrites ~25 QML root properties + 3 QColors, commits viewport metrics twice and resets the CUSTOM override, even when nothing changed | P1 | R2 | Low | measured + CHK27 |
 | LC-06 | `[~]` `get_default_settings()` rebuilt all canonical defaults (≈5.5 ms) per call on context-menu open (×2), image batches and per widget × display construction; now built once per profile, hot paths read sections — physical check open | P1 | R2 | Low | measured |

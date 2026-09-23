@@ -18,7 +18,7 @@ R-51 (per-context GL ownership), Defaults_Canonical_Schema_Dedup (one canonical 
 
 ---
 
-## TX-01 — 3D transitions build run geometry on the render thread at the first frame · P1 · R3 · Risk Low
+## TX-01 — 3D transitions built run geometry on the render thread at the first frame · P1 · R3 · Risk Low · `[~]`
 
 **Evidence (measured on the audited tree).** Geometry is keyed by `run_id` and built lazily inside `render()`:
 Glass Shatter (`implementations/glass_shatter.py:35-40`), Crumble (`implementations/crumble.py:144-147`,
@@ -56,8 +56,14 @@ transition first-use behavior".
 transition timing still sampled from `TransitionRun` wall time; no new clock; transitions stay deactivated by default
 per Transitions.md.
 
-- [ ] Step 1 implemented + byte-identity test on packed buffers.
-- [ ] Step 2 implemented; request immutability and per-display aspect keyed correctly.
+- [x] Step 1: `mesh_support.pack_floats` (`array('f')`), Glass pack 14 → 4 ms; byte identity in
+      `tests/test_transition_run_geometry.py`.
+- [x] Step 2: `run_geometry.py` builders + bounded `PREPARED_GEOMETRY`; `DisplayManager._prepare_transition_run_geometry`
+      submits once per resolved batch spec with each selected display's aspect; renderers `get_or_build` (never wait).
+      Geometry bytes verified identical to the pre-audit build across 6 Glass/Crumble cases. The request stays
+      immutable (nothing is attached to it); the key carries every builder input.
+- Known pre-existing reds (identical at `2ba9e15d`, not caused by TX-01): `test_qtquick_crumble_volume` crack/debris
+  pixel oracles ×3, `test_qtquick_future_transition_gl[melt_drip-detail-2.0]`, `test_qtquick_melt_surface[gloss]`.
 - [ ] `--frame-trace`: first `BACKGROUND_RENDER_*` frame of Glass/Crumble/Tiles drops to steady-frame class;
       publication→draw during transition start neutral-or-better.
 - [ ] Physical: Glass/Crumble/Tiles on both displays with active music (open Current_Plan acceptance item).
