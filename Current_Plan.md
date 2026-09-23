@@ -54,9 +54,9 @@ The independent fragment and particle minimum-energy settings are implemented wi
 
 Transition terminalization, Visualizer owner retirement and shared Core Audio callback retirement are accepted current contracts guarded by source/tests and `Docs/Guardrails.md`; they are not active-plan tasks unless a concrete regression reopens them.
 
-## Runtime audit 2026-09-22 | Wave B admitted
+## Runtime audit 2026-09-22 | Waves A–B landed, physical validation pending
 
-`Docs/Future_Work/Runtime_Audit/00_Index.md` holds the prioritized, source-cited candidate register, its per-item acceptance bars and the historical-bug cross-audit. The operator admitted Wave A (zero-behaviour hygiene, landed) and Wave B in the index order. Waves C/D stay candidates until promoted here.
+`Docs/Future_Work/Runtime_Audit/00_Index.md` holds the prioritized, source-cited candidate register, its per-item acceptance bars and the historical-bug cross-audit. Wave A (zero-behaviour hygiene) and Wave B (below) are implemented, test-gated and pushed; each `[~]` item needs its physical check before it closes. Waves C/D stay candidates until promoted here.
 
 - [~] TX-02 — Random rotation no longer writes Settings or overwrites authored Slide/Wipe directions (session-memory pick handed to the batch resolver; visible Random behaviour unchanged). Physical: two-display Random batches still share one transition + direction; Settings shows the authored direction after a Random session.
 - [ ] Operator: decide TX-02 direction semantics — should Random mode honour an explicitly authored fixed Slide/Wipe direction? (The persistence fix above does not depend on the answer.)
@@ -67,7 +67,6 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 - [~] PW-01 — timeline-only Media refreshes reuse the held album art for the same track instead of re-reading the WinRT thumbnail (refresh count unchanged; `artwork_reused` in `[MEDIA_EVENT] summary`). Physical: track change, same-album next track, podcast/video providers, artwork fade.
 - [~] VZ-01 — paused idle waveform samples are synthesized only while Oscilloscope is active (other modes: paused tick 150.6 → 36.4 µs); the waveform generation still advances every tick. Physical: paused idle for all six modes; pause→play and play→pause on Sine/Osc (no flat line, snap-back or direction inversion); paused switch into Oscilloscope.
 - [ ] When the pending R-84 3–5-cycle Settings churn run happens, also classify LC-01 from its `[PERF][GC_POLICY] generation=2` lines (no separate run).
-- [ ] Operator: supply the log lines behind "2 QImage tasks per context-menu open" (LC-05).
 
 ## Handoff and regression rules
 
