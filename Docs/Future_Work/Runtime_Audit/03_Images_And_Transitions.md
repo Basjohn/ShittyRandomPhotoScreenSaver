@@ -62,9 +62,13 @@ per Transitions.md.
       submits once per resolved batch spec with each selected display's aspect; renderers `get_or_build` (never wait).
       Geometry bytes verified identical to the pre-audit build across 6 Glass/Crumble cases. The request stays
       immutable (nothing is attached to it); the key carries every builder input.
-- Known pre-existing reds (identical at `2ba9e15d`, not caused by TX-01): `test_qtquick_crumble_volume` crack/debris
-  pixel oracles ×3, `test_qtquick_future_transition_gl[melt_drip-detail-2.0]`, `test_qtquick_melt_surface[gloss]`.
-- [ ] `--frame-trace`: first `BACKGROUND_RENDER_*` frame of Glass/Crumble/Tiles drops to steady-frame class;
+- Known pre-existing reds (identical at `2ba9e15d`, not caused by TX-01): the Crumble complexity/debris and Melt
+  gloss/detail control oracles. The operator decided these as transition product rework (2026-09-23;
+  `Docs/Future_Work/Transition_Expansion.md` §Control rework), tracked in `Current_Plan.md`.
+- D1 soak evidence (08): the retained Crumble starts no longer show the old 11–40 ms first-frame geometry class. The
+  Crumble rework will raise vertex counts (jagged shared edges), so keep benchmarking the 128-piece geometry build and
+  draw cost there.
+- [ ] `--frame-trace`: first `BACKGROUND_RENDER_*` frame of Glass and Tiles drops to steady-frame class;
       publication→draw during transition start neutral-or-better.
 - [ ] Physical: Glass/Crumble/Tiles on both displays with active music (open Current_Plan acceptance item).
 
@@ -100,3 +104,5 @@ session's last pick. Normalization repair writes (rare) are unchanged; existing 
 ## Cross-reference
 
 - PR-04 (transition-end native re-copy/re-upload) lives in 01 because its owner is the retained background node.
+- Crumble complexity/debris and Melt gloss/detail strength are transition product work, owned by
+  `Docs/Future_Work/Transition_Expansion.md` §Control rework, not by this audit.
