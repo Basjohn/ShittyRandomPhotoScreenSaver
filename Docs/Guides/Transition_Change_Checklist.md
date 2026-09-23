@@ -64,6 +64,15 @@ with simplified lookalikes.
 
 See `Docs/Architecture/Compositor_Architecture.md` and `Spec.md` for the durable retained transition contracts.
 
+## Display geometry (R-63 overscan)
+
+A transition draws at `frame.logical_size`: the background item's size, which is the R-63 compatibility window and
+deliberately *larger* than the monitor (`display_bounds()`, the image pipeline's target size) by a pixel or two.
+Anything computed for a run outside the renderer (COMPUTE-prepared geometry, caches, per-display aspect or pixel
+math) must key on the renderer's own size (`QuickDisplayUnit.transition_logical_size()`), never on the monitor
+rectangle, or it silently never matches and the render thread rebuilds it every run (R-95: Glass froze 43–141 ms).
+A prepared-work bar must prove a *hit* under an overscanned size, not just that preparation ran.
+
 ## GL ownership
 
 Every implementation restores touched state and owns/releases context-local resources legally.
@@ -81,6 +90,7 @@ Choose the smallest falsifiable set:
 - parameter sensitivity;
 - interruption/exactly-once completion;
 - generation fencing;
+- prepared-work hit under an R-63 overscanned render size (when anything is prepared off the render thread);
 - resource cleanup;
 - GL-state restoration;
 - focused real-GL/eyes-on evidence when the visual claim requires it.
