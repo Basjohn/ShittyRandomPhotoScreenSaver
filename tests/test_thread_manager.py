@@ -1104,3 +1104,40 @@ def test_schedule_recurring_respects_description(qt_app):
     manager.shutdown()
 
     assert len(ticks) >= 1
+
+
+def test_retiring_a_recurring_timer_releases_its_owner_before_deferred_deletion(qt_app):
+    """A recurring timer's callback usually holds its parent (owner) strongly.
+
+    If ``deleteLater()`` left that release to the deferred delete, the owner's
+    last reference would drop inside the timer's own C++ destructor and the
+    owner's destructor would delete the half-destroyed timer again: a native
+    abort in the next nested event loop (seen as a cross-file test abort when a
+    later test ran ``QDialog.exec()``). Retirement releases it synchronously.
+    """
+
+    import gc
+    import weakref
+
+    class _Owner(QObject):
+        def tick(self) -> None:
+            pass
+
+    manager = ThreadManager()
+    was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        owner = _Owner()
+        timer = manager.schedule_recurring(1000, owner.tick, description="owner_timer")
+        assert timer.parent() is owner
+        owner_ref = weakref.ref(owner)
+        del owner
+        assert owner_ref() is not None, "only the timer's callback keeps the owner alive"
+
+        timer.deleteLater()
+
+        assert owner_ref() is None, "owner must be released now, not in the timer's destructor"
+    finally:
+        if was_enabled:
+            gc.enable()
+        manager.shutdown()
