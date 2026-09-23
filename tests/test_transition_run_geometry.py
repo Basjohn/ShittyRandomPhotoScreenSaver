@@ -153,8 +153,11 @@ def test_display_manager_prepares_geometry_once_per_batch_on_compute(qt_app) -> 
             return bool(self.get(key, default))
 
     def _unit(width: float, height: float):
+        # R-63: the window (and the background item the renderer reads its
+        # aspect from) is one logical pixel taller than the monitor rectangle.
         return SimpleNamespace(
-            display_bounds=lambda: SimpleNamespace(x=0.0, y=0.0, width=width, height=height)
+            display_bounds=lambda: SimpleNamespace(x=0.0, y=0.0, width=width, height=height),
+            transition_logical_size=lambda: (width, height + 1.0),
         )
 
     manager = DisplayManager(settings_manager=_Settings(), thread_manager=_Threads(), runtime_generation=705)
@@ -170,9 +173,16 @@ def test_display_manager_prepares_geometry_once_per_batch_on_compute(qt_app) -> 
         assert func is prepare_run_geometry
         assert args[0] == "crumble"
         assert args[1] == dict(spec.parameters)
-        assert args[2] == (2560.0 / 1440.0, 1920.0 / 1200.0)
+        # Regression (2026-09-23 23:47 trace): keyed on the monitor rectangle,
+        # no run ever found its prepared geometry and every Glass/Crumble run
+        # built it on the render thread (43-141 ms first moving frames).
+        render_aspects = (2560.0 / 1441.0, 1920.0 / 1201.0)
+        assert args[2] == render_aspects
         assert args[3] == spec.direction
         assert kwargs == {"category": "transition_geometry"}
+        func(*args)
+        for aspect in render_aspects:  # the key QuickCrumbleRenderer asks for
+            assert PREPARED_GEOMETRY.get(crumble_geometry_key(dict(spec.parameters), aspect)) is not None
 
         manager._reset_quick_transition_batch()
         manager.set_random_transition_selection(RandomTransitionSelection("Slide"))

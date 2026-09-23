@@ -3766,8 +3766,11 @@ class DisplayManager(QObject):
         """Build per-run fracture geometry on COMPUTE while the batch images process.
 
         The spec resolves in the pre-queue preflight, well before any display
-        starts the run. The render thread uploads the prepared bytes, or builds
-        the identical bytes itself if this has not finished (never waits).
+        starts the run. The render thread uploads the prepared bytes, waits
+        briefly for this preparation if it is still in flight, or builds the
+        identical bytes itself. The key's aspect must be the renderer's own
+        (the background item's size, i.e. the R-63 window, not the monitor
+        rectangle), or every run misses and builds on the render thread.
         """
 
         if spec is None or not has_run_geometry(spec.transition_id):
@@ -3777,14 +3780,13 @@ class DisplayManager(QObject):
             return
         aspects: list[float] = []
         for display in self.displays:
-            bounds = getattr(display, "display_bounds", None)
-            if not callable(bounds):
+            render_size = getattr(display, "transition_logical_size", None)
+            if not callable(render_size):
                 continue
             try:
-                geometry = bounds()
-                width, height = float(geometry.width), float(geometry.height)
+                width, height = render_size()
             except Exception:
-                logger.debug("[TRANSITION] Display bounds unavailable for geometry preparation", exc_info=True)
+                logger.debug("[TRANSITION] Render size unavailable for geometry preparation", exc_info=True)
                 continue
             if width > 0.0 and height > 0.0:
                 aspects.append(width / height)

@@ -85,7 +85,7 @@ Each row keeps only what traces a future issue back to the change.
 
 | ID | Change | Commits | Durable home / bar | Closing evidence |
 | --- | --- | --- | --- | --- |
-| TX-01 | Fracture geometry prepared on COMPUTE; a render thread takes the in-flight preparation instead of rebuilding it; vectorised prism builder | `da2de88e`, `50f38551` | `tests/test_transition_run_geometry.py` | 19:29 trace exposed duplicate builds (Glass first frames 102–134 ms / 40–60 ms); fixed with a bar that fails on the old path; Tiles run clean |
+| TX-01 | Fracture geometry prepared on COMPUTE; a render thread takes the in-flight preparation instead of rebuilding it; vectorised prism builder | `da2de88e`, `50f38551` | `tests/test_transition_run_geometry.py` | 19:29 trace exposed duplicate builds (Glass first frames 102–134 ms / 40–60 ms); fixed with a bar that fails on the old path; Tiles run clean. The 23:47 trace showed the preparation never matched in production (R-95: monitor-rect vs R-63 window aspect); fixed 2026-09-24 |
 | TX-02 | Random rotation is session memory, never a Settings write | `e3c6ce82` | R-92; `tests/test_transition_distribution.py` | run: Random rotations with no Settings writes |
 | LC-05 | Context-menu entries refresh before the menu opens | `ca86367c` | context-menu entry test | run: six context-menu actions |
 | LC-06 | Canonical defaults built once per profile | `f84439f2` | defaults tests | run: two Settings replacements, three generations |

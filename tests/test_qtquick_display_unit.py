@@ -115,6 +115,28 @@ def test_unit_assembles_chain_and_binds_families(qt_app) -> None:
 
 
 @pytest.mark.qt
+def test_transition_size_is_the_background_items_not_the_monitor_rect(qt_app) -> None:
+    # Prepared Glass/Crumble geometry keys on this aspect; the renderer reads
+    # the background item's size, and the R-63 window is larger than the
+    # monitor rectangle (2026-09-23 23:47 trace: every run missed).
+    unit, factory = _make_unit(qt_app, 97, SharedCtrlCoordinator())
+    try:
+        unit.show_on_screen()
+        item = unit.runtime.scene_controller.background_item
+        for _ in range(50):
+            qt_app.processEvents()
+            if item.width() > 0.0:
+                break
+        bounds = unit.display_bounds()
+        assert unit.transition_logical_size() == (item.width(), item.height())
+        assert unit.transition_logical_size() != (bounds.width, bounds.height)
+    finally:
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_unit_retire_is_clean_and_drops_ctrl_contribution(qt_app, qtbot) -> None:
     coord = SharedCtrlCoordinator()
     unit, factory = _make_unit(qt_app, 97, coord)

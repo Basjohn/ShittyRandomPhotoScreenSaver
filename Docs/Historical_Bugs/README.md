@@ -42,6 +42,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
+- [R-95 — Prepared Transition Geometry Never Matched Under R-63 Overscan](R-95_Prepared_Transition_Geometry_Never_Matched_Under_R63.md) — **SOLVED IN CODE**. COMPUTE keyed on the monitor rect, the renderer on the (larger) R-63 window: every Glass/Crumble run rebuilt on both render threads; key on the renderer's own size, prove a hit.
 - [R-94 — Melt's Float Noise Hash Cut The Photograph Into Rectangles](R-94_Melt_Float_Hash_Cut_The_Photo_Into_Rectangles.md) — **SOLVED IN CODE**. Compiler-rounding divergence in a chaotic float hash made each noise cell melt separately; exact integer lattice hash + field-render bar.
 - [R-93 — Media Commands And Refreshes Starved Behind Network IO](R-93_Media_Commands_Starved_Behind_Network_IO.md) — **SOLVED** (runtime audit PW-02). Dedicated lazy `media` lane; never the FIFO IO pool or the observation worker.
 - [R-92 — Random Transition Rotation Overwrote The User's Authored Direction](R-92_Random_Rotation_Overwrote_Authored_Direction.md) — **FIXED IN CODE / AWAITING VALIDATION** (runtime audit TX-02). Settings are never inter-component scratch space.
