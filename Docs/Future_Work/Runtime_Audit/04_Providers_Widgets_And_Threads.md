@@ -52,8 +52,22 @@ Media poll.
 **Must remain true.** R-66: native events feed the one shared owner; one in flight + one pending; watchdog unchanged;
 no fast-poll fallback. Command result authority stays with the shared owner (Spec §Media transport).
 
-- [ ] Fault-injection test written; result recorded.
-- [ ] If confirmed: lane change + `tests/test_media_runtime*.py` + transport tests; physical offline-start check.
+- [x] Fault-injection test written; result recorded. **Confirmed (2026-09-23):**
+      `tests/test_media_io_starvation.py` saturates a real `ThreadManager` IO pool with four stalled "network" tasks;
+      a transport command via `WindowsGlobalMediaController._submit_command` and the activation refresh via the shared
+      `MediaRuntimeService` are both still queued after 0.42 s (strict xfails until fixed).
+- **Candidate re-evaluated.** Running Media queries/commands on the existing WinRT observation affinity worker is
+  **rejected**: observation teardown waits only `lane.call(_teardown, timeout=2.0)` on that same single worker, while
+  a WinRT query may occupy it for its best-effort 2 s timeout or longer (WinRT awaits do not always honour
+  cancellation). A stuck query would then fail teardown during runtime replacement (R-53 barrier).
+- **Recommended repair (operator approval — adds one lazy, event-driven worker):** a Media-only serial lane owned by
+  the shared Media runtime owner (same `AffinityLaneScheduler` machinery, separate instance), generation-tagged and
+  stopped with the owner. Refresh queries and transport commands submit there; network providers keep the IO pool.
+  Existing one-in-flight/one-pending and command de-dup bound its queue; a stuck WinRT await blocks only Media (as it
+  blocks one IO worker today). Alternatives: reserve one IO worker for latency-critical categories (changes admission
+  semantics for every IO user), or raising the IO worker count (rejected: hides the ownership problem).
+- [ ] Operator: approve the Media-only lane; then flip the strict xfails, run `tests/test_media_runtime*.py` and
+      transport tests, and do the physical offline-start Play/Pause check.
 
 ---
 
