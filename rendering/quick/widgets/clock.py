@@ -515,9 +515,17 @@ def _hand_angles(now: datetime) -> tuple[float, float, float]:
 
 
 class ClockPresentationModel(QObject):
-    """One stable presentation-oriented model per logical Clock instance."""
+    """One stable presentation-oriented model per logical Clock instance.
+
+    Two semantic notify epochs: ``timeChanged`` carries the once-per-second
+    values (texts, hand angles, separator visibility); ``stateChanged`` carries
+    config/style and fires only when those change. A tick therefore re-evaluates
+    only the time bindings, not the ~27 style bindings. Edit/CUSTOM role lists
+    depend on config (display mode), never on ``timeChanged``.
+    """
 
     stateChanged = Signal()
+    timeChanged = Signal()
     customGeometryChanged = Signal()
 
     def __init__(
@@ -653,8 +661,11 @@ class ClockPresentationModel(QObject):
     def _replace_snapshot(self, snapshot: ClockPresentationSnapshot) -> None:
         if snapshot == self._snapshot:
             return
+        previous = self._snapshot
         self._snapshot = snapshot
-        self.stateChanged.emit()
+        if snapshot.config != previous.config or snapshot.style != previous.style:
+            self.stateChanged.emit()
+        self.timeChanged.emit()
 
     def _build_snapshot(
         self,
@@ -717,15 +728,15 @@ class ClockPresentationModel(QObject):
             second_angle=second_angle,
         )
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=timeChanged)
     def timeText(self) -> str:
         return self._snapshot.time_text
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=timeChanged)
     def calendarText(self) -> str:
         return self._snapshot.calendar_text
 
-    @Property(str, notify=stateChanged)
+    @Property(str, notify=timeChanged)
     def timezoneText(self) -> str:
         return self._snapshot.timezone_text
 
@@ -745,7 +756,9 @@ class ClockPresentationModel(QObject):
     def showNumerals(self) -> bool:
         return self._snapshot.config.show_numerals
 
-    @Property(bool, notify=stateChanged)
+    # Depends on the calendar text as well as config, so it rides the time epoch
+    # (every config change also emits timeChanged).
+    @Property(bool, notify=timeChanged)
     def showSeparator(self) -> bool:
         return (
             self._snapshot.config.show_separator
@@ -819,15 +832,15 @@ class ClockPresentationModel(QObject):
         )
         return QColor(*resolved)
 
-    @Property(float, notify=stateChanged)
+    @Property(float, notify=timeChanged)
     def hourAngle(self) -> float:
         return self._snapshot.hour_angle
 
-    @Property(float, notify=stateChanged)
+    @Property(float, notify=timeChanged)
     def minuteAngle(self) -> float:
         return self._snapshot.minute_angle
 
-    @Property(float, notify=stateChanged)
+    @Property(float, notify=timeChanged)
     def secondAngle(self) -> float:
         return self._snapshot.second_angle
 
