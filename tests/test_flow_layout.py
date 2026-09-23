@@ -66,3 +66,23 @@ def test_child_order_preserved(qapp):
     _host_w, flow, buttons = _host(5)
     ordered = [flow.itemAt(i).widget() for i in range(flow.count())]
     assert ordered == buttons
+
+
+def test_uniform_cells_keep_columns_aligned_despite_one_wide_item(qapp):
+    """A long label (e.g. "Melt Drip (WIP - VERY SHITTY)") must not shift its row."""
+    from PySide6.QtCore import QRect
+
+    host = QWidget()
+    flow = FlowLayout(host, h_spacing=10, v_spacing=10, uniform_cells=True)
+    widths = [100, 100, 100, 160, 100, 100]
+    buttons = []
+    for i, width in enumerate(widths):
+        b = QPushButton(f"b{i}")
+        b.setFixedSize(width, 30)
+        flow.addWidget(b)
+        buttons.append(b)
+    flow.setGeometry(QRect(0, 0, 3 * 160 + 2 * 10, 200))
+
+    xs = [b.geometry().x() for b in buttons]
+    assert xs[:3] == xs[3:]  # row 2 columns line up with row 1
+    assert buttons[3].geometry().y() > buttons[0].geometry().y()

@@ -36,10 +36,15 @@ class FlowContainer(QWidget):
         margin: int = 0,
         h_spacing: int = 12,
         v_spacing: int = 10,
+        uniform_cells: bool = False,
     ) -> None:
         super().__init__(parent)
         self._flow = FlowLayout(
-            self, margin=margin, h_spacing=h_spacing, v_spacing=v_spacing
+            self,
+            margin=margin,
+            h_spacing=h_spacing,
+            v_spacing=v_spacing,
+            uniform_cells=uniform_cells,
         )
         policy = self.sizePolicy()
         policy.setHorizontalPolicy(QSizePolicy.Policy.Preferred)
@@ -68,7 +73,12 @@ class FlowContainer(QWidget):
 
 
 class FlowLayout(QLayout):
-    """A layout that arranges child widgets horizontally and wraps as needed."""
+    """A layout that arranges child widgets horizontally and wraps as needed.
+
+    ``uniform_cells`` turns the flow into an aligned responsive grid: every
+    visible item takes the widest visible item's width, so one long label
+    cannot push the rest of its row out of column alignment.
+    """
 
     def __init__(
         self,
@@ -77,11 +87,13 @@ class FlowLayout(QLayout):
         margin: int = 0,
         h_spacing: int = 12,
         v_spacing: int = 10,
+        uniform_cells: bool = False,
     ) -> None:
         super().__init__(parent)
         self._items: list[QLayoutItem] = []
         self._h_spacing = h_spacing
         self._v_spacing = v_spacing
+        self._uniform_cells = bool(uniform_cells)
         self.setContentsMargins(QMargins(margin, margin, margin, margin))
 
     # --- QLayout plumbing --------------------------------------------------
@@ -139,6 +151,16 @@ class FlowLayout(QLayout):
         x = effective.x()
         y = effective.y()
         line_height = 0
+        cell_width = 0
+        if self._uniform_cells:
+            cell_width = max(
+                (
+                    item.sizeHint().width()
+                    for item in self._items
+                    if item.widget() is None or not item.widget().isHidden()
+                ),
+                default=0,
+            )
 
         for item in self._items:
             widget = item.widget()
@@ -149,6 +171,8 @@ class FlowLayout(QLayout):
                 # before their top-level window is shown.
                 continue
             hint = item.sizeHint()
+            if cell_width:
+                hint = QSize(cell_width, hint.height())
             next_x = x + hint.width() + self._h_spacing
             if next_x - self._h_spacing > effective.right() + 1 and line_height > 0:
                 # Wrap to the next row.
