@@ -81,7 +81,7 @@ needs evidence before it is worth doing.
 | VZ-03 | Tick phase breakdown (closure + dict + 9 timestamps) is recorded every tick though only read when perf-gated | P3 | R1 | Low | **Do** (low priority; park if it needs tick-pipeline surgery) | source + measured |
 | VZ-04 | Every mode's logical frame copies and validates the 256-sample waveform (38.4 µs/tick) | P3 | R1 | Low–Med | **Do with care** (per-mode consumer bar, BTF lane) | measured |
 | PW-03 | Family models notify 30–67 properties through one `stateChanged`; one Clock emit costs 0.69–0.77 ms GUI, once per second per clock | P3 | R1 | Low | Clock **Do with care**; Media **Watch** | measured + soak |
-| LC-05 | Context-menu entries are refreshed *after* the menu is shown (6.6 ms median) | P3 | R1 | Low | **Do** (ordering only) | source + measured |
+| LC-05 | `[~]` Context-menu entries were refreshed *after* the menu was shown (6.6 ms median); now refreshed before `open_at()` | P3 | R1 | Low | landed; physical check open | source + measured |
 | PW-04 | `FeedRowsModel.replace_rows` skips equal rows but resets the whole list when one row changes | P3 | R1 | Low | **Watch** — FEEDS Custom 2–4 | source + soak |
 | PR-07 | `QuickSceneFactory` compiles every family QML component at startup (≈0.2–0.3 s dev), active or not | P3 | R1 | Low | **Park** | measured |
 | ST-01 | `DisplayManager` is a 4.9k-line owner of ~12 concerns | P3 | R1 | Medium | **Park** (move-only on a touched seam) | source |

@@ -802,6 +802,88 @@ def test_display_manager_populates_and_routes_retained_context_menu(
         qt_app.processEvents()
 
 
+def test_context_menu_entries_are_refreshed_before_the_menu_becomes_visible(
+    qt_app,
+    qtbot,
+    monkeypatch,
+) -> None:
+    """LC-05: the retained menu must never show (then rebuild) stale rows.
+
+    Product state changed since the last open (here: dimming) must already be in
+    the model's entries at the instant the menu turns visible.
+    """
+
+    class _Settings:
+        def __init__(self) -> None:
+            self.data = {
+                "widgets": {"family_activation": {"visualizers": False}},
+                "transitions": {"type": "Crossfade", "random_always": False},
+                "accessibility": {
+                    "dimming": {"enabled": False, "opacity": 40},
+                    "pixel_shift": {"enabled": False, "rate": 1},
+                },
+                "display": {"hw_accel": False},
+                "input": {"interaction_mode": False},
+            }
+
+        def get(self, key: str, default=None):
+            value = self.data
+            for part in key.split("."):
+                if not isinstance(value, dict) or part not in value:
+                    return default
+                value = value[part]
+            return value
+
+        @staticmethod
+        def to_bool(value, default: bool = False) -> bool:
+            return SettingsManager.to_bool(value, default)
+
+        def get_bool(self, key: str, default: bool = False) -> bool:
+            return self.to_bool(self.get(key, default), default)
+
+        def save(self) -> None:
+            pass
+
+        def get_widgets_map(self):
+            return deepcopy(self.data["widgets"])
+
+    settings = _Settings()
+    monkeypatch.setattr("core.mc.is_mc_build", lambda: False)
+    monkeypatch.setattr(QuickDisplayUnit, "show_on_screen", lambda _unit: None)
+    manager = DisplayManager(settings_manager=settings, runtime_generation=705)
+    try:
+        assert manager.initialize_displays() == len(qt_app.screens())
+        unit = manager.displays[0]
+        model = unit.runtime.context_menu_model
+
+        def _dimming_checked() -> bool:
+            return next(
+                entry["checked"]
+                for entry in model.entries
+                if entry["actionId"] == "toggle_dimming"
+            )
+
+        assert _dimming_checked() is False
+        # Product state changes while the menu is closed; nothing refreshes it yet.
+        settings.data["accessibility"]["dimming"]["enabled"] = True
+        seen_at_open = []
+        model.visibilityChanged.connect(
+            lambda visible: seen_at_open.append(_dimming_checked()) if visible else None
+        )
+
+        unit.runtime._input.context_menu_requested.emit(QPoint(10, 12))
+
+        assert model.menuVisible is True
+        assert seen_at_open == [True]
+    finally:
+        if manager.displays:
+            manager.cleanup()
+            qtbot.waitUntil(lambda: not manager._retiring_quick_units, timeout=3000)
+        if not manager._retired:
+            manager.retire_runtime()
+        qt_app.processEvents()
+
+
 def test_display_manager_owns_layout_slot_persistence_and_fenced_reload(
     qt_app,
 ) -> None:

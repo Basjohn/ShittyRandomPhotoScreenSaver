@@ -59,7 +59,7 @@ overrides resolved per profile; callers that mutate get a private copy.
 
 ---
 
-## LC-05 — Context-menu entries refresh after the menu is shown · P3 · R1 · Risk Low · Do
+## LC-05 — Context-menu entries refresh after the menu is shown · P3 · R1 · Risk Low · `[~]`
 
 **Evidence.** `QuickDisplayRuntime` connects `context_menu_requested` to its own `_on_context_menu_requested` (opens
 the model) **before** re-emitting it to `DisplayManager` (`rendering/quick/runtime.py:228-231`), whose handler rebuilds
@@ -72,9 +72,12 @@ the smallest ordering change. `QuickContextMenuModel.replace_entries()` already 
 (`rendering/quick/context_menu.py:375`) and stays the only "entries unchanged" authority: no competing equality cache,
 no new menu-state owner.
 
-- [ ] Refresh-before-show; single-menu enforcement, focus/Ctrl halo/keyboard semantics and action admission unchanged
-      (R-84/U-05). Bars: the entries present at open are the refreshed ones (fails with today's order);
-      `test_qtquick_context_menu*`; physical open/close feel.
+- [x] Refresh-before-show: `QuickDisplayRuntime` now connects the relay to `DisplayManager` before its own
+      `_on_context_menu_requested`, so the product refresh completes before `open_at()` (the only open path).
+      Single-menu enforcement (driven by `visibilityChanged`), focus/Ctrl semantics and action admission unchanged.
+      Bar: `test_qtquick_h_cutover.py::test_context_menu_entries_are_refreshed_before_the_menu_becomes_visible`
+      (fails with the old order); context-menu, input and runtime-purity suites green.
+- [ ] Physical: open the menu after Next / a transition change / dimming toggle — no visible row rebuild.
 
 **Resolved operator note — "2 QImage tasks per context-menu open".** The 2026-09-22 22:53–22:59 run shows every
 `FILL(QImage)` pair (one line per display, `rendering/image_processor_async.py`) lands 5–11 s after an image change —
