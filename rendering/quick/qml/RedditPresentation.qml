@@ -257,7 +257,9 @@ OverlayWidget {
                     border.color: refreshHover.hovered && refreshTarget.canActivate
                         ? "white" : redditRoot.redditModel.headerBorderColor
                     border.width: refreshHover.hovered && refreshTarget.canActivate
-                        ? redditRoot.scaleAwareStrokeWidth(1.5) : 0.0
+                        ? redditRoot.scaleAwareChildStrokeWidth(1.5, Math.min(
+                            redditRoot.childWidthScale("refresh"),
+                            redditRoot.childHeightScale("refresh"))) : 0.0
                 }
                 HoverHandler {
                     id: refreshHover

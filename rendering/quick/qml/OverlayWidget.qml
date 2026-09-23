@@ -118,29 +118,52 @@ Item {
         )
         : 1.0
 
-    // Shared inner-stroke scaling contract. Small borders/lines should not
-    // balloon with a whole-card CUSTOM transform, but they do earn a modest
-    // boost as the card enlarges: visible thickness may rise by at most +1.5 px
-    // above its authored baseline at large sizes. Shrinking never thins a stroke
-    // below its authored baseline (the downward delta is floored at 0), so a
-    // smaller card simply returns to the authored thickness rather than going
-    // fainter; nothing ever renders below 1 px. The outer card/shell border
-    // bypasses this entirely and scales with the transform directly. Families
-    // with their own authored-canvas transform (Steam cards) pass that explicit
-    // scale; ordinary uniform-transform families use presentationScale.
+    // Shared inner-stroke scaling contract. Authored lines under 2 px read too
+    // faint, so each gains a fixed boost that rises with its own weight: +0.5 px
+    // for the finest (0.5 px and below), linearly up to +1.5 px just under 2 px;
+    // 2 px and heavier lines are already emphatic and keep their weight. Small
+    // borders/lines should not balloon with a whole-card CUSTOM transform, but
+    // they do earn a further boost as the card enlarges: visible thickness rises
+    // by at most +2.5 px above that baseline at large sizes. Shrinking never
+    // thins a stroke below its baseline (the downward delta is floored at 0);
+    // nothing ever renders below 1 px. The outer card/shell border bypasses this
+    // entirely and scales with the transform directly. Families with their own
+    // authored-canvas transform (Steam cards) pass that explicit scale; ordinary
+    // uniform-transform families use presentationScale; children that CUSTOM
+    // enlarges by geometry (not a transform) use scaleAwareChildStrokeWidth.
+    function _strokeVisibleWidth(baseWidth, scaleValue, growthGain) {
+        const thinBoost = baseWidth < 2.0
+            ? 0.5 + (Math.max(0.5, baseWidth) - 0.5) / 1.5
+            : 0.0
+        const growth = Math.max(0.0, Math.min(2.5, (scaleValue - 1.0) * 2.0)) * growthGain
+        return Math.max(1.0, baseWidth + thinBoost + growth)
+    }
+
     function scaleAwareStrokeWidthForScale(baseWidth, scaleValue) {
         if (baseWidth <= 0.0)
             return 0.0
         const scale = Math.max(0.05, scaleValue)
-        const delta = Math.max(0.0, Math.min(1.5, (scale - 1.0) * 2.0))
-        const visibleTarget = Math.max(1.0, baseWidth + delta)
-        return visibleTarget / scale
+        return overlayWidget._strokeVisibleWidth(baseWidth, scale, 1.0) / scale
     }
 
     function scaleAwareStrokeWidth(baseWidth) {
         return overlayWidget.scaleAwareStrokeWidthForScale(
             baseWidth, overlayWidget.presentationScale
         )
+    }
+
+    // A child CUSTOM enlarges by geometry (its width/height multiplied by a
+    // child scale) is magnified only by presentationScale, yet reads at the
+    // child's own size: it earns the growth boost for presentationScale times
+    // its uniform child scale (callers pass min(width scale, height scale), so
+    // stretching one axis never balloons the line).
+    function scaleAwareChildStrokeWidth(baseWidth, childScale) {
+        if (baseWidth <= 0.0)
+            return 0.0
+        const scale = Math.max(0.05, overlayWidget.presentationScale)
+        return overlayWidget._strokeVisibleWidth(
+            baseWidth, scale * Math.max(0.05, childScale), 1.0
+        ) / scale
     }
 
     // Branded headers already participate in the shared scale-aware stroke
@@ -150,9 +173,7 @@ Item {
         if (baseWidth <= 0.0)
             return 0.0
         const scale = Math.max(0.05, scaleValue)
-        const delta = Math.max(0.0, Math.min(1.5, (scale - 1.0) * 2.0)) * 1.25
-        const visibleTarget = Math.max(1.0, baseWidth + delta)
-        return visibleTarget / scale
+        return overlayWidget._strokeVisibleWidth(baseWidth, scale, 1.25) / scale
     }
 
     function scaleAwareHeaderStrokeWidth(baseWidth) {

@@ -18,6 +18,8 @@ Item {
     property string fontFamily: "Inter"
     property color fillColor: "#26c7d5e0"
     property color borderColor: "#91c7d5e0"
+    // The owning card's scale-aware stroke (OverlayWidget contract).
+    property real strokeWidth: 1.0
     property color shelfSeparatorColor: "#6ec7d5e0"
     property color shelfAccentColor: borderColor
     property color textColor: "#ffffffff"
@@ -59,7 +61,7 @@ Item {
             radius: height / 2.0
             color: capsule.fillColor
             border.color: capsule.borderColor
-            border.width: 1.0
+            border.width: capsule.strokeWidth
         }
 
         ShadowedText {
@@ -107,7 +109,7 @@ Item {
             radius: height / 2.0
             color: capsule.fillColor
             border.color: capsule.borderColor
-            border.width: 1.0
+            border.width: capsule.strokeWidth
         }
 
         ShadowedText {
@@ -138,7 +140,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: 1.0
+            height: capsule.strokeWidth
             color: capsule.shelfSeparatorColor
         }
 

@@ -1225,6 +1225,8 @@ OverlayWidget {
                             fontFamily: achievementRoot.achievementModel.fontFamily
                             fillColor: achievementRoot.achievementModel.capsuleFillColor
                             borderColor: achievementRoot.achievementModel.capsuleBorderColor
+                            strokeWidth: achievementRoot.scaleAwareStrokeWidthForScale(
+                                1.0, achievementRoot.contentScale)
                             shelfSeparatorColor: achievementRoot.achievementModel.steamMetricSeparatorColor
                             shelfAccentColor: achievementRoot.achievementModel.accentColor
                             textColor: achievementRoot.achievementModel.textColor

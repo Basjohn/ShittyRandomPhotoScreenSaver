@@ -119,15 +119,18 @@ def test_transition_size_is_the_background_items_not_the_monitor_rect(qt_app) ->
     # Prepared Glass/Crumble geometry keys on this aspect; the renderer reads
     # the background item's size, and the R-63 window is larger than the
     # monitor rectangle (2026-09-23 23:47 trace: every run missed).
+    from PySide6.QtCore import QSizeF
+
     unit, factory = _make_unit(qt_app, 97, SharedCtrlCoordinator())
     try:
-        unit.show_on_screen()
-        item = unit.runtime.scene_controller.background_item
-        for _ in range(50):
-            qt_app.processEvents()
-            if item.width() > 0.0:
-                break
+        # Never show the unit: it is a full-screen display window. Size its
+        # content item the way the R-63 window resize does (one logical pixel
+        # taller than the monitor) and let the production chain follow.
         bounds = unit.display_bounds()
+        unit.runtime.window.contentItem().setSize(QSizeF(bounds.width, bounds.height + 1.0))
+        qt_app.processEvents()
+        item = unit.runtime.scene_controller.background_item
+        assert (item.width(), item.height()) == (bounds.width, bounds.height + 1.0)
         assert unit.transition_logical_size() == (item.width(), item.height())
         assert unit.transition_logical_size() != (bounds.width, bounds.height)
     finally:

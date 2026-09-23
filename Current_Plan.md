@@ -66,6 +66,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 Pre-existing reds and runtime anomalies found while gating the runtime audit. Each stays here until fixed or explicitly retired; do not treat them as noise in a gate.
 
+- [ ] **Stale Reddit title/age gap bar (pre-existing).** `tests/test_qtquick_reddit_child_committed_reopen_scene.py` (2 tests) expects a 6 px title-to-AGO gap; `RedditPresentation.qml` `titleAgeGap` floors it at 8 px (`max(8, 9 / presentationScale)`). Fails identically on a clean HEAD worktree (2026-09-24). Decide which is intended, then fix the other.
 - [ ] **Spectrum extreme-viewport smoothness (pre-existing, not an audit regression).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Pre-dates the audit; do not reopen VZ-04 over it. Watch item until investigated separately.
 - Evidence runs: 2026-09-22 22:53–22:59 — no native fault; the replacement-construction watchdog armed 13× and never fired. 2026-09-23 D1 soak 09:07–10:40 — no native fault, no QML message, watchdog armed 6× and never fired; one `viz_geometry_mismatches` increment at 10:38:32, which is the fail-closed stale-presentation guard working, not a defect. 2026-09-23 16:53–17:06 acceptance run (two processes, each with a Settings round-trip) — no native fault, replacement watchdog never fired. Note: starting a new `--frame-trace` session replaces the previous session's trace segments; copy them first when a trace must survive a restart.
 
