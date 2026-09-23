@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from core.settings.default_contract import require_canonical_default
+
 from rendering.quick.transitions.parameter_resolution import (
     resolve_parameterized_phase_c_inputs,
 )
@@ -130,9 +132,9 @@ def test_crumble_preserves_current_factory_weighting_fallthroughs():
         params = resolved.parameter_dict()
         assert params["weight_mode"] == expected
         assert "mosaic_mode" not in params
-        assert params["depth"] == .85
-        assert params["thickness"] == .65
-        assert params["debris"] == .65
+        # Unspecified volume controls resolve to the canonical defaults.
+        for name in ("depth", "thickness", "debris"):
+            assert params[name] == require_canonical_default(f"transitions.crumble.{name}")
 
 
 def test_particle_preserves_current_numeric_semantics_for_ui_indices():
