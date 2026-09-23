@@ -1,10 +1,11 @@
 # Runtime Audit 2026-09-22 — Index, Register and Sequencing
 
-**Status:** operator decisions recorded 2026-09-23 (08). `Current_Plan.md` owns the admitted implementation queue and
-its order; this folder holds the evidence, decisions and acceptance bars. Items leave this folder when they are
-implemented and accepted (the durable rule moves to its owning contract/guardrail, the failed-method lesson to
-`Docs/Historical_Bugs/`), or when they are closed (recorded in 06 §Considered and rejected so they are not re-audited).
-This is a live checklist, not a changelog.
+**Status:** the implementation queue was accepted on 2026-09-23 (operator run 19:29–19:35 with `--frame-trace`,
+earlier physical runs and automated bars; see §Accepted). Still open: the PR-04 native texture-handoff investigation
+(admitted 2026-09-23 as a bounded prototype, 01/08) plus the watched and parked items below. Items leave this folder
+when they are implemented and accepted (the durable rule moves to its owning contract/guardrail, the failed-method
+lesson to `Docs/Historical_Bugs/`), or when they are closed (recorded in 06 §Considered and rejected so they are not
+re-audited). Once PR-04 is decided the folder is historicalised. This is a live checklist, not a changelog.
 
 **Baseline audited:** `main` at `2ba9e15d` (5.0.5 FEEDS WORK v2). Performance reference remains CHK26 /
 `a0bf70932c` (Index.md). Every claim below cites exact current source; numbers are measured unless marked
@@ -62,39 +63,51 @@ needs evidence before it is worth doing.
 
 **Decisions** — see 08's decision key (Do · Do with care · Gated · Watch · Park · Close).
 
-## Register
+## Register (open)
 
 | ID | Finding | Pri | Reward | Risk | Decision / status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| TX-01 | `[~]` 3D transitions built fracture/mesh geometry in Python on the render thread at the first transition frame (Glass default ≈25 ms; Crumble ≈11 ms; 128-piece Crumble ≈40 ms); now packed 3× faster and prepared on COMPUTE at batch resolution | P1 | R3 | Low | landed; Glass/Tiles frame-trace + physical check open (soak: Crumble starts no longer show the old class) | measured + soak |
-| TX-02 | `[~]` Random rotation used persisted Settings as scratch space (2–6 `set()` + `save()` per rotation) **and overwrote the user-authored Slide/Wipe `direction`**; now session memory handed to the batch resolver (Random keeps randomizing direction, operator 2026-09-23) | P1 | R2 | Medium | landed; physical check open | source + measured 1.9 ms idle |
-| PR-01 | `[~]` Every visualizer publication (~90 Hz) re-resolved presentation (≈49 µs) and rewrote ~25 QML root properties + 3 QColors even when nothing changed; no-op projection now skipped (20.4 → 4.0 µs/publication idle) | P1 | R2 | Low | landed; physical check open; resolve memo **Park** | measured + CHK27 + soak |
-| LC-06 | `[~]` `get_default_settings()` rebuilt all canonical defaults (≈5.5 ms) per call on context-menu open (×2), image batches and per widget × display construction; now built once per profile, hot paths read sections | P1 | R2 | Low | landed; physical check open | measured |
-| PR-04 | First Quick cycle after each transition end: ≈24.8 ms on the 4K Visualizer display (operator trace), 26.6–90.6 ms across ten soak endings; Qt's straight-alpha conversion is 8.12 ms of the idle case | P1 | R3 | Medium | Stages A and B `[~]` landed (conversion and copy gone); the full upload remains — route decision needs evidence | frame traces + probe + soak |
-| VZ-01 | `[~]` While paused, the BeatEngine synthesized a 256-sample sine waveform every tick for every mode; now only when Oscilloscope is active (paused tick 150.6 → 36.4 µs for other modes) | P2 | R2 | Medium | landed; physical paused/edge check open | measured |
-| PW-01 | `[~]` Every GSMTC timeline edge re-read the whole album-art thumbnail; timeline-only refreshes now reuse held artwork for the same track (soak: `artwork_reused=1196` of 1,222 event refreshes) | P2 | R2 | Low | landed; visible artwork checks open | log-measured + soak |
-| PR-03 | `[~]` Custom background node replaced a 44-field frozen telemetry dataclass ~4× per transition frame on the render thread; now field updates + snapshot built on read (29.6 → 2.2 µs per frame idle) | P2 | R1–R2 | Low | landed; frame-trace open | measured |
-| PW-05 | `[~]` Feed and Games-You-Follow hand-rolled parentless deadline `QTimer`s because `ThreadManager.single_shot` returned no cancel handle; it now returns a `SingleShotHandle` and both use the registry | P2 | R1 | Low | landed; physical check open | source |
-| VZ-05 | `[~]` Capture re-froze every render field twice per tick; single-freeze landed (2.4× faster) | P2 | R1–R2 | Low | landed; epoch cache **Park** | measured + soak |
-| PR-02 | Ordinary runtime connects `frameSwapped` to a queued per-frame GUI Python callback that republishes unchanged readiness (≈0.5 ms/s in the soak) | P2 | R1 | Low–Med | **Park** (with DC-04) | source + measured + soak |
-| VZ-03 | `[~]` Tick phase breakdown (closure + dict + 9 timestamps) was recorded every tick though only read when perf-gated; now built only with `--perf` | P3 | R1 | Low | landed | source + measured |
-| VZ-04 | `[~]` Every mode's logical frame copied and validated the 256-sample waveform (38.4 µs/tick); now only declared sample consumers (Oscilloscope) | P3 | R1 | Low–Med | landed; BTF Layer 4 open | measured |
-| PW-03 | Family models notify 30–67 properties through one `stateChanged`; `[~]` Clock now splits a per-second `timeChanged` from its config/style epoch (tick 0.6 ms → 49 µs) | P3 | R1 | Low | Clock landed, physical check open; Media closed (0.5 ms per ≈0.25/s refresh) | measured + soak |
-| LC-05 | `[~]` Context-menu entries were refreshed *after* the menu was shown (6.6 ms median); now refreshed before `open_at()` | P3 | R1 | Low | landed; physical check open | source + measured |
-| PW-04 | `FeedRowsModel.replace_rows` skips equal rows but resets the whole list when one row changes | P3 | R1 | Low | **Watch** — FEEDS Custom 2–4 | source + soak |
-| PR-07 | `QuickSceneFactory` compiles every family QML component at startup (≈0.2–0.3 s dev), active or not | P3 | R1 | Low | **Park** | measured |
-| ST-01 | `DisplayManager` is a 4.9k-line owner of ~12 concerns | P3 | R1 | Medium | **Park** (move-only on a touched seam) | source |
+| PR-04 | The first Quick cycle after a transition ends re-uploads the whole destination image: 13.5–24.8 ms (median 19.3 ms) on the 3840×2160 Visualizer display against a 7.0 ms median cycle (2026-09-23 19:29 trace, 16 endings); the stall lands in the render pass | P1 | R3 | Medium | Stages A and B accepted; zero-re-upload native handoff admitted as a bounded investigation/prototype (08) | frame traces + probes |
+| PW-04 | `FeedRowsModel.replace_rows` resets the whole list when one row changes | P3 | R1 | Low | **Watch** — FEEDS Custom 2–4 | source + soak |
+| PR-02 | Ordinary runtime connects `frameSwapped` to a queued per-frame GUI Python callback (≈0.5 ms/s) | P2 | R1 | Low–Med | **Park** (with DC-04) | source + soak |
+| PR-01 memo | Presentation re-resolve per publication (47.6 µs) | P3 | R1 | Low | **Park** | measured |
+| PR-07 | `QuickSceneFactory` compiles every family QML component at startup (≈0.2–0.3 s dev) | P3 | R1 | Low | **Park** | measured |
+| ST-01/02 | `DisplayManager` 4.9k-line owner; very large files | P3 | R1 | Medium | **Park** (move-only on a touched seam) | source |
+| VZ-05 cache | Epoch cache for config-static render extras (17–117 µs/tick left) | P3 | R1 | Medium | **Park** | soak |
+| VZ-07 | Logical runtime sleeps in 4 ms slices | P3 | R1 | Low | **Park** | source |
 | DC-04 | Guardrail vs source conflict: per-frame `frameSwapped` Python callback (PR-02) | P3 | R1 | Low | documented; fixed only when PR-02 reopens | source |
 
-Closed: LC-01, PR-05, PW-06 and the prefetch double batch (08 §Closed; 06 §Considered and rejected). Accepted and
-removed: PW-02 (2026-09-23; durable rule in Spec §State/actions). Historical records for defects this audit found:
-R-89 (cross-file native abort), R-90 (Core Audio double release), R-91 (orphaned workers), R-92 (TX-02), R-93 (PW-02). Crumble and Melt
-control rework is transition product work (`Docs/Future_Work/Transition_Expansion.md`), not a register item.
+Closed: LC-01, PR-05, PW-06, PW-03 Media and the prefetch double batch (06 §Considered and rejected).
+
+## Accepted (2026-09-23)
+
+Each row keeps only what traces a future issue back to the change.
+
+| ID | Change | Commits | Durable home / bar | Closing evidence |
+| --- | --- | --- | --- | --- |
+| TX-01 | Fracture geometry prepared on COMPUTE; a render thread takes the in-flight preparation instead of rebuilding it; vectorised prism builder | `da2de88e`, `50f38551` | `tests/test_transition_run_geometry.py` | 19:29 trace exposed duplicate builds (Glass first frames 102–134 ms / 40–60 ms); fixed with a bar that fails on the old path; Tiles run clean |
+| TX-02 | Random rotation is session memory, never a Settings write | `e3c6ce82` | R-92; `tests/test_transition_distribution.py` | run: Random rotations with no Settings writes |
+| LC-05 | Context-menu entries refresh before the menu opens | `ca86367c` | context-menu entry test | run: six context-menu actions |
+| LC-06 | Canonical defaults built once per profile | `f84439f2` | defaults tests | run: two Settings replacements, three generations |
+| PR-01 | Steady equal publications skip the QML shell projection | `3598c8fb` | publication tests | run: mode switches, startup/replacement fades; operator: no regression |
+| PR-03 | Background telemetry notes without dataclass `replace()` | `e80336c9` | telemetry tests | trace: background render normal |
+| PR-04 A | Opaque wallpaper pixels at both processing owners; premultiplied native label | `8541cb82` | Guardrails §Wallpaper pixel opacity; `tests/test_wallpaper_opaque_pixels.py` | operator: no black flash; transparent sources are an automated contract |
+| PR-04 B | Native `QImage` wraps the presentation bytes (no deep copy) | `48b11565` | `tests/test_qtquick_native_image_lifetime.py` | trace: first post-transition sync 0.33–1.53 ms (was ≈4.6 ms) |
+| PW-01 | Timeline-only Media refreshes reuse the held artwork | `aa57c284` | Media refresh tests | run: `artwork_reused` 43 of 47 event refreshes, track changes |
+| PW-02 | Media refresh and commands on a dedicated `media` lane | `a8e38012`, `468ec0cc` | Spec §Media lane; R-93 | operator offline/network-stress run |
+| PW-03 Clock | Clock ticks notify only the time epoch | `e8ef729c` | clock presentation tests | run: clock on screen throughout |
+| PW-05 | `single_shot` returns a cancellation handle; Feed/Games-You-Follow deadlines in the generation registry | `1f60f0c8` | `tests/test_single_shot_handle.py` (incl. a due deadline firing once) | automated |
+| VZ-01 | Paused idle waveform synthesized only for Oscilloscope | `ccb9c615` | `tests/test_visualizer_idle_waveform_demand.py` (all six modes) | automated |
+| VZ-03 | Tick phase recording only under `--perf` | `17fc2276` | `tests/test_visualizer_tick_phase_diagnostics.py` | automated |
+| VZ-04 | Waveform samples only for sample-consuming modes | `a9878340` | `mode_capabilities.consumes_waveform_samples`; payload tests | BTF Layer 4 PASS (Bubble, Oscilloscope, Spectrum, Dev Curve, Voxel Sphere); Sine's quieter-level pulse accepted as authored behaviour |
+| VZ-05 | Render fields frozen once per tick | `99a94a21` | tick tests | soak |
+
+Defects this audit found are recorded as R-89 (cross-file native abort), R-90 (Core Audio double release), R-91
+(orphaned workers), R-92 (TX-02) and R-93 (PW-02).
 
 ## Sequencing
 
-`Current_Plan.md` (runtime audit section) owns the order of the admitted slices. Each slice is its own checkpoint with
-the bars named in 08. Wave B `[~]` items stay in the plan until their physical checks pass.
+`Current_Plan.md` owns the order of the remaining slice (PR-04 native handoff, gated as described in 08).
 
 ## Acceptance lanes used by this audit
 

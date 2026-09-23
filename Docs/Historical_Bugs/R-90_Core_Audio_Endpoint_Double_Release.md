@@ -1,14 +1,14 @@
 # R-90 — Core Audio Endpoint Released Twice (ctypes.cast Shared A COM Pointer)
 
 Date: 2026-09-23  
-Status: FIXED IN CODE — `50052050`; installed physical check open (`Current_Plan.md`)
+Status: SOLVED — `50052050`; closed 2026-09-23 by a native test on the real endpoint
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 ## Observed Failure
 
@@ -34,7 +34,10 @@ longer stubs `cast` (it now fails if used) and a bar asserts `QueryInterface`.
 
 ## Regression Coverage
 
-`tests/test_core_audio_callback_probe.py` with the de-stubbed fixture; `tests/test_s_hotkey_workflow.py` exits cleanly.
+`tests/test_core_audio_callback_probe.py` with the de-stubbed fixture; `tests/test_s_hotkey_workflow.py` exits cleanly;
+`tests/test_core_audio_native_rebind.py` drives the real endpoint through 25 rebinds (the default-output-device path),
+retirement and garbage collection in a subprocess, and fails on the old `ctypes.cast` code. The 2026-09-23 19:29 run's
+two Settings replacements recorded no native fault.
 
 ## Guardrail
 

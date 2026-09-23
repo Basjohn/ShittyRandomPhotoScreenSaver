@@ -159,3 +159,22 @@ def test_feed_and_followed_deadlines_live_in_the_shared_registry(
     assert cancel() is True
     assert _registered(9107) == 0 and _scheduled(9107) == 0
     assert calls == []
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("module", [feed_runtime, steam_followed_runtime])
+def test_feed_and_followed_deadlines_fire_once_and_leave_no_residue(
+    qt_app, qtbot, module
+) -> None:
+    # The physical "wait for a FEEDS timer" check, made deterministic: a due
+    # deadline fires its refresh callback exactly once through the shared
+    # registry, and nothing stays registered or cancellable afterwards.
+    calls: list = []
+    cancel = module._default_schedule(15, _callback(9108, calls))
+    assert _registered(9108) == 1
+
+    qtbot.waitUntil(lambda: calls == [True], timeout=2000)
+    qtbot.wait(40)
+    assert calls == [True]
+    assert _registered(9108) == 0 and _scheduled(9108) == 0
+    assert cancel() is False
