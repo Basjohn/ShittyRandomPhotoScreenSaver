@@ -94,3 +94,4 @@ fragile R-63 reveal ordering), so this stays a documented known mismatch until P
 | PR-04: make every `capture_qimage` output opaque | `capture_qimage` is a generic boundary; the opacity guarantee belongs at the background processing boundary (FILL perfect-fit) |
 | PW-02: run Media queries/commands on the WinRT observation lane | teardown waits 2 s on that worker; a stuck WinRT await would fail the R-53 barrier. Use a separate Media-only lane |
 | PW-03: one notify signal per property across every family | churn without evidence; a few semantic epochs, Clock first, Media only if measured material |
+| PW-03: split Media's notify | measured 2026-09-23: 0.5 ms per emit at ≈0.25 refreshes/s ≈ 0.13 ms/s — not material |

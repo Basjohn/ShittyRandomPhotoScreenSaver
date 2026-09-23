@@ -41,7 +41,7 @@ recorded; the replacement watchdog armed six times (four Settings, two CUSTOM Ed
 | Crumble complexity + debris | irregularity 0.31 → 0.38 across the range; debris ≤0.22% of pixels | **Product rework** | geometry rework, not a remap |
 | Melt gloss / detail | gloss ≤3/255 in the wet band; detail ≈5/255 | **Product rework** | intended min/mid/max first |
 | PW-04 Feed model reset | one changed row resets every delegate; 13 FEEDS IO tasks in the soak | **Watch** — FEEDS Custom 2–4 | stable-ID diff only if churn shows |
-| PW-03 Media notify | 1,207 timeline events in the soak | **Watch** — after Clock | measure one real Media edge |
+| PW-03 Media notify | 0.50 ms per emit × ≈0.25 refreshes/s ≈ 0.13 ms/s | **Close** (measured 2026-09-23) | — |
 | PR-02 frame-swap callback | 5.6 µs × ≈89.4 swaps/s ≈ 0.5 ms/s (soak) | **Park** | DC-04 stays documented |
 | PR-01 resolve memo | 47.6 µs per publication | **Park** | reopen only if publication latency points here |
 | PR-07 eager QML compile | ≈0.2–0.3 s, startup only | **Park** | reopen if startup-to-reveal becomes a target |
@@ -204,9 +204,7 @@ re-upload handoff (PySide 6.9.1 binds no `fromNative`, `createFrom` or `nativeTe
   not currently worth changing, because only 13 FEEDS IO tasks completed in the 92-minute soak. Trigger: FEEDS
   Custom 2–4 multi-source physical testing shows delegate/artwork churn on ordinary changed feeds; then implement a
   stable-ID row diff with `dataChanged`.
-- **PW-03 Media notify.** Soak Media summary: events timeline 1,207 / playback 14 / media_properties 12; refreshes
-  activation 1 / event 1,222 / command 2 / reconcile 175. Once the Clock pattern exists, measure the binding cost of
-  one real Media timeline/playback edge, and split Media only if the saving is material.
+- **PW-03 Media notify — closed.** One Media `stateChanged` (67 bound properties) costs 0.50–0.51 ms of GUI binding work on a live bound card; the D1 soak had ≈1,400 Media refreshes in 92.5 min (≈0.25/s; timeline edges coalesced to ≥1 s), i.e. ≈0.13 ms/s on average and one ≈0.5 ms slice per edge. Not material.
 
 ## Parked
 

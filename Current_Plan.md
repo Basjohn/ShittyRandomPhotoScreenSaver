@@ -84,7 +84,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 - [ ] PR-04 Stage B — drop the native `.copy()` only after a Qt/PySide lifetime test proves `PresentationImage.rgba8` outlives every QSG/texture reference.
 
-**Watch / parked / closed (08).** Watch: PW-04 Feed model reset (trigger: FEEDS Custom 2–4 physical testing shows delegate/artwork churn) and PW-03 Media (measure one real edge after the Clock split). Parked: PR-02 (DC-04 stays documented), PR-01 resolve memo, PR-07, ST-01/ST-02, VZ-05 epoch cache, VZ-07. Closed: LC-01 (post-replacement gen-2 only), PR-05, PW-06, the prefetch double batch.
+**Watch / parked / closed (08).** Watch: PW-04 Feed model reset (trigger: FEEDS Custom 2–4 physical testing shows delegate/artwork churn) (PW-03 Media measured and closed: ≈0.13 ms/s). Parked: PR-02 (DC-04 stays documented), PR-01 resolve memo, PR-07, ST-01/ST-02, VZ-05 epoch cache, VZ-07. Closed: LC-01 (post-replacement gen-2 only), PR-05, PW-06, the prefetch double batch.
 
 ## Known failing tests and anomalies (tracked until resolved)
 
