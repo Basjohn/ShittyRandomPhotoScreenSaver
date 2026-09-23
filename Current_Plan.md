@@ -73,7 +73,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 **Admitted queue, in order.** Each slice is its own checkpoint with the bars in 08.
 
-- [ ] **1 · LC-05** — refresh the retained context-menu entries before `open_at()` (ordering change only); the model's existing tuple equality stays the only "unchanged" check.
+- [~] **1 · LC-05** — the product refresh now runs before `open_at()` (the runtime relays the request before opening; the model's existing tuple equality stays the only "unchanged" check). Bar: `test_context_menu_entries_are_refreshed_before_the_menu_becomes_visible`. Physical: open the menu after Next/transition/dimming changes — no visible row rebuild.
 - [ ] **2 · VZ-03** — skip tick phase recording when `--perf` is off, with an identical slow-tick breakdown when on; park instead if it needs tick-pipeline surgery.
 - [ ] **3 · PW-05** — `ThreadManager.single_shot` returns a cancellation handle (not a `QTimer`); migrate Feed and Games-You-Follow and delete both `_default_schedule` copies. Must land before FEEDS Custom 2–4.
 - [ ] **4 · PW-03 (Clock only)** — split Clock time/tick notifies from style/config as a few semantic epochs; before/after binding cost measured.

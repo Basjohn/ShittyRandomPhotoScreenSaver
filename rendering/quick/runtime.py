@@ -225,10 +225,13 @@ class QuickDisplayRuntime(QObject):
         self._input.global_mute_toggle_requested.connect(
             self.global_mute_toggle_requested.emit
         )
+        # Order matters (direct connections run in connection order): the product
+        # owner refreshes the retained entries first, so the menu never becomes
+        # visible with stale rows that rebuild on screen.
+        self._input.context_menu_requested.connect(self.context_menu_requested.emit)
         self._input.context_menu_requested.connect(
             self._on_context_menu_requested
         )
-        self._input.context_menu_requested.connect(self.context_menu_requested.emit)
         self._input.layout_slot_load_requested.connect(
             self.layout_slot_load_requested.emit
         )
