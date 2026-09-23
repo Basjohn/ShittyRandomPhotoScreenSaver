@@ -30,7 +30,7 @@ class _ThreadedIOManager:
     def __init__(self):
         self.submitted: list[str] = []
 
-    def submit_io_task(self, func, *, task_id=None, priority=None, callback=None):
+    def submit_io_task(self, func, *, task_id=None, priority=None, callback=None, category=None):
         self.submitted.append(task_id or "task")
 
         def _run():

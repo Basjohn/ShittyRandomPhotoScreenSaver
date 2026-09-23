@@ -73,7 +73,11 @@ commands, accumulated only while diagnostics are enabled; no timer, polling or n
 Command result authority stays with the shared owner (Spec §Media transport). Media key capture/dispatch untouched
 (U-05).
 
-- [ ] Per-category queue-wait telemetry (before measurement on the current pool).
+- [x] Per-category queue-wait telemetry: `ThreadManager` adds `queue_wait_ms_total/max` to the existing per-category
+      counters (reported as `tm_categories` in `--usage`) only while `--perf`/`--usage` is on; transport commands and
+      synchronous GSMTC queries now carry `media_command`/`media_query` categories. Bar:
+      `tests/test_thread_manager_category_queue_wait.py` (attribution under a saturated pool; nothing recorded with
+      diagnostics off).
 - [ ] Media-only lane; flip the strict xfails; `tests/test_media_runtime*.py` and transport tests; lane stopped and
       joined at owner retirement (R-30/R-53).
 - [ ] Physical: offline/DNS-stalled start with network widgets enabled, then Play/Pause and media transport.
