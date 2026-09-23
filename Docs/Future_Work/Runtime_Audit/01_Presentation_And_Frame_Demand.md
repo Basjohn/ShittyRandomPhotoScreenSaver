@@ -177,9 +177,23 @@ inside `updatePaintNode`, i.e. while the GUI thread is blocked in the threaded r
 release-on-owner-context, R-63 no black flash, CHK21 steady native ownership; ordinary opaque images render
 identically.
 
-- [ ] Stage A bars: transparent-PNG FILL perfect-fit oracle; native image-format oracle;
-      `tests/test_qtquick_retained_background_contract.py` + VRAM/texture accounting; frame trace before/after on the
-      4K Visualizer display; physical no-black-flash transition end on both displays.
+- [x] Stage A implemented. Source finding: the ImageWorker prescale (the only foreground processor) leaked alpha in
+      **every** display mode — FILL returned the crop unchanged and FIT/SHRINK `paste()`d without a mask — not only
+      the in-process FILL perfect-fit branch. Both owners now composite source transparency over opaque black (worker:
+      right after decode when `has_transparency_data`, so scaling/sharpening/padding see opaque pixels; in-process:
+      perfect fit draws onto a black canvas like its other branches). The native branch labels the `QImage`
+      `Format_RGBA8888_Premultiplied` (the texture was already `TextureIsOpaque`); `.copy()` is unchanged (Stage B).
+      Rule: `Docs/Guardrails.md` §Wallpaper pixel opacity. The unused `IMAGE_DECODE` worker handler is not a wallpaper
+      path and is unchanged.
+- [x] Bars: `tests/test_wallpaper_opaque_pixels.py` — transparent source through every in-process and worker mode
+      yields alpha 255 composited over black (7 of 11 fail without the fix); opaque perfect-fit sources pass through
+      untouched; the processed route captures opaque pixels; the native branch hands Qt a premultiplied `QImage` with
+      byte-identical opaque pixels. Image pipeline/worker/cache-accounting, retained-background, texture, render-node
+      and transition-geometry suites green per file.
+- [ ] `--frame-trace` before/after on the 4K Visualizer display: the full first post-transition cycle (sync +
+      render/upload). PR-04 stays open until this measures the whole cycle.
+- [ ] Physical: no black flash at transition end on both displays; a transparent PNG looks the same during and
+      after its transition.
 - [ ] Stage B prerequisite: Qt/PySide buffer-lifetime test, then the same bars.
 
 ---

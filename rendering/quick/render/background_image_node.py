@@ -166,12 +166,17 @@ class RetainedBackgroundSceneNode(QSGNode):
             new_image_node = True
 
         if self._image_identity != image.identity:
+            # Wallpaper pixels are opaque (composited over black at processing;
+            # the texture is created TextureIsOpaque). Straight and premultiplied
+            # RGBA are byte-identical for opaque pixels, and the premultiplied label
+            # spares Qt a full straight->premultiplied conversion before every
+            # upload (PR-04: 8.1 -> 0.15 ms blocking at 4K).
             qimage = QImage(
                 image.rgba8,
                 width,
                 height,
                 image.row_stride,
-                QImage.Format.Format_RGBA8888,
+                QImage.Format.Format_RGBA8888_Premultiplied,
             ).copy()
             if qimage.isNull():
                 raise RuntimeError("Qt Quick retained background QImage conversion failed")
