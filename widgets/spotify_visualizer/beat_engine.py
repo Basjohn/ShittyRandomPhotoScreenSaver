@@ -215,6 +215,10 @@ class _SpotifyBeatEngine(QObject):
         # must not pay a per-frame tuple-allocation cost when nobody consumes it.
         self._pre_agc_analysis_spectrum: tuple[float, ...] = ()
         self._pre_agc_analysis_spectrum_requested: bool = False
+        # Paused idle waveform *samples* are drawn only by Oscilloscope. The
+        # logical step declares the active mode's demand before each tick; the
+        # default keeps synthesizing for any caller that never declares it.
+        self._idle_waveform_demanded: bool = True
         
         # Smoothing state (moved from widget to reduce UI thread work)
         self._smoothed_bars: List[float] = [0.0] * self._bar_count
@@ -1179,7 +1183,10 @@ class _SpotifyBeatEngine(QObject):
         # While paused, visuals stay on the idle path even if the capture worker
         # is still inside its short warm-grace window.
         if not self._is_spotify_playing:
-            self._update_idle_waveform(now_ts)
+            if self._idle_waveform_demanded:
+                self._update_idle_waveform(now_ts)
+            else:
+                self._mark_idle_waveform_generation()
             self._prime_idle_bars(now_ts)
             try:
                 # Drain one warm-grace frame without accepting it as visual
@@ -1306,6 +1313,26 @@ class _SpotifyBeatEngine(QObject):
             out[i] = float((slow * 0.035) + (mid * 0.022) + (fine * 0.010))
         self._waveform = out
         self._waveform_count = count
+        self._latest_generation_with_waveform = self._generation_id
+
+    def set_idle_waveform_demand(self, demanded: bool) -> None:
+        """Declare whether the active mode draws paused idle waveform samples.
+
+        The logical step sets this before every tick from the current mode, so
+        a paused hot switch to Oscilloscope synthesizes on its very first tick.
+        """
+        self._idle_waveform_demanded = bool(demanded)
+
+    def _mark_idle_waveform_generation(self) -> None:
+        """Paused tick for a mode that draws no idle samples (~150 us saved).
+
+        Line-mode readiness keys on the waveform *generation*, so it advances
+        exactly as ``_update_idle_waveform`` would. Live PCM from before the
+        pause is dropped once instead of lingering in paused snapshots.
+        """
+        if self._waveform_count:
+            self._waveform = [0.0] * 256
+            self._waveform_count = 0
         self._latest_generation_with_waveform = self._generation_id
 
     def _prime_idle_bars(self, now_ts: float) -> None:

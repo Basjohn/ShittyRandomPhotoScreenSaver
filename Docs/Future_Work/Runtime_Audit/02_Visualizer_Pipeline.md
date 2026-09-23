@@ -19,7 +19,7 @@ requires the BTF active-music lane before `[x]`.
 
 ---
 
-## VZ-01 — Paused idle waveform synthesized every tick for every mode · P2 · R2 · Risk Medium
+## VZ-01 — Paused idle waveform synthesized every tick for every mode · P2 · R2 · Risk Medium · `[~]`
 
 **Evidence.** `_SpotifyBeatEngine.tick()` (`beat_engine.py:1181-1191`) calls `_update_idle_waveform()` (256 samples ×
 3 `math.sin`) and `_prime_idle_bars()` on every authored tick whenever playback is paused. **Measured ≈154 µs +
@@ -39,8 +39,17 @@ both use the waveform *generation* for source readiness (`logical_frame_capture.
 R-87 CHK12: playing line-mode reveal still needs an authoritative analysis timestamp; paused idle reveal unchanged;
 no second clock, no timer.
 
-- [ ] Bars: paused Sine/Osc produce identical idle waveform sequences for the same timestamps; non-line modes do
-      not call the synthesizer while paused; hot switch Spectrum→Osc (paused) reveals on the same tick count.
+**Implemented.** The logical step calls `engine.set_idle_waveform_demand(mode == "oscilloscope")` immediately before
+every `engine.tick()` (mode is read live from the controller, which `set_mode` updates before the new runtime starts),
+so a paused hot switch into Oscilloscope synthesizes on its first tick; no activation bookkeeping or stale demand.
+Undemanded paused ticks advance `_latest_generation_with_waveform` exactly as before and drop pre-pause live PCM once.
+The engine default stays "synthesize" for any caller that never declares. Measured paused tick (idle, 64 bars):
+150.6 → 36.4 µs (≈13.6 → 3.3 ms/s at 90 Hz) for every non-Oscilloscope mode; Oscilloscope unchanged.
+
+- [x] Bars: `tests/test_visualizer_idle_waveform_demand.py` (Oscilloscope waveform identical to the frozen R-03
+      synthesis for the same timestamps; non-line modes never call the synthesizer yet keep generation readiness;
+      demand declared before every tick for all six modes) — 8 of 9 fail without the fix. Visualizer, Sine, Osc, BTF
+      and Bubble suites green.
 - [ ] Physical: paused idle for all six modes; pause→play and play→pause on Sine/Osc (R-03 artifacts: flat line,
       snap-back, direction inversion must not appear).
 

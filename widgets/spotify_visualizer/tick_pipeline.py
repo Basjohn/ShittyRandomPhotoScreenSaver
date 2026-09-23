@@ -1024,6 +1024,12 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     if engine is None:
         return changed, any_nonzero
 
+    # Only Oscilloscope draws paused idle waveform samples; declare the demand
+    # before this tick so a paused switch into Oscilloscope is current at once.
+    declare_idle_waveform = getattr(engine, "set_idle_waveform_demand", None)
+    if declare_idle_waveform is not None:
+        declare_idle_waveform(getattr(widget, "_vis_mode_str", "") == "oscilloscope")
+
     # Trigger engine tick (schedules audio processing + smoothing on COMPUTE pool)
     _engine_tick_start = time.time()
     engine.tick()
