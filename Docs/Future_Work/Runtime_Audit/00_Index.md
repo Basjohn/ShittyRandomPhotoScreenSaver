@@ -20,6 +20,7 @@ Delete closed items; this is a live checklist, not a changelog.
 | [05_Lifecycle_GC_And_Durability.md](05_Lifecycle_GC_And_Durability.md) | GC freeze scope, caller-dead runtime residue, diagnostic oracles, context menu, verified-healthy seams |
 | [06_Structure_Docs_And_Expandability.md](06_Structure_Docs_And_Expandability.md) | God-object owners, doc/source contradictions, considered-and-rejected list |
 | [07_Historical_Bug_Cross_Audit.md](07_Historical_Bug_Cross_Audit.md) | This audit audited against every relevant historical bug; constraints each item inherits |
+| [08_Open_Items_Research.md](08_Open_Items_Research.md) | 2026-09-23 evidence, suggestion, risk and verdict for every still-open item (Do / Decide / Close / Park) |
 
 ## Method
 
