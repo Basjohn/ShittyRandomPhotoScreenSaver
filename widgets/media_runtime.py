@@ -82,6 +82,14 @@ class MediaRuntimeSnapshot:
 
 
 @dataclass(frozen=True)
+class _LaneTaskResult:
+    """The TaskResult shape a Media-lane refresh hands to its completion."""
+
+    success: bool
+    result: Any = None
+
+
+@dataclass(frozen=True)
 class _MediaQueryResult:
     info: MediaTrackInfo | None
     artwork: PreparedMediaArtwork
@@ -300,6 +308,11 @@ class _SharedMediaRuntimeOwner:
         self._active_leases: weakref.WeakSet[MediaRuntimeService] = weakref.WeakSet()
         self._running = False
         self._retired = False
+        # PW-02: refresh queries and transport commands run on this owner's own
+        # serial lane (a dedicated "media" worker), never behind network work in
+        # the FIFO IO pool, and never on the WinRT observation worker.
+        self._media_lane: Any = None
+        self._media_lane_serial = 0
 
         self._owner_generation = 0
         self._request_id = 0
@@ -536,6 +549,43 @@ class _SharedMediaRuntimeOwner:
             self.stop()
 
     # ------------------------------------------------------------------
+    # Media-only serial lane (PW-02)
+    # ------------------------------------------------------------------
+    def _ensure_media_lane(self) -> Any:
+        """Return this owner's Media lane, creating it on first use.
+
+        ``None`` only when the injected manager cannot create lanes (unit-test
+        and tool fakes), which keep their IO submission. A real manager that
+        fails to create the lane raises; callers report the work as not
+        submitted rather than silently rerouting it to the IO pool.
+        """
+
+        lane = self._media_lane
+        if lane is not None and not lane.is_stopped:
+            return lane
+        create = getattr(self._thread_manager, "create_affinity_lane", None)
+        if not callable(create):
+            return None
+        self._media_lane_serial += 1
+        lane = create(
+            lane_id=f"media_runtime_{id(self):x}_{self._media_lane_serial}",
+            category="media_runtime",
+            runtime_generation=self._runtime_generation,
+            owner=self,
+            worker="media",
+        )
+        self._media_lane = lane
+        return lane
+
+    def _stop_media_lane(self) -> None:
+        lane = self._media_lane
+        self._media_lane = None
+        if lane is not None:
+            # Close admission without blocking the UI; queued work drains on the
+            # lane and its results are already fenced by generation/request ids.
+            lane.stop(wait=False)
+
+    # ------------------------------------------------------------------
     # Controller/provider ownership
     # ------------------------------------------------------------------
     def _configure_controller(self, controller: BaseMediaController) -> None:
@@ -572,6 +622,27 @@ class _SharedMediaRuntimeOwner:
 
             _on_command_result._srpss_runtime_generation = runtime_generation
             result_setter(_on_command_result)
+        executor_setter = getattr(controller, "set_work_executor", None)
+        if callable(executor_setter) and callable(
+            getattr(self._thread_manager, "create_affinity_lane", None)
+        ):
+            lane_owner_ref = weakref.ref(self)
+
+            def _submit_on_media_lane(work: Callable[[], None]) -> bool:
+                owner = lane_owner_ref()
+                if owner is None or owner._retired:
+                    return False
+                try:
+                    lane = owner._ensure_media_lane()
+                except Exception:
+                    logger.warning(
+                        "[MEDIA_RUNTIME] Media lane unavailable; command not submitted",
+                        exc_info=True,
+                    )
+                    return False
+                return bool(lane is not None and lane.submit(work))
+
+            executor_setter(_submit_on_media_lane)
 
     def _ensure_controller(self) -> BaseMediaController:
         controller = self._controller
@@ -1093,6 +1164,34 @@ class _SharedMediaRuntimeOwner:
             self._refresh_source_counts.get(reason, 0) + 1
         )
         try:
+            lane = self._ensure_media_lane()
+        except Exception:
+            logger.warning(
+                "[MEDIA_RUNTIME] Media lane unavailable; refresh not submitted",
+                exc_info=True,
+            )
+            if self._refresh_in_flight_request == request_id:
+                self._refresh_in_flight = False
+            return False
+        if lane is not None:
+
+            def _run_on_media_lane() -> None:
+                try:
+                    candidate = _do_query()
+                except Exception:
+                    logger.debug("[MEDIA_RUNTIME] Media lane query failed", exc_info=True)
+                    _on_result(_LaneTaskResult(success=False))
+                    return
+                _on_result(_LaneTaskResult(success=True, result=candidate))
+
+            _run_on_media_lane._srpss_runtime_generation = runtime_generation
+            if lane.submit(_run_on_media_lane):
+                return True
+            logger.debug("[MEDIA_RUNTIME] Media lane closed; refresh not submitted")
+            if self._refresh_in_flight_request == request_id:
+                self._refresh_in_flight = False
+            return False
+        try:
             tm.submit_io_task(
                 _do_query,
                 callback=_on_result,
@@ -1481,6 +1580,7 @@ class _SharedMediaRuntimeOwner:
         self._retired = True
         self._retire_controller(self._controller)
         self._controller = None
+        self._stop_media_lane()
         self._active_leases.clear()
         self._leases.clear()
         self._current_info = None

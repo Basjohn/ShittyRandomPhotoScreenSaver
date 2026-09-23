@@ -113,6 +113,7 @@ class BaseMediaController:
         self._retired = False
         self._task_owner_id = f"{id(self):x}"
         self._command_result_handler: Callable[[MediaCommandResult], None] | None = None
+        self._work_executor: Callable[[Callable[[], None]], bool] | None = None
 
     def set_thread_manager(self, thread_manager) -> None:
         """Inject the engine-owned ThreadManager."""
@@ -130,6 +131,19 @@ class BaseMediaController:
 
         self._command_result_handler = handler
 
+    def set_work_executor(
+        self,
+        executor: Callable[[Callable[[], None]], bool] | None,
+    ) -> None:
+        """Install the owner's Media-only serial lane for transport commands.
+
+        PW-02: the shared runtime owner injects this so a command never queues
+        behind network work in the FIFO IO pool. Controllers used without an
+        owner (tools/tests) keep the IO submission.
+        """
+
+        self._work_executor = executor
+
     def retire(self) -> None:
         """Close new command/query admission; in-flight WinRT work may finish fenced."""
         try:
@@ -139,6 +153,7 @@ class BaseMediaController:
         self._retired = True
         self._thread_manager = None
         self._command_result_handler = None
+        self._work_executor = None
 
     # ------------------------------------------------------------------
     # Event observation contract (presentation-neutral).
@@ -790,6 +805,17 @@ class WindowsGlobalMediaController(BaseMediaController):
         _run_and_clear._srpss_runtime_generation = getattr(
             self, "_runtime_generation", None
         )
+
+        executor = getattr(self, "_work_executor", None)
+        if executor is not None:
+            try:
+                submitted = bool(executor(_run_and_clear))
+            except Exception:
+                logger.debug("[MEDIA] Media lane rejected %s command", action_name, exc_info=True)
+                submitted = False
+            if not submitted:
+                self._command_inflight = False
+            return submitted
 
         try:
             from core.threading.manager import TaskPriority

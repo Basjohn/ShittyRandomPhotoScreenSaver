@@ -20,7 +20,7 @@ R-83/R-29/R-40 (provider cadence authority), R-41 (thread ownership), R-88 (Edit
 
 ---
 
-## PW-02 — Media truth and user media commands share a FIFO 4-worker IO pool with network work · P1 · R3 · Risk Medium · Do with care
+## PW-02 — Media truth and user media commands share a FIFO 4-worker IO pool with network work · P1 · R3 · Risk Medium · `[~]`
 
 **Mechanism (source).** `ThreadManager` IO pool = 4 workers (`core/threading/manager.py:537`), a FIFO
 `ThreadPoolExecutor`; `TaskPriority` is passive metadata (Guardrails §Qt Quick states this explicitly). The same
@@ -78,9 +78,24 @@ Command result authority stays with the shared owner (Spec §Media transport). M
       synchronous GSMTC queries now carry `media_command`/`media_query` categories. Bar:
       `tests/test_thread_manager_category_queue_wait.py` (attribution under a saturated pool; nothing recorded with
       diagnostics off).
-- [ ] Media-only lane; flip the strict xfails; `tests/test_media_runtime*.py` and transport tests; lane stopped and
-      joined at owner retirement (R-30/R-53).
-- [ ] Physical: offline/DNS-stalled start with network widgets enabled, then Play/Pause and media transport.
+- [x] Media-only lane. `ThreadManager.create_affinity_lane(..., worker="media")` gives named owners their own lazy
+      single-thread `AffinityLaneScheduler` (`affinity_io_lane:media`), with the same lane metrics, lifecycle-work
+      snapshot (runtime generation) and manager shutdown as the shared worker; diagnostics report it under
+      `dedicated_affinity_lanes`. `_SharedMediaRuntimeOwner` creates its lane on first use, submits refresh queries to
+      it (completion delivered through the unchanged `_on_result` fences) and injects it into its controller through
+      `BaseMediaController.set_work_executor`, so `_submit_command` runs transport commands there; one-in-flight /
+      one-pending refresh, command de-dup (`_command_inflight`) and R-66 event authority are unchanged. `retire()`
+      stops the lane without blocking the UI. A real manager that cannot create the lane reports the work as not
+      submitted; only injected managers without lane support (test/tool fakes) keep the IO submission.
+- [x] Bars: `tests/test_media_io_starvation.py` — with four stalled network tasks the transport command (through the
+      owner's real injection) and the activation refresh both start within 0.4 s on `affinity_io_lane:media`; the
+      Media lane is not the observation worker, is generation-tagged in diagnostics and leaves no lifecycle work after
+      retirement (all 3 fail on the old code). Correction: the refresh bar previously had no Qt app, so shared-owner
+      activation failed at its reconcile timer and the strict xfail passed without reaching the refresh; with `qt_app`
+      the old code now demonstrably queues behind the stalls. Media runtime/presentation/volume/transport,
+      thread-manager, runtime-destruction and h-cutover suites green per file.
+- [ ] Physical: offline/DNS-stalled start with network widgets enabled, then Play/Pause and media transport respond
+      at once and the Visualizer's play/pause follows; Settings round-trips retire the lane cleanly.
 
 ---
 

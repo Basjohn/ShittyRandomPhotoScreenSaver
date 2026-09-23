@@ -92,7 +92,8 @@ class AffinityLaneHandle:
 class AffinityLaneScheduler:
     """One lazy process worker for serial thread-affine native work."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, thread_name: str = "affinity_io_lane") -> None:
+        self._thread_name = str(thread_name or "affinity_io_lane")
         self._condition = threading.Condition(threading.RLock())
         self._states: dict[str, _AffinityLaneState] = {}
         self._ready: deque[_AffinityPacket] = deque()
@@ -141,7 +142,7 @@ class AffinityLaneScheduler:
             return
         thread = threading.Thread(
             target=self._worker_loop,
-            name="affinity_io_lane",
+            name=self._thread_name,
             daemon=True,
         )
         self._thread = thread
