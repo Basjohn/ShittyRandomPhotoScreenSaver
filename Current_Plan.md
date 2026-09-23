@@ -65,7 +65,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 - [~] PR-01 — steady equal visualizer publications no longer rewrite the QML shell (20.4 → 4.0 µs each); `request_present()` still runs once per publication. Physical: activation fade, mode crossfade, CUSTOM resize/Save/Cancel, display hop, startup reveal.
 - [~] PR-03 — background render telemetry notes are plain field updates (render thread 29.6 → 2.2 µs per transition frame); the snapshot is built only when read after a change.
 - [~] PW-01 — timeline-only Media refreshes reuse the held album art for the same track instead of re-reading the WinRT thumbnail (refresh count unchanged; `artwork_reused` in `[MEDIA_EVENT] summary`). Physical: track change, same-album next track, podcast/video providers, artwork fade.
-- [ ] VZ-01 — paused waveform samples synthesized on demand; waveform generation still advances every tick.
+- [~] VZ-01 — paused idle waveform samples are synthesized only while Oscilloscope is active (other modes: paused tick 150.6 → 36.4 µs); the waveform generation still advances every tick. Physical: paused idle for all six modes; pause→play and play→pause on Sine/Osc (no flat line, snap-back or direction inversion); paused switch into Oscilloscope.
 - [ ] When the pending R-84 3–5-cycle Settings churn run happens, also classify LC-01 from its `[PERF][GC_POLICY] generation=2` lines (no separate run).
 - [ ] Operator: supply the log lines behind "2 QImage tasks per context-menu open" (LC-05).
 

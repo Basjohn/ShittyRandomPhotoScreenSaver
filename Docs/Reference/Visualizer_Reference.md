@@ -51,6 +51,8 @@ reactive_source_ready = false
 source identity = absent
 ```
 
+While paused, the shared BeatEngine synthesizes idle waveform *samples* only when the logical step declares Oscilloscope as the active mode (`set_idle_waveform_demand`, set before every tick); every paused tick still advances the waveform generation that Sine/Oscilloscope readiness keys on, and idle bars/energy still animate for every mode.
+
 Idle reveal/self-animation and live audio reactivity are separate contracts. A mode may remain visibly alive while paused or while awaiting a fresh source, but real music must not be treated as current reactive input until generation/activation identity is authoritative. Healthy authored cadence or idle motion therefore does not prove live-source reactivity.
 
 ## 3. Logical cadence
