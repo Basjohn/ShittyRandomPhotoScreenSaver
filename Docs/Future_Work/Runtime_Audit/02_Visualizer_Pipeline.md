@@ -55,7 +55,7 @@ The engine default stays "synthesize" for any caller that never declares. Measur
 
 ---
 
-## VZ-03 — Per-tick phase instrumentation always on · P3 · R1 · Risk Low · Do (low priority)
+## VZ-03 — Per-tick phase instrumentation always on · P3 · R1 · Risk Low · `[~]`
 
 **Evidence.** `logical_tick()` allocates a closure, a dict and nine `perf_counter()` samples every tick
 (`tick_pipeline.py:1422-1530`); the data is read only when a tick exceeds 50 ms **and** `--perf` is enabled.
@@ -66,9 +66,11 @@ so it is not closed.
 is a process-wide flag set once at logging setup, so the change is contained. If it turns out to need wider
 tick-pipeline surgery, park it instead.
 
-- [ ] Skip phase recording (closure, dict, `perf_counter` samples) when perf is off; keep the slow-tick warning and
-      its phase breakdown identical when on. Bars: perf-off ticks build no phase record; perf-on message format
-      unchanged.
+- [x] `logical_tick` reads the perf flag once per tick; off, phase marks go to a module-level no-op and no recorder,
+      entry timestamp or log-only locals are built; on, `_new_tick_phase_recorder()` records the same ten phases and
+      the slow-tick warning and breakdown strings are unchanged. Bar: `tests/test_visualizer_tick_phase_diagnostics.py`
+      (perf off: no recorder, no log; perf on: identical phase order and message shape); tick suites green.
+- [ ] Next `--perf` run: a slow tick still logs `Tick phase breakdown` with all ten phases.
 
 ---
 
