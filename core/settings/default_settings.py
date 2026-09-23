@@ -112,7 +112,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                  'ink_bloom': {'depth': 0.65, 'detail': 1.0, 'direction': None, 'gloss': 0.6},
                  'melt_drip': {'depth': 0.7,
                                'detail': 1.0,
-                               'direction': 'Top to Bottom',
+                               'direction': 'Random',
                                'gloss': 0.65},
                  'particle': {'direction': 'Random',
                               'gloss_size': 72.0,

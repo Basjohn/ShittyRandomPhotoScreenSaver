@@ -686,26 +686,34 @@ def _resolve_organic(
     )
 
 
+# Melt starts at an origin rather than sweeping from an edge (operator rework
+# 2026-09-23). The Settings label maps to the resolved origin code.
+MELT_ORIGIN_LABELS = {
+    "Top Left": "top_left",
+    "Top Center": "top_center",
+    "Top Right": "top_right",
+    "Center Out": "center_out",
+    "Center In": "center_in",
+}
+_MELT_ORIGIN_CHOICES = tuple(MELT_ORIGIN_LABELS.values())
+
+
 def _resolve_melt_drip(
     settings: Mapping[str, object],
     rng: _RandomSource,
 ) -> ResolvedPhaseCInputs:
     cfg = _mapping(settings, "melt_drip")
     defaults = _canonical("melt_drip")
-    direction = _resolve_direction(
-        _value(cfg, defaults, "direction"),
-        choices=("left", "right", "up", "down"),
-        mapping={
-            **_DIRECTION_MAP,
-            "left": "left",
-            "right": "right",
-            "up": "up",
-            "down": "down",
-        },
-        rng=rng,
-    )
+    raw = str(_value(cfg, defaults, "direction") or "Random")
+    origin = MELT_ORIGIN_LABELS.get(raw)
+    if origin is None and raw in _MELT_ORIGIN_CHOICES:
+        origin = raw
+    if origin is None:
+        # "Random", and the retired edge directions ("Top to Bottom", ...) that
+        # older profiles may still hold, pick an origin per run.
+        origin = str(rng.choice(_MELT_ORIGIN_CHOICES))
     return _finish(
-        direction,
+        origin,
         {"seed": _seed(rng), "detail": _resolve_detail(cfg, defaults),
          **_surface_values(cfg, defaults, ("depth", "gloss"))},
     )

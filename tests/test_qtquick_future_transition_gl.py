@@ -55,8 +55,10 @@ def test_authored_controls_change_rendered_pixels(capture, effect, field, value)
 @pytest.mark.qt
 @pytest.mark.parametrize("effect", ["glass_shatter", "exploding_tiles", "pixel_accretion", "melt_drip"])
 def test_direction_changes_actual_rendered_motion(capture, effect):
-    left = capture.render(capture.run(effect, direction="left"), .32)[0]
-    right = capture.render(capture.run(effect, direction="right"), .32)[0]
+    # Melt is steered by where the melt starts rather than an edge direction.
+    first, second = {"melt_drip": ("top_left", "top_right")}.get(effect, ("left", "right"))
+    left = capture.render(capture.run(effect, direction=first), .32)[0]
+    right = capture.render(capture.run(effect, direction=second), .32)[0]
     assert np.abs(np.asarray(left, dtype=np.int16)-np.asarray(right, dtype=np.int16)).mean() > 2
 
 

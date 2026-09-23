@@ -1,4 +1,4 @@
-"""Bounded implicit-liquid renderer for Melt / Drip."""
+"""Gravity melt renderer for Melt / Drip: the image melts from a chosen origin."""
 
 from __future__ import annotations
 
@@ -9,8 +9,18 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.melt_drip_program import MELT_FRAGMENT_SOURCE
-from ..mesh_support import MeshResources, bind_frame, direction_vector
+from ..mesh_support import MeshResources, bind_frame
 from ..render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
+
+# Resolved melt origins: (screen origin with y down, mode 0 = spread from the
+# point, 1 = melt from every edge toward the centre).
+MELT_ORIGINS: dict[str, tuple[tuple[float, float], float]] = {
+    "top_left": ((0.0, 0.0), 0.0),
+    "top_center": ((0.5, 0.0), 0.0),
+    "top_right": ((1.0, 0.0), 0.0),
+    "center_out": ((0.5, 0.5), 0.0),
+    "center_in": ((0.5, 0.5), 1.0),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,7 +29,8 @@ class MeltDripParameters:
     detail: float
     depth: float
     gloss: float
-    direction: tuple[float, float]
+    origin: tuple[float, float]
+    origin_mode: float
 
 
 def melt_drip_parameters(
@@ -47,16 +58,18 @@ def melt_drip_parameters(
                 f"Melt / Drip {name} must be between {lower:g} and {upper:g}"
             )
         values[name] = numeric
-    if str(direction).strip().lower() not in {"down", "up", "left", "right"}:
+    origin = MELT_ORIGINS.get(str(direction).strip().lower())
+    if origin is None:
         raise ValueError(
-            "Melt / Drip requires resolved direction down, up, left, or right"
+            "Melt / Drip requires a resolved origin: " + ", ".join(MELT_ORIGINS)
         )
     return MeltDripParameters(
         seed,
         values["detail"],
         values["depth"],
         values["gloss"],
-        direction_vector(direction),
+        origin[0],
+        origin[1],
     )
 
 
@@ -90,7 +103,8 @@ class QuickMeltDripRenderer:
                     "uDetail",
                     "uDepth",
                     "uGloss",
-                    "uDirection",
+                    "uOrigin",
+                    "uOriginMode",
                 ),
             )
             bind_frame(program, u, frame)
@@ -100,9 +114,10 @@ class QuickMeltDripRenderer:
                 ("uDetail", params.detail),
                 ("uDepth", params.depth),
                 ("uGloss", params.gloss),
+                ("uOriginMode", params.origin_mode),
             ):
                 gl.glUniform1f(u[name], float(value))
-            gl.glUniform2f(u["uDirection"], *params.direction)
+            gl.glUniform2f(u["uOrigin"], *params.origin)
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         except Exception:

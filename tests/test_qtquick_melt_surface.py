@@ -1,49 +1,158 @@
-"""Driver checks for Melt's cohesive wet front and material response."""
+"""Driver checks for Melt: origin, gravity, untouched source and seamless field."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 from PIL import Image
+
+import rendering.quick.transitions.implementations.melt_drip as melt_module
 from tools.transition_contact_sheet import TransitionCapture
+
+ORIGINS = ("top_left", "top_center", "top_right", "center_out", "center_in")
+
+
+def _gradient_image(width, height):
+    # Red rises down the frame, green is constant: content pulled down from
+    # higher rows lowers red/green, while shading scales both channels alike.
+    y = np.linspace(20, 235, height)[:, None]
+    rgba = np.empty((height, width, 4), dtype=np.uint8)
+    rgba[:, :, 0] = np.broadcast_to(y, (height, width)).astype(np.uint8)
+    rgba[:, :, 1] = 128
+    rgba[:, :, 2] = 90
+    rgba[:, :, 3] = 255
+    return Image.fromarray(rgba, "RGBA")
+
+
+def _frame(capture, run, t):
+    return np.asarray(capture.render(run, t)[0], dtype=np.int16)
 
 
 @pytest.mark.qt
 @pytest.mark.parametrize("size", ((180, 480), (640, 160)))
-@pytest.mark.parametrize("direction", ("down", "up", "left", "right"))
-def test_liquid_front_settles_without_an_endpoint_cut(qt_app, size, direction):
+@pytest.mark.parametrize("origin", ORIGINS)
+def test_melt_starts_exactly_on_the_source_and_settles_exactly(qt_app, size, origin):
     capture = TransitionCapture(*size)
     try:
+        source, destination = (np.asarray(i, dtype=np.int16) for i in capture.images)
         for detail in (0.5, 2.0):
             run = capture.run(
-                "melt_drip",
-                direction=direction,
-                parameters={"detail": detail, "depth": 1.0},
+                "melt_drip", direction=origin, parameters={"detail": detail, "depth": 1.0}
             )
-            source, destination = (
-                np.asarray(i, dtype=np.int16) for i in capture.images
-            )
-            assert (
-                np.abs(
-                    np.asarray(capture.render(run, 0.0001)[0], dtype=np.int16) - source
-                ).mean()
-                < 0.5
-            )
-            for t in (0.9949, 0.9951, 0.9999):
-                assert (
-                    np.abs(
-                        np.asarray(capture.render(run, t)[0], dtype=np.int16)
-                        - destination
-                    ).mean()
-                    < 0.5
-                )
+            assert np.abs(_frame(capture, run, 0.0001) - source).mean() < 0.5
+            # Every point has melted by 0.60 and drained by 0.94.
+            for t in (0.9401, 0.97, 0.9999):
+                assert np.array_equal(_frame(capture, run, t), destination), t
+    finally:
+        capture.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize(
+    ("origin", "far_region"),
+    (
+        ("top_left", (slice(110, 180), slice(220, 320))),
+        ("top_center", (slice(130, 180), slice(None))),
+        ("top_right", (slice(110, 180), slice(0, 100))),
+        ("center_out", (slice(0, 30), slice(0, 60))),
+        ("center_in", (slice(70, 110), slice(130, 190))),
+    ),
+)
+def test_points_the_melt_has_not_reached_are_the_untouched_source(
+    qt_app, origin, far_region
+):
+    capture = TransitionCapture(320, 180)
+    try:
+        source = np.asarray(capture.images[0], dtype=np.int16)
+        run = capture.run("melt_drip", direction=origin, seed=713)
+        rendered = _frame(capture, run, 0.12)
+        assert np.array_equal(rendered[far_region], source[far_region])
+    finally:
+        capture.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("origin", ORIGINS)
+def test_the_melt_starts_at_the_chosen_origin(qt_app, origin):
+    width, height = 320, 180
+    capture = TransitionCapture(width, height)
+    try:
+        source = np.asarray(capture.images[0], dtype=np.int16)
+        run = capture.run("melt_drip", direction=origin, seed=713)
+        changed = np.abs(_frame(capture, run, 0.20) - source).max(axis=2) > 12
+        assert changed.mean() > 0.01
+        ys, xs = np.nonzero(changed)
+        cx, cy = xs.mean() / width, ys.mean() / height
+        if origin == "top_left":
+            assert cx < 0.4 and cy < 0.5
+        elif origin == "top_right":
+            assert cx > 0.6 and cy < 0.5
+        elif origin == "top_center":
+            assert 0.3 < cx < 0.7 and cy < 0.5
+        elif origin == "center_out":
+            assert 0.3 < cx < 0.7 and 0.25 < cy < 0.75
+        else:
+            border = np.ones_like(changed)
+            border[30:-30, 50:-50] = False
+            assert changed[border].mean() > 4 * changed[~border].mean()
+    finally:
+        capture.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("origin", ("top_center", "center_out"))
+def test_melted_paint_sags_downward_under_its_weight(qt_app, origin):
+    image = _gradient_image(320, 180)
+    capture = TransitionCapture(320, 180, image, image)
+    try:
+        source = np.asarray(image, dtype=np.float64)
+        run = capture.run(
+            "melt_drip", direction=origin, seed=713, parameters={"gloss": 0.0, "depth": 0.0}
+        )
+        rendered = np.asarray(capture.render(run, 0.30)[0], dtype=np.float64)
+        moved = np.abs(rendered - source).max(axis=2) > 6
+        assert moved.mean() > 0.05
+        ratio = rendered[:, :, 0] / rendered[:, :, 1]
+        original = source[:, :, 0] / source[:, :, 1]
+        # Content shown in the melt came from higher (redder-is-lower) rows.
+        assert (ratio[moved] - original[moved]).mean() < -0.05
+    finally:
+        capture.close()
+
+
+@pytest.mark.qt
+def test_melt_field_has_no_seams(qt_app, monkeypatch):
+    # Regression: the melt-time noise used a chaotic float hash that gave one
+    # lattice corner different values in neighbouring cells, cutting the
+    # photograph into hard-edged rectangles and straight lines. Render the
+    # production field itself and require it to be continuous.
+    marker = "    float a=ageAt(screen,aspect);"
+    source = melt_module.MELT_FRAGMENT_SOURCE
+    assert source.count(marker) == 1
+    monkeypatch.setattr(
+        melt_module,
+        "MELT_FRAGMENT_SOURCE",
+        source.replace(
+            marker,
+            marker + "\n    FragColor=vec4(vec3(a)+1e-9*(uDepth+uGloss),1.);return;",
+        ),
+    )
+    capture = TransitionCapture(320, 180)
+    try:
+        for origin in ORIGINS:
+            for seed in (713, 4242):
+                run = capture.run("melt_drip", direction=origin, seed=seed,
+                                  parameters={"detail": 2.0})
+                age = _frame(capture, run, 0.40)[:, :, 0]
+                assert np.abs(np.diff(age, axis=0)).max() <= 24, (origin, seed)
+                assert np.abs(np.diff(age, axis=1)).max() <= 24, (origin, seed)
     finally:
         capture.close()
 
 
 @pytest.mark.qt
 @pytest.mark.parametrize("field", ("depth", "gloss"))
-def test_liquid_material_controls_affect_the_wet_front(qt_app, field):
+def test_liquid_material_controls_affect_the_melt(qt_app, field):
     # A uniform material removes image contrast as a possible explanation for
     # the observed lighting: differences must come from geometry or shading.
     capture = TransitionCapture(
@@ -54,100 +163,24 @@ def test_liquid_material_controls_affect_the_wet_front(qt_app, field):
     )
     try:
         images = [
-            np.asarray(
-                capture.render(capture.run("melt_drip", parameters={field: v}), 0.43)[
-                    0
-                ],
-                dtype=np.int16,
-            )
+            _frame(capture, capture.run("melt_drip", direction="top_center",
+                                        parameters={field: v}), 0.40)
             for v in (0.0, 1.0)
         ]
         assert np.abs(images[0] - images[1]).mean() > 0.5
-        foreground = images[1][:, :, :3].max(axis=2) > 30
-        assert images[1][:, :, :3][foreground].std() > 15
     finally:
         capture.close()
 
 
 @pytest.mark.qt
-def test_viscous_film_keeps_irregular_fingers_attached_and_continuous(qt_app):
-    capture = TransitionCapture(
-        480,
-        270,
-        Image.new("RGBA", (480, 270), "white"),
-        Image.new("RGBA", (480, 270), "black"),
-    )
+@pytest.mark.parametrize("origin", ORIGINS)
+def test_melt_is_continuous_in_time(qt_app, origin):
+    capture = TransitionCapture(320, 180)
     try:
-        run = capture.run("melt_drip", direction="down", seed=713)
-        for t in (0.43, 0.55, 0.67):
-            rgb = np.asarray(capture.render(run, t)[0])[:, :, :3]
-            mask = rgb.max(axis=2) > 40
-            edge_rows = []
-            continuous_columns = 0
-            occupied_columns = 0
-            for x in range(mask.shape[1]):
-                rows = np.flatnonzero(mask[:, x])
-                if rows.size < 3:
-                    continue
-                occupied_columns += 1
-                edge_rows.append(rows[-1])
-                # With gravity down the source liquid is one attached film
-                # descending from the top.  A detached sphere would create a
-                # second island after an empty gap in one or more columns.
-                if rows[0] <= 2 and np.diff(rows).max(initial=0) <= 2:
-                    continuous_columns += 1
-            assert occupied_columns > mask.shape[1] * 0.55
-            assert continuous_columns / occupied_columns > 0.97
-            # The film must have a visibly irregular hanging front, not a
-            # straight wipe wearing a glossy material.
-            assert np.std(edge_rows) > 2.0
-
-        # Tiny time steps remain continuous across finger growth/drainage.
-        for t in (0.31, 0.43, 0.55, 0.67, 0.82, 0.94):
-            a = np.asarray(capture.render(run, t - 0.0005)[0], dtype=np.int16)
-            b = np.asarray(capture.render(run, t + 0.0005)[0], dtype=np.int16)
+        run = capture.run("melt_drip", direction=origin, seed=713)
+        for t in (0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.93):
+            a = _frame(capture, run, t - 0.0005)
+            b = _frame(capture, run, t + 0.0005)
             assert np.abs(a - b).mean() < 3.0, t
-    finally:
-        capture.close()
-
-
-@pytest.mark.qt
-@pytest.mark.parametrize(
-    ("direction", "region"),
-    (
-        ("down", (slice(0, 60), slice(None))),
-        ("up", (slice(120, 180), slice(None))),
-        ("right", (slice(None), slice(0, 100))),
-        ("left", (slice(None), slice(220, 320))),
-    ),
-)
-def test_melt_preserves_source_pixels_well_behind_the_wet_front(
-    qt_app, direction, region
-):
-    # Regression for the rejected 3D candidate, where horizontal Melt stretched
-    # the entire source photograph into giant rectangular bands. The liquid
-    # character must stay local to the moving meniscus; dry source remains the
-    # source image at its original coordinates.
-    width, height = 320, 180
-    x = np.arange(width, dtype=np.uint8)[None, :]
-    y = np.arange(height, dtype=np.uint8)[:, None]
-    rgba = np.empty((height, width, 4), dtype=np.uint8)
-    rgba[:, :, 0] = (x * 7 + y * 3) % 251
-    rgba[:, :, 1] = (x * 3 + y * 11) % 253
-    rgba[:, :, 2] = (x * 13 + y * 5) % 247
-    rgba[:, :, 3] = 255
-    source_image = Image.fromarray(rgba, "RGBA")
-    destination_image = Image.new("RGBA", (width, height), (0, 0, 0, 255))
-    capture = TransitionCapture(width, height, source_image, destination_image)
-    try:
-        run = capture.run(
-            "melt_drip",
-            direction=direction,
-            seed=713,
-            parameters={"detail": 1.4, "depth": 1.0, "gloss": 0.6},
-        )
-        rendered = np.asarray(capture.render(run, 0.43)[0], dtype=np.int16)
-        source = np.asarray(source_image, dtype=np.int16)
-        assert np.abs(rendered[region] - source[region]).mean() < 0.75
     finally:
         capture.close()

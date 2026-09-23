@@ -85,6 +85,15 @@ without the safe path below.
   bridge disappear. `Reset All Colours to Theme` stays a user-invoked action,
   never startup normalization.
 
+- **Melt retired edge directions** (`transitions.melt_drip.direction` values
+  such as `Top to Bottom` from before the 2026-09-23 origin rework;
+  `rendering/quick/transitions/parameter_resolution.py::_resolve_melt_drip`
+  and the Melt origin combo in `ui/tabs/transitions_tab.py`). Any value that
+  is not an origin label resolves as Random per run and shows as Random in
+  Settings; saving writes an origin label.
+  *Blocked:* mapping old edges onto origins (they carry no origin meaning) or
+  letting the renderer admit an edge direction as a fallback.
+
 ### Not debt — current input contracts (do not "simplify")
 
 - **Custom layout version handling.** `CUSTOM_LAYOUT_VERSION = 2` is enforced by
