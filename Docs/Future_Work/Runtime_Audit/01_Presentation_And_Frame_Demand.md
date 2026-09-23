@@ -190,10 +190,15 @@ identically.
       untouched; the processed route captures opaque pixels; the native branch hands Qt a premultiplied `QImage` with
       byte-identical opaque pixels. Image pipeline/worker/cache-accounting, retained-background, texture, render-node
       and transition-geometry suites green per file.
-- [ ] `--frame-trace` before/after on the 4K Visualizer display: the full first post-transition cycle (sync +
-      render/upload). PR-04 stays open until this measures the whole cycle.
-- [ ] Physical: no black flash at transition end on both displays; a transparent PNG looks the same during and
-      after its transition.
+- [x] Post-Stage-A `--frame-trace` (2026-09-23 17:05 session; one transition end per display survives): on the
+      3840×2160 Visualizer display the handoff spans two Quick cycles — 4.6 ms sync (the `.copy()`) in the first,
+      16.2 ms render/upload in the next (≈21 ms), against a 3.2 ms median cycle. The 2560×1440 display: 3.7 ms first
+      cycle. Stage A is a partial mitigation; the full native re-upload remains structurally visible.
+- [x] Physical (2026-09-23): no black flash at transition end on both displays; ordinary wallpaper unchanged. The
+      transparent-PNG case is owned by the automated contract (operator waived a physical check: SRPSS shows
+      photographs).
+- [ ] Remaining: Stage B lifetime test; then quantify the remaining handoff before choosing a native helper or a
+      PySide upgrade for the zero-re-upload route.
 - [ ] Stage B prerequisite: Qt/PySide buffer-lifetime test, then the same bars.
 
 ---

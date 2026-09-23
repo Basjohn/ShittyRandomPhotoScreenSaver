@@ -16,6 +16,7 @@ worthwhile benefit; recorded in 06 §Considered and rejected.
 | Idle dev-machine probes on the audited tree (2026-09-23) | per-call costs; installed/loaded numbers are larger |
 | Operator runs 2026-09-22 22:53–22:59 and 2026-09-23 08:06–08:09 (`--frame-trace`) | `logs/evidence_chest/0922_BeforeClaudeAuditWork`; first PR-04 trace |
 | **D1 heavy-load diagnostic soak, 2026-09-23 09:07–10:40 (≈92.5 min)** | `logs/evidence_chest/logsb86eee25f4.zip`; the operator cannot reasonably reproduce it |
+| Grouped physical acceptance run, 2026-09-23 16:53–17:06 (two processes, each with a Settings round-trip) | active-music mode review, transitions, offline Media; only the second process's frame trace survives |
 
 The soak ran with `--perf`, `--usage`, handle attribution, visualizer/geometry/settings/lifecycle/cache/Steam/FEEDS
 diagnostics and `--frame-trace` enabled, under heavy external load that eased near the end. **Use it for
@@ -37,7 +38,6 @@ recorded; the replacement watchdog armed six times (four Settings, two CUSTOM Ed
 | VZ-04 waveform payload | 38.4 µs/tick for modes that never draw samples | **Do with care** — `[~]` landed | BTF Layer 4 active-music review |
 | PR-04 Stage A — opaque pixels + premultiplied label | soak: 10 transition ends 26.6–90.6 ms; Qt conversion 8.12 → 0.15 ms idle | **Do with care** — `[~]` landed, partial mitigation | post-change frame trace of the whole cycle |
 | PR-04 Stage B — drop `.copy()` | ≈3–4.5 ms sync | **Gated** | Qt/PySide lifetime test first |
-| PW-02 Media-only lane | fault injection + soak startup burst (IO queue wait max ≈1.9 s) | **Do with care** — `[~]` landed with its telemetry | physical offline-start check |
 | Crumble complexity + debris | irregularity 0.31 → 0.38 across the range; debris ≤0.22% of pixels | **Product rework** | geometry rework, not a remap |
 | Melt gloss / detail | gloss ≤3/255 in the wet band; detail ≈5/255 | **Product rework** | intended min/mid/max first |
 | PW-04 Feed model reset | one changed row resets every delegate; 13 FEEDS IO tasks in the soak | **Watch** — FEEDS Custom 2–4 | stable-ID diff only if churn shows |
@@ -187,49 +187,6 @@ re-upload handoff (PySide 6.9.1 binds no `fromNative`, `createFrom` or `nativeTe
 - Retained-background/VRAM/texture accounting tests.
 - Frame trace before/after on the 4K Visualizer display.
 - Physical no-black-flash transition end.
-
-### PW-02 — Media-only serial lane · Do with care (lane admitted)
-
-**Evidence.**
-
-- Fault injection (`tests/test_media_io_starvation.py`, strict xfails): with four stalled network tasks, a transport
-  command and the activation refresh stay queued past 0.42 s.
-- Soak, shared IO pool counters (`--usage` `tm_delivery.pools.io`), which confirm real saturation:
-
-  | Time | Started / finished | Queue wait total | Queue wait max |
-  | --- | --- | ---: | ---: |
-  | 09:07:52 | 23 / 19 | ≈124 ms | ≈60 ms |
-  | 09:08:06 | 41 / 40 (one task ran ≈11,416 ms) | ≈8,238 ms | ≈1,902 ms |
-  | session end | 2,639 / 2,638 | ≈9,439 ms | still ≈1,902 ms |
-
-  Almost all serious waiting sits in the startup burst. Seven `media_refresh` tasks went through the pool inside that
-  burst, but waits are not attributed by category and no Media command is known to have been pressed then. This does
-  **not** demonstrate a 1.9 s Media-command latency.
-- Not evidence: `[PERF][MEDIA_RUNTIME] slow shared refresh total_ms=… worker_ms=…`. Its `worker_started` is stamped
-  inside the task after the task leaves the executor queue (`widgets/media_runtime.py:1000`), so it never includes
-  queue wait.
-
-**Decision.** Real saturation, the proven mechanism and the FIFO pool architecture are sufficient; no further operator
-reproduction is required. Constraints:
-
-- A separate, lazy, event-driven Media lane owned by the shared Media runtime owner, reusing `AffinityLaneScheduler`
-  machinery if suitable.
-- **Not** the WinRT observation lane: its teardown waits `lane.call(..., timeout=2.0)` on the same worker, where a
-  stuck WinRT await would fail the R-53 barrier.
-- **Not** a larger IO pool; **not** a polling fallback.
-- Generation-owned and explicitly stopped at owner retirement.
-- One-in-flight/one-pending and command de-dup unchanged; R-66 event authority unchanged.
-
-**Validation telemetry** (same slice, landed first so it provides the "before"): extend the existing per-category task
-counters (`tm_categories`, next to the pool-level wait already reported by `--usage`) with queue-wait total/max for
-`media_refresh` and the transport commands. Accumulate only while diagnostics are enabled; no timer, no polling, no
-new log line.
-
-**Bars.**
-- The two strict xfails flip.
-- `tests/test_media_runtime*.py` and the transport tests pass.
-- The lane is stopped and joined at owner retirement (R-30/R-53).
-- Physical: an offline/DNS-stalled start with network widgets enabled, pressing Play/Pause.
 
 ## Product rework (transition work, not runtime cleanup)
 

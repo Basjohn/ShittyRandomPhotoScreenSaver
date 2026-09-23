@@ -70,7 +70,6 @@ needs evidence before it is worth doing.
 | TX-02 | `[~]` Random rotation used persisted Settings as scratch space (2–6 `set()` + `save()` per rotation) **and overwrote the user-authored Slide/Wipe `direction`**; now session memory handed to the batch resolver (Random keeps randomizing direction, operator 2026-09-23) | P1 | R2 | Medium | landed; physical check open | source + measured 1.9 ms idle |
 | PR-01 | `[~]` Every visualizer publication (~90 Hz) re-resolved presentation (≈49 µs) and rewrote ~25 QML root properties + 3 QColors even when nothing changed; no-op projection now skipped (20.4 → 4.0 µs/publication idle) | P1 | R2 | Low | landed; physical check open; resolve memo **Park** | measured + CHK27 + soak |
 | LC-06 | `[~]` `get_default_settings()` rebuilt all canonical defaults (≈5.5 ms) per call on context-menu open (×2), image batches and per widget × display construction; now built once per profile, hot paths read sections | P1 | R2 | Low | landed; physical check open | measured |
-| PW-02 | `[~]` Media refresh (play/pause truth) and transport commands shared the FIFO 4-worker IO pool with network work (soak: ≈1.9 s pool queue wait in the startup burst); now on the shared Media owner's dedicated `media` lane, plus per-category queue-wait telemetry | P1 | R3 | Medium | landed; physical offline-start check open | fault injection + soak |
 | PR-04 | First Quick cycle after each transition end: ≈24.8 ms on the 4K Visualizer display (operator trace), 26.6–90.6 ms across ten soak endings; Qt's straight-alpha conversion is 8.12 ms of the idle case | P1 | R3 | Medium | Stage A `[~]` landed (partial mitigation; frame trace open); Stage B **Gated** on a Qt lifetime test | frame traces + probe + soak |
 | VZ-01 | `[~]` While paused, the BeatEngine synthesized a 256-sample sine waveform every tick for every mode; now only when Oscilloscope is active (paused tick 150.6 → 36.4 µs for other modes) | P2 | R2 | Medium | landed; physical paused/edge check open | measured |
 | PW-01 | `[~]` Every GSMTC timeline edge re-read the whole album-art thumbnail; timeline-only refreshes now reuse held artwork for the same track (soak: `artwork_reused=1196` of 1,222 event refreshes) | P2 | R2 | Low | landed; visible artwork checks open | log-measured + soak |
@@ -87,7 +86,8 @@ needs evidence before it is worth doing.
 | ST-01 | `DisplayManager` is a 4.9k-line owner of ~12 concerns | P3 | R1 | Medium | **Park** (move-only on a touched seam) | source |
 | DC-04 | Guardrail vs source conflict: per-frame `frameSwapped` Python callback (PR-02) | P3 | R1 | Low | documented; fixed only when PR-02 reopens | source |
 
-Closed: LC-01, PR-05, PW-06 and the prefetch double batch (08 §Closed; 06 §Considered and rejected). Crumble and Melt
+Closed: LC-01, PR-05, PW-06 and the prefetch double batch (08 §Closed; 06 §Considered and rejected). Accepted and
+removed: PW-02 (2026-09-23; durable rule in Spec §State/actions). Crumble and Melt
 control rework is transition product work (`Docs/Future_Work/Transition_Expansion.md`), not a register item.
 
 ## Sequencing
