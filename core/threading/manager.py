@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, Future, wait as wait_futures
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
+import shiboken6
 from PySide6.QtCore import QTimer, QObject, QThread, QCoreApplication, Signal, Qt
 from core.logging.logger import (
     get_logger,
@@ -378,9 +379,26 @@ class _GapTrackedTimer(QTimer):
     new expected period. Measuring the next fire from the previous *natural*
     fire instead reported manual rotation rebases and pause/resume as UI-thread
     stalls (R-87's 172,987 ms ``_on_rotation_timer`` warnings).
+
+    ``deleteLater()`` releases the callback payload *before* queuing deletion.
+    The callback usually holds the timer's parent (its owner) strongly; left to
+    the deferred delete, the last owner reference would drop inside the timer's
+    own C++ destructor, so the owner's destructor would delete this
+    half-destroyed child again (a native abort in the next nested event loop).
     """
 
     _srpss_gap_epoch_reset: Optional[Callable[[], None]] = None
+    _srpss_release_callback: Optional[Callable[[], None]] = None
+
+    def deleteLater(self) -> None:  # noqa: N802 - Qt override
+        release = self._srpss_release_callback
+        self._srpss_release_callback = None
+        if release is not None:
+            release()
+        # Releasing the callback may have dropped the owner's last reference,
+        # and deleting the owner deletes this child with it.
+        if shiboken6.isValid(self):
+            super().deleteLater()
 
     def _reset_gap_epoch(self) -> None:
         reset = self._srpss_gap_epoch_reset
@@ -1711,6 +1729,9 @@ class ThreadManager:
                 "Cannot schedule a recurring timer without a live Qt event loop"
             )
         _last_invoke_ts = [0.0]
+        # One mutable holder so terminal retirement can drop the callback (and
+        # the owner it usually holds) synchronously; see _GapTrackedTimer.
+        callback_payload = {"func": func, "args": args, "kwargs": kwargs}
         timer_desc = description
         if not timer_desc:
             try:
@@ -1722,6 +1743,9 @@ class ThreadManager:
         timer_ref: list[Optional[QTimer]] = [None]
 
         def _invoke():
+            target = callback_payload["func"]
+            if target is None:
+                return
             try:
                 now = time.time()
                 if _last_invoke_ts[0] > 0.0:
@@ -1745,10 +1769,13 @@ class ThreadManager:
                             timer_desc,
                             gap_ms,
                             active_interval_ms,
-                            _describe_timer_callable_context(func),
+                            _describe_timer_callable_context(target),
                         )
                 _last_invoke_ts[0] = now
-                func(*args, **(kwargs or {}))
+                target(
+                    *callback_payload["args"],
+                    **(callback_payload["kwargs"] or {}),
+                )
             except Exception as e:
                 logger.exception("Recurring task raised: %s", e)
         
@@ -1759,6 +1786,21 @@ class ThreadManager:
         timer._srpss_owner_class = owner_class
         timer._srpss_owner_id = owner_id
         timer._srpss_gap_epoch_reset = lambda: _last_invoke_ts.__setitem__(0, 0.0)
+
+        def _release_callback() -> None:
+            callback_payload["func"] = None
+            callback_payload["args"] = ()
+            callback_payload["kwargs"] = {}
+            current = timer_ref[0]
+            timer_ref[0] = None
+            if current is not None and shiboken6.isValid(current):
+                try:
+                    current.stop()
+                    current.timeout.disconnect(_invoke)
+                except (RuntimeError, TypeError):
+                    pass
+
+        timer._srpss_release_callback = _release_callback
         timer_ref[0] = timer
         timer.setTimerType(Qt.TimerType.PreciseTimer)
         timer.timeout.connect(_invoke)
