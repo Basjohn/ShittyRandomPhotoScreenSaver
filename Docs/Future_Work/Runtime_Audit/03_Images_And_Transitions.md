@@ -88,8 +88,9 @@ session's last pick. Normalization repair writes (rare) are unchanged; existing 
       choice + direction anti-repeat), `test_qtquick_transition_request_resolution.py` (stale persisted `random_choice`
       ignored; direction override leaves authored value), `test_qtquick_h_cutover.py` (DisplayManager seam, Previous
       reuse), activation-admission tests.
-- [ ] Operator decision: should Random honour an explicitly authored fixed Slide/Wipe direction? (Today: always
-      random, as before. Honouring it is a one-line change in the engine's direction pick.)
+- [x] Operator decision (2026-09-23): "Random should be random" — Random mode keeps randomizing the Slide/Wipe
+      direction regardless of the authored value (current behaviour, no change); `Random` direction randomizes in
+      manual mode too.
 - [ ] Physical: Random rotation across two displays still shares one transition + direction per batch; manual cycle
       (C) and context-menu transition selection unchanged; Settings shows the authored Slide/Wipe direction after a
       Random session.
