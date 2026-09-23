@@ -129,6 +129,17 @@ class QuickDisplayUnit:
         _x, _y, width, height = self._runtime.display_identity.geometry
         return OverlayWidgetGeometry(0.0, 0.0, float(width), float(height))
 
+    def transition_logical_size(self) -> tuple[float, float]:
+        """Logical size transition renderers draw at: the background item's size.
+
+        The R-63 compatibility window is deliberately larger than
+        ``display_bounds``; geometry prepared ahead of a run keys on this size so
+        it matches what the render thread asks for.
+        """
+
+        item = self._runtime.scene_controller.background_item
+        return float(item.width()), float(item.height())
+
     def bind_families(
         self,
         *,
