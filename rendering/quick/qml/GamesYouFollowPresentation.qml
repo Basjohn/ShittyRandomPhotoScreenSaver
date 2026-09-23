@@ -364,18 +364,37 @@ OverlayWidget {
                         horizontalAlignment: Text.AlignHCenter
                     }
                 }
+                // Artwork-frame contract: the image sits inside the outline's
+                // stroke on a concentric rounded mask; the outline paints on top.
+                readonly property real artInset: followsRoot.scaleAwareStrokeWidth(0.9)
                 ArtworkFadeImage {
                     objectName: "followedStoryArtwork" + storySlot
                     parent: tileFrame
                     z: 2
                     visible: tile.showArt
-                    x: tile.artX
-                    y: 8.0
-                    width: tile.artWidth
-                    height: Math.max(0.0, tile.height - 16.0)
+                    x: tile.artX + tile.artInset
+                    y: 8.0 + tile.artInset
+                    width: Math.max(0.0, tile.artWidth - 2.0 * tile.artInset)
+                    height: Math.max(0.0, tile.height - 16.0 - 2.0 * tile.artInset)
                     source: tile.showArt && storyArtwork.length > 0 ? storyArtwork : ""
                     fillMode: followedModel.artworkShape === "portrait"
                         ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+                    layer.enabled: tile.showArt && storyArtwork.length > 0
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: storyArtworkMask
+                    }
+                }
+                Rectangle {
+                    id: storyArtworkMask
+                    parent: tileFrame
+                    x: tile.artX + tile.artInset
+                    y: 8.0 + tile.artInset
+                    width: Math.max(0.0, tile.artWidth - 2.0 * tile.artInset)
+                    height: Math.max(0.0, tile.height - 16.0 - 2.0 * tile.artInset)
+                    radius: Math.max(0.0, 4.0 - tile.artInset)
+                    visible: false
+                    layer.enabled: tile.showArt && storyArtwork.length > 0
                 }
                 // The image itself covers the fallback's original stroke; an
                 // independent semantic outline stays on top of both surfaces.
@@ -472,6 +491,16 @@ OverlayWidget {
                     ? tile.inlineW * tile.inlineCount + inlineGap * (tile.inlineCount - 1) : 0.0
                 readonly property real inlineX: followsRoot.headerFlipped
                     ? tile.textX + tile.textW - tile.inlineRailW : tile.textX
+                readonly property real inlineInset: followsRoot.scaleAwareStrokeWidth(0.9)
+                Rectangle {
+                    id: inlineArtworkMask
+                    parent: tileFrame
+                    width: Math.max(0.0, tile.inlineW - 2.0 * tile.inlineInset)
+                    height: Math.max(0.0, tile.inlineH - 2.0 * tile.inlineInset)
+                    radius: Math.max(0.0, 3.0 - tile.inlineInset)
+                    visible: false
+                    layer.enabled: tile.showInline
+                }
                 Rectangle {
                     objectName: "followedStoryInlineContactShadow1" + storySlot
                     parent: tileFrame
@@ -503,10 +532,16 @@ OverlayWidget {
                     Image {
                         objectName: "followedStoryInlineImage1" + storySlot
                         anchors.fill: parent
+                        anchors.margins: tile.inlineInset
                         source: parent.visible ? storyInlineArtwork1 : ""
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         cache: true
+                        layer.enabled: parent.visible && storyInlineArtwork1.length > 0
+                        layer.effect: MultiEffect {
+                            maskEnabled: true
+                            maskSource: inlineArtworkMask
+                        }
                     }
                     Rectangle {
                         anchors.fill: parent
@@ -547,10 +582,16 @@ OverlayWidget {
                     Image {
                         objectName: "followedStoryInlineImage2" + storySlot
                         anchors.fill: parent
+                        anchors.margins: tile.inlineInset
                         source: parent.visible ? storyInlineArtwork2 : ""
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         cache: true
+                        layer.enabled: parent.visible && storyInlineArtwork2.length > 0
+                        layer.effect: MultiEffect {
+                            maskEnabled: true
+                            maskSource: inlineArtworkMask
+                        }
                     }
                     Rectangle {
                         anchors.fill: parent
@@ -591,10 +632,16 @@ OverlayWidget {
                     Image {
                         objectName: "followedStoryInlineImage3" + storySlot
                         anchors.fill: parent
+                        anchors.margins: tile.inlineInset
                         source: parent.visible ? storyInlineArtwork3 : ""
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         cache: true
+                        layer.enabled: parent.visible && storyInlineArtwork3.length > 0
+                        layer.effect: MultiEffect {
+                            maskEnabled: true
+                            maskSource: inlineArtworkMask
+                        }
                     }
                     Rectangle {
                         anchors.fill: parent

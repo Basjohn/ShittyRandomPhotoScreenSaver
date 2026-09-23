@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 
 OverlayWidget {
     id: feedRoot
@@ -426,13 +427,30 @@ OverlayWidget {
                         radius: 3.0
                         clip: true
                         color: "transparent"
+                        // Artwork-frame contract: inside the outline's stroke on a
+                        // concentric rounded mask; the outline paints on top.
+                        readonly property real imageInset: feedRoot.scaleAwareStrokeWidth(0.75)
                         Image {
                             objectName: "feedListArtwork" + index
                             anchors.fill: parent
+                            anchors.margins: listArtworkFrame.imageInset
                             source: parent.visible ? feedImageSource : ""
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             cache: true
+                            layer.enabled: listArtworkFrame.visible
+                            layer.effect: MultiEffect {
+                                maskEnabled: true
+                                maskSource: listArtworkMask
+                            }
+                        }
+                        Rectangle {
+                            id: listArtworkMask
+                            anchors.fill: parent
+                            anchors.margins: listArtworkFrame.imageInset
+                            radius: Math.max(0.0, listArtworkFrame.radius - listArtworkFrame.imageInset)
+                            visible: false
+                            layer.enabled: listArtworkFrame.visible
                         }
                         Rectangle {
                             anchors.fill: parent
@@ -668,13 +686,30 @@ OverlayWidget {
                         radius: 3.0
                         clip: true
                         color: "transparent"
+                        // Artwork-frame contract: inside the outline's stroke on a
+                        // concentric rounded mask; the outline paints on top.
+                        readonly property real imageInset: feedRoot.scaleAwareStrokeWidth(0.75)
                         Image {
                             objectName: "feedGridArtwork" + index
                             anchors.fill: parent
+                            anchors.margins: gridArtworkFrame.imageInset
                             source: parent.visible ? feedImageSource : ""
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             cache: true
+                            layer.enabled: gridArtworkFrame.visible
+                            layer.effect: MultiEffect {
+                                maskEnabled: true
+                                maskSource: gridArtworkMask
+                            }
+                        }
+                        Rectangle {
+                            id: gridArtworkMask
+                            anchors.fill: parent
+                            anchors.margins: gridArtworkFrame.imageInset
+                            radius: Math.max(0.0, gridArtworkFrame.radius - gridArtworkFrame.imageInset)
+                            visible: false
+                            layer.enabled: gridArtworkFrame.visible
                         }
                         Rectangle {
                             anchors.fill: parent

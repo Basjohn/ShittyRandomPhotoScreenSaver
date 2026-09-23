@@ -76,8 +76,8 @@ def test_friend_pulse_click_targets_have_obvious_white_hover_feedback():
     assert "gridAvatarHover.hovered" in grid_name and '? "white"' in grid_name
     assert 'color: rowGameHover.hovered ? "white"' in friend
     assert 'color: gridGameHover.hovered ? "white"' in friend
-    assert 'rowAvatarHover.hovered && rowAvatarHover.enabled\n                    ? "white"' in friend
-    assert 'gridAvatarHover.hovered && gridAvatarHover.enabled\n                        ? "white"' in friend
+    assert 'rowAvatarHover.hovered && rowAvatarHover.enabled\n                        ? "white"' in friend
+    assert 'gridAvatarHover.hovered && gridAvatarHover.enabled\n                            ? "white"' in friend
     # Semantic accent remains a resting/selected-state color, never the hover
     # transition itself. Neutral washes cover pin/menu/action targets.
     assert "rowAvatarHover.hovered ? 0.38 : 0.22" not in friend
