@@ -11,7 +11,10 @@ def test_media_mute_uses_the_transport_border_and_one_visible_frame():
     mute = qml[start:end]
     assert 'border.color: mediaRoot.mediaModel.controlsBorderColor' in mute
     assert 'systemMuteInnerBorderColor' not in mute
-    assert 'anchors.verticalCenterOffset: -2.0' in mute
+    # The border and glyph share the transport band's true geometric centre;
+    # the former -2.0 optical nudge must not stack on the authored translation.
+    assert 'anchors.verticalCenter: parent.verticalCenter' in mute
+    assert 'verticalCenterOffset' not in mute
     assert 'canonicalSystemMuteHeight * fitScale' in mute
     assert '* 0.54675' in qml
     assert 'id: systemMuteTap' in qml
