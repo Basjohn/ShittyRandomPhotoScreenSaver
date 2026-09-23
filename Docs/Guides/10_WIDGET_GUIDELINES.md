@@ -75,7 +75,7 @@ No extra accelerated widget window. No `QQuickWidget`.
 
 ### Current consumers of this guide
 
-- **System audio OSD:** independent opt-in presentation of the existing shared GUI-apartment Core Audio source; no endpoint poll, per-display callback, alternative window or second source. See [current OSD reference](../Reference/System_Volume_OSD.md).
+- **System audio OSD:** independently enabled (on by canonical default) presentation of the existing shared GUI-apartment Core Audio source; no endpoint poll, per-display callback, alternative window or second source. See [current OSD reference](../Reference/System_Volume_OSD.md).
 - **Games You Follow:** linked followed-set membership through the existing Steam credential owner, one generation-shared source/lease/deadline, retained news tiles and four stable grouped CUSTOM roles with independent X/Y and flip. The first complete scan is durable; post-coverage maintenance updates at most eight apps per admitted session. See [current product reference](../Reference/Steam_Games_You_Follow.md).
 - **FEEDS Custom 1:** one admitted retained RSS/Atom widget on the shared source owner, with independent X/Y `content_extent`, shared `BrandedHeader`, and stable `header`/`refresh`/`articles`/repeated `artwork`/`overflow` child roles. Image-less rows are valid content, and repeated artwork shares one geometry record rather than persisting article IDs. See [current Feeds reference](../Reference/Feeds.md).
 

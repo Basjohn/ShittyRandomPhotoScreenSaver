@@ -244,6 +244,7 @@ def test_default_adapter_set_covers_every_wired_family_without_qt() -> None:
         "weather",
         "media",
         "reddit",
+        "feeds",
         "gmail",
         "steam",
         "steam",
@@ -384,7 +385,8 @@ def test_every_admitted_family_reports_a_real_preferred_size(qt_app) -> None:
             "abandonment_issues": {"enabled": True},
         }
         built = binder.bind(config)
-        # Every family got admitted and built.
+        # Every family got admitted and built. The System Volume OSD is enabled
+        # by canonical default (5.0.4 RC), so it is admitted without config.
         assert set(built) == {
             "clock",
             "weather",
@@ -394,6 +396,7 @@ def test_every_admitted_family_reports_a_real_preferred_size(qt_app) -> None:
             "gmail",
             "achievement_pulse",
             "abandonment_issues",
+            "system_audio_osd",
         }
         for widget_id in built:
             presentation = host.presentation_for_model_identity(widget_id)
