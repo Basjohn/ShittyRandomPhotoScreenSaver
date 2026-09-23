@@ -106,6 +106,18 @@ Work prepared off the render thread for a renderer (for example `run_geometry` k
 
 Wallpaper pixels are opaque. The image-processing owners composite transparent source pixels over opaque black — the ImageWorker prescale right after decode (every display mode) and the in-process `AsyncImageProcessor` (every branch, including FILL perfect fit). The retained native background therefore labels its `QImage` `Format_RGBA8888_Premultiplied` and creates the texture `TextureIsOpaque`; for opaque pixels that is byte-identical to straight RGBA and spares Qt a full per-upload straight→premultiplied conversion (runtime audit PR-04: 8.1 → 0.15 ms blocking at 4K). Never route non-opaque pixels into the wallpaper path, never relabel straight alpha as premultiplied, and do not blanket-convert inside the generic `capture_qimage` boundary. The native branch wraps the `PresentationImage` bytes without a deep copy and the node keeps that `PresentationImage` for as long as its texture exists: Qt reads the bytes on the render thread after `updatePaintNode` returns (`tests/test_qtquick_native_image_lifetime.py`). Never drop that ownership or reintroduce a per-change deep copy.
 
+### Presentation texture ownership (PR-04 native handoff)
+
+`PresentationTextureHost` is the only owner and deleter of presentation GL textures. The retained native background may
+borrow a resident texture only through `lend` and must `reclaim` it after `setTexture` has deleted the wrapper; a
+transition that ends retires with `release(keep_lent=True)`, and only a full `release` (the subtree is being torn down,
+context current) deletes lent textures. A `QSGTexture` made by `native_texture_bridge.wrap_gl_texture` never owns the GL
+name. Never add a second deletion registry, never delete a lent name while a wrapper can render it, never adopt across
+displays or sizes (`lend` checks identity and pixel size), and never let a fallback upload go unattributed
+(`native_background_*` telemetry). The bridge calls only Qt's exported `QSGOpenGLTexture::fromNative` on the loaded
+`Qt6Quick` module; do not widen it into a native presentation layer. No PySide release binds texture adoption, so a
+PySide upgrade is not a route to removing the bridge.
+
 ## Visualizer preset / technical-settings authority guardrail
 
 Technical settings are ordinary Visualizer settings with shared usefulness, **not** a higher-priority authority above presets.

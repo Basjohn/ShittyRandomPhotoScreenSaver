@@ -43,42 +43,6 @@ Python after readiness settles; physical cold start crossfade, Settings round-tr
 
 ---
 
-## PR-04 — Transition finalization re-uploads the destination image · P1 · R3 · Risk Medium
-
-**Mechanism (after Stages A and B).** At transition start the custom node uploads the destination with
-`glTexImage2D` (`render/image_textures.py`). When the run finalizes, the destination becomes the retained base image
-and the native branch (`render/background_image_node.py`) wraps the same `PresentationImage` bytes in a `QImage` (no
-copy since Stage B) and `createTextureFromImage` uploads those pixels a second time.
-
-**Evidence — 2026-09-23 19:29–19:35 `--frame-trace`, 16 transition endings per display over three runtime
-generations**, pairing each run's last custom render with the next Quick render cycle on the same screen:
-
-| Screen | Median cycle | First cycle after an end | Sync | Render pass |
-| --- | ---: | ---: | ---: | ---: |
-| 1 — 3840×2160, Visualizer | 7.0 ms | 13.5–24.8 ms (median 19.3) | 0.33–1.53 ms | median 15.3 ms (6.2 normal), max 21.1 |
-| 0 — 2560×1440 | 2.1 ms | 1.7–7.6 ms (median 3.3) | median 0.69 ms | ≈0.1 ms; +1.2 ms before the pass |
-
-Stage B removed the ≈4.6 ms deep copy from sync. The 33 MB re-upload remains; on the Visualizer display its stall
-materialises inside the render pass (≈9–13 ms above a normal cycle). Earlier evidence: 24.7–24.8 ms before Stage A;
-26.6–90.6 ms in the D1 soak under external GPU load (not directly comparable).
-
-**Stages A and B are accepted** (00 §Accepted).
-
-**Native zero-re-upload handoff — admitted 2026-09-23 as a bounded investigation and prototype.** Goal: the retained
-background adopts the transition's destination GL texture instead of uploading the same pixels again. Gates, in order:
-API feasibility on the pinned Qt/PySide stack (PySide 6.9.1 binds none of `QSGOpenGLTexture::fromNative`,
-`QRhiTexture.createFrom`, `QRhiTexture.nativeTexture`); one authoritative ownership transfer inside the existing
-texture host (no second deletion registry); pixel/geometry parity with Stage B; GL state and context legality (CHK26
-and R-87 untouched); packaging durability in the Nuitka build; measured removal of the duplicate upload. Stage B stays
-the reference and the attributed fallback until the native route passes all gates; if it cannot demonstrate safe
-ownership, substantial benefit and durable packaging, PR-04 parks at Stage B.
-
-**Must remain true.** R-60 texture identity (one DPR owner, no rekey), R-50 byte-bounded retention and
-release-on-owner-context, R-63 no black flash, CHK21 steady native ownership, CHK26 inherited-state optimization;
-ordinary opaque images render identically.
-
----
-
 ## PR-07 — Eager compile of every family QML component at startup · P3 · R1 · Risk Low · Parked
 
 `QuickSceneFactory.__init__` (`scene_controller.py:219-234`) compiles all 12 registered family components.

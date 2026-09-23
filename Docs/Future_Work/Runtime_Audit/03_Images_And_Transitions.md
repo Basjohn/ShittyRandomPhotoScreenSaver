@@ -20,6 +20,5 @@ R-51 (per-context GL ownership), Defaults_Canonical_Schema_Dedup (one canonical 
 
 ## Cross-reference
 
-- PR-04 (transition-end native re-copy/re-upload) lives in 01 because its owner is the retained background node.
 - Crumble complexity/debris and Melt gloss/detail strength are transition product work, owned by
   `Docs/Future_Work/Transition_Expansion.md` §Control rework, not by this audit.

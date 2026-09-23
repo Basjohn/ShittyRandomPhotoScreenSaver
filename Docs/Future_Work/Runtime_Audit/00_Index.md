@@ -1,11 +1,6 @@
 # Runtime Audit 2026-09-22 — Index, Register and Sequencing
 
-**Status:** the implementation queue was accepted on 2026-09-23 (operator run 19:29–19:35 with `--frame-trace`,
-earlier physical runs and automated bars; see §Accepted). Still open: the PR-04 native texture-handoff investigation
-(admitted 2026-09-23 as a bounded prototype, 01/08) plus the watched and parked items below. Items leave this folder
-when they are implemented and accepted (the durable rule moves to its owning contract/guardrail, the failed-method
-lesson to `Docs/Historical_Bugs/`), or when they are closed (recorded in 06 §Considered and rejected so they are not
-re-audited). Once PR-04 is decided the folder is historicalised. This is a live checklist, not a changelog.
+**Status:** the implementation queue was accepted on 2026-09-23 (operator run 19:29–19:35 with `--frame-trace`, earlier physical runs and automated bars) and PR-04's native texture handoff on 2026-09-24 (operator run 23:47 with `--frame-trace` plus a frozen-build probe); see §Accepted. Only the watched and parked items below remain. Items leave this folder when they are implemented and accepted (the durable rule moves to its owning contract/guardrail, the failed-method lesson to `Docs/Historical_Bugs/`), or when they are closed (recorded in 06 §Considered and rejected so they are not re-audited). The folder is historicalised once the watched and parked items are closed or moved to a backlog. This is a live checklist, not a changelog.
 
 **Baseline audited:** `main` at `2ba9e15d` (5.0.5 FEEDS WORK v2). Performance reference remains CHK26 /
 `a0bf70932c` (Index.md). Every claim below cites exact current source; numbers are measured unless marked
@@ -67,7 +62,6 @@ needs evidence before it is worth doing.
 
 | ID | Finding | Pri | Reward | Risk | Decision / status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| PR-04 | The first Quick cycle after a transition ends re-uploads the whole destination image: 13.5–24.8 ms (median 19.3 ms) on the 3840×2160 Visualizer display against a 7.0 ms median cycle (2026-09-23 19:29 trace, 16 endings); the stall lands in the render pass | P1 | R3 | Medium | Stages A and B accepted; zero-re-upload native handoff admitted as a bounded investigation/prototype (08) | frame traces + probes |
 | PW-04 | `FeedRowsModel.replace_rows` resets the whole list when one row changes | P3 | R1 | Low | **Watch** — FEEDS Custom 2–4 | source + soak |
 | PR-02 | Ordinary runtime connects `frameSwapped` to a queued per-frame GUI Python callback (≈0.5 ms/s) | P2 | R1 | Low–Med | **Park** (with DC-04) | source + soak |
 | PR-01 memo | Presentation re-resolve per publication (47.6 µs) | P3 | R1 | Low | **Park** | measured |
@@ -93,6 +87,7 @@ Each row keeps only what traces a future issue back to the change.
 | PR-03 | Background telemetry notes without dataclass `replace()` | `e80336c9` | telemetry tests | trace: background render normal |
 | PR-04 A | Opaque wallpaper pixels at both processing owners; premultiplied native label | `8541cb82` | Guardrails §Wallpaper pixel opacity; `tests/test_wallpaper_opaque_pixels.py` | operator: no black flash; transparent sources are an automated contract |
 | PR-04 B | Native `QImage` wraps the presentation bytes (no deep copy) | `48b11565` | `tests/test_qtquick_native_image_lifetime.py` | trace: first post-transition sync 0.33–1.53 ms (was ≈4.6 ms) |
+| PR-04 native | The retained background adopts the transition's destination GL texture through Qt's exported `QSGOpenGLTexture::fromNative` (ctypes on the loaded `Qt6Quick`; no PySide release binds it, no compiled helper); the texture host stays the only owner/deleter (lend/reclaim) and the next run reuses it as its source | `e744d119` | Guardrails §Presentation texture ownership; `tests/test_qtquick_native_texture_handoff.py`, `tests/test_qtquick_native_texture_handoff_gl.py` (real GL; six reintroduced ownership faults each caught) | 23:47 trace: first cycle after a transition end on the 4K Visualizer display 3.3–11.1 ms (median ≈7; was median 19.3), 26 of 26 completed runs adopted, no fallback; frozen Nuitka probe: adoption, deletion by identity, pixel parity with Stage B, GL state untouched, one `qt6quick.dll` |
 | PW-01 | Timeline-only Media refreshes reuse the held artwork | `aa57c284` | Media refresh tests | run: `artwork_reused` 43 of 47 event refreshes, track changes |
 | PW-02 | Media refresh and commands on a dedicated `media` lane | `a8e38012`, `468ec0cc` | Spec §Media lane; R-93 | operator offline/network-stress run |
 | PW-03 Clock | Clock ticks notify only the time epoch | `e8ef729c` | clock presentation tests | run: clock on screen throughout |
@@ -103,11 +98,11 @@ Each row keeps only what traces a future issue back to the change.
 | VZ-05 | Render fields frozen once per tick | `99a94a21` | tick tests | soak |
 
 Defects this audit found are recorded as R-89 (cross-file native abort), R-90 (Core Audio double release), R-91
-(orphaned workers), R-92 (TX-02) and R-93 (PW-02).
+(orphaned workers), R-92 (TX-02), R-93 (PW-02) and R-95 (TX-01's prepared geometry never matched under R-63 overscan; found in the 23:47 trace).
 
 ## Sequencing
 
-`Current_Plan.md` owns the order of the remaining slice (PR-04 native handoff, gated as described in 08).
+No implementation slice remains; watched and parked items keep their triggers (08).
 
 ## Acceptance lanes used by this audit
 

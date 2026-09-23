@@ -1,14 +1,14 @@
 # R-91 — Worker Processes Outlived A Crashed UI Process
 
 Date: 2026-09-23  
-Status: FIXED IN CODE — `e42fb948`; installed End-task check open (`Current_Plan.md`)
+Status: SOLVED — `e42fb948`; validated on a frozen Nuitka build 2026-09-24
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 ## Observed Failure
 
@@ -30,6 +30,10 @@ on each empty poll and exits cleanly.
 
 `tests/test_worker_parent_death.py` — an intermediate parent `os._exit()`s; the real worker process must
 disappear.
+
+## Validation
+
+2026-09-24, frozen Nuitka build of the fix: a parent that owned a live worker died through `os._exit(3)` (no `atexit`, no multiprocessing finalizers) and the worker exited on its own 0.20 s later.
 
 ## Guardrail
 

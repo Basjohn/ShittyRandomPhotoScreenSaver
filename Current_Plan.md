@@ -56,19 +56,16 @@ The independent fragment and particle minimum-energy settings are implemented wi
 
 Transition terminalization, Visualizer owner retirement and shared Core Audio callback retirement are accepted current contracts guarded by source/tests and `Docs/Guardrails.md`; they are not active-plan tasks unless a concrete regression reopens them.
 
-## Runtime audit 2026-09-22 | accepted 2026-09-23; PR-04 native handoff open
+## Runtime audit 2026-09-22 | accepted 2026-09-23/24
 
 `Docs/Future_Work/Runtime_Audit/` holds the register (00, including the accepted-items table with commits and closing evidence), item detail (01–05), structure and the considered-and-rejected list (06), historical-bug constraints (07) and the open-item evidence (08). The whole admitted queue (TX-01/02, LC-05/06, PR-01/03, PR-04 Stages A+B, PW-01/02/03-Clock/05, VZ-01/03/04/05) is accepted from the 2026-09-23 19:29–19:35 run, earlier physical runs and automated bars; the 19:29 trace also exposed and closed a TX-01 duplicate Glass geometry build.
 
-- [ ] **PR-04 native texture handoff (admitted 2026-09-23, bounded investigation/prototype).** Adopt the transition's destination GL texture as the retained background instead of re-uploading the same 33 MB (19:29 trace: first post-transition cycle median 19.3 ms on the 4K Visualizer display vs 7.0 ms normal). Slices: API feasibility on the pinned stack → one ownership transfer in the existing texture host → minimal native proof outside production → pixel/geometry/lifetime/GL-state/packaging proof → production integration with an attributed Stage-B fallback → frame-trace proof that the duplicate upload is gone. Park at Stage B if safe ownership, substantial gain or durable packaging cannot be shown. Detail and gates: Runtime_Audit 01 §PR-04.
 - Watch: PW-04 Feed model reset (trigger: FEEDS Custom 2–4 physical testing shows delegate/artwork churn). Parked: PR-02 (DC-04 stays documented), PR-01 resolve memo, PR-07, ST-01/02, VZ-05 epoch cache, VZ-07. Closed: LC-01, PR-05, PW-06, PW-03 Media, the prefetch double batch.
 
 ## Known failing tests and anomalies (tracked until resolved)
 
 Pre-existing reds and runtime anomalies found while gating the runtime audit. Each stays here until fixed or explicitly retired; do not treat them as noise in a gate.
 
-- [x] **Core Audio double release (R-90).** Closed 2026-09-23: `QueryInterface` fix (`50052050`), the de-stubbed fake-COM bar, and a native test on the real endpoint (`tests/test_core_audio_native_rebind.py`: 25 rebinds — the default-output-device path — plus retirement and GC in a subprocess; it fails on the old `ctypes.cast` code). The 19:29 run's two Settings replacements recorded no native fault.
-- [~] **Worker processes outlived a crashed UI process (R-91).** Fixed (`e42fb948`); the real process-level bar `tests/test_worker_parent_death.py` kills the parent without SHUTDOWN and requires the worker to exit. Remaining: confirm on a frozen Nuitka build that includes the fix (the existing release builds predate it); runs with the next build made for PR-04 — no operator action.
 - [ ] **Spectrum extreme-viewport smoothness (pre-existing, not an audit regression).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Pre-dates the audit; do not reopen VZ-04 over it. Watch item until investigated separately.
 - Evidence runs: 2026-09-22 22:53–22:59 — no native fault; the replacement-construction watchdog armed 13× and never fired. 2026-09-23 D1 soak 09:07–10:40 — no native fault, no QML message, watchdog armed 6× and never fired; one `viz_geometry_mismatches` increment at 10:38:32, which is the fail-closed stale-presentation guard working, not a defect. 2026-09-23 16:53–17:06 acceptance run (two processes, each with a Settings round-trip) — no native fault, replacement watchdog never fired. Note: starting a new `--frame-trace` session replaces the previous session's trace segments; copy them first when a trace must survive a restart.
 
