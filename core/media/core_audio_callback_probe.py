@@ -35,7 +35,6 @@ class CoreAudioCallbackProbe:
         if self._device_callback is not None:
             return True
         # Dependencies are deliberately imported only upon explicit B0 start.
-        from ctypes import POINTER, cast
         from comtypes import CLSCTX_ALL, COMObject
         from pycaw.pycaw import (AudioUtilities, IAudioEndpointVolume,
                                  IAudioEndpointVolumeCallback, IMMNotificationClient)
@@ -106,7 +105,12 @@ class CoreAudioCallbackProbe:
             devices = AudioUtilities.GetSpeakers()
             if devices is not None:
                 interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-                endpoint = cast(interface, POINTER(IAudioEndpointVolume))
+                # QueryInterface, never ctypes.cast: cast shares the raw COM
+                # pointer without AddRef and ties the source into a ctypes
+                # reference cycle, so dropping the endpoint freed the object and
+                # a later GC released it again (access violation on retire/rebind).
+                endpoint = interface.QueryInterface(IAudioEndpointVolume)
+                del interface
                 volume_callback = VolumeCallback()
                 endpoint.RegisterControlChangeNotify(volume_callback)
                 self._endpoint = endpoint
