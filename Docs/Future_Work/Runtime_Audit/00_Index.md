@@ -79,7 +79,7 @@ needs evidence before it is worth doing.
 | VZ-05 | `[~]` Capture re-froze every render field twice per tick; single-freeze landed (2.4× faster) | P2 | R1–R2 | Low | landed; epoch cache **Park** | measured + soak |
 | PR-02 | Ordinary runtime connects `frameSwapped` to a queued per-frame GUI Python callback that republishes unchanged readiness (≈0.5 ms/s in the soak) | P2 | R1 | Low–Med | **Park** (with DC-04) | source + measured + soak |
 | VZ-03 | `[~]` Tick phase breakdown (closure + dict + 9 timestamps) was recorded every tick though only read when perf-gated; now built only with `--perf` | P3 | R1 | Low | landed | source + measured |
-| VZ-04 | Every mode's logical frame copies and validates the 256-sample waveform (38.4 µs/tick) | P3 | R1 | Low–Med | **Do with care** (per-mode consumer bar, BTF lane) | measured |
+| VZ-04 | `[~]` Every mode's logical frame copied and validated the 256-sample waveform (38.4 µs/tick); now only declared sample consumers (Oscilloscope) | P3 | R1 | Low–Med | landed; BTF Layer 4 open | measured |
 | PW-03 | Family models notify 30–67 properties through one `stateChanged`; `[~]` Clock now splits a per-second `timeChanged` from its config/style epoch (tick 0.6 ms → 49 µs) | P3 | R1 | Low | Clock landed, physical check open; Media **Watch** | measured + soak |
 | LC-05 | `[~]` Context-menu entries were refreshed *after* the menu was shown (6.6 ms median); now refreshed before `open_at()` | P3 | R1 | Low | landed; physical check open | source + measured |
 | PW-04 | `FeedRowsModel.replace_rows` skips equal rows but resets the whole list when one row changes | P3 | R1 | Low | **Watch** — FEEDS Custom 2–4 | source + soak |

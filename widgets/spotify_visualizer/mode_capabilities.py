@@ -46,6 +46,12 @@ _IDLE_SELF_ANIMATING = frozenset(
 # source frame at all.
 _PRESENTATION_OWNED_IDLE = frozenset({"spectrum"})
 
+# Modes whose renderer draws the waveform *samples*. Every other mode carries an
+# empty sample payload (no per-tick copy/validation) and no paused idle
+# synthesis. The waveform count and generation are separate authority: they
+# stay live for every mode (Sine/line-mode readiness keys on the generation).
+_WAVEFORM_SAMPLE_CONSUMERS = frozenset({"oscilloscope"})
+
 
 def mode_key(mode: Any) -> str:
     """Normalize a mode name or mode-carrying widget attribute to its key."""
@@ -73,6 +79,12 @@ def has_presentation_owned_idle_scene(mode: Any) -> bool:
     """
 
     return mode_key(mode) in _PRESENTATION_OWNED_IDLE
+
+
+def consumes_waveform_samples(mode: Any) -> bool:
+    """True when the mode's renderer reads ``common.waveform`` samples."""
+
+    return mode_key(mode) in _WAVEFORM_SAMPLE_CONSUMERS
 
 
 def requires_authoritative_first_source(mode: Any) -> bool:
