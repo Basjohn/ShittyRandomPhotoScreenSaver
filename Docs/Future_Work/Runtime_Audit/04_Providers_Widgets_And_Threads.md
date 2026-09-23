@@ -2,7 +2,8 @@
 
 Owners audited: `widgets/*_runtime.py`, `core/media/media_controller.py`, `rendering/quick/widgets/*.py`,
 `widgets/{clock_ticker,overlay_timers}.py`, `core/threading/manager.py`, `core/process/supervisor.py`,
-`utils/image_prefetcher.py`, `sources/rss/*`.
+`utils/image_prefetcher.py`, `sources/rss/*`. (PW-06, the supervisor heartbeat, is closed: 06 §Considered and
+rejected.)
 
 **Binding:** R-66 (Media event ownership; no fast-poll fallback), R-84 (single-notify churn precedent; Toolhelp),
 R-83/R-29/R-40 (provider cadence authority), R-41 (thread ownership), R-88 (Edit churn), Spec §Last-good cache.
@@ -19,9 +20,9 @@ R-83/R-29/R-40 (provider cadence authority), R-41 (thread ownership), R-88 (Edit
 
 ---
 
-## PW-02 — Media truth and user media commands share a FIFO 4-worker IO pool with network work · P1 · R3 · Risk Medium
+## PW-02 — Media truth and user media commands share a FIFO 4-worker IO pool with network work · P1 · R3 · Risk Medium · Do with care
 
-**Evidence (source).** `ThreadManager` IO pool = 4 workers (`core/threading/manager.py:537`), a FIFO
+**Mechanism (source).** `ThreadManager` IO pool = 4 workers (`core/threading/manager.py:537`), a FIFO
 `ThreadPoolExecutor`; `TaskPriority` is passive metadata (Guardrails §Qt Quick states this explicitly). The same
 pool carries:
 
@@ -33,41 +34,49 @@ pool carries:
   Weather (10 s), RSS startup load (30 s), plus raw image prefetch decodes (`utils/image_prefetcher.py:390-398`)
   and System Stats samples.
 
-`requests`/`urllib` timeouts do not bound DNS resolution (`getaddrinfo` has no timeout); an offline or DNS-stalled
-start can pin all four workers for tens of seconds (`Current_Plan.md` already lists "native DNS/connect stall
-retirement" as an open FEEDS check). During that window Media refreshes and transport commands queue behind them:
-play/pause edges reach the Visualizer late (reactivity/latency is protected) and media keys can be silently dropped.
+`requests`/`urllib` timeouts do not bound DNS resolution (`getaddrinfo` has no timeout), so an offline or DNS-stalled
+start can pin all four workers for tens of seconds.
 
-**Evidence step first (no new runtime instrumentation).** A focused test with a real `ThreadManager`: occupy the
-four IO workers with blocking tasks, submit a Media refresh and a transport command, assert queue wait. Then a
-physical check: start offline with Reddit/Feeds/Gmail enabled and press Play/Pause.
+**Evidence.**
 
-**Candidate repair if confirmed.** Give Media its own serial lane using the existing lane infrastructure — the
-GSMTC session/subscriptions already live on a ThreadManager **affinity lane** (Spec §State/actions). Running refresh
-queries and commands on that same owner is cleaner ownership (no per-query `request_async()` manager on arbitrary IO
-threads) and removes head-of-line blocking without adding a generic executor. Alternatively bound network work with
-per-family slots. Do **not** "fix" by raising the IO worker count (hides the ownership problem) or by adding a
-Media poll.
+- Fault injection: `tests/test_media_io_starvation.py` saturates a real `ThreadManager` IO pool with four stalled
+  "network" tasks. A transport command via `WindowsGlobalMediaController._submit_command` and the activation refresh
+  via the shared `MediaRuntimeService` are both still queued after 0.42 s (strict xfails until fixed).
+- D1 soak (08): real shared-pool saturation in the startup burst. Queue wait max ≈60 ms at 09:07:52, ≈1,902 ms at
+  09:08:06 (total ≈8,238 ms; one task executing ≈11,416 ms), unchanged max by session end (total ≈9,439 ms over
+  2,639 tasks). Seven `media_refresh` tasks went through the pool in that burst, but waits are not attributed by
+  category and no Media command is known to have been pressed then — this is **not** an observed 1.9 s
+  Media-command latency.
+- Not evidence: the `[PERF][MEDIA_RUNTIME] slow shared refresh total_ms=… worker_ms=…` warning. `worker_started` is
+  stamped inside the task after it leaves the executor queue (`widgets/media_runtime.py:1000`), so it never includes
+  queue wait.
 
-**Must remain true.** R-66: native events feed the one shared owner; one in flight + one pending; watchdog unchanged;
-no fast-poll fallback. Command result authority stays with the shared owner (Spec §Media transport).
+**Decision (operator 2026-09-23): Do with care — Media-only lane admitted.** No further operator reproduction is
+required. Constraints:
 
-- [x] Fault-injection test written; result recorded. **Confirmed (2026-09-23):**
-      `tests/test_media_io_starvation.py` saturates a real `ThreadManager` IO pool with four stalled "network" tasks;
-      a transport command via `WindowsGlobalMediaController._submit_command` and the activation refresh via the shared
-      `MediaRuntimeService` are both still queued after 0.42 s (strict xfails until fixed).
-- **Candidate re-evaluated.** Running Media queries/commands on the existing WinRT observation affinity worker is
-  **rejected**: observation teardown waits only `lane.call(_teardown, timeout=2.0)` on that same single worker, while
-  a WinRT query may occupy it for its best-effort 2 s timeout or longer (WinRT awaits do not always honour
-  cancellation). A stuck query would then fail teardown during runtime replacement (R-53 barrier).
-- **Recommended repair (operator approval — adds one lazy, event-driven worker):** a Media-only serial lane owned by
-  the shared Media runtime owner (same `AffinityLaneScheduler` machinery, separate instance), generation-tagged and
-  stopped with the owner. Refresh queries and transport commands submit there; network providers keep the IO pool.
-  Existing one-in-flight/one-pending and command de-dup bound its queue; a stuck WinRT await blocks only Media (as it
-  blocks one IO worker today). Alternatives: reserve one IO worker for latency-critical categories (changes admission
-  semantics for every IO user), or raising the IO worker count (rejected: hides the ownership problem).
-- [ ] Operator: approve the Media-only lane; then flip the strict xfails, run `tests/test_media_runtime*.py` and
-      transport tests, and do the physical offline-start Play/Pause check.
+- one separate, lazy, event-driven Media lane owned by the shared Media runtime owner, reusing
+  `AffinityLaneScheduler` machinery if suitable; refresh queries and transport commands submit there; network
+  providers keep the IO pool;
+- **not** the WinRT observation lane: observation teardown waits only `lane.call(_teardown, timeout=2.0)` on that
+  single worker, while a WinRT query may occupy it for its best-effort 2 s timeout or longer (WinRT awaits do not
+  always honour cancellation), so a stuck query would fail teardown during runtime replacement (R-53);
+- **not** a larger generic IO pool (hides the ownership problem), **not** a polling fallback;
+- generation-owned and explicitly stopped at owner retirement;
+- one-in-flight/one-pending, command de-dup and R-66 observation/event authority unchanged; a stuck WinRT await then
+  blocks only Media (as it blocks one IO worker today).
+
+**Validation telemetry (same slice, first).** Extend the existing per-category task counters (`tm_categories`, next
+to the pool-level wait already reported by `--usage`) with queue-wait total/max for `media_refresh` and the transport
+commands, accumulated only while diagnostics are enabled; no timer, polling or new log line.
+
+**Must remain true.** R-66: native events feed the one shared owner; watchdog unchanged; no fast-poll fallback.
+Command result authority stays with the shared owner (Spec §Media transport). Media key capture/dispatch untouched
+(U-05).
+
+- [ ] Per-category queue-wait telemetry (before measurement on the current pool).
+- [ ] Media-only lane; flip the strict xfails; `tests/test_media_runtime*.py` and transport tests; lane stopped and
+      joined at owner retirement (R-30/R-53).
+- [ ] Physical: offline/DNS-stalled start with network widgets enabled, then Play/Pause and media transport.
 
 ---
 
@@ -100,58 +109,71 @@ decode). Refresh count is unchanged; `[MEDIA_EVENT] summary` now reports `artwor
 - [x] Bars in `tests/test_media_runtime.py`: timeline-only edge reuses without a read (fails without the fix),
       properties/playback always read, a timeline edge on a new track reads and decodes, no held artwork keeps
       reading (lazy thumbnail), collapsed pending edge scope.
+- D1 soak (08): `artwork_reused=1196` of 1,222 event refreshes over ≈92 minutes — the reuse works in real use.
 - [ ] Physical: track change, same-album next track, podcast/video providers, artwork fade.
 
 ---
 
-## PW-03 — One `stateChanged` notify for 30–67 properties per family model · P3 · R1 · Risk Low
+## PW-03 — One `stateChanged` notify for 30–67 properties per family model · P3 · R1 · Risk Low · Clock: Do with care
 
 **Evidence.** Properties sharing one notify signal: Media 67/84, Achievement Pulse 59/98, Abandonment 54/91,
 Gmail 44/51, Weather 36/38, Clock 33/34, Reddit 27/32, System Stats 24/41, Friend Pulse 23/59, Feeds 13/33.
 Clock emits every second (`rendering/quick/widgets/clock.py:646-657`) and Media on every refresh because the runtime
 revision always advances (`rendering/quick/widgets/media.py:943-996`, `widgets/media_runtime.py:664`). Each emission
-re-evaluates every binding on every property (Python getter calls on the GUI thread), not only the ones that changed.
-R-84 measured 75–94 ms stalls from the same single-notify shape on the context menu.
+re-evaluates every binding on every property. **Measured (2026-09-23):** one Clock emit costs 0.69–0.77 ms of GUI
+binding work with no value change. Soak Media summary: 1,207 timeline, 14 playback, 12 media_properties events in
+≈92 minutes.
 
-**Proposal (only after measuring).** Split high-rate content (Clock time/angles; Media title/position/state) from
-style/config notifies. Measure first with a QML binding-evaluation count or GUI event-loop timing around a Clock tick
-and a Media timeline edge; the per-tick cost is expected to be small.
+**Decision (operator 2026-09-23).**
 
-- [ ] Measured; decision recorded per family (Clock and Media first).
+- **Clock — Do with care**, as its own slice: split high-rate time/tick state from style/config state as a few
+  semantic epochs, not one signal per property. `customEditableChildRoles` stays independent of the new signals
+  (R-88); Edit/CUSTOM contracts unchanged.
+- **Media — Watch:** after the Clock pattern exists, measure one real Media timeline/playback edge; split only if the
+  binding saving is material.
+- No repository-wide "one notify per property" refactor.
 
----
-
-## PW-04 — `FeedRowsModel.replace_rows` resets the whole model on any change · P3 · R1 · Risk Low
-
-`rendering/quick/widgets/feeds.py:399-406` uses `beginResetModel/endResetModel`, so any refresh that changes one row
-retires every delegate and re-requests every local artwork `Image` (`asynchronous: true`). Reddit/Gmail/Steam
-update in place (`reddit.py:419-455`). Do this together with the FEEDS multi-source gate so Custom 2–4 inherit the
-in-place pattern.
-
-- [ ] In-place row diff + `dataChanged`; retained-delegate identity test; artwork not reloaded for unchanged rows.
+- [ ] Clock split with before/after measurement on a live Clock; Clock Edit/CUSTOM oracle tests unchanged.
 
 ---
 
-## PW-05 — Hand-rolled parentless deadline timers; `single_shot` has no cancel handle · P2 · R1 · Risk Low
+## PW-04 — `FeedRowsModel.replace_rows` resets the whole model when a row changes · P3 · R1 · Risk Low · Watch
 
-`widgets/feed_runtime.py:59-78` and `widgets/steam_followed_runtime.py:50-72` duplicate the same `_default_schedule`
+`rendering/quick/widgets/feeds.py:399-406` returns early when the new row tuple equals the current one, so unchanged
+refreshes do nothing. When even one row genuinely changes it calls `beginResetModel/endResetModel`, which retires every
+delegate and re-requests every local artwork `Image` (`asynchronous: true`). Reddit/Gmail/Steam update in place
+(`reddit.py:419-455`). The soak completed only 13 FEEDS IO tasks in ≈92 minutes, so this is not hot at current
+cadence.
+
+**Decision (operator 2026-09-23): Watch — not currently worth changing.** The structural issue exists, but no in-place
+diff on principle. Trigger: FEEDS Custom 2–4 multiply live feed instances and retained image delegates; if
+multi-source physical testing shows delegate/artwork churn on ordinary changed feeds, implement a stable-ID row diff
+with `dataChanged` (bars: retained-delegate identity test; artwork not reloaded for unchanged rows).
+
+---
+
+## PW-05 — Hand-rolled parentless deadline timers; `single_shot` has no cancel handle · P2 · R1 · Risk Low · Do before FEEDS Custom 2–4
+
+`widgets/feed_runtime.py:59-78` and `widgets/steam_followed_runtime.py:48-72` duplicate the same `_default_schedule`
 creating parentless `QTimer`s outside the generation-owned single-shot registry that the destruction barrier observes
-(`core/threading/manager.py:1456-1578`). They exist because `ThreadManager.single_shot()` returns nothing. Both owners
-clear the handle when the deadline fires (`feed_runtime.py:540-554`, `steam_followed_runtime.py:293`), so no
-double-delete race was found — this is a structure/accounting gap that will multiply with FEEDS Custom 2–4.
+(`core/threading/manager.py:1302-1425`). They exist because `ThreadManager.single_shot()` returns `None`, although it
+already owns generation fencing, a registry, `_srpss_cancel_single_shot` and payload release in
+`_finish(execute=False)`. Both owners clear their handle when the deadline fires (`feed_runtime.py:540-554`,
+`steam_followed_runtime.py:293`), so no double-delete race was found. Soak: OS timer handles held at ≈13–14 for
+92 minutes, so this is ownership/durability work before Custom 2–4 multiplies the timers, not an observed leak.
 
-- [ ] Return a cancel handle from `ThreadManager.single_shot` (same registry/generation cancellation), migrate both
-      families, delete the duplicates. Barrier/lifecycle tests: a retired family leaves no scheduled single-shot.
+**Decision (operator 2026-09-23): Do — return a cancellation handle, not a raw `QTimer`.** `single_shot` may be called
+off the UI thread while its `QTimer` is created later on the UI thread, so no timer can be returned synchronously.
 
----
+- A lightweight `SingleShotHandle` is constructed immediately; `cancel()` is idempotent.
+- Cancel before the timer exists: timer creation is skipped (or the timer finishes immediately).
+- The UI-thread timer creation binds itself to the handle; a later cancel routes through the existing
+  registry/`_finish(execute=False)`, releasing callback payload and owner references exactly as today.
+- Firing marks the handle completed.
+- Generation-wide retirement stays authoritative; the handle is not a second timer registry or lifecycle authority.
 
-## PW-06 — Supervisor heartbeat creates a new OS thread every 3 s · P3 · R1 · Risk Low
-
-`core/process/supervisor.py:1491-1579` re-arms `threading.Timer` after every check (`WORKER_HEARTBEAT_INTERVAL_MS =
-3000`): ≈1,200 thread create/destroy cycles per hour for the life of the image worker. Not a leak, but handle/thread
-churn in a process whose handle behaviour is under R-84 scrutiny.
-
-- [ ] Replace with one persistent heartbeat thread waiting on an `Event` with timeout, stopped and joined on
-      supervisor shutdown; it must never be able to keep the process alive at exit (R-30), so keep daemon semantics
-      unless the join is proven on every exit path. Keep the documented Qt-independence exemption.
-      `tests/test_process_supervisor.py`.
+- [ ] Handle in `ThreadManager.single_shot`; migrate `feed_runtime.py` and `steam_followed_runtime.py` (their
+      injectable `schedule` seams stay; deadline closures already carry the owner generation); delete both
+      `_default_schedule` copies once the shared path satisfies their tests.
+- [ ] Bars: cancel before creation (off-UI-thread call), after creation and after fire (no-op); payload released on
+      cancel; a retired generation leaves no scheduled single-shot; Feed and Games-You-Follow deadline tests unchanged.

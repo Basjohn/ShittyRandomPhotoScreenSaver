@@ -1,180 +1,295 @@
-# 08 — Open Items: Evidence, Suggestions, Risks and Verdicts (2026-09-23)
+# 08 — Open Items: Evidence, Decisions and Remaining Action
 
-Every item still open after Waves A–C and the stale-test pass, researched with evidence rather than estimates.
-Measurements are on the dev machine (idle unless stated); operator runs cited by time are in `logs/` or
-`logs/evidence_chest/0922_BeforeClaudeAuditWork`. **Verdict key:** **Do** (benefit clearly outweighs risk) ·
-**Do with care** (worth it; named risk needs its bar) · **Decide** (product/architecture call for the operator) ·
-**Close** (evidence shows no worthwhile benefit; delete from the queue) · **Park** (keep, no action now).
+Every item still open after Waves A–C: its evidence, the operator decision of 2026-09-23 and the bar or prerequisite
+that remains. Item detail lives in 01–05; `Current_Plan.md` owns the implementation order. Crumble and Melt control
+rework is transition product work owned by `Docs/Future_Work/Transition_Expansion.md`, not runtime cleanup.
+
+**Decision key.** **Do** — admitted; implement with the named bars. **Do with care** — admitted; the named risk has a
+bar that lands in the same slice. **Gated** — decided, but a named prerequisite test must pass before the code change.
+**Watch** — parked with a named reopening trigger. **Park** — no action without new evidence. **Close** — no
+worthwhile benefit; recorded in 06 §Considered and rejected.
+
+## Evidence sources
+
+| Source | Use |
+| --- | --- |
+| Idle dev-machine probes on the audited tree (2026-09-23) | per-call costs; installed/loaded numbers are larger |
+| Operator runs 2026-09-22 22:53–22:59 and 2026-09-23 08:06–08:09 (`--frame-trace`) | `logs/evidence_chest/0922_BeforeClaudeAuditWork`; first PR-04 trace |
+| **D1 heavy-load diagnostic soak, 2026-09-23 09:07–10:40 (≈92.5 min)** | `logs/evidence_chest/logsb86eee25f4.zip`; the operator cannot reasonably reproduce it |
+
+The soak ran with `--perf`, `--usage`, handle attribution, visualizer/geometry/settings/lifecycle/cache/Steam/FEEDS
+diagnostics and `--frame-trace` enabled, under heavy external load that eased near the end. **Use it for
+event-correlated evidence only.** It is not an ordinary-runtime baseline: its raw global FPS, CPU percentage and
+isolated event-loop maxima do not justify micro-optimizations. Trace quality: 24,793,350 records written, 117 dropped
+(≈0.0005%); the retained rolling segments hold 3,355,809 records covering the final 717.46 s, with logical publish
+≈89.91 Hz, GUI wake ≈88.26 Hz, render draw and frame swap ≈89.41 Hz. This supports the existing Qt Quick latest-wins
+cadence architecture and does not reopen R-87 pacing. No native fault, no QML message and no hang capture were
+recorded; the replacement watchdog armed six times (four Settings, two CUSTOM Edit round-trips) and never fired.
 
 ## Summary
 
-| Item | Evidence (short) | Verdict |
-| --- | --- | --- |
-| PR-04 transition-end stall | ≈24.8 ms on the 4K Visualizer display per image change; **most of it is a Qt CPU pixel conversion caused by the `RGBA8888` label** (8.1 → 0.15 ms blocking on a real Quick window) | **Do with care** |
-| Crumble crack complexity | dead above ≈1.26; whole range only moves irregularity 0.31 → 0.38 | **Decided by operator: much stronger shape mutation** |
-| PW-02 Media IO starvation | mechanism proven by fault injection; real-world frequency unmeasured | **Decide** (cheap measurement first) |
-| PW-03 notify granularity | one Clock `stateChanged` = 0.69–0.77 ms of GUI binding work, every second per clock | **Do with care** (Clock first) |
-| LC-05 menu refresh after show | 6.6 ms median (15.5 ms first) rebuild while the menu is visible | **Do** |
-| PR-01 resolve memo | 47.6 µs per publication ≈ 4.3 ms/s GUI | **Park** |
-| VZ-04 waveform copy/validate | 38.4 µs/tick ≈ 3.5 ms/s logical thread | **Do with care** (Oscilloscope-only payload) |
-| PR-02 frame-swap callback | 5.6 µs per swap ≈ 1.8 ms/s GUI at 165 Hz × 2 | **Park** |
-| Crumble debris | debris on/off changes ≤0.22% of pixels at any progress | **Decide** (product) |
-| Melt gloss / detail | gloss 0↔1 moves the wet band ≤3/255; detail ≈5/255 | **Decide** (product, with Melt rework) |
-| PW-05 cancellable `single_shot` | 2 hand-rolled parentless deadline QTimers | **Do** before FEEDS Custom 2–4 |
-| LC-01 GC freeze per generation | after a real replacement gen-2 = **1.2 ms** (11.7k unfrozen objects); pinned retired garbage 748 objects, 0 MB | **Close** |
-| PR-05 repeat visualizer draws | 2.9% of draws, ≈5.8 ms/s render thread | **Close** (architecture risk ≫ benefit) |
-| VZ-03 phase recording | 4.2 µs/tick ≈ 0.4 ms/s | **Close** |
-| PW-06 supervisor Timer thread | 0.31 ms per 3 s ≈ 0.1 ms/s | **Close** |
-| PW-04 Feed model reset | `replace_rows` already skips unchanged rows; resets only on real content change | **Close** |
-| PR-07 eager QML compile | ≈210 ms at startup, startup-only | **Park** |
-| ST-01 `DisplayManager` size | 4,855 lines | **Park** (move-only when touched) |
-| VZ-05 epoch cache | 17–117 µs/tick left after the single-freeze fix | **Park** |
-| VZ-07 sleep slicing | no evidence of harm | **Park** |
-| Prefetch "double batch" | catch-up after a lookahead miss ("requested=2 retained=1") | **Close** (benign) |
+| Item | Evidence (short) | Decision | Remaining |
+| --- | --- | --- | --- |
+| LC-05 menu refresh after show | 6.6 ms median (15.5 ms first) rebuild while visible | **Do** | ordering change only |
+| VZ-03 phase recording | 4.2 µs/tick of diagnostic work at rest | **Do** (low priority) | park instead if it needs tick-pipeline surgery |
+| PW-05 cancellable `single_shot` | two hand-rolled parentless deadline `QTimer`s | **Do** before FEEDS Custom 2–4 | handle, not a raw `QTimer` |
+| PW-03 Clock notify | 0.69–0.77 ms GUI per 1 Hz emit per clock | **Do with care** (Clock only) | before/after measurement |
+| VZ-04 waveform payload | 38.4 µs/tick for modes that never draw samples | **Do with care** | per-mode consumer bar + BTF lane |
+| PR-04 Stage A — opaque pixels + premultiplied label | soak: 10 transition ends 26.6–90.6 ms; Qt conversion 8.12 → 0.15 ms idle | **Do with care** — partial mitigation | post-change frame trace of the whole cycle |
+| PR-04 Stage B — drop `.copy()` | ≈3–4.5 ms sync | **Gated** | Qt/PySide lifetime test first |
+| PW-02 Media-only lane | fault injection + soak startup burst (IO queue wait max ≈1.9 s) | **Do with care** — lane admitted | per-category queue-wait telemetry as validation |
+| Crumble complexity + debris | irregularity 0.31 → 0.38 across the range; debris ≤0.22% of pixels | **Product rework** | geometry rework, not a remap |
+| Melt gloss / detail | gloss ≤3/255 in the wet band; detail ≈5/255 | **Product rework** | intended min/mid/max first |
+| PW-04 Feed model reset | one changed row resets every delegate; 13 FEEDS IO tasks in the soak | **Watch** — FEEDS Custom 2–4 | stable-ID diff only if churn shows |
+| PW-03 Media notify | 1,207 timeline events in the soak | **Watch** — after Clock | measure one real Media edge |
+| PR-02 frame-swap callback | 5.6 µs × ≈89.4 swaps/s ≈ 0.5 ms/s (soak) | **Park** | DC-04 stays documented |
+| PR-01 resolve memo | 47.6 µs per publication | **Park** | reopen only if publication latency points here |
+| PR-07 eager QML compile | ≈0.2–0.3 s, startup only | **Park** | reopen if startup-to-reveal becomes a target |
+| ST-01 / ST-02 large owners/files | 4,855-line `DisplayManager` | **Park** | move-only when a real change touches a clean seam |
+| VZ-05 epoch cache | 17–117 µs/tick left after the single-freeze fix | **Park** | — |
+| VZ-07 sleep slicing | no demonstrated problem | **Park** | — |
+| LC-01, PR-05, PW-06, prefetch double batch | see §Closed | **Close** | — |
 
----
+## Admitted slices
 
-## PR-04 — transition-end re-upload stall · **Do with care**
+### LC-05 — context-menu entries refreshed after the menu is shown · Do
 
-**Evidence.** Operator `--frame-trace` (2026-09-23 08:06): the first Quick cycle after every transition end is
-24.7–24.8 ms on the 3840×2160 Visualizer display vs 2.8 ms steady (4.5 ms sync `QImage.copy()` + 13.5 ms upload).
-New probe on a real `QQuickWindow` with the app's own OpenGL bootstrap, timing the frame that first uses a new 4K
-texture:
+**Evidence.** `_refresh_quick_context_menu` costs 6.6 ms median (15.5 ms first) per open after LC-06. It runs after
+`QuickDisplayRuntime._on_context_menu_requested` has already called `open_at()` (connection order at
+`rendering/quick/runtime.py:228-231`), so when entries changed the Repeater rebuilds rows that are already visible.
 
-| QImage format handed to `createTextureFromImage` | blocking prepare | sync → swap |
-| --- | ---: | ---: |
-| `Format_RGBA8888` (current, straight alpha) | **8.12 ms** | 19.5 ms |
-| `Format_RGBA8888_Premultiplied` | **0.15 ms** | 10.6 ms |
-| `Format_ARGB32_Premultiplied` | 0.19 ms | 16.7 ms |
+**Decision.** Make the DisplayManager refresh complete before `open_at()` with the smallest ordering change. The
+model's `replace_entries()` already returns early on an equal tuple (`rendering/quick/context_menu.py:375`) and stays
+the only "entries unchanged" check: no second equality cache and no new menu-state owner. Preserve R-84 single-menu
+enforcement, U-05 focus/Ctrl halo/keyboard semantics and action admission.
 
-`QImage` `RGBA8888 → RGBA8888_Premultiplied` alone costs 10.8 ms at 4K. Qt's scene-graph texture converts a
-straight-alpha image to premultiplied on the render thread before every upload; the pixels are opaque, so that pass
-does nothing but burn time.
+**Bars.** The entries present when the menu opens are the refreshed ones (fails with today's order);
+`test_qtquick_context_menu*`; physical open/close feel.
 
-**Suggestion.** (1) Guarantee opaque presentation pixels at capture (`image_boundary._capture_qimage`): FILL's
-"perfect fit" path returns the scaled source directly, so a transparent PNG can carry alpha; composite it onto black
-exactly as every other processing path already does. (2) Label the native branch `QImage` `Format_RGBA8888_Premultiplied`
-— byte-identical for opaque pixels. (3) Separately, drop `.copy()` only after a Qt lifetime test (saves the 4.5 ms sync).
+### VZ-03 — per-tick phase instrumentation always on · Do (low priority)
 
-**Risks.** Transparent sources are the only behaviour change, and today they already differ between the transition
-(straight RGBA sampled by the custom node) and steady native output (Qt-premultiplied = over black); step 1 makes both
-the same as the steady look. R-60 texture identity and R-63 no-black-flash are untouched (same node, same timing).
+**Evidence.** 4.2 µs/tick ≈ 0.4 ms/s. Small, but it is diagnostic work at rest, which the opt-in rule forbids.
 
-**Benefit vs risk.** ≈8–10 ms of render-thread time removed per display per image change, on the Visualizer display
-included, for a two-line change plus an opacity guarantee. **Clearly worth it.** Bars: transparent-PNG perfect-fit
-capture test; native-branch format test; frame-trace before/after.
+**Decision.** Source check: the closure, dict and nine `perf_counter()` samples are local to `logical_tick`
+(`widgets/spotify_visualizer/tick_pipeline.py:1422-1530`), and `--perf` is a process-wide flag set once at logging
+setup, so the gate is contained. Skip the recording when perf is off. Keep the slow-tick warning and its phase
+breakdown identical when perf is on. If the change turns out to need wider tick-pipeline surgery, park it instead;
+0.4 ms/s is not worth that risk.
 
-## Crumble crack complexity · **Operator decision (2026-09-23): much stronger shape/pattern mutation**
+**Bars.** Perf-off ticks build no phase record; the perf-on slow-tick message format is unchanged.
 
-**Evidence.** Mean cell-area coefficient of variation over 12 seeds, 35 pieces: 0.306 (c=0.5) → 0.351 (1.0) → 0.382
-(≥1.26, flat to 2.0). The only input is site jitter (`spread = min(.48, .38·c)`), which is bounded by the cell grid;
-even an unclamped remap moves irregularity only to 0.388 at 2.0. A remap alone cannot deliver "much more effect".
+### PW-05 — cancellable `ThreadManager.single_shot` · Do (before FEEDS Custom 2–4)
 
-**Design options (to combine), all inside `run_geometry`/Crumble shaders, prepared off-thread (TX-01):**
+**Evidence.** `single_shot` already owns generation fencing, a registry, `_srpss_cancel_single_shot` and payload
+release in `_finish(execute=False)`, but it returns `None`. So `widgets/feed_runtime.py:59` and
+`widgets/steam_followed_runtime.py:48` hand-roll parentless `QTimer`s outside the registry, and Custom 2–4 would
+multiply them. Soak: OS timer handles stayed ≈13–14 for 92 minutes, so this is ownership/durability work, not a repair
+of an observed leak.
 
-1. **Jagged fracture edges.** Subdivide each shared polygon edge into k segments with seeded perpendicular offsets
-   derived from the edge's endpoints (the same trick `crumble_vertices` uses for crack phase), so both neighbours get
-   the identical polyline and coverage stays gap-free. Complexity drives k and amplitude. Strongest visible change.
-2. **Site distribution.** Complexity shifts from grid-jitter toward clustered/Poisson sites, mixing large slabs with
-   small shards (shape *and* size variety).
-3. **Secondary micro-cracks** in the crack-formation shader stage (branching fissures that do not split pieces),
-   density scaled by complexity.
-4. **Anisotropy** (optional): elongate cells along the fall direction at high complexity.
+**Decision.** Return a small `SingleShotHandle`, **not** the `QTimer`. A call made off the UI thread creates its timer
+later on the UI thread, so there is no timer to return synchronously.
 
-**Risks.** Seams/gaps if shared edges diverge (bar: coverage/seam oracle); crack-stage stroke coordinates must follow
-the polyline; geometry cost grows with k (now off the render thread; keep the 128-piece build under ~40 ms on
-COMPUTE); determinism per seed must hold (byte-identity bar per seed). The pinned pixel oracles and the strict xfail
-in `test_qtquick_crumble_volume.py` get replaced by "each complexity step changes shape metrics monotonically".
+- The handle is created immediately.
+- `cancel()` is idempotent and works before the timer exists; timer creation is then skipped.
+- A created timer binds to its handle; a later cancel goes through the existing `_finish(execute=False)`, releasing
+  the callback payload and owner references as today.
+- Firing marks the handle completed.
+- Generation-wide retirement stays authoritative. The handle is not a second timer registry or lifecycle owner.
 
-**Benefit vs risk.** Operator-requested product change; risk is contained to Crumble with clear bars. **Admitted.**
+Migrate both families; their injectable `schedule` seams stay, and their deadline closures already carry the owner
+generation. Delete both `_default_schedule` copies.
 
-## PW-02 — Media truth/commands share the FIFO IO pool · **Decide**
+**Bars.**
+- A cancel before timer creation (an off-UI-thread call) is honoured.
+- A cancel after creation works.
+- A cancel after the timer fires is a no-op.
+- Cancelling releases the payload.
+- Generation retirement still cancels.
+- The Feed and Games-You-Follow deadline tests are unchanged.
 
-**Evidence.** Fault injection (`tests/test_media_io_starvation.py`): with four stalled network tasks, a transport
-command and the activation refresh stay queued past 0.42 s. Real-world frequency is **unmeasured**: no log records IO
-queue wait. (The `slow shared refresh total_ms≈2.4–2.9 s` startup warnings measure GUI delivery after the worker,
-not IO queueing — startup GUI saturation, not PW-02.)
+### PW-03 — Clock notify split · Do with care (Clock only)
 
-**Suggestion.** First make it measurable: add IO `queue_wait_ms_max` for `media_refresh`/`media_cmd` categories to the
-existing `--perf` summary (opt-in, no new timer) and run the offline/DNS-blocked start physical check. If waits >150 ms
-appear, add the Media-only serial lane (one lazy event-driven worker owned by the shared Media runtime). Reusing the
-WinRT observation worker is rejected (teardown waits 2 s there).
+**Evidence.** One Clock `stateChanged.emit()` costs 0.69–0.77 ms of GUI binding re-evaluation even with no value
+change. Each clock emits once per second.
 
-**Risks of the lane.** One more thread and its retirement (R-30/R-53); a stuck WinRT await then blocks only Media (as
-it blocks one IO worker today). **Benefit vs risk:** protects play/pause truth (a protected invariant) but only under
-network stalls; do the cheap measurement before paying the lifecycle cost.
+**Decision.** Split a few semantic epochs — high-rate time/tick state versus style/config — not one signal per
+property. `customEditableChildRoles` stays independent of the new signals (R-88); Edit/CUSTOM contracts unchanged.
+Media is a separate later decision (§Watch). No repository-wide notify refactor.
 
-## PW-03 — one `stateChanged` for 30–67 properties · **Do with care (Clock first)**
+**Bars.** Before/after binding cost on a live Clock; Clock Edit/CUSTOM oracle tests unchanged.
 
-**Evidence.** A live Clock presentation: one `stateChanged.emit()` costs **0.69–0.77 ms** of GUI-thread binding
-re-evaluation with no value changes. The Clock emits once per second per instance (three clocks on two displays ≈
-2–4.6 ms/s and a sub-millisecond GUI block every second). Media's model is twice the size and emits per event.
+### VZ-04 — waveform samples only for Oscilloscope · Do with care
 
-**Suggestion.** Split notifies into `styleChanged` (config epoch) and a small `timeChanged` (text/tick) for Clock;
-then Media (`transportChanged`/`trackChanged`/`artworkChanged`). **Risks:** QML bindings that read a property whose
-notify moves must be re-pointed; R-88 requires `customEditableChildRoles` to stay independent of the new signals.
-**Benefit vs risk:** measurable, owner-local, low risk with the Edit/CUSTOM oracle tests. Worth it.
+**Evidence.** Every mode copies and validates the 256-sample waveform: 38.4 µs/tick ≈ 3.5 ms/s of logical-thread
+Python, although only Oscilloscope reads `common.waveform`. Soak: the audio lane ran 37,822 steps with 0 publication
+rejects and 0 worker failures, so this is contained efficiency work, not a cadence rescue.
 
-## LC-05 — context-menu entries rebuilt after the menu is shown · **Do**
+**Decision.** Acquire and copy samples only while Oscilloscope is the mode; other modes carry `waveform=()`.
+`waveform_count` and the latest waveform generation are a separate authority from the sample payload and stay
+unchanged (Sine/line-mode readiness, R-87 CHK12).
 
-**Evidence.** `_refresh_quick_context_menu` costs 6.6 ms median (15.5 ms first) per open (after LC-06) and runs after
-`_on_context_menu_requested` has already opened the model, so the Repeater rebuilds visible rows.
+**Bars.**
+- A per-mode test pins which modes consume the sample payload, so a future mode cannot silently read an omitted field.
+- Readiness is unchanged.
+- The BTF active-music lane passes.
 
-**Suggestion.** Refresh before opening (reverse the connection order at `rendering/quick/runtime.py:228-231`) and skip
-the rebuild when the entry tuple is unchanged. **Risks:** R-84 single-menu enforcement and U-05 focus/Ctrl semantics
-(covered by `test_qtquick_context_menu*`). **Benefit vs risk:** removes a visible rebuild and most per-open cost; low risk.
+### PR-04 — transition-end native re-upload · Stage A Do with care, Stage B Gated
 
-## PR-01 remainder — presentation resolve per publication · **Park**
+**Evidence.**
 
-47.6 µs per publication ≈ 4.3 ms/s of GUI Python. A memo keyed on every resolve input is feasible but R-68/U-09
-forbid a second geometry authority and a missed key would freeze geometry. Reopen only if a trace shows GUI
-publication latency pressure.
+- Operator trace, 2026-09-23 08:06: the first Quick cycle after each transition end takes 24.7–24.8 ms on the
+  3840×2160 Visualizer display, against 2.8 ms steady.
+- Soak: all ten retained transition endings show a large first post-transition cycle.
+  - Total 26.62–90.58 ms (median ≈58.9 ms).
+  - Sync 4.58–21.52 ms.
+  - Render/upload 21.88–68.99 ms.
+  - That is 5.5–9.9× the median of the following 60 cycles.
+  - The last two, after external load eased, still cost ≈26.6 and 34.7 ms. The ≈24.8 ms event was not a fluke.
+- Idle probe on a real `QQuickWindow` with the app's own OpenGL bootstrap, timing the frame that first uses a new 4K
+  texture:
 
-## VZ-04 — every mode copies and validates the 256-sample waveform · **Do with care**
+  | `QImage` format given to `createTextureFromImage` | blocking prepare | sync → swap |
+  | --- | ---: | ---: |
+  | `Format_RGBA8888` (current, straight alpha) | **8.12 ms** | 19.5 ms |
+  | `Format_RGBA8888_Premultiplied` | **0.15 ms** | 10.6 ms |
+  | `Format_ARGB32_Premultiplied` | 0.19 ms | 16.7 ms |
 
-38.4 µs/tick ≈ 3.5 ms/s on the logical thread for modes that never draw samples. Suggestion: carry the samples only for
-Oscilloscope (empty tuple elsewhere), mirroring VZ-01's demand. Risk: U-10/diagnostics that read `common.waveform`
-(debug-level only). Worth doing with an Oscilloscope payload bar.
+  Qt's scene-graph texture converts a straight-alpha image to premultiplied on the render thread before upload. For
+  opaque pixels that pass only burns time.
 
-## PR-02 — per-frame queued `frameSwapped` readiness callback · **Park**
+**Stage A (admitted).**
 
-5.6 µs per swap ≈ 1.8 ms/s at 165 Hz on two displays. The guardrail (DC-04) still says the callback should not exist,
-but removing it touches R-63 first-show/reveal ordering. Park until it is touched for another reason; keep DC-04 open.
+1. **Make the background `PresentationImage` genuinely opaque, with one explicit compositing rule:** a transparent
+   source is composited over black, the colour every other processing path already uses.
+   - `capture_qimage` is a generic boundary (processed images via `display_image_route`, startup screen grabs via
+     `startup_desktop_capture`), so do not blanket-convert there.
+   - The one processing branch that can leak alpha is FILL's perfect-fit return in `rendering/image_processor_async.py`;
+     every other branch paints onto a black-filled result.
+   - Put the guarantee at that processing boundary, confirm that screen grabs are opaque, and document the rule.
+2. **Label the native retained-background `QImage` `Format_RGBA8888_Premultiplied`**
+   (`render/background_image_node.py:174`). This is byte-identical for opaque pixels. Never label non-opaque pixels
+   premultiplied.
 
-## Crumble debris · **Decide (product)**
+Stage A removes the conversion only. Under load, render/upload is the larger component, so Stage A is a **partial
+mitigation**. PR-04 stays open until a post-change frame trace measures the complete transition-end cycle.
 
-Changing debris from 0.65 to 0 or 1 alters **≤0.22%** of pixels at any progress (0.00% at 0.35 and 0.80). Debris is
-effectively invisible. Either enlarge/increase debris (fold into the complexity work) or drop the control. The red
-oracle stays until then.
+**Stage B (gated).** Dropping `.copy()` saves ≈3–4.5 ms of sync. It first needs a real Qt/PySide lifetime test proving
+that the immutable `PresentationImage.rgba8` storage stays valid for as long as QSG/texture creation may reference it.
+Do not infer synchronous consumption. Do not trade R-50/R-60/R-63 lifetime, texture-identity or no-black-flash safety
+for it.
 
-## Melt gloss / detail · **Decide (product, with Melt rework)**
+**Rejected:** moving the upload earlier (it only relocates the stall into the transition). **Blocked:** a zero
+re-upload handoff (PySide 6.9.1 binds no `fromNative`, `createFrom` or `nativeTexture`).
 
-Inside the moving wet band (≈5% of the frame): gloss 0↔1 changes ≤3/255 (mean 0.15–0.19) even on textured images;
-detail 1↔2 ≈5/255; depth 0↔1 ≈11/255. Gloss is effectively a dead control in the 1c6cf165 design. Decide the intended
-strength with Melt's open visual acceptance; then re-express the oracles inside the band.
+**Bars (Stage A).**
+- Transparent-PNG FILL perfect-fit oracle.
+- Native image-format oracle.
+- Retained-background/VRAM/texture accounting tests.
+- Frame trace before/after on the 4K Visualizer display.
+- Physical no-black-flash transition end.
 
-## PW-05 — cancellable `single_shot` · **Do (before FEEDS Custom 2–4)**
+### PW-02 — Media-only serial lane · Do with care (lane admitted)
 
-`feed_runtime.py:62` and `steam_followed_runtime.py:55` hand-roll parentless deadline `QTimer`s because
-`ThreadManager.single_shot` returns no cancel handle; Custom 2–4 would multiply them. A handle moves those timers into
-the generation-owned registry (R-65/R-27). Low risk, durability win.
+**Evidence.**
 
-## Closures (evidence shows no worthwhile benefit)
+- Fault injection (`tests/test_media_io_starvation.py`, strict xfails): with four stalled network tasks, a transport
+  command and the activation refresh stay queued past 0.42 s.
+- Soak, shared IO pool counters (`--usage` `tm_delivery.pools.io`), which confirm real saturation:
 
-- **LC-01.** Real engine, freeze, full runtime replacement: unfrozen tracked objects 11,692 → gen-2 **1.2 ms**
-  (vs 90.7 ms before freezing 141k objects); `gc.unfreeze()` then frees only 748 retired objects, 0 MB RSS. The
-  predicted post-replacement stall does not exist. Close; delete the item.
-- **PR-05.** 863 of 29,706 draws (2.9%) repeat a revision, ≈1.8 ms each ≈ 5.8 ms/s render thread. Fixing it changes
-  the custom-render composition (Compositor_Architecture §6, High risk). Close.
-- **VZ-03.** 4.2 µs/tick ≈ 0.4 ms/s. Close.
-- **PW-06.** 0.31 ms per `threading.Timer` cycle every 3 s ≈ 0.1 ms/s; replacing it risks R-30 exit behaviour. Close.
-- **PW-04.** `FeedRowsModel.replace_rows` returns early on equal rows; resets happen only on real content change
-  (feed refresh cadence, minutes). Close.
-- **Prefetch double batch (22:58:31).** `[CACHE] Protected near-future cache keys requested=2 retained=1` → the
-  resume warmed two upcoming images for two displays (4 lines). Benign catch-up. Close.
+  | Time | Started / finished | Queue wait total | Queue wait max |
+  | --- | --- | ---: | ---: |
+  | 09:07:52 | 23 / 19 | ≈124 ms | ≈60 ms |
+  | 09:08:06 | 41 / 40 (one task ran ≈11,416 ms) | ≈8,238 ms | ≈1,902 ms |
+  | session end | 2,639 / 2,638 | ≈9,439 ms | still ≈1,902 ms |
+
+  Almost all serious waiting sits in the startup burst. Seven `media_refresh` tasks went through the pool inside that
+  burst, but waits are not attributed by category and no Media command is known to have been pressed then. This does
+  **not** demonstrate a 1.9 s Media-command latency.
+- Not evidence: `[PERF][MEDIA_RUNTIME] slow shared refresh total_ms=… worker_ms=…`. Its `worker_started` is stamped
+  inside the task after the task leaves the executor queue (`widgets/media_runtime.py:1000`), so it never includes
+  queue wait.
+
+**Decision.** Real saturation, the proven mechanism and the FIFO pool architecture are sufficient; no further operator
+reproduction is required. Constraints:
+
+- A separate, lazy, event-driven Media lane owned by the shared Media runtime owner, reusing `AffinityLaneScheduler`
+  machinery if suitable.
+- **Not** the WinRT observation lane: its teardown waits `lane.call(..., timeout=2.0)` on the same worker, where a
+  stuck WinRT await would fail the R-53 barrier.
+- **Not** a larger IO pool; **not** a polling fallback.
+- Generation-owned and explicitly stopped at owner retirement.
+- One-in-flight/one-pending and command de-dup unchanged; R-66 event authority unchanged.
+
+**Validation telemetry** (same slice, landed first so it provides the "before"): extend the existing per-category task
+counters (`tm_categories`, next to the pool-level wait already reported by `--usage`) with queue-wait total/max for
+`media_refresh` and the transport commands. Accumulate only while diagnostics are enabled; no timer, no polling, no
+new log line.
+
+**Bars.**
+- The two strict xfails flip.
+- `tests/test_media_runtime*.py` and the transport tests pass.
+- The lane is stopped and joined at owner retirement (R-30/R-53).
+- Physical: an offline/DNS-stalled start with network widgets enabled, pressing Play/Pause.
+
+## Product rework (transition work, not runtime cleanup)
+
+`Docs/Future_Work/Transition_Expansion.md` §Control rework owns the design and bars. Evidence behind the decisions:
+
+- **Crumble.** Irregularity 0.306 at complexity 0.5 → 0.351 at 1.0 → 0.382, flat from ≈1.26 to 2.0; an unclamped
+  remap reaches only 0.388. Changing debris from 0.65 to 0 or 1 alters ≤0.22% of pixels at any progress.
+- **Melt.** Inside the moving wet band (≈5% of the frame): gloss 0↔1 changes ≤3/255, detail 1↔2 ≈5/255, depth 0↔1
+  ≈11/255. The soak contained no useful Melt sample and does not inform this work.
+
+## Watch (parked with a trigger)
+
+- **PW-04 Feed model reset.** `FeedRowsModel.replace_rows` returns early on an equal tuple, but one genuinely changed
+  row still triggers `beginResetModel`/`endResetModel` and retires every delegate. The structural issue exists; it is
+  not currently worth changing, because only 13 FEEDS IO tasks completed in the 92-minute soak. Trigger: FEEDS
+  Custom 2–4 multi-source physical testing shows delegate/artwork churn on ordinary changed feeds; then implement a
+  stable-ID row diff with `dataChanged`.
+- **PW-03 Media notify.** Soak Media summary: events timeline 1,207 / playback 14 / media_properties 12; refreshes
+  activation 1 / event 1,222 / command 2 / reconcile 175. Once the Clock pattern exists, measure the binding cost of
+  one real Media timeline/playback edge, and split Media only if the saving is material.
 
 ## Parked
 
-- **PR-07** (≈210 ms `QuickSceneFactory` compile, startup only) — lazy compile only helps disabled families.
-- **ST-01** (`DisplayManager` 4,855 lines) — move-only extractions when a change touches a concern.
-- **VZ-05 epoch cache**, **VZ-07 sleep slicing** — see 02.
+- **PR-02 — queued `frameSwapped` readiness callback.**
+  - Cost: 5.6 µs per swap. In the soak that is ≈0.5 ms/s (≈89.4 swaps/s on the traced Visualizer display); at 165 Hz
+    on two displays it is ≈1.8 ms/s.
+  - Why park: startup/reveal ordering (R-63) is historically fragile.
+  - Reopen only when the readiness/reveal machinery is already being changed, or profiling shows the callback has
+    become material.
+  - DC-04 stays documented as a known source/guardrail mismatch.
+- **PR-01 resolve memo.**
+  - Cost: 47.6 µs per publication ≈ 4.3 ms/s, spread over tiny publications.
+  - Soak: publication ≈89.91 Hz vs GUI admission ≈88.26 Hz, i.e. small, useful latest-wins coalescing and no cadence
+    collapse.
+  - The retained item stays the comparison authority; no second geometry/presentation cache. Reopen only if GUI
+    publication latency profiling points back here.
+  - `viz_geometry_mismatches` went 0 → 1 once, at 10:38:32 during a late Spectrum/menu/mode interaction, with no QML
+    message, fault or hang. The fail-closed stale-presentation guard was exercised; this is not a new bug. Preserve
+    that guard in any presentation work.
+- **PR-07 eager QML compile** (startup only): reopen if startup-to-reveal becomes a target.
+- **ST-01 / ST-02:** move-only extraction, only when a real change already touches a clean ownership seam.
+- **VZ-05 epoch cache.** The accidental double freeze was the real win. Soak:
+
+  | Section | Scene FPS (median) | Revision rate (median) | Age (median) |
+  | --- | ---: | ---: | ---: |
+  | heavy, Bubble idle | ≈88.87 | ≈89.96 Hz | ≈20.9 ms |
+  | late, lighter | ≈90.59 | ≈89.95 Hz | ≈13.58 ms |
+
+  Audio lane: execution mean ≈1.58 ms, handoff mean ≈2.31 ms. No epoch-cache complexity without new evidence.
+- **VZ-07 sleep slicing:** no demonstrated problem on a protected timing path.
+
+## Closed (recorded in 06 §Considered and rejected)
+
+- **LC-01 — narrowly, the feared post-replacement gen-2 stall.** After a real runtime replacement, 11,692 objects are
+  unfrozen and a gen-2 pass takes 1.2 ms (vs 90.7 ms unfrozen). `gc.unfreeze()` frees only 748 retired objects, 0 MB.
+  The soak had no gen-2 stall. It did record one 19.53 ms gen-1 collection, so this closure does not claim GC can
+  never stall.
+- **PR-05:** the soak had 1,803 repeated revisions in 64,150 draws (2.81%), matching the idle 2.9% (≈5.8 ms/s).
+  Removing them means changing the custom-render composition (Compositor_Architecture §6).
+- **PW-06:** 0.31 ms per `threading.Timer` cycle every 3 s ≈ 0.1 ms/s, and OS timer handles held at ≈13–14 through
+  the soak. Replacing it would risk R-30 exit behaviour.
+- **Prefetch double batch (22:58:31):** `[CACHE] Protected near-future cache keys requested=2 retained=1`. This is
+  benign lookahead catch-up.

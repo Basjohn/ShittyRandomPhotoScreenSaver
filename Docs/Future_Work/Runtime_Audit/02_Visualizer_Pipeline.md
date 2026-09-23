@@ -55,28 +55,39 @@ The engine default stays "synthesize" for any caller that never declares. Measur
 
 ---
 
-## VZ-03 — Per-tick phase instrumentation always on · P3 · R1 · Risk Low
+## VZ-03 — Per-tick phase instrumentation always on · P3 · R1 · Risk Low · Do (low priority)
 
 **Evidence.** `logical_tick()` allocates a closure, a dict and nine `perf_counter()` samples every tick
-(`tick_pipeline.py:1425-1520`); the data is read only when a tick exceeds 50 ms **and** `--perf` is enabled.
-Violates "diagnostic instrumentation adds zero per-frame work at rest".
+(`tick_pipeline.py:1422-1530`); the data is read only when a tick exceeds 50 ms **and** `--perf` is enabled.
+Measured 4.2 µs/tick ≈ 0.4 ms/s. Small, but it violates "diagnostic instrumentation adds zero per-frame work at rest",
+so it is not closed.
 
-- [ ] Capture `is_perf_metrics_enabled()` once per runtime start; skip phase recording when disabled; keep the slow-
-      tick warning path and message format identical when enabled.
+**Decision (operator 2026-09-23): Do, low priority.** Source check: all of it is local to `logical_tick`, and `--perf`
+is a process-wide flag set once at logging setup, so the change is contained. If it turns out to need wider
+tick-pipeline surgery, park it instead.
+
+- [ ] Skip phase recording (closure, dict, `perf_counter` samples) when perf is off; keep the slow-tick warning and
+      its phase breakdown identical when on. Bars: perf-off ticks build no phase record; perf-on message format
+      unchanged.
 
 ---
 
-## VZ-04 — Every mode's logical frame copies and validates the 256-sample waveform · P3 · R1 · Risk Low–Medium
+## VZ-04 — Every mode's logical frame copies and validates the 256-sample waveform · P3 · R1 · Risk Low–Medium · Do with care
 
 **Evidence.** `_base_extras()` always calls `engine.get_waveform()` (a 256-element `list` copy,
 `beat_engine.py:1369-1371`; `logical_frame_capture.py:217-224`), and `VisualizerCommonState.__post_init__`
-re-validates it with `_float_tuple` (`render_state.py:225-230`). **Measured ≈34 µs/tick ≈ 3 ms/s.** Source
-search on the audited tree finds only the Oscilloscope renderer reading `common.waveform`
-(`implementations/oscilloscope.py:112-116`); Bubble mentions it only in comments.
+re-validates it with `_float_tuple` (`render_state.py:225-230`). **Measured 38.4 µs/tick ≈ 3.5 ms/s** (2026-09-23).
+Source search finds only the Oscilloscope renderer reading `common.waveform`
+(`implementations/oscilloscope.py:112-116`); Bubble mentions it only in comments. The soak's audio lane (37,822 steps,
+0 publication rejects, 0 worker failures) shows this is contained efficiency work, not a cadence rescue.
 
-- [ ] Add a per-mode payload test that pins which modes consume `common.waveform` (guards future modes).
-- [ ] Pass `()` for non-Oscilloscope modes (the field already defaults to `()`); keep `waveform_count`/generation
-      semantics used for Sine readiness unchanged.
+**Decision (operator 2026-09-23): Do with care.** Acquire/copy samples only for Oscilloscope; other modes carry
+`waveform=()` (the field already defaults to `()`). `waveform_count` and the latest waveform generation are a separate
+authority from the sample payload and must not change (Sine/line-mode readiness, R-87 CHK12).
+
+- [ ] Per-mode payload test pinning which modes consume the sample payload (a future mode cannot silently read an
+      omitted field).
+- [ ] Oscilloscope-only payload; readiness/generation semantics unchanged; BTF active-music lane.
 
 ---
 
@@ -89,11 +100,7 @@ search on the audited tree finds only the Oscilloscope renderer reading `common.
 configuration/activation boundaries; a few are per-tick (`heartbeat_intensity`, Bubble arrays, line-mode event
 strengths).
 
-**Evidence step first.** `_tick_phase_ms` already separates `publish` (capture + mailbox); log its per-mode
-distribution once under `--perf` (or use a focused benchmark of `capture_visualizer_logical_frame`). Proceed only if
-capture is a material share of tick cost.
-
-**Proposal if admitted.** Split static vs dynamic keys; freeze the static set once per **configuration epoch**
+**Epoch cache (parked; description kept for a reopen).** Split static vs dynamic keys; freeze the static set once per **configuration epoch**
 (bumped by `_apply_configuration`, mode/preset activation, technical config and presentation-state writes) and
 reuse the same immutable `FrozenFields` object; merge dynamic keys per tick. Reuse of an immutable object is not
 shared mutable state (R-71 rule).
@@ -110,9 +117,11 @@ shared mutable state (R-71 rule).
       entries, and an existing `FrozenFields` is returned as-is (deep-frozen by construction). Output equal and hash-
       equal to the constructor path; NaN/empty-name/type validation unchanged. 61-key record 155.8 → 65.4 µs.
       Bar: `tests/test_visualizer_render_state_freeze.py` (fails without the fix).
-- **Parked:** the configuration-epoch cache for static keys. After the single-freeze fix the remaining cost is
-  ≈17–117 µs/tick of preemptible logical-thread Python, which does not justify R-22/A-06 activation-bleed risk.
-  Reopen only if `--perf` tick phases show capture dominating a stall.
+- **Parked (operator 2026-09-23):** the configuration-epoch cache for static keys. After the single-freeze fix the
+  remaining cost is ≈17–117 µs/tick of preemptible logical-thread Python, which does not justify R-22/A-06
+  activation-bleed risk. The D1 soak reinforces this: revision rate ≈89.95–89.96 Hz in both heavy and lighter
+  sections, audio lane execution mean ≈1.58 ms (08). Reopen only if `--perf` tick phases show capture dominating a
+  stall.
 
 ---
 
@@ -126,5 +135,5 @@ shared mutable state (R-71 rule).
 
 `_wait_until()` sleeps `min(remaining, 4 ms)` (`logical_runtime.py:62-65, 442-448`) so `stop()`/`wake()` are prompt.
 Removing slicing would save ≈180 GIL reacquisitions/s but touches the BTF clock for a small, unmeasured gain;
-`Event.wait` was proven to quantize to 15.6 ms on this platform. **Parked** unless a trace shows these wakeups in a
-render-entry tail. Do not reopen without that evidence.
+`Event.wait` was proven to quantize to 15.6 ms on this platform. **Parked** (reaffirmed 2026-09-23; the soak shows no
+cadence problem) unless a trace shows these wakeups in a render-entry tail. Do not reopen without that evidence.

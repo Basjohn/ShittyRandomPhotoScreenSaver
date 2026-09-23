@@ -23,6 +23,35 @@ Earlier appearance testing rejected flat/opaque shard treatment, premature in-vi
 
 All new material values resolve once through canonical defaults/UI/request admission. Renderers retain existing context resources and monotonic progress; no clocks, evolving CPU fluid simulations, parallel surfaces or fallback effects. Mesh geometry is static within a run; deformation/motion and Melt volume evaluation are analytical on the GPU. The existing mesh helper may support concrete shared needs only. Performance evidence must distinguish cold geometry/shaders from warm draws.
 
+## Control rework (operator decisions 2026-09-23)
+
+Measurements from the 2026-09-23 runtime-audit research (`Docs/Future_Work/Runtime_Audit/08_Open_Items_Research.md`) showed three authored controls with near-dead ranges. The operator kept every concept and admitted stronger visible effects; this is transition product work, separate from runtime cleanup.
+
+- [ ] **Crumble — crack complexity and debris.**
+  - **Intent.** Complexity must visibly mutate the fracture shape/pattern much more; it owns fracture topology and shape. Debris owns the secondary broken-off material and must visibly change debris density and/or chip size, dispersion and flight. Debris stays recognisably debris, not another alias for complexity.
+  - **Evidence.** Irregularity (cell-area CV, 12 seeds, 35 pieces) is 0.306 at 0.5, 0.351 at 1.0 and 0.382 flat from ≈1.26 to 2.0 (site spread clamps at .48), so half the slider, including the 1.8 default, does nothing. An unclamped spread remap reaches only 0.388: a remap cannot deliver the decision. Debris 0.65 → 0 or 1 changes ≤0.22% of pixels at any progress.
+  - **Geometry options** (combine; built in `run_geometry`/Crumble shaders and prepared off-thread as today):
+    1. jagged shared fracture edges — subdivide each shared edge into k segments with seeded perpendicular offsets derived from its endpoints, so both neighbours get the identical polyline; complexity drives k and amplitude (the strongest visible change);
+    2. clustered/Poisson site distribution mixing large slabs with small shards;
+    3. secondary micro-cracks in the crack-formation stage (fissures that do not split pieces), density scaled by complexity;
+    4. optional anisotropy along the fall direction at high complexity.
+  - **Debris.** Rework debris inside the same slice; do not spend a separate slice polishing the current, nearly invisible implementation.
+  - **Bars.**
+    - Gap-free seams (coverage/seam oracle); crack-stage strokes follow the polyline.
+    - Byte-identical geometry per seed.
+    - Each complexity step changes shape metrics monotonically, replacing the strict xfail `test_crack_complexity_is_live_across_its_whole_range` and the pinned calibrated pixel oracles.
+    - Debris min/mid/max visibly distinct, replacing `test_real_driver_each_crumble_control_changes_the_volume[debris-1.0]`.
+    - Jagged edges raise vertex counts, so benchmark the 128-piece geometry build (off-thread) and draw cost. The D1 soak showed the old 11–40 ms first-frame class gone after off-thread preparation; keep it gone.
+- [ ] **Melt — gloss and detail.**
+  - **Intent.** Keep both concepts; rework their strength with the Melt visual rework instead of accepting the current near-dead ranges.
+    - Detail visibly affects contour/drip/front complexity.
+    - Gloss visibly affects wet-highlight character, intensity and width without changing the melt silhouette.
+    - Depth remains the stronger physical thickness/refraction/lip control.
+  - **Evidence.** Inside the moving wet band (≈5% of the frame): gloss 0↔1 changes ≤3/255 (mean 0.15–0.19) even on textured images, detail 1↔2 ≈5/255, depth 0↔1 ≈11/255. The D1 soak held no useful Melt sample.
+  - **Method.** First establish the intended, perceptually meaningful min/mid/max states. Then measure changing pixels inside the active wet band, not whole-frame means. Do not scale shader constants until an oracle turns green.
+  - **Keep.** Exact source/destination endpoints and the anti-shred/readability contracts.
+  - **Replaces.** The reds `test_qtquick_melt_surface.py::test_liquid_material_controls_affect_the_wet_front[gloss]` and `test_qtquick_future_transition_gl.py::test_authored_controls_change_rendered_pixels[melt_drip-detail-2.0]`.
+
 ## Current owners and invariants
 
 - `rendering/transition_registry.py` owns identities/activation participation; `core/settings/default_settings.py` owns values, with existing Settings UI/model/schema integration.

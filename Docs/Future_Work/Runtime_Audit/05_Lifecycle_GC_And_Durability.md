@@ -1,7 +1,8 @@
 # 05 — Lifecycle, GC, Durability and Diagnostic Oracles
 
 Owners audited: `engine/{runtime_destruction,engine_lifecycle,screensaver_engine,display_manager}.py`,
-`core/performance/{gc_policy,event_loop_recorder}.py`, `core/threading/manager.py`, `main.py`,
+`core/performance/{gc_policy,event_loop_recorder}.py` (LC-01 closed: 06 §Considered and rejected),
+`core/threading/manager.py`, `main.py`,
 `rendering/quick/{runtime,context_menu}.py`, `core/settings/{defaults,default_contract}.py`,
 `core/animation/animator.py`, `utils/lockfree/*`.
 
@@ -58,49 +59,28 @@ overrides resolved per profile; callers that mutate get a private copy.
 
 ---
 
-## LC-05 — Context-menu entries refresh after the menu is shown · P3 · R1 · Risk Low
+## LC-05 — Context-menu entries refresh after the menu is shown · P3 · R1 · Risk Low · Do
 
 **Evidence.** `QuickDisplayRuntime` connects `context_menu_requested` to its own `_on_context_menu_requested` (opens
 the model) **before** re-emitting it to `DisplayManager` (`rendering/quick/runtime.py:228-231`), whose handler rebuilds
-entries (`display_manager.py:1348-1352` → `_refresh_quick_context_menu` `:876-940`). When entries changed since the last
-open (transition/visualizer/dimming/edit state), the row Repeater rebuilds while the menu is already visible.
+entries (`display_manager.py:1348-1352` → `_refresh_quick_context_menu`). When entries changed since the last open
+(transition/visualizer/dimming/edit state), the row Repeater rebuilds while the menu is already visible. Measured
+2026-09-23: 6.6 ms median (15.5 ms first) per refresh after LC-06.
 
-**Proposal.** Refresh before opening (reverse the emit order, or refresh on the edges that change entries). LC-06
-already removed the per-open defaults rebuild (≈11 ms).
+**Decision (operator 2026-09-23): Do.** Make the refresh of the retained menu entries complete before `open_at()` with
+the smallest ordering change. `QuickContextMenuModel.replace_entries()` already returns early on an unchanged tuple
+(`rendering/quick/context_menu.py:375`) and stays the only "entries unchanged" authority: no competing equality cache,
+no new menu-state owner.
 
-- [ ] Refresh-before-show implemented with single-menu enforcement and focus/Ctrl semantics unchanged (R-84/U-05).
+- [ ] Refresh-before-show; single-menu enforcement, focus/Ctrl halo/keyboard semantics and action admission unchanged
+      (R-84/U-05). Bars: the entries present at open are the refreshed ones (fails with today's order);
+      `test_qtquick_context_menu*`; physical open/close feel.
 
 **Resolved operator note — "2 QImage tasks per context-menu open".** The 2026-09-22 22:53–22:59 run shows every
 `FILL(QImage)` pair (one line per display, `rendering/image_processor_async.py`) lands 5–11 s after an image change —
 the prefetcher pre-scaling the next images — whether or not a menu is open. The observed workflow (Next, then open the
-menu to pick a transition) puts that pair inside the menu window; menu opens without a recent rotation (22:54:03,
-22:54:10, 22:54:19, 22:58:05, 22:58:16, 22:58:36, 22:58:43, 22:59:29) show none. The menu path creates no images.
-
----
-
-## LC-01 — GC freeze protects only generation 0 · P2 · R2 (estimate) · Risk Medium
-
-**Evidence (source).** `main.py:676` schedules one `gc.freeze()` 45 s after startup; `RuntimeGCPolicy`
-(`core/performance/gc_policy.py:123-172`) documents that later generations are *not* frozen and that the retired
-generation-0 cyclic graph stays pinned until `gc.unfreeze()` at exit ("bounded one-generation offset"). Therefore
-after the first Settings/CUSTOM-slot/topology replacement, the replacement generation's long-lived set is back in
-gen-2 scans — the ~28–142 ms stall class `freeze_stable_generation` was introduced to remove. The local run froze
-142,875 objects and saw zero gen-2 collections in 8 minutes, but contained no replacement.
-
-**Evidence step (no new instrumentation, no extra operator run).** The pending R-84 exit gate already asks for
-3–5 Settings cycles with `--perf`: grep `[PERF][GC_POLICY] generation=2 duration_ms=` (always logged ≥10 ms) before vs
-after each replacement.
-
-**Candidate repair if confirmed.** At a replacement boundary after the destruction barrier completes:
-`gc.unfreeze()` (retired gen-0 cycles become collectable by the normal cadence), then one-shot re-freeze after the new
-generation warms. No `gc.collect()`, no threshold tuning (Performance contract §P2), no periodic work.
-
-- [ ] Evidence classified from the R-84 run. **2026-09-23 08:06–08:09 operator run (1 Settings round-trip):**
-      `collections=(194, 8, 0)` — no gen-2 collection at all, but the run ended ≈18 s after the replacement. With the
-      active thresholds `(700, 20, 50)` a gen-2 pass needs ≈1,000 gen-0 passes (≈15 min at this run's allocation rate),
-      so a valid capture needs ≥20 min of runtime *after* a Settings round-trip with `--perf`, then grep
-      `[PERF][GC_POLICY] generation=2 duration_ms=`. Inconclusive until then.
-- [ ] If implemented: `tests/test_gc_freeze_lifetime.py` extended for re-freeze; RSS/USS plateau across 3–5 cycles.
+menu to pick a transition) puts that pair inside the menu window; menu opens without a recent rotation show none. The
+menu path creates no images.
 
 ---
 
