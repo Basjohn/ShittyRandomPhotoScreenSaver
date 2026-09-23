@@ -101,7 +101,11 @@ authority from the sample payload and must not change (Sine/line-mode readiness,
       `tests/goldens/visualizer_replay/reactivity_floor.json`, `tools/visualizer_replay/floors.calibrate()` applies the
       same rule, and `test_waveform_floors_apply_only_to_sample_consuming_modes` pins it. Bar, energy, attack and
       output-flux floors are untouched.
-- [ ] BTF Layer 4 (installed, active music): all six modes; Oscilloscope output and Sine readiness/reveal unchanged.
+- [x] BTF Layer 4 (2026-09-23, active music, `--frame-trace` on): Bubble, Oscilloscope, Spectrum, DevCurve and Voxel
+      Sphere PASS. Spectrum's reduced smoothness at extreme viewport shapes is pre-existing and tracked separately.
+- [ ] Sine: no longer shows its distinct pulse/bump reaction. Establish causality against the pre-VZ-04 commit
+      (`62424b2c`) with deterministic replay of renderer-facing Sine outputs before changing anything; never restore
+      Sine as a waveform-sample consumer.
 
 ---
 

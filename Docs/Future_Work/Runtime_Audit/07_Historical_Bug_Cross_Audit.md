@@ -20,7 +20,6 @@ item). Parked and Watch rows state the constraints that apply if the item reopen
 | PW-01 | throttle Media refreshes on timeline storms | R-66: event ownership must feed the one owner; no cadence substitution | refresh count unchanged; only the query *scope* narrows on timeline-only edges |
 | TX-02 | repair clobbered Slide/Wipe directions in existing profiles | R-33 / Defaults dedup: never rewrite installed profiles implicitly | stop the writes; no automatic profile repair; release-note only |
 | TX-01 | global geometry cache | R-51: shared GL handles gave two contexts one deletion identity | precompute **CPU bytes** only; VAO/VBO stay per render context |
-| PW-02 | run Media queries/commands on the existing WinRT observation affinity lane | R-53: that lane's teardown waits 2 s on the same worker, so a stuck WinRT await would fail the destruction barrier | a separate Media-only lane owned by the shared Media owner, stopped at owner retirement |
 
 ## Item-by-item verdicts
 
@@ -30,7 +29,6 @@ item). Parked and Watch rows state the constraints that apply if the item reopen
 | TX-02 | R-65, R-33, Defaults dedup, R-06 | admission before mutation; fail-closed empty pool; implicit profile rewrite | Safe with constraints: batch spec carries the choice; empty pool withholds destination loudly; operator decides direction semantics |
 | LC-06 | R-84, R-24, Defaults authority tests | menu-time broad invalidation (R-24); defaults authority drift | Safe: pure memoization of an immutable result; callers still get private copies |
 | PR-01 | R-62, R-61B, R-27, U-09, R-68, R-69, R-73, R-74 | delayed presentation; second geometry authority; response compression; skipped shadow updates | Safe with constraints: equality covers shell style (shadow fields live in the record), fades/transitions still project, CUSTOM path unchanged, presentation values never altered (R-69 untouched) |
-| PW-02 | R-66, R-41, R-83, R-29, R-40, R-53, R-30, U-05 | Media polling fallback; unowned threads; provider cadence changes; teardown barrier; exit hang; media-key routing | Safe with constraints: one separate lazy Media-only lane (not the WinRT observation lane), generation-owned and stopped/joined at owner retirement; no poll; R-66 event authority, one-in-flight/one-pending and command de-dup unchanged; key capture/dispatch untouched (U-05 is open) |
 | VZ-01 | R-03, R-87 CHK12, U-10, BTF | dead/flat paused Sine; stale line-mode reveal; Oscilloscope contract drift | Safe with constraints: identical phase math and sequences for Osc; generation semantics unchanged; active-music BTF lane |
 | PW-01 | R-66, ArtworkFadeImage contract | polling; missed artwork; unchanged re-upload | Safe with constraints: full query on properties/playback/activation/reconcile/wake/command; keep reading until the track has artwork |
 | PR-03 | R-87 retained pixel oracles | diagnostic oracle drift | Safe: snapshot schema and pixel-capture paths unchanged |
@@ -65,7 +63,7 @@ item). Parked and Watch rows state the constraints that apply if the item reopen
 ## Residual risk statement
 
 The Medium-risk P1 items are TX-02 (landed; direction semantics decided by the operator), PR-04 (Stage A changes the
-native texture format label under an explicit opacity rule; Stage B is gated on a lifetime test) and PW-02 (adds one
+native texture format label under an explicit opacity rule; Stage B is gated on a lifetime test) and PW-02 (accepted; adds one
 lazy, event-driven, generation-owned Media lane — the only new thread any item introduces, admitted by the operator
 on fault-injection plus soak evidence). No item removes a fence, lowers cadence, or adds a timer, poller or clock. The
 only new instrumentation (PW-02 per-category queue wait) extends existing counters and is accumulated only while
