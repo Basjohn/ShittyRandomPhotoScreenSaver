@@ -138,7 +138,9 @@ def test_followed_header_and_action_hover_inherit_existing_widget_contracts():
     assert 'id: tileHover' in qml and 'enabled: tile.canActivate' in qml
     assert 'objectName: "followedStoryHoverOutline" + storySlot' in qml
     assert 'visible: tileHover.hovered && tile.canActivate' in qml
-    assert 'border.color: followedModel.primaryColor' in qml
+    # Reference (Steam_Games_You_Follow.md): the admitted clickable hover outline
+    # turns bright white; the resting border keeps its semantic colour.
+    assert 'border.color: "white"' in qml
     assert 'id: refreshHover' in qml and 'enabled: refreshGlyph.canActivate' in qml
     assert '!followsRoot.customLayoutInputBlocked' in qml
     assert 'text: followedModel.remainingFollowedCount > 0' in qml
