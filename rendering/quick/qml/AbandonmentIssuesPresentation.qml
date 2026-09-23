@@ -867,9 +867,10 @@ OverlayWidget {
                     radius: 6.0
                     color: abandonmentRoot.abandonmentModel.steamMetricSurfaceColor
                     border.color: abandonmentRoot.abandonmentModel.steamMetricBorderColor
-                    border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                        2.0, abandonmentRoot.presentationScale
-                    )
+                    readonly property real childStrokeScale: Math.min(
+                        abandonmentRoot.abandonmentModel.customLastVisitWidthScale,
+                        abandonmentRoot.abandonmentModel.customLastVisitHeightScale)
+                    border.width: abandonmentRoot.scaleAwareChildStrokeWidth(2.0, childStrokeScale)
 
                     Rectangle {
                         anchors.fill: parent
@@ -877,9 +878,8 @@ OverlayWidget {
                         radius: 4.0
                         color: "transparent"
                         border.color: abandonmentRoot.abandonmentModel.steamMetricInnerBorderColor
-                        border.width: abandonmentRoot.scaleAwareStrokeWidthForScale(
-                            1.0, abandonmentRoot.presentationScale
-                        )
+                        border.width: abandonmentRoot.scaleAwareChildStrokeWidth(
+                            1.0, parent.childStrokeScale)
                     }
 
                     ShadowedText {

@@ -147,9 +147,12 @@ OverlayWidget {
         border.color: refreshHover.hovered && canActivate
             ? "white"
             : followedModel.showRefreshFrame ? followedModel.headerBorderColor : "transparent"
+        readonly property real childStrokeScale: Math.min(childWidthScale("refresh"),
+                                                          childHeightScale("refresh"))
         border.width: refreshHover.hovered && canActivate
-            ? followsRoot.scaleAwareStrokeWidth(1.5)
-            : followedModel.showRefreshFrame ? followsRoot.scaleAwareStrokeWidth(1.0) : 0.0
+            ? followsRoot.scaleAwareChildStrokeWidth(1.5, childStrokeScale)
+            : followedModel.showRefreshFrame
+                ? followsRoot.scaleAwareChildStrokeWidth(1.0, childStrokeScale) : 0.0
         HoverHandler {
             id: refreshHover
             enabled: refreshGlyph.canActivate

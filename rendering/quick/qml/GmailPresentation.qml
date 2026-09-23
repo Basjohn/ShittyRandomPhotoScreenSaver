@@ -337,7 +337,9 @@ OverlayWidget {
                     border.color: refreshHover.hovered && refreshTarget.canActivate
                         ? "white" : gmailRoot.gmailModel.headerBorderColor
                     border.width: refreshHover.hovered && refreshTarget.canActivate
-                        ? gmailRoot.scaleAwareStrokeWidth(1.5) : 0.0
+                        ? gmailRoot.scaleAwareChildStrokeWidth(1.5, Math.min(
+                            gmailRoot.childWidthScale("refresh"),
+                            gmailRoot.childHeightScale("refresh"))) : 0.0
                 }
                 HoverHandler {
                     id: refreshHover

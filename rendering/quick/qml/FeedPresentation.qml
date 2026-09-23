@@ -465,7 +465,7 @@ OverlayWidget {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
-                        height: 1.0
+                        height: feedRoot.scaleAwareStrokeWidth(1.0)
                         color: Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
                                        feedRoot.feedModel.textColor.b, feedRoot.feedModel.textColor.a * 0.12)
                     }

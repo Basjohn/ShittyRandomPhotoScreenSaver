@@ -15,6 +15,11 @@ OverlayWidget {
     function friendStrokeWidth(baseWidth) {
         return friendRoot.scaleAwareStrokeWidth(baseWidth + 1.0)
     }
+    // Avatars grow by geometry (customAvatarScale), so their strokes earn the
+    // shared growth boost for the avatar's own size.
+    function friendAvatarStrokeWidth(baseWidth) {
+        return friendRoot.scaleAwareChildStrokeWidth(baseWidth + 1.0, friendRoot.customAvatarScale)
+    }
     uniformScaleTransform: true
     preferredContentWidth: friendPulseModel.authoredWidth
     preferredContentHeight: friendPulseModel.authoredHeight
@@ -597,7 +602,7 @@ OverlayWidget {
                 // Issues): the image sits inside the resting stroke on a
                 // concentric mask and the outline paints on top, so neither the
                 // image nor a thicker hover stroke can cover or escape the frame.
-                readonly property real imageInset: friendRoot.friendStrokeWidth(1.0)
+                readonly property real imageInset: friendRoot.friendAvatarStrokeWidth(1.0)
                 Item {
                     id: rowAvatarClip
                     anchors.fill: parent
@@ -636,7 +641,7 @@ OverlayWidget {
                     z: 2
                     border.color: rowAvatarHover.hovered && rowAvatarHover.enabled
                         ? "white" : friendRoot.friendPulseModel.rowInnerBorderColor
-                    border.width: friendRoot.friendStrokeWidth(
+                    border.width: friendRoot.friendAvatarStrokeWidth(
                         rowAvatarHover.hovered && rowAvatarHover.enabled ? 2.25 : 1.0
                     )
                 }
@@ -912,7 +917,7 @@ OverlayWidget {
                     color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.22)
                     antialiasing: true
                     // Same artwork-frame contract as the row avatar above.
-                    readonly property real imageInset: friendRoot.friendStrokeWidth(1.0)
+                    readonly property real imageInset: friendRoot.friendAvatarStrokeWidth(1.0)
                     Item {
                         id: gridAvatarClip
                         anchors.fill: parent
@@ -951,7 +956,7 @@ OverlayWidget {
                         z: 2
                         border.color: gridAvatarHover.hovered && gridAvatarHover.enabled
                             ? "white" : friendRoot.friendPulseModel.rowInnerBorderColor
-                        border.width: friendRoot.friendStrokeWidth(
+                        border.width: friendRoot.friendAvatarStrokeWidth(
                             gridAvatarHover.hovered && gridAvatarHover.enabled ? 2.25 : 1.0
                         )
                     }

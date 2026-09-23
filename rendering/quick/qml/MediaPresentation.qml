@@ -846,7 +846,9 @@ OverlayWidget {
                     * mediaRoot.mediaModel.customTransportHeightScale
                 radius: 12.0
                 color: mediaRoot.mediaModel.controlsSurfaceColor
-                border.width: mediaRoot.scaleAwareStrokeWidth(1.5)
+                border.width: mediaRoot.scaleAwareChildStrokeWidth(1.5, Math.min(
+                    mediaRoot.mediaModel.customTransportWidthScale,
+                    mediaRoot.mediaModel.customTransportHeightScale))
                 border.color: mediaRoot.mediaModel.controlsBorderColor
                 clip: false
 
