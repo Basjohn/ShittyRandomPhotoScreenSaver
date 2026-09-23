@@ -103,9 +103,10 @@ authority from the sample payload and must not change (Sine/line-mode readiness,
       output-flux floors are untouched.
 - [x] BTF Layer 4 (2026-09-23, active music, `--frame-trace` on): Bubble, Oscilloscope, Spectrum, DevCurve and Voxel
       Sphere PASS. Spectrum's reduced smoothness at extreme viewport shapes is pre-existing and tracked separately.
-- [ ] Sine: no longer shows its distinct pulse/bump reaction. Establish causality against the pre-VZ-04 commit
-      (`62424b2c`) with deterministic replay of renderer-facing Sine outputs before changing anything; never restore
-      Sine as a waveform-sample consumer.
+- [x] Sine pulse parity report investigated: Investigated 2026-09-23 — not caused by the audit. (1) Deterministic replay of every renderer-facing Sine value (energy, bars, heartbeat intensity, ghost energy, animation time, all resolved parameters incl. resolved sensitivity/width reaction/wave-effect gate) is identical at HEAD, just before VZ-04 (`62424b2c`) and at the audit baseline (`2ba9e15d`): 24,500 values without events and 21,658 with deterministic kick/snare events injected (kick up to 0.9). (2) No audit commit touched the Sine renderer, shader, `SineFrameRuntime` or `sine_reactivity.py`, whose event math is unchanged since the Quick port (2026-08-22; `0abc479c` only added source-timestamp readiness). (3) The active preset is index 0 “Wobble Groove”, authored with `sine_sensitivity=0.1` (the shader floor), `sine_width_reaction=0` and `sine_heartbeat=0` (Heartbeat is off in all six built-in presets; the shader's swell is slider × envelope, so it has been invisible at 0 since March) — unchanged since July. (4) Live events arrived (kick up to 1.0) and the Sine technical config is identical to the pre-audit run, and the raw→resolved energy transfer matches it (bass ×1.29 → ×1.36; with kicks ×1.41 → ×1.46), but the input was ≈3× quieter during this check: raw bass median 0.655 pre-audit vs 0.220 now (resolved peak 1.00 vs 0.475); the second process also switched to MusicBee. Sine amplitude is bass energy × sensitivity, so a quiet source on the floor-sensitivity preset shows no distinct pulse.
+- [ ] Operator: one short Sine-only active-music check on Wobble Groove with a loud reference track. If the pulse is
+      still missing at comparable input levels, bisect before `2ba9e15d`; never restore Sine as a waveform-sample
+      consumer.
 
 ---
 
