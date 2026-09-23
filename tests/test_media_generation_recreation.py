@@ -114,7 +114,7 @@ class _MediaController:
     def retire(self) -> None:
         self.retire_calls += 1
 
-    def get_current_track_from_io_worker(self, fallback_providers=()):
+    def get_current_track_from_io_worker(self, fallback_providers=(), *, reuse_artwork_identity=None):
         return None, None
 
 

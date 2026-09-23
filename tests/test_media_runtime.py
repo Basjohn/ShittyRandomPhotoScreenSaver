@@ -17,6 +17,7 @@ from core.media.media_controller import (
     MediaCommandResult,
     MediaPlaybackState,
     MediaTrackInfo,
+    media_track_identity,
 )
 from core.threading.manager import ThreadManager
 from widgets import media_runtime
@@ -122,6 +123,8 @@ class _Controller:
         self.thread_manager = None
         self.runtime_generation = None
         self.query_calls: list[tuple[str, ...]] = []
+        self.reuse_identities: list[tuple | None] = []
+        self.thumbnail_reads = 0
         self.play_pause_calls = 0
         self.play_pause_states: list[MediaPlaybackState | None] = []
         self.next_calls = 0
@@ -177,12 +180,23 @@ class _Controller:
     def retire(self) -> None:
         self.retire_calls += 1
 
-    def get_current_track_from_io_worker(self, fallback_providers=()):
+    def get_current_track_from_io_worker(self, fallback_providers=(), *, reuse_artwork_identity=None):
         self.query_calls.append(tuple(fallback_providers))
+        self.reuse_identities.append(reuse_artwork_identity)
         selected = self.selected_provider
         if selected is None and self.info is not None:
             selected = "spotify"
-        return selected, self.info
+        info = self.info
+        # Mirror the WinRT controller: a matching identity skips the thumbnail.
+        if (
+            info is not None
+            and reuse_artwork_identity is not None
+            and media_track_identity(info) == reuse_artwork_identity
+        ):
+            return selected, replace(info, artwork=None)
+        if info is not None and info.artwork is not None:
+            self.thumbnail_reads += 1
+        return selected, info
 
     def get_current_track(self):
         raise AssertionError("shared owner must use its existing I/O worker")
@@ -1210,3 +1224,111 @@ def test_retire_stops_observation_exactly_once_and_blocks_late_publish() -> None
         late_dirty("media_properties")
     assert consumer.snapshots == []
     assert shared_media_owner_count() == 0
+
+
+def _artwork_owner(monkeypatch):
+    tm = _ThreadManager()
+    art = b"\x89PNG" + b"a" * 5000
+    factory = _ControllerFactory({"spotify": _track(title="Held", artwork=art)})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    owner = service.shared_owner
+    assert owner is not None
+    controller = factory.controllers[0][1]
+    decodes: list[int] = []
+    monkeypatch.setattr(
+        media_runtime,
+        "decode_media_artwork",
+        lambda payload: decodes.append(len(payload or b"")) or None,
+    )
+    tm.complete()  # activation: full read + one decode
+    assert controller.reuse_identities == [None]
+    assert controller.thumbnail_reads == 1
+    # Keep the lease alive for the caller: the owner only refreshes for live leases.
+    consumer.lease = service
+    return tm, consumer, owner, controller, art, decodes
+
+
+def test_timeline_only_edge_reuses_held_artwork_without_thumbnail_read(monkeypatch) -> None:
+    """PW-01: position edges keep the refresh but skip the WinRT thumbnail stream."""
+
+    tm, consumer, owner, controller, art, decodes = _artwork_owner(monkeypatch)
+    key_before = owner._artwork.key
+    consumer.snapshots.clear()
+
+    controller.fire_dirty("timeline")
+    assert len(tm.jobs) == 1
+    tm.complete()
+
+    assert controller.reuse_identities[-1] == media_track_identity(controller.info)
+    assert controller.thumbnail_reads == 1
+    assert decodes == [len(art)]
+    assert owner._artwork.key == key_before
+    assert owner._current_info.artwork == art
+    assert consumer.snapshots and consumer.snapshots[-1].artwork.key == key_before
+    assert owner.event_telemetry()["artwork_reads_reused"] == 1
+    assert owner.event_telemetry()["refresh_sources"]["event"] == 1
+
+
+@pytest.mark.parametrize("reason", ["media_properties", "playback"])
+def test_non_timeline_edges_always_read_artwork(monkeypatch, reason) -> None:
+    tm, _consumer, owner, controller, _art, _decodes = _artwork_owner(monkeypatch)
+
+    controller.fire_dirty(reason)
+    tm.complete()
+
+    assert controller.reuse_identities[-1] is None
+    assert controller.thumbnail_reads == 2
+    assert owner.event_telemetry()["artwork_reads_reused"] == 0
+
+
+def test_timeline_edge_on_a_new_track_reads_and_accepts_new_artwork(monkeypatch) -> None:
+    tm, _consumer, owner, controller, art, decodes = _artwork_owner(monkeypatch)
+    new_art = b"\xff\xd8" + b"b" * 7000
+    controller.info = _track(title="Next", artwork=new_art)
+
+    controller.fire_dirty("timeline")
+    tm.complete()
+
+    assert controller.thumbnail_reads == 2
+    assert owner._current_info.artwork == new_art
+    assert decodes == [len(art), len(new_art)]
+    assert owner.event_telemetry()["artwork_reads_reused"] == 0
+
+
+def test_timeline_edge_without_held_artwork_keeps_reading(monkeypatch) -> None:
+    tm = _ThreadManager()
+    factory = _ControllerFactory({"spotify": _track(title="Lazy", artwork=None)})
+    consumer = _Consumer(tm)
+    service = _lease(consumer, factory)
+    service.start()
+    owner = service.shared_owner
+    controller = factory.controllers[0][1]
+    monkeypatch.setattr(media_runtime, "decode_media_artwork", lambda payload: None)
+    tm.complete()
+
+    # The thumbnail is published lazily after the properties edge.
+    controller.info = _track(title="Lazy", artwork=b"\x89PNG" + b"c" * 3000)
+    controller.fire_dirty("timeline")
+    tm.complete()
+
+    assert controller.reuse_identities[-1] is None
+    assert owner._current_info.artwork is not None
+
+
+def test_collapsed_pending_edge_is_full_when_any_non_timeline_edge_joined(monkeypatch) -> None:
+    tm, _consumer, owner, controller, _art, _decodes = _artwork_owner(monkeypatch)
+
+    controller.fire_dirty("playback")  # in flight (full)
+    controller.fire_dirty("media_properties")  # pending: full
+    tm.complete()
+    tm.complete()
+    assert controller.reuse_identities[-2:] == [None, None]
+
+    controller.fire_dirty("playback")  # in flight (full)
+    owner._last_timeline_refresh_monotonic = 0.0
+    controller.fire_dirty("timeline")  # pending: timeline only
+    tm.complete()
+    tm.complete()
+    assert controller.reuse_identities[-1] == media_track_identity(controller.info)

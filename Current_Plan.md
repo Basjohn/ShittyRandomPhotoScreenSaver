@@ -64,7 +64,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 - [~] TX-01 — Glass/Crumble per-run geometry is prepared on COMPUTE when the batch resolves (render thread uploads, or builds identical bytes if not ready) and packs 3× faster. Physical: Glass/Crumble/Tiles start on both displays with active music (`--frame-trace` first `BACKGROUND_RENDER_*` frame near steady class).
 - [~] PR-01 — steady equal visualizer publications no longer rewrite the QML shell (20.4 → 4.0 µs each); `request_present()` still runs once per publication. Physical: activation fade, mode crossfade, CUSTOM resize/Save/Cancel, display hop, startup reveal.
 - [~] PR-03 — background render telemetry notes are plain field updates (render thread 29.6 → 2.2 µs per transition frame); the snapshot is built only when read after a change.
-- [ ] PW-01 — timeline-only Media edges narrow their query scope (refresh count unchanged).
+- [~] PW-01 — timeline-only Media refreshes reuse the held album art for the same track instead of re-reading the WinRT thumbnail (refresh count unchanged; `artwork_reused` in `[MEDIA_EVENT] summary`). Physical: track change, same-album next track, podcast/video providers, artwork fade.
 - [ ] VZ-01 — paused waveform samples synthesized on demand; waveform generation still advances every tick.
 - [ ] When the pending R-84 3–5-cycle Settings churn run happens, also classify LC-01 from its `[PERF][GC_POLICY] generation=2` lines (no separate run).
 - [ ] Operator: supply the log lines behind "2 QImage tasks per context-menu open" (LC-05).

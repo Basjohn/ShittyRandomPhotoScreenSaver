@@ -57,7 +57,7 @@ no fast-poll fallback. Command result authority stays with the shared owner (Spe
 
 ---
 
-## PW-01 — Timeline edges re-read and re-hash the whole album-art thumbnail · P2 · R2 · Risk Low
+## PW-01 — Timeline edges re-read and re-hash the whole album-art thumbnail · P2 · R2 · Risk Low · `[~]`
 
 **Evidence (local 2026-09-22 dev run).** `[MEDIA_EVENT] summary`: `events={'timeline': 119, 'playback': 2,
 'media_properties': 2}`, `refreshes={'activation': 1, 'event': 121, 'reconcile': 17, 'command': 2}`; the verbose log
@@ -74,8 +74,18 @@ lazily-published thumbnail is still picked up.
 **Must remain true.** R-66 event ownership and coalescing; "every changing artwork surface fades" (ArtworkFadeImage);
 no unchanged-image reupload; no new timer.
 
-- [ ] Implemented; `tests/test_media_runtime_artwork.py` bars for timeline-only edge (no stream read) and delayed
-      thumbnail after a properties edge.
+**Re-confirmed in the 2026-09-22 22:53–22:59 operator run:** `events={'timeline': 70, 'playback': 5,
+'media_properties': 4}`, 90 refreshes, **97** `Thumbnail stream` reads, **4** `Artwork decode` lines.
+
+**Implemented.** Timeline-only edges carry a scope flag through the existing coalescing (a collapsed pending edge is
+full if any non-timeline edge joined it). Such a refresh passes `media_track_identity(current)` to
+`get_current_track_from_io_worker(reuse_artwork_identity=...)`; the controller skips the thumbnail stream only when
+the freshly read host/title/artist/album identity matches, and the runtime reuses the held payload (same key, no
+decode). Refresh count is unchanged; `[MEDIA_EVENT] summary` now reports `artwork_reused=N`.
+
+- [x] Bars in `tests/test_media_runtime.py`: timeline-only edge reuses without a read (fails without the fix),
+      properties/playback always read, a timeline edge on a new track reads and decodes, no held artwork keeps
+      reading (lazy thumbnail), collapsed pending edge scope.
 - [ ] Physical: track change, same-album next track, podcast/video providers, artwork fade.
 
 ---

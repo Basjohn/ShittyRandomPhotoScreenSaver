@@ -41,6 +41,7 @@ from core.media.media_controller import (
     MediaPlaybackState,
     MediaTrackInfo,
     create_media_controller,
+    media_track_identity,
 )
 from core.media.provider_registry import (
     get_provider_failover_candidates,
@@ -93,6 +94,7 @@ class _MediaQueryResult:
     worker_started: float
     worker_finished: float
     reason: str = "event"
+    artwork_reused: bool = False
 
 
 ControllerFactory = Callable[..., BaseMediaController]
@@ -306,6 +308,9 @@ class _SharedMediaRuntimeOwner:
         self._refresh_in_flight_request = 0
         self._command_refresh_pending = False
         self._event_refresh_pending = False
+        # Whether a collapsed pending edge needs the full query (anything other
+        # than a timeline edge can change track identity or artwork).
+        self._event_refresh_pending_full = False
 
         # Reconciliation / liveness watchdog timer (deep-idle scale). Replaces the
         # retired 1000/2000/2500 ms active poll cadence: normal truth arrives via
@@ -327,6 +332,7 @@ class _SharedMediaRuntimeOwner:
         # Bounded [MEDIA_EVENT] telemetry (never per-callback verbose).
         self._event_counts: dict[str, int] = {}
         self._dirty_coalesced = 0
+        self._artwork_reads_reused = 0
         self._refresh_source_counts: dict[str, int] = {}
         self._stale_event_rejections = 0
         self._missed_event_count = 0
@@ -413,6 +419,7 @@ class _SharedMediaRuntimeOwner:
             "observation_degraded": self._event_observation_degraded,
             "event_counts": dict(self._event_counts),
             "dirty_coalesced": self._dirty_coalesced,
+            "artwork_reads_reused": self._artwork_reads_reused,
             "refresh_sources": dict(self._refresh_source_counts),
             "stale_event_rejections": self._stale_event_rejections,
             "missed_events": self._missed_event_count,
@@ -836,17 +843,19 @@ class _SharedMediaRuntimeOwner:
                 self._schedule_timeline_flush(self._TIMELINE_COALESCE_MS - elapsed_ms)
                 return
             self._last_timeline_refresh_monotonic = now
-        self._launch_dirty_refresh()
+        self._launch_dirty_refresh(timeline_only=(reason == "timeline"))
 
-    def _launch_dirty_refresh(self) -> None:
+    def _launch_dirty_refresh(self, *, timeline_only: bool = False) -> None:
         if self._refresh_in_flight:
             if self._event_refresh_pending:
                 # Already one pending edge: collapse this one into it.
                 self._dirty_coalesced += 1
             else:
                 self._event_refresh_pending = True
+            if not timeline_only:
+                self._event_refresh_pending_full = True
             return
-        self.refresh(bust_cache=True, reason="event")
+        self.refresh(bust_cache=True, reason="event", timeline_only=timeline_only)
 
     def _schedule_timeline_flush(self, delay_ms: float) -> None:
         if self._timeline_flush_scheduled:
@@ -870,7 +879,7 @@ class _SharedMediaRuntimeOwner:
                 return
             owner._timeline_flush_scheduled = False
             owner._last_timeline_refresh_monotonic = time.monotonic()
-            owner._launch_dirty_refresh()
+            owner._launch_dirty_refresh(timeline_only=True)
 
         _flush._srpss_runtime_generation = runtime_generation
         ThreadManager.single_shot(max(1, int(delay_ms)), _flush)
@@ -893,7 +902,7 @@ class _SharedMediaRuntimeOwner:
     def _log_event_summary(self) -> None:
         logger.info(
             "[MEDIA_EVENT] summary provider=%s events=%s coalesced=%d refreshes=%s "
-            "stale_rejected=%d missed=%d degraded=%s",
+            "stale_rejected=%d missed=%d degraded=%s artwork_reused=%d",
             self._provider,
             dict(self._event_counts),
             self._dirty_coalesced,
@@ -901,6 +910,7 @@ class _SharedMediaRuntimeOwner:
             self._stale_event_rejections,
             self._missed_event_count,
             self._event_observation_degraded,
+            self._artwork_reads_reused,
         )
 
     @staticmethod
@@ -924,7 +934,21 @@ class _SharedMediaRuntimeOwner:
         self._query_cache_info = None
         self._query_cache_ts = 0.0
 
-    def refresh(self, *, bust_cache: bool = False, reason: str = "event") -> bool:
+    def refresh(
+        self,
+        *,
+        bust_cache: bool = False,
+        reason: str = "event",
+        timeline_only: bool = False,
+    ) -> bool:
+        """Launch the one shared query.
+
+        ``timeline_only`` narrows only the query scope, never the refresh count:
+        when the fresh snapshot is the same track (``media_track_identity``) and
+        its artwork is already held, the WinRT thumbnail read is skipped and the
+        held payload is reused. Without held artwork every refresh reads, so a
+        lazily published thumbnail is still picked up.
+        """
         if self._retired or not self._running or not self._active_leases:
             return False
         if bust_cache:
@@ -955,6 +979,11 @@ class _SharedMediaRuntimeOwner:
             else None
         )
         known_artwork_key = self._artwork.key
+        reuse_artwork_identity = (
+            media_track_identity(self._current_info)
+            if timeline_only and fallback_artwork and self._current_info is not None
+            else None
+        )
         allow_failover = bool(get_provider_failover_candidates(provider)) and (
             should_probe_provider_failover(self._runtime_state)
             and not self._has_fresh_info()
@@ -974,13 +1003,27 @@ class _SharedMediaRuntimeOwner:
             try:
                 worker_query = getattr(controller, "get_current_track_from_io_worker", None)
                 if callable(worker_query):
-                    selected_provider, info = worker_query(fallback_providers)
+                    if reuse_artwork_identity is None:
+                        selected_provider, info = worker_query(fallback_providers)
+                    else:
+                        selected_provider, info = worker_query(
+                            fallback_providers,
+                            reuse_artwork_identity=reuse_artwork_identity,
+                        )
                 else:
                     info = controller.get_current_track()
                     if info is not None:
                         selected_provider = provider
             except Exception:
                 logger.debug("[MEDIA_RUNTIME] get_current_track failed", exc_info=True)
+            artwork_reused = bool(
+                reuse_artwork_identity is not None
+                and info is not None
+                and info.artwork is None
+                and media_track_identity(info) == reuse_artwork_identity
+            )
+            if artwork_reused:
+                info = replace(info, artwork=fallback_artwork)
             artwork_payload = (
                 getattr(info, "artwork", None) if info is not None else fallback_artwork
             )
@@ -1002,6 +1045,7 @@ class _SharedMediaRuntimeOwner:
                 worker_started=worker_started,
                 worker_finished=time.monotonic(),
                 reason=reason,
+                artwork_reused=artwork_reused,
             )
 
         _do_query._srpss_runtime_generation = runtime_generation
@@ -1017,6 +1061,8 @@ class _SharedMediaRuntimeOwner:
                 owner = owner_ref()
                 if owner is None:
                     return
+                if candidate is not None and getattr(candidate, "artwork_reused", False):
+                    owner._artwork_reads_reused += 1
                 try:
                     owner._commit_query(candidate)
                 finally:
@@ -1027,10 +1073,17 @@ class _SharedMediaRuntimeOwner:
                         if owner._command_refresh_pending:
                             owner._command_refresh_pending = False
                             owner._event_refresh_pending = False
+                            owner._event_refresh_pending_full = False
                             owner.refresh(bust_cache=True, reason="command")
                         elif owner._event_refresh_pending:
+                            timeline_only = not owner._event_refresh_pending_full
                             owner._event_refresh_pending = False
-                            owner.refresh(bust_cache=True, reason="event")
+                            owner._event_refresh_pending_full = False
+                            owner.refresh(
+                                bust_cache=True,
+                                reason="event",
+                                timeline_only=timeline_only,
+                            )
 
             _deliver._srpss_runtime_generation = runtime_generation
             ThreadManager.run_on_ui_thread(_deliver)
@@ -1414,6 +1467,7 @@ class _SharedMediaRuntimeOwner:
         self._refresh_in_flight_request = self._request_id
         self._command_refresh_pending = False
         self._event_refresh_pending = False
+        self._event_refresh_pending_full = False
         self._timeline_flush_scheduled = False
         self._timeline_flush_token += 1
         self._stop_reconcile_timer()
