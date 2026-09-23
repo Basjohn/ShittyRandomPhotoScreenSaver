@@ -472,7 +472,7 @@ class TransitionsTab(QWidget):
         activation_layout.setContentsMargins(0, 12, 0, 0)
         activation_layout.setSpacing(8)
 
-        activation_grid_host = FlowContainer(h_spacing=18, v_spacing=8)
+        activation_grid_host = FlowContainer(h_spacing=18, v_spacing=8, uniform_cells=True)
         self._activation_checkboxes = {}
         for name in _TRANSITION_SETTING_NAMES:
             row = QCheckBox(_transition_settings_label(name))
@@ -519,7 +519,7 @@ class TransitionsTab(QWidget):
         shared_styles.apply_shared_label_style(pool_label, "PAGE_TITLE_STYLE")
         random_layout.addWidget(pool_label)
 
-        pool_grid_host = FlowContainer(h_spacing=18, v_spacing=8)
+        pool_grid_host = FlowContainer(h_spacing=18, v_spacing=8, uniform_cells=True)
         self._pool_checkboxes = {}
         for name in _TRANSITION_SETTING_NAMES:
             row = QCheckBox(_transition_settings_label(name))

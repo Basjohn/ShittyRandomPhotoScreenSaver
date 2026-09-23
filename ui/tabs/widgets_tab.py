@@ -923,7 +923,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         modules_layout.setContentsMargins(0, 12, 0, 0)
         modules_layout.setSpacing(8)
 
-        grid_host = FlowContainer(h_spacing=18, v_spacing=8)
+        grid_host = FlowContainer(h_spacing=18, v_spacing=8, uniform_cells=True)
         self._family_activation_checkboxes = {}
         for family in get_widget_family_descriptors():
             row = QCheckBox(family.label)
