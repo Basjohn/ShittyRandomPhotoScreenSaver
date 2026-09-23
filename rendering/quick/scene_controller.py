@@ -1738,6 +1738,24 @@ class QuickSceneController(QObject):
             raise RuntimeError("visualizer presentation ownership is incomplete")
 
         outer_x, outer_y, outer_width, outer_height = presentation.outer_rect
+        # Steady publications (~90 Hz) usually carry an equal record. The
+        # retained item's record plus the live shell geometry/visibility are the
+        # only "already applied" truth (no parallel cache): CUSTOM sync can move
+        # the loader and retire/transfer paths can clear presentationActive
+        # without changing the record, so both are read back, not assumed.
+        if (
+            item.presentation == presentation
+            and bool(root.property("presentationActive")) == bool(active)
+            and loader.x() == outer_x
+            and loader.y() == outer_y
+            and loader.width() == outer_width
+            and loader.height() == outer_height
+            and root.x() == 0.0
+            and root.y() == 0.0
+            and root.width() == outer_width
+            and root.height() == outer_height
+        ):
+            return
         loader.setX(outer_x)
         loader.setY(outer_y)
         loader.setWidth(outer_width)
