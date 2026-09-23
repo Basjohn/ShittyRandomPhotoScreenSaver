@@ -34,6 +34,12 @@ class RenderNodeSnapshot:
     sample_colors: tuple[str, ...] = ()
     active_image_identity: str | None = None
     native_background_active: bool = False
+    # PR-04 routes for the retained background texture: adopted from the
+    # transition's GPU texture, or uploaded from the image bytes (Stage B).
+    native_background_adopt_count: int = 0
+    native_background_upload_count: int = 0
+    native_background_last_route: str | None = None
+    native_background_fallback_reason: str | None = None
     image_upload_thread_id: int | None = None
     image_release_thread_id: int | None = None
     image_upload_count: int = 0
@@ -178,8 +184,9 @@ class RenderNodeTelemetry:
         *,
         identity: str,
         byte_count: int,
+        fallback_reason: str | None = None,
     ) -> None:
-        """Record one retained Qt scenegraph background texture admission."""
+        """Record one retained background texture uploaded from image bytes."""
 
         with self._lock:
             self._update(
@@ -192,6 +199,30 @@ class RenderNodeTelemetry:
                     self._fields["image_upload_bytes"] + int(byte_count)
                 ),
                 pending_image_release_count=0,
+                native_background_upload_count=(
+                    self._fields["native_background_upload_count"] + 1
+                ),
+                native_background_last_route="uploaded",
+                native_background_fallback_reason=fallback_reason,
+            )
+
+    def note_native_background_adopted(self, *, identity: str) -> None:
+        """Record one retained background texture adopted without an upload.
+
+        Its bytes stay accounted to the presentation texture host that owns
+        the GL allocation, so no upload/release byte is counted here.
+        """
+
+        with self._lock:
+            self._update(
+                render_thread_id=threading.get_ident(),
+                active_image_identity=str(identity),
+                native_background_active=True,
+                native_background_adopt_count=(
+                    self._fields["native_background_adopt_count"] + 1
+                ),
+                native_background_last_route="adopted",
+                native_background_fallback_reason=None,
             )
 
     def note_native_background_released(
@@ -199,11 +230,23 @@ class RenderNodeTelemetry:
         *,
         identity: str,
         byte_count: int,
+        adopted: bool = False,
     ) -> None:
-        """Record logical retirement of a scenegraph-owned retained texture."""
+        """Record logical retirement of the retained texture.
+
+        An adopted texture's bytes are released by its owning texture host.
+        """
 
         with self._lock:
             active_identity = self._fields["active_image_identity"]
+            if adopted:
+                self._update(
+                    active_image_identity=(
+                        None if active_identity == str(identity) else active_identity
+                    ),
+                    native_background_active=False,
+                )
+                return
             self._update(
                 active_image_identity=(
                     None if active_identity == str(identity) else active_identity

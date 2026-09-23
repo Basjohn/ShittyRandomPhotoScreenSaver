@@ -292,8 +292,26 @@ class BackgroundRenderNode(QSGRenderNode):
             self._telemetry.note_error(signature)
             self._failure_log.note_failure(signature, exc)
 
+    def lend_presentation_texture(self, image: PresentationImage) -> int:
+        """Lend the resident GL texture for ``image`` to the retained native branch (PR-04)."""
+
+        return self._image_textures.lend(image)
+
+    def reclaim_presentation_texture(self, identity: str) -> None:
+        """The native branch stopped showing a lent texture; the host may delete it."""
+
+        if QOpenGLContext.currentContext() is None:
+            error = "Quick background texture reclaimed without a current GL context"
+            self._telemetry.note_error(error)
+            logger.error("[QUICK] %s", error)
+            return
+        self._image_textures.reclaim(identity)
+
     def release_presentation_textures(self) -> None:
-        """Release transition/base image textures while preserving warm GL programs."""
+        """Release transition/base image textures while preserving warm GL programs.
+
+        A texture lent to the retained native branch stays: it is showing it.
+        """
 
         if not self._image_textures.has_resources:
             return
@@ -304,7 +322,7 @@ class BackgroundRenderNode(QSGRenderNode):
             logger.error("[QUICK] %s", error)
             return
         try:
-            self._image_textures.release()
+            self._image_textures.release(keep_lent=True)
         except Exception as exc:
             self._telemetry.note_error(
                 f"texture release failed: {type(exc).__name__}: {exc}"

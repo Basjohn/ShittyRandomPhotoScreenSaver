@@ -1,4 +1,14 @@
-"""Render-thread ownership for base and transition presentation textures."""
+"""Render-thread ownership for base and transition presentation textures.
+
+This host is the only owner and the only deleter of presentation GL textures.
+PR-04: when a transition ends, its destination texture is *lent* to the retained
+native background, which wraps it instead of uploading the same pixels again.
+A lent texture survives the transition branch's retirement (and serves as the
+next transition's source without a re-upload); the native owner hands it back
+with ``reclaim`` once it no longer shows it, and it is deleted through the same
+pending-deletion queue as every other texture. A full ``release`` deletes lent
+textures too: it runs only when Qt is tearing the whole subtree down.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +38,7 @@ class _TextureRecord:
     identity: str
     byte_count: int
     counted_upload: bool = True
+    pixel_size: tuple[int, int] = (0, 0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +66,7 @@ class PresentationTextureHost:
         self._telemetry = telemetry
         self._records: dict[str, _TextureRecord] = {}
         self._pending_deletions: dict[int, _TextureRecord] = {}
+        self._lent: set[str] = set()
         self._base_identity: str | None = None
         self._transition_run_id: int | None = None
         self._source_identity: str | None = None
@@ -109,6 +121,7 @@ class PresentationTextureHost:
                 texture_id=texture_id,
                 identity=identity,
                 byte_count=image.byte_count,
+                pixel_size=(int(image.pixel_size[0]), int(image.pixel_size[1])),
             )
             self._telemetry.note_image_uploaded(
                 identity=identity,
@@ -123,7 +136,7 @@ class PresentationTextureHost:
         self._destination_identity = destination_identity
 
         for identity in tuple(self._records):
-            if identity in desired:
+            if identity in desired or identity in self._lent:
                 continue
             record = self._records.pop(identity)
             self._pending_deletions[record.texture_id] = record
@@ -145,12 +158,60 @@ class PresentationTextureHost:
             ),
         )
 
-    def release(self) -> None:
-        """Delete all owned names; failed deletes remain tracked for retry."""
+    @property
+    def lent_identities(self) -> frozenset[str]:
+        return frozenset(self._lent)
 
-        for record in self._records.values():
+    def lend(self, image: PresentationImage) -> int:
+        """Lend the resident texture for ``image`` to the retained native owner.
+
+        Returns its GL name, or 0 when no texture of exactly this image and size
+        is resident (the caller then uploads). The texture stays owned here.
+        """
+
+        record = self._records.get(image.identity)
+        if record is None or record.pixel_size != (
+            int(image.pixel_size[0]),
+            int(image.pixel_size[1]),
+        ):
+            return 0
+        self._lent.add(image.identity)
+        return record.texture_id
+
+    def reclaim(self, identity: str) -> None:
+        """The native owner no longer shows ``identity``: delete it unless in use here."""
+
+        if identity not in self._lent:
+            return
+        self._lent.discard(identity)
+        in_use = identity in (
+            self._base_identity,
+            self._source_identity,
+            self._destination_identity,
+        )
+        if not in_use and identity in self._records:
+            record = self._records.pop(identity)
             self._pending_deletions[record.texture_id] = record
-        self._records.clear()
+            self._telemetry.note_image_release_pending(
+                active_identity=self.identity,
+                pending_release_count=len(self._pending_deletions),
+            )
+        self._drain_pending_deletions()
+
+    def release(self, *, keep_lent: bool = False) -> None:
+        """Delete owned names; failed deletes remain tracked for retry.
+
+        ``keep_lent`` keeps textures the native owner still shows (a transition
+        ended); a full release (teardown) deletes every name.
+        """
+
+        for identity, record in tuple(self._records.items()):
+            if keep_lent and identity in self._lent:
+                continue
+            self._pending_deletions[record.texture_id] = record
+            del self._records[identity]
+        if not keep_lent:
+            self._lent.clear()
         self._base_identity = None
         self._transition_run_id = None
         self._source_identity = None

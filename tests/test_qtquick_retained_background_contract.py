@@ -75,7 +75,8 @@ def test_transition_end_releases_only_duplicate_custom_image_textures():
     start = node.index("def release_presentation_textures")
     end = node.index("def releaseResources", start)
     method = node[start:end]
-    assert "self._image_textures.release()" in method
+    # PR-04: the destination texture the native branch now shows stays lent.
+    assert "self._image_textures.release(keep_lent=True)" in method
     assert "self._transition_renderer.release_resources()" not in method
     assert "glDeleteProgram" not in method
     assert "glDeleteVertexArrays" not in method
