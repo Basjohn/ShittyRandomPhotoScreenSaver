@@ -69,8 +69,7 @@ binding work with no value change. Soak Media summary: 1,207 timeline, 14 playba
 - **Clock — Do with care**, as its own slice: split high-rate time/tick state from style/config state as a few
   semantic epochs, not one signal per property. `customEditableChildRoles` stays independent of the new signals
   (R-88); Edit/CUSTOM contracts unchanged.
-- **Media — Watch:** after the Clock pattern exists, measure one real Media timeline/playback edge; split only if the
-  binding saving is material.
+- **Media — Closed (measured 2026-09-23):** one Media `stateChanged` (67 bound properties) costs 0.50–0.51 ms of GUI binding work on a live bound card; the D1 soak had ≈1,400 Media refreshes in 92.5 min (≈0.25/s; timeline edges coalesced to ≥1 s), i.e. ≈0.13 ms/s on average and one ≈0.5 ms slice per edge. Not material; Media keeps one notify.
 - No repository-wide "one notify per property" refactor.
 
 - [x] Clock split (`rendering/quick/widgets/clock.py`): `timeChanged` notifies `timeText`, `calendarText`,
