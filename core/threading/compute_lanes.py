@@ -323,16 +323,6 @@ class ComputeLaneScheduler:
                 ),
             }
 
-    def frame_snapshot(self) -> dict[str, Any]:
-        """Return only constant-size counters used by per-paint diagnostics."""
-
-        with self._condition:
-            return {
-                **self._scheduler_metrics,
-                "queue_depth": len(self._ready),
-                "registered_lanes": len(self._states),
-            }
-
     def lifecycle_work_snapshot(self) -> tuple[dict[str, Any], ...]:
         """Return every live lane handle/work item for destruction barriers."""
 

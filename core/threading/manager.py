@@ -234,7 +234,7 @@ def _callable_runtime_identity(
 
 
 def _describe_timer_callable_context(func: Callable) -> dict | None:
-    """Best-effort context for recurring-timer gap diagnostics."""
+    """Best-effort owner facts for recurring-timer gap diagnostics."""
     owner = getattr(func, "__self__", None)
     if owner is None:
         owner = getattr(func, "_srpss_timer_owner", None)
@@ -267,99 +267,37 @@ def _describe_timer_callable_context(func: Callable) -> dict | None:
     except Exception:
         pass
     try:
-        if hasattr(owner, "_vis_mode_str"):
-            context["vis_mode"] = getattr(owner, "_vis_mode_str")
-    except Exception:
-        pass
-    try:
-        if hasattr(owner, "_mode_transition_phase"):
-            context["vis_phase"] = getattr(owner, "_mode_transition_phase")
-    except Exception:
-        pass
-    try:
-        if hasattr(owner, "_mode_transition_pending"):
-            pending = getattr(owner, "_mode_transition_pending")
-            context["vis_pending_mode"] = getattr(pending, "name", None) if pending is not None else None
-    except Exception:
-        pass
-    try:
-        if hasattr(owner, "_waiting_for_fresh_engine_frame"):
-            context["vis_waiting_engine"] = bool(getattr(owner, "_waiting_for_fresh_engine_frame"))
-        if hasattr(owner, "_waiting_for_fresh_frame"):
-            context["vis_waiting_frame"] = bool(getattr(owner, "_waiting_for_fresh_frame"))
-    except Exception:
-        pass
-    try:
         parent = owner.parent() if hasattr(owner, "parent") else None
         if parent is not None and hasattr(parent, "screen_index"):
             context["parent_screen_index"] = getattr(parent, "screen_index")
-        if parent is not None and hasattr(parent, "get_transition_snapshot"):
-            context["display_transition"] = parent.get_transition_snapshot()
     except Exception:
         logger.debug("[THREADING] Failed to describe timer callable context", exc_info=True)
-    try:
-        if context.get("owner_type") == "MediaWidget":
-            for attr_name, context_name in (
-                ("_provider", "media_provider"),
-                ("_current_poll_stage", "media_poll_stage"),
-                ("_update_timer_interval_ms", "media_timer_interval_ms"),
-                ("_refresh_in_flight", "media_refresh_in_flight"),
-                ("_is_idle", "media_idle"),
-                ("_app_process_running", "media_app_process_running"),
-                ("_fade_in_completed", "media_fade_in_completed"),
-                ("_has_seen_first_track", "media_seen_first_track"),
-            ):
-                if hasattr(owner, attr_name):
-                    context[context_name] = getattr(owner, attr_name)
-    except Exception:
-        logger.debug("[THREADING] Failed to describe MediaWidget timer context", exc_info=True)
     return context
 
 
-def _should_suppress_large_timer_gap_warning(
-    gap_ms: float,
-    interval_ms: int,
-    context: dict | None,
-) -> bool:
-    """Return True when a recurring-timer gap is expected by shared transition ownership.
+class _GapTrackedTimer(QTimer):
+    """Recurring QTimer whose gap oracle restarts with its countdown.
 
-    The visualizer hands steady cadence to AnimationManager during transitions and
-    resumes its dedicated recurring timer afterward. That intentional handoff should
-    not be logged as a pathological UI-thread stall.
+    ``start()`` and ``setInterval()`` (which restarts an active timer) begin a
+    new expected period. Measuring the next fire from the previous *natural*
+    fire instead reported manual rotation rebases and pause/resume as UI-thread
+    stalls (R-87's 172,987 ms ``_on_rotation_timer`` warnings).
     """
-    if not isinstance(context, dict):
-        return False
 
-    if bool(context.get("vis_waiting_engine")) or bool(context.get("vis_waiting_frame")):
-        return True
-    if context.get("vis_pending_mode"):
-        return True
+    _srpss_gap_epoch_reset: Optional[Callable[[], None]] = None
 
-    display_transition = context.get("display_transition")
-    if isinstance(display_transition, dict):
-        if bool(display_transition.get("running")) or bool(display_transition.get("pending")):
-            return True
+    def _reset_gap_epoch(self) -> None:
+        reset = self._srpss_gap_epoch_reset
+        if reset is not None:
+            reset()
 
-    return False
+    def start(self, *args) -> None:  # noqa: D401 - Qt override
+        self._reset_gap_epoch()
+        super().start(*args)
 
-
-def _classify_large_timer_gap_warning(context: dict | None) -> str:
-    """Return a coarse likely-cause label for loud timer-gap diagnostics."""
-    if not isinstance(context, dict):
-        return "unknown_ui_thread_stall"
-
-    if bool(context.get("vis_waiting_engine")) or bool(context.get("vis_waiting_frame")) or context.get("vis_pending_mode"):
-        return "visualizer_reconfiguration_starvation"
-
-    if context.get("owner_type") == "MediaWidget":
-        return "media_widget_poll_starvation"
-
-    display_transition = context.get("display_transition")
-    if isinstance(display_transition, dict):
-        if bool(display_transition.get("running")) or bool(display_transition.get("pending")):
-            return "display_transition_starvation"
-
-    return "unknown_ui_thread_stall"
+    def setInterval(self, *args) -> None:  # noqa: N802 - Qt override
+        self._reset_gap_epoch()
+        super().setInterval(*args)
 
 
 # UI-thread invoker for reliable main thread dispatch
@@ -1032,98 +970,6 @@ class ThreadManager:
             ),
         }
 
-    def get_frame_delivery_snapshot(self) -> Dict[str, Any]:
-        """Return the small counter set needed by frame-gap owner diagnostics.
-
-        Unlike ``get_diagnostic_snapshot()``, this path deliberately avoids
-        copying the complete cumulative timing dictionaries on every paint.
-        The compositor keeps one display-local previous snapshot and derives
-        delivery deltas without changing scheduling.
-        """
-        with self._diagnostic_lock:
-            io_diag = self._diagnostic_pools[ThreadPoolType.IO.value]
-            compute_diag = self._diagnostic_pools[ThreadPoolType.COMPUTE.value]
-            snapshot: Dict[str, Any] = {
-                "io_worker_active": int(io_diag["worker_active"]),
-                "io_callbacks_delivered": int(io_diag["callbacks_delivered"]),
-                "io_callbacks_active": int(io_diag["callbacks_active"]),
-                "io_last_task": str(io_diag["last_task"]),
-                "io_last_callback": str(io_diag["last_callback"]),
-                "io_last_queue_wait_ms": float(io_diag["last_queue_wait_ms"]),
-                "io_last_execution_ms": float(io_diag["last_execution_ms"]),
-                "io_last_callback_ms": float(io_diag["last_callback_ms"]),
-                "compute_worker_active": int(compute_diag["worker_active"]),
-                "compute_callbacks_delivered": int(
-                    compute_diag["callbacks_delivered"]
-                ),
-                "compute_callbacks_active": int(compute_diag["callbacks_active"]),
-                "compute_last_task": str(compute_diag["last_task"]),
-                "compute_last_callback": str(compute_diag["last_callback"]),
-                "compute_last_queue_wait_ms": float(
-                    compute_diag["last_queue_wait_ms"]
-                ),
-                "compute_last_execution_ms": float(
-                    compute_diag["last_execution_ms"]
-                ),
-                "compute_last_callback_ms": float(
-                    compute_diag["last_callback_ms"]
-                ),
-            }
-        for pool_type in ThreadPoolType:
-            queue_depth = -1
-            executor = self._executors.get(pool_type)
-            try:
-                queue_depth = int(executor._work_queue.qsize())
-            except Exception:
-                pass
-            snapshot[f"{pool_type.value}_queue_depth"] = queue_depth
-        with _ui_diagnostic_lock:
-            snapshot.update(
-                {
-                    "ui_queued": int(_ui_diagnostics["queued"]),
-                    "ui_delivered": int(_ui_diagnostics["delivered"]),
-                    "ui_failed": int(_ui_diagnostics["failed"]),
-                    "ui_active": int(_ui_diagnostics["active"]),
-                    "ui_queue_depth": int(_ui_diagnostics["queue_depth"]),
-                    "ui_last_callback": str(_ui_diagnostics["last_callback"]),
-                    "ui_last_duration_ms": float(
-                        _ui_diagnostics["last_duration_ms"]
-                    ),
-                    "ui_last_completed_ts": float(
-                        _ui_diagnostics["last_completed_ts"]
-                    ),
-                }
-            )
-        scheduler = self._compute_lane_scheduler
-        lane_diag = (
-            scheduler.frame_snapshot()
-            if scheduler is not None
-            else {}
-        )
-        snapshot.update(
-            {
-                "compute_lane_worker_active": int(
-                    lane_diag.get("worker_active", 0)
-                ),
-                "compute_lane_queue_depth": int(
-                    lane_diag.get("queue_depth", 0)
-                ),
-                "compute_lane_callbacks_delivered": int(
-                    lane_diag.get("callbacks_delivered", 0)
-                ),
-                "compute_lane_last_category": str(
-                    lane_diag.get("last_category", "<none>")
-                ),
-                "compute_lane_last_execution_ms": float(
-                    lane_diag.get("last_execution_ms", 0.0)
-                ),
-                "compute_lane_last_callback_ms": float(
-                    lane_diag.get("last_callback_ms", 0.0)
-                ),
-            }
-        )
-        return snapshot
-
     def get_lifecycle_ownership_snapshot(self) -> Dict[str, Any]:
         """Return active task and queued-UI ownership grouped by generation."""
 
@@ -1698,17 +1544,13 @@ class ThreadManager:
                     # expected gaps that should not spam warnings.
                     threshold_ms = max(100.0, float(active_interval_ms) * 2.0)
                     if gap_ms > threshold_ms and is_perf_metrics_enabled():
-                        context = _describe_timer_callable_context(func)
-                        if not _should_suppress_large_timer_gap_warning(gap_ms, active_interval_ms, context):
-                            likely_cause = _classify_large_timer_gap_warning(context)
-                            logger.warning(
-                                "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms likely=%s context=%s)",
-                                timer_desc,
-                                gap_ms,
-                                active_interval_ms,
-                                likely_cause,
-                                context,
-                            )
+                        logger.warning(
+                            "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms context=%s)",
+                            timer_desc,
+                            gap_ms,
+                            active_interval_ms,
+                            _describe_timer_callable_context(func),
+                        )
                 _last_invoke_ts[0] = now
                 func(*args, **(kwargs or {}))
             except Exception as e:
@@ -1716,10 +1558,11 @@ class ThreadManager:
         
         owner, owner_class, owner_id, runtime_generation = _callable_runtime_identity(func)
         timer_parent = owner if isinstance(owner, QObject) else None
-        timer = QTimer(timer_parent)
+        timer = _GapTrackedTimer(timer_parent)
         timer._runtime_generation = runtime_generation
         timer._srpss_owner_class = owner_class
         timer._srpss_owner_id = owner_id
+        timer._srpss_gap_epoch_reset = lambda: _last_invoke_ts.__setitem__(0, 0.0)
         timer_ref[0] = timer
         timer.setTimerType(Qt.TimerType.PreciseTimer)
         timer.timeout.connect(_invoke)

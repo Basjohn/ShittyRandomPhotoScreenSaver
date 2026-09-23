@@ -45,14 +45,6 @@ retained-scene tests as the gate. Two small, concrete hygiene items found while 
 
 ## Documentation / source contradictions
 
-### DC-03 — Comments/docstrings naming retired owners · P3 · R1
-
-- `core/threading/manager.py` gap classifier docstring (visualizer hands cadence to AnimationManager) and its
-  `MediaWidget` context branch; `get_frame_delivery_snapshot` ("the compositor … on every paint") now has test callers
-  only.
-
-- [ ] Fix with LC-04 (same owner); no separate doc tranche.
-
 ### DC-04 — Guardrail vs source conflict (tracked where it is fixed)
 
 Guardrails §"Qt Quick presentation-clock": "never add dormant per-frame Python … on `frameSwapped`". Source keeps one
