@@ -294,25 +294,6 @@ def test_block_flip_grid_saves_the_canonical_rows_and_cols_contract(
     assert "columns" not in block_flip
 
 
-def test_melt_wip_warning_is_settings_presentation_only(qapp, settings_manager, qtbot):
-    tab = TransitionsTab(settings_manager)
-    qtbot.addWidget(tab)
-
-    label = "Melt Drip (WIP - VERY SHITTY)"
-    assert tab._nav_buttons["Melt Drip"].text() == label
-    assert tab._activation_checkboxes["Melt Drip"].text() == label
-    assert tab._pool_checkboxes["Melt Drip"].text() == label
-
-    # Stable selection/persistence identity remains unchanged.
-    assert tab.transition_combo.findText("Melt Drip") >= 0
-    assert tab.transition_combo.findText(label) == -1
-
-    tab._activation_checkboxes["Melt Drip"].setChecked(True)
-    tab._on_nav_selected("Melt Drip")
-    assert tab.melt_drip_group.title() == f"{label} Settings"
-    assert tab._current_transition == "Melt Drip"
-
-
 def test_melt_origin_combo_offers_origins_and_retires_edge_directions(
     qapp, settings_manager, qtbot
 ):

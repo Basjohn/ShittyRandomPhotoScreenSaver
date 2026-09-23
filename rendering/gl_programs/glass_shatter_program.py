@@ -18,7 +18,10 @@ layout(location=7) in float aRadius;
 layout(location=8) in vec2 aLife;    // visible from .x until .y (split parents/children)
 layout(location=9) in vec4 aKick;    // velocity kick xyz from time .w
 layout(location=10) in vec4 aSpin;   // extra spin axis xyz and rate .w from aKick.w
-layout(location=11) in vec2 aPivot;  // this piece's own centre (spin pivot)
+layout(location=11) in vec2 aPivot;  // stage-1 spin pivot
+layout(location=12) in vec4 aKick2;  // second crack: kick xyz from time .w
+layout(location=13) in vec4 aSpin2;  // second crack: spin axis xyz, rate .w
+layout(location=14) in vec2 aPivot2; // second crack: this piece's own centre
 uniform mat4 uMatrix;
 uniform vec2 uItemSize;
 uniform vec2 uDirection;
@@ -68,15 +71,26 @@ void main() {
     float thickness=aRadius*.65*uThickness*impact;
     vec3 position=rotateAxis(vec3(delta,aZ*thickness),axis,angle);
     vec3 normal=rotateAxis(normalize(aNormal),axis,angle);
-    // Build-time event: from aKick.w the piece takes a velocity kick and spins
-    // about its own centre. Time freezes with the path at the exit.
+    // Build-time events: from aKick.w the piece takes a velocity kick and spins
+    // about its pivot; a second crack adds another stage from aKick2.w. Time
+    // freezes with the path at the exit.
     float tau=max(min(uProgress,.98)-aKick.w,0.0);
+    float tau2=max(min(uProgress,.98)-aKick2.w,0.0);
+    vec3 pivot=vec3(0.0);
     if(tau>0.0) {
         vec2 pivotDelta=vec2((aPivot.x-aCenter.x)*aspect,aCenter.y-aPivot.y);
-        vec3 pivot=rotateAxis(vec3(pivotDelta,-.5*thickness),axis,angle);
+        pivot=rotateAxis(vec3(pivotDelta,-.5*thickness),axis,angle);
         float spin=aSpin.w*tau;
         position=pivot+rotateAxis(position-pivot,aSpin.xyz,spin);
         normal=rotateAxis(normal,aSpin.xyz,spin);
+    }
+    if(tau2>0.0) {
+        vec2 pivotDelta2=vec2((aPivot2.x-aCenter.x)*aspect,aCenter.y-aPivot2.y);
+        vec3 pivot2=rotateAxis(vec3(pivotDelta2,-.5*thickness),axis,angle);
+        if(tau>0.0) pivot2=pivot+rotateAxis(pivot2-pivot,aSpin.xyz,aSpin.w*tau);
+        float spin2=aSpin2.w*tau2;
+        position=pivot2+rotateAxis(position-pivot2,aSpin2.xyz,spin2);
+        normal=rotateAxis(normal,aSpin2.xyz,spin2);
     }
     direction=normalize(direction+vec2(-direction.y,direction.x)*(.35*(aVariation-.5)));
     // Ray/expanded-rectangle exit accounts for the entire rotating prism and
@@ -91,7 +105,7 @@ void main() {
     position.xy+=center+direction*exitDistance*travel;
     position.y-=.16*sin(3.14159265*local)*local;
     position.z+=uDepth*(.56*sin(3.14159265*local)-.6*local*local);
-    position+=aKick.xyz*tau;
+    position+=aKick.xyz*tau+aKick2.xyz*tau2;
     float w=3.0-position.z;
     vec2 uv=vec2(position.x/aspect,-position.y)*3.0/w+.5;
     vec4 projected=uMatrix*vec4(uv*uItemSize,0,1);

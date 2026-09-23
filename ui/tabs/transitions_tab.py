@@ -50,15 +50,6 @@ logger = get_logger(__name__)
 _TRANSITION_SETTING_NAMES = get_transition_setting_names()
 
 _SETUP_NAV_KEY = "__setup__"
-_MELT_SETTINGS_LABEL = "Melt Drip (WIP - VERY SHITTY)"
-
-
-def _transition_settings_label(name: str) -> str:
-    """Return presentation-only Settings text without changing stable IDs."""
-
-    return _MELT_SETTINGS_LABEL if name == "Melt Drip" else name
-
-
 def _transition_default(path: str):
     """Return one persisted Transition product default from canonical authority."""
 
@@ -365,7 +356,7 @@ class TransitionsTab(QWidget):
 
         _add_nav_pill(_SETUP_NAV_KEY, "Setup")
         for name in _TRANSITION_SETTING_NAMES:
-            _add_nav_pill(name, _transition_settings_label(name))
+            _add_nav_pill(name, name)
         layout.addWidget(nav_container)
 
         # Duration group (slider: short → long)
@@ -475,7 +466,7 @@ class TransitionsTab(QWidget):
         activation_grid_host = FlowContainer(h_spacing=18, v_spacing=8, uniform_cells=True)
         self._activation_checkboxes = {}
         for name in _TRANSITION_SETTING_NAMES:
-            row = QCheckBox(_transition_settings_label(name))
+            row = QCheckBox(name)
             row.setProperty("circleIndicator", True)
             row.setMinimumWidth(_MODULE_ROW_MIN_WIDTH)
             row.setChecked(True)
@@ -522,7 +513,7 @@ class TransitionsTab(QWidget):
         pool_grid_host = FlowContainer(h_spacing=18, v_spacing=8, uniform_cells=True)
         self._pool_checkboxes = {}
         for name in _TRANSITION_SETTING_NAMES:
-            row = QCheckBox(_transition_settings_label(name))
+            row = QCheckBox(name)
             row.setProperty("circleIndicator", True)
             row.setMinimumWidth(_MODULE_ROW_MIN_WIDTH)
             row.toggled.connect(
@@ -1163,7 +1154,7 @@ class TransitionsTab(QWidget):
         )
 
     def _build_melt_drip_group(self) -> None:
-        self.melt_drip_group = QGroupBox(f"{_MELT_SETTINGS_LABEL} Settings")
+        self.melt_drip_group = QGroupBox("Melt Drip Settings")
         self._style_group_box(self.melt_drip_group)
         layout = QVBoxLayout(self.melt_drip_group)
         layout.setContentsMargins(0, 12, 0, 0)

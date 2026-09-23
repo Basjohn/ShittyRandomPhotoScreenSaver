@@ -113,6 +113,9 @@ def test_random_transition_pool_can_select_burn_when_hw_accel_enabled() -> None:
             "Crumble": False,
             "Particle": False,
             "Burn": True,
+            # Pooled by default since their acceptance; excluded here.
+            "Glass Shatter": False,
+            "Melt Drip": False,
         },
     }
     settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
@@ -181,6 +184,8 @@ def test_random_transition_distribution_is_approximately_uniform_for_enabled_poo
             "Crumble": True,
             "Particle": True,
             "Burn": True,
+            "Glass Shatter": False,
+            "Melt Drip": False,
         },
         "activation": {name: True for name in get_transition_setting_names()},
     }
