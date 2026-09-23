@@ -87,7 +87,8 @@ needs evidence before it is worth doing.
 | DC-04 | Guardrail vs source conflict: per-frame `frameSwapped` Python callback (PR-02) | P3 | R1 | Low | documented; fixed only when PR-02 reopens | source |
 
 Closed: LC-01, PR-05, PW-06 and the prefetch double batch (08 §Closed; 06 §Considered and rejected). Accepted and
-removed: PW-02 (2026-09-23; durable rule in Spec §State/actions). Crumble and Melt
+removed: PW-02 (2026-09-23; durable rule in Spec §State/actions). Historical records for defects this audit found:
+R-89 (cross-file native abort), R-90 (Core Audio double release), R-91 (orphaned workers), R-92 (TX-02), R-93 (PW-02). Crumble and Melt
 control rework is transition product work (`Docs/Future_Work/Transition_Expansion.md`), not a register item.
 
 ## Sequencing
