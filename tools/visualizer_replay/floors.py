@@ -5,6 +5,8 @@ import json
 import math
 from pathlib import Path
 
+from widgets.spotify_visualizer import mode_capabilities
+
 REFERENCE = Path(__file__).resolve().parents[2] / "tests/goldens/visualizer_replay/reactivity_floor.json"
 
 
@@ -35,7 +37,11 @@ def calibrate(results):
             maximums = {key: 1e-6 for key in ("bar_peak", "waveform_peak", "onset_count")}
         elif fixture != "mode_visibility_switch":
             keys = ["bar_peak", "bar_flux", "integrated_bar_energy", "attack_slope_per_s",
-                    "waveform_rms", "output_flux"]
+                    "output_flux"]
+            # Only sample-consuming modes carry waveform samples (VZ-04); for the
+            # rest the lane would only measure the omitted raw source copy.
+            if mode_capabilities.consumes_waveform_samples(mode):
+                keys.append("waveform_rms")
             if mode == "bubble":
                 keys += ["bubble_radius_excursion", "bubble_particle_peak"]
             for key in keys:

@@ -214,11 +214,18 @@ def _base_extras(widget: Any, mode_id: str, engine: Any) -> dict[str, Any]:
     extra["latest_waveform_generation"] = _safe_call(
         "get_latest_generation_with_waveform"
     )
-    waveform = _safe_call("get_waveform", ())
-    extra["waveform"] = waveform if waveform is not None else ()
+    # Only sample-consuming modes copy the 256 samples (VZ-04); the count stays
+    # live for every mode exactly as before.
+    consumes_samples = mode_capabilities.consumes_waveform_samples(mode_id)
+    waveform = _safe_call("get_waveform", ()) if consumes_samples else None
     waveform_count = _safe_call("get_waveform_count")
+    if waveform is None and waveform_count is None:
+        # A count-less engine has always derived the count from the samples.
+        waveform = _safe_call("get_waveform", ())
+    samples = waveform if waveform is not None else ()
+    extra["waveform"] = samples if consumes_samples else ()
     extra["waveform_count"] = (
-        len(extra["waveform"])
+        len(samples)
         if waveform_count is None
         else int(waveform_count)
     )

@@ -74,7 +74,7 @@ tick-pipeline surgery, park it instead.
 
 ---
 
-## VZ-04 — Every mode's logical frame copies and validates the 256-sample waveform · P3 · R1 · Risk Low–Medium · Do with care
+## VZ-04 — Every mode's logical frame copies and validates the 256-sample waveform · P3 · R1 · Risk Low–Medium · `[~]`
 
 **Evidence.** `_base_extras()` always calls `engine.get_waveform()` (a 256-element `list` copy,
 `beat_engine.py:1369-1371`; `logical_frame_capture.py:217-224`), and `VisualizerCommonState.__post_init__`
@@ -87,9 +87,21 @@ Source search finds only the Oscilloscope renderer reading `common.waveform`
 `waveform=()` (the field already defaults to `()`). `waveform_count` and the latest waveform generation are a separate
 authority from the sample payload and must not change (Sine/line-mode readiness, R-87 CHK12).
 
-- [ ] Per-mode payload test pinning which modes consume the sample payload (a future mode cannot silently read an
-      omitted field).
-- [ ] Oscilloscope-only payload; readiness/generation semantics unchanged; BTF active-music lane.
+- [x] One declaration: `mode_capabilities.consumes_waveform_samples` (`{"oscilloscope"}`). `_base_extras` copies samples
+      only for declared modes; every mode still reads `get_waveform_count` and the waveform generation exactly as before
+      (a count-less engine still derives the count from the samples). VZ-01's paused idle-synthesis demand now uses the
+      same declaration. Other `common.waveform` readers found: the opt-in `[VIS_PLAYBACK_EDGE]` T5/T7 debug diagnostics,
+      whose `waveform_level` now reads 0 for non-consumer modes (their bars/energy levels still gate T5).
+- [x] Bars: `tests/test_visualizer_waveform_payload.py` — consumer set pinned; any renderer reading `common.waveform`
+      must be declared; per-mode capture carries samples only for Oscilloscope with count/generation unchanged; the
+      count-less fallback preserved (10 of 14 fail without the fix). Visualizer, Bubble, Sine, Oscilloscope, line-mode
+      and replay suites green per file.
+- [x] Replay oracle: `waveform_rms` minimums for Spectrum/Sine/Bubble/DevCurve were the same raw-source value per
+      fixture (a payload those modes never render); the 44 bounds are removed from
+      `tests/goldens/visualizer_replay/reactivity_floor.json`, `tools/visualizer_replay/floors.calibrate()` applies the
+      same rule, and `test_waveform_floors_apply_only_to_sample_consuming_modes` pins it. Bar, energy, attack and
+      output-flux floors are untouched.
+- [ ] BTF Layer 4 (installed, active music): all six modes; Oscilloscope output and Sine readiness/reveal unchanged.
 
 ---
 

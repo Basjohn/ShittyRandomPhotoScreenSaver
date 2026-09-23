@@ -50,7 +50,6 @@
         "bar_flux": 27.61632945,
         "integrated_bar_energy": 0.1529907,
         "attack_slope_per_s": 22.33371915,
-        "waveform_rms": 0.02519355,
         "output_flux": 41.42861007016954
       },
       "maximums": {}
@@ -158,7 +157,6 @@
         "bar_flux": 38.24882585,
         "integrated_bar_energy": 0.14313145,
         "attack_slope_per_s": 22.33371915,
-        "waveform_rms": 0.02519355,
         "output_flux": 2.360803642538121
       },
       "maximums": {}
@@ -212,7 +210,6 @@
         "bar_flux": 45.88917055,
         "integrated_bar_energy": 0.14312065,
         "attack_slope_per_s": 22.33371915,
-        "waveform_rms": 0.02519355,
         "output_flux": 91.08915638951983,
         "bubble_radius_excursion": 0.00324705,
         "bubble_particle_peak": 30.0
@@ -268,7 +265,6 @@
         "bar_flux": 33.4879785,
         "integrated_bar_energy": 0.1432424,
         "attack_slope_per_s": 22.33371915,
-        "waveform_rms": 0.02519355,
         "output_flux": 31.460987557720443
       },
       "maximums": {}
@@ -322,7 +318,6 @@
         "bar_flux": 33.66192525,
         "integrated_bar_energy": 0.1814324,
         "attack_slope_per_s": 22.39237615,
-        "waveform_rms": 0.02718295,
         "output_flux": 46.85254484028763
       },
       "maximums": {}
@@ -430,7 +425,6 @@
         "bar_flux": 48.40853055,
         "integrated_bar_energy": 0.17096895,
         "attack_slope_per_s": 22.39237615,
-        "waveform_rms": 0.02718295,
         "output_flux": 2.6574230862053856
       },
       "maximums": {}
@@ -484,7 +478,6 @@
         "bar_flux": 58.07721335,
         "integrated_bar_energy": 0.1709423,
         "attack_slope_per_s": 22.39237615,
-        "waveform_rms": 0.02718295,
         "output_flux": 120.05664443868453,
         "bubble_radius_excursion": 0.00385255,
         "bubble_particle_peak": 30.5
@@ -540,7 +533,6 @@
         "bar_flux": 42.38880225,
         "integrated_bar_energy": 0.1710924,
         "attack_slope_per_s": 22.39237615,
-        "waveform_rms": 0.02718295,
         "output_flux": 41.32420755915611
       },
       "maximums": {}
@@ -594,7 +586,6 @@
         "bar_flux": 17.24749135,
         "integrated_bar_energy": 0.1191188,
         "attack_slope_per_s": 22.265304,
-        "waveform_rms": 0.020656,
         "output_flux": 29.310762794473415
       },
       "maximums": {}
@@ -702,7 +693,6 @@
         "bar_flux": 22.2968886,
         "integrated_bar_energy": 0.1113357,
         "attack_slope_per_s": 22.265304,
-        "waveform_rms": 0.020656,
         "output_flux": 1.409950730126036
       },
       "maximums": {}
@@ -756,7 +746,6 @@
         "bar_flux": 26.7368152,
         "integrated_bar_energy": 0.11135745,
         "attack_slope_per_s": 22.265304,
-        "waveform_rms": 0.020656,
         "output_flux": 81.84382705897946,
         "bubble_radius_excursion": 0.0033122,
         "bubble_particle_peak": 29.5
@@ -812,7 +801,6 @@
         "bar_flux": 19.5187785,
         "integrated_bar_energy": 0.11142705,
         "attack_slope_per_s": 22.265304,
-        "waveform_rms": 0.020656,
         "output_flux": 18.696660031595563
       },
       "maximums": {}
@@ -866,7 +854,6 @@
         "bar_flux": 32.18458235,
         "integrated_bar_energy": 0.28250335,
         "attack_slope_per_s": 21.3965419,
-        "waveform_rms": 0.0890528,
         "output_flux": 43.927019863620764
       },
       "maximums": {}
@@ -974,7 +961,6 @@
         "bar_flux": 50.84709325,
         "integrated_bar_energy": 0.2814813,
         "attack_slope_per_s": 21.3965419,
-        "waveform_rms": 0.0890528,
         "output_flux": 0.1219901601543327
       },
       "maximums": {}
@@ -1028,7 +1014,6 @@
         "bar_flux": 61.12478325,
         "integrated_bar_energy": 0.2816223,
         "attack_slope_per_s": 21.3965419,
-        "waveform_rms": 0.0890528,
         "output_flux": 220.15402603663085,
         "bubble_radius_excursion": 0.0138988,
         "bubble_particle_peak": 31.0
@@ -1084,7 +1069,6 @@
         "bar_flux": 44.9089928,
         "integrated_bar_energy": 0.282226,
         "attack_slope_per_s": 21.3965419,
-        "waveform_rms": 0.0890528,
         "output_flux": 48.14486326362687
       },
       "maximums": {}
@@ -1138,7 +1122,6 @@
         "bar_flux": 9.96600605,
         "integrated_bar_energy": 0.1266523,
         "attack_slope_per_s": 0.4808817,
-        "waveform_rms": 0.06568645,
         "output_flux": 19.932012064780995
       },
       "maximums": {}
@@ -1246,7 +1229,6 @@
         "bar_flux": 11.65097095,
         "integrated_bar_energy": 0.13324165,
         "attack_slope_per_s": 0.4849087,
-        "waveform_rms": 0.06568645,
         "output_flux": 0.5908383295306388
       },
       "maximums": {}
@@ -1300,7 +1282,6 @@
         "bar_flux": 13.97899915,
         "integrated_bar_energy": 0.13321795,
         "attack_slope_per_s": 0.4849087,
-        "waveform_rms": 0.06568645,
         "output_flux": 123.98282710403929,
         "bubble_radius_excursion": 0.0165741,
         "bubble_particle_peak": 26.0
@@ -1356,7 +1337,6 @@
         "bar_flux": 10.2015771,
         "integrated_bar_energy": 0.13333225,
         "attack_slope_per_s": 0.4849087,
-        "waveform_rms": 0.06568645,
         "output_flux": 19.269285559818062
       },
       "maximums": {}
@@ -1410,7 +1390,6 @@
         "bar_flux": 11.55295585,
         "integrated_bar_energy": 0.14223855,
         "attack_slope_per_s": 0.21150305,
-        "waveform_rms": 0.0625035,
         "output_flux": 22.02041076764655
       },
       "maximums": {}
@@ -1518,7 +1497,6 @@
         "bar_flux": 17.34006375,
         "integrated_bar_energy": 0.14625395,
         "attack_slope_per_s": 0.2177688,
-        "waveform_rms": 0.0625035,
         "output_flux": 0.6037214648936999
       },
       "maximums": {}
@@ -1572,7 +1550,6 @@
         "bar_flux": 20.80925075,
         "integrated_bar_energy": 0.14626035,
         "attack_slope_per_s": 0.2177688,
-        "waveform_rms": 0.0625035,
         "output_flux": 231.690210427237,
         "bubble_radius_excursion": 0.01353165,
         "bubble_particle_peak": 36.5
@@ -1628,7 +1605,6 @@
         "bar_flux": 15.1832543,
         "integrated_bar_energy": 0.1463565,
         "attack_slope_per_s": 0.2177688,
-        "waveform_rms": 0.0625035,
         "output_flux": 18.893904353745896
       },
       "maximums": {}
@@ -1682,7 +1658,6 @@
         "bar_flux": 5.9776226,
         "integrated_bar_energy": 0.01767825,
         "attack_slope_per_s": 9.3490134,
-        "waveform_rms": 0.0209949,
         "output_flux": 10.611702134334575
       },
       "maximums": {}
@@ -1790,7 +1765,6 @@
         "bar_flux": 8.7152574,
         "integrated_bar_energy": 0.016346,
         "attack_slope_per_s": 10.88204695,
-        "waveform_rms": 0.0209949,
         "output_flux": 0.49720441842986796
       },
       "maximums": {}
@@ -1844,7 +1818,6 @@
         "bar_flux": 10.4545684,
         "integrated_bar_energy": 0.01634015,
         "attack_slope_per_s": 10.88204695,
-        "waveform_rms": 0.0209949,
         "output_flux": 12.164980442143165,
         "bubble_radius_excursion": 0.00319555,
         "bubble_particle_peak": 24.5
@@ -1900,7 +1873,6 @@
         "bar_flux": 7.63234735,
         "integrated_bar_energy": 0.01635995,
         "attack_slope_per_s": 10.88204695,
-        "waveform_rms": 0.0209949,
         "output_flux": 8.092249935810681
       },
       "maximums": {}
@@ -2240,7 +2212,6 @@
         "bar_flux": 39.16692055,
         "integrated_bar_energy": 0.25666475,
         "attack_slope_per_s": 0.6037371,
-        "waveform_rms": 0.05355425,
         "output_flux": 52.06467401625841
       },
       "maximums": {}
@@ -2348,7 +2319,6 @@
         "bar_flux": 50.3351163,
         "integrated_bar_energy": 0.2542751,
         "attack_slope_per_s": 0.61911945,
-        "waveform_rms": 0.05355425,
         "output_flux": 0.2663565510583479
       },
       "maximums": {}
@@ -2402,7 +2372,6 @@
         "bar_flux": 60.3992193,
         "integrated_bar_energy": 0.2542664,
         "attack_slope_per_s": 0.61911945,
-        "waveform_rms": 0.05355425,
         "output_flux": 202.37911917158547,
         "bubble_radius_excursion": 0.01173595,
         "bubble_particle_peak": 31.5
@@ -2458,7 +2427,6 @@
         "bar_flux": 44.2072616,
         "integrated_bar_energy": 0.25463515,
         "attack_slope_per_s": 0.61911945,
-        "waveform_rms": 0.05355425,
         "output_flux": 76.07385477173298
       },
       "maximums": {}
@@ -2767,7 +2735,6 @@
         "bar_flux": 10.0415097,
         "integrated_bar_energy": 0.1709668,
         "attack_slope_per_s": 0.46888915,
-        "waveform_rms": 0.08929885,
         "output_flux": 20.083019437848197
       },
       "maximums": {}
@@ -2875,7 +2842,6 @@
         "bar_flux": 11.58980025,
         "integrated_bar_energy": 0.1733935,
         "attack_slope_per_s": 0.5970328,
-        "waveform_rms": 0.08929885,
         "output_flux": 0.5900143121087161
       },
       "maximums": {}
@@ -2929,7 +2895,6 @@
         "bar_flux": 13.9171835,
         "integrated_bar_energy": 0.17341,
         "attack_slope_per_s": 0.5970328,
-        "waveform_rms": 0.08929885,
         "output_flux": 165.4123247426827,
         "bubble_radius_excursion": 0.0157991,
         "bubble_particle_peak": 28.5
@@ -2985,7 +2950,6 @@
         "bar_flux": 10.14730805,
         "integrated_bar_energy": 0.1735668,
         "attack_slope_per_s": 0.5970328,
-        "waveform_rms": 0.08929885,
         "output_flux": 27.06454619854659
       },
       "maximums": {}
@@ -3039,7 +3003,6 @@
         "bar_flux": 0.09275075,
         "integrated_bar_energy": 0.14691675,
         "attack_slope_per_s": 2.3815751,
-        "waveform_rms": 0.08307665,
         "output_flux": 0.18550150054815617
       },
       "maximums": {}
@@ -3147,7 +3110,6 @@
         "bar_flux": 0.17639155,
         "integrated_bar_energy": 0.14704325,
         "attack_slope_per_s": 4.77169085,
-        "waveform_rms": 0.08307665,
         "output_flux": 0.08369517170614052
       },
       "maximums": {}
@@ -3201,7 +3163,6 @@
         "bar_flux": 0.23118545,
         "integrated_bar_energy": 0.1467959,
         "attack_slope_per_s": 4.77169085,
-        "waveform_rms": 0.08307665,
         "output_flux": 168.12515638706557,
         "bubble_radius_excursion": 0.01597685,
         "bubble_particle_peak": 26.0
@@ -3257,7 +3218,6 @@
         "bar_flux": 0.14874095,
         "integrated_bar_energy": 0.14708215,
         "attack_slope_per_s": 4.77169085,
-        "waveform_rms": 0.08307665,
         "output_flux": 18.534324685785617
       },
       "maximums": {}
@@ -3311,7 +3271,6 @@
         "bar_flux": 0.07974995,
         "integrated_bar_energy": 0.15978435,
         "attack_slope_per_s": 23.87074775,
-        "waveform_rms": 0.08312925,
         "output_flux": 0.15949986173755354
       },
       "maximums": {}
@@ -3418,8 +3377,7 @@
         "bar_peak": 0.4774719,
         "bar_flux": 0.15050715,
         "integrated_bar_energy": 0.15995075,
-        "attack_slope_per_s": 23.8735947,
-        "waveform_rms": 0.08312925
+        "attack_slope_per_s": 23.8735947
       },
       "maximums": {}
     },
@@ -3472,7 +3430,6 @@
         "bar_flux": 0.19235195,
         "integrated_bar_energy": 0.15968885,
         "attack_slope_per_s": 23.89669175,
-        "waveform_rms": 0.08312925,
         "output_flux": 80.04764714061245,
         "bubble_radius_excursion": 0.00805525,
         "bubble_particle_peak": 28.5
@@ -3528,7 +3485,6 @@
         "bar_flux": 0.1366422,
         "integrated_bar_energy": 0.15985395,
         "attack_slope_per_s": 23.87074775,
-        "waveform_rms": 0.08312925,
         "output_flux": 12.996536228036168
       },
       "maximums": {}

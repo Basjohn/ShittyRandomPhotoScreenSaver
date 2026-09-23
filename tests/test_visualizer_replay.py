@@ -77,6 +77,16 @@ def test_control_fixture_keeps_mode_and_visibility_events(clips):
     assert result["presentation_trace"] == [i for i, frame in enumerate(clip.frames) if frame.visible]
 
 
+def test_waveform_floors_apply_only_to_sample_consuming_modes():
+    from widgets.spotify_visualizer import mode_capabilities
+
+    reference = json.loads(REFERENCE.read_text(encoding="utf-8"))
+    for case, bounds in reference["cases"].items():
+        mode = case.split("__")[1]
+        if not mode_capabilities.consumes_waveform_samples(mode):
+            assert "waveform_rms" not in bounds["minimums"], case
+
+
 def test_every_retained_v1_case_has_a_floor_entry():
     prior = {path.stem for path in (REFERENCE.parent / "v1").glob("*.json") if path.stem != "manifest"}
     assert set(CASES) == prior

@@ -34,7 +34,7 @@ recorded; the replacement watchdog armed six times (four Settings, two CUSTOM Ed
 | VZ-03 phase recording | 4.2 µs/tick of diagnostic work at rest | **Do** — `[~]` landed | next `--perf` slow tick |
 | PW-05 cancellable `single_shot` | two hand-rolled parentless deadline `QTimer`s | **Do** — `[~]` landed | physical check |
 | PW-03 Clock notify | 0.69–0.77 ms GUI per 1 Hz emit per clock; live tick 597–618 → 48–50 µs after the split | **Do with care** — `[~]` landed | physical check |
-| VZ-04 waveform payload | 38.4 µs/tick for modes that never draw samples | **Do with care** | per-mode consumer bar + BTF lane |
+| VZ-04 waveform payload | 38.4 µs/tick for modes that never draw samples | **Do with care** — `[~]` landed | BTF Layer 4 active-music review |
 | PR-04 Stage A — opaque pixels + premultiplied label | soak: 10 transition ends 26.6–90.6 ms; Qt conversion 8.12 → 0.15 ms idle | **Do with care** — partial mitigation | post-change frame trace of the whole cycle |
 | PR-04 Stage B — drop `.copy()` | ≈3–4.5 ms sync | **Gated** | Qt/PySide lifetime test first |
 | PW-02 Media-only lane | fault injection + soak startup burst (IO queue wait max ≈1.9 s) | **Do with care** — lane admitted | per-category queue-wait telemetry as validation |
