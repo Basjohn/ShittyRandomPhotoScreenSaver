@@ -102,6 +102,22 @@ class FrozenFields(Mapping[str, object]):
     def as_dict(self) -> dict[str, object]:
         return {name: _thaw(value) for name, value in self.entries}
 
+    @classmethod
+    def _from_frozen_entries(
+        cls,
+        entries: tuple[tuple[str, object], ...],
+    ) -> "FrozenFields":
+        """Adopt entries that ``freeze_render_fields`` already froze and validated.
+
+        The public constructor re-freezes and re-validates every entry, which
+        doubled the per-tick cost of every capture (and compounded for nested
+        mappings). Callers must pass unique, sorted, non-empty names whose values
+        are already deep-frozen.
+        """
+        instance = object.__new__(cls)
+        object.__setattr__(instance, "entries", entries)
+        return instance
+
 
 def freeze_render_value(value: object) -> object:
     """Deep-freeze a render value without retaining its mutable source.
@@ -114,6 +130,9 @@ def freeze_render_value(value: object) -> object:
         return value
     if isinstance(value, float):
         return _finite(value, name="render value")
+    if isinstance(value, FrozenFields):
+        # Deep-frozen by construction; rebuilding it only repeats the work.
+        return value
     if isinstance(value, Enum):
         return freeze_render_value(value.value)
     if isinstance(value, Mapping):
@@ -154,7 +173,7 @@ def freeze_render_fields(
         if name in frozen:
             raise ValueError(f"duplicate render field: {name}")
         frozen[name] = freeze_render_value(value)
-    return FrozenFields(tuple(sorted(frozen.items())))
+    return FrozenFields._from_frozen_entries(tuple(sorted(frozen.items())))
 
 
 def _float_tuple(values: Sequence[object], *, name: str) -> tuple[float, ...]:

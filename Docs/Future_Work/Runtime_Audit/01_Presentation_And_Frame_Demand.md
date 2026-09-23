@@ -157,7 +157,28 @@ for the first 3 frames after each `transition_finalized` against steady frames.
 **Must remain true.** R-60 texture identity (one DPR owner, no rekey), R-50 byte-bounded retention and
 release-on-owner-context, R-63 no black flash, CHK21 steady native ownership.
 
-- [ ] Evidence captured and classified (keep / fix).
+- [x] Evidence captured and classified (keep / fix): **confirmed, fix.** Operator `--frame-trace` run 2026-09-23
+      08:06–08:09, three transitions per display, first Quick render cycle after each run's last custom background
+      frame vs that screen's median:
+
+      | Screen | Steady cycle (median) | First cycle after transition end | Of which sync (`QImage.copy`) | Of which render pass (re-upload) |
+      | --- | ---: | ---: | ---: | ---: |
+      | 1 — 3840×2160, Visualizer | 2.8 ms | **24.7–24.8 ms** (×3) | 4.3–4.9 ms | 13.5–14.1 ms |
+      | 0 — 2560×1440 | 1.1 ms | 6.9–8.4 ms (×3) | 2.5–3.3 ms | ≈0.1 ms |
+
+      On the Visualizer display every image change costs one ≈22 ms render-thread stall (1–2 visualizer frames at
+      90 Hz), R3-class. Transition *starts* show a separate 13–28 ms first-cycle cost (destination upload, plus TX-01
+      geometry before that fix).
+- **Repair options after checking PySide 6.9.1 bindings:**
+  - *Zero re-upload* (hand the transition's GL texture to the native branch, or let the custom node borrow the native
+    texture) needs `QSGOpenGLTexture::fromNative`, `QRhiTexture.createFrom` or `QRhiTexture.nativeTexture` — **none
+    are bound** in PySide 6.9.1 (`createTextureFromRhiTexture` exists but a QRhiTexture cannot wrap an existing GL
+    id). Blocked on bindings or a small native helper; operator decision.
+  - *Drop the 33 MB `.copy()`* (saves the 3–4.5 ms GUI-blocking sync part only): keep the `PresentationImage` bytes
+    referenced for as long as the `QSGPlainTexture` may reference the image (it shares the external buffer via
+    implicit sharing, possibly beyond the upload). Needs a real Qt lifetime test before any change.
+  - Moving the upload elsewhere (earlier in the run) only relocates the 13.5 ms stall into the animation or stacks it
+    on the already-costly start frame; rejected.
 - [ ] If fixed: `tests/test_qtquick_retained_background_contract.py` + VRAM/texture accounting bars; physical
       transition end on both displays.
 

@@ -95,7 +95,11 @@ after each replacement.
 `gc.unfreeze()` (retired gen-0 cycles become collectable by the normal cadence), then one-shot re-freeze after the new
 generation warms. No `gc.collect()`, no threshold tuning (Performance contract §P2), no periodic work.
 
-- [ ] Evidence classified from the R-84 run.
+- [ ] Evidence classified from the R-84 run. **2026-09-23 08:06–08:09 operator run (1 Settings round-trip):**
+      `collections=(194, 8, 0)` — no gen-2 collection at all, but the run ended ≈18 s after the replacement. With the
+      active thresholds `(700, 20, 50)` a gen-2 pass needs ≈1,000 gen-0 passes (≈15 min at this run's allocation rate),
+      so a valid capture needs ≥20 min of runtime *after* a Settings round-trip with `--perf`, then grep
+      `[PERF][GC_POLICY] generation=2 duration_ms=`. Inconclusive until then.
 - [ ] If implemented: `tests/test_gc_freeze_lifetime.py` extended for re-freeze; RSS/USS plateau across 3–5 cycles.
 
 ---

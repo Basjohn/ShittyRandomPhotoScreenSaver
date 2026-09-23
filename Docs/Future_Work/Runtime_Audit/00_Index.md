@@ -70,10 +70,10 @@ needs evidence before it is worth doing.
 | PW-01 | `[~]` Every GSMTC timeline edge re-read the whole album-art thumbnail (operator run: 97 reads, 4 real artwork decodes in 6 min); timeline-only refreshes now reuse held artwork for the same track — physical check open | P2 | R2 | Low | log-measured |
 | PR-03 | `[~]` Custom background node replaced a 44-field frozen telemetry dataclass ~4× per transition frame on the render thread; now field updates + snapshot built on read (29.6 → 2.2 µs per frame idle) — frame-trace open | P2 | R1–R2 | Low | measured |
 | PR-02 | Ordinary runtime connects `frameSwapped` to a queued per-frame GUI Python callback that republishes unchanged readiness | P2 | R1 | Low–Med | source + measured |
-| PR-04 | Transition finalization deep-copies the 33 MB destination (`QImage.copy()`) during blocked sync and re-uploads it for the native branch although the custom node already uploaded it | P2 | R2 *est* | Medium | source; needs frame-trace |
-| LC-01 | `gc.freeze()` runs once for generation 0 only; every replacement generation loses the gen-2 protection and retired gen-0 cyclic graph stays pinned until exit | P2 | R2 *est* | Medium | source; fold into R-84 exit run |
+| PR-04 | **Confirmed** by frame trace: first Quick cycle after each transition end costs ≈24.8 ms on the 3840×2160 Visualizer display (4.5 ms `QImage.copy` in sync + 13.5 ms re-upload) vs 2.8 ms steady; zero-upload handoff blocked on PySide bindings, `.copy()` removal needs a Qt lifetime test | P1 | R3 | Medium | frame trace |
+| LC-01 | `gc.freeze()` runs once for generation 0 only; the 2026-09-23 run ended 18 s after its replacement, before any gen-2 pass (≈15 min cadence) — needs a ≥20 min post-round-trip `--perf` capture | P2 | R2 *est* | Medium | source; evidence pending |
 | PW-05 | Feed and Games-You-Follow each hand-roll parentless deadline `QTimer`s because `ThreadManager.single_shot` returns no cancel handle | P2 | R1 | Low | source |
-| VZ-05 | Config-static render extras (~30–90 keys) are re-collected and re-frozen every tick for every mode | P2 | R1–R2 *est* | Medium | source; measure |
+| VZ-05 | `[~]` Capture re-froze every render field twice per tick (constructor re-froze what `freeze_render_fields` had just frozen; 41–280 µs/tick by mode); single-freeze landed (2.4× faster), epoch cache parked | P2 | R1–R2 | Low (landed part) | measured |
 | VZ-03 | Tick phase breakdown (closure + dict + 9 timestamps) is recorded every tick though only read when perf-gated | P3 | R1 | Low | source |
 | VZ-04 | Every mode's logical frame copies and validates the 256-sample waveform (≈34 µs/tick) | P3 | R1 | Low–Med | measured |
 | PW-03 | Family models notify 30–67 properties through one `stateChanged` (Clock 1 Hz, Media per event) — the single-notify shape R-84 fixed for the context menu | P3 | R1 | Low | source |
@@ -94,7 +94,7 @@ Each wave is independently committable. Nothing below overrides `Current_Plan.md
 
 - [~] **Wave B (admitted) — measured runtime wins and the one authority defect:** TX-02 → LC-06 → TX-01 → PR-01 →
   PR-03 → PW-01 → VZ-01. Each is its own checkpoint with its acceptance lane (doc sections list the exact bar).
-- [ ] **Wave C — evidence first, then decide:** PW-02 (IO starvation fault injection), LC-01 (piggy-back on the
+- [~] **Wave C (run 2026-09-23) — evidence first, then decide:** PW-02 (IO starvation fault injection), LC-01 (piggy-back on the
   pending R-84 3–5-cycle Settings churn run: grep `[PERF][GC_POLICY] generation=2`), PR-04 (`--frame-trace` around
   one transition end), VZ-05 (per-tick capture timing already recorded in `_tick_phase_ms`).
 - [ ] **Wave D — structure/durability:** PW-05 (cancellable `single_shot` handle; do before FEEDS Custom 2–4),
