@@ -315,7 +315,10 @@ def test_ensure_widget_service_builds_abandonment_without_generic_steam_owner():
     assert service.is_retired() is False
     assert owner.get_widget_service("abandonment_issues") is service
     assert owner.has_runtime_service("achievement_pulse") is True
-    assert owner.has_runtime_service("steam_progress") is False
+    # steam_progress is Games You Follow, whose own shared followed-news service
+    # spec exists; building Abandonment must still not construct it.
+    assert owner.has_runtime_service("steam_progress") is True
+    assert owner.get_widget_service("steam_progress") is None
     assert owner.has_runtime_service("friend_pulse") is True
     assert owner.has_runtime_service("system_stats") is True
     assert owner.retire_widget_service("abandonment_issues") is True
