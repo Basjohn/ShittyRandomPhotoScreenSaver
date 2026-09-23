@@ -114,7 +114,7 @@ decode). Refresh count is unchanged; `[MEDIA_EVENT] summary` now reports `artwor
 
 ---
 
-## PW-03 — One `stateChanged` notify for 30–67 properties per family model · P3 · R1 · Risk Low · Clock: Do with care
+## PW-03 — One `stateChanged` notify for 30–67 properties per family model · P3 · R1 · Risk Low · Clock `[~]`
 
 **Evidence.** Properties sharing one notify signal: Media 67/84, Achievement Pulse 59/98, Abandonment 54/91,
 Gmail 44/51, Weather 36/38, Clock 33/34, Reddit 27/32, System Stats 24/41, Friend Pulse 23/59, Feeds 13/33.
@@ -133,7 +133,17 @@ binding work with no value change. Soak Media summary: 1,207 timeline, 14 playba
   binding saving is material.
 - No repository-wide "one notify per property" refactor.
 
-- [ ] Clock split with before/after measurement on a live Clock; Clock Edit/CUSTOM oracle tests unchanged.
+- [x] Clock split (`rendering/quick/widgets/clock.py`): `timeChanged` notifies `timeText`, `calendarText`,
+      `timezoneText`, `showSeparator` (it also depends on the calendar text) and the three hand angles and fires on
+      every snapshot change; `stateChanged` is now the config/style epoch and fires only when config or style changed
+      (a config edge emits both). No QML change: bindings follow the properties' notify signals.
+      Measured on a live bound Clock (`_publish_tick`, idle machine): **597–618 → 48–50 µs median** per tick, digital
+      and analogue.
+- [x] Bars (`tests/test_qtquick_clock_presentation.py`): per-property notify epochs pinned via the meta-object; a tick
+      emits only `timeChanged` and an unchanged tick nothing; config/style edges emit both; `customEditableChildRoles`
+      never rebuilds on a tick (R-88 guard with a positive control on mode switch). Clock, family-binder,
+      custom-layout-owner, Edit/child-geometry and size-policy suites green per file.
+- [ ] Physical: both faces tick correctly each second; live Settings edits; Clock CUSTOM Edit.
 
 ---
 

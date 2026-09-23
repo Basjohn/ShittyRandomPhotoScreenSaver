@@ -255,6 +255,120 @@ def test_clock_family_reuses_display_engine_and_retains_static_analogue_face_acr
         qt_app.processEvents()
 
 
+_CLOCK_TIME_EPOCH_PROPERTIES = frozenset(
+    {
+        "timeText",
+        "calendarText",
+        "timezoneText",
+        "showSeparator",
+        "hourAngle",
+        "minuteAngle",
+        "secondAngle",
+    }
+)
+
+
+def test_clock_notify_epochs_are_pinned_per_property(qt_app) -> None:
+    """PW-03: only per-second values ride ``timeChanged``; style/config stay put."""
+
+    model = _model([datetime(2026, 8, 25, 13, 24, 30)], _FakeTicker())
+    meta = model.metaObject()
+    notifies = {}
+    for index in range(meta.propertyOffset(), meta.propertyCount()):
+        prop = meta.property(index)
+        notifies[prop.name()] = bytes(prop.notifySignal().name()).decode()
+    assert {name for name, signal in notifies.items() if signal == "timeChanged"} == (
+        _CLOCK_TIME_EPOCH_PROPERTIES
+    )
+    assert set(notifies.values()) == {"timeChanged", "stateChanged", "customGeometryChanged"}
+
+
+def test_clock_tick_emits_only_the_time_epoch(qt_app) -> None:
+    ticker = _FakeTicker()
+    now_box = [datetime(2026, 8, 25, 13, 24, 30)]
+    model = _model(now_box, ticker)
+    state, times = [], []
+    model.stateChanged.connect(lambda: state.append(True))
+    model.timeChanged.connect(lambda: times.append(True))
+    model.activate(object())
+    try:
+        state.clear()
+        times.clear()
+        for second in (31, 32, 33):
+            now_box[0] = datetime(2026, 8, 25, 13, 24, second)
+            ticker.tick()
+        assert model.timeText == "13:24:33"
+        assert (len(times), len(state)) == (3, 0)
+
+        # An unchanged tick (same second) notifies nothing.
+        ticker.tick()
+        assert (len(times), len(state)) == (3, 0)
+
+        # Config edges notify both epochs: derived time values may change with them.
+        assert model.apply_config(replace(model.config, show_seconds=False)) is True
+        assert model.timeText == "13:24"
+        assert (len(times), len(state)) == (4, 1)
+        assert model.apply_style(replace(model.style, text_shadow_enabled=False)) is True
+        assert (len(times), len(state)) == (5, 2)
+    finally:
+        model.retire()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("display_mode", ["digital", "analog"])
+def test_clock_tick_does_not_rebuild_editable_child_roles(qt_app, display_mode) -> None:
+    """R-88: CUSTOM Edit role lists must stay independent of the tick epoch."""
+
+    from PySide6.QtCore import SIGNAL
+
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root, host = _create_host(factory, owner)
+    ticker = _FakeTicker()
+    now_box = [datetime(2026, 8, 25, 13, 24, 30)]
+    model = _model(now_box, ticker, config=_clock_config(display_mode=display_mode))
+    presentation = RetainedClockPresentation(
+        host=host,
+        model=model,
+        geometry=OverlayWidgetGeometry(100.0, 80.0, 420.0, 540.0),
+        display_bounds=OverlayWidgetGeometry(0.0, 0.0, 1920.0, 1080.0),
+        display_identity="screen:a",
+    )
+    try:
+        item = presentation.item
+        rebuilds = []
+        assert QObject.connect(
+            item,
+            SIGNAL("customEditableChildRolesChanged()"),
+            lambda: rebuilds.append(True),
+        )
+        presentation.activate(object())
+        qt_app.processEvents()
+        rebuilds.clear()
+        for second in (31, 32, 33):
+            now_box[0] = datetime(2026, 8, 25, 13, 24, second)
+            ticker.tick()
+            qt_app.processEvents()
+        assert model.secondAngle == pytest.approx(198.0)
+        assert rebuilds == []
+
+        # Positive control: a config edge that changes the role set does rebuild.
+        other = "analog" if display_mode == "digital" else "digital"
+        assert model.set_display_mode(other) is True
+        qt_app.processEvents()
+        assert rebuilds
+    finally:
+        presentation.retire()
+        host.retire_all()
+        root.setParentItem(None)
+        root.setParent(None)
+        root.deleteLater()
+        context.deleteLater()
+        factory.deleteLater()
+        owner.deleteLater()
+        qt_app.processEvents()
+
+
 @pytest.mark.qt
 def test_clock_retained_custom_resize_payload_updates_same_model_and_item(qt_app) -> None:
     owner = QObject()
