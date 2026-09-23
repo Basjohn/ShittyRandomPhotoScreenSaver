@@ -108,7 +108,7 @@ activation/menu stay (bounded diagnostics used by R-63).
 
 ---
 
-## PR-03 — Background telemetry `replace()` on every transition frame · P2 · R1–R2 · Risk Low
+## PR-03 — Background telemetry `replace()` on every transition frame · P2 · R1–R2 · Risk Low · `[~]`
 
 **Evidence.** `RenderNodeTelemetry` (`render/telemetry.py`) `replace()`s a **44-field** frozen dataclass under a lock
 in every `note_*`. During transitions the custom node calls `note_sync` (`background_node.py:223`),
@@ -120,8 +120,13 @@ mutation (`visualizer/telemetry.py` docstring) — this is the same fix, not a n
 **Proposal.** Mirror `VisualizerRenderNodeTelemetry`: plain fields mutated under the lock, `snapshot()` builds
 the immutable `RenderNodeSnapshot` on demand. Keep the pixel-capture/probe paths byte-identical (harness oracles).
 
-- [ ] Bars: existing transition pixel-oracle and retained-background contract tests
-      (`tests/test_qtquick_retained_background_contract.py`, `tests/test_qtquick_future_transition_gl.py`) unchanged.
+**Implemented.** `RenderNodeTelemetry` keeps plain fields; `snapshot()` rebuilds the unchanged `RenderNodeSnapshot`
+only when read after a change (the GUI `_on_frame_swapped` path reads it per swap, so build-on-every-read would only
+have moved the cost). Idle measurement: sync+render+draw notes per transition frame 29.6 → 2.2 µs on the render
+thread; one note + GUI read 9.4 → 5.4 µs.
+
+- [x] Bars: `tests/test_render_node_telemetry.py` (notes never compose snapshots; identity changes only on change) plus
+      the retained-background, render-node and transition suites unchanged (only the pre-existing Melt red).
 - [ ] `--frame-trace`: `BACKGROUND_RENDER_BEGIN → BACKGROUND_RENDER_READY` transition frames neutral-or-better.
 
 ---

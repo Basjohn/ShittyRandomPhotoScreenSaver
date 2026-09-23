@@ -1,8 +1,14 @@
-"""Thread-safe proof telemetry for the first production Quick render node."""
+"""Thread-safe proof telemetry for the first production Quick render node.
+
+Hot-path ``note_*`` calls (render thread during transitions: sync, sample,
+draw, render every frame) mutate plain fields under the lock. The immutable
+``RenderNodeSnapshot`` is composed only when read after a change, instead of
+``dataclasses.replace`` copying all 44 fields on every note (~10 us each).
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields
 import threading
 
 from ..transitions.state import TransitionRun, TransitionSample
@@ -56,6 +62,9 @@ class RenderNodeSnapshot:
     error: str | None = None
 
 
+_SNAPSHOT_FIELDS = tuple(field.name for field in fields(RenderNodeSnapshot))
+
+
 class RenderNodeTelemetry:
     """Latest immutable diagnostics written by GUI/sync/render owners."""
 
@@ -80,11 +89,15 @@ class RenderNodeTelemetry:
             TransitionSample,
             tuple[str, ...],
         ] | None = None
-        self._snapshot = RenderNodeSnapshot(
+        initial = RenderNodeSnapshot(
             gui_thread_id=(
                 threading.get_ident() if gui_thread_id is None else int(gui_thread_id)
             )
         )
+        self._fields: dict[str, object] = {
+            name: getattr(initial, name) for name in _SNAPSHOT_FIELDS
+        }
+        self._cached: RenderNodeSnapshot | None = initial
 
     @property
     def capture_pixels_enabled(self) -> bool:
@@ -94,7 +107,17 @@ class RenderNodeTelemetry:
 
     def snapshot(self) -> RenderNodeSnapshot:
         with self._lock:
-            return self._snapshot
+            cached = self._cached
+            if cached is None:
+                cached = RenderNodeSnapshot(**self._fields)
+                self._cached = cached
+            return cached
+
+    def _update(self, **values: object) -> None:
+        """Apply field changes; caller holds the lock."""
+
+        self._fields.update(values)
+        self._cached = None
 
     def note_sync(
         self,
@@ -103,19 +126,17 @@ class RenderNodeTelemetry:
         device_pixel_ratio: float,
     ) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
-                sync_count=self._snapshot.sync_count + 1,
+            self._update(
+                sync_count=self._fields["sync_count"] + 1,
                 logical_size=(float(logical_size[0]), float(logical_size[1])),
                 device_pixel_ratio=float(device_pixel_ratio),
             )
 
     def note_initialized(self, *, render_thread_id: int, gl_version: str) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 render_thread_id=int(render_thread_id),
-                initialize_count=self._snapshot.initialize_count + 1,
+                initialize_count=self._fields["initialize_count"] + 1,
                 gl_version=str(gl_version),
             )
 
@@ -127,10 +148,9 @@ class RenderNodeTelemetry:
         render_target_size: tuple[int, int],
     ) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 render_thread_id=int(render_thread_id),
-                render_count=self._snapshot.render_count + 1,
+                render_count=self._fields["render_count"] + 1,
                 viewport=tuple(int(value) for value in viewport),
                 render_target_size=tuple(
                     int(value) for value in render_target_size
@@ -141,15 +161,14 @@ class RenderNodeTelemetry:
         with self._lock:
             return bool(
                 self._capture_pixels
-                and self._snapshot.sampled_sync_count < self._snapshot.sync_count
+                and self._fields["sampled_sync_count"] < self._fields["sync_count"]
             )
 
     def note_pixel_sample(self, colors: tuple[str, ...]) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
-                pixel_sample_count=self._snapshot.pixel_sample_count + 1,
-                sampled_sync_count=self._snapshot.sync_count,
+            self._update(
+                pixel_sample_count=self._fields["pixel_sample_count"] + 1,
+                sampled_sync_count=self._fields["sync_count"],
                 sample_colors=tuple(str(color) for color in colors),
             )
 
@@ -163,15 +182,14 @@ class RenderNodeTelemetry:
         """Record one retained Qt scenegraph background texture admission."""
 
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 render_thread_id=threading.get_ident(),
                 active_image_identity=str(identity),
                 native_background_active=True,
                 image_upload_thread_id=threading.get_ident(),
-                image_upload_count=self._snapshot.image_upload_count + 1,
+                image_upload_count=self._fields["image_upload_count"] + 1,
                 image_upload_bytes=(
-                    self._snapshot.image_upload_bytes + int(byte_count)
+                    self._fields["image_upload_bytes"] + int(byte_count)
                 ),
                 pending_image_release_count=0,
             )
@@ -185,17 +203,16 @@ class RenderNodeTelemetry:
         """Record logical retirement of a scenegraph-owned retained texture."""
 
         with self._lock:
-            active_identity = self._snapshot.active_image_identity
-            self._snapshot = replace(
-                self._snapshot,
+            active_identity = self._fields["active_image_identity"]
+            self._update(
                 active_image_identity=(
                     None if active_identity == str(identity) else active_identity
                 ),
                 native_background_active=False,
                 image_release_thread_id=threading.get_ident(),
-                image_release_count=self._snapshot.image_release_count + 1,
+                image_release_count=self._fields["image_release_count"] + 1,
                 image_release_bytes=(
-                    self._snapshot.image_release_bytes + int(byte_count)
+                    self._fields["image_release_bytes"] + int(byte_count)
                 ),
                 pending_image_release_count=0,
             )
@@ -209,12 +226,11 @@ class RenderNodeTelemetry:
         """Track whether the retained native branch is currently render-visible."""
 
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 active_image_identity=(
                     str(identity)
                     if visible and identity is not None
-                    else self._snapshot.active_image_identity
+                    else self._fields["active_image_identity"]
                 ),
                 native_background_active=bool(visible and identity is not None),
             )
@@ -223,10 +239,9 @@ class RenderNodeTelemetry:
         """Clear the retained-image readiness bit before custom rendering."""
 
         with self._lock:
-            if not self._snapshot.native_background_active:
+            if not self._fields["native_background_active"]:
                 return
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 native_background_active=False,
             )
 
@@ -239,13 +254,12 @@ class RenderNodeTelemetry:
         pending_release_count: int,
     ) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 active_image_identity=active_identity,
                 image_upload_thread_id=threading.get_ident(),
-                image_upload_count=self._snapshot.image_upload_count + 1,
+                image_upload_count=self._fields["image_upload_count"] + 1,
                 image_upload_bytes=(
-                    self._snapshot.image_upload_bytes + int(byte_count)
+                    self._fields["image_upload_bytes"] + int(byte_count)
                 ),
                 pending_image_release_count=int(pending_release_count),
             )
@@ -258,13 +272,12 @@ class RenderNodeTelemetry:
         pending_release_count: int,
     ) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 active_image_identity=active_identity,
                 image_release_thread_id=threading.get_ident(),
-                image_release_count=self._snapshot.image_release_count + 1,
+                image_release_count=self._fields["image_release_count"] + 1,
                 image_release_bytes=(
-                    self._snapshot.image_release_bytes + int(byte_count)
+                    self._fields["image_release_bytes"] + int(byte_count)
                 ),
                 pending_image_release_count=int(pending_release_count),
             )
@@ -276,8 +289,7 @@ class RenderNodeTelemetry:
         pending_release_count: int,
     ) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 active_image_identity=active_identity,
                 pending_image_release_count=int(pending_release_count),
             )
@@ -289,10 +301,9 @@ class RenderNodeTelemetry:
         sample: TransitionSample,
     ) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 transition_sample_count=(
-                    self._snapshot.transition_sample_count + 1
+                    self._fields["transition_sample_count"] + 1
                 ),
                 last_transition_run_id=sample.run_id,
                 last_transition_generation=sample.runtime_generation,
@@ -303,9 +314,8 @@ class RenderNodeTelemetry:
 
     def note_transition_drawn(self, *, transition_id: str) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
-                transition_draw_count=self._snapshot.transition_draw_count + 1,
+            self._update(
+                transition_draw_count=self._fields["transition_draw_count"] + 1,
                 last_transition_renderer_id=str(transition_id),
             )
 
@@ -316,7 +326,7 @@ class RenderNodeTelemetry:
         with self._lock:
             return bool(
                 self._capture_pixels
-                and self._snapshot.transition_midpoint_run_id != sample.run_id
+                and self._fields["transition_midpoint_run_id"] != sample.run_id
                 and 0.35 <= sample.linear_progress <= 0.75
             )
 
@@ -328,10 +338,9 @@ class RenderNodeTelemetry:
         dense_colors: tuple[str, ...] = (),
     ) -> None:
         with self._lock:
-            if self._snapshot.transition_midpoint_run_id == sample.run_id:
+            if self._fields["transition_midpoint_run_id"] == sample.run_id:
                 return
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 transition_midpoint_run_id=sample.run_id,
                 transition_midpoint_linear_progress=sample.linear_progress,
                 transition_midpoint_eased_progress=sample.eased_progress,
@@ -387,25 +396,24 @@ class RenderNodeTelemetry:
 
             chosen_sample, chosen_colors = candidate
             snapshot_matches_run = (
-                self._snapshot.transition_probe_run_id == sample.run_id
+                self._fields["transition_probe_run_id"] == sample.run_id
             )
             linear = (
-                self._snapshot.transition_probe_linear_progresses
+                self._fields["transition_probe_linear_progresses"]
                 if snapshot_matches_run
                 else ()
             )
             eased = (
-                self._snapshot.transition_probe_eased_progresses
+                self._fields["transition_probe_eased_progresses"]
                 if snapshot_matches_run
                 else ()
             )
             samples = (
-                self._snapshot.transition_probe_colors
+                self._fields["transition_probe_colors"]
                 if snapshot_matches_run
                 else ()
             )
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 transition_probe_run_id=sample.run_id,
                 transition_probe_linear_progresses=(
                     *linear,
@@ -425,20 +433,18 @@ class RenderNodeTelemetry:
 
     def note_released(self, *, release_thread_id: int) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 release_thread_id=int(release_thread_id),
-                release_count=self._snapshot.release_count + 1,
+                release_count=self._fields["release_count"] + 1,
             )
 
     def note_scene_graph_invalidated(self) -> None:
         with self._lock:
-            self._snapshot = replace(
-                self._snapshot,
+            self._update(
                 invalidation_thread_id=threading.get_ident(),
-                invalidation_count=self._snapshot.invalidation_count + 1,
+                invalidation_count=self._fields["invalidation_count"] + 1,
             )
 
     def note_error(self, error: object) -> None:
         with self._lock:
-            self._snapshot = replace(self._snapshot, error=str(error))
+            self._update(error=str(error))
