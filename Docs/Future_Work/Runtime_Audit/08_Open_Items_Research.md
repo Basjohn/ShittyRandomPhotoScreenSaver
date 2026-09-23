@@ -32,7 +32,6 @@ recorded; the replacement watchdog armed six times (four Settings, two CUSTOM Ed
 
 | Item | Evidence (short) | Decision | Remaining |
 | --- | --- | --- | --- |
-| PR-04 native handoff | 19:29 trace: first post-transition cycle median 19.3 ms on 4K (7.0 ms normal), re-upload in the render pass | **Investigate / prototype** (bounded, gated) | feasibility → ownership → parity → packaging → measured gain |
 | PW-04 Feed model reset | one changed row resets every delegate; 13 FEEDS IO tasks in the soak | **Watch** — FEEDS Custom 2–4 | stable-ID diff only if churn shows |
 | PW-03 Media notify | 0.50 ms per emit × ≈0.25 refreshes/s ≈ 0.13 ms/s | **Close** (measured 2026-09-23) | — |
 | PR-02 frame-swap callback | 5.6 µs × ≈89.4 swaps/s ≈ 0.5 ms/s (soak) | **Park** | DC-04 stays documented |
@@ -42,11 +41,6 @@ recorded; the replacement watchdog armed six times (four Settings, two CUSTOM Ed
 | VZ-05 epoch cache | 17–117 µs/tick left after the single-freeze fix | **Park** | — |
 | VZ-07 sleep slicing | no demonstrated problem | **Park** | — |
 | LC-01, PR-05, PW-06, prefetch double batch | see §Closed | **Close** | — |
-
-## PR-04 — native texture handoff (admitted 2026-09-23)
-
-Detail, evidence and gates: 01 §PR-04. Rejected earlier: moving the upload earlier (it only relocates the stall into
-the transition). Findings from the feasibility and prototype slices are recorded in 01 as they are established.
 
 ## Watch (parked with a trigger)
 
