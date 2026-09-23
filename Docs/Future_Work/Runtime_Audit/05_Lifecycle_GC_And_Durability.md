@@ -104,21 +104,6 @@ generation warms. No `gc.collect()`, no threshold tuning (Performance contract �
 
 ---
 
-## LC-04 — Recurring-timer gap oracle ignores rebase/restart and names retired owners · P3 · R1 · Risk Low
-
-**Evidence.** `ThreadManager.schedule_recurring` keeps `_last_invoke_ts` in the wrapper closure
-(`core/threading/manager.py:1671-1715`). `ScreensaverEngine._rebase_rotation_timer` (`screensaver_engine.py:1521-1544`)
-restarts the countdown on every manual next/previous without resetting that timestamp, so repeated manual rotations
-produce huge "gaps" on the next natural fire — matching R-87's unexplained `_on_rotation_timer` 172,987 ms /
-152,734 ms warnings "around manual/image-transition/timer-reset activity". The classifier
-(`manager.py:236-362`) still looks for `MediaWidget`, AnimationManager hand-off and `get_transition_snapshot`, none of
-which exist in the Quick runtime, so every such gap is labelled `unknown_ui_thread_stall`.
-
-- [ ] Give `schedule_recurring` timers an epoch reset used by restart/rebase (perf-gated diagnostic only; R-80 rule);
-      delete the retired-owner classifier branches and their tests; keep the warning for genuine gaps.
-
----
-
 ## Durability notes (no action unless evidence appears)
 
 - Replacement barrier timeout exits the app (`runtime_destruction.py:592-594`) — intended fail-closed contract.

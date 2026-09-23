@@ -15,11 +15,7 @@ import time
 import pytest
 from concurrent.futures import Future
 from core.threading import manager as manager_module
-from core.threading.manager import (
-    _classify_large_timer_gap_warning,
-    _describe_timer_callable_context,
-    _should_suppress_large_timer_gap_warning,
-)
+from core.threading.manager import _describe_timer_callable_context
 
 from core.threading.manager import (
     ThreadManager,
@@ -303,7 +299,6 @@ class TestThreadManagerSubmit:
             )
 
             full = manager.get_diagnostic_snapshot()["pools"]["compute"]
-            frame = manager.get_frame_delivery_snapshot()
 
             assert callback_results == ["done"]
             assert full["tasks_started"] == 1
@@ -315,9 +310,6 @@ class TestThreadManagerSubmit:
             assert full["queue_wait_ms_total"] >= 0.0
             assert full["execution_ms_total"] >= 0.0
             assert full["callback_ms_total"] >= 0.0
-            assert frame["compute_queue_depth"] == -1
-            assert frame["compute_callbacks_delivered"] == 1
-            assert frame["compute_worker_active"] == 0
         finally:
             original_executor.shutdown(wait=False, cancel_futures=True)
             manager.shutdown()
@@ -926,22 +918,22 @@ class TestUiThreadDispatch:
         called = []
         thread_ids = []
         manager = ThreadManager()
-        before = manager.get_frame_delivery_snapshot()
+        before = manager.get_diagnostic_snapshot()["ui"]
 
         def _fn():
             called.append(True)
             thread_ids.append(QThread.currentThread())
 
         admitted = ThreadManager.run_on_ui_thread(_fn)
-        after = manager.get_frame_delivery_snapshot()
+        after = manager.get_diagnostic_snapshot()["ui"]
         manager.shutdown()
 
         assert called == [True]
         assert admitted is True
         assert thread_ids[0] is qt_app.thread()
-        assert after["ui_delivered"] == before["ui_delivered"] + 1
-        assert after["ui_active"] == 0
-        assert after["ui_last_callback"].endswith("._fn")
+        assert after["delivered"] == before["delivered"] + 1
+        assert after["active"] == 0
+        assert after["last_callback"].endswith("._fn")
 
     def test_run_on_ui_thread_from_worker_thread(self, qt_app):
         """Worker threads should dispatch back to Qt main thread."""
@@ -1010,119 +1002,87 @@ class TestRecurringTimers:
         caplog,
     ):
         manager = ThreadManager()
-        ticks: list[float] = []
-        fake_times = [100.0, 102.6, 105.2]
-
-        def _fake_time():
-            if fake_times:
-                return fake_times.pop(0)
-            return 105.2
-
+        clock = [100.0]
         monkeypatch.setattr(manager_module, "is_perf_metrics_enabled", lambda: True)
-        monkeypatch.setattr(manager_module.time, "time", _fake_time)
-        monkeypatch.setattr(manager_module, "_describe_timer_callable_context", lambda _func: {})
-        monkeypatch.setattr(
-            manager_module,
-            "_should_suppress_large_timer_gap_warning",
-            lambda _gap, _interval, _context: False,
-        )
+        monkeypatch.setattr(manager_module.time, "time", lambda: clock[0])
 
-        timer = manager.schedule_recurring(
-            1000,
-            lambda: ticks.append(time.monotonic()),
-            description="retuned_timer",
-        )
+        timer = manager.schedule_recurring(1000, lambda: None, description="retuned_timer")
         try:
             with caplog.at_level("WARNING"):
-                timer.timeout.emit()
-                timer.setInterval(2500)
-                timer.timeout.emit()
+                timer.timeout.emit()  # baseline
+                timer.setInterval(2500)  # restarts the countdown: new epoch
+                clock[0] += 2.6
+                timer.timeout.emit()  # first fire of the new epoch is a baseline
+                clock[0] += 2.6
+                timer.timeout.emit()  # 2.6 s < 2 x 2500 ms
                 assert "Large gap for retuned_timer" not in caplog.text
 
                 timer.setInterval(1000)
+                clock[0] += 1.0
                 timer.timeout.emit()
+                clock[0] += 2.6
+                timer.timeout.emit()  # 2.6 s > 2 x live 1000 ms
                 assert "Large gap for retuned_timer" in caplog.text
                 assert "interval=1000ms" in caplog.text
         finally:
             timer.stop()
             manager.shutdown()
 
+    def test_restarting_a_recurring_timer_is_not_reported_as_a_stall(
+        self,
+        qt_app,
+        monkeypatch,
+        caplog,
+    ):
+        """LC-04 / R-87: manual rotation rebases restart the countdown."""
 
-def test_large_timer_gap_warning_not_suppressed_for_plain_idle_gap():
-    context = {
-        "display_transition": {
-            "running": False,
-            "pending": False,
-        },
-    }
+        manager = ThreadManager()
+        clock = [500.0]
+        monkeypatch.setattr(manager_module, "is_perf_metrics_enabled", lambda: True)
+        monkeypatch.setattr(manager_module.time, "time", lambda: clock[0])
 
-    assert _should_suppress_large_timer_gap_warning(400.0, 16, context) is False
+        timer = manager.schedule_recurring(40_000, lambda: None, description="_on_rotation_timer")
+        try:
+            with caplog.at_level("WARNING"):
+                timer.timeout.emit()  # natural fire
+                for _ in range(3):  # three manual Next presses, 39 s apart
+                    clock[0] += 39.0
+                    timer.start()  # _rebase_rotation_timer
+                clock[0] += 40.0
+                timer.timeout.emit()  # 157 s after the last natural fire
+                assert "Large gap" not in caplog.text
 
-
-def test_large_timer_gap_warning_suppressed_for_visualizer_reconfiguration_window():
-    context = {
-        "vis_pending_mode": "BUBBLE",
-        "vis_waiting_engine": True,
-        "vis_waiting_frame": False,
-        "display_transition": {
-            "running": False,
-            "pending": False,
-            "last_transition": None,
-            "idle_age": 12.0,
-        },
-    }
-
-    assert _should_suppress_large_timer_gap_warning(140.0, 16, context) is True
-
-
-def test_large_timer_gap_warning_classifies_visualizer_reconfiguration():
-    context = {
-        "vis_pending_mode": "BUBBLE",
-        "vis_waiting_engine": False,
-        "vis_waiting_frame": True,
-    }
-
-    assert _classify_large_timer_gap_warning(context) == "visualizer_reconfiguration_starvation"
+                clock[0] += 95.0  # a genuine 95 s stall on a 40 s timer
+                timer.timeout.emit()
+                assert "Large gap for _on_rotation_timer: 95000.00ms" in caplog.text
+        finally:
+            timer.stop()
+            manager.shutdown()
 
 
-def test_timer_context_includes_media_widget_poll_state(qt_app):
+def test_timer_context_describes_the_owner_generically(qt_app):
     class _Display(QObject):
         screen_index = 1
 
-    class _MediaOwner(QObject):
+    class _Owner(QObject):
         def __init__(self, parent: QObject) -> None:
             super().__init__(parent)
-            self.setObjectName("media_overlay")
-            self._provider = "spotify"
-            self._current_poll_stage = 0
-            self._update_timer_interval_ms = 1000
-            self._refresh_in_flight = False
-            self._is_idle = False
-            self._app_process_running = True
-            self._fade_in_completed = True
-            self._has_seen_first_track = True
+            self.setObjectName("clock_overlay")
 
-    _MediaOwner.__name__ = "MediaWidget"
     display = _Display()
-    owner = _MediaOwner(display)
+    owner = _Owner(display)
 
     def _callback() -> None:
         return None
 
     setattr(_callback, "_srpss_timer_owner", owner)
-
     context = _describe_timer_callable_context(_callback)
 
-    assert context is not None
-    assert context["owner_type"] == "MediaWidget"
-    assert context["object_name"] == "media_overlay"
-    assert context["parent_screen_index"] == 1
-    assert context["media_provider"] == "spotify"
-    assert context["media_poll_stage"] == 0
-    assert context["media_timer_interval_ms"] == 1000
-    assert context["media_refresh_in_flight"] is False
-    assert context["media_fade_in_completed"] is True
-    assert _classify_large_timer_gap_warning(context) == "media_widget_poll_starvation"
+    assert context == {
+        "owner_type": "_Owner",
+        "object_name": "clock_overlay",
+        "parent_screen_index": 1,
+    }
 
 @pytest.mark.qt_no_exception_capture
 def test_schedule_recurring_respects_description(qt_app):

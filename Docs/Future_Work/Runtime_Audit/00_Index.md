@@ -80,11 +80,10 @@ needs evidence before it is worth doing.
 | PW-04 | `FeedRowsModel.replace_rows` resets the whole list on any change; other families update in place | P3 | R1 | Low | source |
 | PW-06 | `ProcessSupervisor` heartbeat spawns a new OS thread every 3 s (`threading.Timer` re-armed per check) | P3 | R1 | Low | source |
 | PR-07 | `QuickSceneFactory` compiles every family QML component at startup (≈290 ms of 517 ms dev compile), active or not | P3 | R1 | Low | measured |
-| LC-04 | Recurring-timer gap oracle is not reset on stop/rebase and its classifier still names retired QWidget owners (R-87 "172,987 ms `unknown_ui_thread_stall`" anomaly) | P3 | R1 | Low | source |
 | LC-05 | Context-menu entries are refreshed *after* the menu is shown (operator "2 QImage tasks" note resolved: post-rotation prefetch, not the menu) | P3 | R1 | Low | source + operator log |
 | PR-05 | Any unrelated scene frame (widget animation, transition, menu) re-runs the Python visualizer render callback; local idle windows show 110–116 draws/s vs ~90 revisions/s | P3 | ? | High | log; architecture — operator only |
 | ST-01 | `DisplayManager` is a 4.9k-line owner of ~12 concerns | P3 | R1 | Medium | source |
-| DC-03..04 | Doc/source contradictions (retired-owner comments in the timer-gap classifier; `frameSwapped` guardrail vs source) | P3 | R1 | Low | source |
+| DC-04 | Guardrail vs source conflict: dormant per-frame `frameSwapped` Python callback (fixed with PR-02) | P3 | R1 | Low | source |
 
 Parked / rejected candidates are listed in 06 §Considered and rejected so they are not re-audited.
 
@@ -98,7 +97,7 @@ Each wave is independently committable. Nothing below overrides `Current_Plan.md
   pending R-84 3–5-cycle Settings churn run: grep `[PERF][GC_POLICY] generation=2`), PR-04 (`--frame-trace` around
   one transition end), VZ-05 (per-tick capture timing already recorded in `_tick_phase_ms`).
 - [ ] **Wave D — structure/durability:** PW-05 (cancellable `single_shot` handle; do before FEEDS Custom 2–4),
-  PW-04, PW-03, PW-06, LC-04, LC-05, PR-07, ST-01.
+  PW-04, PW-03, PW-06, LC-05, PR-07, ST-01. (LC-04 landed 2026-09-23.)
 - [ ] **Operator-only:** PR-05 (would change the selected custom-render primitive's composition; see
   Compositor_Architecture §6) and the parked VZ-07.
 

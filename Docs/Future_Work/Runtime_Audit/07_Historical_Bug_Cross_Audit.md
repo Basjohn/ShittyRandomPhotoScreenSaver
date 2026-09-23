@@ -45,11 +45,10 @@ item) · **Blocked** (needs operator/architecture decision before any work).
 | PW-04 | R-88 | delegate identity churn | Safe: it reduces delegate churn |
 | PW-06 | R-30, R-84 | exit hang; handle churn | Safe with constraints (above) |
 | PR-07 | R-07, import dormancy | startup reveal ordering; eager family imports | Safe: compile still completes before the owning window is shown |
-| LC-04 | R-80, R-87 | rolling-history contamination | Safe: resets epochs; diagnostics only |
 | LC-05 | R-84, R-24, U-05 | menu rebuild tails; broad invalidation; focus/Ctrl-halo | Safe with constraints: single-menu enforcement and focus/Ctrl semantics unchanged |
 | PR-05 | R-87 CHK5/CHK10, Compositor_Architecture §6 | second custom-render primitive; composite pass | **Blocked**: operator architecture decision |
 | ST-01 / ST-02 | R-26, U-09, R-79, R-85, R-53, R-88, R-23 | routing/topology/Edit behaviour drift during refactor | Safe only as move-only extractions with existing tests unchanged |
-| DC-03..04 | Documentation_Maintenance | deleting a product requirement to match a bug | Safe: DC-03 goes with LC-04; DC-04 fixes source, not the guardrail |
+| DC-04 | Documentation_Maintenance | deleting a product requirement to match a bug | Safe: DC-04 fixes source, not the guardrail |
 
 ## Historical classes checked with no audit item touching them
 
