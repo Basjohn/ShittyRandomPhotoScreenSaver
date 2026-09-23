@@ -27,17 +27,23 @@ def test_ink_bloom_requires_bounded_explicit_materials():
             resolver({key: value for key, value in valid.items() if key != field})
 
 
-@pytest.mark.parametrize("direction,expected", (("down", (0., 1.)), ("up", (0., -1.)),
-                                                ("left", (-1., 0.)), ("right", (1., 0.))))
-def test_melt_drip_requires_one_resolved_cardinal_gravity_direction(direction, expected):
+@pytest.mark.parametrize("origin,expected", (
+    ("top_left", ((0., 0.), 0.)), ("top_center", ((.5, 0.), 0.)),
+    ("top_right", ((1., 0.), 0.)), ("center_out", ((.5, .5), 0.)),
+    ("center_in", ((.5, .5), 1.)),
+))
+def test_melt_drip_requires_one_resolved_melt_origin(origin, expected):
     valid = {"seed": 12, "detail": .5, "depth": .7, "gloss": .65}
-    assert melt_drip_parameters(valid, direction).direction == expected
-    for invalid in (None, "Random", "diagonal", "diag_tl_br", 3):
-        with pytest.raises(ValueError, match="resolved direction"):
+    params = melt_drip_parameters(valid, origin)
+    assert (params.origin, params.origin_mode) == expected
+    # Settings labels, "Random" and the retired edge directions resolve before
+    # the request; the renderer only admits a resolved origin.
+    for invalid in (None, "Random", "Top Left", "down", "left", "diag_tl_br", 3):
+        with pytest.raises(ValueError, match="resolved origin"):
             melt_drip_parameters(valid, invalid)
     for field in ("depth", "gloss"):
         with pytest.raises(ValueError, match=field):
-            melt_drip_parameters({**valid, field: float("nan")}, direction)
+            melt_drip_parameters({**valid, field: float("nan")}, origin)
 
 
 def test_organic_renderers_are_distinct_lazy_local_surfaces():

@@ -1,64 +1,103 @@
-"""Screen-space cohesive viscous film for Melt / Drip.
+"""Gravity melt for Melt / Drip (operator rework 2026-09-23).
 
-Melt is intentionally not a general fluid simulation.  One continuous moving
-meniscus owns the silhouette, with attached rivulets, shallow refraction and
-wet material response confined to the front band.  The photographed source is
-kept readable away from that band: no ray-marched pseudo-volume, detached
-primitive droplets, or large-scale texture shredding is allowed.
+The photograph itself melts. A seeded heat field starts the melt at the chosen
+origin -- a top corner, the top centre, the centre outward, or the edges inward
+-- and spreads with an irregular (noise-roughened) boundary. Once a region has
+melted, gravity takes it: the image content sags downward with accelerating
+displacement, narrow viscous drips run ahead of the sheet, and the stretched
+film thins until the destination shows through. Regions the melt has not yet
+reached are the untouched source at their original coordinates.
+
+Everything is analytic in ``uProgress``: no clock, no CPU simulation, no
+detached primitive bodies (drips are part of the one displaced sheet). Exact
+source at progress 0 and exact destination from ≈0.94 onward.
+
+Controls: Detail = drip count and melt-boundary irregularity; Depth = film
+thickness, lip darkening and refraction; Gloss = wet highlight intensity and
+tightness only (never the silhouette).
 """
 
 MELT_FRAGMENT_SOURCE = r"""#version 410 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uOldTex,uNewTex;
-uniform vec2 uItemSize,uDirection;
-uniform float uProgress,uSeed,uDetail,uDepth,uGloss;
+uniform vec2 uItemSize,uOrigin;
+uniform float uProgress,uSeed,uDetail,uDepth,uGloss,uOriginMode;
 
-float hash1(float n){
-    return fract(sin(n*127.1+mod(uSeed,997.)*1.73)*43758.5453);
+const float REACH=.60;   // latest melt start (farthest point from the origin)
+const float SPAN=.34;    // time for a melted region to sag, thin and fall away
+
+float seedOffset(){return mod(uSeed,997.)*.137;}
+float detailN(){return clamp((uDetail-.5)/1.5,0.,1.);}
+
+// Exact integer hash of a lattice point. A chaotic float hash gives the same
+// corner different values when two neighbouring cells round it differently,
+// which cut the melt field into hard-edged rectangles.
+float hash21(vec2 p){
+    uvec3 v=uvec3(ivec3(ivec2(floor(p)),int(mod(uSeed,997.))));
+    v=v*1664525u+1013904223u;
+    v.x+=v.y*v.z;v.y+=v.z*v.x;v.z+=v.x*v.y;
+    v^=v>>16u;
+    v.x+=v.y*v.z;v.y+=v.z*v.x;v.z+=v.x*v.y;
+    return float((v.x^v.y^v.z)&0xffffffu)/16777215.;
 }
-
-// The source coating drains in the authored gravity direction.  It begins
-// beyond the viewport and leaves before the exact endpoint, avoiding a final
-// frame cut while preserving exact source/destination endpoints.
-float baseFront(float t){
-    float p=smoothstep(.015,.985,t);
-    return 1.045-1.205*pow(p,1.34);
+float vnoise(vec2 p){
+    vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);
+    return mix(mix(hash21(i),hash21(i+vec2(1.,0.)),u.x),
+               mix(hash21(i+vec2(0.,1.)),hash21(i+vec2(1.,1.)),u.x),u.y);
 }
+float fbm(vec2 p){return .62*vnoise(p)+.38*vnoise(p*2.13+7.1);}
 
-// One single-valued front owns every finger.  Local protrusions can stretch
-// and narrow but cannot detach into islands because there is no second body.
-float frontAt(float x,float t,float count){
-    float p=smoothstep(.015,.985,t);
-    float late=1.-smoothstep(.78,.965,p);
-    float detailN=clamp((uDetail-.5)/1.5,0.,1.);
-    float front=baseFront(t);
-
-    // Broad non-periodic-looking contour motion keeps the body from reading as
-    // a ruler-straight wipe without turning the photograph itself into waves.
-    front+=(.0045+.0065*detailN)*late*
-           (sin(x*12.3+mod(uSeed,17.)*.37)
-            +.42*sin(x*27.1+1.8+mod(uSeed,11.)*.51));
-
-    for(int i=0;i<12;i++){
-        float fi=float(i);
-        if(fi>=count)continue;
-        float center=(fi+.50+.48*(hash1(fi+7.)-.5))/count;
-        float width=(.34+.38*hash1(fi+29.))/count;
-        float dx=(x-center)/max(width,.0001);
-        float lobe=exp(-2.25*dx*dx);
-        float core=exp(-5.2*dx*dx);
-
-        float birth=.055+.25*hash1(fi+53.);
-        float grow=smoothstep(birth,birth+.22,p);
-        float drain=1.-smoothstep(.66+.12*hash1(fi+71.),.955,p);
-        float length=(.045+.185*hash1(fi+43.))*grow*drain;
-
-        // A narrow core inside the broader shoulder reads as a viscous finger
-        // with a neck rather than a row of identical semicircular scallops.
-        front+=length*(.58*lobe+.42*core);
+// When does the melt reach this point? 0 at the origin, REACH at the farthest.
+float meltStart(vec2 s,float aspect){
+    float d;
+    if(uOriginMode>.5){
+        // Centre-in: every edge melts first, the centre last.
+        vec2 e=min(s,1.-s);
+        d=clamp(2.*min(e.x,e.y),0.,1.);
+    }else{
+        vec2 p=vec2(s.x*aspect,s.y),o=vec2(uOrigin.x*aspect,uOrigin.y);
+        float far=max(max(length(o),length(o-vec2(aspect,0.))),
+                      max(length(o-vec2(0.,1.)),length(o-vec2(aspect,1.))));
+        d=length(p-o)/max(far,.0001);
     }
-    return front;
+    float n=fbm(vec2(s.x*aspect,s.y)*(2.2+3.2*detailN())+seedOffset());
+    return REACH*clamp(d*.80+(n-.5)*(.28+.22*detailN())+.10,0.,1.);
+}
+
+float ageAt(vec2 s,float aspect){
+    return clamp((uProgress-meltStart(s,aspect))/SPAN,0.,1.);
+}
+
+// Viscous drips: columns that fall faster than the sheet around them. Their
+// flanks are wide enough that a drip never shears the photograph into a seam.
+// Returns the drip weight at x-step, x and x+step.
+vec3 dripsAt(float x,float step){
+    float count=6.+16.*detailN();
+    vec3 total=vec3(0.);
+    for(int i=0;i<22;i++){
+        float fi=float(i);
+        if(fi>=count)break;
+        float c=hash21(vec2(fi,3.));
+        float w=(.012+.026*hash21(vec2(fi,7.)))*(1.25-.45*detailN());
+        vec3 dx=(vec3(x-step,x,x+step)-c)/w;
+        total+=exp(-dx*dx)*(.35+.65*hash21(vec2(fi,11.)));
+    }
+    return min(total,vec3(1.4));
+}
+
+// Downward sag of the material shown at a point of age a: accelerating with
+// age (weight), longer inside drips.
+float sagOf(float a,float drip){return a*a*(1.30+(.40+.40*uDepth)*drip*a);}
+
+// Remaining film: melted material stretches thin and falls away. Drips hold
+// their body a little longer than the sheet around them.
+float filmOf(float a,float drip){return 1.-smoothstep(.42,.97,a-.10*drip*a);}
+
+// Paint height: the film, swollen in drips and where sliding paint has piled.
+float heightOf(float a,float drip){
+    float f=filmOf(a,drip);
+    return f*(1.+.9*uDepth*drip+(3.+9.*uDepth)*sagOf(a,drip));
 }
 
 void main(){
@@ -66,72 +105,69 @@ void main(){
     if(uProgress<=0.){FragColor=texture(uOldTex,screen);return;}
     if(uProgress>=1.){FragColor=texture(uNewTex,screen);return;}
 
-    vec2 gravity=normalize(uDirection);
-    vec2 tangent=vec2(gravity.y,-gravity.x);
-    vec2 delta=screen-.5;
-    float cross=dot(delta,tangent)+.5;
-    float flow=dot(delta,gravity)+.5;
-
-    float crossPixels=max(1.,abs(tangent.x)*uItemSize.x+abs(tangent.y)*uItemSize.y);
-    float flowPixels=max(1.,abs(gravity.x)*uItemSize.x+abs(gravity.y)*uItemSize.y);
-    float detailN=clamp((uDetail-.5)/1.5,0.,1.);
-    float count=clamp(round((7.+4.*detailN)*sqrt(crossPixels/1440.)),6.,12.);
-
-    float front=frontAt(cross,uProgress,count);
-    float signedDepth=front-flow; // positive inside the remaining source film
-    float aa=max(1.35/flowPixels,.00075);
-    float sourceMask=smoothstep(-aa,aa,signedDepth);
-    if(sourceMask<=.00001){FragColor=texture(uNewTex,screen);return;}
-
-    float wet=smoothstep(.025,.16,uProgress)*(1.-smoothstep(.90,.985,uProgress));
-    float eps=max(1.75/crossPixels,.0012);
-    float slope=(frontAt(clamp(cross+eps,0.,1.),uProgress,count)
-                -frontAt(clamp(cross-eps,0.,1.),uProgress,count))/(2.*eps);
-    vec2 localNormal=normalize(vec2(-slope,1.));
-    vec2 screenNormal=tangent*localNormal.x+gravity*localNormal.y;
-
-    // Optical deformation is intentionally shallow and front-local.  This is
-    // the key anti-shred contract: readable source pixels away from the wet
-    // edge are sampled at their original coordinates.
-    float bandWidth=.038+.052*uDepth;
-    float meniscus=sourceMask*(1.-smoothstep(0.,bandWidth,max(signedDepth,0.)));
-    float narrowBand=sourceMask*(1.-smoothstep(0.,.014+.018*uDepth,max(signedDepth,0.)));
-    float activeMeniscus=meniscus*wet;
-    float activeNarrow=narrowBand*wet;
-    float ripple=sin(cross*33.7+flow*9.1+mod(uSeed,13.)*.43-uProgress*2.7)
-                 *(.00035+.00105*uDepth)*activeMeniscus;
-    vec2 refractOffset=screenNormal*((.0008+.0033*uDepth)*activeMeniscus)
-                       +tangent*ripple;
-    float pull=(.0012+.0050*uDepth)*activeMeniscus*(.35+.65*uProgress);
-    vec2 materialUv=clamp(screen+refractOffset-gravity*pull,0.,1.);
-
-    vec3 source0=texture(uOldTex,materialUv).rgb;
-    // A tiny gravity-aligned streak softens the meniscus like viscous material
-    // without producing the broad rectangular smears of the rejected volume.
-    float streak=(.0010+.0038*uDepth)*activeMeniscus;
-    vec3 source1=texture(uOldTex,clamp(materialUv-gravity*streak,0.,1.)).rgb;
-    vec3 sourceColor=mix(source0,source1,.34*activeMeniscus);
+    float aspect=uItemSize.x/max(uItemSize.y,1.);
     vec3 destination=texture(uNewTex,screen).rgb;
+    float a=ageAt(screen,aspect);
+    if(a<=0.){FragColor=texture(uOldTex,screen);return;}   // not melted yet: untouched
 
-    // Build a shallow screen-space surface normal from the front slope and a
-    // restrained micro-ripple.  Depth fattens/darkens the lip; Gloss controls
-    // only the wet highlight response rather than changing the silhouette.
-    vec3 n=normalize(vec3(screenNormal*.52,
-                          1.0+(.08+.12*uDepth)*sin(cross*21.1+mod(uSeed,7.))));
-    vec3 light=normalize(vec3(-.42,-.55,1.0));
+    float px=1./max(uItemSize.x,1.),py=1./max(uItemSize.y,1.);
+    float stepX=3.*px,stepY=3.*py;
+    vec3 drips=dripsAt(screen.x,stepX);
+    float drip=drips.y;
+    float sag=sagOf(a,drip);
+    float film=filmOf(a,drip);
+
+    // A gentle sideways meander as the material flows.
+    float meander=(vnoise(vec2(screen.y*5.3,screen.x*3.1+seedOffset()))-.5)*.012*a;
+    vec2 sourceUv=vec2(screen.x+meander,screen.y-sag);
+    // Above the top edge there is no material left to pull down.
+    film*=smoothstep(-.002,.02,sourceUv.y);
+
+    // The melting layer casts a soft shadow down-right onto what it reveals.
+    vec2 casterAt=screen-vec2(6.*px,9.*py);
+    float aC=ageAt(casterAt,aspect);
+    float caster=filmOf(aC,drip)*smoothstep(-.002,.02,casterAt.y-sagOf(aC,drip));
+    float shadow=clamp(caster-film,0.,1.)*(.18+.32*uDepth);
+    vec3 revealed=destination*(1.-shadow);
+    if(film<=.0005){FragColor=vec4(revealed,1.);return;}
+
+    // Surface relief from the paint height (three-pixel central differences).
+    float aU=ageAt(screen-vec2(0.,stepY),aspect),aD=ageAt(screen+vec2(0.,stepY),aspect);
+    float hR=heightOf(ageAt(screen+vec2(stepX,0.),aspect),drips.z);
+    float hL=heightOf(ageAt(screen-vec2(stepX,0.),aspect),drips.x);
+    float hD=heightOf(aD,drip),hU=heightOf(aU,drip);
+    vec2 grad=vec2(hR-hL,hD-hU)/(2.*vec2(stepX*uItemSize.x,stepY*uItemSize.y));
+    float relief=(6.+18.*uDepth);
+    vec3 n=normalize(vec3(-grad*relief,1.));
+    // Where the sliding paint bunches up it folds and darkens.
+    float bunch=clamp((sagOf(aU,drip)-sagOf(aD,drip))/(2.*stepY),0.,3.);
+
+    // Refraction through the moving liquid, stronger for a deeper film.
+    vec2 bend=n.xy*(.004+.014*uDepth)*smoothstep(0.,.25,a);
+    vec3 liquid=texture(uOldTex,clamp(sourceUv+bend,0.,1.)).rgb;
+    // Viscous smear along the flow: sample a little higher and blend.
+    vec3 smear=texture(uOldTex,clamp(sourceUv+bend-vec2(0.,.010+.030*a*(.5+drip)),0.,1.)).rgb;
+    liquid=mix(liquid,smear,.45*smoothstep(0.,.5,a));
+
+    // Lip: the thinning edge of the sheet darkens with depth.
+    float lip=smoothstep(.05,.45,film)*(1.-smoothstep(.45,.95,film));
+    liquid*=1.-lip*(.10+.30*uDepth);
+    liquid*=1.-(.08+.22*uDepth)*smoothstep(.2,2.5,bunch);
+
+    // Wet highlights: Gloss controls intensity and tightness only.
+    vec3 light=normalize(vec3(-.35,-.55,.76));
     vec3 halfV=normalize(light+vec3(0.,0.,1.));
-    float ndl=max(dot(n,light),0.);
-    float spec=pow(max(dot(n,halfV),0.),18.+76.*uGloss);
-    float rim=pow(1.-clamp(n.z,0.,1.),2.6);
+    float spec=pow(max(dot(n,halfV),0.),8.+120.*uGloss);
+    float wet=smoothstep(0.,.18,a);
+    liquid+=vec3(1.)*spec*(.05+.95*uGloss)*wet*(.35+.65*(1.-n.z*n.z*.5));
+    float rim=pow(1.-clamp(n.z,0.,1.),2.2);
+    liquid+=vec3(.95,.98,1.)*rim*uGloss*.35*wet;
+    // Wet sheen: a soft sky reflection over the moving paint, strongest where
+    // it tilts. Screen-blended so it glazes the photograph without clipping.
+    float tilt=smoothstep(0.,.25,1.-n.z);
+    vec3 sheen=vec3(.80,.88,1.)*uGloss*wet*(.10+.30*tilt);
+    liquid=1.-(1.-clamp(liquid,0.,1.))*(1.-sheen);
 
-    vec3 liquidColor=sourceColor*(1.-activeMeniscus*(.035+.085*uDepth));
-    liquidColor*=1.-activeMeniscus*(.06-.08*ndl);
-    float transmission=activeNarrow*(.025+.065*uDepth);
-    liquidColor=mix(liquidColor,destination,transmission);
-    liquidColor+=vec3(.96,.985,1.)*
-                 (spec*(.055+.34*uGloss)*activeMeniscus
-                  +rim*(.025+.055*uGloss)*activeNarrow);
-
-    FragColor=vec4(mix(destination,liquidColor,sourceMask),1.);
+    FragColor=vec4(mix(revealed,clamp(liquid,0.,1.),film),1.);
 }
 """

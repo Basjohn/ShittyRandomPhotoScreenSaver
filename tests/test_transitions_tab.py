@@ -311,3 +311,26 @@ def test_melt_wip_warning_is_settings_presentation_only(qapp, settings_manager, 
     tab._on_nav_selected("Melt Drip")
     assert tab.melt_drip_group.title() == f"{label} Settings"
     assert tab._current_transition == "Melt Drip"
+
+
+def test_melt_origin_combo_offers_origins_and_retires_edge_directions(
+    qapp, settings_manager, qtbot
+):
+    transitions = deepcopy(settings_manager.get("transitions", {}))
+    melt = dict(transitions.get("melt_drip") or {})
+    melt["direction"] = "Top to Bottom"  # a retired edge direction
+    transitions["melt_drip"] = melt
+    transitions.setdefault("activation", {})["Melt Drip"] = True
+    settings_manager.set("transitions", transitions)
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._on_nav_selected("Melt Drip")
+    tab.transition_combo.setCurrentText("Melt Drip")
+    items = [tab.direction_combo.itemText(i) for i in range(tab.direction_combo.count())]
+    assert items == ["Top Left", "Top Center", "Top Right", "Center Out", "Center In", "Random"]
+    assert tab.direction_combo.currentText() == "Random"
+
+    tab.direction_combo.setCurrentText("Center Out")
+    tab._save_settings()
+    assert settings_manager.get("transitions", {})["melt_drip"]["direction"] == "Center Out"

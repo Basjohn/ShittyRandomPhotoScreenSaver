@@ -2059,14 +2059,16 @@ class TransitionsTab(QWidget):
                         idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
                 elif transition == "Melt Drip":
+                    # Melt starts at an origin, not an edge; retired edge
+                    # directions from older profiles show as Random.
                     self.direction_combo.addItems([
-                        "Left to Right", "Right to Left", "Top to Bottom",
-                        "Bottom to Top", "Random",
+                        "Top Left", "Top Center", "Top Right",
+                        "Center Out", "Center In", "Random",
                     ])
                     current = self._direction_by_type["melt_drip"]
                     idx = self.direction_combo.findText(current)
                     if idx < 0:
-                        idx = self.direction_combo.findText("Top to Bottom")
+                        idx = self.direction_combo.findText("Random")
                     self.direction_combo.setCurrentIndex(max(0, idx))
             finally:
                 self.direction_combo.blockSignals(False)

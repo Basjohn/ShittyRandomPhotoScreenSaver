@@ -49,7 +49,7 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
         ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen"}),
         ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force"}),
         ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel"}),
-        ("melt_drip", "melt_drip", "down", {"seed", "detail", "depth", "gloss"}),
+        ("melt_drip", "melt_drip", "center_in", {"seed", "detail", "depth", "gloss"}),
     ],
 )
 def test_future_transition_parameters_are_bounded_and_seeded_once(
@@ -239,3 +239,34 @@ def test_unknown_or_unparameterized_effect_is_not_silently_defaulted():
             {},
             random_source=_Rng(),
         )
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        ("Top Left", "top_left"),
+        ("Top Center", "top_center"),
+        ("Top Right", "top_right"),
+        ("Center Out", "center_out"),
+        ("Center In", "center_in"),
+        ("center_out", "center_out"),
+    ],
+)
+def test_melt_resolves_its_settings_origin_without_consuming_randomness(stored, expected):
+    rng = _Rng()
+    rng.choice_values = ["must-not-be-used"]
+    resolved = resolve_parameterized_phase_c_inputs(
+        "melt_drip", {"melt_drip": {"direction": stored}}, random_source=rng
+    )
+    assert resolved.direction == expected
+    assert rng.choice_values == ["must-not-be-used"]
+
+
+@pytest.mark.parametrize("stored", ["Random", "Top to Bottom", "Left to Right", "bogus"])
+def test_melt_random_and_retired_edge_directions_pick_a_real_origin(stored):
+    rng = _Rng()
+    rng.choice_values = ["top_right"]
+    resolved = resolve_parameterized_phase_c_inputs(
+        "melt_drip", {"melt_drip": {"direction": stored}}, random_source=rng
+    )
+    assert resolved.direction == "top_right"
