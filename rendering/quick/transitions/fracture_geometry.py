@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import math
 import random
 
+import numpy as np
+
 
 @dataclass(frozen=True, slots=True)
 class GlassShard:
@@ -169,43 +171,69 @@ def crumble_cells(seed: int | float, count: int, aspect: float, complexity: floa
     return _cells_from_sites(spaced, aspect, rng)
 
 
-def fracture_vertices(shards: tuple[GlassShard, ...], aspect: float, *,
-                      pivots=None, radii=None) -> tuple[float, ...]:
-    """Closed beveled prisms, with UV continuity when their release is zero.
+# One prism = 24 vertices per polygon edge: the top and bottom fan triangles,
+# then the upper bevel, vertical wall and lower bevel quads. Per slot: source
+# point (0 = fan centre, 1 = edge start a, 2 = edge end b), depth fraction,
+# inset flag, face id and the side normal's z (NaN: a cap normal).
+_PRISM_SLOTS = np.array(
+    [0, 2, 1, 0, 1, 2] + [1, 2, 2, 1, 2, 1] * 3, dtype=np.int64)
+_PRISM_Z = np.array(
+    [0., 0., 0., -1., -1., -1.]
+    + [0., 0., -.22, 0., -.22, -.22]
+    + [-.22, -.22, -.78, -.22, -.78, -.78]
+    + [-.78, -.78, -1., -.78, -1., -1.])
+_PRISM_INSET = np.array(
+    [1.] * 6 + [1., 1., 0., 1., 0., 0.] + [0.] * 6 + [0., 0., 1., 0., 1., 1.])
+_PRISM_FACE = np.array([0.] * 3 + [3.] * 3 + [1.] * 6 + [2.] * 6 + [1.] * 6)
+_PRISM_CAP_NZ = np.array([1.] * 3 + [-1.] * 3 + [0.] * 18)
+_PRISM_SIDE_NZ = np.array([0.] * 6 + [.8] * 6 + [0.] * 6 + [-.8] * 6)
+_PRISM_IS_SIDE = np.array([0.] * 6 + [1.] * 18)
+
+
+def fracture_vertex_array(shards: tuple[GlassShard, ...], aspect: float, *,
+                          pivots=None, radii=None) -> np.ndarray:
+    """Closed beveled prisms as a float64 ``(vertices, 12)`` array.
 
     UV2, centre2, depth fraction, normal3, inset flag, face, variation, radius.
     Geometry is uploaded once; thickness and bevel emerge during release. Each
     prism fans from its own centre; ``pivots``/``radii`` let a piece split off
-    a Glass shard keep that shard's motion pivot and thickness.
+    a Glass shard keep that shard's motion pivot and thickness. Vectorised over
+    every edge of every shard; values are identical to the per-vertex form.
     """
-    vertices = []
+    starts, ends, centres, pivot_rows, extra = [], [], [], [], []
     for index, shard in enumerate(shards):
         cx, cy = shard.center
-        px, py = pivots[index] if pivots is not None else shard.center
+        pivot = pivots[index] if pivots is not None else shard.center
         radius = (radii[index] if radii is not None
                   else max(math.hypot((x-cx)*aspect, y-cy) for x, y in shard.polygon))
+        polygon = shard.polygon
+        starts.extend(polygon)
+        ends.extend(polygon[1:] + polygon[:1])
+        centres.extend((shard.center,) * len(polygon))
+        pivot_rows.extend((pivot,) * len(polygon))
+        extra.extend(((shard.variation, radius),) * len(polygon))
+    if not starts:
+        return np.zeros((0, 12))
+    a, b = np.asarray(starts, dtype=np.float64), np.asarray(ends, dtype=np.float64)
+    lengths = np.asarray([math.hypot((bx-ax)*aspect, by-ay) for (ax, ay), (bx, by) in zip(starts, ends)])
+    out_x = (b[:, 1] - a[:, 1]) / lengths
+    out_y = (b[:, 0] - a[:, 0]) * aspect / lengths
+    points = np.stack((np.asarray(centres, dtype=np.float64), a, b), axis=1)   # (E, 3, 2)
+    edges = len(starts)
+    rows = np.empty((edges, 24, 12))
+    rows[:, :, 0:2] = points[:, _PRISM_SLOTS, :]
+    rows[:, :, 2:4] = np.asarray(pivot_rows, dtype=np.float64)[:, None, :]
+    rows[:, :, 4] = _PRISM_Z
+    rows[:, :, 5] = out_x[:, None] * _PRISM_IS_SIDE
+    rows[:, :, 6] = out_y[:, None] * _PRISM_IS_SIDE
+    rows[:, :, 7] = _PRISM_CAP_NZ + _PRISM_SIDE_NZ
+    rows[:, :, 8] = _PRISM_INSET
+    rows[:, :, 9] = _PRISM_FACE
+    rows[:, :, 10:12] = np.asarray(extra, dtype=np.float64)[:, None, :]
+    return rows.reshape(-1, 12)
 
-        def vertex(point, z, normal, inset, face):
-            vertices.extend((*point, px, py, z, *normal, inset, face, shard.variation, radius))
 
-        for index, a in enumerate(shard.polygon):
-            b = shard.polygon[(index+1) % len(shard.polygon)]
-            dx, dy = (b[0]-a[0])*aspect, b[1]-a[1]
-            length = math.hypot(dx, dy)
-            outward = (dy/length, dx/length, 0.)
-            for point in (shard.center, b, a):
-                vertex(point, 0., (0., 0., 1.), 1., 0.)
-            for point in (shard.center, a, b):
-                vertex(point, -1., (0., 0., -1.), 1., 3.)
-            # Upper bevel, vertical wall, lower bevel. The clockwise world
-            # contour produces outward-facing closed side geometry.
-            for z0, z1, inset0, inset1, nz, face in (
-                (0., -.22, 1., 0., .8, 1.),
-                (-.22, -.78, 0., 0., 0., 2.),
-                (-.78, -1., 0., 1., -.8, 1.),
-            ):
-                normal = (outward[0], outward[1], nz)
-                for point, z, inset in ((a,z0,inset0),(b,z0,inset0),(b,z1,inset1),
-                                        (a,z0,inset0),(b,z1,inset1),(a,z1,inset1)):
-                    vertex(point, z, normal, inset, face)
-    return tuple(vertices)
+def fracture_vertices(shards: tuple[GlassShard, ...], aspect: float, *,
+                      pivots=None, radii=None) -> tuple[float, ...]:
+    """``fracture_vertex_array`` as a flat tuple (Crumble's per-triangle builder)."""
+    return tuple(fracture_vertex_array(shards, aspect, pivots=pivots, radii=radii).ravel().tolist())
