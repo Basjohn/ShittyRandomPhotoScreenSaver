@@ -13,7 +13,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 from PySide6.QtCore import QTimer, QObject, QThread, QCoreApplication, Signal, Qt
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_perf_metrics_enabled,
+    is_usage_logging_enabled,
+    is_verbose_logging,
+)
 
 logger = get_logger(__name__)
 
@@ -195,6 +200,12 @@ class SingleShotHandle:
             if self._state in (_SINGLE_SHOT_PENDING, _SINGLE_SHOT_SCHEDULED):
                 self._state = _SINGLE_SHOT_CANCELLED
             self._on_cancel = None
+
+
+def _category_queue_wait_enabled() -> bool:
+    """Per-category executor queue wait is diagnostics (--perf/--usage) only."""
+
+    return is_perf_metrics_enabled() or is_usage_logging_enabled()
 
 
 def _on_qt_ui_thread() -> bool:
@@ -703,6 +714,8 @@ class ThreadManager:
                 pool_diag["last_task_category"] = task.category
                 pool_diag["last_task"] = _callable_debug_name(task.func)
                 pool_diag["last_queue_wait_ms"] = queue_wait_ms
+            if _category_queue_wait_enabled():
+                self._note_category_queue_wait(task.category, queue_wait_ms)
             try:
                 result = task.func(*task.args, **task.kwargs)
                 execution_time = time.time() - start_time
@@ -1280,6 +1293,20 @@ class ThreadManager:
             pool_counts = self._stats.get(getattr(task, "pool_type", None))
             if pool_counts is not None:
                 pool_counts["submitted"] += 1
+
+    def _note_category_queue_wait(self, category: str, queue_wait_ms: float) -> None:
+        """Diagnostics only: attribute executor queue wait to the task category."""
+
+        with self._category_stats_lock:
+            counts = self._category_stats.get(category)
+            if counts is None:
+                return
+            counts["queue_wait_ms_total"] = (
+                float(counts.get("queue_wait_ms_total", 0.0)) + queue_wait_ms
+            )
+            counts["queue_wait_ms_max"] = max(
+                float(counts.get("queue_wait_ms_max", 0.0)), queue_wait_ms
+            )
 
     def _unregister_active_task(
         self,

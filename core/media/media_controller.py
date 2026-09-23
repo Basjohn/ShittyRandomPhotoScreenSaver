@@ -800,6 +800,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                     f"{action_name}"
                 ),
                 priority=TaskPriority.HIGH,
+                category="media_command",
             )
         except Exception:
             self._command_inflight = False
@@ -874,6 +875,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                     ),
                     priority=TaskPriority.HIGH,
                     callback=_on_done,
+                    category="media_query",
                 )
             except Exception:
                 logger.debug("[MEDIA] Failed to submit GSMTC query task", exc_info=True)
