@@ -58,7 +58,7 @@ overrides resolved per profile; callers that mutate get a private copy.
 
 ---
 
-## LC-05 — Context-menu entries refresh after the menu is shown; operator's "2 QImage tasks" note · P3 · R1 · Risk Low
+## LC-05 — Context-menu entries refresh after the menu is shown · P3 · R1 · Risk Low
 
 **Evidence.** `QuickDisplayRuntime` connects `context_menu_requested` to its own `_on_context_menu_requested` (opens
 the model) **before** re-emitting it to `DisplayManager` (`rendering/quick/runtime.py:228-231`), whose handler rebuilds
@@ -66,19 +66,15 @@ entries (`display_manager.py:1348-1352` → `_refresh_quick_context_menu` `:876-
 open (transition/visualizer/dimming/edit state), the row Repeater rebuilds while the menu is already visible.
 
 **Proposal.** Refresh before opening (reverse the emit order, or refresh on the edges that change entries). LC-06
-removes most of the per-open cost.
+already removed the per-open defaults rebuild (≈11 ms).
 
-**Operator note (2026-09-22): "every time the context menu is opened 2 new QImage tasks occur in the logs."**
-Not reproduced from the local 2026-09-22 dev logs:
+- [ ] Refresh-before-show implemented with single-menu enforcement and focus/Ctrl semantics unchanged (R-84/U-05).
 
-- the menu-open code path creates no images (`ContextMenu.qml` has no `Image`; entries are dicts; the halo/arrow
-  cursor pixmaps are cached per shape/DPR/fade step, `cursor_controller.py:245-261`);
-- the only "QImage" text in the logs is `FILL(QImage)` from `rendering/image_processor_async.py` (image processing);
-  in this run those lines follow transitions/prefetch, not menu opens;
-- Media `Thumbnail stream` reads landed 1–2 s after two menu opens but also occur every 4–13 s regardless (PW-01).
-
-- [ ] Operator: capture the exact log file + lines (or a run with `--cache --perf`) showing the two tasks around a
-      menu open; then classify (prefetch resume, media refresh, or a real menu-triggered image path).
+**Resolved operator note — "2 QImage tasks per context-menu open".** The 2026-09-22 22:53–22:59 run shows every
+`FILL(QImage)` pair (one line per display, `rendering/image_processor_async.py`) lands 5–11 s after an image change —
+the prefetcher pre-scaling the next images — whether or not a menu is open. The observed workflow (Next, then open the
+menu to pick a transition) puts that pair inside the menu window; menu opens without a recent rotation (22:54:03,
+22:54:10, 22:54:19, 22:58:05, 22:58:16, 22:58:36, 22:58:43, 22:59:29) show none. The menu path creates no images.
 
 ---
 

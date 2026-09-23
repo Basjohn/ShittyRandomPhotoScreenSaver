@@ -81,7 +81,7 @@ needs evidence before it is worth doing.
 | PW-06 | `ProcessSupervisor` heartbeat spawns a new OS thread every 3 s (`threading.Timer` re-armed per check) | P3 | R1 | Low | source |
 | PR-07 | `QuickSceneFactory` compiles every family QML component at startup (≈290 ms of 517 ms dev compile), active or not | P3 | R1 | Low | measured |
 | LC-04 | Recurring-timer gap oracle is not reset on stop/rebase and its classifier still names retired QWidget owners (R-87 "172,987 ms `unknown_ui_thread_stall`" anomaly) | P3 | R1 | Low | source |
-| LC-05 | Context-menu entries are refreshed *after* the menu is shown; operator-reported "2 QImage tasks per menu open" not yet reproduced | P3 | R1 | Low | source; open question |
+| LC-05 | Context-menu entries are refreshed *after* the menu is shown (operator "2 QImage tasks" note resolved: post-rotation prefetch, not the menu) | P3 | R1 | Low | source + operator log |
 | PR-05 | Any unrelated scene frame (widget animation, transition, menu) re-runs the Python visualizer render callback; local idle windows show 110–116 draws/s vs ~90 revisions/s | P3 | ? | High | log; architecture — operator only |
 | ST-01 | `DisplayManager` is a 4.9k-line owner of ~12 concerns | P3 | R1 | Medium | source |
 | DC-03..04 | Doc/source contradictions (retired-owner comments in the timer-gap classifier; `frameSwapped` guardrail vs source) | P3 | R1 | Low | source |
@@ -117,4 +117,5 @@ Each wave is independently committable. Nothing below overrides `Current_Plan.md
 
 > "Every time the context menu is opened 2 new QImage tasks occur in the logs."
 
-Tracked as LC-05 (05 §LC-05) with what was checked and what evidence would pin it down.
+Resolved from the operator's 2026-09-22 logs (05 §LC-05): the pair is the next-image prefetch 5–11 s after each image
+change, which the Next-then-menu workflow places inside the menu window.
