@@ -1086,7 +1086,18 @@ def test_live_visualizer_session_save_preserves_visible_projection_and_identity(
         def resize_live(handle: str) -> None:
             nonlocal last_revision
             rect = QRect(item.current_global_rect)
+            # Production presses the edge handle itself, not the card centre;
+            # starting at the centre turned the "8 px" preview into a jump large
+            # enough to reach the display-edge snap on short (huge-world) cards.
             start = QPoint(rect.center())
+            if handle == "left":
+                start.setX(rect.left())
+            elif handle == "right":
+                start.setX(rect.right())
+            elif handle == "top":
+                start.setY(rect.top())
+            else:
+                start.setY(rect.bottom())
             cursor = QPoint(start)
             preview = QPoint(start)
             if handle == "left":
