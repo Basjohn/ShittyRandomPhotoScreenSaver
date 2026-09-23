@@ -21,75 +21,6 @@ Owners audited: `rendering/quick/{runtime,window,frame_pacer,bootstrap,scene_con
 
 ---
 
-## PR-01 — Per-publication presentation re-resolve and ~25 no-op property writes · P1 · R2 · Risk Low · `[~]`
-
-**Evidence (source).** Every logical publication (~90 Hz) runs on the GUI thread:
-
-1. `QuickVisualizerPresentationSync.sync_latest()` → `resolve_presentation()`
-   (`quick_presentation_sync.py:189`) → `QuickDisplayVisualizerOwner._resolve_current_presentation()`
-   (`quick_display_visualizer_owner.py:639-692`) — a full `resolve_visualizer_presentation(...)` plus a
-   `dataclasses.replace` when a resolver is injected. **Measured ≈49 µs** per call (idle machine).
-2. `VisualizerRuntimeController.publish_render_snapshot()` commits viewport metrics
-   (`runtime_controller.py:639-640`).
-3. `_apply_resolved_presentation()` (`quick_display_visualizer_owner.py:694-716`) →
-   `QuickSceneController.apply_visualizer_presentation()` (`scene_controller.py:1707-1724`) →
-   `_apply_visualizer_presentation_items()` (`:1726-1794`): 4 loader geometry setters, 4 root geometry setters and
-   **~21 `root.setProperty()` calls plus 3 `QColor` constructions, unconditionally**, then
-   `_sync_custom_layout_visualizer()` (`:1281-1296`) which, with no CUSTOM session, calls the viewport sink
-   (`controller.set_custom_viewport_override(None, {})`, lock + import statement) and writes
-   `customLayoutWorkingVisible=True` again.
-4. `_apply_resolved_presentation()` then commits viewport metrics **a second time** (`:711-712`).
-
-CHK27 measured the commit alone at **0.141 / 0.263 ms median/p95** in D1-heavy (R-87). In steady state (no fade,
-no mode transition, no CUSTOM) the resolved record is equal every frame; an equality check costs **0.7 µs**.
-
-**What disappears.** Steady-state resolve + ~25 Qt meta-property writes + one duplicate metric commit + one
-override reset per publication: on the order of 15–20 ms/s of GUI-thread Python holding the GIL under heavy load
-(*estimate* from CHK27 + measured resolve), competing with the render thread's Python render callbacks
-(the R-87 CHK17 concurrent-GIL hypothesis).
-
-**Proposal (single owner, no cache that can outlive the item).**
-
-- In `_apply_visualizer_presentation_items`, early-return when `presentation == item.presentation` **and**
-  `bool(root.property("presentationActive")) == active` — the retained item's own record is the only
-  "last applied" value (no parallel cache; U-09/R-68 single-geometry-authority rule). Leave
-  `item.set_presentation` semantics unchanged.
-- Call `_sync_custom_layout_visualizer()` only when a CUSTOM session is bound or presentation actually
-  changed; the "no session" branch is already committed truth.
-- Delete the duplicate `commit_presentation_metrics` (keep the one owner in `publish_render_snapshot`, which is
-  already gated on `has_custom_viewport_override`).
-- Second step (memoizing `_resolve_current_presentation`): **parked**, see below.
-
-**Must remain true.** `request_present()` still runs for every accepted publication (R-62: never delay/coalesce
-visible state); snapshot and item commit still use the *same* resolved record (Visualizer_Presentation §4);
-fades/mode-transition frames still project every frame (their record differs); CUSTOM rebase path unchanged
-(R-68).
-
-**Implemented (step 1).** `_apply_visualizer_presentation_items` returns early when the retained item's record is
-equal **and** the live loader/root geometry and `presentationActive` already match (read back, not cached: CUSTOM sync
-moves the loader and retire/transfer paths clear `presentationActive` without changing the record). Measured on the real
-QML shell (idle): steady equal publication 20.4 → 4.0 µs; changing records unchanged (≈22 µs). `request_present()` and
-snapshot composition are untouched. Deliberately **kept**: the owner's second `commit_presentation_metrics` (≈3 µs) —
-it runs after the scene's CUSTOM sync and observes the post-sync override state, so removing it is not worth that edge.
-
-**Resolve memo — Park (operator 2026-09-23).** The remaining ≈47.6 µs resolve (≈4.3 ms/s) is spread over tiny
-publications. No second geometry/presentation cache; the retained item stays the comparison authority. Reopen only if
-GUI publication latency profiling points back here. Soak evidence (08): publication ≈89.91 Hz vs GUI admission
-≈88.26 Hz, i.e. small latest-wins coalescing and no cadence collapse. `viz_geometry_mismatches` went 0 → 1 once, at
-10:38:32, with no QML message, fault or hang: the fail-closed stale-presentation guard was exercised. Preserve that
-guard in any presentation work.
-
-**Acceptance.**
-
-- [x] Focused: `test_qtquick_scene_controller.py::test_steady_equal_visualizer_publication_performs_no_projection_writes`
-      (fails without the fix; covers changed fade, reactivation, externally moved loader), scene/owner/render-bridge/
-      presentation suites green; CUSTOM-owner reds are the pre-existing 24.
-- [ ] `--frame-trace` D1-heavy: `GUI_SNAPSHOT_PUBLISH → GUI_PRESENTATION_COMMIT_READY` collapses; publication→draw
-      neutral-or-better vs CHK26.
-- [ ] Physical: activation fade, mode crossfade, CUSTOM resize/Save/Cancel, display hop, startup reveal.
-
----
-
 ## PR-02 — Per-frame queued `frameSwapped` readiness callback in ordinary runtime · P2 · R1 · Risk Low–Medium · Parked
 
 **Evidence.** `scene_controller.py:597-600` connects `frameSwapped → _on_frame_swapped` (queued) for every display,
@@ -112,98 +43,39 @@ Python after readiness settles; physical cold start crossfade, Settings round-tr
 
 ---
 
-## PR-03 — Background telemetry `replace()` on every transition frame · P2 · R1–R2 · Risk Low · `[~]`
+## PR-04 — Transition finalization re-uploads the destination image · P1 · R3 · Risk Medium
 
-**Evidence.** `RenderNodeTelemetry` (`render/telemetry.py`) `replace()`s a **44-field** frozen dataclass under a lock
-in every `note_*`. During transitions the custom node calls `note_sync` (`background_node.py:223`),
-`note_transition_sample` (`:268`), `note_transition_drawn` (`:471`) and `note_render` (`:488`) per frame, plus
-three `wants_*` lock checks. **Measured ≈9.8 µs per `replace()`** → ≈40 µs of GIL-held render-thread Python per
-transition frame per display (≈6.6 ms/s at 165 Hz). The visualizer telemetry was already converted to cheap field
-mutation (`visualizer/telemetry.py` docstring) — this is the same fix, not a new design.
+**Mechanism (after Stages A and B).** At transition start the custom node uploads the destination with
+`glTexImage2D` (`render/image_textures.py`). When the run finalizes, the destination becomes the retained base image
+and the native branch (`render/background_image_node.py`) wraps the same `PresentationImage` bytes in a `QImage` (no
+copy since Stage B) and `createTextureFromImage` uploads those pixels a second time.
 
-**Proposal.** Mirror `VisualizerRenderNodeTelemetry`: plain fields mutated under the lock, `snapshot()` builds
-the immutable `RenderNodeSnapshot` on demand. Keep the pixel-capture/probe paths byte-identical (harness oracles).
+**Evidence — 2026-09-23 19:29–19:35 `--frame-trace`, 16 transition endings per display over three runtime
+generations**, pairing each run's last custom render with the next Quick render cycle on the same screen:
 
-**Implemented.** `RenderNodeTelemetry` keeps plain fields; `snapshot()` rebuilds the unchanged `RenderNodeSnapshot`
-only when read after a change (the GUI `_on_frame_swapped` path reads it per swap, so build-on-every-read would only
-have moved the cost). Idle measurement: sync+render+draw notes per transition frame 29.6 → 2.2 µs on the render
-thread; one note + GUI read 9.4 → 5.4 µs.
+| Screen | Median cycle | First cycle after an end | Sync | Render pass |
+| --- | ---: | ---: | ---: | ---: |
+| 1 — 3840×2160, Visualizer | 7.0 ms | 13.5–24.8 ms (median 19.3) | 0.33–1.53 ms | median 15.3 ms (6.2 normal), max 21.1 |
+| 0 — 2560×1440 | 2.1 ms | 1.7–7.6 ms (median 3.3) | median 0.69 ms | ≈0.1 ms; +1.2 ms before the pass |
 
-- [x] Bars: `tests/test_render_node_telemetry.py` (notes never compose snapshots; identity changes only on change) plus
-      the retained-background, render-node and transition suites unchanged (only the pre-existing Melt red).
-- [ ] `--frame-trace`: `BACKGROUND_RENDER_BEGIN → BACKGROUND_RENDER_READY` transition frames neutral-or-better.
+Stage B removed the ≈4.6 ms deep copy from sync. The 33 MB re-upload remains; on the Visualizer display its stall
+materialises inside the render pass (≈9–13 ms above a normal cycle). Earlier evidence: 24.7–24.8 ms before Stage A;
+26.6–90.6 ms in the D1 soak under external GPU load (not directly comparable).
 
----
+**Stages A and B are accepted** (00 §Accepted).
 
-## PR-04 — Transition finalization re-copies and re-uploads the destination image · P1 · R3 · Risk Medium
-
-**Mechanism.** At transition start the custom node uploads the destination with `glTexImage2D`
-(`render/image_textures.py:171-243`). At finalization the destination becomes the base image and the native branch
-builds a **deep copy** `QImage(bytes…).copy()` (`render/background_image_node.py:169-175`) — 33 MB at 3840×2160 —
-inside `updatePaintNode`, i.e. while the GUI thread is blocked in the threaded render loop's sync, then
-`createTextureFromImage` uploads the same pixels again, labelled straight-alpha `Format_RGBA8888`.
-
-**Evidence (details and the format probe table in 08).**
-
-- Operator `--frame-trace` 2026-09-23 08:06–08:09, first Quick render cycle after each transition end vs that screen's
-  median:
-
-  | Screen | Steady cycle (median) | First cycle after transition end | Of which sync (`QImage.copy`) | Of which render pass (re-upload) |
-  | --- | ---: | ---: | ---: | ---: |
-  | 1 — 3840×2160, Visualizer | 2.8 ms | **24.7–24.8 ms** (×3) | 4.3–4.9 ms | 13.5–14.1 ms |
-  | 0 — 2560×1440 | 1.1 ms | 6.9–8.4 ms (×3) | 2.5–3.3 ms | ≈0.1 ms |
-
-- D1 soak: all ten retained transition endings cost 26.62–90.58 ms (median ≈58.9 ms; sync 4.58–21.52 ms,
-  render/upload 21.88–68.99 ms), 5.5–9.9× the following 60 cycles; ≈26.6 and 34.7 ms after external load eased.
-- Idle probe: Qt converts the straight-alpha image to premultiplied on the render thread before upload — blocking
-  prepare 8.12 ms with `Format_RGBA8888`, 0.15 ms with `Format_RGBA8888_Premultiplied`.
-
-**Decision (operator 2026-09-23).**
-
-- **Stage A — Do with care (partial mitigation).** Guarantee opaque background pixels at the narrowest processing
-  boundary (FILL's perfect-fit return in `rendering/image_processor_async.py` is the only branch that can leak alpha;
-  every other branch paints onto black), with one documented rule: transparent sources composite over black. Do not
-  blanket-convert in the generic `capture_qimage`. Then label the native `QImage` `Format_RGBA8888_Premultiplied`;
-  never label non-opaque pixels premultiplied. Render/upload stays the larger cost under load, so PR-04 remains open
-  until a post-change frame trace measures the whole transition-end cycle.
-- **Stage B — Gated.** Drop `.copy()` (≈3–4.5 ms sync) only after a real Qt/PySide lifetime test proves the immutable
-  `PresentationImage.rgba8` storage stays valid for as long as QSG/texture creation may reference it. Do not infer
-  synchronous consumption.
-- **Rejected:** moving the upload earlier (relocates the stall into the transition). **Blocked:** zero re-upload
-  handoff — `QSGOpenGLTexture::fromNative`, `QRhiTexture.createFrom` and `QRhiTexture.nativeTexture` are not bound in
-  PySide 6.9.1.
+**Native zero-re-upload handoff — admitted 2026-09-23 as a bounded investigation and prototype.** Goal: the retained
+background adopts the transition's destination GL texture instead of uploading the same pixels again. Gates, in order:
+API feasibility on the pinned Qt/PySide stack (PySide 6.9.1 binds none of `QSGOpenGLTexture::fromNative`,
+`QRhiTexture.createFrom`, `QRhiTexture.nativeTexture`); one authoritative ownership transfer inside the existing
+texture host (no second deletion registry); pixel/geometry parity with Stage B; GL state and context legality (CHK26
+and R-87 untouched); packaging durability in the Nuitka build; measured removal of the duplicate upload. Stage B stays
+the reference and the attributed fallback until the native route passes all gates; if it cannot demonstrate safe
+ownership, substantial benefit and durable packaging, PR-04 parks at Stage B.
 
 **Must remain true.** R-60 texture identity (one DPR owner, no rekey), R-50 byte-bounded retention and
-release-on-owner-context, R-63 no black flash, CHK21 steady native ownership; ordinary opaque images render
-identically.
-
-- [x] Stage A implemented. Source finding: the ImageWorker prescale (the only foreground processor) leaked alpha in
-      **every** display mode — FILL returned the crop unchanged and FIT/SHRINK `paste()`d without a mask — not only
-      the in-process FILL perfect-fit branch. Both owners now composite source transparency over opaque black (worker:
-      right after decode when `has_transparency_data`, so scaling/sharpening/padding see opaque pixels; in-process:
-      perfect fit draws onto a black canvas like its other branches). The native branch labels the `QImage`
-      `Format_RGBA8888_Premultiplied` (the texture was already `TextureIsOpaque`); `.copy()` is unchanged (Stage B).
-      Rule: `Docs/Guardrails.md` §Wallpaper pixel opacity. The unused `IMAGE_DECODE` worker handler is not a wallpaper
-      path and is unchanged.
-- [x] Bars: `tests/test_wallpaper_opaque_pixels.py` — transparent source through every in-process and worker mode
-      yields alpha 255 composited over black (7 of 11 fail without the fix); opaque perfect-fit sources pass through
-      untouched; the processed route captures opaque pixels; the native branch hands Qt a premultiplied `QImage` with
-      byte-identical opaque pixels. Image pipeline/worker/cache-accounting, retained-background, texture, render-node
-      and transition-geometry suites green per file.
-- [x] Post-Stage-A `--frame-trace` (2026-09-23 17:05 session; one transition end per display survives): on the
-      3840×2160 Visualizer display the handoff spans two Quick cycles — 4.6 ms sync (the `.copy()`) in the first,
-      16.2 ms render/upload in the next (≈21 ms), against a 3.2 ms median cycle. The 2560×1440 display: 3.7 ms first
-      cycle. Stage A is a partial mitigation; the full native re-upload remains structurally visible.
-- [x] Physical (2026-09-23): no black flash at transition end on both displays; ordinary wallpaper unchanged. The
-      transparent-PNG case is owned by the automated contract (operator waived a physical check: SRPSS shows
-      photographs).
-- [x] Stage B landed: no `.copy()`; Lifetime result (`tests/test_qtquick_native_image_lifetime.py`, real threaded OpenGL window): Qt reads the pixels on the render thread during that frame's upload, after `updatePaintNode` returns; steady frames never re-read them; PySide 6.9.1 keeps the Python buffer alive while any C++ `QImage` copy exists (the texture's and upload batch's); the production native node renders correct pixels when the GUI-side reference is dropped right after sync and freed memory is churned. The node also owns the `PresentationImage` for as long as its texture exists (no extra bytes in steady state: the item holds the same object). Saves ≈3.8 ms idle (4.6 ms traced) of GUI-blocking
-      sync per 4K image change. Bars: the lifetime probes, the PySide buffer-lifetime pin, and the no-copy/ownership
-      unit bar (fails with the old copy).
-- [ ] Remaining: the full-image upload (≈16 ms calm, up to ≈69 ms under load) on the 4K display. Choosing the
-      zero-re-upload route (native helper vs PySide upgrade) needs evidence first: a post-Stage-B trace and a check of
-      what a newer PySide binds.
-- [ ] Stage B prerequisite: Qt/PySide buffer-lifetime test, then the same bars.
+release-on-owner-context, R-63 no black flash, CHK21 steady native ownership, CHK26 inherited-state optimization;
+ordinary opaque images render identically.
 
 ---
 
