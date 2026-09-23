@@ -78,7 +78,7 @@ needs evidence before it is worth doing.
 | PW-05 | Feed and Games-You-Follow each hand-roll parentless deadline `QTimer`s because `ThreadManager.single_shot` returns no cancel handle | P2 | R1 | Low | **Do** before FEEDS Custom 2–4 (handle, not a raw `QTimer`) | source |
 | VZ-05 | `[~]` Capture re-froze every render field twice per tick; single-freeze landed (2.4× faster) | P2 | R1–R2 | Low | landed; epoch cache **Park** | measured + soak |
 | PR-02 | Ordinary runtime connects `frameSwapped` to a queued per-frame GUI Python callback that republishes unchanged readiness (≈0.5 ms/s in the soak) | P2 | R1 | Low–Med | **Park** (with DC-04) | source + measured + soak |
-| VZ-03 | Tick phase breakdown (closure + dict + 9 timestamps) is recorded every tick though only read when perf-gated | P3 | R1 | Low | **Do** (low priority; park if it needs tick-pipeline surgery) | source + measured |
+| VZ-03 | `[~]` Tick phase breakdown (closure + dict + 9 timestamps) was recorded every tick though only read when perf-gated; now built only with `--perf` | P3 | R1 | Low | landed | source + measured |
 | VZ-04 | Every mode's logical frame copies and validates the 256-sample waveform (38.4 µs/tick) | P3 | R1 | Low–Med | **Do with care** (per-mode consumer bar, BTF lane) | measured |
 | PW-03 | Family models notify 30–67 properties through one `stateChanged`; one Clock emit costs 0.69–0.77 ms GUI, once per second per clock | P3 | R1 | Low | Clock **Do with care**; Media **Watch** | measured + soak |
 | LC-05 | `[~]` Context-menu entries were refreshed *after* the menu was shown (6.6 ms median); now refreshed before `open_at()` | P3 | R1 | Low | landed; physical check open | source + measured |

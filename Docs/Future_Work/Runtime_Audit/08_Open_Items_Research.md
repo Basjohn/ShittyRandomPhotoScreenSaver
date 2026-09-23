@@ -31,7 +31,7 @@ recorded; the replacement watchdog armed six times (four Settings, two CUSTOM Ed
 | Item | Evidence (short) | Decision | Remaining |
 | --- | --- | --- | --- |
 | LC-05 menu refresh after show | 6.6 ms median (15.5 ms first) rebuild while visible | **Do** — `[~]` landed | physical check |
-| VZ-03 phase recording | 4.2 µs/tick of diagnostic work at rest | **Do** (low priority) | park instead if it needs tick-pipeline surgery |
+| VZ-03 phase recording | 4.2 µs/tick of diagnostic work at rest | **Do** — `[~]` landed | next `--perf` slow tick |
 | PW-05 cancellable `single_shot` | two hand-rolled parentless deadline `QTimer`s | **Do** before FEEDS Custom 2–4 | handle, not a raw `QTimer` |
 | PW-03 Clock notify | 0.69–0.77 ms GUI per 1 Hz emit per clock | **Do with care** (Clock only) | before/after measurement |
 | VZ-04 waveform payload | 38.4 µs/tick for modes that never draw samples | **Do with care** | per-mode consumer bar + BTF lane |

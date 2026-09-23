@@ -11,7 +11,7 @@ import logging
 import math
 import time
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 
 from core.logging.logger import (
@@ -1411,6 +1411,24 @@ def _publish_logical_state(
     return payload
 
 
+def _skip_tick_phase(_name: str) -> None:
+    """Phase mark while ``--perf`` is off: diagnostics add no work at rest."""
+
+
+def _new_tick_phase_recorder() -> tuple[Callable[[str], None], dict[str, float]]:
+    """``--perf`` only: per-phase durations for the slow-tick breakdown."""
+
+    phases: dict[str, float] = {}
+    last = [time.perf_counter()]
+
+    def record(name: str) -> None:
+        now_perf = time.perf_counter()
+        phases[name] = (now_perf - last[0]) * 1000.0
+        last[0] = now_perf
+
+    return record, phases
+
+
 def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     """Advance authored logical state and publish the latest immutable frame.
 
@@ -1418,15 +1436,13 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     touch QPixmap/GL state, or perform any retained Quick scene mutation.
     """
 
-    _tick_entry_ts = time.time()
-    _tick_phase_start = time.perf_counter()
-    _tick_phase_ms: dict[str, float] = {}
-
-    def _record_tick_phase(name: str) -> None:
-        nonlocal _tick_phase_start
-        now_perf = time.perf_counter()
-        _tick_phase_ms[name] = (now_perf - _tick_phase_start) * 1000.0
-        _tick_phase_start = now_perf
+    # --perf is fixed for the process; with it off the tick records no phases.
+    perf_enabled = is_perf_metrics_enabled()
+    if perf_enabled:
+        _tick_entry_ts = time.time()
+        _record_tick_phase, _tick_phase_ms = _new_tick_phase_recorder()
+    else:
+        _record_tick_phase = _skip_tick_phase
 
     _ensure_fresh_generation_state(widget)
     _record_tick_phase("fresh_state")
@@ -1511,13 +1527,15 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     payload = _publish_logical_state(
         widget, now_ts, changed=changed, mode_reveal_ready=mode_reveal_ready
     )
-    used_gpu = False
-    first_frame = not widget._has_pushed_first_frame
     _record_tick_phase("publish")
 
     # PERF: Log slow ticks
+    if not perf_enabled:
+        return payload
+    used_gpu = False
+    first_frame = not widget._has_pushed_first_frame
     _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
-    if _tick_elapsed > 50.0 and is_perf_metrics_enabled():
+    if _tick_elapsed > 50.0:
         logger.warning("[PERF] [SPOTIFY_VIS] Slow _on_tick: %.2fms", _tick_elapsed)
         phase_payload = " ".join(
             f"{name}_ms={elapsed_ms:.2f}"
