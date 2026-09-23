@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-09-16
+Last updated: 2026-09-23
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -37,6 +37,12 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-94 — Melt's Float Noise Hash Cut The Photograph Into Rectangles](Historical_Bugs/R-94_Melt_Float_Hash_Cut_The_Photo_Into_Rectangles.md) — **SOLVED IN CODE**. Compiler-rounding divergence in a chaotic float hash made each noise cell melt separately; exact integer lattice hash + field-render bar.
+- [R-93 — Media Commands And Refreshes Starved Behind Network IO](Historical_Bugs/R-93_Media_Commands_Starved_Behind_Network_IO.md) — **SOLVED** (runtime audit PW-02). Dedicated lazy `media` lane; never the FIFO IO pool or the observation worker.
+- [R-92 — Random Transition Rotation Overwrote The User's Authored Direction](Historical_Bugs/R-92_Random_Rotation_Overwrote_Authored_Direction.md) — **FIXED IN CODE / AWAITING VALIDATION** (runtime audit TX-02). Settings are never inter-component scratch space.
+- [R-91 — Worker Processes Outlived A Crashed UI Process](Historical_Bugs/R-91_Worker_Processes_Outlived_Crashed_UI.md) — **FIXED IN CODE / AWAITING VALIDATION**. Workers detect parent death; installed End-task check open.
+- [R-90 — Core Audio Endpoint Released Twice (ctypes.cast Shared A COM Pointer)](Historical_Bugs/R-90_Core_Audio_Endpoint_Double_Release.md) — **FIXED IN CODE / AWAITING VALIDATION**. `QueryInterface`, never `ctypes.cast`, between COM interfaces.
+- [R-89 — Recurring Timer Released Its Owner Inside Its Own Deferred Deletion](Historical_Bugs/R-89_Recurring_Timer_Owner_Released_Inside_Deferred_Delete.md) — **SOLVED**. The cross-file native abort; release timer callbacks before `deleteLater()`.
 - [R-88 — Qt Quick CUSTOM Edit painted geometry, role churn and false test oracles](Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md) — **ACCEPTED for tested multi-family Edit and retained child guides**; not a claim of whole-project churn clearance.
 - [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md)
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md)
