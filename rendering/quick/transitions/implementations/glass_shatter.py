@@ -6,9 +6,14 @@ from OpenGL import GL as gl
 from rendering.gl_programs.glass_shatter_program import (
     GLASS_FRAGMENT, GLASS_VERTEX,
 )
-from ..fracture_geometry import fracture_cells, fracture_vertices
 from ..mesh_support import MeshResources, bind_frame, direction_vector
 from ..render_contract import QuickTransitionRenderFrame
+from ..run_geometry import (
+    GLASS_ATTRIBUTES,
+    PREPARED_GEOMETRY,
+    build_glass_geometry,
+    glass_geometry_key,
+)
 
 
 class QuickGlassShatterRenderer:
@@ -35,8 +40,10 @@ class QuickGlassShatterRenderer:
             key = (frame.run.run_id, params["seed"], params["shards"], aspect)
             if key != self._geometry_key:
                 resources.drop_mesh("shards")
-                vertices = fracture_vertices(fracture_cells(int(params["seed"]), int(params["shards"]), aspect), aspect)
-                self._vao, self._count = resources.mesh("shards", vertices, (2, 2, 1, 3, 1, 1, 1, 1))
+                geometry = PREPARED_GEOMETRY.get_or_build(
+                    glass_geometry_key(params, aspect), build_glass_geometry
+                )
+                self._vao, self._count = resources.mesh("shards", geometry.vertices, GLASS_ATTRIBUTES)
                 self._geometry_key = key
             program = resources.program("glass", GLASS_VERTEX, GLASS_FRAGMENT)
             uniforms = resources.uniforms("glass", (

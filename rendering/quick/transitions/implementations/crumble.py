@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 import ctypes
-import math
-import random
-from collections.abc import Mapping
 from OpenGL import GL as gl
 from rendering.gl_programs.crumble_program import (
     CRUMBLE_CHIP_VERTICES,
@@ -13,107 +10,17 @@ from rendering.gl_programs.crumble_program import (
     DEBRIS_FRAGMENT,
     DEBRIS_VERTEX,
 )
-from ..fracture_geometry import fracture_cells, fracture_vertices
 from ..mesh_support import MeshResources, bind_frame
 from ..render_contract import QuickTransitionRenderFrame
-
-
-def _number(
-    parameters: Mapping[str, object], name: str, low: float, high: float
-) -> float:
-    value = parameters.get(name)
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(float(value))
-    ):
-        raise ValueError(f"Crumble requires resolved finite numeric parameter {name!r}")
-    value = float(value)
-    if not low <= value <= high:
-        raise ValueError(f"Crumble {name} must be between {low} and {high}")
-    return value
-
-
-def _crumble_parameters(
-    parameters: Mapping[str, object],
-) -> tuple[float, int, float, float, float, float, float]:
-    seed = _number(parameters, "seed", 0.0, 1000.0)
-    pieces = parameters.get("piece_count")
-    if (
-        isinstance(pieces, bool)
-        or not isinstance(pieces, int)
-        or not 4 <= pieces <= 128
-    ):
-        raise ValueError("Crumble piece_count must be an integer between 4 and 128")
-    complexity = _number(parameters, "crack_complexity", 0.5, 2.0)
-    weight = _number(parameters, "weight_mode", 0.0, 4.0)
-    if weight not in {0.0, 1.0, 2.0, 3.0, 4.0}:
-        raise ValueError("Crumble weight_mode must be one of 0, 1, 2, 3, 4")
-    return (
-        seed,
-        pieces,
-        complexity,
-        weight,
-        _number(parameters, "depth", 0.2, 1.5),
-        _number(parameters, "thickness", 0.0, 1.0),
-        _number(parameters, "debris", 0.0, 1.0),
-    )
-
-
-def _debris_instances(seed: float, shards, amount: float) -> tuple[float, ...]:
-    rng = random.Random(seed)
-    count = max(12, min(512, round(len(shards) * (3 + 9 * amount))))
-    values = []
-    for index in range(count):
-        shard = shards[index % len(shards)]
-        first = shard.polygon[index % len(shard.polygon)]
-        second = shard.polygon[(index + 1) % len(shard.polygon)]
-        fraction = rng.random()
-        x = first[0] + (second[0] - first[0]) * fraction
-        y = first[1] + (second[1] - first[1]) * fraction
-        parent_x, parent_y = shard.center
-        values.extend(
-            (
-                x,
-                y,
-                parent_x,
-                parent_y,
-                shard.variation,
-                0.35 + rng.random() * 0.65,
-            )
-        )
-    return tuple(values)
-
-
-def _crumble_vertices(shards, aspect: float) -> tuple[float, ...]:
-    """Add crack coordinates on the real polygon borders of the shared solids.
-
-    Each front fan triangle has exactly one external polygon edge. Distance
-    from that edge and distance along it interpolate across the face; fan
-    diagonals receive no crack. Shared edges use the same orientation/phase.
-    The prism itself is unchanged, including its closed sides and bevels.
-    """
-    solid = fracture_vertices(shards, aspect)
-    result = []
-    for start in range(0, len(solid), 36):
-        triangle = [solid[start + offset:start + offset + 12] for offset in (0, 12, 24)]
-        if triangle[0][9] == 0.0:
-            a, b = sorted((triangle[1][:2], triangle[2][:2]))
-            dx, dy = (b[0] - a[0]) * aspect, b[1] - a[1]
-            length = math.hypot(dx, dy)
-            phase = (a[0] + b[0]) * 63.55 + (a[1] + b[1]) * 155.85
-            # Viewport borders are not fractures between pieces.
-            outer = ((a[0] == b[0] and a[0] in (0.0, 1.0)) or
-                     (a[1] == b[1] and a[1] in (0.0, 1.0)))
-            for vertex in triangle:
-                x, y = (vertex[0] - a[0]) * aspect, vertex[1] - a[1]
-                distance = abs(dx * y - dy * x) / length
-                along = (x * dx + y * dy) / (length * length)
-                result.extend((*vertex, 10.0 if outer else distance, along, phase))
-        else:
-            for vertex in triangle:
-                result.extend((*vertex, 10.0, 0.0, 0.0))
-    return tuple(result)
+from ..run_geometry import (
+    CRUMBLE_CHUNK_ATTRIBUTES,
+    CRUMBLE_DEBRIS_STRIDE,
+    PREPARED_GEOMETRY,
+    CrumbleGeometry,
+    build_crumble_geometry,
+    crumble_geometry_key,
+    crumble_parameters,
+)
 
 
 class QuickCrumbleRenderer:
@@ -137,13 +44,19 @@ class QuickCrumbleRenderer:
             if progress >= 1.0:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
+            parameters = frame.run.request.parameter_dict()
             seed, pieces, complexity, weight, depth, thickness, debris = (
-                _crumble_parameters(frame.run.request.parameter_dict())
+                crumble_parameters(parameters)
             )
             aspect = frame.logical_size[0] / frame.logical_size[1]
             key = (frame.run.run_id, seed, pieces, complexity, aspect, debris)
             if key != self._geometry_key:
-                self._rebuild_geometry(seed, pieces, complexity, aspect, debris)
+                self._rebuild_geometry(
+                    PREPARED_GEOMETRY.get_or_build(
+                        crumble_geometry_key(parameters, aspect),
+                        build_crumble_geometry,
+                    )
+                )
                 self._geometry_key = key
             self._resources.draw_image(frame, frame.destination_texture_id)
             self._resources.begin_depth(frame)
@@ -154,28 +67,27 @@ class QuickCrumbleRenderer:
             self.release_resources()
             raise
 
-    def _rebuild_geometry(self, seed, pieces, complexity, aspect, debris) -> None:
+    def _rebuild_geometry(self, geometry: CrumbleGeometry) -> None:
         self._resources.drop_mesh("chunks")
         if self._debris_vbo:
             gl.glDeleteBuffers(1, [self._debris_vbo])
             self._debris_vbo = 0
-        shards = fracture_cells(seed, pieces, aspect, complexity)
         self._chunk_vao, self._chunk_count = self._resources.mesh(
-            "chunks", _crumble_vertices(shards, aspect), (2, 2, 1, 3, 1, 1, 1, 1, 3)
+            "chunks", geometry.chunks, CRUMBLE_CHUNK_ATTRIBUTES
         )
-        if debris <= 0.0:
+        if not geometry.debris:
             self._debris_count = 0
             self._resources.drop_mesh("debris_chip")
             return
         vao, _ = self._resources.mesh("debris_chip", CRUMBLE_CHIP_VERTICES, (3, 3))
-        values = _debris_instances(seed, shards, debris)
-        self._debris_count = len(values) // 6
+        float_count = len(geometry.debris) // 4
+        self._debris_count = float_count // CRUMBLE_DEBRIS_STRIDE
         self._debris_vbo = int(gl.glGenBuffers(1))
         if not self._debris_vbo:
             raise RuntimeError("Quick Crumble debris allocation failed")
         gl.glBindVertexArray(vao)
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self._debris_vbo)
-        packed = (ctypes.c_float * len(values))(*values)
+        packed = (ctypes.c_float * float_count).from_buffer_copy(geometry.debris)
         gl.glBufferData(
             gl.GL_ARRAY_BUFFER, ctypes.sizeof(packed), packed, gl.GL_STATIC_DRAW
         )

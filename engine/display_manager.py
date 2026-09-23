@@ -64,6 +64,10 @@ from rendering.quick.transitions.request_resolution import (
     ResolvedQuickTransitionSpec,
     resolve_quick_transition_spec,
 )
+from rendering.quick.transitions.run_geometry import (
+    has_run_geometry,
+    prepare_run_geometry,
+)
 
 logger = get_logger(__name__)
 REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
@@ -3752,7 +3756,50 @@ class DisplayManager(QObject):
                 random_selection=self._random_transition_selection,
             )
             self._quick_transition_spec_resolved = True
+            self._prepare_transition_run_geometry(self._quick_transition_batch_spec)
         return self._quick_transition_batch_spec
+
+    def _prepare_transition_run_geometry(
+        self,
+        spec: ResolvedQuickTransitionSpec | None,
+    ) -> None:
+        """Build per-run fracture geometry on COMPUTE while the batch images process.
+
+        The spec resolves in the pre-queue preflight, well before any display
+        starts the run. The render thread uploads the prepared bytes, or builds
+        the identical bytes itself if this has not finished (never waits).
+        """
+
+        if spec is None or not has_run_geometry(spec.transition_id):
+            return
+        submit = getattr(self._thread_manager, "submit_compute_task", None)
+        if not callable(submit):
+            return
+        aspects: list[float] = []
+        for display in self.displays:
+            bounds = getattr(display, "display_bounds", None)
+            if not callable(bounds):
+                continue
+            try:
+                geometry = bounds()
+                width, height = float(geometry.width), float(geometry.height)
+            except Exception:
+                logger.debug("[TRANSITION] Display bounds unavailable for geometry preparation", exc_info=True)
+                continue
+            if width > 0.0 and height > 0.0:
+                aspects.append(width / height)
+        if not aspects:
+            return
+        try:
+            submit(
+                prepare_run_geometry,
+                spec.transition_id,
+                dict(spec.parameters),
+                tuple(aspects),
+                category="transition_geometry",
+            )
+        except Exception:
+            logger.debug("[TRANSITION] Geometry preparation not submitted", exc_info=True)
 
     def has_admissible_transition_for_open_batch(self) -> bool:
         """Validate transition availability before producer queue mutation.
