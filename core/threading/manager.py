@@ -617,6 +617,9 @@ class ThreadManager:
         self._compute_lane_scheduler = None
         self._affinity_lane_lock = threading.RLock()
         self._affinity_lane_scheduler = None
+        # Named single-thread workers for owners that must not share the
+        # thread-affine worker above (PW-02: Media queries/commands).
+        self._dedicated_affinity_schedulers: Dict[str, Any] = {}
         self._background_task_lock = threading.RLock()
         self._background_task_scheduler = None
         
@@ -935,12 +938,19 @@ class ThreadManager:
         category: str,
         runtime_generation: object | None = None,
         owner: object | None = None,
+        worker: str | None = None,
     ):
         """Create a logical lane on the process-owned thread-affinity worker.
 
         Use this only for retained native resources whose create/mutate/release
         operations must execute on one OS thread (for example COM/WinRT
         subscription objects). The lane is event-driven and owns no cadence.
+
+        ``worker`` names a separate lazy single-thread worker instead of the
+        shared one, for serial work that must neither share that thread nor
+        queue behind the FIFO IO pool (PW-02: the Media runtime lane). Each
+        named worker is created once, idles on a condition, and is shut down
+        with this manager.
         """
 
         if self._shutdown:
@@ -950,10 +960,19 @@ class ThreadManager:
         with self._affinity_lane_lock:
             if self._shutdown:
                 raise RuntimeError("Cannot create an affinity lane after shutdown")
-            scheduler = self._affinity_lane_scheduler
-            if scheduler is None:
-                scheduler = AffinityLaneScheduler()
-                self._affinity_lane_scheduler = scheduler
+            if worker:
+                worker_name = str(worker)
+                scheduler = self._dedicated_affinity_schedulers.get(worker_name)
+                if scheduler is None:
+                    scheduler = AffinityLaneScheduler(
+                        thread_name=f"affinity_io_lane:{worker_name}"
+                    )
+                    self._dedicated_affinity_schedulers[worker_name] = scheduler
+            else:
+                scheduler = self._affinity_lane_scheduler
+                if scheduler is None:
+                    scheduler = AffinityLaneScheduler()
+                    self._affinity_lane_scheduler = scheduler
 
         owner_class = type(owner).__name__ if owner is not None else None
         owner_id = id(owner) if owner is not None else None
@@ -1054,6 +1073,12 @@ class ThreadManager:
                     "tasks_completed": 0,
                 }
             ),
+            "dedicated_affinity_lanes": {
+                name: scheduler.diagnostic_snapshot()
+                for name, scheduler in tuple(
+                    self._dedicated_affinity_schedulers.items()
+                )
+            },
             "background_cpu": (
                 self._background_task_scheduler.diagnostic_snapshot()
                 if self._background_task_scheduler is not None
@@ -1089,6 +1114,8 @@ class ThreadManager:
         affinity_scheduler = self._affinity_lane_scheduler
         if affinity_scheduler is not None:
             tasks = tasks + affinity_scheduler.lifecycle_work_snapshot()
+        for dedicated in tuple(self._dedicated_affinity_schedulers.values()):
+            tasks = tasks + dedicated.lifecycle_work_snapshot()
         background_scheduler = self._background_task_scheduler
         if background_scheduler is not None:
             tasks = tasks + background_scheduler.lifecycle_work_snapshot()
@@ -1133,6 +1160,10 @@ class ThreadManager:
                 complete = complete and affinity_complete
                 if affinity_complete:
                     self._affinity_lane_scheduler = None
+            complete = (
+                self._shutdown_dedicated_affinity_schedulers(wait=wait, timeout=timeout)
+                and complete
+            )
             background_scheduler = self._background_task_scheduler
             if background_scheduler is not None:
                 background_complete = bool(
@@ -1178,6 +1209,10 @@ class ThreadManager:
                 affinity_shutdown_complete = False
             if affinity_shutdown_complete:
                 self._affinity_lane_scheduler = None
+        affinity_shutdown_complete = (
+            self._shutdown_dedicated_affinity_schedulers(wait=wait, timeout=timeout)
+            and affinity_shutdown_complete
+        )
 
         background_shutdown_complete = True
         background_scheduler = self._background_task_scheduler
@@ -1293,6 +1328,21 @@ class ThreadManager:
             pool_counts = self._stats.get(getattr(task, "pool_type", None))
             if pool_counts is not None:
                 pool_counts["submitted"] += 1
+
+    def _shutdown_dedicated_affinity_schedulers(
+        self, *, wait: bool, timeout: Optional[float]
+    ) -> bool:
+        complete = True
+        for name, scheduler in tuple(self._dedicated_affinity_schedulers.items()):
+            try:
+                worker_complete = bool(scheduler.shutdown(wait=wait, timeout=timeout))
+            except Exception:
+                logger.exception("Dedicated affinity worker shutdown failed: %s", name)
+                worker_complete = False
+            if worker_complete:
+                self._dedicated_affinity_schedulers.pop(name, None)
+            complete = complete and worker_complete
+        return complete
 
     def _note_category_queue_wait(self, category: str, queue_wait_ms: float) -> None:
         """Diagnostics only: attribute executor queue wait to the task category."""
