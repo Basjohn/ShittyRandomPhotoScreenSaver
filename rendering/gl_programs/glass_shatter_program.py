@@ -1,4 +1,10 @@
-"""Perspective motion and independently authored optical material for glass prisms."""
+"""Perspective motion and independently authored optical material for glass prisms.
+
+Collisions and in-flight re-shattering are solved per run at build time
+(``rendering/quick/transitions/glass_dynamics.py``); each piece carries a
+visibility window and a velocity/spin kick that start at its event time. With
+no event the kick is zero and the path is exactly the plain shatter.
+"""
 
 GLASS_VERTEX = """#version 410 core
 layout(location=0) in vec2 aUv;
@@ -9,6 +15,10 @@ layout(location=4) in float aInset;
 layout(location=5) in float aFace;
 layout(location=6) in float aVariation;
 layout(location=7) in float aRadius;
+layout(location=8) in vec2 aLife;    // visible from .x until .y (split parents/children)
+layout(location=9) in vec4 aKick;    // velocity kick xyz from time .w
+layout(location=10) in vec4 aSpin;   // extra spin axis xyz and rate .w from aKick.w
+layout(location=11) in vec2 aPivot;  // this piece's own centre (spin pivot)
 uniform mat4 uMatrix;
 uniform vec2 uItemSize;
 uniform vec2 uDirection;
@@ -29,6 +39,13 @@ vec3 rotateAxis(vec3 p, vec3 axis, float angle) {
     return p*c + cross(axis,p)*s + axis*dot(axis,p)*(1.0-c);
 }
 void main() {
+    if(uProgress<aLife.x||uProgress>=aLife.y) {
+        // Not this piece's turn (a shard before or after it cracks apart).
+        gl_Position=vec4(2.0,2.0,2.0,1.0);
+        vScreenUv=vec2(0.0);vUv=vec2(0.0);vNormal=vec3(0.0,0.0,1.0);
+        vView=vec3(0.0,0.0,1.0);vMotion=0.0;vThickness=0.0;vFace=0.0;
+        return;
+    }
     float aspect=uItemSize.x/uItemSize.y;
     vec2 center=vec2((aCenter.x-.5)*aspect,.5-aCenter.y);
     vec2 direction=vec2(uDirection.x,-uDirection.y);
@@ -50,6 +67,17 @@ void main() {
     vec2 delta=vec2((localUv.x-aCenter.x)*aspect,aCenter.y-localUv.y);
     float thickness=aRadius*.65*uThickness*impact;
     vec3 position=rotateAxis(vec3(delta,aZ*thickness),axis,angle);
+    vec3 normal=rotateAxis(normalize(aNormal),axis,angle);
+    // Build-time event: from aKick.w the piece takes a velocity kick and spins
+    // about its own centre. Time freezes with the path at the exit.
+    float tau=max(min(uProgress,.98)-aKick.w,0.0);
+    if(tau>0.0) {
+        vec2 pivotDelta=vec2((aPivot.x-aCenter.x)*aspect,aCenter.y-aPivot.y);
+        vec3 pivot=rotateAxis(vec3(pivotDelta,-.5*thickness),axis,angle);
+        float spin=aSpin.w*tau;
+        position=pivot+rotateAxis(position-pivot,aSpin.xyz,spin);
+        normal=rotateAxis(normal,aSpin.xyz,spin);
+    }
     direction=normalize(direction+vec2(-direction.y,direction.x)*(.35*(aVariation-.5)));
     // Ray/expanded-rectangle exit accounts for the entire rotating prism and
     // the largest possible receding projection. No scale/fade retirement.
@@ -63,6 +91,7 @@ void main() {
     position.xy+=center+direction*exitDistance*travel;
     position.y-=.16*sin(3.14159265*local)*local;
     position.z+=uDepth*(.56*sin(3.14159265*local)-.6*local*local);
+    position+=aKick.xyz*tau;
     float w=3.0-position.z;
     vec2 uv=vec2(position.x/aspect,-position.y)*3.0/w+.5;
     vec4 projected=uMatrix*vec4(uv*uItemSize,0,1);
@@ -71,7 +100,7 @@ void main() {
     gl_Position=projected;
     vScreenUv=uv;
     vUv=localUv;
-    vNormal=rotateAxis(normalize(aNormal),axis,angle);
+    vNormal=normal;
     vView=vec3(-position.xy,3.0-position.z);
     vMotion=impact;
     vThickness=thickness;

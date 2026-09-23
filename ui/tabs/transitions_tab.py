@@ -755,6 +755,10 @@ class TransitionsTab(QWidget):
             self.glass_depth_spin.setValue(self._new_transition_number(
                 cfg, 'depth', 'glass_shatter', canonical['depth'], self.glass_depth_spin, float,
             ))
+            for field, check in (("collisions", self.glass_collisions_check),
+                                 ("reshatter", self.glass_reshatter_check)):
+                check.setChecked(bool(SettingsManager.to_bool(
+                    cfg.get(field, canonical[field]), bool(canonical[field]))))
 
         if hasattr(self, 'exploding_tiles_group'):
             canonical = canonical_transitions['exploding_tiles']
@@ -1063,6 +1067,27 @@ class TransitionsTab(QWidget):
         self.glass_depth_spin.valueChanged.connect(self._save_settings)
         depth_row.addWidget(self.glass_depth_spin)
         depth_row.addStretch()
+        collide_row = self._aligned_row(layout, "", wrap=False)
+        self.glass_collisions_check = QCheckBox("Shards Collide")
+        self.glass_collisions_check.setProperty("circleIndicator", True)
+        self.glass_collisions_check.setToolTip(
+            "Shards that meet in flight bounce off each other and spin away."
+        )
+        self.glass_collisions_check.setChecked(bool(_transition_default("glass_shatter.collisions")))
+        self.glass_collisions_check.stateChanged.connect(self._save_settings)
+        collide_row.addWidget(self.glass_collisions_check)
+        collide_row.addStretch()
+        reshatter_row = self._aligned_row(layout, "", wrap=False)
+        self.glass_reshatter_check = QCheckBox("Shards Break Again")
+        self.glass_reshatter_check.setProperty("circleIndicator", True)
+        self.glass_reshatter_check.setToolTip(
+            "Shards crack into smaller pieces in flight: when they collide if "
+            "Shards Collide is on, otherwise about 30% of shards crack at random."
+        )
+        self.glass_reshatter_check.setChecked(bool(_transition_default("glass_shatter.reshatter")))
+        self.glass_reshatter_check.stateChanged.connect(self._save_settings)
+        reshatter_row.addWidget(self.glass_reshatter_check)
+        reshatter_row.addStretch()
         self._build_surface_controls(layout, "glass_shatter")
         self._specific_group_host_layout.addWidget(self.glass_shatter_group)
 
@@ -1851,6 +1876,8 @@ class TransitionsTab(QWidget):
             # Future transition pages (lazy; absent until selected)
             getattr(self, 'glass_shards_spin', None),
             getattr(self, 'glass_depth_spin', None),
+            getattr(self, 'glass_collisions_check', None),
+            getattr(self, 'glass_reshatter_check', None),
             getattr(self, 'exploding_tiles_columns_spin', None),
             getattr(self, 'exploding_tiles_depth_spin', None),
             getattr(self, 'pixel_tile_size_spin', None),
@@ -2289,6 +2316,8 @@ class TransitionsTab(QWidget):
                 'shards': self.glass_shards_spin.value(),
                 'depth': float(self.glass_depth_spin.value()),
                 'direction': self._direction_by_type['glass_shatter'],
+                'collisions': self.glass_collisions_check.isChecked(),
+                'reshatter': self.glass_reshatter_check.isChecked(),
             }
         else:
             glass_shatter = _existing_subdict('glass_shatter')

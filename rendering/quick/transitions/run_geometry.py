@@ -22,13 +22,17 @@ import random
 import threading
 from typing import Callable, Hashable, TypeVar
 
+import numpy as np
+
 from core.logging.logger import get_logger
 
 from .fracture_geometry import crumble_cells, fracture_cells, fracture_vertices
+from .glass_dynamics import piece_extras, solve_glass_pieces
 
 logger = get_logger(__name__)
 
-GLASS_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1)
+# Prism data (as Crumble), then per-piece events: life2, kick4, spin4, pivot2.
+GLASS_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 2, 4, 4, 2)
 CRUMBLE_CHUNK_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 3)
 CRUMBLE_DEBRIS_STRIDE = 6
 
@@ -47,13 +51,35 @@ class GlassGeometry:
     vertices: bytes
 
 
-def glass_geometry_key(parameters: Mapping[str, object], aspect: float) -> tuple:
-    return ("glass_shatter", int(parameters["seed"]), int(parameters["shards"]), float(aspect))
+def glass_geometry_key(
+    parameters: Mapping[str, object], aspect: float, direction: object = None
+) -> tuple:
+    collisions = bool(parameters.get("collisions", False))
+    reshatter = bool(parameters.get("reshatter", False))
+    dynamic = collisions or reshatter
+    # Collisions and splits follow the shards' paths, which depend on the
+    # resolved direction and depth; without them the geometry does not.
+    return ("glass_shatter", int(parameters["seed"]), int(parameters["shards"]), float(aspect),
+            str(direction) if dynamic else None,
+            float(parameters["depth"]) if dynamic else None,
+            collisions, reshatter)
 
 
 def build_glass_geometry(key: tuple) -> GlassGeometry:
-    _name, seed, shards, aspect = key
-    return GlassGeometry(_pack(fracture_vertices(fracture_cells(seed, shards, aspect), aspect)))
+    _name, seed, shards, aspect, direction, depth, collisions, reshatter = key
+    pieces = solve_glass_pieces(
+        fracture_cells(seed, shards, aspect), aspect, direction, depth or 0.0, seed,
+        collisions=collisions, reshatter=reshatter,
+    )
+    prisms = np.asarray(fracture_vertices(
+        tuple(piece.shard for piece in pieces), aspect,
+        pivots=[piece.pivot_center for piece in pieces],
+        radii=[piece.radius for piece in pieces],
+    ), dtype=np.float32).reshape(-1, 12)
+    per_piece = np.asarray([piece_extras(piece) for piece in pieces], dtype=np.float32)
+    counts = [24 * len(piece.shard.polygon) for piece in pieces]
+    extras = np.repeat(per_piece, counts, axis=0)
+    return GlassGeometry(np.hstack((prisms, extras)).tobytes())
 
 
 # --- Crumble ----------------------------------------------------------------
@@ -242,9 +268,10 @@ class PreparedGeometryCache:
 
 PREPARED_GEOMETRY = PreparedGeometryCache()
 
-_BUILDERS: dict[str, tuple[Callable[[Mapping[str, object], float], tuple], Callable[[tuple], object]]] = {
+_BUILDERS: dict[str, tuple[Callable[[Mapping[str, object], float, object], tuple], Callable[[tuple], object]]] = {
     "glass_shatter": (glass_geometry_key, build_glass_geometry),
-    "crumble": (crumble_geometry_key, build_crumble_geometry),
+    "crumble": (lambda parameters, aspect, _direction: crumble_geometry_key(parameters, aspect),
+                build_crumble_geometry),
 }
 
 
@@ -256,6 +283,7 @@ def prepare_run_geometry(
     transition_id: str,
     parameters: Mapping[str, object],
     aspects: Iterable[float],
+    direction: object = None,
 ) -> None:
     """Build and store geometry for each distinct display aspect (COMPUTE side).
 
@@ -269,7 +297,7 @@ def prepare_run_geometry(
     make_key, build = builders
     for aspect in dict.fromkeys(float(value) for value in aspects):
         try:
-            key = make_key(parameters, aspect)
+            key = make_key(parameters, aspect, direction)
             if PREPARED_GEOMETRY.get(key) is None:
                 PREPARED_GEOMETRY.put(key, build(key))
         except Exception:

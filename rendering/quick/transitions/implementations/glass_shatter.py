@@ -37,12 +37,11 @@ class QuickGlassShatterRenderer:
                 return
             params = frame.run.request.parameter_dict()
             aspect = frame.logical_size[0] / frame.logical_size[1]
-            key = (frame.run.run_id, params["seed"], params["shards"], aspect)
+            geometry_key = glass_geometry_key(params, aspect, frame.run.request.direction)
+            key = (frame.run.run_id, geometry_key)
             if key != self._geometry_key:
                 resources.drop_mesh("shards")
-                geometry = PREPARED_GEOMETRY.get_or_build(
-                    glass_geometry_key(params, aspect), build_glass_geometry
-                )
+                geometry = PREPARED_GEOMETRY.get_or_build(geometry_key, build_glass_geometry)
                 self._vao, self._count = resources.mesh("shards", geometry.vertices, GLASS_ATTRIBUTES)
                 self._geometry_key = key
             program = resources.program("glass", GLASS_VERTEX, GLASS_FRAGMENT)

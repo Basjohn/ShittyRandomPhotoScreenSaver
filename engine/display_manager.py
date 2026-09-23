@@ -3796,6 +3796,7 @@ class DisplayManager(QObject):
                 spec.transition_id,
                 dict(spec.parameters),
                 tuple(aspects),
+                spec.direction,
                 category="transition_geometry",
             )
         except Exception:
