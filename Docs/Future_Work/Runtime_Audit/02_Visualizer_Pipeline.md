@@ -80,7 +80,7 @@ search on the audited tree finds only the Oscilloscope renderer reading `common.
 
 ---
 
-## VZ-05 — Config-static render extras re-collected and re-frozen every tick · P2 · R1–R2 (estimate) · Risk Medium
+## VZ-05 — Config-static render extras re-collected and re-frozen every tick · P2 · R1–R2 · Risk Medium · `[~]`
 
 **Evidence.** Each capture builds a fresh dict from `_populate_shared_visualizer_extras` (~28 keys,
 `config_applier.py:650-680`) plus mode extras (Sine/Osc ≈60 more, `:686-765`; DevCurve ≈50 via
@@ -101,8 +101,18 @@ shared mutable state (R-71 rule).
 **Must remain true.** R-22/A-06: no value from a previous mode/preset/activation may survive an activation boundary
 — the epoch must reset in the activation transaction itself, and bars must poison-test hot switch and preset cycle.
 
-- [ ] Evidence captured; decision recorded.
-- [ ] If implemented: R-22 keep-closed tests + preset-cycle/hot-switch oracles; BTF lane.
+- [x] Evidence captured; decision recorded (2026-09-23). Production-shaped logical ticks (real owner/controller,
+      fixed engine), unprofiled, `freeze_render_fields` per tick before the fix: Spectrum 41 µs, Oscilloscope 105,
+      Sine 104, Bubble 93, DevCurve 280, Sphere 16 (≈4–25 ms/s at 90 Hz); whole capture 111–289 µs.
+      **Root cause found:** `freeze_render_fields` froze every value and then built `FrozenFields` through its public
+      constructor, which froze and validated every value again; nested `FrozenFields` values were rebuilt recursively.
+- [x] **Landed (no caching, no epoch):** `FrozenFields._from_frozen_entries` adopts the already-frozen, validated
+      entries, and an existing `FrozenFields` is returned as-is (deep-frozen by construction). Output equal and hash-
+      equal to the constructor path; NaN/empty-name/type validation unchanged. 61-key record 155.8 → 65.4 µs.
+      Bar: `tests/test_visualizer_render_state_freeze.py` (fails without the fix).
+- **Parked:** the configuration-epoch cache for static keys. After the single-freeze fix the remaining cost is
+  ≈17–117 µs/tick of preemptible logical-thread Python, which does not justify R-22/A-06 activation-bleed risk.
+  Reopen only if `--perf` tick phases show capture dominating a stall.
 
 ---
 
