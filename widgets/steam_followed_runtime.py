@@ -45,30 +45,15 @@ def _default_load() -> tuple[object, FollowedNewsSnapshot]:
     return source, source.cached() or FollowedNewsSnapshot("unavailable")
 
 
-def _default_schedule(delay_ms: int, callback: Callable[[], None]) -> Callable[[], None]:
+def _default_schedule(delay_ms: int, callback: Callable[[], None]) -> Callable[[], bool]:
     """One cancellable GUI deadline for the ACTIVE shared Steam news owner.
 
-    Unlike an unowned single-shot closure, this one is stopped and destroyed as
+    It lives in the generation-owned single-shot registry and is cancelled as
     soon as the final lease retires. No timer exists while the family is off.
     """
-    from PySide6.QtCore import QTimer
-    timer = QTimer()
-    timer.setSingleShot(True)
+    from core.threading.manager import ThreadManager
 
-    def fire() -> None:
-        try:
-            callback()
-        finally:
-            timer.deleteLater()
-
-    timer.timeout.connect(fire)
-    timer.start(max(1, int(delay_ms)))
-
-    def cancel() -> None:
-        timer.stop()
-        timer.deleteLater()
-
-    return cancel
+    return ThreadManager.single_shot(max(1, int(delay_ms)), callback).cancel
 
 
 def _default_refresh(source: object) -> tuple[object, FollowedNewsSnapshot]:

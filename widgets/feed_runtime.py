@@ -56,26 +56,12 @@ def shared_feed_owner_count() -> int:
     return len(_SHARED)
 
 
-def _default_schedule(delay_ms: int, callback: Callable[[], None]) -> Callable[[], None]:
-    from PySide6.QtCore import QTimer
+def _default_schedule(delay_ms: int, callback: Callable[[], None]) -> Callable[[], bool]:
+    """One generation-owned deadline in the shared single-shot registry."""
 
-    timer = QTimer()
-    timer.setSingleShot(True)
+    from core.threading.manager import ThreadManager
 
-    def _fire() -> None:
-        try:
-            callback()
-        finally:
-            timer.deleteLater()
-
-    timer.timeout.connect(_fire)
-    timer.start(max(1, int(delay_ms)))
-
-    def _cancel() -> None:
-        timer.stop()
-        timer.deleteLater()
-
-    return _cancel
+    return ThreadManager.single_shot(max(1, int(delay_ms)), callback).cancel
 
 
 class _FeedFamilyOwner:

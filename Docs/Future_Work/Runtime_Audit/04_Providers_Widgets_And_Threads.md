@@ -152,7 +152,7 @@ with `dataChanged` (bars: retained-delegate identity test; artwork not reloaded 
 
 ---
 
-## PW-05 — Hand-rolled parentless deadline timers; `single_shot` has no cancel handle · P2 · R1 · Risk Low · Do before FEEDS Custom 2–4
+## PW-05 — Hand-rolled parentless deadline timers; `single_shot` has no cancel handle · P2 · R1 · Risk Low · `[~]`
 
 `widgets/feed_runtime.py:59-78` and `widgets/steam_followed_runtime.py:48-72` duplicate the same `_default_schedule`
 creating parentless `QTimer`s outside the generation-owned single-shot registry that the destruction barrier observes
@@ -172,8 +172,14 @@ off the UI thread while its `QTimer` is created later on the UI thread, so no ti
 - Firing marks the handle completed.
 - Generation-wide retirement stays authoritative; the handle is not a second timer registry or lifecycle authority.
 
-- [ ] Handle in `ThreadManager.single_shot`; migrate `feed_runtime.py` and `steam_followed_runtime.py` (their
-      injectable `schedule` seams stay; deadline closures already carry the owner generation); delete both
-      `_default_schedule` copies once the shared path satisfies their tests.
-- [ ] Bars: cancel before creation (off-UI-thread call), after creation and after fire (no-op); payload released on
-      cancel; a retired generation leaves no scheduled single-shot; Feed and Games-You-Follow deadline tests unchanged.
+- [x] `SingleShotHandle` (`core/threading/manager.py`): pending → scheduled → fired/cancelled under one lock. A
+      pending cancel releases the payload and the later UI-thread creation skips; a scheduled cancel runs the timer's
+      existing `_finish(execute=False)` (posted to the UI thread when cancelled elsewhere, and the timeout only
+      executes if it claims the fire first); `_finish` settles the handle on retirement/owner death. Calls that cannot
+      schedule return an already-cancelled handle. Both families' `_default_schedule` are now one-line adapters over
+      `single_shot(...).cancel` (the System Stats idiom); their injectable seams are unchanged.
+- [x] Bars: `tests/test_single_shot_handle.py` — cancel after creation, after fire (no-op), before creation from a
+      worker thread, off-thread cancel racing the timeout, payload released without GC, generation retirement still
+      cancels, Feed/Games-You-Follow deadlines registered (fails with the old parentless timers). Thread-manager,
+      runtime-destruction, Feed, Steam, System Stats and Friend Pulse suites green per file.
+- [ ] Physical: Feed and Games-You-Follow refresh on schedule; a Settings round-trip leaves no stray deadline.

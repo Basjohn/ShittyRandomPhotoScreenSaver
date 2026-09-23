@@ -117,6 +117,91 @@ def _register_single_shot_timer(key: str, timer: QTimer) -> bool:
         return True
 
 
+_SINGLE_SHOT_PENDING = "pending"
+_SINGLE_SHOT_SCHEDULED = "scheduled"
+_SINGLE_SHOT_FIRED = "fired"
+_SINGLE_SHOT_CANCELLED = "cancelled"
+
+
+class SingleShotHandle:
+    """Cancellation token returned by :meth:`ThreadManager.single_shot`.
+
+    It exists before the UI-thread ``QTimer`` does (a call made off the UI thread
+    creates its timer later), so it is never the timer itself. It is not a
+    registry either: the timer binds to it, cancellation routes through that
+    timer's normal ``_finish(execute=False)``, and generation retirement stays
+    the lifecycle authority. ``cancel()`` is idempotent and callable from any
+    thread; once it returns True the callback can no longer run.
+    """
+
+    __slots__ = ("_lock", "_state", "_on_cancel")
+
+    def __init__(self, *, state: str = _SINGLE_SHOT_PENDING) -> None:
+        self._lock = threading.Lock()
+        self._state = state
+        self._on_cancel: Callable[[], None] | None = None
+
+    @property
+    def active(self) -> bool:
+        return self._state in (_SINGLE_SHOT_PENDING, _SINGLE_SHOT_SCHEDULED)
+
+    @property
+    def fired(self) -> bool:
+        return self._state == _SINGLE_SHOT_FIRED
+
+    @property
+    def cancelled(self) -> bool:
+        return self._state == _SINGLE_SHOT_CANCELLED
+
+    def cancel(self) -> bool:
+        """Cancel if still pending/scheduled; False once fired or cancelled."""
+
+        with self._lock:
+            if self._state not in (_SINGLE_SHOT_PENDING, _SINGLE_SHOT_SCHEDULED):
+                return False
+            self._state = _SINGLE_SHOT_CANCELLED
+            on_cancel, self._on_cancel = self._on_cancel, None
+        if on_cancel is not None:
+            on_cancel()
+        return True
+
+    def _set_pending_release(self, release: Callable[[], None]) -> None:
+        with self._lock:
+            if self._state == _SINGLE_SHOT_PENDING:
+                self._on_cancel = release
+
+    def _bind_timer(self, cancel_timer: Callable[[], None]) -> bool:
+        """Attach the created timer; False when cancelled before creation."""
+
+        with self._lock:
+            if self._state != _SINGLE_SHOT_PENDING:
+                return False
+            self._state = _SINGLE_SHOT_SCHEDULED
+            self._on_cancel = cancel_timer
+            return True
+
+    def _claim_fire(self) -> bool:
+        with self._lock:
+            if self._state != _SINGLE_SHOT_SCHEDULED:
+                return False
+            self._state = _SINGLE_SHOT_FIRED
+            self._on_cancel = None
+            return True
+
+    def _settle(self) -> None:
+        """The timer finished without firing (cancel, retirement, owner death)."""
+
+        with self._lock:
+            if self._state in (_SINGLE_SHOT_PENDING, _SINGLE_SHOT_SCHEDULED):
+                self._state = _SINGLE_SHOT_CANCELLED
+            self._on_cancel = None
+
+
+def _on_qt_ui_thread() -> bool:
+    app = QCoreApplication.instance()
+    return app is not None and QThread.currentThread() is app.thread()
+
+
 def _unregister_single_shot_timer(key: str, timer: QTimer | None) -> None:
     if timer is not None:
         with _single_shot_registry_lock:
@@ -1299,13 +1384,21 @@ class ThreadManager:
             return False
 
     @staticmethod
-    def single_shot(delay_ms: int, func: Callable, *args, **kwargs) -> None:
-        """Schedule a cancellable, generation-owned UI callback."""
+    def single_shot(
+        delay_ms: int, func: Callable, *args, **kwargs
+    ) -> SingleShotHandle:
+        """Schedule a cancellable, generation-owned UI callback.
+
+        Returns a :class:`SingleShotHandle`; callers that never cancel may ignore
+        it. A call that cannot schedule returns an already-cancelled handle.
+        """
+        handle = SingleShotHandle()
         try:
             app = QCoreApplication.instance()
             if app is None or QCoreApplication.closingDown():
                 logger.debug("single_shot ignored without a live Qt event loop")
-                return
+                handle._settle()
+                return handle
 
             owner, owner_class, owner_id, generation = _callable_runtime_identity(func)
             generation_key = _generation_key(generation)
@@ -1326,14 +1419,25 @@ class ThreadManager:
                 "kwargs": dict(kwargs or {}),
             }
 
+            def _release_payload() -> None:
+                callback_payload["strong_func"] = None
+                callback_payload["args"] = ()
+                callback_payload["kwargs"] = {}
+
+            # Cancelled before the UI thread creates the timer: drop the payload
+            # now; creation below then sees the cancelled handle and skips.
+            handle._set_pending_release(_release_payload)
             _record_single_shot_scheduled(generation)
 
             def _create_timer_on_ui() -> None:
                 if (
-                    not _qt_dispatch_available()
+                    not handle.active
+                    or not _qt_dispatch_available()
                     or _single_shot_generation_cancelled(generation_key)
                     or _ui_generation_cancelled(generation)
                 ):
+                    handle._settle()
+                    _release_payload()
                     _record_single_shot_delivered(generation)
                     return
                 try:
@@ -1354,6 +1458,8 @@ class ThreadManager:
                     if state["finished"]:
                         return
                     state["finished"] = True
+                    if not execute:
+                        handle._settle()
                     target = (
                         weak_method()
                         if weak_method is not None
@@ -1361,9 +1467,7 @@ class ThreadManager:
                     )
                     call_args = callback_payload["args"]
                     call_kwargs = callback_payload["kwargs"]
-                    callback_payload["strong_func"] = None
-                    callback_payload["args"] = ()
-                    callback_payload["kwargs"] = {}
+                    _release_payload()
                     current_timer = timer_ref()
                     _unregister_single_shot_timer(
                         generation_key,
@@ -1393,14 +1497,27 @@ class ThreadManager:
                             pass
 
                 def _invoke() -> None:
-                    _finish(execute=True)
+                    # A handle cancelled off the UI thread may race the timeout;
+                    # only a claimed fire executes.
+                    _finish(execute=handle._claim_fire())
 
                 def _on_destroyed(*_args: object) -> None:
                     _finish(execute=False)
 
+                def _cancel_from_handle() -> None:
+                    if _on_qt_ui_thread():
+                        _finish(execute=False)
+                    else:
+                        ThreadManager.run_on_ui_thread(
+                            lambda: _finish(execute=False)
+                        )
+
                 timer._srpss_cancel_single_shot = lambda: _finish(execute=False)
                 timer.timeout.connect(_invoke)
                 timer.destroyed.connect(_on_destroyed)
+                if not handle._bind_timer(_cancel_from_handle):
+                    _finish(execute=False)
+                    return
                 if not _register_single_shot_timer(generation_key, timer):
                     _finish(execute=False)
                     return
@@ -1422,6 +1539,8 @@ class ThreadManager:
                 ThreadManager.run_on_ui_thread(_schedule_on_ui)
         except Exception as e:
             logger.exception("single_shot failed: %s", e)
+            handle._settle()
+        return handle
 
     @staticmethod
     def cancel_scheduled_single_shots(runtime_generation: object) -> int:
