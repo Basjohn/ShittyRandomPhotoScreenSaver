@@ -334,3 +334,23 @@ def test_melt_origin_combo_offers_origins_and_retires_edge_directions(
     tab.direction_combo.setCurrentText("Center Out")
     tab._save_settings()
     assert settings_manager.get("transitions", {})["melt_drip"]["direction"] == "Center Out"
+
+
+def test_glass_collision_and_reshatter_options_load_and_persist(qapp, settings_manager, qtbot):
+    transitions = deepcopy(settings_manager.get("transitions", {}))
+    glass = dict(transitions.get("glass_shatter") or {})
+    glass["collisions"] = True
+    transitions["glass_shatter"] = glass
+    transitions.setdefault("activation", {})["Glass Shatter"] = True
+    settings_manager.set("transitions", transitions)
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    tab._on_nav_selected("Glass Shatter")
+    assert tab.glass_collisions_check.isChecked()
+    assert not tab.glass_reshatter_check.isChecked()
+
+    tab.glass_reshatter_check.setChecked(True)
+    persisted = settings_manager.get("transitions", {})["glass_shatter"]
+    assert persisted["collisions"] is True
+    assert persisted["reshatter"] is True

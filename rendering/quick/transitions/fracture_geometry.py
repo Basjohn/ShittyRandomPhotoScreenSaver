@@ -169,19 +169,24 @@ def crumble_cells(seed: int | float, count: int, aspect: float, complexity: floa
     return _cells_from_sites(spaced, aspect, rng)
 
 
-def fracture_vertices(shards: tuple[GlassShard, ...], aspect: float) -> tuple[float, ...]:
+def fracture_vertices(shards: tuple[GlassShard, ...], aspect: float, *,
+                      pivots=None, radii=None) -> tuple[float, ...]:
     """Closed beveled prisms, with UV continuity when their release is zero.
 
     UV2, centre2, depth fraction, normal3, inset flag, face, variation, radius.
-    Geometry is uploaded once; thickness and bevel emerge during release.
+    Geometry is uploaded once; thickness and bevel emerge during release. Each
+    prism fans from its own centre; ``pivots``/``radii`` let a piece split off
+    a Glass shard keep that shard's motion pivot and thickness.
     """
     vertices = []
-    for shard in shards:
+    for index, shard in enumerate(shards):
         cx, cy = shard.center
-        radius = max(math.hypot((x-cx)*aspect, y-cy) for x, y in shard.polygon)
+        px, py = pivots[index] if pivots is not None else shard.center
+        radius = (radii[index] if radii is not None
+                  else max(math.hypot((x-cx)*aspect, y-cy) for x, y in shard.polygon))
 
         def vertex(point, z, normal, inset, face):
-            vertices.extend((*point, cx, cy, z, *normal, inset, face, shard.variation, radius))
+            vertices.extend((*point, px, py, z, *normal, inset, face, shard.variation, radius))
 
         for index, a in enumerate(shard.polygon):
             b = shard.polygon[(index+1) % len(shard.polygon)]

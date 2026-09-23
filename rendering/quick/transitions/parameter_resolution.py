@@ -623,6 +623,8 @@ def _resolve_glass_shatter(
     shards = max(24, min(180, _integer(_value(cfg, defaults, "shards"), default_shards)))
     depth = max(0.2, min(1.5, _number(_value(cfg, defaults, "depth"), default_depth)))
     return _finish(direction, {"seed": _seed(rng), "shards": shards, "depth": depth,
+                               "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
+                               "reshatter": _bool(_value(cfg, defaults, "reshatter"), bool(defaults["reshatter"])),
                                **_surface_values(cfg, defaults, ("thickness", "transparency", "refraction", "dispersion", "sheen"))})
 
 

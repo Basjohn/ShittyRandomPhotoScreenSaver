@@ -46,7 +46,7 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
 @pytest.mark.parametrize(
     ("transition_id", "section", "expected_direction", "expected_keys"),
     [
-        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen"}),
+        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen", "collisions", "reshatter"}),
         ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force"}),
         ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel"}),
         ("melt_drip", "melt_drip", "center_in", {"seed", "detail", "depth", "gloss"}),
@@ -71,6 +71,7 @@ def test_future_transition_parameters_are_bounded_and_seeded_once(
     assert params["seed"] == 1234
     if transition_id == "glass_shatter":
         assert params["shards"] == 180 and params["depth"] == pytest.approx(1.5)
+        assert params["collisions"] is False and params["reshatter"] is False
     elif transition_id == "exploding_tiles":
         assert params["columns"] == 48 and params["depth"] == pytest.approx(1.5)
     elif transition_id == "pixel_accretion":

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from rendering.quick.transitions.fracture_geometry import crumble_cells, fracture_cells, fracture_vertices
@@ -53,9 +54,25 @@ def test_pack_floats_is_byte_identical_to_ctypes_constructor() -> None:
 
 
 def test_glass_geometry_matches_the_previous_render_thread_build() -> None:
+    # With collisions and re-shattering off, every vertex carries exactly the
+    # previous prism data followed by neutral (never-firing) event floats.
     key = glass_geometry_key(_GLASS, _ASPECT)
     reference = fracture_vertices(fracture_cells(417, 95, _ASPECT), _ASPECT)
-    assert build_glass_geometry(key).vertices == _ctypes_reference(reference)
+    rows = np.frombuffer(build_glass_geometry(key).vertices, dtype=np.float32).reshape(-1, 24)
+    assert rows[:, :12].tobytes() == _ctypes_reference(reference)
+    neutral = np.array((0.0, 9.0, 0.0, 0.0, 0.0, 9.0, 1.0, 0.0, 0.0, 0.0), dtype=np.float32)
+    assert np.array_equal(rows[:, 12:22], np.broadcast_to(neutral, (len(rows), 10)))
+    assert np.array_equal(rows[:, 22:24], rows[:, 2:4])
+
+
+def test_glass_dynamic_geometry_keys_on_direction_and_depth() -> None:
+    dynamic = {**_GLASS, "depth": 1.0, "collisions": True}
+    assert glass_geometry_key(_GLASS, _ASPECT, "left") == glass_geometry_key(_GLASS, _ASPECT, "right")
+    assert glass_geometry_key(dynamic, _ASPECT, "left") != glass_geometry_key(dynamic, _ASPECT, "right")
+    assert (glass_geometry_key(dynamic, _ASPECT, "left")
+            != glass_geometry_key({**dynamic, "depth": 0.4}, _ASPECT, "left"))
+    prepare_run_geometry("glass_shatter", dynamic, (_ASPECT,), "left")
+    assert PREPARED_GEOMETRY.get(glass_geometry_key(dynamic, _ASPECT, "left")) is not None
 
 
 def test_crumble_geometry_matches_the_ctypes_packing_of_its_pure_builders() -> None:
@@ -152,6 +169,7 @@ def test_display_manager_prepares_geometry_once_per_batch_on_compute(qt_app) -> 
         assert args[0] == "crumble"
         assert args[1] == dict(spec.parameters)
         assert args[2] == (2560.0 / 1440.0, 1920.0 / 1200.0)
+        assert args[3] == spec.direction
         assert kwargs == {"category": "transition_geometry"}
 
         manager._reset_quick_transition_batch()
