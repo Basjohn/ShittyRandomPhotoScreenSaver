@@ -129,10 +129,13 @@ def test_retiring_item_destroys_both_item_and_bound_model(qt_app) -> None:
     # processEvents does not drain DeferredDelete at the top event-loop level).
     qt_app.processEvents()
     # Retire only the item owned by this test. Draining every pending QObject
-    # can tear down an unrelated test's still-referenced QQuick scene. The item
-    # may already be gone if the loop above processed the deferred delete.
-    if shiboken6.isValid(item):
-        QCoreApplication.sendPostedEvents(item, QEvent.Type.DeferredDelete)
+    # can tear down an unrelated test's still-referenced QQuick scene. Detaching
+    # in retire() already invalidates this Python wrapper while the C++ item waits
+    # for its DeferredDelete, so flush through the model's live parent handle.
+    pending_item = model.parent()
+    assert pending_item is not None
+    QCoreApplication.sendPostedEvents(pending_item, QEvent.Type.DeferredDelete)
+    del pending_item
     qt_app.processEvents()
     gc.collect()
 
