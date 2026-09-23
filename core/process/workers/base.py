@@ -10,6 +10,7 @@ Provides common functionality for all workers:
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import os
 import time
 from multiprocessing import Queue
@@ -156,6 +157,11 @@ class BaseWorker:
             success=True,
         ))
         
+        # ``daemon=True`` reaps workers only when the UI process exits normally.
+        # After a native crash or forced termination nothing sends SHUTDOWN, so
+        # watch the parent directly (a zero-timeout wait on its process handle).
+        parent = multiprocessing.parent_process()
+
         try:
             while not self._shutdown:
                 try:
@@ -164,6 +170,13 @@ class BaseWorker:
                     try:
                         msg_data = self._request_queue.get(timeout=self.POLL_TIMEOUT_S)
                     except QueueEmpty:
+                        if parent is not None and not parent.is_alive():
+                            self._logger.warning(
+                                "Parent process %s exited without shutdown; worker exiting",
+                                parent.pid,
+                            )
+                            self._shutdown = True
+                            break
                         # Normal - no messages, continue polling
                         continue
                     
