@@ -52,6 +52,8 @@ class RetainedBackgroundSceneNode(QSGNode):
         self.appendChildNode(self._custom_opacity)
 
         self._image_node: QSGImageNode | None = None
+        # The PresentationImage whose bytes back the native texture (PR-04 Stage B).
+        self._native_image_source: PresentationImage | None = None
         self._image_identity: str | None = None
         self._image_byte_count = 0
         self._custom_node = BackgroundRenderNode(
@@ -140,6 +142,8 @@ class RetainedBackgroundSceneNode(QSGNode):
         self._released = True
         self._custom_node.releaseResources()
         self._note_native_released()
+        # The scene graph is torn down; no upload can read these bytes again.
+        self._native_image_source = None
         # The QSGImageNode owns its QSGTexture.  Qt deletes both with this
         # subtree; do not manually delete the texture and risk double-free.
 
@@ -171,13 +175,20 @@ class RetainedBackgroundSceneNode(QSGNode):
             # RGBA are byte-identical for opaque pixels, and the premultiplied label
             # spares Qt a full straight->premultiplied conversion before every
             # upload (PR-04: 8.1 -> 0.15 ms blocking at 4K).
+            #
+            # No deep copy (PR-04 Stage B): the QImage wraps the immutable
+            # PresentationImage bytes. Qt reads them on the render thread during
+            # this frame's upload, after updatePaintNode returns, while the GUI
+            # thread may already have replaced the item's image
+            # (tests/test_qtquick_native_image_lifetime.py). The node therefore
+            # keeps the PresentationImage for as long as the texture exists.
             qimage = QImage(
                 image.rgba8,
                 width,
                 height,
                 image.row_stride,
                 QImage.Format.Format_RGBA8888_Premultiplied,
-            ).copy()
+            )
             if qimage.isNull():
                 raise RuntimeError("Qt Quick retained background QImage conversion failed")
             qimage.setDevicePixelRatio(float(image.device_pixel_ratio))
@@ -191,7 +202,10 @@ class RetainedBackgroundSceneNode(QSGNode):
 
             previous_identity = self._image_identity
             previous_byte_count = self._image_byte_count
+            # The node owns its texture: setTexture deletes the previous one, so
+            # only now may the previous image's bytes go.
             self._image_node.setTexture(texture)
+            self._native_image_source = image
             self._image_identity = image.identity
             self._image_byte_count = image.byte_count
 
