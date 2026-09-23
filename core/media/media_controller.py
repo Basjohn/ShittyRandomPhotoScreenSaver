@@ -71,6 +71,24 @@ class MediaTrackInfo:
     duration_ms: Optional[int] = None
 
 
+def media_track_identity(info: MediaTrackInfo) -> tuple[str, str, str, str, str]:
+    """Exact host + track metadata that an artwork payload belongs to.
+
+    A timeline-only GSMTC edge cannot change artwork by itself. When a fresh
+    query returns this same identity, the already-held artwork payload is reused
+    instead of re-reading the WinRT thumbnail stream. Artwork changes on the
+    same track arrive as a media-properties edge, which always reads.
+    """
+
+    return (
+        info.source_app_user_model_id,
+        info.title,
+        info.artist,
+        info.album,
+        info.album_artist,
+    )
+
+
 @dataclass(frozen=True)
 class MediaCommandResult:
     """Completed provider result for one asynchronously submitted command."""
@@ -1114,6 +1132,7 @@ class WindowsGlobalMediaController(BaseMediaController):
         provider_ids: Iterable[str],
         *,
         already_on_io_worker: bool,
+        reuse_artwork_identity: tuple[str, str, str, str, str] | None = None,
     ) -> tuple[Optional[str], Optional[MediaTrackInfo]]:  # pragma: no cover - requires winrt
         if (
             getattr(self, "_retired", False)
@@ -1232,9 +1251,16 @@ class WindowsGlobalMediaController(BaseMediaController):
             except Exception:
                 logger.debug("[MEDIA] Failed to read control capabilities", exc_info=True)
 
-            # Optional album artwork thumbnail
+            # Optional album artwork thumbnail. The caller already holds this
+            # track's payload when the identity matches (timeline-only edge).
             try:
-                thumb_ref = getattr(props, "thumbnail", None)
+                if (
+                    reuse_artwork_identity is not None
+                    and media_track_identity(info) == reuse_artwork_identity
+                ):
+                    thumb_ref = None
+                else:
+                    thumb_ref = getattr(props, "thumbnail", None)
                 if thumb_ref is not None:
                     try:
                         from winrt.windows.storage.streams import DataReader  # type: ignore[import]
@@ -1338,11 +1364,15 @@ class WindowsGlobalMediaController(BaseMediaController):
     def get_current_track_from_io_worker(
         self,
         fallback_providers: Iterable[str] = (),
+        *,
+        reuse_artwork_identity: tuple[str, str, str, str, str] | None = None,
     ) -> tuple[Optional[str], Optional[MediaTrackInfo]]:
         """Query primary and fallback providers once from an owned IO worker.
 
         This path performs one bounded WinRT request/session enumeration and
-        never submits another task to the same executor.
+        never submits another task to the same executor. With
+        ``reuse_artwork_identity`` the thumbnail stream is skipped when the
+        freshly read track has exactly that identity (``artwork`` stays None).
         """
 
         provider_ids: list[str] = []
@@ -1355,6 +1385,7 @@ class WindowsGlobalMediaController(BaseMediaController):
         return self._get_current_track_for_providers(
             provider_ids,
             already_on_io_worker=True,
+            reuse_artwork_identity=reuse_artwork_identity,
         )
 
     def _invoke_simple_action(
