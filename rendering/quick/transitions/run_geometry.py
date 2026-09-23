@@ -27,12 +27,13 @@ import numpy as np
 from core.logging.logger import get_logger
 
 from .fracture_geometry import crumble_cells, fracture_cells, fracture_vertices
-from .glass_dynamics import piece_extras, solve_glass_pieces
+from .glass_dynamics import EXTRA_FLOATS, piece_extras, solve_glass_pieces
 
 logger = get_logger(__name__)
 
-# Prism data (as Crumble), then per-piece events: life2, kick4, spin4, pivot2.
-GLASS_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 2, 4, 4, 2)
+# Prism data (as Crumble), then per-piece events: life2, then two stages of
+# kick4, spin4, pivot2 (a split piece can crack once more).
+GLASS_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 2, 4, 4, 2, 4, 4, 2)
 CRUMBLE_CHUNK_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 3)
 CRUMBLE_DEBRIS_STRIDE = 6
 
@@ -76,7 +77,7 @@ def build_glass_geometry(key: tuple) -> GlassGeometry:
         pivots=[piece.pivot_center for piece in pieces],
         radii=[piece.radius for piece in pieces],
     ), dtype=np.float32).reshape(-1, 12)
-    per_piece = np.asarray([piece_extras(piece) for piece in pieces], dtype=np.float32)
+    per_piece = np.asarray([piece_extras(piece) for piece in pieces], dtype=np.float32).reshape(-1, EXTRA_FLOATS)
     counts = [24 * len(piece.shard.polygon) for piece in pieces]
     extras = np.repeat(per_piece, counts, axis=0)
     return GlassGeometry(np.hstack((prisms, extras)).tobytes())

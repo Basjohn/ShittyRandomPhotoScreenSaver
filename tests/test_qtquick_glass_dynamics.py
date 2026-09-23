@@ -63,7 +63,8 @@ def test_without_collisions_about_thirty_percent_of_shards_crack_in_flight():
         shards = fracture_cells(seed, 95, ASPECT)
         pieces = solve_glass_pieces(shards, ASPECT, "diag_tl_br", 1.0, seed,
                                     collisions=False, reshatter=True)
-        parents = [piece for piece in pieces if piece.life[1] < NO_EVENT]
+        # Original shards (visible from the start) that split in flight.
+        parents = [piece for piece in pieces if piece.life[0] == 0.0 and piece.life[1] < NO_EVENT]
         assert 0.15 < len(parents) / len(shards) < 0.45
         assert RANDOM_SPLIT_CHANCE == 0.30
         for parent in parents:
@@ -80,9 +81,48 @@ def test_with_collisions_shards_crack_only_when_they_collide():
     bounce = solve_glass_pieces(shards, ASPECT, "left", 1.0, 417, collisions=True, reshatter=False)
     hit_times = {piece.shard.center: piece.kick[3] for piece in bounce if piece.kick[3] < NO_EVENT}
     assert len(hit_times) >= 4
-    split = {piece.shard.center: piece.life[1] for piece in both if piece.life[1] < NO_EVENT}
+    split = {piece.shard.center: piece.life[1] for piece in both
+             if piece.life[0] == 0.0 and piece.life[1] < NO_EVENT}
     assert split and split == {center: time for center, time in hit_times.items() if center in split}
     assert set(split) <= set(hit_times)
+
+
+def _second_cracks(pieces):
+    """(child, its pieces) for every split piece that cracked a second time."""
+    found = []
+    for child in pieces:
+        if child.life[0] == 0.0 or child.life[1] >= NO_EVENT:
+            continue
+        grand = [piece for piece in pieces
+                 if piece.life[0] == child.life[1] and piece.spin_pivot == child.shard.center]
+        if grand:
+            found.append((child, grand))
+    return found
+
+
+def test_split_pieces_can_crack_a_second_time():
+    shards = fracture_cells(417, 95, ASPECT)
+    pieces = solve_glass_pieces(shards, ASPECT, "diag_tl_br", 1.0, 417, collisions=False, reshatter=True)
+    cracks = _second_cracks(pieces)
+    first_generation = sum(1 for piece in pieces if piece.life[0] > 0.0 and piece.kick2[3] >= NO_EVENT)
+    assert cracks and len(cracks) < first_generation
+    for child, grand in cracks:
+        assert 2 <= len(grand) <= 3
+        assert sum(_area(piece.shard.polygon) for piece in grand) == pytest.approx(
+            _area(child.shard.polygon), rel=1e-9)
+        for piece in grand:
+            # Stage 1 is inherited exactly, so the pieces sit where the child was.
+            assert piece.kick == child.kick and piece.spin == child.spin
+            assert piece.kick2[3] == child.life[1] > child.kick[3]
+
+
+def test_with_collisions_the_second_crack_follows_the_impact():
+    shards = fracture_cells(417, 95, ASPECT)
+    pieces = solve_glass_pieces(shards, ASPECT, "left", 1.0, 417, collisions=True, reshatter=True)
+    cracks = _second_cracks(pieces)
+    assert cracks
+    for child, _grand in cracks:
+        assert 0.02 <= child.life[1] - child.kick[3] <= 0.07
 
 
 def test_collision_budget_keeps_crashes_occasional():
@@ -130,7 +170,8 @@ def test_events_do_not_pop(qt_app, mode):
         pieces = solve_glass_pieces(fracture_cells(resolved["seed"], 95, 320 / 180), 320 / 180,
                                     "left", 1.0, resolved["seed"], **mode)
         times = sorted({piece.kick[3] for piece in pieces if piece.kick[3] < NO_EVENT}
-                       | {piece.life[1] for piece in pieces if piece.life[1] < NO_EVENT})
+                       | {piece.life[1] for piece in pieces if piece.life[1] < NO_EVENT}
+                       | {piece.kick2[3] for piece in pieces if piece.kick2[3] < NO_EVENT})
         assert times
         for t in times[:: max(1, len(times) // 6)]:
             before = np.asarray(capture.render(run, t - 0.0004)[0], dtype=np.int16)

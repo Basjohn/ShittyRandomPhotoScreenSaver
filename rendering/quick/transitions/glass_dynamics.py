@@ -14,6 +14,10 @@ start at the event time. There is no per-frame simulation, clock or state.
   parent exactly until the split and then drift apart and spin. With
   collisions on, only colliding shards split; with collisions off, each shard
   has a 30% chance to crack at a random point of its flight.
+* A second crack: split pieces can break once more. With collisions on this
+  only follows an impact (the fracture propagating a moment later); with
+  collisions off each split piece has a 30% chance to crack again later in
+  its flight. A second crack is a second event stage on the same piece.
 
 Every kicked piece must still leave the frame by the end of the run: a kick
 that would carry a piece back into view is scaled down (or turned outward).
@@ -33,6 +37,8 @@ from .fracture_geometry import GlassShard, _clip_cell
 PATH_END = 0.98
 NO_EVENT = 9.0
 RANDOM_SPLIT_CHANCE = 0.30
+SECOND_SPLIT_CHANCE = 0.30          # split pieces cracking again (no collisions)
+IMPACT_SECOND_SPLIT_CHANCE = 0.45   # pieces of a collision cracking again
 
 _RESTITUTION = 0.45
 _COLLISION_RADIUS = 0.80   # of the circumradius a tumbling shard sweeps
@@ -52,6 +58,9 @@ class GlassPiece:
     life: tuple[float, float] = (0.0, NO_EVENT)
     kick: tuple[float, float, float, float] = (0.0, 0.0, 0.0, NO_EVENT)
     spin: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+    spin_pivot: tuple[float, float] | None = None       # stage-1 spin pivot (default: own centre)
+    kick2: tuple[float, float, float, float] = (0.0, 0.0, 0.0, NO_EVENT)
+    spin2: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
 
 
 def shard_radius(shard: GlassShard, aspect: float) -> float:
@@ -236,9 +245,15 @@ def split_polygon(shard: GlassShard, aspect: float, rng: random.Random) -> tuple
     return tuple(tuple((x / aspect, y) for x, y in piece) for piece in pieces)
 
 
-def _exits(paths: _Paths, index: int, kick: np.ndarray, start: float, offset: float, extent: float) -> bool:
-    """Does a piece with this kick end fully outside the frame (conservatively)?"""
+def _exits(paths: _Paths, index: int, kick: np.ndarray, start: float, offset: float, extent: float,
+           carried: np.ndarray | None = None) -> bool:
+    """Does a piece with this kick end fully outside the frame (conservatively)?
+
+    ``carried`` is displacement already fixed by an earlier event stage.
+    """
     end = paths.point(index, PATH_END) + kick * max(PATH_END - start, 0.0)
+    if carried is not None:
+        end = end + carried
     w = 3.0 - end[2]
     if w <= 0.1:
         return False
@@ -250,23 +265,36 @@ def _exits(paths: _Paths, index: int, kick: np.ndarray, start: float, offset: fl
 
 
 def _leave_the_frame(paths: _Paths, index: int, kick: np.ndarray, start: float,
-                     offset: float, extent: float) -> np.ndarray:
-    if _exits(paths, index, kick, start, offset, extent):
+                     offset: float, extent: float, carried: np.ndarray | None = None) -> np.ndarray:
+    def exits(candidate):
+        return _exits(paths, index, candidate, start, offset, extent, carried)
+
+    if exits(kick):
         return kick
     lo, hi = 0.0, 1.0
-    if _exits(paths, index, np.zeros(3), start, offset, extent):
+    if exits(np.zeros(3)):
         for _ in range(12):
             mid = 0.5 * (lo + hi)
-            lo, hi = (mid, hi) if _exits(paths, index, kick * mid, start, offset, extent) else (lo, mid)
+            lo, hi = (mid, hi) if exits(kick * mid) else (lo, mid)
         return kick * lo
     # Even without the kick this piece would end too close: push it outward.
     outward = np.array([paths.dx[index], paths.dy[index], 0.0])
     push = 0.25
     for _ in range(16):
-        if _exits(paths, index, outward * push, start, offset, extent):
+        if exits(outward * push):
             return outward * push
         push *= 1.6
     return outward * push
+
+
+def _centroid(polygon) -> tuple[float, float]:
+    return (sum(x for x, _ in polygon) / len(polygon), sum(y for _, y in polygon) / len(polygon))
+
+
+def _drift(rng: random.Random, aspect: float, origin, point, speed: tuple[float, float]) -> np.ndarray:
+    away = np.array([(point[0] - origin[0]) * aspect, origin[1] - point[1], rng.uniform(-0.3, 0.3)])
+    away /= max(float(np.linalg.norm(away)), 1e-9)
+    return away * rng.uniform(*speed)
 
 
 def _whole(shard: GlassShard, radius: float, **event) -> GlassPiece:
@@ -346,31 +374,66 @@ def solve_glass_pieces(
             continue
         pieces.append(_whole(shard, radius, life=(0.0, split)))
         for polygon in children:
-            ux = sum(x for x, _ in polygon) / len(polygon)
-            uy = sum(y for _, y in polygon) / len(polygon)
-            away = np.array([(ux - shard.center[0]) * aspect, shard.center[1] - uy, rng.uniform(-0.3, 0.3)])
-            away /= max(float(np.linalg.norm(away)), 1e-9)
-            drift = away * rng.uniform(0.25, 0.6)
+            ux, uy = _centroid(polygon)
+            drift = _drift(rng, aspect, shard.center, (ux, uy), (0.25, 0.6))
             offset = math.hypot((ux - shard.center[0]) * aspect, uy - shard.center[1])
             extent = max(math.hypot((x - ux) * aspect, y - uy) for x, y in polygon)
             kick = _leave_the_frame(paths, index, base_kick + drift, split, offset, extent)
             rate = rng.choice((-1.0, 1.0)) * rng.uniform(4.0, 10.0) * spin_scale
+            spin = (*_random_axis(rng), rate)
             child = GlassShard((ux, uy), polygon, shard.variation)
-            pieces.append(GlassPiece(child, shard.center, radius, life=(split, NO_EVENT),
-                                     kick=(*map(float, kick), split), spin=(*_random_axis(rng), rate)))
+            # Second crack: after an impact it follows at once; otherwise at random later.
+            if collisions:
+                cracks_again = rng.random() < IMPACT_SECOND_SPLIT_CHANCE
+                second = split + rng.uniform(0.02, 0.07)
+            else:
+                cracks_again = rng.random() < SECOND_SPLIT_CHANCE
+                second = split + rng.uniform(0.08, 0.35) * (PATH_END - split)
+            grandchildren = (split_polygon(child, aspect, rng)
+                             if cracks_again and second < PATH_END - 0.05 else ())
+            if not grandchildren:
+                pieces.append(GlassPiece(child, shard.center, radius, life=(split, NO_EVENT),
+                                         kick=(*map(float, kick), split), spin=spin))
+                continue
+            pieces.append(GlassPiece(child, shard.center, radius, life=(split, second),
+                                     kick=(*map(float, kick), split), spin=spin))
+            carried = kick * (PATH_END - split)
+            for piece_polygon in grandchildren:
+                gx, gy = _centroid(piece_polygon)
+                grand_offset = math.hypot((gx - shard.center[0]) * aspect, gy - shard.center[1])
+                grand_extent = max(math.hypot((x - gx) * aspect, y - gy) for x, y in piece_polygon)
+                kick2 = _leave_the_frame(paths, index, _drift(rng, aspect, (ux, uy), (gx, gy), (0.2, 0.5)),
+                                         second, grand_offset, grand_extent, carried)
+                rate2 = rng.choice((-1.0, 1.0)) * rng.uniform(4.0, 10.0) * spin_scale
+                pieces.append(GlassPiece(
+                    GlassShard((gx, gy), piece_polygon, shard.variation), shard.center, radius,
+                    life=(second, NO_EVENT), kick=(*map(float, kick), split), spin=spin,
+                    spin_pivot=(ux, uy), kick2=(*map(float, kick2), second), spin2=(*_random_axis(rng), rate2),
+                ))
     return tuple(pieces)
 
 
+EXTRA_FLOATS = 22
+
+
 def piece_extras(piece: GlassPiece) -> tuple[float, ...]:
-    """The 12 per-vertex event floats GLASS_VERTEX reads after the prism data."""
-    return (*piece.life, *piece.kick, *piece.spin, *piece.shard.center)
+    """The per-vertex event floats GLASS_VERTEX reads after the prism data.
+
+    life2, kick4, spin4, pivot2 (stage 1), kick4, spin4, pivot2 (stage 2).
+    """
+    pivot = piece.spin_pivot if piece.spin_pivot is not None else piece.shard.center
+    return (*piece.life, *piece.kick, *piece.spin, *pivot,
+            *piece.kick2, *piece.spin2, *piece.shard.center)
 
 
 __all__ = [
     "GlassPiece",
     "NO_EVENT",
     "PATH_END",
+    "EXTRA_FLOATS",
+    "IMPACT_SECOND_SPLIT_CHANCE",
     "RANDOM_SPLIT_CHANCE",
+    "SECOND_SPLIT_CHANCE",
     "piece_extras",
     "shard_radius",
     "solve_glass_pieces",

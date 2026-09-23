@@ -58,11 +58,13 @@ def test_glass_geometry_matches_the_previous_render_thread_build() -> None:
     # previous prism data followed by neutral (never-firing) event floats.
     key = glass_geometry_key(_GLASS, _ASPECT)
     reference = fracture_vertices(fracture_cells(417, 95, _ASPECT), _ASPECT)
-    rows = np.frombuffer(build_glass_geometry(key).vertices, dtype=np.float32).reshape(-1, 24)
+    rows = np.frombuffer(build_glass_geometry(key).vertices, dtype=np.float32).reshape(-1, 34)
     assert rows[:, :12].tobytes() == _ctypes_reference(reference)
-    neutral = np.array((0.0, 9.0, 0.0, 0.0, 0.0, 9.0, 1.0, 0.0, 0.0, 0.0), dtype=np.float32)
-    assert np.array_equal(rows[:, 12:22], np.broadcast_to(neutral, (len(rows), 10)))
-    assert np.array_equal(rows[:, 22:24], rows[:, 2:4])
+    stage = np.array((0.0, 0.0, 0.0, 9.0, 1.0, 0.0, 0.0, 0.0), dtype=np.float32)
+    assert np.array_equal(rows[:, 12:14], np.broadcast_to((0.0, 9.0), (len(rows), 2)))
+    for start in (14, 24):  # both event stages are neutral
+        assert np.array_equal(rows[:, start:start + 8], np.broadcast_to(stage, (len(rows), 8)))
+        assert np.array_equal(rows[:, start + 8:start + 10], rows[:, 2:4])
 
 
 def test_glass_dynamic_geometry_keys_on_direction_and_depth() -> None:

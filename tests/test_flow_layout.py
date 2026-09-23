@@ -69,7 +69,7 @@ def test_child_order_preserved(qapp):
 
 
 def test_uniform_cells_keep_columns_aligned_despite_one_wide_item(qapp):
-    """A long label (e.g. "Melt Drip (WIP - VERY SHITTY)") must not shift its row."""
+    """A long label (e.g. "Directional Pixel Accretion") must not shift its row."""
     from PySide6.QtCore import QRect
 
     host = QWidget()
