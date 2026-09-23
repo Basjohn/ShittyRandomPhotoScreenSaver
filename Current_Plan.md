@@ -62,7 +62,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 - [ ] Operator: decide TX-02 direction semantics — should Random mode honour an explicitly authored fixed Slide/Wipe direction? (The persistence fix above does not depend on the answer.)
 - [~] LC-06 — canonical defaults are built once per profile (callers still get private copies); context menu, transition batches and widget routing read sections. Physical: context-menu open/close feel and Settings round-trip `[LIFECYCLE]` construction time.
 - [~] TX-01 — Glass/Crumble per-run geometry is prepared on COMPUTE when the batch resolves (render thread uploads, or builds identical bytes if not ready) and packs 3× faster. Physical: Glass/Crumble/Tiles start on both displays with active music (`--frame-trace` first `BACKGROUND_RENDER_*` frame near steady class).
-- [ ] PR-01 — no-op visualizer presentation writes skipped; `request_present()` stays once per publication.
+- [~] PR-01 — steady equal visualizer publications no longer rewrite the QML shell (20.4 → 4.0 µs each); `request_present()` still runs once per publication. Physical: activation fade, mode crossfade, CUSTOM resize/Save/Cancel, display hop, startup reveal.
 - [ ] PR-03 — background telemetry off the per-frame dataclass `replace()` path.
 - [ ] PW-01 — timeline-only Media edges narrow their query scope (refresh count unchanged).
 - [ ] VZ-01 — paused waveform samples synthesized on demand; waveform generation still advances every tick.

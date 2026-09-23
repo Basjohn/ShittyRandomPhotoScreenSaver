@@ -21,7 +21,7 @@ Owners audited: `rendering/quick/{runtime,window,frame_pacer,bootstrap,scene_con
 
 ---
 
-## PR-01 — Per-publication presentation re-resolve and ~25 no-op property writes · P1 · R2 · Risk Low
+## PR-01 — Per-publication presentation re-resolve and ~25 no-op property writes · P1 · R2 · Risk Low · `[~]`
 
 **Evidence (source).** Every logical publication (~90 Hz) runs on the GUI thread:
 
@@ -66,11 +66,19 @@ visible state); snapshot and item commit still use the *same* resolved record (V
 fades/mode-transition frames still project every frame (their record differs); CUSTOM rebase path unchanged
 (R-68).
 
+**Implemented (step 1).** `_apply_visualizer_presentation_items` returns early when the retained item's record is
+equal **and** the live loader/root geometry and `presentationActive` already match (read back, not cached: CUSTOM sync
+moves the loader and retire/transfer paths clear `presentationActive` without changing the record). Measured on the real
+QML shell (idle): steady equal publication 20.4 → 4.0 µs; changing records unchanged (≈22 µs). `request_present()` and
+snapshot composition are untouched. Deliberately **kept**: the owner's second `commit_presentation_metrics` (≈3 µs) —
+it runs after the scene's CUSTOM sync and observes the post-sync override state, so removing it is not worth that edge.
+**Open:** the ≈49 µs resolve is now the dominant per-publication cost; memoize only if `--frame-trace` shows it matters.
+
 **Acceptance.**
 
-- [ ] Focused: `tests/test_qtquick_scene_controller.py`, `tests/test_qtquick_visualizer_render_bridge.py`, visualizer
-      owner/presentation tests; add a bar that a steady equal publication performs zero root property writes and
-      a changed fade still writes.
+- [x] Focused: `test_qtquick_scene_controller.py::test_steady_equal_visualizer_publication_performs_no_projection_writes`
+      (fails without the fix; covers changed fade, reactivation, externally moved loader), scene/owner/render-bridge/
+      presentation suites green; CUSTOM-owner reds are the pre-existing 24.
 - [ ] `--frame-trace` D1-heavy: `GUI_SNAPSHOT_PUBLISH → GUI_PRESENTATION_COMMIT_READY` collapses; publication→draw
       neutral-or-better vs CHK26.
 - [ ] Physical: activation fade, mode crossfade, CUSTOM resize/Save/Cancel, display hop, startup reveal.

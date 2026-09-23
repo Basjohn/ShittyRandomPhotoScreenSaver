@@ -496,6 +496,87 @@ def test_scene_controller_applies_one_geometry_record_to_lazy_shell_and_item(
     qt_app.processEvents()
 
 
+class _CountingProxy:
+    """Forward to a real QQuickItem while counting projection writes (PR-01)."""
+
+    _WRITES = ("setProperty", "setX", "setY", "setWidth", "setHeight")
+
+    def __init__(self, target) -> None:
+        self._target = target
+        self.writes: list[str] = []
+
+    def __getattr__(self, name):
+        attribute = getattr(self._target, name)
+        if name not in self._WRITES:
+            return attribute
+
+        def _write(*args):
+            self.writes.append(name if name != "setProperty" else f"setProperty:{args[0]}")
+            return attribute(*args)
+
+        return _write
+
+
+def test_steady_equal_visualizer_publication_performs_no_projection_writes(qt_app) -> None:
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=0,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(1920.0, 1080.0),
+        outer_origin=(207.0, 310.0),
+        uniform_visual_scale=1.5,
+        scene_fade=0.75,
+    )
+    try:
+        controller.apply_visualizer_presentation(presentation)
+        real_root = controller._visualizer_root
+        real_loader = controller._visualizer_loader
+        root = _CountingProxy(real_root)
+        loader = _CountingProxy(real_loader)
+        controller._visualizer_root = root
+        controller._visualizer_loader = loader
+
+        # Equal (not identical) record, as every steady publication resolves.
+        controller.apply_visualizer_presentation(replace(presentation))
+        assert loader.writes == []
+        assert [w for w in root.writes if w != "setProperty:customLayoutWorkingVisible"] == []
+
+        # A changed fade is visible state and must still project.
+        faded = replace(presentation, scene_fade=0.25)
+        controller.apply_visualizer_presentation(faded)
+        assert "setProperty:authoredSceneOpacity" in root.writes
+        assert real_root.property("authoredSceneOpacity") == pytest.approx(0.25)
+
+        # Retire/transfer paths clear presentationActive without changing the
+        # record; the next equal publication must restore it.
+        real_root.setProperty("presentationActive", False)
+        root.writes.clear()
+        controller.apply_visualizer_presentation(faded)
+        assert real_root.property("presentationActive") is True
+
+        # CUSTOM sync can move the loader without changing the record.
+        real_loader.setX(5.0)
+        loader.writes.clear()
+        controller.apply_visualizer_presentation(faded)
+        assert real_loader.x() == 207.0
+        assert "setX" in loader.writes
+    finally:
+        controller._visualizer_root = real_root
+        controller._visualizer_loader = real_loader
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
 def test_runtime_smoke_delegates_qml_and_items_to_scene_owner():
     source = (ROOT / "tools" / "qtquick_render_node_smoke.py").read_text(
         encoding="utf-8"
