@@ -26,7 +26,7 @@ import numpy as np
 
 from core.logging.logger import get_logger
 
-from .fracture_geometry import crumble_cells, fracture_cells, fracture_vertices
+from .fracture_geometry import crumble_cells, fracture_cells, fracture_vertex_array, fracture_vertices
 from .glass_dynamics import EXTRA_FLOATS, piece_extras, solve_glass_pieces
 
 logger = get_logger(__name__)
@@ -72,11 +72,11 @@ def build_glass_geometry(key: tuple) -> GlassGeometry:
         fracture_cells(seed, shards, aspect), aspect, direction, depth or 0.0, seed,
         collisions=collisions, reshatter=reshatter,
     )
-    prisms = np.asarray(fracture_vertices(
+    prisms = fracture_vertex_array(
         tuple(piece.shard for piece in pieces), aspect,
         pivots=[piece.pivot_center for piece in pieces],
         radii=[piece.radius for piece in pieces],
-    ), dtype=np.float32).reshape(-1, 12)
+    ).astype(np.float32)
     per_piece = np.asarray([piece_extras(piece) for piece in pieces], dtype=np.float32).reshape(-1, EXTRA_FLOATS)
     counts = [24 * len(piece.shard.polygon) for piece in pieces]
     extras = np.repeat(per_piece, counts, axis=0)
@@ -227,17 +227,26 @@ def build_crumble_geometry(key: tuple) -> CrumbleGeometry:
 # --- Shared prepared-geometry store -----------------------------------------
 
 
+# How long a render thread waits for the same key's in-flight preparation
+# before building it itself. Waiting releases the GIL, so the preparation runs
+# faster than a duplicate build would; the bound only covers a stuck worker.
+IN_FLIGHT_WAIT_S = 0.25
+
+
 class PreparedGeometryCache:
     """Small LRU of immutable CPU geometry keyed by its complete pure inputs.
 
     Keys hold every input the builder reads, so an entry can never be stale; the
-    bound only limits memory. Both displays of a batch may read one entry.
+    bound only limits memory. Both displays of a batch may read one entry. A
+    key being prepared is tracked so a render thread that needs it meanwhile
+    waits for that build instead of duplicating it under GIL contention.
     """
 
     def __init__(self, capacity: int = 6) -> None:
         self._capacity = max(1, int(capacity))
         self._lock = threading.Lock()
         self._entries: OrderedDict[Hashable, object] = OrderedDict()
+        self._in_flight: dict[Hashable, threading.Event] = {}
 
     def get(self, key: Hashable) -> object | None:
         with self._lock:
@@ -253,10 +262,39 @@ class PreparedGeometryCache:
             while len(self._entries) > self._capacity:
                 self._entries.popitem(last=False)
 
-    def get_or_build(self, key: Hashable, build: Callable[[Hashable], _T]) -> _T:
-        """Render-thread entry: prepared bytes, else build synchronously (never waits)."""
+    def claim(self, key: Hashable) -> bool:
+        """Mark ``key`` as being prepared; False when it is ready or already claimed."""
+
+        with self._lock:
+            if key in self._entries or key in self._in_flight:
+                return False
+            self._in_flight[key] = threading.Event()
+            return True
+
+    def settle(self, key: Hashable, value: object | None) -> None:
+        """Finish a claim: store ``value`` (None = the preparation failed) and wake waiters."""
+
+        if value is not None:
+            self.put(key, value)
+        with self._lock:
+            event = self._in_flight.pop(key, None)
+        if event is not None:
+            event.set()
+
+    def get_or_build(
+        self,
+        key: Hashable,
+        build: Callable[[Hashable], _T],
+        wait_s: float = IN_FLIGHT_WAIT_S,
+    ) -> _T:
+        """Render-thread entry: prepared bytes; else the in-flight build; else build here."""
 
         value = self.get(key)
+        if value is None:
+            with self._lock:
+                event = self._in_flight.get(key)
+            if event is not None and event.wait(wait_s):
+                value = self.get(key)
         if value is None:
             value = build(key)
             self.put(key, value)
@@ -299,8 +337,15 @@ def prepare_run_geometry(
     for aspect in dict.fromkeys(float(value) for value in aspects):
         try:
             key = make_key(parameters, aspect, direction)
-            if PREPARED_GEOMETRY.get(key) is None:
-                PREPARED_GEOMETRY.put(key, build(key))
+        except Exception:
+            logger.debug("[TRANSITION] %s geometry key rejected for aspect %.6f",
+                         transition_id, aspect, exc_info=True)
+            continue
+        if not PREPARED_GEOMETRY.claim(key):
+            continue
+        value = None
+        try:
+            value = build(key)
         except Exception:
             logger.debug(
                 "[TRANSITION] %s geometry preparation skipped for aspect %.6f",
@@ -308,10 +353,13 @@ def prepare_run_geometry(
                 aspect,
                 exc_info=True,
             )
+        finally:
+            PREPARED_GEOMETRY.settle(key, value)
 
 
 __all__ = [
     "CRUMBLE_CHUNK_ATTRIBUTES",
+    "IN_FLIGHT_WAIT_S",
     "CRUMBLE_DEBRIS_STRIDE",
     "CrumbleGeometry",
     "GLASS_ATTRIBUTES",

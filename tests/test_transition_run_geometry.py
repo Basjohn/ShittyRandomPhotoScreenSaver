@@ -183,3 +183,62 @@ def test_display_manager_prepares_geometry_once_per_batch_on_compute(qt_app) -> 
         manager.disconnect_monitor_detection()
         manager.deleteLater()
         qt_app.processEvents()
+
+
+def test_render_thread_takes_the_in_flight_preparation_instead_of_rebuilding() -> None:
+    # Regression (2026-09-23 trace): Glass runs started before their COMPUTE
+    # preparation finished, so each render thread rebuilt the same geometry
+    # under GIL contention (100-130 ms first frames). A render thread that needs
+    # a key being prepared must wait for that build, not duplicate it.
+    import threading
+    import time
+
+    cache = PreparedGeometryCache()
+    assert cache.claim("key")
+    assert not cache.claim("key")  # one preparation per key
+
+    def finish_later():
+        time.sleep(0.05)
+        cache.settle("key", "prepared")
+
+    worker = threading.Thread(target=finish_later)
+    worker.start()
+
+    def must_not_build(_key):
+        raise AssertionError("duplicated an in-flight preparation")
+
+    assert cache.get_or_build("key", must_not_build) == "prepared"
+    worker.join()
+    assert cache.claim("other") and not cache.claim("key")  # ready keys are not re-claimed
+
+
+def test_a_failed_preparation_releases_the_waiting_render_thread_at_once() -> None:
+    import time
+
+    cache = PreparedGeometryCache()
+    assert cache.claim("key")
+    cache.settle("key", None)
+    built = []
+    start = time.perf_counter()
+    assert cache.get_or_build("key", lambda key: built.append(key) or "local") == "local"
+    assert built == ["key"] and time.perf_counter() - start < 0.05
+
+
+def test_a_stuck_preparation_only_delays_the_render_thread_by_the_bound() -> None:
+    import time
+
+    cache = PreparedGeometryCache()
+    assert cache.claim("key")  # never settled
+    start = time.perf_counter()
+    assert cache.get_or_build("key", lambda key: "local", wait_s=0.05) == "local"
+    assert 0.04 < time.perf_counter() - start < 0.5
+
+
+def test_preparation_always_settles_its_claim() -> None:
+    prepare_run_geometry("glass_shatter", _GLASS, (_ASPECT,))
+    assert PREPARED_GEOMETRY.get(glass_geometry_key(_GLASS, _ASPECT)) is not None
+    assert not PREPARED_GEOMETRY._in_flight
+    # A builder failure settles too, so nothing waits on a dead claim.
+    prepare_run_geometry("glass_shatter", {"seed": 1, "shards": 95, "depth": 1.0,
+                                           "collisions": True}, (_ASPECT,), "not-a-direction")
+    assert not PREPARED_GEOMETRY._in_flight
