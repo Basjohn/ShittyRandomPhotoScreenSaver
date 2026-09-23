@@ -197,8 +197,12 @@ identically.
 - [x] Physical (2026-09-23): no black flash at transition end on both displays; ordinary wallpaper unchanged. The
       transparent-PNG case is owned by the automated contract (operator waived a physical check: SRPSS shows
       photographs).
-- [ ] Remaining: Stage B lifetime test; then quantify the remaining handoff before choosing a native helper or a
-      PySide upgrade for the zero-re-upload route.
+- [x] Stage B landed: no `.copy()`; Lifetime result (`tests/test_qtquick_native_image_lifetime.py`, real threaded OpenGL window): Qt reads the pixels on the render thread during that frame's upload, after `updatePaintNode` returns; steady frames never re-read them; PySide 6.9.1 keeps the Python buffer alive while any C++ `QImage` copy exists (the texture's and upload batch's); the production native node renders correct pixels when the GUI-side reference is dropped right after sync and freed memory is churned. The node also owns the `PresentationImage` for as long as its texture exists (no extra bytes in steady state: the item holds the same object). Saves ≈3.8 ms idle (4.6 ms traced) of GUI-blocking
+      sync per 4K image change. Bars: the lifetime probes, the PySide buffer-lifetime pin, and the no-copy/ownership
+      unit bar (fails with the old copy).
+- [ ] Remaining: the full-image upload (≈16 ms calm, up to ≈69 ms under load) on the 4K display. Choosing the
+      zero-re-upload route (native helper vs PySide upgrade) needs evidence first: a post-Stage-B trace and a check of
+      what a newer PySide binds.
 - [ ] Stage B prerequisite: Qt/PySide buffer-lifetime test, then the same bars.
 
 ---
