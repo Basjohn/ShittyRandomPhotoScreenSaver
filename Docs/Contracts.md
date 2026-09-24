@@ -174,6 +174,10 @@ family activated/deactivated != ordinary widget ON/OFF
 CUSTOM X and layout-slot replay operate only on ordinary ON/OFF. They never activate a fully deactivated capability
 or replace provider/account/source settings.
 
+## Network transports
+
+Every network request on the ThreadManager IO lane resolves its connection host through `core/network` before connecting: `bounded_request` (requests), `bounded_urlopen` (urllib), or `resolve_bounded` ahead of a raw socket client (Gmail IMAP). `socket.getaddrinfo` ignores socket timeouts and cannot be interrupted, so the lookup runs on a short-lived daemon thread with a 4 s deadline, at most eight in progress, cancelled by the family's own retirement fence (FEEDS job event, Reddit `shutdown_event`, Weather service/request fence, Gmail `should_cancel`, geocode pending query, wallpaper RSS shutdown check) and by the one-way process exit fence `close_network_admission()`, which the engine closes immediately before its thread-manager shutdown and `main` closes at process end. Steam requests are shared through request coordinators, so no single widget retirement cancels them; their deadline and the exit fence bound them. Redirects are followed one bounded hop at a time with the library's own semantics, a proxy's host is resolved when one applies, and a failed lookup surfaces as the library's own connection error. Without this, one stalled lookup pinned a worker of the four-worker lane, held the engine's 5 s exit wait and then kept the process alive (ThreadPoolExecutor workers are joined by the interpreter; the OS does not kill them). Headless bars: `tests/test_network_bounded_http.py`, `tests/test_network_dns_stall_families.py`, `tests/test_feed_dns_stall.py`.
+
 ## Import dormancy
 
 Common capability metadata and common Quick scene/host imports must not resolve inactive family business/runtime/
