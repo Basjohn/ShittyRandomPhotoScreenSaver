@@ -10,6 +10,17 @@ Run `python tools/feed_probe.py --catalog` once per calendar day and add one row
 
 Tally toward 6/7 days: US 1/1 both; World CBS 1/1, ABC 0/1; Politics 1/1 both; Tech 1/1 all; Gaming 1/1 both.
 
+## Wallpaper feeds (image RSS) | rebuild on the shared feed core (ACTIVE)
+
+Assessment 2026-09-24: of the 12 default feeds only NASA and Wallhaven ever yielded images (Bing's relative, HTML-escaped image URLs never downloaded; all 9 Flickr public feeds max out at 1024 px in every format and were downloaded then deleted each pass); the 30-image pool was 16–19 days old because a full cache skipped downloads and nothing rotated; per-site parser branches and domain tables; failures only recorded for Reddit feeds; unconditional feed re-downloads; no byte cap, public-address check or honest User-Agent on image downloads; a dead facade and a never-started worker process. It stays a separate product (wallpaper pool, rotation, save-to-disk) but acquires through the FEEDS core. Operator rules: fill mode is the yardstick; larger than the displays is good, smaller is not; crop is not judged in advance; no Wikimedia.
+
+- [ ] Shared public image stream (artwork transport): bounded DNS, pinned public address, validated redirects, byte and time caps; wallpaper images stream to a temp file with the pixel size read from the header as it arrives and rejected early when the image cannot fill every connected display without upscaling.
+- [ ] Feed acquisition through `FeedSource` (conditional requests, discovery, persisted backoff for every feed) plus a generic JSON image-listing adapter for API-style sources; remove `RSSParser`, `FeedHealthTracker`, domain priority/fallback tables and per-site branches; remember rejected image URLs so they are not re-probed.
+- [ ] Session rotation: once per process session replace up to a third of the pool (undersized images first, then the oldest stale ones); retire an old image only after its replacement is on disk.
+- [ ] Defaults: NASA Image of the Day, NASA JPL Photojournal, Wallhaven, Bing (valid for 1080p setups); Flickr removed (cannot supply display-filling images). Existing user feed lists are left to the user.
+- [ ] Remove dead code after caller proof: `sources/rss_source.py` facade, the never-started `core/process/workers/rss_worker.py` and its registration.
+- [ ] Settings/docs: accurate Sources-tab text; a Wallpaper feeds reference section.
+
 ## FEEDS | Custom 1 closure and bounded family expansion (ACTIVE)
 
 **Authority:** `Docs/Reference/Feeds.md` owns implemented architecture. `Docs/Future_Work/Feeds.md` owns the still-pending expansion/deferred work. Continue to audit **durability, content adaptability and performance neutrality** before multiplying sources or widget identities.

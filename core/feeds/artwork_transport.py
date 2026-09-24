@@ -1,4 +1,4 @@
-"""Pinned-address, bounded image transport for the existing FEEDS source worker.
+"""Pinned-address, bounded public image transport (FEEDS artwork and wallpaper feeds).
 
 No scheduling, Qt, requests.Session, background thread, or global connection pool.
 Every redirect hop is resolved and vetted *before* opening a socket, and the
@@ -13,7 +13,7 @@ import ipaddress
 import socket
 import ssl
 import time
-from typing import Callable
+from typing import Callable, Iterator
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from .artwork import ArtworkCancelled, MAX_DOWNLOAD_BYTES, safe_artwork_url
@@ -64,24 +64,30 @@ def _public_address(host: str, port: int, *, resolve: Callable[..., object]) -> 
     return addresses[0]
 
 
-def fetch_artwork_bytes(
+def iter_public_image(
     url: str, *,
     still_needed: Callable[[], bool],
+    max_bytes: int,
+    max_seconds: float,
     resolve: Callable[..., object] | None = None,
-    max_bytes: int = MAX_DOWNLOAD_BYTES,
     connect_timeout: float = CONNECT_TIMEOUT_SECONDS,
     read_timeout: float = READ_TIMEOUT_SECONDS,
-    max_seconds: float = MAX_TOTAL_SECONDS,
-) -> bytes:
-    """Fetch one optional image in the caller's existing bounded worker job.
+    user_agent: str = "SRPSS/FeedArtwork",
+    accept: str = "image/png,image/jpeg,image/webp,image/gif;q=0.8,*/*;q=0.1",
+    chunk_size: int = 16 * 1024,
+) -> Iterator[bytes]:
+    """Stream one public image's bytes: the one vetted image path for every family.
 
-    Explicit address pinning prevents a second DNS resolution after vetting.
-    HTTP connections are short-lived and not shared across source generations.
-    Both redirect count and wall-clock budget cover the *entire* image fetch.
-    The caller owns retirement; it supplies its per-source cancellation fence.
+    Each redirect hop is resolved (bounded, cancellable) and vetted before a
+    socket opens, and the connection is pinned to that global address with TLS
+    SNI/hostname verification against the original name. The whole stream is
+    bounded by ``max_bytes`` and ``max_seconds`` and checks ``still_needed``
+    between reads. Chunks are yielded as they arrive; closing the generator
+    early (a caller that has seen enough) closes the connection. A declared
+    length must be met exactly, so a truncated body never completes.
     """
-    budget = max(1, min(MAX_DOWNLOAD_BYTES, int(max_bytes)))
-    deadline = time.monotonic() + min(MAX_TOTAL_SECONDS, max(0.1, float(max_seconds)))
+    budget = max(1, int(max_bytes))
+    deadline = time.monotonic() + max(0.1, float(max_seconds))
     current = url
     for hop in range(MAX_ARTWORK_REDIRECTS + 1):
         if not still_needed():
@@ -122,8 +128,8 @@ def fetch_artwork_bytes(
         try:
             connection.request("GET", request_target, headers={
                 "Host": host,
-                "User-Agent": "SRPSS/FeedArtwork",
-                "Accept": "image/png,image/jpeg,image/webp,image/gif;q=0.8,*/*;q=0.1",
+                "User-Agent": user_agent,
+                "Accept": accept,
                 "Accept-Encoding": "identity",
                 "Connection": "close",
             })
@@ -152,7 +158,7 @@ def fetch_artwork_bytes(
                     raise ArtworkFetchError("invalid artwork content length")
                 if declared_bytes > budget:
                     raise ArtworkFetchError("artwork content length exceeds bound")
-            data = bytearray()
+            received = 0
             while True:
                 if not still_needed():
                     raise ArtworkCancelled()
@@ -161,19 +167,20 @@ def fetch_artwork_bytes(
                     raise ArtworkFetchError("artwork time budget exhausted")
                 if connection.sock is not None:
                     connection.sock.settimeout(min(max(0.1, read_timeout), remaining))
-                chunk = response.read(min(16 * 1024, budget + 1 - len(data)))
+                chunk = response.read(min(max(1, int(chunk_size)), budget + 1 - received))
                 if not chunk:
                     break
-                data.extend(chunk)
-                if len(data) > budget:
+                received += len(chunk)
+                if received > budget:
                     raise ArtworkFetchError("artwork payload exceeds bound")
-            if declared_bytes is not None and len(data) != declared_bytes:
+                yield chunk
+            if declared_bytes is not None and received != declared_bytes:
                 raise ArtworkFetchError("truncated artwork response")
-            if not data:
+            if not received:
                 raise ArtworkFetchError("empty artwork response")
             if not still_needed():
                 raise ArtworkCancelled()
-            return bytes(data)
+            return
         except (OSError, http.client.HTTPException, ssl.SSLError) as exc:
             if not still_needed():
                 raise ArtworkCancelled() from exc
@@ -181,3 +188,30 @@ def fetch_artwork_bytes(
         finally:
             connection.close()
     raise ArtworkFetchError("artwork redirect limit")
+
+
+def fetch_artwork_bytes(
+    url: str, *,
+    still_needed: Callable[[], bool],
+    resolve: Callable[..., object] | None = None,
+    max_bytes: int = MAX_DOWNLOAD_BYTES,
+    connect_timeout: float = CONNECT_TIMEOUT_SECONDS,
+    read_timeout: float = READ_TIMEOUT_SECONDS,
+    max_seconds: float = MAX_TOTAL_SECONDS,
+) -> bytes:
+    """Fetch one optional feed image in the caller's existing bounded worker job.
+
+    Explicit address pinning prevents a second DNS resolution after vetting.
+    HTTP connections are short-lived and not shared across source generations.
+    Both redirect count and wall-clock budget cover the *entire* image fetch.
+    The caller owns retirement; it supplies its per-source cancellation fence.
+    """
+    return b"".join(iter_public_image(
+        url,
+        still_needed=still_needed,
+        max_bytes=max(1, min(MAX_DOWNLOAD_BYTES, int(max_bytes))),
+        max_seconds=min(MAX_TOTAL_SECONDS, max(0.1, float(max_seconds))),
+        resolve=resolve,
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+    ))
