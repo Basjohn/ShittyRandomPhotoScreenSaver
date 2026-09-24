@@ -134,7 +134,8 @@ class FeedHttpTransport:
             raise FeedTransportError("feed fetch cancelled")
         headers = {
             "User-Agent": self.user_agent,
-            "Accept": "application/atom+xml, application/rss+xml, application/xml, text/xml, */*;q=0.2",
+            "Accept": "application/atom+xml, application/rss+xml, application/feed+json, "
+                      "application/xml;q=0.9, text/xml;q=0.9, application/json;q=0.8, */*;q=0.2",
             "Accept-Encoding": "gzip, deflate",
         }
         if etag:

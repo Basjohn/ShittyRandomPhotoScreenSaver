@@ -85,11 +85,18 @@ Technical health labels describe reachability/parser viability only. SRPSS does 
 
 ## Feed formats
 
-- [ ] JSON Feed (`application/feed+json`): the pinned `feedparser==6.0.12` has no JSON Feed parser, so discovery ignores JSON alternates today. If a wanted site offers only JSON Feed, add a small bounded JSON Feed normalizer into the same `FeedDocument` model rather than upgrading the pin.
+Implemented (see `Docs/Reference/Feeds.md`): RSS, Atom, JSON Feed 1.x, JF2 and IndieWeb h-feed. Evaluated on 2026-09-24 and deliberately not built, each with the condition that would reopen it:
+
+- ActivityStreams 2.0 / ActivityPub outboxes: Mastodon, Lemmy, PeerTube and Pixelfed all publish RSS that discovery already finds; outboxes need paging and often signed fetches. Reopen if a fediverse platform drops RSS.
+- AT Protocol (Bluesky): profiles publish RSS. Reopen if that stops.
+- Nostr: not HTTP; out of scope for a bounded HTTP feed source.
+- OPML: a list of feeds, not a feed. A possible later "import subscriptions" convenience, not a format.
+- WebSub: push notification, not a format; the pull cadence does not need it.
+- Microformats1 hAtom: see the Reference note on why it is not read.
 
 ## Torrent and magnet actions
 
-- [ ] Keep authored title first. Only a missing title may fall back to magnet `dn=`, enclosure filename or URL-derived text; machine-ish cleanup applies only to derived fallback text.
+- [ ] Keep authored title first. A missing title falls back to magnet `dn=`, then the entry's own text, then enclosure filename or URL-derived text (implemented in `entry_title_and_summary`); machine-ish cleanup applies only to URL-derived fallback text.
 - [ ] Add a separate allowlisted `open_magnet` capability with bounded syntax validation. Do not broaden HTTP/S open into generic URI execution.
 - [ ] Fetch `.torrent` enclosures only after explicit user action, with strict response-size/content checks into an SRPSS-owned managed action-cache directory.
 - [ ] Add a separate `open_torrent_file` capability restricted to validated `.torrent` files in that managed directory. Never add arbitrary-file opening.

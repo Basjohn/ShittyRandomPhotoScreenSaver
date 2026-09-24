@@ -11,17 +11,19 @@
 - [x] Physical Custom 1 artwork editing is accepted for free X/Y/width/height adjustment, with Grid text/content reflow following the changed artwork geometry rather than preserving a fixed landscape slot.
 - [x] Physical source adaptability has exercised an image-sparse Hacker News feed plus image-bearing GitHub and Ars feeds. Image absence is a valid feed/content state, and tested story links reached the correct external destinations.
 - [x] Product-wide clickable highlighting is physically accepted on the current tree: semantic colour is the resting/state language and an admitted active click target uses bright white where the shared contract calls for a border/separator/emphasized text cue. Text-dense row surfaces remain borderless where specified; Media retains its no-hover-border exception.
+- [x] Website-address discovery is physically accepted (2026-09-24): `arstechnica.com` resolved to its feed in Custom 1. Standards-based, no per-site rules; `Docs/Reference/Feeds.md` § Feed discovery.
 - [x] The secure Winlogon handoff remains the external-link authority: saver-side queue admission is the success boundary, helper wake is best-effort, and helper readiness never gates normal saver exit. Reddit/Reddit2, Gmail, FEEDS and Steam-family actions stay behind the same product-action/session boundary rather than calling direct browser APIs from retained runtime code.
 
 ### Remaining Custom 1 acceptance
 
 - [ ] Exercise a full Edit transaction on the current tree: widget-wide alignment flip, parent resize before save, child move/resize, Reset, bounded Ctrl-Z, child lock, Save, leave/re-enter Edit and fresh runtime recreation. Verify the header, refresh rail, Grid/List content rails and overflow retain one semantic orientation without mirroring pixels or snapping back.
 - [ ] Verify the per-feed **Show Feed Subtitle** setting off/on and Save/reopen behavior, including the separate below-pill subtitle and retained header geometry.
-- [ ] **Website-address discovery (2026-09-24).** Enter `arstechnica.com` (no feed path) in Custom 1: TEST FEED reports `feed found at https://arstechnica.com/feed`, the runtime shows Ars stories, `--feeds` logs one `[FEEDS][DISCOVERY]` line on the first refresh and none on later refreshes (steady state is one conditional request to the resolved feed). Reference: `Docs/Reference/Feeds.md` § Feed discovery.
 - [ ] Prove last-good behavior through a fresh offline restart, then restore connectivity and verify ordinary conditional refresh without blanking or endpoint cross-contamination.
 - [ ] Disable/replace Custom 1 while source/artwork work is queued or in flight; verify callbacks retire cleanly, no stale completion republishes, no transport/provider work survives the final active lease and no native fault appears.
 
 ### Multi-CUSTOM expansion gate
+
+- [ ] **Modern feed formats (2026-09-24), required before Custom 2–4/NEWS.** RSS, Atom, JSON Feed 1.x, JF2 and IndieWeb h-feed land in one model; title-less posts read as text. Physical check in Custom 1: `mastodon.social/@Gargron` shows post text as titles (not numeric IDs); `daringfireball.net/feeds/json` renders with dates and images; `reddit.com/r/programming` resolves through the `.rss` suffix.
 
 Custom 2–4 remain dormant until the same shared codepath is proven with more than one active source. Do **not** clone providers, QML, editor state, schedulers or persistence owners.
 

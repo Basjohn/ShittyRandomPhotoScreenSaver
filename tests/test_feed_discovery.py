@@ -122,15 +122,52 @@ def test_feed_shaped_anchors_are_candidates_when_nothing_is_advertised():
     ]
 
 
+def test_a_section_page_prefers_its_own_advertised_feed():
+    page = _page(
+        '<link rel="alternate" type="application/rss+xml" href="/journal/rss">'
+        '<link rel="alternate" type="application/rss+xml" href="/rss/">'
+        '<link rel="alternate" type="application/rss+xml" href="/notes/rss">'
+    )
+    section = advertised_feed_candidates(page, page_url="https://site.test/notes")
+    assert [c.url for c in section][0] == "https://site.test/notes/rss"
+    # A home page keeps the site's own advertised order.
+    home = advertised_feed_candidates(page, page_url="https://site.test/")
+    assert [c.url for c in home][0] == "https://site.test/journal/rss"
+
+
+def test_links_back_to_the_page_itself_are_not_feed_candidates():
+    # A news page served under a feed-looking path links to its own language
+    # variants; those are the page again, not feeds.
+    page = _page(body=(
+        '<a href="?l=schinese">中文</a><a href="?l=japanese">日本語</a>'
+        '<a href="?format=rss">RSS</a>'
+        '<a href="https://feeds.site.test/news?lang=en">Feed</a>'
+        '<a href="https://feeds.site.test/news?lang=de">Feed (de)</a>'
+    ))
+    candidates = advertised_feed_candidates(page, page_url="https://site.test/news/app/570.rss")
+    assert [c.url for c in candidates] == [
+        "https://site.test/news/app/570.rss?format=rss",
+        "https://feeds.site.test/news?lang=en",
+    ]
+
+
 def test_conventional_paths_stay_inside_the_address_directory():
     root = [c.url for c in conventional_feed_candidates("https://site.test")]
     assert root[:2] == ["https://site.test/feed", "https://site.test/rss"]
     assert all(c.via == "conventional" for c in conventional_feed_candidates("https://site.test"))
-    # A sub-path never walks up to a shared host's site-wide feed.
-    blog = [c.url for c in conventional_feed_candidates("https://host.test/@writer?tab=posts")]
-    assert blog[0] == "https://host.test/@writer/feed"
-    assert all(url.startswith("https://host.test/@writer/") for url in blog)
-    assert conventional_feed_candidates("https://site.test/blog/index.html")[0].url == "https://site.test/blog/feed"
+    assert not any(url.endswith((".rss", ".atom")) for url in root)
+    # A sub-path tries the page-suffix convention first and never walks up to
+    # a shared host's site-wide feed; a dotted handle is a directory, not a file.
+    handle = [c.url for c in conventional_feed_candidates("https://host.test/@tim.oreilly?tab=posts")]
+    assert handle[:3] == [
+        "https://host.test/@tim.oreilly.rss",
+        "https://host.test/@tim.oreilly.atom",
+        "https://host.test/@tim.oreilly/feed",
+    ]
+    assert all(url.startswith("https://host.test/@tim.oreilly") for url in handle)
+    page = [c.url for c in conventional_feed_candidates("https://site.test/blog/index.html")]
+    assert page[0] == "https://site.test/blog/feed"
+    assert "https://site.test/blog/feed.json" in page
 
 
 def test_address_that_is_already_a_feed_needs_one_fetch():
