@@ -1,96 +1,55 @@
-"""
-RSS system constants - feeds, priorities, rate limits, cache settings.
+"""Wallpaper-feed constants: curated defaults, pool bounds, rotation, politeness.
 
-Centralised here so every sub-module imports from one place.
+No per-site rules live here. Feeds are ordinary RSS/Atom/JSON Feed documents or
+JSON image listings read by shape; images are judged by their real pixels
+against the connected displays (fill mode, no upscaling).
 """
 
 # ---------------------------------------------------------------------------
-# Default feeds (no Reddit - cross-process rate limit issues)
+# Curated defaults (added through Settings / first-run onboarding)
 # ---------------------------------------------------------------------------
+# Chosen 2026-09-24 by measured image size: each advertises images well beyond
+# 1080p (NASA 2000-9000 px, JPL 5000-11780 px, Wallhaven full-size originals).
+# Bing's archive is 1920x1080: admitted on 1080p setups, skipped from its header
+# on larger displays at a cost of a few kilobytes. Flickr's public feeds (at
+# most 1024 px in every format) and Wikimedia are deliberately absent.
 DEFAULT_RSS_FEEDS = {
-    # NASA - High quality space/science imagery
     "NASA Image of the Day": "https://www.nasa.gov/feeds/iotd-feed",
-
-    # Bing - Daily wallpapers, consistently high quality
-    "Bing Image of the Day": "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
-
-    # Wallhaven - curated safe-for-work wallpaper search
+    "NASA JPL Photojournal": "https://photojournal.jpl.nasa.gov/rss/new",
     "Wallhaven SFW Wallpapers": "https://wallhaven.cc/api/v1/search?categories=110&purity=100",
-
-    # Flickr - No rate limits on public RSS feeds, diverse content
-    "Flickr Night Cityscapes": "https://www.flickr.com/services/feeds/photos_public.gne?tags=cityscape,night,longexposure&tagmode=all&format=json&nojsoncallback=1",
-    "Flickr Architecture Nights": "https://www.flickr.com/services/feeds/photos_public.gne?tags=architecture,night&tagmode=all&format=json&nojsoncallback=1",
-    "Flickr Downtown Lights": "https://www.flickr.com/services/feeds/photos_public.gne?tags=downtown,lights&tagmode=all&format=json&nojsoncallback=1",
-    "Flickr Landscape": "https://www.flickr.com/services/feeds/photos_public.gne?tags=landscape,nature&format=json&nojsoncallback=1",
-    "Flickr Mountains": "https://www.flickr.com/services/feeds/photos_public.gne?tags=mountains,peaks&format=json&nojsoncallback=1",
-    "Flickr Ocean": "https://www.flickr.com/services/feeds/photos_public.gne?tags=ocean,sea&format=json&nojsoncallback=1",
-    "Flickr Space": "https://www.flickr.com/services/feeds/photos_public.gne?tags=space,astronomy,nebula&format=json&nojsoncallback=1",
-    "Flickr Cityscapes": "https://www.flickr.com/services/feeds/photos_public.gne?tags=cityscape,urban,skyline&format=json&nojsoncallback=1",
-    "Flickr Night Photography": "https://www.flickr.com/services/feeds/photos_public.gne?tags=night,nightscape,longexposure&format=json&nojsoncallback=1",
+    "Bing Image of the Day": "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
 }
 
 # ---------------------------------------------------------------------------
-# Source priority weights - higher = processed earlier
+# Pool
 # ---------------------------------------------------------------------------
-SOURCE_PRIORITY = {
-    "bing.com": 95,
-    "flickr.com": 90,
-    "wikimedia.org": 85,
-    "nasa.gov": 75,
-    "wallhaven.cc": 72,
-    "reddit.com": 10,
-}
-
-
-def get_source_priority(url: str) -> int:
-    """Return priority for a feed URL based on domain."""
-    url_lower = url.lower()
-    for domain, priority in SOURCE_PRIORITY.items():
-        if domain in url_lower:
-            return priority
-    return 50
-
+TARGET_TOTAL_IMAGES = 50          # Pool target when the engine gives none
+MAX_CACHED_IMAGES_TO_LOAD = 35    # Startup load ceiling (newest first)
+MIN_CACHE_BEFORE_CLEANUP = 20     # Eviction never goes below this
+DEFAULT_MAX_CACHE_SIZE_MB = 500   # On-disk pool byte cap
 
 # ---------------------------------------------------------------------------
-# Download budget
+# Session rotation: a full pool still refreshes
 # ---------------------------------------------------------------------------
-TARGET_TOTAL_IMAGES = 50          # Cache + new downloads ceiling
-MAX_PER_FEED_DOWNLOAD = 3        # Never download more than 3 per feed per pass
-MIN_PER_FEED_DOWNLOAD = 1        # At least 1 per feed when downloads are needed
-MIN_WALLPAPER_REFRESH_TARGET = 11  # Minimum usable images per coordinator pass
-FALLBACK_MAX_PER_FEED_DOWNLOAD = 8  # Extra allowance for high-res feeds (Bing/NASA)
-
-# Domains we trust for high-resolution fallback pulls
-HIGH_QUALITY_FALLBACK_DOMAINS = (
-    "bing.com",
-    "nasa.gov",
-)
+STALE_AFTER_HOURS = 72            # Older pool images are eligible for replacement
+SESSION_REPLACE_FRACTION = 3      # At most 1/3 of the pool target per process session
 
 # ---------------------------------------------------------------------------
-# Cache
+# Work bounds and politeness (per pass)
 # ---------------------------------------------------------------------------
-MAX_CACHED_IMAGES_TO_LOAD = 35   # Startup cache ceiling
-MIN_CACHE_BEFORE_CLEANUP = 20    # Don't evict until we have at least 20
-DEFAULT_MAX_CACHE_SIZE_MB = 500  # On-disk cache size cap
+MAX_IMAGE_ATTEMPTS_PER_PASS = 40  # Image fetch attempts (including early rejections)
+HOST_MIN_INTERVAL_SECONDS = 1.0   # Between two image requests to the same host
+MAX_REJECTED_URLS = 4000          # Remembered too-small / non-image URLs
+REJECTED_URL_TTL_DAYS = 30        # Re-judge after this (displays may change)
+FEED_MAX_ITEMS = 50               # Entries read per feed document
 
 # ---------------------------------------------------------------------------
-# Domain-based rate limiting (applies to all domains)
+# Stored size: an image far larger than the displays is kept right-sized once
+# at acquisition (still covering the largest display with this headroom), so
+# every later display decodes a fraction of the pixels.
 # ---------------------------------------------------------------------------
-DOMAIN_RATE_LIMIT_PER_MINUTE = 15
-DOMAIN_RATE_LIMIT_WINDOW = 60.0  # seconds
-
-# ---------------------------------------------------------------------------
-# Feed health / backoff
-# ---------------------------------------------------------------------------
-MAX_CONSECUTIVE_FAILURES = 3
-FAILURE_BACKOFF_BASE_SECONDS = 60
-FEED_HEALTH_RESET_HOURS = 24
-
-# ---------------------------------------------------------------------------
-# Reddit-specific
-# ---------------------------------------------------------------------------
-MAX_REDDIT_FEEDS_PER_STARTUP = 2
-REDDIT_TOTAL_IMAGE_LIMIT = 10
+STORED_COVER_HEADROOM = 1.25
+RIGHT_SIZE_BELOW_SCALE = 0.8      # Only when that saves at least a fifth per side
 
 # ---------------------------------------------------------------------------
 # Network

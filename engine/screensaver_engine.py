@@ -599,6 +599,7 @@ class ScreensaverEngine(QObject):
                     self.rss_coordinator = RSSCoordinator(
                         feed_urls=rss_feeds,
                         target_total_images=get_rss_startup_target_total(self),
+                        required_size=self._wallpaper_required_size(),
                         save_to_disk=bool(rss_save_to_disk and rss_save_directory),
                         save_directory=Path(rss_save_directory) if rss_save_directory else None,
                         thread_manager=self.thread_manager,
@@ -708,6 +709,26 @@ class ScreensaverEngine(QObject):
             logger.exception(f"Image queue build failed: {e}")
             return False
     
+    @staticmethod
+    def _wallpaper_required_size():
+        """Device pixels an RSS wallpaper must reach to fill every screen (fill mode).
+
+        The largest width and the largest height across connected screens: an
+        image at least that big fills each of them without upscaling.
+        """
+        try:
+            from PySide6.QtGui import QGuiApplication
+
+            sizes = []
+            for screen in QGuiApplication.screens():
+                geometry, dpr = screen.geometry(), float(screen.devicePixelRatio() or 1.0)
+                sizes.append((round(geometry.width() * dpr), round(geometry.height() * dpr)))
+            if sizes:
+                return max(w for w, _ in sizes), max(h for _, h in sizes)
+        except Exception as exc:
+            logger.debug("[ENGINE] Screen size query failed: %s", exc)
+        return None
+
     def _load_rss_images_async(self) -> None:
         """Delegates to engine.engine_rss."""
         from engine.engine_rss import load_rss_images_async

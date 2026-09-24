@@ -3084,8 +3084,6 @@ def setup_logging(
         "core.resources.manager",
         # Multi-monitor coordinator - logs halo owner on every check
         "rendering.multi_monitor_coordinator",
-        # RSS source - logs every feed parse
-        "sources.rss_source",
         # Gmail modules - logs on every fetch/auth
         "core.auth.gmail_oauth",
         "core.gmail.gmail_client",

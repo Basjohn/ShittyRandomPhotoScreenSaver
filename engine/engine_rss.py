@@ -151,6 +151,23 @@ def get_rss_stale_minutes(engine: ScreensaverEngine) -> int:
 # Async / sync RSS loading
 # ------------------------------------------------------------------
 
+def drop_retired_rss_images(engine: ScreensaverEngine) -> int:
+    """Remove pool images the coordinator retired (replaced or unable to fill) from the queue."""
+    coordinator = getattr(engine, "rss_coordinator", None)
+    if coordinator is None or not engine.image_queue:
+        return 0
+    removed = 0
+    for path in coordinator.take_retired_paths():
+        try:
+            if engine.image_queue.remove_image(path):
+                removed += 1
+        except Exception as e:
+            logger.debug("[ENGINE] Exception suppressed: %s", e)
+    if removed:
+        logger.info(f"{TAG_RSS} Retired {removed} replaced RSS images from the queue")
+    return removed
+
+
 def load_rss_images_async(engine: ScreensaverEngine) -> None:
     """Load RSS images asynchronously via RSSCoordinator.
 
@@ -186,6 +203,7 @@ def load_rss_images_async(engine: ScreensaverEngine) -> None:
                 logger.info(f"{TAG_RSS} Pre-loaded {n} cached RSS images (cap={rotating})")
 
         if not new_images:
+            drop_retired_rss_images(engine)
             return
 
         try:
@@ -202,6 +220,8 @@ def load_rss_images_async(engine: ScreensaverEngine) -> None:
             logger.info(f"{TAG_RSS} Added {len(to_add)} new RSS images to queue (cap={cap})")
         else:
             logger.debug(f"{TAG_RSS} RSS cap reached ({cap}), skipping {len(new_images)} new images")
+        # Replacements are in: the images they replace leave the queue.
+        drop_retired_rss_images(engine)
 
     engine.rss_coordinator.load_async(on_images=_on_new_images)
 
@@ -329,6 +349,7 @@ def background_refresh_rss(engine: ScreensaverEngine) -> None:
                 if not isinstance(images, list) or not images:
                     return
                 merge_rss_images_from_refresh(engine, images)
+                drop_retired_rss_images(engine)
             except Exception as e:
                 logger.debug(f"Background RSS merge failed: {e}")
 

@@ -127,6 +127,23 @@ def test_byte_cap_and_cancellation_leave_no_partial_file(tmp_path, network):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_a_far_larger_image_is_stored_right_sized_once(tmp_path, network):
+    # Requirement 400x300: a 1600x1600 source is 4x more than a 1.25x-headroom cover needs.
+    _Connection.responses = [_Response(_image((1600, 1600)))]
+    result = _fetch(tmp_path, network, required=(400, 300))
+    assert (result.width, result.height) == (500, 500)   # still covers 400x300 with headroom
+    assert result.path.suffix == ".jpg"
+    from PIL import Image
+    with Image.open(result.path) as stored:
+        assert stored.size == (500, 500)
+
+    # A panorama limited by its height is left exactly as it is.
+    _Connection.responses = [_Response(_image((4000, 380), "PNG"))]
+    kept = fetch_wallpaper("https://images.example.test/p.png", tmp_path, file_stem="pano",
+                           still_needed=lambda: True, required=(400, 300), resolve=network)
+    assert (kept.width, kept.height, kept.path.suffix) == (4000, 380, ".png")
+
+
 def test_fill_rule_is_every_display_without_upscaling():
     assert fills_displays(3840, 2160, REQUIRED) and fills_displays(8999, 9011, REQUIRED)
     assert not fills_displays(1920, 1080, REQUIRED)
