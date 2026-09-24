@@ -227,7 +227,11 @@ class SteamOpenIdLinkSession:
 
 
 def _default_open(request: urllib.request.Request, timeout_seconds: float) -> Any:
-    return urllib.request.urlopen(request, timeout=timeout_seconds)
+    # Bounded DNS on every hop (core/network): urllib alone resolves with an
+    # unbounded getaddrinfo that can pin a shared IO worker and hold exit.
+    from core.network.http import bounded_urlopen
+
+    return bounded_urlopen(request, timeout_seconds)
 
 
 def _normalize_endpoint(value: str | None) -> str:

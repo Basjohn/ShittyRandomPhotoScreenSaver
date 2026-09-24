@@ -100,3 +100,20 @@ def test_gmail_api_client_retires_with_the_runtime_generation():
         rearm="alive[0] = True",
     )
     assert_lane_and_exit_bounded(facts)
+
+
+def test_steam_requests_are_bounded_by_the_dns_deadline_and_the_exit_fence():
+    """Steam requests are shared across widgets through its request coordinators,
+    so a single widget retiring does not cancel them: the DNS deadline frees the
+    lane instead, and the process exit fence releases work in flight at exit."""
+    facts = run_family_stall(
+        category="steam",
+        setup="""
+            from core.steam.backend import SteamSourceId, build_endpoint, fetch_json
+            endpoint = build_endpoint(SteamSourceId.PLAYER_SUMMARIES,
+                                      api_key="not-a-real-key", steamids="76561197960287930")
+        """,
+        work="fetch_json(endpoint)",
+        retire=None,
+    )
+    assert_lane_and_exit_bounded(facts, retirement_fenced=False)
