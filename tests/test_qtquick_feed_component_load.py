@@ -222,3 +222,117 @@ def test_f3_feed_grid_uses_local_artwork_and_geometry_visible_admission(qt_app, 
         window.deleteLater()
         engine.deleteLater()
         qt_app.processEvents()
+
+
+def _headless_feed(values: dict, document=None):
+    """The real component and model with no window (no scene graph, nothing shown)."""
+    from time import time
+    from core.feeds.models import FeedDocument, FeedHealth, FeedItem, FeedRefreshResult, FeedSnapshot
+    from rendering.quick.widgets.feeds import (FeedPresentationConfig,
+                                               FeedPresentationModel, FeedPresentationStyle)
+
+    config = FeedPresentationConfig.from_widgets_mapping(
+        {"feeds_custom_1": {"enabled": True, "feed_url": "https://example.test/feed.xml", **values}},
+        widget_id="feeds_custom_1",
+    )
+    model = FeedPresentationModel(
+        config, FeedPresentationStyle.project(config, dict(require_canonical_default("widgets.shadows"))))
+    model._active = True  # Test-only consumer admission; no runtime/network owner.
+
+    def publish(doc):
+        now = time()
+        model.on_feed_runtime_result(FeedRefreshResult(
+            "available", FeedSnapshot(doc, now), FeedHealth(last_success_at=now)), from_cache=False)
+
+    publish(document or FeedDocument("Publisher Title", "https://example.test", "rss20",
+                                     (FeedItem("1", "Story", "https://example.test/1"),)))
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_ROOT / "FeedPresentation.qml")))
+    assert component.status() == QQmlComponent.Status.Ready, [e.toString() for e in component.errors()]
+    root = component.createWithInitialProperties({"feedModel": model})
+    assert root is not None, [e.toString() for e in component.errors()]
+    # No window parent holds it, so keep it out of the JS collector.
+    QQmlEngine.setObjectOwnership(root, QQmlEngine.ObjectOwnership.CppOwnership)
+    root.setWidth(420.0)
+    root.setHeight(320.0)
+    return (engine, component), model, root, publish
+
+
+def _item(root, object_name):
+    if root.objectName() == object_name:
+        return root
+    for child in root.childItems():
+        found = _item(child, object_name)
+        if found is not None:
+            return found
+    return None
+
+
+@pytest.mark.parametrize("font_size", [12, 14, 18])
+def test_feed_subtitle_box_holds_its_whole_text_line_below_the_pill(qt_app, font_size):
+    """The subtitle is set in points; its box must come from the real line height.
+
+    A box computed from ``fontSize`` as pixels is shorter than the line at the
+    default 14 (16.1 vs 19 logical px), so centred glyphs climbed 1.45 px out
+    of it toward the pill.
+    """
+    from PySide6.QtGui import QFontInfo, QFontMetricsF
+    from ui.font_registration import ensure_custom_fonts
+
+    # The product's bundled Inter; the headless platform has no system fonts
+    # and would otherwise give every font the same dummy line height.
+    ensure_custom_fonts()
+    engine, _model, root, _publish = _headless_feed({"font_family": "Inter", "font_size": font_size})
+    qt_app.processEvents()
+    header = _item(root, "feedHeader")
+    subtitle = _item(root, "feedHeaderSubtitle")
+    assert header is not None and subtitle is not None and subtitle.isVisible()
+    font = subtitle.property("font")
+    assert QFontInfo(font).family() == "Inter"
+    line = QFontMetricsF(font).height()
+    assert subtitle.height() >= line
+    pill_bottom = header.y() + header.height() * header.scale()
+    assert subtitle.y() - pill_bottom == pytest.approx(float(root.property("subtitleGap")))
+    root.deleteLater()
+    del root, engine
+
+
+def test_feed_content_never_moves_authored_normalization_or_role_identity(qt_app):
+    """Whatever a feed contains, the authored baselines and role list stay put.
+
+    Title-less posts (derived titles), long titles, and a feed with or without
+    its own title (subtitle on/off) only reflow text inside the card.
+    """
+    from core.feeds.models import FeedDocument, FeedItem
+
+    engine, model, root, publish = _headless_feed({})
+    qt_app.processEvents()
+    baseline = (model.basePreferredWidth, model.basePreferredHeight,
+                model.preferredWidth, model.preferredHeight,
+                root.property("childNormalizationWidth"), root.property("childNormalizationHeight"))
+    roles = [row["roleId"] for row in root.property("customEditableChildRoles").toVariant()]
+    notified: list[str] = []
+    for name in ("customEditableChildRoles", "childNormalizationWidth", "childNormalizationHeight",
+                 "preferredContentWidth", "preferredContentHeight"):
+        getattr(root, f"{name}Changed").connect(lambda *_a, n=name: notified.append(n))
+
+    long_text = "A very long derived title from a title-less post " * 6
+    for doc in (
+        FeedDocument("", "https://example.test", "json11",
+                     tuple(FeedItem(str(i), long_text[: 140], f"https://example.test/{i}", summary=long_text)
+                           for i in range(12))),
+        FeedDocument("An extremely long publisher title that must elide rather than grow anything " * 3,
+                     "https://example.test", "h-feed", (FeedItem("x", "Short", "https://example.test/x"),)),
+        FeedDocument("Publisher Title", "https://example.test", "rss20",
+                     (FeedItem("1", "Story", "https://example.test/1"),)),
+    ):
+        publish(doc)
+        qt_app.processEvents()
+        assert (model.basePreferredWidth, model.basePreferredHeight,
+                model.preferredWidth, model.preferredHeight,
+                root.property("childNormalizationWidth"), root.property("childNormalizationHeight")) == baseline
+    assert [row["roleId"] for row in root.property("customEditableChildRoles").toVariant()] == roles
+    assert notified == []
+    root.deleteLater()
+    del root, engine
