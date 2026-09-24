@@ -412,8 +412,12 @@ def fetch_and_cache_asset(
 
 
 def _default_fetch_asset(url: str, *, timeout_seconds: float = 12.0) -> bytes:
+    from core.network.http import bounded_urlopen
+
     request = urllib.request.Request(url, headers={"User-Agent": "SRPSS-Steam/0.1"})
-    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+    # Bounded DNS on every hop (core/network): urllib alone resolves with an
+    # unbounded getaddrinfo that can pin a shared IO worker and hold exit.
+    with bounded_urlopen(request, timeout_seconds) as response:
         # urllib follows redirects by default: reject an untrusted final
         # origin before accepting any response bytes as a local image.
         final = urlparse(response.geturl())

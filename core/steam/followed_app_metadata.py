@@ -64,8 +64,11 @@ def fetch_store_metadata(appid: int) -> tuple[str, str]:
         return "", ""
     url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=english"
     request = urllib.request.Request(url, headers={"User-Agent": "SRPSS-Steam/0.1", "Accept": "application/json"})
+    from core.network.http import bounded_urlopen
+
     try:
-        with urllib.request.urlopen(request, timeout=4.0) as response:
+        # Bounded DNS on every hop (core/network), like every IO-lane request.
+        with bounded_urlopen(request, 4.0) as response:
             final = urlsplit(response.geturl())
             if final.scheme != "https" or final.hostname != "store.steampowered.com":
                 return "", ""
