@@ -7,8 +7,7 @@ list when the network is unavailable.
 from __future__ import annotations
 
 import threading
-import requests
-from typing import List
+from typing import Callable, List, Optional
 
 from PySide6.QtCore import Qt, QStringListModel, QObject, Signal
 from PySide6.QtWidgets import QCompleter, QLineEdit
@@ -60,6 +59,10 @@ class GeocodeCompleter(QCompleter):
         self._line_edit = line_edit
         self._pending_query: str = ""
         self._lock = threading.Lock()
+        # Set when the completer is destroyed; captured by value so the
+        # destroyed-signal lambda never touches the dying object.
+        self._closed = threading.Event()
+        self.destroyed.connect(lambda _obj=None, closed=self._closed: closed.set())
         shared_threads = ThreadManager.get_app_shared()
         self._threads = shared_threads or ThreadManager.create_helper_manager(
             resource_manager=ResourceManager.get_app_shared(),
@@ -106,17 +109,33 @@ class GeocodeCompleter(QCompleter):
         with self._lock:
             if query != self._pending_query:
                 return
-        results = self._fetch_cities(query)
+        closed, lock = self._closed, self._lock
+
+        def _still_wanted() -> bool:
+            # A newer keystroke or a closed Settings page retires this lookup.
+            with lock:
+                return not closed.is_set() and query == self._pending_query
+
+        results = self._fetch_cities(query, should_continue=_still_wanted)
         if results:
             self._signals.results_ready.emit(results)
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _fetch_cities(query: str) -> List[str]:
-        """Query Open-Meteo geocoding API and return city display strings."""
+    def _fetch_cities(query: str, should_continue: Optional[Callable[[], bool]] = None) -> List[str]:
+        """Query Open-Meteo geocoding API and return city display strings.
+
+        DNS is bounded (``core/network``) and returns as soon as
+        ``should_continue`` turns false, so typing never queues stalled lookups
+        on the shared IO lane.
+        """
+        from core.network.http import bounded_request
+
         try:
-            resp = requests.get(
+            resp = bounded_request(
+                "GET",
                 GEOCODING_URL,
+                should_continue=should_continue,
                 params={"name": query, "count": _MAX_RESULTS, "language": "en", "format": "json"},
                 timeout=3,
             )

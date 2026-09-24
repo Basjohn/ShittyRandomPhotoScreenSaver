@@ -496,6 +496,13 @@ class WeatherRuntimeService:
         runtime_generation = self._runtime_generation
         self_ref = weakref.ref(self)
 
+        def _still_wanted() -> bool:
+            # Retirement fence for the network work: a stopped/retired service
+            # or a newer request makes this fetch's bounded DNS return at once.
+            owner = self_ref()
+            return bool(owner is not None and owner._running and not owner._retired
+                        and owner._fetch_request_id == request_id)
+
         def _do_fetch() -> PreparedWeatherFetch:
             import time
 
@@ -504,7 +511,8 @@ class WeatherRuntimeService:
                 logger.debug("[PERF] Weather API call starting for %s", location)
             else:
                 logger.debug("[ThreadManager] Fetching weather for %s", location)
-            provider = OpenMeteoProvider(timeout=10, persist_results=False)
+            provider = OpenMeteoProvider(timeout=10, persist_results=False,
+                                         should_continue=_still_wanted)
             result = provider.get_current_weather(location)
             if is_perf_metrics_enabled():
                 elapsed_ms = (time.perf_counter() - start_time) * 1000

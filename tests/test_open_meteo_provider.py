@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 from weather.open_meteo_provider import OpenMeteoProvider
 
 
-@patch("weather.open_meteo_provider.requests.get")
+@patch("weather.open_meteo_provider._weather_get")
 def test_get_current_weather_uses_documented_current_block(
     mock_get,
     tmp_path,

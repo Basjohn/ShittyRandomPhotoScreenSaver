@@ -33,3 +33,36 @@ def test_reddit_requests_retire_with_the_widget_shutdown_event():
         rearm="fence = Event()",
     )
     assert_lane_and_exit_bounded(facts)
+
+
+def test_weather_requests_retire_with_the_service_fence(tmp_path):
+    facts = run_family_stall(
+        category="weather_fetch",
+        setup=f"""
+            import weather.open_meteo_provider as open_meteo
+            # Never the operator's profile cache.
+            open_meteo._WEATHER_CACHE_FILE = {str(tmp_path / "open_meteo.json")!r}
+            alive = [True]   # WeatherRuntimeService._still_wanted: running, not retired, current request
+            provider = open_meteo.OpenMeteoProvider(timeout=10, persist_results=False,
+                                                    should_continue=lambda: alive[0])
+        """,
+        work='provider.get_current_weather("London")',
+        retire="alive[0] = False",
+        rearm="alive[0] = True",
+    )
+    assert_lane_and_exit_bounded(facts)
+
+
+def test_settings_geocode_lookups_retire_when_the_query_is_superseded():
+    facts = run_family_stall(
+        category="geocode",
+        setup="""
+            from ui.widgets.geocode_completer import GeocodeCompleter
+            current = ["Lond"]   # GeocodeCompleter._pending_query; a keystroke replaces it
+            query = "Lond"
+        """,
+        work="GeocodeCompleter._fetch_cities(query, should_continue=lambda: current[0] == query)",
+        retire='current[0] = "London"',
+        rearm='current[0] = "Lond"',
+    )
+    assert_lane_and_exit_bounded(facts)

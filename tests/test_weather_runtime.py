@@ -401,10 +401,12 @@ def test_weather_fetch_defers_provider_cache_until_gui_accepts_request(
     consumer.pending_first_show = False
     queued_ui = []
     constructor_flags: list[bool] = []
+    fences: list = []
 
     class _Provider:
-        def __init__(self, timeout=10, *, persist_results=True):
+        def __init__(self, timeout=10, *, persist_results=True, should_continue=None):
             constructor_flags.append(persist_results)
+            fences.append(should_continue)
             self.last_result_was_network = True
 
         def get_current_weather(self, location):
@@ -419,6 +421,8 @@ def test_weather_fetch_defers_provider_cache_until_gui_accepts_request(
     owner.fetch_weather()
     _run_queued_io_task(manager.tasks.pop())
     assert constructor_flags == [False]
+    # The network work carries the service's retirement fence (bounded DNS).
+    assert callable(fences[0]) and fences[0]() is True
     assert provider_path.exists() is False
     assert widget_path.exists() is False
 
@@ -430,6 +434,8 @@ def test_weather_fetch_defers_provider_cache_until_gui_accepts_request(
     _run_queued_io_task(persist_task)
     provider_payload = json.loads(provider_path.read_text(encoding="utf-8"))
     assert provider_payload["London"]["temperature"] == 21.0
+    owner.stop()
+    assert fences[0]() is False
 
 
 def test_weather_persistence_is_atomic_and_newest_wins(tmp_path) -> None:
