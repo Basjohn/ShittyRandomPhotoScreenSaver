@@ -44,6 +44,7 @@ class FeedSource:
         cache: FeedCacheStore | None = None,
         should_continue: Callable[[], bool] | None = None,
         now=time.time,
+        document_adapter: Callable[[bytes, str, int], object] | None = None,
     ) -> None:
         if transport is not None and transport_factory is not None:
             raise ValueError("provide transport or transport_factory, not both")
@@ -56,6 +57,9 @@ class FeedSource:
         self.cache = cache or FeedCacheStore()
         self.now = now
         self._should_continue = should_continue
+        # Optional reader for structured non-feed sources (wallpaper image
+        # listings); FEEDS widgets never pass one.
+        self._document_adapter = document_adapter
 
     def _ensure_needed(self) -> None:
         if self._should_continue is not None and not self._should_continue():
@@ -127,6 +131,7 @@ class FeedSource:
                 home_url=home_url,
                 max_items=self.spec.max_items,
                 should_continue=self._should_continue,
+                document_adapter=self._document_adapter,
             )
             self._ensure_needed()
             response = resolution.response
