@@ -96,7 +96,7 @@ class TestRSSBehavior:
             
             return mock_resp
         
-        with patch('requests.get', side_effect=mock_get):
+        with patch('sources.rss.downloader._rss_get', side_effect=mock_get):
             source = RSSSource(
                 feed_urls=feeds,
                 cache_dir=temp_cache_dir,
@@ -148,7 +148,7 @@ class TestRSSBehavior:
             
             return mock_resp
         
-        with patch('requests.get', side_effect=mock_get):
+        with patch('sources.rss.downloader._rss_get', side_effect=mock_get):
             source = RSSSource(feed_urls=feeds, cache_dir=temp_cache_dir)
             
             # First refresh - should download images
@@ -305,7 +305,7 @@ class TestRSSBehavior:
             
             return mock_resp
         
-        with patch('requests.get', side_effect=mock_get):
+        with patch('sources.rss.downloader._rss_get', side_effect=mock_get):
             source = RSSSource(feed_urls=feeds, cache_dir=temp_cache_dir)
             
             # First refresh

@@ -14,7 +14,6 @@ import time
 import hashlib
 import shutil
 import threading
-import requests
 import feedparser
 from pathlib import Path
 from typing import Optional, Callable
@@ -33,6 +32,18 @@ from PySide6.QtGui import QImageReader
 
 logger = get_logger(__name__)
 
+
+
+def _rss_get(url: str, *, should_continue=None, **kwargs):
+    """One wallpaper-RSS GET with bounded DNS (``core/network``), cancelled with the downloader.
+
+    ``requests`` alone resolves the host with an unbounded ``getaddrinfo``: a
+    stalled DNS server would pin a worker of the shared IO lane and hold
+    process exit. Otherwise this is plain ``requests.get``.
+    """
+    from core.network.http import bounded_request
+
+    return bounded_request("GET", url, should_continue=should_continue, **kwargs)
 
 class RSSDownloader:
     """Handles all network I/O for the RSS system.
@@ -206,8 +217,9 @@ class RSSDownloader:
             return None
 
         try:
-            resp = requests.get(
+            resp = _rss_get(
                 url,
+                should_continue=self._should_continue,
                 timeout=self.timeout,
                 headers={"User-Agent": self._user_agent(), "Accept": "application/json"},
             )
@@ -242,8 +254,9 @@ class RSSDownloader:
             return cache_file
 
         try:
-            resp = requests.get(
+            resp = _rss_get(
                 image_url,
+                should_continue=self._should_continue,
                 timeout=self.timeout,
                 headers={"User-Agent": self._user_agent()},
                 stream=True,
