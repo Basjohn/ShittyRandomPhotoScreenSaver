@@ -66,12 +66,13 @@ See `Docs/Architecture/Compositor_Architecture.md` and `Spec.md` for the durable
 
 ## Display geometry (R-63 overscan)
 
-A transition draws at `frame.logical_size`: the background item's size, which is the R-63 compatibility window and
-deliberately *larger* than the monitor (`display_bounds()`, the image pipeline's target size) by a pixel or two.
+A transition draws at `frame.logical_size`: the background item's size. That is the monitor's device-exact rectangle
+inside the R-63 window (at 150% a 2560 px monitor is 1706.67 logical px, while `display_bounds()`, Qt's rounded screen
+geometry, says 1707) and, before the window's native rectangle is known, the whole overscanned window.
 Anything computed for a run outside the renderer (COMPUTE-prepared geometry, caches, per-display aspect or pixel
 math) must key on the renderer's own size (`QuickDisplayUnit.transition_logical_size()`), never on the monitor
 rectangle, or it silently never matches and the render thread rebuilds it every run (R-95: Glass froze 43–141 ms).
-A prepared-work bar must prove a *hit* under an overscanned size, not just that preparation ran.
+A prepared-work bar must prove a *hit* when the render size differs from `display_bounds()`, not just that preparation ran.
 
 ## GL ownership
 
@@ -90,7 +91,7 @@ Choose the smallest falsifiable set:
 - parameter sensitivity;
 - interruption/exactly-once completion;
 - generation fencing;
-- prepared-work hit under an R-63 overscanned render size (when anything is prepared off the render thread);
+- prepared-work hit when the render size differs from `display_bounds()` (when anything is prepared off the render thread);
 - resource cleanup;
 - GL-state restoration;
 - focused real-GL/eyes-on evidence when the visual claim requires it.

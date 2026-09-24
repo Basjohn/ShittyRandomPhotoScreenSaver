@@ -6,7 +6,7 @@ from collections.abc import Callable
 import logging
 from typing import Any
 
-from PySide6.QtCore import QMetaObject, QPointF, QRect, Signal, Qt
+from PySide6.QtCore import QMetaObject, QPointF, QRect, QRectF, Signal, Qt
 from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QScreen
 from PySide6.QtQuick import QQuickWindow
 
@@ -17,6 +17,7 @@ from .state import (
     capture_display_identity,
 )
 from .cursor_controller import QuickCursorController
+from .device_geometry import compat_native_rect, visible_rect_in_window
 from .input_controller import QuickInputController
 
 
@@ -29,6 +30,9 @@ class QuickDisplayWindow(QQuickWindow):
     display_identity_changed = Signal(object)
     binding_lost = Signal(object)
     close_queued = Signal()
+    # The window's on-desktop rectangle (for the R-63 window, exactly its
+    # monitor) in logical coordinates; the scene root is laid out on it.
+    scene_rect_changed = Signal(object)
 
     _SCREEN_SIGNAL_NAMES = (
         "geometryChanged",
@@ -67,6 +71,11 @@ class QuickDisplayWindow(QQuickWindow):
         self._custom_layout_input_blocked = False
         self._desired_visible = False
         self._close_queued = False
+        self._scene_rect: QRectF | None = None
+        # Logical rects this window's own R-63 placement produced. The native
+        # device-pixel correction applies only while the window still has one
+        # of them; a window placed by anything else is left alone.
+        self._compat_logical_rects: set[tuple[int, int, int, int]] = set()
 
         generation_label = (
             "none" if self._runtime_generation is None else str(self._runtime_generation)
@@ -86,6 +95,10 @@ class QuickDisplayWindow(QQuickWindow):
         self._bind_screen(screen, apply_geometry=False)
         self.screenChanged.connect(self._on_window_screen_changed)
         self.visibleChanged.connect(self._on_window_visibility_changed)
+        # Geometry edges are rare (show, screen changes, resume); each re-derives
+        # whether the scene sits on the monitor or fills the window.
+        for changed in (self.xChanged, self.yChanged, self.widthChanged, self.heightChanged):
+            changed.connect(self._refresh_scene_rect)
 
     @property
     def screen_index(self) -> int:
@@ -439,85 +452,166 @@ class QuickDisplayWindow(QQuickWindow):
         self.queue_hide()
         self.binding_lost.emit(loss)
 
-    def _log_native_window_geometry(self) -> None:
-        """Log the real Win32 rect once the window exists.
+    @property
+    def scene_rect(self) -> QRectF | None:
+        """The window's on-desktop rectangle (its monitor), once the native window exists."""
 
-        Qt's mixed-DPR virtual geometry is not a physical-pixel coordinate
-        system. R7's remaining one-pixel seam therefore cannot be diagnosed by
-        multiplying logical widths by DPR. Compare the actual HWND and monitor
-        rectangles after show instead; this is bounded startup/reinit telemetry
-        and never runs on the render/pointer hot paths.
-        """
+        return self._scene_rect
+
+    def _native_rects(self):
+        """``(hwnd, window, monitor, virtual)`` device rects from Win32, or ``None``."""
+
         import sys
 
         if sys.platform != "win32":
+            return None
+        import ctypes
+        from ctypes import wintypes
+
+        class _Rect(ctypes.Structure):
+            _fields_ = [
+                ("left", wintypes.LONG),
+                ("top", wintypes.LONG),
+                ("right", wintypes.LONG),
+                ("bottom", wintypes.LONG),
+            ]
+
+        class _MonitorInfo(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("rcMonitor", _Rect),
+                ("rcWork", _Rect),
+                ("dwFlags", wintypes.DWORD),
+            ]
+
+        user32 = ctypes.windll.user32
+        user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(_Rect)]
+        user32.GetWindowRect.restype = wintypes.BOOL
+        user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+        user32.MonitorFromWindow.restype = wintypes.HANDLE
+        user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_MonitorInfo)]
+        user32.GetMonitorInfoW.restype = wintypes.BOOL
+        user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+        user32.GetSystemMetrics.restype = ctypes.c_int
+
+        hwnd = wintypes.HWND(int(self.winId()))
+        rect = _Rect()
+        info = _MonitorInfo()
+        info.cbSize = ctypes.sizeof(_MonitorInfo)
+        handle = user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
+        if (
+            not user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            or not handle
+            or not user32.GetMonitorInfoW(handle, ctypes.byref(info))
+        ):
+            return None
+        mr = info.rcMonitor
+        v_left = user32.GetSystemMetrics(76)   # SM_XVIRTUALSCREEN
+        v_top = user32.GetSystemMetrics(77)    # SM_YVIRTUALSCREEN
+        virtual = (
+            v_left,
+            v_top,
+            v_left + user32.GetSystemMetrics(78),  # SM_CXVIRTUALSCREEN
+            v_top + user32.GetSystemMetrics(79),   # SM_CYVIRTUALSCREEN
+        )
+        return (
+            hwnd,
+            (rect.left, rect.top, rect.right, rect.bottom),
+            (mr.left, mr.top, mr.right, mr.bottom),
+            virtual,
+        )
+
+    def _apply_native_compat_geometry(self) -> None:
+        """Place the window on device pixels, then publish the monitor's rect inside it.
+
+        Qt's logical R-63 overscan (``_fullscreen_compat_geometry``) keeps the
+        window from being exact cover, but at a fractional DPR it rounds a pixel
+        onto the shared edge too: Display 0 at 150% was 2561 device pixels wide
+        against its 2560-pixel monitor, overdrawing Display 1. Once the native
+        window exists its rectangle is re-set in device pixels from the real
+        monitor and virtual-desktop rectangles (``compat_native_rect``: the
+        monitor plus overscan on one exterior edge only). Runs on show and
+        screen-geometry edges only; never on render or pointer paths.
+        """
+
+        if self.geometry().getRect() not in self._compat_logical_rects:
+            # Placed by something other than the R-63 screen geometry.
+            self._refresh_scene_rect()
             return
-        try:
+        rects = self._native_rects()
+        if rects is None:
+            if self._native_rects_expected():
+                logger.warning(
+                    "[QUICK_NATIVE_GEOMETRY] native rects unavailable screen=%d; keeping Qt geometry",
+                    self._screen_index,
+                )
+            return
+        hwnd, current, monitor, virtual = rects
+        dpr = float(self.effectiveDevicePixelRatio())
+        desired = compat_native_rect(monitor, virtual, dpr)
+        if current != desired:
             import ctypes
             from ctypes import wintypes
 
-            class _Rect(ctypes.Structure):
-                _fields_ = [
-                    ("left", wintypes.LONG),
-                    ("top", wintypes.LONG),
-                    ("right", wintypes.LONG),
-                    ("bottom", wintypes.LONG),
-                ]
-
-            class _MonitorInfo(ctypes.Structure):
-                _fields_ = [
-                    ("cbSize", wintypes.DWORD),
-                    ("rcMonitor", _Rect),
-                    ("rcWork", _Rect),
-                    ("dwFlags", wintypes.DWORD),
-                ]
-
-            user32 = ctypes.windll.user32
-            user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(_Rect)]
-            user32.GetWindowRect.restype = wintypes.BOOL
-            user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
-            user32.MonitorFromWindow.restype = wintypes.HANDLE
-            user32.GetMonitorInfoW.argtypes = [
-                wintypes.HANDLE, ctypes.POINTER(_MonitorInfo)
+            set_window_pos = ctypes.windll.user32.SetWindowPos
+            set_window_pos.argtypes = [
+                wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, wintypes.UINT,
             ]
-            user32.GetMonitorInfoW.restype = wintypes.BOOL
+            set_window_pos.restype = wintypes.BOOL
+            # SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER
+            if not set_window_pos(
+                hwnd, None, desired[0], desired[1],
+                desired[2] - desired[0], desired[3] - desired[1], 0x0004 | 0x0010 | 0x0200,
+            ):
+                logger.warning(
+                    "[QUICK_NATIVE_GEOMETRY] SetWindowPos failed screen=%d; keeping Qt geometry",
+                    self._screen_index,
+                )
+            rects = self._native_rects() or rects
+            _hwnd, current, monitor, _virtual = rects
+            # Qt's logical view of the corrected native rect is ours too.
+            self._compat_logical_rects.add(self.geometry().getRect())
+        wl, wt, wr, wb = current
+        logger.info(
+            "[QUICK_NATIVE_GEOMETRY] screen=%d generation=%s "
+            "window_device=(%d,%d,%d,%d) monitor_device=(%d,%d,%d,%d) "
+            "overscan_device=(left=%d,top=%d,right=%d,bottom=%d) dpr=%.3f",
+            self._screen_index,
+            self._runtime_generation,
+            wl, wt, wr - wl, wb - wt,
+            monitor[0], monitor[1], monitor[2] - monitor[0], monitor[3] - monitor[1],
+            monitor[0] - wl, monitor[1] - wt, wr - monitor[2], wb - monitor[3],
+            dpr,
+        )
+        self._refresh_scene_rect()
 
-            hwnd = wintypes.HWND(int(self.winId()))
-            window_rect = _Rect()
-            if not user32.GetWindowRect(hwnd, ctypes.byref(window_rect)):
-                return
-            monitor = user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
-            info = _MonitorInfo()
-            info.cbSize = ctypes.sizeof(_MonitorInfo)
-            if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
-                return
-            wr = window_rect
-            mr = info.rcMonitor
-            logger.info(
-                "[QUICK_NATIVE_GEOMETRY] screen=%d generation=%s "
-                "window_device=(%d,%d,%d,%d) monitor_device=(%d,%d,%d,%d) "
-                "overscan_device=(left=%d,top=%d,right=%d,bottom=%d)",
-                self._screen_index,
-                self._runtime_generation,
-                wr.left,
-                wr.top,
-                wr.right - wr.left,
-                wr.bottom - wr.top,
-                mr.left,
-                mr.top,
-                mr.right - mr.left,
-                mr.bottom - mr.top,
-                mr.left - wr.left,
-                mr.top - wr.top,
-                wr.right - mr.right,
-                wr.bottom - mr.bottom,
+    @staticmethod
+    def _native_rects_expected() -> bool:
+        import sys
+
+        return sys.platform == "win32"
+
+    def _refresh_scene_rect(self, *_args: object) -> None:
+        """Publish the window's on-desktop rect: exactly the monitor for the R-63 window.
+
+        The R-63 overscan lies off the virtual desktop and is never visible, so
+        the scene is not laid out on it. ``None`` (fill the window, as before)
+        until the native window exists.
+        """
+
+        rects = self._native_rects() if self.isVisible() else None
+        scene: QRectF | None = None
+        if rects is not None:
+            _hwnd, window, _monitor, virtual = rects
+            visible = visible_rect_in_window(
+                window, virtual, float(self.effectiveDevicePixelRatio())
             )
-        except Exception:
-            logger.debug(
-                "[QUICK_NATIVE_GEOMETRY] native rect unavailable screen=%d",
-                self._screen_index,
-                exc_info=True,
-            )
+            if visible is not None:
+                scene = QRectF(*visible)
+        if scene != self._scene_rect:
+            self._scene_rect = scene
+            self.scene_rect_changed.emit(scene)
 
     def _on_screen_metrics_changed(self, *_args: object) -> None:
         screen = self._bound_screen
@@ -529,7 +623,7 @@ class QuickDisplayWindow(QQuickWindow):
     def _on_window_visibility_changed(self, visible: bool) -> None:
         if not visible or not self._desired_visible or self._close_queued:
             return
-        self._log_native_window_geometry()
+        self._apply_native_compat_geometry()
         self.raise_()
         if self._policy.accepts_focus:
             self.requestActivate()
@@ -590,6 +684,7 @@ class QuickDisplayWindow(QQuickWindow):
             virtual_geometry = QRect()
         adjusted = self._fullscreen_compat_geometry(geometry, virtual_geometry)
         self.setGeometry(adjusted)
+        self._compat_logical_rects = {adjusted.getRect(), self.geometry().getRect()}
 
         # Bounded surface-geometry evidence for the intermittent seam falsifier.
         # Size projections are useful across DPR without pretending Qt's virtual
@@ -613,6 +708,9 @@ class QuickDisplayWindow(QQuickWindow):
             int(round(adjusted.width() * dpr)),
             int(round(adjusted.height() * dpr)),
         )
+        if self.isVisible():
+            # Qt just re-set the logical geometry; restore the device-exact rect.
+            self._apply_native_compat_geometry()
 
     def _queue_meta_call(self, method: str) -> None:
         if not QMetaObject.invokeMethod(
