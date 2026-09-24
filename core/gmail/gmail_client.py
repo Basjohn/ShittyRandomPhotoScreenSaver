@@ -112,22 +112,26 @@ class GmailClient:
 
         import requests
 
+        from core.network.http import bounded_request
+
+        # DNS for every attempt is bounded (core/network) and returns as soon as
+        # the owning runtime generation retires, instead of pinning an IO worker.
+        still_wanted = (lambda: not should_cancel()) if should_cancel is not None else None
+        verb = method.upper()
         with self._api_lock:
             last_err: Optional[Exception] = None
             for attempt in range(MAX_RETRIES):
                 if should_cancel is not None and should_cancel():
                     raise GmailFetchCancelled(endpoint)
                 try:
-                    if method.upper() == "GET":
-                        resp = requests.get(url, headers=req_headers, params=params, timeout=DEFAULT_TIMEOUT)
-                    elif method.upper() == "POST":
-                        resp = requests.post(
-                            url,
-                            headers=req_headers,
-                            params=params,
-                            json=data,
-                            timeout=DEFAULT_TIMEOUT,
-                        )
+                    if verb == "GET":
+                        resp = bounded_request("GET", url, should_continue=still_wanted,
+                                               headers=req_headers, params=params,
+                                               timeout=DEFAULT_TIMEOUT)
+                    elif verb == "POST":
+                        resp = bounded_request("POST", url, should_continue=still_wanted,
+                                               headers=req_headers, params=params, json=data,
+                                               timeout=DEFAULT_TIMEOUT)
                     else:
                         raise ValueError(f"Unsupported HTTP method: {method}")
                     resp.raise_for_status()
