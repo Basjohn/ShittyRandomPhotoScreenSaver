@@ -5,7 +5,7 @@ Free weather API with no API key required.
 - Geocoding: City name → lat/lon
 - Weather: Current weather data
 """
-from typing import Optional, Dict, Any, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 from datetime import datetime
 import time
 import requests
@@ -22,6 +22,19 @@ logger = get_logger(__name__)
 # Optional test/profile override.  The canonical path is resolved lazily by a
 # provider instance so module import never performs filesystem work.
 _WEATHER_CACHE_FILE = None
+
+
+def _weather_get(url: str, *, should_continue: Optional[Callable[[], bool]] = None,
+                 **kwargs: Any) -> requests.Response:
+    """One Open-Meteo GET with bounded DNS (``core/network``), cancelled by the owner's fence.
+
+    ``requests`` alone resolves host names with an unbounded ``getaddrinfo``: a
+    stalled DNS server would pin a worker of the shared IO lane and hold
+    process exit. Otherwise this is plain ``requests.get``.
+    """
+    from core.network.http import bounded_request
+
+    return bounded_request("GET", url, should_continue=should_continue, **kwargs)
 _WEATHER_CACHE_TTL_SECONDS = 1800  # 30 minutes
 
 
@@ -73,7 +86,13 @@ class OpenMeteoProvider:
         99: "Thunderstorm with heavy hail"
     }
     
-    def __init__(self, timeout: int = 10, *, persist_results: bool = True):
+    def __init__(
+        self,
+        timeout: int = 10,
+        *,
+        persist_results: bool = True,
+        should_continue: Optional[Callable[[], bool]] = None,
+    ):
         """
         Initialize Open-Meteo provider.
         
@@ -82,8 +101,11 @@ class OpenMeteoProvider:
             persist_results: Persist successful network samples immediately.
                 WeatherRuntimeService disables this and persists only after its
                 request/location token accepts the result.
+            should_continue: The owner's retirement fence. Every request's DNS
+                lookup is bounded and returns as soon as this turns false.
         """
         self._timeout = timeout
+        self._should_continue = should_continue
         self._persist_results = bool(persist_results)
         self._last_result_was_network = False
         self._cache_file = resolve_weather_provider_cache_path(_WEATHER_CACHE_FILE)
@@ -225,7 +247,8 @@ class OpenMeteoProvider:
                 'format': 'json'
             }
             
-            response = requests.get(self.GEOCODING_URL, params=params, timeout=self._timeout)
+            response = _weather_get(self.GEOCODING_URL, should_continue=self._should_continue,
+                                    params=params, timeout=self._timeout)
             response.raise_for_status()
             
             data = response.json()
@@ -312,7 +335,8 @@ class OpenMeteoProvider:
                 'timezone': 'auto'
             }
             
-            response = requests.get(self.WEATHER_URL, params=params, timeout=self._timeout)
+            response = _weather_get(self.WEATHER_URL, should_continue=self._should_continue,
+                                    params=params, timeout=self._timeout)
             response.raise_for_status()
             
             data = response.json()
@@ -447,7 +471,8 @@ class OpenMeteoProvider:
                 'timezone': 'auto'
             }
             
-            response = requests.get(self.WEATHER_URL, params=params, timeout=self._timeout)
+            response = _weather_get(self.WEATHER_URL, should_continue=self._should_continue,
+                                    params=params, timeout=self._timeout)
             response.raise_for_status()
             
             data = response.json()
