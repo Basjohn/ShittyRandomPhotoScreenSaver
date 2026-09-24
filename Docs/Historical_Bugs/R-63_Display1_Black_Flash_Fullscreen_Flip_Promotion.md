@@ -99,3 +99,30 @@ bounded shared-edge overshoot <= 1px  acceptable residual
 ```
 
 Do **not** remove overscan, force exact-cover geometry, or hard-code this monitor's `2560x1440`, `1.5` DPR, coordinate, display index or neighbour relationship merely to erase the pixel. Any optional J refinement must derive native/device-space coverage from the actual monitor rectangles/DPR and remain correct for different resolutions, origins/orderings and common mixed DPR combinations. A harmless bounded overshoot is preferable to re-admitting exact-cover fullscreen promotion.
+
+## 2026-09-24 Device-Exact Window And Scene (J Refinement)
+
+The accepted <=1px shared-edge residual is removed the way this record required: native geometry is derived in
+device pixels from the real monitor/virtual-desktop rectangles and DPR, with nothing hard-coded.
+
+- `rendering/quick/device_geometry.py` `compat_native_rect`: the monitor plus overscan on one exterior edge only
+  (top, bottom, left, right; an interior display falls back to top), using the smallest overscan (>=1 px) whose
+  extent survives Qt's whole-logical-pixel rounding (otherwise Qt's idea of the surface height differs from the
+  real one and the scene shifts a row). Never exact cover; never past the monitor on any other edge.
+- `QuickDisplayWindow._apply_native_compat_geometry` re-sets the native rectangle with `SetWindowPos` after show and
+  after every Qt geometry application, but only while the window still has the logical geometry its own R-63
+  placement produced: a window placed by anything else (test harness, tool role) is left alone. The logical
+  `_fullscreen_compat_geometry` still applies first (pre-show, and as the fallback when Win32 rectangles fail).
+- The window publishes its on-desktop rectangle (`scene_rect`, `visible_rect_in_window`, re-derived on every
+  window geometry change) and the scene root is laid out on it. The overscan strip lies off the virtual desktop,
+  so for the display window this is exactly its monitor. The wallpaper (processed at monitor size) had been drawn
+  across the whole overscanned window with linear filtering: on the 4K display 2160 rows over 2161.5 device rows,
+  cropping two rows, blending neighbouring rows by up to 50% and dropping one; the startup desktop capture and
+  widgets were shifted the same way. They now map 1:1 to monitor pixels. A monitor enclosed on all four sides
+  keeps the accepted top fallback and today's fill-the-window scene.
+- Operator layout after the change: Display 0 `(0,-2,2560,1442)` (was 2561 wide, overdrawing Display 1),
+  Display 1 `(2560,-2,3840,2162)`.
+- Bars: `tests/test_qtquick_window.py` sweeps 803 layouts (rows both sides, top/bottom/centre aligned, stacks,
+  negative origins, portrait, three-wide, 2x2 and 3x3 grids; ten resolutions) at DPR 1.0-3.0: never exact cover, one
+  outward edge, no neighbour overdrawn, Qt-rounding-safe extent, scene exactly on the monitor's pixels. The
+  render-node smoke and runtime suites keep harness-placed windows untouched.

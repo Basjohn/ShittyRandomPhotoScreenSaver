@@ -599,9 +599,20 @@ class BackgroundRenderNode(QSGRenderNode):
             1,
             round(self._logical_size[1] * self._device_pixel_ratio),
         )
+        # The item need not start at the render target's origin (the scene sits
+        # on the monitor inside the R-63 overscanned window): locate it from its
+        # model matrix. GL rows count up from the bottom.
+        model = self.matrix().data()
+        origin_x = viewport[0] + round(float(model[12]) * self._device_pixel_ratio)
+        origin_y = (
+            viewport[1] + viewport[3]
+            - round(float(model[13]) * self._device_pixel_ratio)
+            - physical_height
+        )
+
         def _read_grid(x_offsets: tuple[int, ...], y_offsets: tuple[int, ...]):
-            sample_xs = tuple(viewport[0] + offset for offset in x_offsets)
-            sample_ys = tuple(viewport[1] + offset for offset in y_offsets)
+            sample_xs = tuple(origin_x + offset for offset in x_offsets)
+            sample_ys = tuple(origin_y + offset for offset in y_offsets)
             return tuple(
                 _pixel_hex(
                     gl.glReadPixels(

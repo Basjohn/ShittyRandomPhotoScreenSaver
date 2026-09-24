@@ -549,6 +549,9 @@ class QuickSceneController(QObject):
 
         content.widthChanged.connect(self._sync_root_width)
         content.heightChanged.connect(self._sync_root_height)
+        scene_rect_changed = getattr(window, "scene_rect_changed", None)
+        if scene_rect_changed is not None:
+            scene_rect_changed.connect(self._sync_root_geometry)
         root.widthChanged.connect(self._sync_background_width)
         root.heightChanged.connect(self._sync_background_height)
         window.activeChanged.connect(self._on_window_active_changed)
@@ -2022,13 +2025,41 @@ class QuickSceneController(QObject):
             raise ValueError(f"invalid visualizer shell color: {value!r}")
         return color
 
+    def _published_scene_rect(self) -> Any:
+        rect = getattr(self._window, "scene_rect", None)
+        if rect is None or rect.width() <= 0.0 or rect.height() <= 0.0:
+            return None
+        return rect
+
+    # The scene lives on the monitor's exact rectangle inside the R-63
+    # overscanned window (published by the window once its native rect is
+    # known), so wallpaper, startup capture and widgets map 1:1 to monitor
+    # pixels. Until then it fills the content item, as before.
     def _sync_root_width(self) -> None:
-        if self._scene_root is not None:
+        if self._scene_root is None:
+            return
+        rect = self._published_scene_rect()
+        if rect is None:
+            self._scene_root.setX(0.0)
             self._scene_root.setWidth(self._window.contentItem().width())
+        else:
+            self._scene_root.setX(rect.x())
+            self._scene_root.setWidth(rect.width())
 
     def _sync_root_height(self) -> None:
-        if self._scene_root is not None:
+        if self._scene_root is None:
+            return
+        rect = self._published_scene_rect()
+        if rect is None:
+            self._scene_root.setY(0.0)
             self._scene_root.setHeight(self._window.contentItem().height())
+        else:
+            self._scene_root.setY(rect.y())
+            self._scene_root.setHeight(rect.height())
+
+    def _sync_root_geometry(self, *_args: object) -> None:
+        self._sync_root_width()
+        self._sync_root_height()
 
     def _sync_background_width(self) -> None:
         if self._scene_root is not None and self._background_item is not None:
