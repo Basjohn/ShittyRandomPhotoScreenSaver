@@ -66,7 +66,7 @@
       "Crumble": true,
       "Diffuse": false,
       "Directional Pixel Accretion": true,
-      "Exploding Tiles": true,
+      "Exploding Tiles": false,
       "Glass Shatter": true,
       "Ink Bloom": false,
       "Melt Drip": true,
@@ -111,10 +111,10 @@
       "smoke_enabled": true
     },
     "crumble": {
-      "crack_complexity": 1.8,
+      "crack_complexity": 11.0,
       "debris": 0.85,
       "depth": 0.45,
-      "piece_count": 35,
+      "piece_count": 45,
       "thickness": 0.15,
       "weighting": "Random Choice"
     },
@@ -151,12 +151,12 @@
       "thickness": 0.65
     },
     "glass_shatter": {
-      "collisions": false,
+      "collisions": true,
       "depth": 1.0,
       "direction": "Random",
       "dispersion": 0.3,
       "refraction": 0.45,
-      "reshatter": false,
+      "reshatter": true,
       "shards": 95,
       "sheen": 0.65,
       "thickness": 0.15,
@@ -169,8 +169,8 @@
       "gloss": 0.6
     },
     "melt_drip": {
-      "depth": 0.7,
-      "detail": 1.0,
+      "depth": 0.1,
+      "detail": 1.4,
       "direction": "Random",
       "gloss": 0.65
     },
@@ -198,19 +198,19 @@
     "pool": {
       "3D Block Spins": true,
       "Blinds": false,
-      "Block Puzzle Flip": true,
+      "Block Puzzle Flip": false,
       "Burn": true,
       "Crossfade": false,
       "Crumble": true,
-      "Diffuse": true,
-      "Directional Pixel Accretion": false,
+      "Diffuse": false,
+      "Directional Pixel Accretion": true,
       "Exploding Tiles": false,
       "Glass Shatter": true,
-      "Ink Bloom": false,
+      "Ink Bloom": true,
       "Melt Drip": true,
       "Particle": true,
       "Ripple": true,
-      "Slide": false,
+      "Slide": true,
       "Warp Dissolve": true,
       "Wipe": true
     },
@@ -1409,7 +1409,7 @@
       "mode_activation": {
         "bubble": true,
         "devcurve": true,
-        "oscilloscope": true,
+        "oscilloscope": false,
         "sine_wave": true,
         "spectrum": true,
         "sphere": true
@@ -1935,7 +1935,7 @@
       "monitor": "1",
       "position": "Top Center",
       "preferred_height": 68,
-      "preferred_width": 380,
+      "preferred_width": 580,
       "show_background": true,
       "text_position": "right_of_bar",
       "track_color": [
