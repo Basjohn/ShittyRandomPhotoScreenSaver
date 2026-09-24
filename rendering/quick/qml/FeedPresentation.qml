@@ -91,8 +91,19 @@ OverlayWidget {
     readonly property bool hasHeaderSubtitle: feedModel.showSubtitle
         && feedModel.feedTitle.length > 0
         && feedModel.feedTitle.toUpperCase() !== feedModel.displayName.toUpperCase()
+    // The subtitle is set in points, so its box comes from the font's real
+    // line height, never ``fontSize`` read as pixels: a box shorter than the
+    // line lets vertically centred glyphs climb out of it toward the pill.
+    readonly property font subtitleFont: Qt.font({
+        "family": feedModel.fontFamily,
+        "pointSize": Math.max(8.5, feedModel.fontSize - 3.0)
+    })
+    FontMetrics {
+        id: subtitleMetrics
+        font: feedRoot.subtitleFont
+    }
     readonly property real subtitleHeight: hasHeaderSubtitle
-        ? Math.max(15.0, feedModel.fontSize * 1.15) : 0.0
+        ? Math.ceil(subtitleMetrics.height) : 0.0
     readonly property real subtitleGap: 2.5
     readonly property real headerHeight: Math.max(
         36.0, headerFrame.implicitHeight * childWidthScale("header")
@@ -229,8 +240,7 @@ OverlayWidget {
                 feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
                 feedRoot.feedModel.textColor.b, feedRoot.feedModel.textColor.a * 0.70
             )
-            font.family: feedRoot.feedModel.fontFamily
-            font.pointSize: Math.max(8.5, feedRoot.feedModel.fontSize - 3.0)
+            font: feedRoot.subtitleFont
             horizontalAlignment: feedRoot.headerFlipped ? Text.AlignRight : Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight

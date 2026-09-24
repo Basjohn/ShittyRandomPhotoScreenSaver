@@ -41,14 +41,7 @@ Before multiplying sources or identities, re-check **durability, content adaptab
 
 ## Custom 1 closure gate
 
-The current Windows regression gate is green, physical freeform artwork/reflow is accepted, tested alternate feeds have exercised both image-sparse and image-bearing content, tested links reached their intended destinations, and the shared hover/highlight language is physically accepted. The remaining Custom 1 gate is deliberately narrower:
-
-- [ ] Complete the current-tree Edit transaction: widget-wide semantic alignment flip, parent resize before save, child move/resize, Reset, bounded Ctrl-Z, lock, Save, Edit re-entry and fresh runtime recreation. No pixel mirroring, stale orientation, snap-back or second editor authority.
-- [ ] Verify **Show Feed Subtitle** off/on plus Save/reopen. The subtitle remains a small bounded line below the shared branded-header pill, not part of the pill itself.
-- [ ] Verify last-good through a fresh offline restart, then ordinary reconnect/conditional refresh without blanking or endpoint crossover.
-- [ ] Disable or replace Custom 1 while source/artwork work is queued/in flight. Prove callback fencing, source pruning, transport retirement and no stale publication/native fault.
-
-Do not reopen already accepted artwork reflow, source-link routing or click-highlight behavior without a reproduced defect.
+Closed 2026-09-24: the Edit transaction, Show Feed Subtitle, offline last-good restart and in-flight disable/replace were physically accepted (see `Current_Plan.md`). Do not reopen accepted artwork reflow, source-link routing, click-highlight or subtitle behaviour without a reproduced defect.
 
 ## Custom 2–4 activation gate
 
