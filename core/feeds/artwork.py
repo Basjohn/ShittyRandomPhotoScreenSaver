@@ -238,7 +238,7 @@ class FeedArtworkCache:
         fetch_bytes: Callable[[str], bytes],
         still_needed: Callable[[], bool],
         max_new: int = MAX_IMAGES_PER_WARM,
-        protected_sources: Iterable[str] = (),
+        protected_sources: Iterable[str] | Callable[[], Iterable[str]] = (),
     ) -> ArtworkWarmResult:
         """Resolve local article art with bounded fallback and content identity.
 
@@ -249,6 +249,12 @@ class FeedArtworkCache:
         earlier claim and lets both stories try their next feed-advertised candidate.
         Work remains source-event-owned and bounded; no article-page scraping,
         presentation-time hashing, timer or second worker is introduced.
+
+        ``protected_sources`` may be a callable: eviction then protects what is
+        published *when it prunes*, not what was published when this warm was
+        submitted, so another source that publishes meanwhile (possibly an
+        older cached file) is never evicted from under its card. Every file this
+        warm selects has its age refreshed, so eviction is least-recently-used.
         """
         local: dict[str, str] = {}
         selected_url: dict[str, str] = {}
@@ -411,10 +417,16 @@ class FeedArtworkCache:
                 except (OSError, ValueError, TypeError):
                     continue
 
+        for candidate in set(selected_url.values()):
+            try:
+                os.utime(self._file(candidate))
+            except OSError:
+                pass
         if created:
             if not still_needed():
                 raise ArtworkCancelled()
-            self.prune(protected=(*local.values(), *protected_sources))
+            live = protected_sources() if callable(protected_sources) else protected_sources
+            self.prune(protected=(*local.values(), *live))
         shared_candidates = sum(1 for count in candidate_users.values() if count > 1)
         if is_feeds_logging_enabled():
             logger.info(

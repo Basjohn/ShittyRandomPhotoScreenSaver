@@ -21,7 +21,6 @@
 Custom 2–4 remain dormant until the same shared codepath is proven with more than one active source. Do **not** clone providers, QML, editor state, schedulers or persistence owners.
 
 - [ ] Exercise two simultaneous independent endpoints through refresh, cancellation, one-source retirement and reactivation. Retiring A must not cancel, delay or publish into B; identical endpoints must continue to share one source transaction where privacy/cache identity permits it.
-- [ ] Prove artwork eviction/current-generation protection with simultaneous sources, including a stalled/cancelled source and source retirement during bounded image work.
 - [ ] Add deterministic Custom 2–4 monogram collision ordinals through the existing cached vector-monogram path, then admit the remaining fixed IDs through the same descriptor/runtime/QML component.
 
 ### Independent Games You Follow verification

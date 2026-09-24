@@ -89,6 +89,15 @@ class _FeedFamilyOwner:
         self._deadline_cancel: Callable[[], None] | None = None
         self._deadline_token = 0
         self._retired = False
+        # Every local image currently published by any source of this owner.
+        # Replaced whole on the GUI thread; artwork workers read it when they
+        # evict, so a source that publishes meanwhile is protected too.
+        self._published_artwork: frozenset[str] = frozenset()
+
+    def _refresh_published_artwork(self) -> None:
+        self._published_artwork = frozenset(
+            uri for state in self._states.values() if state.last_result is not None
+            for _item_id, uri in state.last_result.local_artwork_by_item)
 
     @property
     def is_retired(self) -> bool:
@@ -131,6 +140,7 @@ class _FeedFamilyOwner:
                    for lease in self._leases):
             if self._states.get(state.spec.cache_key) is state:
                 del self._states[state.spec.cache_key]
+                self._refresh_published_artwork()
 
     def _state_for(self, lease: "FeedRuntimeLease") -> _SourceState:
         config = lease.config
@@ -301,7 +311,7 @@ class _FeedFamilyOwner:
     @staticmethod
     def _warm_artwork(
         result: FeedRefreshResult, *, cancel: Event,
-        protected: tuple[str, ...],
+        protected: Callable[[], frozenset[str]],
     ) -> FeedRefreshResult:
         """One event-admitted follow-on job, never a per-image timer/owner.
 
@@ -348,11 +358,14 @@ class _FeedFamilyOwner:
         cache_key = state.spec.cache_key
         owner_ref = weakref.ref(self)
         base_artwork_result = state.last_result if artwork_only else None
-        # Capture protection on the GUI thread rather than reading mutable
-        # family/lease state from a worker while a different source retires.
-        protected = tuple(uri for current in self._states.values()
-                          if current.last_result is not None
-                          for _item_id, uri in current.last_result.local_artwork_by_item)
+        # Eviction protection is read when the worker prunes, from the owner's
+        # immutable published set (replaced whole on the GUI thread): never a
+        # submit-time copy that misses another source publishing meanwhile,
+        # and never a worker read of mutable family/lease state.
+
+        def protected() -> frozenset[str]:
+            owner = owner_ref()
+            return owner._published_artwork if owner is not None else frozenset()
 
         def _work() -> FeedRefreshResult:
             owner = owner_ref()
@@ -455,6 +468,7 @@ class _FeedFamilyOwner:
                 and previous.local_artwork_by_item):
                 result = replace(result, local_artwork_by_item=previous.local_artwork_by_item)
             state.last_result = result
+            self._refresh_published_artwork()
             if not artwork_only and not cache_only:
                 # A 304 or an identical ordinary refresh must not reissue the
                 # same optional image requests at every source cadence. Only a
