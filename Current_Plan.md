@@ -22,7 +22,6 @@ Custom 2–4 remain dormant until the same shared codepath is proven with more t
 
 - [ ] Exercise two simultaneous independent endpoints through refresh, cancellation, one-source retirement and reactivation. Retiring A must not cancel, delay or publish into B; identical endpoints must continue to share one source transaction where privacy/cache identity permits it.
 - [ ] Prove artwork eviction/current-generation protection with simultaneous sources, including a stalled/cancelled source and source retirement during bounded image work.
-- [ ] Exercise native DNS/connect stall retirement and confirm the existing bounded cancellation/lifetime rules are sufficient before multiplying runtime leases.
 - [ ] Add deterministic Custom 2–4 monogram collision ordinals through the existing cached vector-monogram path, then admit the remaining fixed IDs through the same descriptor/runtime/QML component.
 
 ### Independent Games You Follow verification
@@ -62,6 +61,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 Pre-existing reds and runtime anomalies found while gating the runtime audit. Each stays here until fixed or explicitly retired; do not treat them as noise in a gate.
 
+- [ ] **Unbounded DNS in the other IO-lane network families (found 2026-09-24 gating FEEDS).** Reddit, Weather, Gmail, Steam and Media network work still resolves host names with plain `getaddrinfo`. A stalled lookup there pins one of the four IO workers, blocks the engine's exit wait (`engine_lifecycle`, 5 s) and keeps the process alive until the OS gives up, because `ThreadPoolExecutor` workers are joined at interpreter exit (the comment there assuming the OS kills stuck threads is wrong). FEEDS is fixed through `core/feeds/bounded_dns.py`; each family should adopt it at its own transport, not by weakening the exit barrier.
 - [ ] **Stale Reddit title/age gap bar (pre-existing).** `tests/test_qtquick_reddit_child_committed_reopen_scene.py` (2 tests) expects a 6 px title-to-AGO gap; `RedditPresentation.qml` `titleAgeGap` floors it at 8 px (`max(8, 9 / presentationScale)`). Fails identically on a clean HEAD worktree (2026-09-24). Decide which is intended, then fix the other.
 - [ ] **Spectrum extreme-viewport smoothness (pre-existing, not an audit regression).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Pre-dates the audit; do not reopen VZ-04 over it. Watch item until investigated separately.
 - Evidence runs: 2026-09-22 22:53–22:59 — no native fault; the replacement-construction watchdog armed 13× and never fired. 2026-09-23 D1 soak 09:07–10:40 — no native fault, no QML message, watchdog armed 6× and never fired; one `viz_geometry_mismatches` increment at 10:38:32, which is the fail-closed stale-presentation guard working, not a defect. 2026-09-23 16:53–17:06 acceptance run (two processes, each with a Settings round-trip) — no native fault, replacement watchdog never fired. Note: starting a new `--frame-trace` session replaces the previous session's trace segments; copy them first when a trace must survive a restart.
