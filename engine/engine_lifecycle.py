@@ -289,11 +289,20 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
     # Shutdown ThreadManager to stop all IO/compute threads
     if exit_app and engine.thread_manager:
         logger.info("Shutting down ThreadManager...")
+        # Process exit fence: network lookups still in progress return at once
+        # and new ones are refused, so no IO worker is left waiting on a
+        # stalled DNS server (core/network/bounded_dns.py).
+        from core.network.bounded_dns import close_network_admission
+
+        close_network_admission()
         try:
-            # wait=True so non-daemon pool threads are joined.
-            # Active tasks were already cancelled above so this should
-            # complete quickly. Stuck threads would be killed by OS on
-            # process exit anyway, but joining avoids lingering processes.
+            # wait=True so pool threads are joined here, within the timeout.
+            # A worker still running afterwards is NOT killed by the OS at
+            # process exit: ThreadPoolExecutor workers are non-daemon and the
+            # interpreter joins them, so a stuck one keeps the process alive
+            # after the saver has visibly closed. Network work therefore has
+            # to be bounded at its own transport (bounded DNS, socket timeouts,
+            # retirement fences); this barrier must not be weakened instead.
             shutdown_complete = engine.thread_manager.shutdown(
                 wait=True,
                 timeout=5.0,

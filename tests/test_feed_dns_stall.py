@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from core.feeds import bounded_dns
-from core.feeds.bounded_dns import DnsLookupError, resolve_bounded
+from core.network import bounded_dns
+from core.network.bounded_dns import DnsLookupError, resolve_bounded
 from core.feeds.transport import FeedHttpTransport, FeedTransportError
 
 REPO = Path(__file__).resolve().parents[1]

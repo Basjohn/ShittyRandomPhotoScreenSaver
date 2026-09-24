@@ -17,7 +17,7 @@ from typing import Callable
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from .artwork import ArtworkCancelled, MAX_DOWNLOAD_BYTES, safe_artwork_url
-from .bounded_dns import resolve_bounded
+from core.network.bounded_dns import resolve_bounded
 
 MAX_ARTWORK_REDIRECTS = 3
 CONNECT_TIMEOUT_SECONDS = 4.0
