@@ -41,6 +41,20 @@ def _clear_reddit_session_sources():
     _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY.clear()
 
 
+
+@pytest.fixture(autouse=True)
+def _isolated_reddit_rate_limiter():
+    """Tests here record blocked responses in the process-wide limiter; never leak them.
+
+    Without this, a later file in the same process (the Reddit runtime tests)
+    sees Reddit as blocked and its fetches are skipped.
+    """
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    RedditRateLimiter.reset()
+    yield
+    RedditRateLimiter.reset()
+
 def test_normalize_reddit_provider_defaults_to_rss() -> None:
     assert normalize_reddit_provider_id(None) == "rss"
     assert normalize_reddit_provider_id("unknown") == "rss"
