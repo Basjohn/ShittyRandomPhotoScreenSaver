@@ -48,6 +48,8 @@ def probe(label: str, url: str, *, max_items: int = 50) -> dict:
         "etag": bool(result.etag_present),
         "last_modified": bool(result.last_modified_present),
         "bytes": result.response_bytes,
+        "feed_url": redacted_url_for_log(result.feed_url or url),
+        "via": result.via,
     })
     return payload
 

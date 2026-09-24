@@ -5,8 +5,9 @@ NEWS categories are already reserved by neutral family identity but remain
 fully dormant until their later slices are implemented.
 
 Network work is explicit only: editing a URL never probes it.  TEST FEED runs
-the production bounded transport/parser off the GUI thread and does not mutate
-the runtime cache.
+the production bounded transport/parser/discovery off the GUI thread and does
+not mutate the runtime cache.  A site address is kept as typed: the runtime
+resolves it to the site's feed itself and can find it again if it moves.
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import Shiboken
 
+from core.feeds.normalization import redacted_url_for_log
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
@@ -95,11 +97,19 @@ def _set_view_combo(tab: "WidgetsTab", value: object) -> None:
     tab._set_combo_text(tab.feeds_custom1_view_mode, label)
 
 
+_PROBE_FAILURE_TEXT = {
+    "FeedDiscoveryError": "no RSS or Atom feed found at this address",
+    "FeedEmptyError": "the feed has no items right now",
+    "FeedTransportError": "the address could not be reached",
+    "ValueError": "not a valid http(s) address",
+}
+
+
 def _probe_summary(result: object) -> tuple[bool, str]:
     ok = bool(getattr(result, "ok", False))
     if not ok:
         failure = str(getattr(result, "failure", "") or "Feed could not be validated")
-        return False, f"FAILED · {failure[:180]}"
+        return False, f"FAILED · {_PROBE_FAILURE_TEXT.get(failure, failure)[:180]}"
     fmt = str(getattr(result, "format", "feed") or "feed").upper()
     count = int(getattr(result, "item_count", 0) or 0)
     actionable = int(getattr(result, "actionable_count", 0) or 0)
@@ -111,18 +121,24 @@ def _probe_summary(result: object) -> tuple[bool, str]:
             newest_text = " · newest " + datetime.fromtimestamp(int(newest)).strftime("%Y-%m-%d %H:%M")
         except Exception:
             newest_text = ""
-    return True, f"OK · {fmt} · {count} items · {actionable} links · {images} with images{newest_text}"
+    found_text = ""
+    if bool(getattr(result, "discovered", False)):
+        found_text = " · feed found at " + redacted_url_for_log(str(getattr(result, "feed_url", "") or ""))
+    return True, (
+        f"OK · {fmt} · {count} items · {actionable} links · {images} with images"
+        f"{newest_text}{found_text}"
+    )
 
 
 def _test_feed(tab: "WidgetsTab") -> None:
     url = str(tab.feeds_custom1_url.text() or "").strip()
     if not url:
-        tab.feeds_custom1_test_status.setText("Enter a feed URL first.")
+        tab.feeds_custom1_test_status.setText("Enter a feed or website address first.")
         return
     generation = int(getattr(tab, "_feeds_probe_generation", 0)) + 1
     tab._feeds_probe_generation = generation
     tab.feeds_custom1_test_button.setEnabled(False)
-    tab.feeds_custom1_test_status.setText("Testing with bounded production parser…")
+    tab.feeds_custom1_test_status.setText("Testing (finding the site's feed if needed)…")
     tab_ref = weakref.ref(tab)
 
     def _work():
@@ -166,8 +182,9 @@ def build_feeds_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     root.setSpacing(14)
 
     intro = QLabel(
-        "CUSTOM feeds accept RSS or Atom. Runtime is cache-first and preserves the last good "
-        "snapshot across temporary source failures. URL testing is explicit and never runs while typing."
+        "CUSTOM feeds accept an RSS or Atom feed address, or a website address whose feed is found "
+        "automatically. Runtime is cache-first and preserves the last good snapshot across temporary "
+        "source failures. URL testing is explicit and never runs while typing."
     )
     intro.setWordWrap(True)
     root.addWidget(intro)
@@ -202,7 +219,7 @@ def build_feeds_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     row, _ = add_aligned_row(source_layout, "Feed URL:", label_width=_LABEL_WIDTH)
     tab.feeds_custom1_url = QLineEdit()
     tab.feeds_custom1_url.setMaxLength(8192)
-    tab.feeds_custom1_url.setPlaceholderText("https://example.com/feed.xml")
+    tab.feeds_custom1_url.setPlaceholderText("https://example.com or https://example.com/feed.xml")
     tab.feeds_custom1_url.setText(tab._default_str("feeds_custom_1", "feed_url"))
     tab.feeds_custom1_url.editingFinished.connect(tab._save_settings)
     row.addWidget(tab.feeds_custom1_url, 1)

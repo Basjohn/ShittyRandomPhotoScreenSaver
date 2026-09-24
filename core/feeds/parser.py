@@ -27,6 +27,15 @@ class FeedParseError(ValueError):
     pass
 
 
+class FeedEmptyError(FeedParseError):
+    """A recognised RSS/Atom document that currently has no usable entries.
+
+    Distinct from a payload that is not a feed at all (an HTML page, an error
+    body): an empty feed is still the right endpoint, so it must not trigger
+    feed discovery; it is an ordinary retained-last-good source failure.
+    """
+
+
 class _ImageCollector(HTMLParser):
     def __init__(self, *, base_url: str = "") -> None:
         super().__init__(convert_charrefs=True)
@@ -315,6 +324,8 @@ def parse_feed_bytes(payload: bytes, *, source_url: str, max_items: int = 50) ->
     if not raw_entries:
         bozo = getattr(parsed, "bozo_exception", None)
         detail = type(bozo).__name__ if bozo is not None else "no entries"
+        if getattr(parsed, "version", ""):
+            raise FeedEmptyError(f"feed has no usable entries ({detail})")
         raise FeedParseError(f"feed has no usable entries ({detail})")
 
     items: list[FeedItem] = []
@@ -356,7 +367,7 @@ def parse_feed_bytes(payload: bytes, *, source_url: str, max_items: int = 50) ->
         ))
 
     if not items:
-        raise FeedParseError("feed entries could not be normalized")
+        raise FeedEmptyError("feed entries could not be normalized")
     feed = getattr(parsed, "feed", {})
     feed_map = feed if isinstance(feed, Mapping) else {}
     home_url = normalized_action_url(feed_map.get("link"), base_url=source_url)

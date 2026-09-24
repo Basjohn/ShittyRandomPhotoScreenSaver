@@ -10,7 +10,7 @@ FEEDS is one bounded widget family. Four CUSTOM slots have stable IDs (`feeds_cu
 
 ## Layer boundaries
 
-`core/feeds/transport.py` owns one bounded HTTP transaction. `core/feeds/parser.py` owns RSS/Atom bytes-to-model normalization. `core/feeds/cache.py` owns the durable versioned last-good record. `core/feeds/source.py` owns one cache-first refresh transaction and persisted backoff decision. `core/feeds/projection.py` owns pure snapshot-to-presentation policy. `core/feeds/probe.py` is the one explicit viability seam used by Settings TEST FEED and the operator probation tool. None of those core layers owns Qt objects, QML, periodic timers or Settings UI.
+`core/feeds/transport.py` owns one bounded HTTP transaction. `core/feeds/discovery.py` owns resolving a website address to its verified feed. `core/feeds/parser.py` owns RSS/Atom bytes-to-model normalization. `core/feeds/cache.py` owns the durable versioned last-good record. `core/feeds/source.py` owns one cache-first refresh transaction and persisted backoff decision. `core/feeds/projection.py` owns pure snapshot-to-presentation policy. `core/feeds/probe.py` is the one explicit viability seam used by Settings TEST FEED and the operator probation tool. None of those core layers owns Qt objects, QML, periodic timers or Settings UI.
 
 `widgets/feed_runtime.py` owns generation-scoped scheduling/source leases. `rendering/quick/widgets/feeds.py` owns retained presentation projection/action admission; `FeedPresentation.qml` is presentation only. Its `ShadowedText` instances use the component's supported `wrap` boolean instead of the native `Text.wrapMode` property; a native `QQmlComponent` compile gate is mandatory for any QML property changes because an invalid custom property can prevent the *entire screensaver engine* from initializing. The package root intentionally has no eager parser/network imports. Importing Feed configuration/source in a clean interpreter does not import `requests` or `feedparser`. Cache-only `FeedSource` admission also keeps parser and HTTP transport construction lazy, so a fresh last-good snapshot can paint without creating a network session.
 
@@ -23,6 +23,21 @@ FEEDS is one bounded widget family. Four CUSTOM slots have stable IDs (`feeds_cu
 - Final redirect URL is retained and becomes the base for relative item/home/media/enclosure URLs.
 - Feed query strings/fragments may contain private tokens. Runtime/tool logging uses redacted scheme/host/path form.
 - `feedparser` receives bytes; it is never allowed to perform production network I/O itself.
+
+## Feed discovery
+
+A CUSTOM address may be a feed or a website (`https://arstechnica.com`, or a bare `arstechnica.com`, which means HTTPS; `feed:` and protocol-relative forms are accepted, nothing else widens the HTTP/S rule). There is **no per-site knowledge**: every candidate comes from a published convention and is accepted only after the production transport/parser fetches it and finds a feed with items. In order:
+
+1. the address itself, when it already serves a feed (a feed served with a wrong `text/html` type is still sniffed as a feed);
+2. feeds the page advertises: the RFC 8288 `Link` header, then HTML `<link rel="alternate" type="application/rss+xml|atom+xml|rdf+xml">` in document order (honouring `<base href>`), with comment feeds demoted; oEmbed/JSON alternates are ignored;
+3. feed-shaped `<a href>` links on that page;
+4. platform-convention paths (`feed`, `rss`, `feed.xml`, `atom.xml`, `rss.xml`, `index.xml`) inside the address's own directory. A sub-path never walks up to the host root, so an address on a shared platform host cannot resolve to the platform's site-wide feed. This is the route for a home page behind a bot wall whose feed is open (Ars Technica's home page answers 405 with a human-verification page; `/feed` is RSS). Bot walls and challenges are never bypassed and the User-Agent is not disguised.
+
+One HTML page met on the way (a feed index page) may contribute its own links. Discovery is bounded to 8 fetches and a 20 s wall clock, checks cancellation between candidates, and stops at the first verified feed. A public page cannot steer the saver at a private/loopback literal address. Offline/network failure, 408, 429 and 5xx never start extra requests; a bot-walled (403/405) or missing page may.
+
+The configured address stays the user's identity (cache key, endpoint fingerprint, sharing); the verified feed is stored on the cache record as `resolved_url` together with *its* ETag/Last-Modified. Steady refreshes are one conditional request to that feed, exactly as for a directly entered feed. Discovery runs again only when the stored feed is gone (404/410) or no longer serves a feed; other failures are ordinary retained-last-good failures under backoff. The seeds for rediscovery are the configured address and the last-good feed's own site link, so a feed that moves is found again from the site that published it, including a directly entered feed that later dies. An empty but real feed never triggers discovery. Settings TEST FEED uses the same resolver and reports the feed it found. `resolved_url` is an optional field inside cache schema 1: older records read as unresolved and older readers ignore it.
+
+Verified on 2026-09-24 against live sites: arstechnica.com (conventional path), The Verge, BBC News, GitHub Blog, xkcd (advertised), Polygon (anchor), NYT (feed index page one hop away), Hacker News, IGN, Python Insider and nyaa resolve in 2–4 fetches; Reuters and GameSpot bot-wall their feed paths too and correctly fail as `FeedDiscoveryError`.
 
 The legacy wallpaper RSS downloader now uses this bounded transport for its document fetch. Its existing image-primary parser/cache/scheduler remain separate until an explicit parity-preserving consolidation slice.
 

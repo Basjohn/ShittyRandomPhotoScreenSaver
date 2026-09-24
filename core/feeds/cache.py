@@ -20,6 +20,7 @@ from .models import (
     FeedSnapshot,
 )
 from .normalization import safe_cache_fragment
+from .transport import validate_feed_url
 
 
 SCHEMA_VERSION = 1
@@ -112,6 +113,16 @@ def _document(row: Mapping[str, Any]) -> FeedDocument:
     )
 
 
+def _resolved_url(value: object) -> str:
+    """A stored feed resolution; an unusable one is dropped, never fatal."""
+    if type(value) is not str or not value:
+        return ""
+    try:
+        return validate_feed_url(value)
+    except ValueError:
+        return ""
+
+
 def _record(payload: Mapping[str, Any]) -> FeedCacheRecord:
     if payload.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("unsupported feed cache schema")
@@ -147,6 +158,7 @@ def _record(payload: Mapping[str, Any]) -> FeedCacheRecord:
         etag=_optional_str(payload.get("etag"), max_len=1024),
         last_modified=_optional_str(payload.get("last_modified"), max_len=1024),
         schema_version=SCHEMA_VERSION,
+        resolved_url=_resolved_url(payload.get("resolved_url")),
     )
 
 
