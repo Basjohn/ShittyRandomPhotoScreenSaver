@@ -1025,6 +1025,14 @@ def main(*, entrypoint: str = "main"):
             _restore_windows_timer_resolution(1)
             logger.debug("Windows timer resolution restored to default")
     
+    # Process exit fence for every network family (the engine closes it earlier
+    # on its own exit path; Settings-only runs reach it here). Lookups still in
+    # progress return at once, so pool workers joined at interpreter exit are
+    # never held by a stalled DNS server.
+    from core.network.bounded_dns import close_network_admission
+
+    close_network_admission()
+
     # Stop the independent binary frame tracer before ordinary logger teardown.
     # It owns no logger handler and therefore has its own explicit durability edge.
     if frame_trace is not None:

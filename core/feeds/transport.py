@@ -6,7 +6,7 @@ expanding without limit.  Feed URLs may contain private query tokens; logs must
 use ``redacted_url_for_log`` rather than raw URLs.
 
 Every hop's host name (or its proxy's) is resolved through
-``core.feeds.bounded_dns`` before ``requests`` connects, so a stalled DNS server
+``core.network.bounded_dns`` before ``requests`` connects, so a stalled DNS server
 costs at most ``dns_timeout`` and honours cancellation instead of pinning a
 shared IO worker and holding process exit. Redirects are therefore followed
 here, one bounded hop at a time, rather than inside ``requests``.
@@ -18,7 +18,8 @@ import re
 from typing import TYPE_CHECKING, Any, Callable, Mapping
 from urllib.parse import urljoin, urlparse
 
-from .bounded_dns import DnsLookupError, resolve_bounded
+from core.network.bounded_dns import DnsLookupError, resolve_bounded
+from core.network.http import requests_connection_host
 
 if TYPE_CHECKING:
     import requests
@@ -131,27 +132,10 @@ class FeedHttpTransport:
     def _alive(self) -> bool:
         return True if self.should_continue is None else bool(self.should_continue())
 
-    def _connection_host(self, url: str) -> tuple[str, int]:
-        """The host the connection for ``url`` will actually resolve: its proxy's, if one applies."""
-        proxy = ""
-        proxies = dict(getattr(self.session, "proxies", None) or {})
-        if getattr(self.session, "trust_env", False):
-            import requests.utils
-
-            if requests.utils.getproxies():
-                proxies = {**requests.utils.get_environ_proxies(url), **proxies}
-        if proxies:
-            import requests.utils
-
-            proxy = requests.utils.select_proxy(url, proxies) or ""
-        target = urlparse(proxy if "://" in proxy else (f"http://{proxy}" if proxy else url))
-        default_port = 443 if target.scheme.casefold() in {"https", "wss"} else 80
-        return target.hostname or "", target.port or default_port
-
     def _resolve_hop(self, url: str) -> None:
         if self._resolve is None:
             return
-        host, port = self._connection_host(url)
+        host, port = requests_connection_host(url, session=self.session)
         if not host:
             return
         try:

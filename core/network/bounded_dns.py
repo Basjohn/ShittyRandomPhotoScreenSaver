@@ -1,19 +1,28 @@
-"""Name resolution with a deadline and cancellation, for the feed transports.
+"""Name resolution with a deadline and cancellation for every IO-lane network family.
 
 ``socket.getaddrinfo`` cannot be interrupted and no socket timeout covers it: a
 stalled DNS server holds it for the operating system's whole retry schedule
-(seconds to tens of seconds on Windows). Feed work runs on the shared IO lane
-(four workers, shared with Media, Weather, Reddit, Gmail and Steam), so an
-unbounded lookup would pin a worker, ignore retirement and, at exit, keep the
-process alive, because the interpreter joins thread-pool workers.
+(seconds to tens of seconds on Windows). Network work runs on the shared IO lane
+(four workers, shared by FEEDS, Reddit, Weather, Gmail, Steam and Media), so an
+unbounded lookup pins a worker, ignores retirement and, at exit, keeps the
+process alive, because the interpreter joins thread-pool workers (measured
+2026-09-24: a 12 s stall held the engine's 5 s exit wait and then the process
+for 12.2 s).
 
 Here the lookup runs on a short-lived daemon thread while the caller waits in
-short slices for the answer, its deadline or cancellation. An abandoned lookup
-finishes on its own and its answer is dropped; a daemon thread never holds
-process exit. Lookups in progress are capped, so a persistent DNS outage cannot
-pile up threads: at the cap a new lookup fails at once as a transient network
-failure. A successful lookup also leaves the answer in the operating system's
-resolver cache for the connection that follows it.
+short slices for the answer, its deadline, its own cancellation or the process
+exit fence. An abandoned lookup finishes on its own and its answer is dropped;
+a daemon thread never holds process exit. Lookups in progress are capped, so a
+persistent DNS outage cannot pile up threads: at the cap a new lookup fails at
+once as a transient network failure. A successful lookup also leaves the
+answer in the operating system's resolver cache for the connection that
+follows it.
+
+``close_network_admission()`` is the one-way process exit fence. The engine
+closes it immediately before its thread-manager shutdown (and ``main`` at the
+end of the process), so lookups in progress return at once and new ones are
+refused; the exit barrier itself is unchanged, it simply has nothing stalled
+left to wait for.
 """
 from __future__ import annotations
 
@@ -24,10 +33,12 @@ import time
 from typing import Any, Callable
 
 MAX_LOOKUPS_IN_PROGRESS = 8
+DEFAULT_DNS_TIMEOUT = 4.0
 _WAIT_SLICE_SECONDS = 0.05
 
 _lock = threading.Lock()
 _in_progress = 0
+_admission_closed = threading.Event()
 
 
 class DnsLookupError(OSError):
@@ -39,11 +50,20 @@ def lookups_in_progress() -> int:
         return _in_progress
 
 
+def close_network_admission() -> None:
+    """Process exit: fail lookups in progress at once and refuse new ones (one-way)."""
+    _admission_closed.set()
+
+
+def network_admission_closed() -> bool:
+    return _admission_closed.is_set()
+
+
 def resolve_bounded(
     host: str,
     port: int,
     *,
-    timeout: float,
+    timeout: float = DEFAULT_DNS_TIMEOUT,
     should_continue: Callable[[], bool] | None = None,
     getaddrinfo: Callable[..., Any] | None = None,
     family: int = 0,
@@ -56,6 +76,8 @@ def resolve_bounded(
     """
     global _in_progress
     getaddrinfo = getaddrinfo or socket.getaddrinfo
+    if _admission_closed.is_set():
+        raise DnsLookupError("network admission closed for process exit")
     try:
         ipaddress.ip_address(str(host).strip("[]"))
     except ValueError:
@@ -93,6 +115,8 @@ def resolve_bounded(
         remaining = deadline - time.monotonic()
         if done.wait(max(0.0, min(_WAIT_SLICE_SECONDS, remaining))):
             break
+        if _admission_closed.is_set():
+            raise DnsLookupError("network admission closed for process exit")
         if should_continue is not None and not should_continue():
             raise DnsLookupError("DNS lookup cancelled")
         if time.monotonic() >= deadline:
@@ -103,4 +127,12 @@ def resolve_bounded(
     return outcome["answer"]
 
 
-__all__ = ["DnsLookupError", "MAX_LOOKUPS_IN_PROGRESS", "lookups_in_progress", "resolve_bounded"]
+__all__ = [
+    "DEFAULT_DNS_TIMEOUT",
+    "DnsLookupError",
+    "MAX_LOOKUPS_IN_PROGRESS",
+    "close_network_admission",
+    "lookups_in_progress",
+    "network_admission_closed",
+    "resolve_bounded",
+]
