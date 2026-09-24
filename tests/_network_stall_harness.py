@@ -58,6 +58,12 @@ ran = threading.Event()
 manager.submit_io_task(ran.set, category="other_family")
 facts["lane_free"] = ran.wait(10.0)
 facts["lane_free_s"] = round(time.monotonic() - retired_at, 2)
+# Every retired request must finish (some families serialise requests behind
+# their own lock), not merely free one worker, before the fence is re-armed.
+while len(outcomes) < 4 and time.monotonic() - retired_at < 10.0:
+    time.sleep(0.01)
+facts["retired_all_s"] = round(time.monotonic() - retired_at, 2)
+facts["retired_outcomes"] = list(outcomes)
 
 {rearm}
 for _ in range(4):
@@ -103,7 +109,9 @@ def assert_lane_and_exit_bounded(facts: dict, *, retirement_fenced: bool = True,
     assert facts["lane_free"], facts
     limit = 1.0 if retirement_fenced else dns_deadline_s + 1.0
     assert facts["lane_free_s"] < limit, facts
+    # All four stalled requests of phase 1 finished within the bound.
+    assert len(facts["retired_outcomes"]) == 4, facts
+    assert facts["retired_all_s"] < limit + 0.5, facts
     assert facts["shutdown_s"] < 1.0, facts
     # The 30 s lookups are still sleeping on daemon threads: exit must not wait.
     assert facts["lifetime_s"] < 20.0, facts
-    assert len(facts["outcomes"]) == 8, facts

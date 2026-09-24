@@ -29,7 +29,7 @@ def test_imap_mark_as_read_uses_uid_store(monkeypatch) -> None:
 
     conn = FakeImapActionConn()
     client = GmailImapClient("fake@example.com", "fake_app_password")
-    monkeypatch.setattr(client, "_connect", lambda: conn)
+    monkeypatch.setattr(client, "_connect", lambda *_a, **_k: conn)
 
     assert client.mark_as_read("42") is True
     assert conn.selected == [('"INBOX"', False)]
@@ -42,7 +42,7 @@ def test_imap_mark_as_unread_uses_uid_store(monkeypatch) -> None:
 
     conn = FakeImapActionConn()
     client = GmailImapClient("fake@example.com", "fake_app_password")
-    monkeypatch.setattr(client, "_connect", lambda: conn)
+    monkeypatch.setattr(client, "_connect", lambda *_a, **_k: conn)
 
     assert client.mark_as_unread("42") is True
     assert conn.selected == [('"INBOX"', False)]
@@ -55,7 +55,7 @@ def test_imap_archive_removes_inbox_label(monkeypatch) -> None:
 
     conn = FakeImapActionConn()
     client = GmailImapClient("fake@example.com", "fake_app_password")
-    monkeypatch.setattr(client, "_connect", lambda: conn)
+    monkeypatch.setattr(client, "_connect", lambda *_a, **_k: conn)
 
     assert client.archive_message("42") is True
     assert conn.uid_calls == [("STORE", "42", "-X-GM-LABELS", r"(\Inbox)")]
@@ -68,14 +68,14 @@ def test_imap_spam_and_trash_use_gmail_labels(monkeypatch) -> None:
     trash_conn = FakeImapActionConn()
     client = GmailImapClient("fake@example.com", "fake_app_password")
 
-    monkeypatch.setattr(client, "_connect", lambda: spam_conn)
+    monkeypatch.setattr(client, "_connect", lambda *_a, **_k: spam_conn)
     assert client.spam_message("42") is True
     assert spam_conn.uid_calls == [
         ("STORE", "42", "+X-GM-LABELS", r"(\Spam)"),
         ("STORE", "42", "-X-GM-LABELS", r"(\Inbox)"),
     ]
 
-    monkeypatch.setattr(client, "_connect", lambda: trash_conn)
+    monkeypatch.setattr(client, "_connect", lambda *_a, **_k: trash_conn)
     assert client.trash_message("42") is True
     assert trash_conn.uid_calls == [
         ("STORE", "42", "+X-GM-LABELS", r"(\Trash)"),
@@ -87,7 +87,7 @@ def test_imap_action_rejects_non_numeric_uid(monkeypatch) -> None:
     from core.gmail.gmail_imap import GmailImapClient
 
     client = GmailImapClient("fake@example.com", "fake_app_password")
-    monkeypatch.setattr(client, "_connect", lambda: (_ for _ in ()).throw(AssertionError("should not connect")))
+    monkeypatch.setattr(client, "_connect", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("should not connect")))
 
     assert client.archive_message("gmail-message-id") is False
 
@@ -157,7 +157,7 @@ def test_imap_list_messages_preserves_recent_uid_order(monkeypatch) -> None:
 
     conn = FakeListConn()
     client = GmailImapClient("fake@example.com", "fake_app_password")
-    monkeypatch.setattr(client, "_connect", lambda: conn)
+    monkeypatch.setattr(client, "_connect", lambda *_a, **_k: conn)
 
     messages = client.list_messages(label_ids=["INBOX"], max_results=2)
 
@@ -202,7 +202,7 @@ def test_imap_list_messages_raises_on_partial_fetch_failure(monkeypatch) -> None
 
     conn = FakeListConn()
     client = GmailImapClient("fake@example.com", "fake_app_password")
-    monkeypatch.setattr(client, "_connect", lambda: conn)
+    monkeypatch.setattr(client, "_connect", lambda *_a, **_k: conn)
 
     with pytest.raises(RuntimeError, match="partial fetch failure"):
         client.list_messages(label_ids=["INBOX"], max_results=2)

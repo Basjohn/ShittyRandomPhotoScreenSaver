@@ -66,3 +66,37 @@ def test_settings_geocode_lookups_retire_when_the_query_is_superseded():
         rearm='current[0] = "Lond"',
     )
     assert_lane_and_exit_bounded(facts)
+
+
+def test_gmail_imap_fetch_retires_with_the_runtime_generation():
+    """IMAP (App Password) is the operator's Gmail backend."""
+    facts = run_family_stall(
+        category="gmail_fetch",
+        setup="""
+            from core.gmail.gmail_imap import GmailImapClient
+            alive = [True]   # GmailRuntime._fetch_is_retired, passed as should_cancel
+            client = GmailImapClient("reader@example.test", "not-a-real-app-password")
+        """,
+        work='client.list_messages(label_ids=["INBOX"], max_results=5, should_cancel=lambda: not alive[0])',
+        retire="alive[0] = False",
+        rearm="alive[0] = True",
+    )
+    assert_lane_and_exit_bounded(facts)
+
+
+def test_gmail_api_client_retires_with_the_runtime_generation():
+    """The still-selectable OAuth/API backend uses the same fence."""
+    facts = run_family_stall(
+        category="gmail_fetch",
+        setup="""
+            from types import SimpleNamespace
+            from core.gmail.gmail_client import GmailClient
+            alive = [True]
+            oauth = SimpleNamespace(credentials=SimpleNamespace(access_token="not-a-real-token"))
+            client = GmailClient(oauth)
+        """,
+        work='client.list_messages(label_ids=["INBOX"], max_results=5, should_cancel=lambda: not alive[0])',
+        retire="alive[0] = False",
+        rearm="alive[0] = True",
+    )
+    assert_lane_and_exit_bounded(facts)

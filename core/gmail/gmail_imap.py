@@ -65,8 +65,24 @@ class GmailImapClient:
         self._lock = threading.Lock()
         self._supports_gmail_extensions = False
 
-    def _connect(self) -> imaplib.IMAP4_SSL:
-        """Create and authenticate an IMAP connection."""
+    def _connect(self, should_cancel: Optional[Callable[[], bool]] = None) -> imaplib.IMAP4_SSL:
+        """Create and authenticate an IMAP connection.
+
+        ``imaplib`` resolves the host with an unbounded ``getaddrinfo``; resolve
+        it first through ``core/network`` (bounded, cancelled with the caller's
+        fence and at process exit) so the connection reuses the cached answer.
+        """
+        from core.network.bounded_dns import DnsLookupError, resolve_bounded
+
+        try:
+            resolve_bounded(
+                IMAP_HOST, IMAP_PORT,
+                should_continue=(lambda: not should_cancel()) if should_cancel is not None else None,
+            )
+        except DnsLookupError:
+            if should_cancel is not None and should_cancel():
+                raise GmailFetchCancelled("imap:connect")
+            raise
         conn = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, timeout=IMAP_TIMEOUT)
         conn.login(self._email, self._password)
         self._supports_gmail_extensions = self._detect_gmail_extensions(conn)
@@ -122,7 +138,7 @@ class GmailImapClient:
         with self._lock:
             conn = None
             try:
-                conn = self._connect()
+                conn = self._connect(should_cancel)
                 status, _ = conn.select(f'"{mailbox}"', readonly=True)
                 if status != "OK":
                     logger.warning("[GMAIL_IMAP] Failed to select mailbox %s", mailbox)

@@ -27,6 +27,18 @@ from core.windows.dpapi import encrypt_user_data
 
 logger = get_logger(__name__)
 
+
+def _oauth_post(url: str, **kwargs):
+    """One Google OAuth POST with bounded DNS (``core/network``).
+
+    ``requests`` alone resolves the host with an unbounded ``getaddrinfo``; a
+    stalled DNS server would hold the IO worker (or Settings) and, at exit, the
+    process. The lookup here is bounded and released by the process exit fence.
+    """
+    from core.network.http import bounded_request
+
+    return bounded_request("POST", url, **kwargs)
+
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.metadata",
 ]
@@ -529,7 +541,6 @@ class GmailOAuthManager(QObject):
         Qt signals are emitted back on the UI thread via run_on_ui_thread.
         """
         try:
-            import requests
             data = {
                 "grant_type": "authorization_code",
                 "client_id": self._client_id,
@@ -538,7 +549,7 @@ class GmailOAuthManager(QObject):
                 "redirect_uri": redirect_uri or self._redirect_uri,
                 "code_verifier": pkce_verifier or self._pkce_verifier,
             }
-            resp = requests.post(GOOGLE_TOKEN_URL, data=data, timeout=30)
+            resp = _oauth_post(GOOGLE_TOKEN_URL, data=data, timeout=30)
             resp.raise_for_status()
             token_data = resp.json()
             self._process_token_response(token_data)
@@ -577,14 +588,13 @@ class GmailOAuthManager(QObject):
             logger.warning("[GMAIL_OAUTH] Cannot refresh: no refresh token available")
             return
         try:
-            import requests
             data = {
                 "grant_type": "refresh_token",
                 "client_id": self._client_id,
                 "client_secret": self._client_secret or "",
                 "refresh_token": self._credentials.refresh_token,
             }
-            resp = requests.post(GOOGLE_TOKEN_URL, data=data, timeout=30)
+            resp = _oauth_post(GOOGLE_TOKEN_URL, data=data, timeout=30)
             resp.raise_for_status()
             token_data = resp.json()
             self._credentials.access_token = token_data["access_token"]
@@ -604,9 +614,8 @@ class GmailOAuthManager(QObject):
         if not self._credentials:
             return False
         try:
-            import requests
             data = {"token": self._credentials.access_token}
-            resp = requests.post(GOOGLE_REVOKE_URL, data=data, timeout=30)
+            resp = _oauth_post(GOOGLE_REVOKE_URL, data=data, timeout=30)
             if resp.status_code != 200:
                 logger.warning("[GMAIL_OAUTH] Revoke request returned %s", resp.status_code)
             else:
