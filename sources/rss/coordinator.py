@@ -1,69 +1,100 @@
-"""
-RSSCoordinator - State machine, dynamic limits, orchestration.
+"""RSSCoordinator - the wallpaper-feed pool owner: acquisition and session rotation.
 
-Responsibilities:
-    - State machine: IDLE → LOADING → LOADED → ERROR
-    - Dynamic download budget based on cache size vs startup target
-    - Orchestrate cache, parser, downloader, and health tracker
-    - Provide clean API for screensaver_engine (replaces raw RSSSource usage)
-    - No time.sleep() in main flow - delegates to downloader's interruptible waits
-    - ThreadManager integration for async loading
-    - ResourceManager integration via RSSCache
+Wallpaper feeds are a separate product from the FEEDS widget (an image pool
+for wallpaper rotation, not stories), but they acquire through the same feed
+core:
+
+- each feed is a ``core.feeds.source.FeedSource``: conditional requests,
+  standards-based discovery, persisted backoff for every feed, a last-good
+  document, bounded DNS; structured non-feed sources (JSON image listings)
+  are read by ``sources.rss.json_listing`` by shape;
+- each image is fetched by ``sources.rss.image_fetch`` through the shared
+  vetted public-image stream, judged by its real pixels: admitted only when it
+  fills every connected display in fill mode without upscaling, and refused
+  from its header (a few kilobytes) otherwise. Refusals are remembered.
+
+Session rotation keeps a full pool fresh: once per process session (not per
+settings rebuild) up to a third of the pool target is replaced, stale images
+(older than ``STALE_AFTER_HOURS``) oldest first. An old image is retired only
+after its replacement is on disk, so an offline session never shrinks the
+pool; images that cannot fill the current displays are hidden at once. Retired
+files are deleted at the next session start.
+
+There is no scheduler, timer or thread here: the engine's existing IO-lane task
+and background refresh drive passes, one at a time.
 """
-import threading
+from __future__ import annotations
+
 from enum import Enum, auto
-from datetime import datetime
+import math
 from pathlib import Path
-from typing import List, Optional, Callable, Set
+import shutil
+import threading
+import time
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
+from urllib.parse import urlparse
 
-from sources.base_provider import ImageMetadata, ImageSourceType
-from sources.rss.constants import (
-    DEFAULT_RSS_FEEDS,
-    TARGET_TOTAL_IMAGES,
-    MAX_PER_FEED_DOWNLOAD,
-    MIN_PER_FEED_DOWNLOAD,
-    MAX_REDDIT_FEEDS_PER_STARTUP,
-    DEFAULT_TIMEOUT_SECONDS,
-    DEFAULT_MAX_CACHE_SIZE_MB,
-    MIN_WALLPAPER_REFRESH_TARGET,
-    FALLBACK_MAX_PER_FEED_DOWNLOAD,
-    HIGH_QUALITY_FALLBACK_DOMAINS,
-    get_source_priority,
-)
-from sources.rss.cache import RSSCache
-from sources.rss.parser import RSSParser, ParsedEntry
-from sources.rss.downloader import RSSDownloader
-from sources.rss.health import FeedHealthTracker
-from core.feeds.normalization import redacted_url_for_log
+from core.constants import MIN_WALLPAPER_HEIGHT, MIN_WALLPAPER_WIDTH
+from core.feeds.cache import FeedCacheStore
+from core.feeds.models import FeedDocument, FeedImageCandidate, FeedItem, FeedSourceSpec
+from core.feeds.normalization import endpoint_fingerprint, redacted_url_for_log
+from core.feeds.transport import normalize_feed_address
 from core.logging.logger import get_logger
+from sources.base_provider import ImageMetadata
+from sources.rss.cache import PoolEntry, RSSCache, url_key
+from sources.rss.constants import (
+    DEFAULT_MAX_CACHE_SIZE_MB,
+    DEFAULT_RSS_FEEDS,
+    DEFAULT_TIMEOUT_SECONDS,
+    FEED_MAX_ITEMS,
+    HOST_MIN_INTERVAL_SECONDS,
+    MAX_IMAGE_ATTEMPTS_PER_PASS,
+    SESSION_REPLACE_FRACTION,
+    STALE_AFTER_HOURS,
+    TARGET_TOTAL_IMAGES,
+)
+from sources.rss.image_fetch import fills_displays, image_size_of_file
 
 logger = get_logger(__name__)
 
+_ROTATION_LOCK = threading.Lock()
+_ROTATED_THIS_PROCESS: set[str] = set()
+_LOADED_THIS_PROCESS: set[str] = set()
+
+
+def _first_load_this_process(cache_dir: Path) -> bool:
+    """True for the first pool load of a process (a new session), False for rebuilds."""
+    key = str(Path(cache_dir).resolve())
+    with _ROTATION_LOCK:
+        if key in _LOADED_THIS_PROCESS:
+            return False
+        _LOADED_THIS_PROCESS.add(key)
+        return True
+
+
+def _claim_session_rotation(cache_dir: Path) -> bool:
+    """True once per process for a pool directory (settings rebuilds reuse the claim)."""
+    key = str(Path(cache_dir).resolve())
+    with _ROTATION_LOCK:
+        if key in _ROTATED_THIS_PROCESS:
+            return False
+        _ROTATED_THIS_PROCESS.add(key)
+        return True
+
 
 class RSSState(Enum):
-    """RSS coordinator state machine."""
     IDLE = auto()
     LOADING = auto()
     LOADED = auto()
     ERROR = auto()
 
 
+class _PassStopped(Exception):
+    """Shutdown or retirement ended a pass early."""
+
+
 class RSSCoordinator:
-    """Orchestrates the full RSS image pipeline.
-
-    Usage from screensaver_engine::
-
-        coord = RSSCoordinator(
-            feed_urls=[...],
-            thread_manager=self.thread_manager,
-            resource_manager=self.resource_manager,
-            shutdown_check=lambda: not self._shutting_down,
-        )
-        # Instant cached images
-        cached = coord.get_cached_images()
-        # Async load new images (runs on IO pool)
-        coord.load_async(on_images=self._on_rss_images)
-    """
+    """Owns the wallpaper pool: cache, feed sources, image acquisition, rotation."""
 
     def __init__(
         self,
@@ -74,60 +105,64 @@ class RSSCoordinator:
         save_to_disk: bool = False,
         save_directory: Optional[Path] = None,
         target_total_images: int = TARGET_TOTAL_IMAGES,
-        min_refresh_target: int = MIN_WALLPAPER_REFRESH_TARGET,
         thread_manager=None,
         resource_manager=None,
         shutdown_check: Optional[Callable[[], bool]] = None,
+        required_size: Optional[Tuple[int, int]] = None,
     ):
-        self.feed_urls = feed_urls or list(DEFAULT_RSS_FEEDS.values())
-        self._state_lock = threading.Lock()  # protects _state reads/writes
+        urls = feed_urls if feed_urls is not None else list(DEFAULT_RSS_FEEDS.values())
+        self.feed_urls: List[str] = list(dict.fromkeys(
+            normalize_feed_address(url) for url in urls if str(url or "").strip()))
+        self._state_lock = threading.Lock()
         self._state = RSSState.IDLE
         self._thread_manager = thread_manager
         self._shutdown_check = shutdown_check
+        self._timeout = max(5, int(timeout))
         self._target_total_images = max(1, int(target_total_images))
-        self._min_refresh_target = max(1, min(int(min_refresh_target), self._target_total_images))
-
-        # Save-to-disk config
-        self._save_to_disk = save_to_disk
-        self._save_directory = Path(save_directory) if save_directory else None
-        if self._save_to_disk and self._save_directory:
+        self._required = self._valid_required(required_size)
+        self._save_directory = Path(save_directory) if save_to_disk and save_directory else None
+        if self._save_directory is not None:
             try:
                 self._save_directory.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
+            except OSError as e:
                 logger.error(f"[RSS_COORD] Failed to create save dir: {e}")
-                self._save_to_disk = False
+                self._save_directory = None
 
-        # Sub-modules
-        self._cache = RSSCache(
-            cache_dir=cache_dir,
-            max_cache_size_mb=max_cache_size_mb,
-            resource_manager=resource_manager,
-        )
-        self._downloader = RSSDownloader(
-            timeout=timeout,
-            shutdown_check=shutdown_check,
-        )
-        self._health = FeedHealthTracker()
-
-        # NOTE: load_from_disk() is NOT called here to avoid blocking
-        # the UI thread.  Call warm_cache() explicitly or let load_async()
-        # do it on the IO pool.
+        self._cache = RSSCache(cache_dir=cache_dir, max_cache_size_mb=max_cache_size_mb,
+                               resource_manager=resource_manager)
+        self._feed_store: Optional[FeedCacheStore] = None
+        self._sources: Dict[str, object] = {}
+        self._stop = threading.Event()
+        self._pass_lock = threading.Lock()
+        self._retired_lock = threading.Lock()
+        self._retired_paths: List[str] = []
+        self._host_last_request: Dict[str, float] = {}
         self._cache_warmed = False
-
-        logger.info(f"[RSS_COORD] Initialised: {len(self.feed_urls)} feeds")
+        logger.info("[RSS_COORD] Initialised: %d feeds, admission >= %dx%d (fill, no upscaling)",
+                    len(self.feed_urls), *self._required)
 
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _valid_required(size) -> Tuple[int, int]:
+        try:
+            width, height = int(size[0]), int(size[1])
+        except (TypeError, ValueError, IndexError):
+            return MIN_WALLPAPER_WIDTH, MIN_WALLPAPER_HEIGHT
+        if width <= 0 or height <= 0:
+            return MIN_WALLPAPER_WIDTH, MIN_WALLPAPER_HEIGHT
+        return width, height
 
     @property
     def state(self) -> RSSState:
         with self._state_lock:
             return self._state
 
-    def _set_state(self, s: RSSState) -> None:
+    def _set_state(self, state: RSSState) -> None:
         with self._state_lock:
-            self._state = s
+            self._state = state
 
     @property
     def cache_dir(self) -> Path:
@@ -137,343 +172,315 @@ class RSSCoordinator:
     def cached_count(self) -> int:
         return self._cache.count
 
+    @property
+    def required_size(self) -> Tuple[int, int]:
+        return self._required
+
     # ------------------------------------------------------------------
-    # Public API
+    # Public API (engine)
     # ------------------------------------------------------------------
 
     def warm_cache(self) -> int:
-        """Load cached images from disk.  Safe to call from any thread.
-
-        Returns count of images loaded.  Idempotent.
-        """
-        if self._cache_warmed:
-            return self._cache.count
-        n = self._cache.load_from_disk()
-        self._cache_warmed = True
-        return n
+        """Load the pool from disk (cheap: an index read, no image probing). Idempotent."""
+        if not self._cache_warmed:
+            self._cache.load_from_disk(purge_retired=_first_load_this_process(self._cache.cache_dir))
+            self._cache_warmed = True
+        return self._cache.count
 
     def get_cached_images(self) -> List[ImageMetadata]:
-        """Return images currently in cache (no network)."""
-        return list(self._cache.images)
+        """Pool images that can fill the displays (unmeasured legacy files included)."""
+        return [entry.metadata for entry in self._cache.entries if self._admissible(entry)]
 
     def get_all_images(self) -> List[ImageMetadata]:
-        """Return all images (cached + freshly downloaded)."""
-        return list(self._cache.images)
+        return self.get_cached_images()
+
+    def take_retired_paths(self) -> List[str]:
+        """Paths retired since the last call; the engine removes them from its queue."""
+        with self._retired_lock:
+            paths, self._retired_paths = self._retired_paths, []
+        return paths
 
     def load_async(self, on_images: Optional[Callable[[List[ImageMetadata]], None]] = None) -> None:
-        """Start async loading on the IO thread pool.
-
-        Args:
-            on_images: Callback invoked with newly downloaded images (on IO thread).
-        """
+        """Session pass on the IO lane: warm, rotate, top up; ``on_images`` gets new images."""
         if self._thread_manager is None:
-            logger.warning("[RSS_COORD] No ThreadManager, falling back to sync load")
-            self.warm_cache()
-            new_images = self._load_feeds()
+            new_images = self.load_sync()
             if on_images:
                 on_images(new_images)
             return
 
         def _task():
-            self.warm_cache()  # disk I/O on IO thread, not UI thread
-            new_images = self._load_feeds()
+            new_images = self.load_sync()
             if on_images:
-                on_images(new_images)  # always call so engine can pre-load cache
+                on_images(new_images)  # always called so the engine can pre-load the pool
 
         self._thread_manager.submit_io_task(_task, category="rss_startup_load")
 
     def load_sync(self) -> List[ImageMetadata]:
-        """Synchronous load - blocks until complete. Returns new images."""
         self.warm_cache()
-        return self._load_feeds()
+        return self._run_pass(self.feed_urls, session=True)
 
     def refresh_single_feed(self, feed_url: str) -> List[ImageMetadata]:
-        """Refresh a single feed (for background refresh). Returns new images."""
-        return self._process_single_feed(
-            feed_url,
-            max_images=MAX_PER_FEED_DOWNLOAD,
-            existing_paths=self._cache.existing_paths(),
-        )
+        """Background top-up from one feed (conditional; no rotation). Returns new images."""
+        url = normalize_feed_address(feed_url)
+        return self._run_pass([url] if url in self.feed_urls else [], session=False)
 
     def set_shutdown_check(self, cb: Optional[Callable[[], bool]]) -> None:
         self._shutdown_check = cb
-        self._downloader.set_shutdown_check(cb)
 
     def request_stop(self) -> None:
-        """Signal all sub-modules to abort immediately."""
-        self._downloader.request_stop()
-
-    def get_feed_health(self) -> dict:
-        return self._health.get_status(self.feed_urls)
+        """Abort passes at their next check (interruptible waits wake at once)."""
+        self._stop.set()
 
     # ------------------------------------------------------------------
-    # Core loading logic
+    # Pass
     # ------------------------------------------------------------------
 
-    def _load_feeds(self) -> List[ImageMetadata]:
-        """Load images from all feeds respecting dynamic limits.
+    def _alive(self) -> bool:
+        if self._stop.is_set():
+            return False
+        return True if self._shutdown_check is None else bool(self._shutdown_check())
 
-        Returns list of newly downloaded ImageMetadata (not cached ones).
-        """
+    def _admissible(self, entry: PoolEntry) -> bool:
+        if entry.width is None or entry.height is None:
+            return True
+        return fills_displays(entry.width, entry.height, self._required)
+
+    def _run_pass(self, feeds: List[str], *, session: bool) -> List[ImageMetadata]:
+        if not self._pass_lock.acquire(blocking=False):
+            logger.debug("[RSS_COORD] A pass is already running; skipped")
+            return []
         self._set_state(RSSState.LOADING)
-
-        # Dynamic budget
-        cached = self._cache.count
-        target_total = self._target_total_images
-        new_needed = max(0, target_total - cached)
-
-        if new_needed == 0:
-            logger.info(
-                f"[RSS_COORD] Cache full ({cached} >= {target_total}), "
-                f"skipping all downloads"
-            )
-            self._set_state(RSSState.LOADED)
-            return []
-
-        num_feeds = len(self.feed_urls)
-        if num_feeds == 0:
-            self._set_state(RSSState.LOADED)
-            return []
-
-        per_feed = max(MIN_PER_FEED_DOWNLOAD, new_needed // num_feeds)
-        per_feed = min(per_feed, MAX_PER_FEED_DOWNLOAD)
-
-        logger.info(
-            f"[RSS_COORD] Budget: cached={cached}, target={target_total}, "
-            f"new_needed={new_needed}, per_feed={per_feed}, feeds={num_feeds}"
-        )
-
-        # Sort by priority (highest first), shuffle within same priority for variety
-        sorted_urls = sorted(self.feed_urls, key=get_source_priority, reverse=True)
-
-        # Limit Reddit feeds
-        reddit_count = 0
-        urls_to_process = []
-        for url in sorted_urls:
-            is_reddit = "reddit.com" in url.lower()
-            if is_reddit:
-                if reddit_count >= MAX_REDDIT_FEEDS_PER_STARTUP:
-                    logger.debug("[RSS_COORD] Skipping Reddit feed (limit): %s", redacted_url_for_log(url))
-                    continue
-                reddit_count += 1
-            urls_to_process.append(url)
-
-        existing_paths = self._cache.existing_paths()
-        all_new: List[ImageMetadata] = []
-        total_budget_remaining = new_needed
-
-        for i, feed_url in enumerate(urls_to_process):
-            if not self._should_continue():
-                logger.info("[RSS_COORD] Shutdown requested, aborting load")
-                break
-
-            if total_budget_remaining <= 0:
-                logger.info(f"[RSS_COORD] Budget exhausted after {i} feeds")
-                break
-
-            # Skip unhealthy feeds
-            if self._health.should_skip(feed_url):
-                logger.debug("[RSS_COORD] Skipping unhealthy feed: %s", redacted_url_for_log(feed_url))
-                continue
-
-            feed_limit = min(per_feed, total_budget_remaining)
-            logger.info(
-                "[RSS_COORD] Feed %d/%d: %s (limit=%d)",
-                i + 1,
-                len(urls_to_process),
-                redacted_url_for_log(feed_url),
-                feed_limit,
-            )
-
-            new_images = self._process_single_feed(feed_url, feed_limit, existing_paths)
-
-            if new_images:
-                all_new.extend(new_images)
-                total_budget_remaining -= len(new_images)
-                # Update existing paths for dedup across feeds
-                for img in new_images:
-                    if img.local_path:
-                        existing_paths.add(str(img.local_path))
-                self._health.record_success(feed_url)
-            else:
-                is_reddit = "reddit.com" in feed_url.lower()
-                if is_reddit:
-                    self._health.record_failure(feed_url)
-
-        # Fallback: ensure we have a minimum pool of wallpaper-quality images by
-        # leaning on high-quality feeds (Bing/NASA) when other feeds underfill.
-        all_new = self._top_up_with_high_quality_feeds(
-            all_new,
-            urls_to_process,
-            existing_paths,
-        )
-
-        # Cleanup cache if we added images and cache is large enough
-        if all_new and self._cache.count > 20:
-            self._cache.cleanup()
-
-        self._set_state(RSSState.LOADED)
-        logger.info(
-            f"[RSS_COORD] Complete: {len(all_new)} new images from {len(urls_to_process)} feeds"
-        )
-        return all_new
-
-    def _process_single_feed(
-        self,
-        feed_url: str,
-        max_images: int,
-        existing_paths: Set[str],
-    ) -> List[ImageMetadata]:
-        """Download and parse a single feed. Returns list of new ImageMetadata."""
-        if not self._should_continue():
-            return []
-
-        request_url, mode, original_url = RSSParser.resolve_feed_mode(feed_url)
-        entries: List[ParsedEntry] = []
-
-        try:
-            if mode == "json":
-                data = self._downloader.fetch_json(request_url)
-                if data is not None:
-                    entries = RSSParser.parse_json(data, original_url, max_entries=max_images)
-            else:
-                feed_data = self._downloader.fetch_rss(request_url)
-                if feed_data is not None:
-                    if feed_data.bozo:
-                        logger.warning("[RSS_COORD] Feed has parsing errors: %s", redacted_url_for_log(feed_url))
-                    entries = RSSParser.parse_rss(feed_data, feed_url, max_entries=max_images)
-        except Exception as e:
-            logger.error(
-                "[RSS_COORD] Feed fetch/parse failed: %s - %s",
-                redacted_url_for_log(feed_url),
-                type(e).__name__,
-            )
-            return []
-
-        if not entries:
-            return []
-
-        # Download images from parsed entries
         new_images: List[ImageMetadata] = []
-        for entry in entries:
-            if not self._should_continue():
-                break
-            if len(new_images) >= max_images:
-                break
-
-            # Dedup check
-            expected_path = str(self._cache.get_cache_path(entry.image_url))
-            if expected_path in existing_paths:
-                continue
-
-            cached_path = self._downloader.download_image(
-                entry.image_url, self._cache.cache_dir
-            )
-            if not cached_path:
-                continue
-
-            # Save to permanent storage if configured
-            if self._save_to_disk and self._save_directory:
-                self._downloader.download_image_to_save_dir(cached_path, self._save_directory)
-
-            meta = ImageMetadata(
-                source_type=ImageSourceType.RSS,
-                source_id=feed_url,
-                image_id=entry.image_url.split("/")[-1],
-                local_path=cached_path,
-                url=entry.image_url,
-                title=entry.title,
-                description=entry.description,
-                author=entry.author,
-                created_date=entry.created_date,
-                fetched_date=datetime.utcnow(),
-                file_size=cached_path.stat().st_size if cached_path.exists() else 0,
-                format=cached_path.suffix[1:].upper() if cached_path.suffix else "UNKNOWN",
-            )
-
-            self._cache.add(meta)
-            self._cache.mark_cached(entry.image_url)
-            new_images.append(meta)
-
+        try:
+            replace: List[PoolEntry] = []
+            if session and _claim_session_rotation(self._cache.cache_dir):
+                replace = self._begin_session_rotation()
+            missing = max(0, self._target_total_images - self._cache.count)
+            wanted = missing + len(replace)
+            if wanted and feeds:
+                logger.info("[RSS_COORD] Pass: pool=%d target=%d missing=%d replacing=%d feeds=%d",
+                            self._cache.count, self._target_total_images, missing, len(replace), len(feeds))
+                for entry in self._acquire(feeds, wanted):
+                    new_images.append(entry.metadata)
+                    if missing > 0:
+                        missing -= 1
+                    elif replace:
+                        self._retire([replace.pop(0)])
+            self._cache.cleanup()
+            self._set_state(RSSState.LOADED)
+        except _PassStopped:
+            logger.info("[RSS_COORD] Pass stopped (shutdown/retirement)")
+            self._set_state(RSSState.LOADED)
+        except Exception:
+            logger.exception("[RSS_COORD] Pass failed")
+            self._set_state(RSSState.ERROR)
+        finally:
+            self._cache.save_state()
+            self._release_transports()
+            self._pass_lock.release()
         if new_images:
-            logger.info(
-                "[RSS_COORD] +%d images from %s",
-                len(new_images),
-                redacted_url_for_log(feed_url),
-            )
-
+            logger.info("[RSS_COORD] Pass complete: %d new images", len(new_images))
         return new_images
 
+    def _begin_session_rotation(self) -> List[PoolEntry]:
+        """Measure unmeasured files, hide undersized ones, pick stale ones to replace."""
+        for entry in list(self._cache.entries):
+            if entry.width is None or entry.height is None:
+                measured = image_size_of_file(entry.path)
+                if measured is not None:
+                    self._cache.record_size(entry, *measured[0])
+        undersized = [e for e in self._cache.entries if not self._admissible(e)]
+        if undersized:
+            logger.info("[RSS_COORD] Hiding %d pool images that cannot fill %dx%d",
+                        len(undersized), *self._required)
+            self._retire(undersized)
+        cutoff = time.time() - STALE_AFTER_HOURS * 3600.0
+        stale = sorted((e for e in self._cache.entries if e.fetched_at < cutoff),
+                       key=lambda e: e.fetched_at)
+        quota = max(1, math.ceil(self._target_total_images / SESSION_REPLACE_FRACTION))
+        return stale[:quota]
+
+    def _retire(self, entries: List[PoolEntry]) -> None:
+        paths = self._cache.retire(entries)
+        if paths:
+            with self._retired_lock:
+                self._retired_paths.extend(paths)
+
     # ------------------------------------------------------------------
-    # Fallback helpers
+    # Acquisition
     # ------------------------------------------------------------------
 
-    def _top_up_with_high_quality_feeds(
-        self,
-        current_new: List[ImageMetadata],
-        processed_urls: List[str],
-        existing_paths: Set[str],
-    ) -> List[ImageMetadata]:
-        if len(current_new) >= self._min_refresh_target:
-            return current_new
+    def _acquire(self, feeds: List[str], wanted: int) -> Iterator[PoolEntry]:
+        """New pool entries, taken round-robin across feeds, until ``wanted`` or bounds."""
+        streams = []
+        for feed_url in feeds:
+            if not self._alive():
+                raise _PassStopped()
+            document = self._document(feed_url)
+            if document is not None:
+                streams.append((feed_url, iter(document.items)))
+        attempts = [0]
+        produced = 0
+        while streams and produced < wanted:
+            for feed_url, items in list(streams):
+                item = next(items, None)
+                if item is None:
+                    streams.remove((feed_url, items))
+                    continue
+                entry = self._acquire_item(feed_url, item, attempts)
+                if entry is not None:
+                    produced += 1
+                    yield entry
+                    if produced >= wanted:
+                        return
+                if attempts[0] >= MAX_IMAGE_ATTEMPTS_PER_PASS:
+                    logger.info("[RSS_COORD] Attempt bound reached (%d)", attempts[0])
+                    return
 
-        if self._cache.count >= self._target_total_images:
-            return current_new
-        budget_remaining = max(0, self._target_total_images - self._cache.count)
-        if budget_remaining == 0:
-            return current_new
+    def _ordered_candidates(self, item: FeedItem) -> List[FeedImageCandidate]:
+        """Declared-large first, then unsized; an entry declared too small is skipped whole."""
+        declared = [c for c in item.images if c.width and c.height]
+        large = sorted((c for c in declared if fills_displays(c.width, c.height, self._required)),
+                       key=lambda c: -(c.width * c.height))
+        if declared and not large and item.images[0] in declared:
+            return []  # its own image is too small; variants (thumbnails) are smaller still
+        unsized = [c for c in item.images if not (c.width and c.height)]
+        return large + unsized
 
-        deficit = min(
-            self._min_refresh_target - len(current_new),
-            budget_remaining,
-        )
-        if deficit <= 0:
-            return current_new
+    def _acquire_item(self, feed_url: str, item: FeedItem, attempts: List[int]) -> Optional[PoolEntry]:
+        from core.feeds.artwork import ArtworkCancelled
+        from core.feeds.artwork_transport import ArtworkFetchError
+        from sources.rss.image_fetch import WallpaperRejected, fetch_wallpaper
 
-        fallback_feeds = [
-            url for url in processed_urls if self._is_high_quality_fallback_feed(url)
-        ]
-        if not fallback_feeds:
-            return current_new
-
-        logger.info(
-            "[RSS_COORD] Fallback: need %s more wallpapers, pulling extra from high-quality feeds",
-            deficit,
-        )
-
-        for feed_url in fallback_feeds:
-            if not self._should_continue() or deficit <= 0:
-                break
-
-            feed_limit = min(FALLBACK_MAX_PER_FEED_DOWNLOAD, deficit)
-            logger.info(
-                "[RSS_COORD] Fallback feed: %s (limit=%s)",
-                redacted_url_for_log(feed_url),
-                feed_limit,
-            )
-
-            extra_images = self._process_single_feed(feed_url, feed_limit, existing_paths)
-            if not extra_images:
+        for candidate in self._ordered_candidates(item):
+            if self._cache.has_url(candidate.url):
+                return None  # this entry is already in the pool
+            if self._cache.is_rejected(candidate.url, self._required):
                 continue
+            if attempts[0] >= MAX_IMAGE_ATTEMPTS_PER_PASS or not self._alive():
+                if not self._alive():
+                    raise _PassStopped()
+                return None
+            attempts[0] += 1
+            self._pace(candidate.url)
+            try:
+                result = fetch_wallpaper(candidate.url, self._cache.cache_dir,
+                                         file_stem=url_key(candidate.url),
+                                         still_needed=self._alive, required=self._required)
+            except WallpaperRejected as rejected:
+                self._cache.remember_rejected(candidate.url, rejected.size)
+                if rejected.size is not None and candidate is item.images[0]:
+                    return None  # its own image is too small; variants are smaller still
+                continue
+            except ArtworkCancelled:
+                raise _PassStopped()
+            except ArtworkFetchError as exc:
+                logger.debug("[RSS_COORD] Image fetch failed %s: %s",
+                             redacted_url_for_log(candidate.url), exc)
+                continue
+            except Exception as exc:  # one odd image never ends the pass
+                logger.warning("[RSS_COORD] Image skipped %s: %s",
+                               redacted_url_for_log(candidate.url), type(exc).__name__)
+                continue
+            entry = self._cache.add(result.path, width=result.width, height=result.height,
+                                    url=candidate.url, source=feed_url, title=item.title)
+            self._save_copy(result.path)
+            logger.info("[RSS_COORD] +1 %dx%d from %s", result.width, result.height,
+                        redacted_url_for_log(feed_url))
+            return entry
+        return None
 
-            current_new.extend(extra_images)
-            deficit -= len(extra_images)
-            for img in extra_images:
-                if img.local_path:
-                    existing_paths.add(str(img.local_path))
+    def _pace(self, url: str) -> None:
+        host = (urlparse(url).hostname or "").casefold()
+        last = self._host_last_request.get(host)
+        if last is not None:
+            wait = HOST_MIN_INTERVAL_SECONDS - (time.monotonic() - last)
+            if wait > 0 and self._stop.wait(wait):
+                raise _PassStopped()
+        self._host_last_request[host] = time.monotonic()
 
-        return current_new
+    def _save_copy(self, path: Path) -> None:
+        if self._save_directory is None:
+            return
+        try:
+            destination = self._save_directory / path.name
+            if not destination.exists():
+                shutil.copy2(path, destination)
+        except OSError as e:
+            logger.warning(f"[RSS_COORD] Save-to-disk failed: {e}")
+
+    # ------------------------------------------------------------------
+    # Feed documents (shared feed core)
+    # ------------------------------------------------------------------
+
+    def _source(self, feed_url: str):
+        source = self._sources.get(feed_url)
+        if source is None:
+            from core.feeds.source import FeedSource
+            from core.feeds.transport import FeedHttpTransport
+            from sources.rss.image_fetch import WALLPAPER_USER_AGENT
+            from sources.rss.json_listing import json_image_listing
+
+            if self._feed_store is None:
+                self._feed_store = FeedCacheStore(self._cache.state_dir / "feeds")
+            fingerprint = endpoint_fingerprint(feed_url)
+            timeout = float(self._timeout)
+            source = FeedSource(
+                FeedSourceSpec(f"wallpaper:endpoint:{fingerprint}", feed_url,
+                               f"wallpaper_endpoint_{fingerprint}", max_items=FEED_MAX_ITEMS),
+                transport_factory=lambda: FeedHttpTransport(
+                    connect_timeout=min(timeout, 4.0), read_timeout=timeout,
+                    user_agent=WALLPAPER_USER_AGENT, should_continue=self._alive),
+                cache=self._feed_store,
+                should_continue=self._alive,
+                document_adapter=json_image_listing,
+            )
+            self._sources[feed_url] = source
+        return source
+
+    def _document(self, feed_url: str) -> Optional[FeedDocument]:
+        from core.feeds.source import FeedRefreshCancelled
+
+        if not self._reddit_quota_allows(feed_url):
+            return None
+        try:
+            result = self._source(feed_url).refresh()
+        except FeedRefreshCancelled:
+            raise _PassStopped()
+        except Exception as exc:
+            logger.warning("[RSS_COORD] Feed failed %s: %s", redacted_url_for_log(feed_url), type(exc).__name__)
+            return None
+        if result.status not in {"available", "not_modified"}:
+            logger.info("[RSS_COORD] Feed %s: %s (%s)", redacted_url_for_log(feed_url),
+                        result.status, result.failure or "-")
+        return result.snapshot.document if result.snapshot is not None else None
 
     @staticmethod
-    def _is_high_quality_fallback_feed(feed_url: str) -> bool:
-        url_lower = feed_url.lower()
-        return any(domain in url_lower for domain in HIGH_QUALITY_FALLBACK_DOMAINS)
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _should_continue(self) -> bool:
-        if self._shutdown_check is not None:
-            return self._shutdown_check()
+    def _reddit_quota_allows(feed_url: str) -> bool:
+        """Reddit feeds share the Reddit widget's strictly enforced request quota."""
+        host = (urlparse(feed_url).hostname or "").casefold()
+        if host != "reddit.com" and not host.endswith(".reddit.com"):
+            return True
+        try:
+            from core.reddit_rate_limiter import RateLimitPriority, RedditRateLimiter
+            if RedditRateLimiter.should_skip_for_quota(priority=RateLimitPriority.NORMAL):
+                logger.info("[RSS_COORD] Reddit feed skipped to preserve the Reddit widget's quota")
+                return False
+            RedditRateLimiter.record_request(namespace="rss")
+        except ImportError:
+            pass
         return True
+
+    def _release_transports(self) -> None:
+        """No HTTP session outlives its pass."""
+        for source in self._sources.values():
+            transport = getattr(source, "transport", None)
+            if transport is not None:
+                try:
+                    transport.close()
+                except Exception:
+                    pass
+                source.transport = None
+
+
+__all__ = ["RSSCoordinator", "RSSState"]

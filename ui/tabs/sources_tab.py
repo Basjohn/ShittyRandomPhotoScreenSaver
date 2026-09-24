@@ -571,9 +571,8 @@ class SourcesTab(QWidget):
         - Adds missing ``http://`` / ``https://``
         - Normalizes obviously broken hosts such as ``.reddit.com``
           to ``www.reddit.com``
-        - Leaves the rest of the URL intact so that backend
-          source-specific handling remains centralized in
-          ``RSSSource``.
+        - Leaves the rest of the URL intact; the wallpaper-feed coordinator
+          (``sources.rss.coordinator``) resolves site addresses to their feeds.
         """
         text = (url or "").strip()
         if not text:
@@ -665,14 +664,10 @@ class SourcesTab(QWidget):
         the Clear Cache button; doing it here causes a settings-exit download
         storm and throws away still-useful wallpaper candidates.
         
-        Uses DEFAULT_RSS_FEEDS from sources/rss_source.py:
-        - Flickr (7 feeds): No rate limits, diverse content
-        - Wikimedia (2 feeds): High quality, curated
-        - Bing: Daily wallpapers
-        - NASA: Space/science imagery
-        
-        NO Reddit feeds (cross-process rate limit issues with MC build).
-        Users can manually add Reddit feeds if desired.
+        Uses ``sources.rss.constants.DEFAULT_RSS_FEEDS``: sources measured to
+        publish images well beyond 1080p (NASA Image of the Day, NASA JPL
+        Photojournal, Wallhaven) plus Bing for 1080p setups. Images are admitted
+        only when they fill every connected display, so no feed needs rules.
         """
         # Import DEFAULT_RSS_FEEDS from modular RSS package
         from sources.rss.constants import DEFAULT_RSS_FEEDS
@@ -700,8 +695,9 @@ class SourcesTab(QWidget):
     def _clear_rss_cache(self) -> int:
         """Delete all files from the shared RSS cache directory.
 
-        Uses the same cache location as ``RSSSource`` so that cached
-        images can be cleared instantly from the settings UI.
+        Uses the wallpaper pool's cache location so cached images can be
+        cleared instantly from the settings UI; the pool index prunes the
+        missing files on its next load.
         Skips files locked by other processes (e.g. active RSS downloads).
         """
         from core.settings.storage_paths import get_rss_cache_dir

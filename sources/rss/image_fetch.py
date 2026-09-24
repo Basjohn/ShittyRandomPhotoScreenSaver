@@ -4,6 +4,10 @@ Wallpapers are judged against the connected displays in fill mode (the default
 and best mode): an image is admitted only when it can fill every display
 without upscaling. Larger is always fine; the crop is not judged in advance.
 
+An image far larger than the displays is stored right-sized once (still
+covering the largest display with ``STORED_COVER_HEADROOM``), so every later
+display decodes a fraction of its pixels instead of paying for them each time.
+
 The image streams through the shared public image path
 (``core.feeds.artwork_transport.iter_public_image``: bounded DNS, a pinned
 public address, validated redirects, byte and time caps) straight into a
@@ -88,6 +92,40 @@ def _unlink(path: Path) -> None:
         pass
 
 
+def _right_size(path: Path, size: tuple[int, int],
+                required: tuple[int, int]) -> tuple[tuple[int, int], str] | None:
+    """Rewrite ``path`` smaller when the image is far larger than the displays need.
+
+    Returns the new ``(size, extension)`` or ``None`` when it stays as it is.
+    JPEG uses the decoder's reduced-size draft, so the full image is never held.
+    """
+    from PIL import Image
+
+    from sources.rss.constants import RIGHT_SIZE_BELOW_SCALE, STORED_COVER_HEADROOM
+
+    width, height = size
+    scale = max(required[0] * STORED_COVER_HEADROOM / width,
+                required[1] * STORED_COVER_HEADROOM / height)
+    if scale >= RIGHT_SIZE_BELOW_SCALE:
+        return None
+    target = (max(required[0], round(width * scale)), max(required[1], round(height * scale)))
+    try:
+        with Image.open(path) as image:
+            image.draft("RGB", target)
+            if image.mode in ("RGBA", "LA", "P") and image.has_transparency_data:
+                # Wallpapers are opaque: composite over black, as the display pipeline does.
+                image = Image.alpha_composite(Image.new("RGBA", image.size, (0, 0, 0, 255)),
+                                              image.convert("RGBA"))
+            smaller = image.convert("RGB").resize(target, Image.Resampling.LANCZOS)
+        smaller.save(path, format="JPEG", quality=92)
+    except Image.DecompressionBombError as exc:
+        # Beyond what the display pipeline can decode either: not a usable wallpaper.
+        raise WallpaperRejected("image too large to decode") from exc
+    except (OSError, ValueError):
+        return None  # keep the original file rather than fail the image
+    return target, ".jpg"
+
+
 def fetch_wallpaper(
     url: str,
     directory: Path,
@@ -151,6 +189,9 @@ def fetch_wallpaper(
         extension = _EXTENSIONS.get(fmt)
         if extension is None:
             raise WallpaperRejected(f"unsupported format {fmt.decode(errors='replace') or '?'}", (width, height))
+        right_sized = _right_size(temp, (width, height), required)
+        if right_sized is not None:
+            (width, height), extension = right_sized
         final = directory / f"{file_stem}{extension}"
         for attempt in range(4):
             try:

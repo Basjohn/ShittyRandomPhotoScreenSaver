@@ -222,16 +222,22 @@ class TestRedditRateLimiterThreadSafety:
 class TestRedditRateLimiterIntegration:
     """Integration tests for rate limiter with RSS source and Reddit widget."""
 
-    def test_rss_source_uses_rate_limiter(self):
-        """Verify RSS source checks rate limiter before Reddit requests."""
-        # This is a documentation test - the actual integration is in rss_source.py
-        # We verify the import works and the method exists
+    def test_wallpaper_feeds_share_the_reddit_quota(self, monkeypatch):
+        """A Reddit wallpaper feed yields to the Reddit widget's quota and counts against it."""
         from core.reddit_rate_limiter import RedditRateLimiter
-        
-        assert hasattr(RedditRateLimiter, 'wait_if_needed')
-        assert hasattr(RedditRateLimiter, 'record_request')
-        assert callable(RedditRateLimiter.wait_if_needed)
-        assert callable(RedditRateLimiter.record_request)
+        from sources.rss.coordinator import RSSCoordinator
+
+        recorded = []
+        monkeypatch.setattr(RedditRateLimiter, "should_skip_for_quota", classmethod(lambda cls, **_k: True))
+        assert RSSCoordinator._reddit_quota_allows("https://www.reddit.com/r/wallpapers/.rss") is False
+        monkeypatch.setattr(RedditRateLimiter, "should_skip_for_quota", classmethod(lambda cls, **_k: False))
+        monkeypatch.setattr(RedditRateLimiter, "record_request",
+                            classmethod(lambda cls, **kwargs: recorded.append(kwargs)))
+        assert RSSCoordinator._reddit_quota_allows("https://www.reddit.com/r/wallpapers/.rss") is True
+        assert recorded == [{"namespace": "rss"}]
+        # Other hosts never consult the Reddit limiter.
+        assert RSSCoordinator._reddit_quota_allows("https://www.nasa.gov/feeds/iotd-feed") is True
+        assert recorded == [{"namespace": "rss"}]
 
     def test_rate_limiter_constants_reasonable(self):
         """Verify rate limiter constants are reasonable for Reddit API."""
