@@ -1,4 +1,8 @@
-"""RSS/Atom bytes -> durable normalized feed document.
+"""Feed bytes -> durable normalized feed document.
+
+RSS 0.9x/1.0/2.0 and Atom go through ``feedparser``; a JSON document (JSON
+Feed 1.x or a JF2 feed) goes through ``core.feeds.json_feed``. Every format
+lands in the same ``FeedDocument`` model with the same title/summary rules.
 
 Parsing is intentionally transport-free.  Feed validity never depends on image
 presence: images are optional presentation candidates layered on valid items.
@@ -16,6 +20,7 @@ import feedparser
 from .models import FeedDocument, FeedEnclosure, FeedImageCandidate, FeedItem
 from .normalization import (
     display_title,
+    entry_title_and_summary,
     normalized_action_url,
     normalized_media_url,
     plain_text,
@@ -85,6 +90,23 @@ class _ImageCollector(HTMLParser):
                     self.urls.append(url)
 
 
+def html_image_urls(markup: object, *, base_url: str = "", limit: int = 8) -> list[str]:
+    """Image candidates inside an HTML fragment (``img``/``source``, lazy and srcset)."""
+    collector = _ImageCollector(base_url=base_url)
+    try:
+        collector.feed(str(markup or "")[:32768])
+    except (ValueError, AssertionError):
+        return []
+    return collector.urls[: max(0, int(limit))]
+
+
+_UTF8_BOM = bytes((0xEF, 0xBB, 0xBF))
+
+
+def _is_json_document(payload: bytes) -> bool:
+    return payload[:256].removeprefix(_UTF8_BOM).lstrip().startswith(b"{")
+
+
 def _xml_local_name(tag: object) -> str:
     value = str(tag or "")
     return value.rsplit("}", 1)[-1].rsplit(":", 1)[-1].casefold()
@@ -143,6 +165,19 @@ def _raw_entry_image_markup(payload: bytes) -> tuple[tuple[str, ...], ...]:
                 break
         result.append(tuple(fragments))
     return tuple(result)
+
+
+def _summary_markup(entry: Mapping[str, Any]) -> object:
+    """Summary/description, else the first content body (``content:encoded``-only items)."""
+    direct = entry.get("summary") or entry.get("description")
+    if direct:
+        return direct
+    content = entry.get("content")
+    if isinstance(content, list):
+        for row in content[:4]:
+            if isinstance(row, Mapping) and row.get("value"):
+                return row.get("value")
+    return ""
 
 
 def _published_at(entry: Mapping[str, Any]) -> int | None:
@@ -211,6 +246,12 @@ def _images(
 ) -> tuple[FeedImageCandidate, ...]:
     result: list[FeedImageCandidate] = []
     seen: set[str] = set()
+
+    # Podcast episode art (``itunes:image`` / Podcasting 2.0) on the item.
+    episode_art = entry.get("image")
+    if isinstance(episode_art, Mapping):
+        _append_image(result, seen, url=episode_art.get("href") or episode_art.get("url"),
+                      relation="episode", base_url=base_url)
 
     for key, relation in (("media_thumbnail", "thumbnail"), ("media_content", "media")):
         rows = entry.get(key)
@@ -308,6 +349,9 @@ def parse_feed_bytes(payload: bytes, *, source_url: str, max_items: int = 50) ->
         raise FeedParseError("feed payload is empty")
     limit = max(1, min(200, int(max_items)))
     payload_bytes = bytes(payload)
+    if _is_json_document(payload_bytes):
+        from .json_feed import parse_json_feed_bytes
+        return parse_json_feed_bytes(payload_bytes, source_url=source_url, max_items=limit)
     # Most feeds do not need a second XML pass. Only invoke the bounded raw
     # companion when the payload advertises image attributes that feedparser's
     # sanitizer may remove; ordinary normalized feed parsing remains the hot
@@ -337,7 +381,8 @@ def parse_feed_bytes(payload: bytes, *, source_url: str, max_items: int = 50) ->
             continue
         action_url = _action_url(raw, base_url=source_url)
         published_at = _published_at(raw)
-        title = display_title(raw.get("title"), fallback_url=action_url)
+        summary = plain_text(_summary_markup(raw), limit=1200)
+        title, summary = entry_title_and_summary(raw.get("title"), summary=summary, action_url=action_url)
         item_id = stable_item_id(
             explicit_id=raw.get("id") or raw.get("guid"),
             action_url=action_url,
@@ -347,7 +392,6 @@ def parse_feed_bytes(payload: bytes, *, source_url: str, max_items: int = 50) ->
         if item_id in seen:
             continue
         seen.add(item_id)
-        summary = plain_text(raw.get("summary") or raw.get("description"), limit=1200)
         items.append(FeedItem(
             item_id=item_id,
             title=title,

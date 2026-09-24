@@ -6,16 +6,18 @@ candidate comes from a published convention, and every candidate is verified by
 fetching and parsing it with the production transport/parser before it is
 accepted:
 
-1. the address itself, when it already serves a feed;
+1. the address itself, when it already serves a feed (RSS, Atom, JSON Feed or
+   JF2), or when it is an IndieWeb h-feed page that advertises no other feed;
 2. feeds the page advertises: the RFC 8288 ``Link`` header and HTML
-   ``<link rel="alternate" type="application/rss+xml|atom+xml">`` (the RSS/Atom
-   autodiscovery convention), in document order with comment feeds demoted;
+   ``<link rel="alternate">`` of an RSS, Atom, JSON Feed, JF2 or h-feed type
+   (the autodiscovery convention), in document order with comment feeds demoted;
 3. feed-shaped ``<a href>`` links on that page;
-4. the paths common publishing platforms serve feeds on (``/feed``, ``/rss``,
-   ``/feed.xml``, ``/atom.xml``, ``/rss.xml``, ``/index.xml``), relative to the
-   page's own directory. This is what resolves a site whose home page sits
-   behind a bot wall while its feed does not; bot walls and challenges are
-   never bypassed.
+4. platform conventions: the page URL with ``.rss``/``.atom`` appended
+   (Reddit, Mastodon, Discourse, Lobsters, GitHub) and the paths publishing
+   platforms serve feeds on (``feed``, ``rss``, ``feed.xml``, ``atom.xml``,
+   ``rss.xml``, ``index.xml``, ``feed.json``) inside the page's own directory.
+   This is what resolves a site whose home page sits behind a bot wall while
+   its feed does not; bot walls and challenges are never bypassed.
 
 One HTML page found on the way (a conventional path that serves a feed index,
 for example) may contribute its own advertised links. The walk is bounded by a
@@ -36,12 +38,13 @@ import time
 from typing import Callable
 from urllib.parse import urljoin, urlparse, urlunparse
 
+from .hfeed import hfeed_document
 from .models import FeedDocument
 from .parser import FeedEmptyError, FeedParseError, parse_feed_bytes
 from .transport import FeedHttpResponse, FeedTransportError, validate_feed_url
 
 
-MAX_DISCOVERY_FETCHES = 8
+MAX_DISCOVERY_FETCHES = 10
 DISCOVERY_DEADLINE_SECONDS = 20.0
 MAX_HTML_PAGES = 2
 _MAX_HTML_SCAN_CHARS = 1_500_000
@@ -51,8 +54,16 @@ _MAX_ANCHORS = 8
 
 # Paths common publishing platforms serve feeds on (WordPress, Substack and
 # Ghost style ``feed``/``rss``; Jekyll ``feed.xml``; static ``atom.xml`` and
-# ``rss.xml``; Hugo ``index.xml``). Platform conventions, not site knowledge.
-CONVENTIONAL_FEED_NAMES = ("feed", "rss", "feed.xml", "atom.xml", "rss.xml", "index.xml")
+# ``rss.xml``; Hugo ``index.xml``; JSON Feed ``feed.json``), and the suffixes
+# platforms append to a page URL for its feed. Conventions, not site knowledge.
+CONVENTIONAL_FEED_NAMES = ("feed", "rss", "feed.xml", "atom.xml", "rss.xml", "index.xml", "feed.json")
+CONVENTIONAL_FEED_SUFFIXES = (".rss", ".atom")
+# A final path segment with one of these extensions is a document, not a
+# directory (``@tim.oreilly`` or ``v2.0`` are directories).
+_DOCUMENT_EXTENSIONS = frozenset({
+    "html", "htm", "xhtml", "shtml", "php", "asp", "aspx", "jsp", "cgi",
+    "xml", "rss", "atom", "rdf", "json",
+})
 
 _FEED_TYPES = frozenset({
     "application/rss+xml",
@@ -64,12 +75,17 @@ _FEED_TYPES = frozenset({
     "application/x-atom+xml",
     "text/rss+xml",
     "text/atom+xml",
+    "application/feed+json",
+    "application/jf2feed+json",
+    "text/mf2+html",
 })
-_GENERIC_XML_TYPES = frozenset({"application/xml", "text/xml"})
+# Types that are sometimes a feed: accepted when the title/href says so (JSON
+# Feed 1.0 was advertised as ``application/json`` titled "JSON Feed").
+_GENERIC_TYPES = frozenset({"application/xml", "text/xml", "application/json"})
 _FEED_WORD_RE = re.compile(r"rss|atom|feed", re.IGNORECASE)
 _FEED_PATH_SUFFIXES = (
     ".rss", ".rdf", ".atom", "/feed", "/feed/", "/rss", "/rss/", "/atom", "/atom/",
-    "rss.xml", "atom.xml", "feed.xml", "/feeds/posts/default",
+    "rss.xml", "atom.xml", "feed.xml", "feed.json", "/feeds/posts/default",
 )
 _FEED_QUERY_RE = re.compile(r"(^|&)(feed|format|type|page)=(rss2?|atom|feed)(&|$)", re.IGNORECASE)
 _FEED_HOST_PREFIXES = ("feeds.", "feed.", "rss.")
@@ -145,12 +161,22 @@ def _candidate_url(value: object, *, base_url: str, page_url: str) -> str:
     return urlunparse(parsed._replace(fragment=""))
 
 
-def _looks_like_feed_link(url: str) -> bool:
+def _path_key(url: str) -> tuple[str, str]:
+    parsed = urlparse(url)
+    return (parsed.hostname or "").casefold(), parsed.path.rstrip("/").casefold()
+
+
+def _looks_like_feed_link(url: str, *, page_url: str = "") -> bool:
     parsed = urlparse(url)
     path = parsed.path.casefold()
     host = (parsed.hostname or "").casefold()
     if "comment" in path:
         return False
+    if page_url and _path_key(url) == _path_key(page_url):
+        # A link back to this page (another language, sort or page number) is
+        # the page, not a feed, however feed-like the page's own path is; only
+        # an explicit feed query (``?format=rss``) makes it one.
+        return bool(_FEED_QUERY_RE.search(parsed.query))
     if path.endswith(_FEED_PATH_SUFFIXES):
         return True
     if path.endswith(".xml") and (_FEED_WORD_RE.search(path) or host.startswith(_FEED_HOST_PREFIXES)):
@@ -185,7 +211,8 @@ class _FeedLinkCollector(HTMLParser):
             self._link(mapping)
         elif kind == "a" and len(self.anchors) < _MAX_ANCHORS:
             url = self._admit(mapping.get("href"))
-            if url and _looks_like_feed_link(url) and url not in self.anchors:
+            if (url and _looks_like_feed_link(url, page_url=self.page_url)
+                    and all(_path_key(url) != _path_key(existing) for existing in self.anchors)):
                 self.anchors.append(url)
         elif kind == "body":
             self.head_closed = True
@@ -201,13 +228,13 @@ class _FeedLinkCollector(HTMLParser):
         media_type = mapping.get("type", "").casefold().split(";", 1)[0].strip()
         title = mapping.get("title", "")
         href = mapping.get("href", "")
-        if "oembed" in media_type or "json" in media_type:
+        if "oembed" in media_type:
             return
         if not rel & {"alternate", "feed"}:
             return
         if media_type in _FEED_TYPES:
             pass
-        elif media_type in _GENERIC_XML_TYPES or (not media_type and "feed" in rel):
+        elif media_type in _GENERIC_TYPES or (not media_type and "feed" in rel):
             if not _FEED_WORD_RE.search(f"{title} {href}") and "feed" not in rel:
                 return
         else:
@@ -243,6 +270,15 @@ def _link_header_candidates(link_header: str, *, page_url: str) -> list[str]:
     return urls
 
 
+def _under_page(url: str, page_url: str) -> bool:
+    """``url``'s path continues a non-root page path (``/notes`` -> ``/notes/rss``, ``/@a.rss``)."""
+    page_path = urlparse(page_url).path.rstrip("/").casefold()
+    if not page_path:
+        return False
+    path = urlparse(url).path.casefold()
+    return path.startswith(page_path) and path[len(page_path):len(page_path) + 1] in {"/", "."}
+
+
 def advertised_feed_candidates(
     payload: bytes,
     *,
@@ -265,7 +301,11 @@ def advertised_feed_candidates(
         collector.close()
     except (ValueError, AssertionError):
         pass
-    ordered = [url for comment, url in collector.advertised if not comment]
+    # A section page's own feed (``/notes`` -> ``/notes/rss``, a category's
+    # ``/category/x/feed/``) outranks the site-wide feed advertised first;
+    # otherwise document order. Comment feeds always go last.
+    ordered = [url for comment, url in collector.advertised if not comment and _under_page(url, page_url)]
+    ordered += [url for comment, url in collector.advertised if not comment and url not in ordered]
     ordered += [url for comment, url in collector.advertised if comment]
     candidates += [FeedCandidate(url, "advertised") for url in ordered]
     candidates += [FeedCandidate(url, "anchor") for url in collector.anchors]
@@ -279,10 +319,11 @@ def advertised_feed_candidates(
 
 
 def conventional_feed_candidates(page_url: str) -> tuple[FeedCandidate, ...]:
-    """Platform-convention feed paths within the page's own directory.
+    """Platform-convention feed URLs for a page, most specific first.
 
-    ``https://example.com`` gives ``https://example.com/feed`` and so on;
-    ``https://example.com/blog/`` gives ``https://example.com/blog/feed``.
+    ``https://example.com/r/news`` gives ``/r/news.rss`` and ``/r/news.atom``
+    (the page-suffix convention), then ``/r/news/feed`` and the other names
+    inside that directory. ``https://example.com`` gives ``/feed`` and so on.
     Never walks up to the site root from a sub-path, so an address on a shared
     platform host cannot resolve to that platform's own site-wide feed.
     """
@@ -291,11 +332,24 @@ def conventional_feed_candidates(page_url: str) -> tuple[FeedCandidate, ...]:
     except ValueError:
         return ()
     path = parsed.path or "/"
+    document = False
     if not path.endswith("/"):
         leaf = path.rsplit("/", 1)[-1]
-        path = path[: len(path) - len(leaf)] if "." in leaf else path + "/"
+        document = "." in leaf and leaf.rsplit(".", 1)[-1].casefold() in _DOCUMENT_EXTENSIONS
+        path = path[: len(path) - len(leaf)] if document else path + "/"
+    candidates: list[FeedCandidate] = []
+    stem = path.rstrip("/")
+    if stem and not document:
+        candidates += [
+            FeedCandidate(
+                urlunparse(parsed._replace(path=stem + suffix, params="", query="", fragment="")),
+                "conventional",
+            )
+            for suffix in CONVENTIONAL_FEED_SUFFIXES
+        ]
     base = urlunparse(parsed._replace(path=path, params="", query="", fragment=""))
-    return tuple(FeedCandidate(urljoin(base, name), "conventional") for name in CONVENTIONAL_FEED_NAMES)
+    candidates += [FeedCandidate(urljoin(base, name), "conventional") for name in CONVENTIONAL_FEED_NAMES]
+    return tuple(candidates)
 
 
 def _is_html(response: FeedHttpResponse) -> bool:
@@ -308,31 +362,38 @@ def _is_html(response: FeedHttpResponse) -> bool:
     return media_type in {"text/html", "application/xhtml+xml"}
 
 
-def _feed_document(response: FeedHttpResponse, *, url: str, max_items: int) -> FeedDocument | None:
-    """The response's feed, or ``None`` when it is not a feed at all.
+def _examine(
+    response: FeedHttpResponse, *, url: str, max_items: int,
+) -> tuple[FeedDocument | None, list[FeedCandidate]]:
+    """What a fetched response offers: a feed, or the candidates a page points at.
 
-    Raises ``FeedEmptyError`` for a real feed with no usable entries. Obvious
-    HTML is never handed to the feed parser.
+    A feed document (RSS, Atom, JSON Feed, JF2) is parsed; ``FeedEmptyError``
+    propagates for a real but empty feed. A page yields its advertised and
+    linked candidates; a page that declares no feed but marks its own posts up
+    as an IndieWeb h-feed is itself the feed. Obvious HTML is never handed to
+    the feed parser.
     """
-    if _is_html(response):
-        return None
-    try:
-        return parse_feed_bytes(response.payload, source_url=response.final_url or url, max_items=max_items)
-    except FeedEmptyError:
-        raise
-    except FeedParseError:
-        return None
-
-
-def _page_candidates(response: FeedHttpResponse, *, url: str) -> list[FeedCandidate]:
-    if not _is_html(response) and b"<html" not in response.payload[:8192].lower():
-        return []
-    return list(advertised_feed_candidates(
-        response.payload,
-        page_url=response.final_url or url,
-        content_type=response.content_type,
-        link_header=response.link_header,
+    if not _is_html(response):
+        try:
+            document = parse_feed_bytes(
+                response.payload, source_url=response.final_url or url, max_items=max_items)
+            return document, []
+        except FeedEmptyError:
+            raise
+        except FeedParseError:
+            if b"<html" not in response.payload[:8192].lower():
+                return None, []
+    page_url = response.final_url or url
+    candidates = list(advertised_feed_candidates(
+        response.payload, page_url=page_url,
+        content_type=response.content_type, link_header=response.link_header,
     ))
+    if not any(candidate.via in {"link_header", "advertised"} for candidate in candidates):
+        document = hfeed_document(response.payload, page_url=page_url,
+                                  content_type=response.content_type, max_items=max_items)
+        if document is not None:
+            return document, []
+    return None, candidates
 
 
 def _visit_key(url: str) -> str:
@@ -422,12 +483,12 @@ def resolve_feed(
     else:
         if response.status == "not_modified":
             return FeedResolution(response, None, primary, "direct", attempts)
-        document = _feed_document(response, url=primary, max_items=max_items)
+        document, found = _examine(response, url=primary, max_items=max_items)
         if document is not None:
             return FeedResolution(response, document, primary, "direct", attempts)
         html_pages += 1
         page_url = response.final_url or primary
-        queue.extend(_page_candidates(response, url=primary))
+        queue.extend(found)
 
     # The last-good feed's own site link is the most direct route to a feed
     # that moved, so it precedes any guessing.
@@ -462,18 +523,17 @@ def resolve_feed(
         if response.status != "ok":
             continue
         try:
-            document = _feed_document(response, url=candidate.url, max_items=max_items)
+            document, found = _examine(response, url=candidate.url, max_items=max_items)
         except FeedEmptyError:
             continue
         if document is not None:
             return FeedResolution(response, document, candidate.url, candidate.via, attempts)
         if candidate.via == "seed":
             queue.extend(conventional_feed_candidates(response.final_url or candidate.url))
-        if html_pages < MAX_HTML_PAGES:
+        if found and html_pages < MAX_HTML_PAGES:
             html_pages += 1
             # A page's own advertised feeds outrank the remaining guesses.
-            queue[0:0] = [item for item in _page_candidates(response, url=candidate.url)
-                          if _visit_key(item.url) not in fetched]
+            queue[0:0] = [item for item in found if _visit_key(item.url) not in fetched]
 
     if not _alive():
         raise FeedTransportError("feed fetch cancelled")

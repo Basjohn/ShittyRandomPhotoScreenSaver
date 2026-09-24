@@ -98,7 +98,7 @@ def _set_view_combo(tab: "WidgetsTab", value: object) -> None:
 
 
 _PROBE_FAILURE_TEXT = {
-    "FeedDiscoveryError": "no RSS or Atom feed found at this address",
+    "FeedDiscoveryError": "no feed found at this address",
     "FeedEmptyError": "the feed has no items right now",
     "FeedTransportError": "the address could not be reached",
     "ValueError": "not a valid http(s) address",
@@ -182,9 +182,9 @@ def build_feeds_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     root.setSpacing(14)
 
     intro = QLabel(
-        "CUSTOM feeds accept an RSS or Atom feed address, or a website address whose feed is found "
-        "automatically. Runtime is cache-first and preserves the last good snapshot across temporary "
-        "source failures. URL testing is explicit and never runs while typing."
+        "CUSTOM feeds accept an RSS, Atom or JSON Feed address, or a website address whose feed is "
+        "found automatically. Runtime is cache-first and preserves the last good snapshot across "
+        "temporary source failures. URL testing is explicit and never runs while typing."
     )
     intro.setWordWrap(True)
     root.addWidget(intro)
