@@ -199,6 +199,8 @@ A deactivated family remains deactivated even if a saved layout contained it.
 Close admission before retirement. Fence stale generation/request state. Destroy custom GL on the legal render/context
 owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nested event loops.
 
+**Network on the IO lane goes through `core/network`.** Never add a raw `requests.get`/`Session.get`, `urlopen` or socket-client connect on the IO lane: resolve through `bounded_request`, `bounded_urlopen` or `resolve_bounded` and pass the family's existing retirement fence (Contracts § Network transports). A stuck worker is not killed at exit; never answer a stall by weakening the exit barrier, extending timeouts, env flags or daemon pool threads.
+
 **Release callbacks before deferred deletion.** A timer's callback usually holds its Qt parent (the owner) strongly. If
 `deleteLater()` leaves that release to the deferred delete, the owner's last reference can drop *inside the timer's own
 C++ destructor*; the owner's destructor then deletes the half-destroyed child again (a native abort in the next nested

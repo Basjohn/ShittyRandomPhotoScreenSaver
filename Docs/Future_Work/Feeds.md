@@ -50,7 +50,7 @@ All remaining CUSTOM slots must use the **same** descriptor/runtime/source/QML/E
 - [ ] Run two independent active endpoints simultaneously. Cancel/retire A while B remains active; A must not cancel, delay, back off or publish into B. Reactivating A must reuse valid retained/last-good state when appropriate.
 - [ ] Verify identical active endpoints deduplicate acquisition while each widget retains independent presentation settings.
 - [x] Simultaneous artwork warming and eviction (2026-09-24): protection is read at eviction time from the owner's live published set and eviction is least-recently-used; a retired source's image job evicts nothing. `tests/test_feed_artwork_multisource.py`.
-- [x] Retirement during native DNS/connect/read stalls (2026-09-24): DNS was the unbounded step and is now bounded and cancellable (`core/feeds/bounded_dns.py`); connect is bounded by its 4 s timeout, reads by the 8 s read timeout with cancellation between chunks. `tests/test_feed_dns_stall.py` proves the IO lane frees and exit neither waits nor lingers.
+- [x] Retirement during native DNS/connect/read stalls (2026-09-24): DNS was the unbounded step and is now bounded and cancellable (`core/network/bounded_dns.py`); connect is bounded by its 4 s timeout, reads by the 8 s read timeout with cancellation between chunks. `tests/test_feed_dns_stall.py` proves the IO lane frees and exit neither waits nor lingers.
 - [ ] Add deterministic small monogram collision ordinals for same-initial custom names through the existing cached vector-monogram path. Do not introduce a second glyph/header renderer.
 - [ ] Admit Custom 2/3/4 through the existing registry/descriptors/Settings family only after those multi-source gates pass.
 
