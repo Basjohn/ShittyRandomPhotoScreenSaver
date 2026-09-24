@@ -63,10 +63,6 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 - Watch: PW-04 Feed model reset (trigger: FEEDS Custom 2–4 physical testing shows delegate/artwork churn). Parked: PR-02 (DC-04 stays documented), PR-01 resolve memo, PR-07, ST-01/02, VZ-05 epoch cache, VZ-07. Closed: LC-01, PR-05, PW-06, PW-03 Media, the prefetch double batch.
 
-## Display geometry | device-exact R-63 window and scene
-
-- [~] **Device-exact R-63 window and monitor-exact scene (2026-09-24).** The window is placed in device pixels (monitor plus one exterior-edge overscan; Display 0 no longer overdraws Display 1 by a column) and the scene sits on the monitor's exact pixels inside it (no wallpaper/startup-capture resampling or widget shift); R-63 §2026-09-24. Remaining: one ordinary run — `[QUICK_NATIVE_GEOMETRY]` shows `right=0` for Display 0, no black/stale flash (R-63 stays mandatory), wallpapers crisp, no edge seam.
-
 ## Known failing tests and anomalies (tracked until resolved)
 
 Pre-existing reds and runtime anomalies found while gating the runtime audit. Each stays here until fixed or explicitly retired; do not treat them as noise in a gate.

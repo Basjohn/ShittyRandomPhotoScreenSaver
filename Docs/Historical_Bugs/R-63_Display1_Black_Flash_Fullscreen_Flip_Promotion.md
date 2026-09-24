@@ -126,3 +126,7 @@ device pixels from the real monitor/virtual-desktop rectangles and DPR, with not
   negative origins, portrait, three-wide, 2x2 and 3x3 grids; ten resolutions) at DPR 1.0-3.0: never exact cover, one
   outward edge, no neighbour overdrawn, Qt-rounding-safe extent, scene exactly on the monitor's pixels. The
   render-node smoke and runtime suites keep harness-placed windows untouched.
+
+**Accepted 2026-09-24 (operator physical run, 15:10-15:14):** every generation logged Display 0
+`window_device=(0,-2,2560,1442)` / Display 1 `(2560,-2,3840,2162)` with `right=0`, no bleed into the
+neighbouring display, no black/stale flash, crisp wallpapers; Glass held 158-165 fps on the 165 Hz display.
