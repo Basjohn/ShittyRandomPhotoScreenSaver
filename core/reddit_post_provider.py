@@ -193,6 +193,20 @@ def _record_reddit_blocked_response(reason: str) -> None:
         logger.debug("[REDDIT] Failed to record blocked Reddit response", exc_info=True)
 
 
+def _reddit_get(url: str, *, shutdown_event: Optional[Event] = None, **kwargs: Any) -> requests.Response:
+    """One Reddit GET: bounded DNS on every hop, cancelled by the widget's shutdown fence.
+
+    ``requests`` alone resolves host names with an unbounded ``getaddrinfo``; a
+    stalled DNS server would pin a worker of the shared IO lane and hold
+    process exit (``core/network/bounded_dns.py``). Everything else is the
+    plain ``requests.get`` behaviour, redirects included.
+    """
+    from core.network.http import bounded_request
+
+    should_continue = (lambda: not shutdown_event.is_set()) if shutdown_event is not None else None
+    return bounded_request("GET", url, should_continue=should_continue, **kwargs)
+
+
 def _build_reddit_request_headers(stable_key: str, *, accept: str) -> dict[str, str]:
     """Build stable persona headers for public Reddit-family endpoints."""
 
@@ -313,7 +327,7 @@ class RedditRssProvider:
             accept="application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
         )
         logger.debug("[REDDIT] Fetching RSS feed: subreddit=%s", request.subreddit)
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = _reddit_get(url, shutdown_event=request.shutdown_event, headers=headers, timeout=10)
         _raise_for_reddit_http_status(
             resp,
             provider_id=self.provider_id,
@@ -375,6 +389,7 @@ class PullPushProvider:
         rows = self._fetch_rows(
             request.subreddit,
             size=max(1, clamp_list_capacity(request.limit)),
+            shutdown_event=request.shutdown_event,
         )
         posts = self._normalize_rows(rows)
         logger.debug(
@@ -384,7 +399,9 @@ class PullPushProvider:
         )
         return RedditProviderResult.with_posts(posts, source_id=self.provider_id)
 
-    def _fetch_rows(self, subreddit: str, *, size: int) -> list[dict[str, Any]]:
+    def _fetch_rows(
+        self, subreddit: str, *, size: int, shutdown_event: Optional[Event] = None,
+    ) -> list[dict[str, Any]]:
         params = {
             "subreddit": subreddit,
             "size": int(size),
@@ -394,8 +411,9 @@ class PullPushProvider:
             subreddit,
             params["size"],
         )
-        resp = requests.get(
+        resp = _reddit_get(
             "https://api.pullpush.io/reddit/search/submission/",
+            shutdown_event=shutdown_event,
             params=params,
             timeout=10,
         )
@@ -485,7 +503,8 @@ class RedditPublicJsonProvider:
                 persona.label,
             )
 
-        resp = requests.get(url, headers=headers, params=params, timeout=10)
+        resp = _reddit_get(url, shutdown_event=request.shutdown_event,
+                           headers=headers, params=params, timeout=10)
         _raise_for_reddit_http_status(
             resp,
             provider_id=self.provider_id,
@@ -720,7 +739,7 @@ class RedditHtmlProvider:
             f"{request.cache_key}:{request.subreddit}:html:{label}",
             accept="text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         )
-        resp = requests.get(base_url, headers=headers, timeout=10)
+        resp = _reddit_get(base_url, shutdown_event=request.shutdown_event, headers=headers, timeout=10)
         _raise_for_reddit_http_status(
             resp,
             provider_id=f"{self.provider_id}:{label}",

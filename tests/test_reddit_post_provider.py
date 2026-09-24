@@ -108,12 +108,12 @@ def test_rss_provider_maps_atom_entries(monkeypatch: pytest.MonkeyPatch) -> None
 </feed>
 """
 
-    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, headers=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append({"url": url, "headers": dict(headers or {}), "timeout": timeout})
         return _StubResponse(content=atom_feed)
 
     monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
 
     provider = RedditRssProvider()
     result = provider.fetch_posts(
@@ -154,12 +154,12 @@ def test_html_provider_maps_standard_reddit_shreddit_posts(monkeypatch: pytest.M
 </body></html>
 """
 
-    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, headers=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append({"url": url, "headers": dict(headers or {}), "timeout": timeout})
         return _StubResponse(content=html_payload)
 
     monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
 
     provider = RedditHtmlProvider()
     result = provider.fetch_source(
@@ -200,7 +200,7 @@ def test_html_provider_maps_old_reddit_listing(monkeypatch: pytest.MonkeyPatch) 
 </body></html>
 """
 
-    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, headers=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append(url)
         return _StubResponse(content=old_payload)
 
@@ -209,7 +209,7 @@ def test_html_provider_maps_old_reddit_listing(monkeypatch: pytest.MonkeyPatch) 
         return "acquired"
 
     monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", _fake_slot)
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
 
     provider = RedditHtmlProvider()
     result = provider.fetch_posts(
@@ -253,7 +253,7 @@ def test_composite_provider_classifies_blocked_chain_as_expected_unavailability(
         lambda request, **kwargs: "acquired",
     )
     monkeypatch.setattr(
-        "core.reddit_post_provider.requests.get",
+        "core.reddit_post_provider._reddit_get",
         lambda *args, **kwargs: _StubResponse(status_code=403),
     )
 
@@ -292,7 +292,7 @@ def test_composite_provider_tries_old_before_www_after_primary_failure(monkeypat
         def fetch_posts(self, request):  # noqa: ANN001
             raise RuntimeError("rss down")
 
-    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, headers=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append(url)
         if "old.reddit.com" in url:
             return _StubResponse(content=b"<html><body>No posts here</body></html>")
@@ -302,7 +302,7 @@ def test_composite_provider_tries_old_before_www_after_primary_failure(monkeypat
         "core.reddit_post_provider._acquire_widget_reddit_request_slot",
         lambda request, **kwargs: "acquired",
     )
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
 
     provider = FallbackRedditPostProvider(FailingPrimary())
     result = provider.fetch_posts(
@@ -339,7 +339,7 @@ def test_composite_provider_continues_when_old_html_only_has_filtered_rows(monke
         def fetch_posts(self, request):  # noqa: ANN001
             raise RuntimeError("rss down")
 
-    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, headers=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append(url)
         if "old.reddit.com" in url:
             return _StubResponse(content=old_payload)
@@ -349,7 +349,7 @@ def test_composite_provider_continues_when_old_html_only_has_filtered_rows(monke
         "core.reddit_post_provider._acquire_widget_reddit_request_slot",
         lambda request, **kwargs: "acquired",
     )
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
 
     provider = FallbackRedditPostProvider(FailingPrimary())
     result = provider.fetch_posts(
@@ -382,12 +382,12 @@ def test_composite_provider_uses_html_after_primary_failure(monkeypatch: pytest.
         def fetch_posts(self, request):  # noqa: ANN001
             raise RuntimeError("rss down")
 
-    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, headers=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append(url)
         return _StubResponse(content=html_payload)
 
     monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
 
     provider = FallbackRedditPostProvider(FailingPrimary())
     result = provider.fetch_posts(
@@ -431,12 +431,12 @@ def test_composite_provider_promotes_successful_html_source_for_session(monkeypa
             calls.append("rss")
             raise RuntimeError("rss down")
 
-    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, headers=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append(url)
         return _StubResponse(content=old_payload)
 
     monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
 
     provider = FallbackRedditPostProvider(FailingPrimary())
     request = RedditFetchRequest(
@@ -475,12 +475,12 @@ def test_composite_provider_does_not_promote_sparse_html_rescue(monkeypatch: pyt
             calls.append("rss")
             raise RuntimeError("rss down")
 
-    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, headers=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append(url)
         return _StubResponse(content=old_payload)
 
     monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
 
     provider = FallbackRedditPostProvider(FailingPrimary())
     request = RedditFetchRequest(
@@ -507,7 +507,7 @@ def test_composite_provider_does_not_promote_sparse_html_rescue(monkeypatch: pyt
 def test_pullpush_provider_maps_submission_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
 
-    def _fake_get(url, params=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, params=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append({"url": url, "params": dict(params or {}), "timeout": timeout})
         return _StubResponse(
             {
@@ -522,7 +522,7 @@ def test_pullpush_provider_maps_submission_rows(monkeypatch: pytest.MonkeyPatch)
             }
         )
 
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
     provider = PullPushProvider()
     result = provider.fetch_posts(
         RedditFetchRequest(
@@ -552,7 +552,7 @@ def test_pullpush_provider_maps_submission_rows(monkeypatch: pytest.MonkeyPatch)
 
 def test_pullpush_provider_filters_rows_missing_title_or_link(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "core.reddit_post_provider.requests.get",
+        "core.reddit_post_provider._reddit_get",
         lambda *args, **kwargs: _StubResponse(  # noqa: ANN001
             {
                 "data": [
@@ -587,7 +587,7 @@ def test_pullpush_provider_filters_rows_missing_title_or_link(monkeypatch: pytes
 
 def test_pullpush_provider_returns_empty_posts_for_empty_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "core.reddit_post_provider.requests.get",
+        "core.reddit_post_provider._reddit_get",
         lambda *args, **kwargs: _StubResponse({"data": []}),  # noqa: ANN001
     )
 
@@ -610,7 +610,7 @@ def test_pullpush_provider_surfaces_network_failures(monkeypatch: pytest.MonkeyP
     def _boom(*args, **kwargs):  # noqa: ANN001
         raise RuntimeError("network down")
 
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _boom)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _boom)
 
     provider = PullPushProvider()
     with pytest.raises(RuntimeError, match="network down"):
@@ -628,7 +628,7 @@ def test_pullpush_provider_surfaces_network_failures(monkeypatch: pytest.MonkeyP
 def test_pullpush_provider_uses_requested_limit_as_fetch_size(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
 
-    def _fake_get(url, params=None, timeout=None):  # noqa: ANN001
+    def _fake_get(url, params=None, timeout=None, **_kwargs):  # noqa: ANN001
         calls.append(dict(params or {}))
         return _StubResponse(
             {
@@ -643,7 +643,7 @@ def test_pullpush_provider_uses_requested_limit_as_fetch_size(monkeypatch: pytes
             }
         )
 
-    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+    monkeypatch.setattr("core.reddit_post_provider._reddit_get", _fake_get)
 
     provider = PullPushProvider()
     result = provider.fetch_posts(
@@ -670,7 +670,7 @@ def test_pullpush_provider_uses_requested_limit_as_fetch_size(monkeypatch: pytes
 
 def test_pullpush_provider_dedupes_duplicate_rows_by_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "core.reddit_post_provider.requests.get",
+        "core.reddit_post_provider._reddit_get",
         lambda *args, **kwargs: _StubResponse(  # noqa: ANN001
             {
                 "data": [
