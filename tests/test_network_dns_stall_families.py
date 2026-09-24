@@ -117,3 +117,20 @@ def test_steam_requests_are_bounded_by_the_dns_deadline_and_the_exit_fence():
         retire=None,
     )
     assert_lane_and_exit_bounded(facts, retirement_fenced=False)
+
+
+def test_wallpaper_rss_downloads_retire_with_the_downloader_shutdown_check(tmp_path):
+    facts = run_family_stall(
+        category="rss",
+        setup=f"""
+            from pathlib import Path
+            from sources.rss.downloader import RSSDownloader
+            alive = [True]   # the coordinator's shutdown_check (True while work may continue)
+            downloader = RSSDownloader(timeout=10, shutdown_check=lambda: alive[0])
+            cache = Path({str(tmp_path)!r})
+        """,
+        work='downloader.download_image("https://images.example.test/wallpaper.jpg", cache)',
+        retire="alive[0] = False",
+        rearm="alive[0] = True",
+    )
+    assert_lane_and_exit_bounded(facts)
