@@ -1,5 +1,15 @@
 # SRPSS | Current Plan
 
+## NEWS provider probation log (run once per day)
+
+Run `python tools/feed_probe.py --catalog` once per calendar day and add one row (newest first). **Satisfied** for a category when two independent providers have each passed on at least 6 of 7 separate days, every pass `via=direct` (a discovery rescue means the endpoint moved: update the candidate, restart its count), and neither provider's newest item is older than 72 h on its last three runs. Only then may that category's NEWS widget be admitted (`Docs/Future_Work/Feeds.md` § NEWS provider probation).
+
+| Date | US (CBS, ABC) | World (CBS, ABC) | Politics (CBS, ABC) | Tech (CBS, ABC, Ars) | Gaming (Ars, PC Gamer) | Notes |
+|---|---|---|---|---|---|---|
+| 2026-09-24 | ok 30 / ok 25 | ok 30 / **FAIL** empty feed | ok 30 / ok 25 (newest 16 h) | ok 30 / ok 25 / ok 20 | ok 20 (newest 47 h) / ok 50 | 10/11; all direct. CBS images 0 = parser gap (item-level `<image>URL</image>` unread), not absent art. |
+
+Tally toward 6/7 days: US 1/1 both; World CBS 1/1, ABC 0/1; Politics 1/1 both; Tech 1/1 all; Gaming 1/1 both.
+
 ## FEEDS | Custom 1 closure and bounded family expansion (ACTIVE)
 
 **Authority:** `Docs/Reference/Feeds.md` owns implemented architecture. `Docs/Future_Work/Feeds.md` owns the still-pending expansion/deferred work. Continue to audit **durability, content adaptability and performance neutrality** before multiplying sources or widget identities.
