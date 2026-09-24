@@ -8,6 +8,7 @@ use ``redacted_url_for_log`` rather than raw URLs.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import TYPE_CHECKING, Callable, Mapping
 from urllib.parse import urlparse
 
@@ -22,7 +23,16 @@ MAX_REDIRECTS = 5
 
 
 class FeedTransportError(RuntimeError):
-    pass
+    """A failed bounded fetch.
+
+    ``status_code`` is the HTTP status when the server answered with an error,
+    and ``None`` for network-level failure, cancellation or a byte-limit breach.
+    Feed discovery uses it to tell a missing/blocked page from being offline.
+    """
+
+    def __init__(self, message: str = "", *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 @dataclass(frozen=True)
@@ -33,6 +43,33 @@ class FeedHttpResponse:
     etag: str = ""
     last_modified: str = ""
     content_type: str = ""
+    # RFC 8288 ``Link`` header (bounded); a site may advertise its feed here.
+    link_header: str = ""
+
+
+_BARE_HOST_RE = re.compile(r"^(localhost|[a-z0-9-]+(\.[a-z0-9-]+)+)(:\d{1,5})?([/?#]|$)", re.IGNORECASE)
+
+
+def normalize_feed_address(value: object) -> str:
+    """User-typed feed/site address -> URL text (not yet validated).
+
+    Accepts a bare host such as ``arstechnica.com`` (HTTPS is assumed), a
+    protocol-relative ``//host/path`` and the legacy ``feed:`` pseudo-scheme.
+    Anything else is returned unchanged for ``validate_feed_url`` to judge, so
+    this never widens the HTTP/S-only admission rule.
+    """
+    text = str(value or "").strip()
+    lowered = text.casefold()
+    if lowered.startswith("feed:"):
+        text = text[5:]
+        if text.startswith("//"):
+            text = "https:" + text
+        lowered = text.casefold()
+    if text.startswith("//"):
+        return "https:" + text
+    if "://" not in lowered and _BARE_HOST_RE.match(text):
+        return "https://" + text
+    return text
 
 
 def validate_feed_url(url: str) -> str:
@@ -132,8 +169,11 @@ class FeedHttpTransport:
                     etag=str(response.headers.get("ETag") or etag or "")[:1024],
                     last_modified=str(response.headers.get("Last-Modified") or last_modified or "")[:1024],
                     content_type=str(response.headers.get("Content-Type") or "")[:240],
+                    link_header=str(response.headers.get("Link") or "")[:4096],
                 )
-            response.raise_for_status()
+            status_code = int(response.status_code)
+            if status_code >= 400:
+                raise FeedTransportError(f"HTTP {status_code}", status_code=status_code)
             declared = response.headers.get("Content-Length")
             if declared:
                 try:
@@ -162,6 +202,7 @@ class FeedHttpTransport:
                 etag=str(response.headers.get("ETag") or "")[:1024],
                 last_modified=str(response.headers.get("Last-Modified") or "")[:1024],
                 content_type=str(response.headers.get("Content-Type") or "")[:240],
+                link_header=str(response.headers.get("Link") or "")[:4096],
             )
         except FeedTransportError:
             raise

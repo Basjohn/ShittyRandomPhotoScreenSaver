@@ -17,6 +17,7 @@
 
 - [ ] Exercise a full Edit transaction on the current tree: widget-wide alignment flip, parent resize before save, child move/resize, Reset, bounded Ctrl-Z, child lock, Save, leave/re-enter Edit and fresh runtime recreation. Verify the header, refresh rail, Grid/List content rails and overflow retain one semantic orientation without mirroring pixels or snapping back.
 - [ ] Verify the per-feed **Show Feed Subtitle** setting off/on and Save/reopen behavior, including the separate below-pill subtitle and retained header geometry.
+- [ ] **Website-address discovery (2026-09-24).** Enter `arstechnica.com` (no feed path) in Custom 1: TEST FEED reports `feed found at https://arstechnica.com/feed`, the runtime shows Ars stories, `--feeds` logs one `[FEEDS][DISCOVERY]` line on the first refresh and none on later refreshes (steady state is one conditional request to the resolved feed). Reference: `Docs/Reference/Feeds.md` § Feed discovery.
 - [ ] Prove last-good behavior through a fresh offline restart, then restore connectivity and verify ordinary conditional refresh without blanking or endpoint cross-contamination.
 - [ ] Disable/replace Custom 1 while source/artwork work is queued or in flight; verify callbacks retire cleanly, no stale completion republishes, no transport/provider work survives the final active lease and no native fault appears.
 

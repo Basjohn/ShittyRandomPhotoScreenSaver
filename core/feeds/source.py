@@ -103,17 +103,33 @@ class FeedSource:
 
         # Parser and HTTP dependencies are imported only for an actual network
         # refresh, never for cache-only startup.
-        from .parser import FeedParseError, parse_feed_bytes
+        from .discovery import resolve_feed
+        from .normalization import redacted_url_for_log
+        from .parser import FeedParseError
         from .transport import FeedTransportError
 
         try:
             same_endpoint = record.endpoint_fingerprint == self.fingerprint
-            response = self._transport_for_refresh().fetch(
-                self.spec.url,
+            # A site address resolves once to its feed; steady refreshes go
+            # straight to that feed with its own validators. Discovery runs
+            # again only when the resolution is gone or no longer a feed.
+            resolved_url = record.resolved_url if same_endpoint else ""
+            home_url = (
+                record.snapshot.document.home_url
+                if same_endpoint and record.snapshot is not None else ""
+            )
+            resolution = resolve_feed(
+                self._transport_for_refresh().fetch,
+                resolved_url or self.spec.url,
                 etag=record.etag if same_endpoint else "",
                 last_modified=record.last_modified if same_endpoint else "",
+                configured_url=self.spec.url,
+                home_url=home_url,
+                max_items=self.spec.max_items,
+                should_continue=self._should_continue,
             )
             self._ensure_needed()
+            response = resolution.response
             if response.status == "not_modified":
                 if record.snapshot is None or not same_endpoint:
                     return self._failure(record, now, "not_modified_without_matching_cache")
@@ -130,17 +146,18 @@ class FeedSource:
                 self._persist_best_effort(updated)
                 return FeedRefreshResult("not_modified", updated.snapshot, updated.health, changed=False)
 
-            document = parse_feed_bytes(
-                response.payload,
-                source_url=response.final_url or self.spec.url,
-                max_items=self.spec.max_items,
-            )
-            self._ensure_needed()
-            if not document.items:
+            document = resolution.document
+            if document is None or not document.items:
                 # A syntactically valid but empty replacement is not allowed to
                 # erase established state.  Treat it like a transient source
                 # failure and retain last-good under normal backoff.
                 raise FeedParseError("feed contains no usable items")
+            if resolution.discovered:
+                logger.info(
+                    "[FEEDS][DISCOVERY] source=%s address=%s feed=%s via=%s fetches=%d",
+                    self.spec.source_id, redacted_url_for_log(self.spec.url),
+                    redacted_url_for_log(resolution.feed_url), resolution.via, resolution.attempts,
+                )
             snapshot = FeedSnapshot(document=document, fetched_at=now)
             changed = record.snapshot is None or record.snapshot.document != document
             updated = FeedCacheRecord(
@@ -150,6 +167,7 @@ class FeedSource:
                 health=FeedHealth(last_checked_at=now, last_success_at=now),
                 etag=response.etag,
                 last_modified=response.last_modified,
+                resolved_url="" if resolution.feed_url == self.spec.url else resolution.feed_url,
             )
             self._persist_best_effort(updated)
             return FeedRefreshResult("available", snapshot, updated.health, changed=changed)

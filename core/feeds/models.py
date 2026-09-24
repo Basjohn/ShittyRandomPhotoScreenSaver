@@ -83,6 +83,11 @@ class FeedCacheRecord:
     etag: str = ""
     last_modified: str = ""
     schema_version: int = 1
+    # The discovered feed serving this endpoint when the configured address is
+    # a site page (``""``: the configured address is the feed). ETag and
+    # Last-Modified belong to this URL. An optional field inside schema 1:
+    # older records read as ``""`` and older readers ignore it.
+    resolved_url: str = ""
 
 
 @dataclass(frozen=True)

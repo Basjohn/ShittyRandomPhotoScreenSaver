@@ -83,6 +83,10 @@ Technical health labels describe reachability/parser viability only. SRPSS does 
 - [ ] One failed provider retains that provider's last-good state and must not blank healthy providers.
 - [ ] Reuse the shared FEEDS transport/parser/cache/runtime/presentation modes and local-artwork rules. Do not build five bespoke NEWS engines.
 
+## Feed formats
+
+- [ ] JSON Feed (`application/feed+json`): the pinned `feedparser==6.0.12` has no JSON Feed parser, so discovery ignores JSON alternates today. If a wanted site offers only JSON Feed, add a small bounded JSON Feed normalizer into the same `FeedDocument` model rather than upgrading the pin.
+
 ## Torrent and magnet actions
 
 - [ ] Keep authored title first. Only a missing title may fall back to magnet `dn=`, enclosure filename or URL-derived text; machine-ish cleanup applies only to derived fallback text.

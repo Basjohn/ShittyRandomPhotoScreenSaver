@@ -8,7 +8,7 @@ from core.settings.default_contract import require_canonical_default
 
 from .models import FeedSourceSpec, FeedViewMode
 from .normalization import endpoint_fingerprint
-from .transport import validate_feed_url
+from .transport import normalize_feed_address, validate_feed_url
 
 
 CUSTOM_FEED_WIDGET_IDS = tuple(f"feeds_custom_{index}" for index in range(1, 5))
@@ -36,7 +36,8 @@ class CustomFeedConfig:
             raise TypeError(f"canonical widgets.{widget_id} default must be a mapping")
         raw = value if isinstance(value, Mapping) else {}
         name = str(raw.get("name", defaults["name"]) or defaults["name"]).strip()[:80]
-        feed_url = str(raw.get("feed_url", defaults["feed_url"]) or "").strip()[:8192]
+        # A feed or site address; a bare host such as ``example.com`` means HTTPS.
+        feed_url = normalize_feed_address(raw.get("feed_url", defaults["feed_url"]) or "")[:8192]
         view = str(raw.get("view_mode", defaults["view_mode"]) or defaults["view_mode"]).strip().casefold()
         if view not in _VALID_VIEW_MODES:
             view = str(defaults["view_mode"]).casefold()
