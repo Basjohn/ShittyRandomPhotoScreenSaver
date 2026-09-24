@@ -4,13 +4,21 @@ No parser, cache, schedule or Qt ownership lives here.  The response body is
 bounded *after* requests decompression, preventing compressed payloads from
 expanding without limit.  Feed URLs may contain private query tokens; logs must
 use ``redacted_url_for_log`` rather than raw URLs.
+
+Every hop's host name (or its proxy's) is resolved through
+``core.feeds.bounded_dns`` before ``requests`` connects, so a stalled DNS server
+costs at most ``dns_timeout`` and honours cancellation instead of pinning a
+shared IO worker and holding process exit. Redirects are therefore followed
+here, one bounded hop at a time, rather than inside ``requests``.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import TYPE_CHECKING, Callable, Mapping
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING, Any, Callable, Mapping
+from urllib.parse import urljoin, urlparse
+
+from .bounded_dns import DnsLookupError, resolve_bounded
 
 if TYPE_CHECKING:
     import requests
@@ -19,7 +27,9 @@ if TYPE_CHECKING:
 DEFAULT_MAX_FEED_BYTES = 4 * 1024 * 1024
 DEFAULT_CONNECT_TIMEOUT = 4.0
 DEFAULT_READ_TIMEOUT = 8.0
+DEFAULT_DNS_TIMEOUT = 4.0
 MAX_REDIRECTS = 5
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 
 
 class FeedTransportError(RuntimeError):
@@ -95,11 +105,19 @@ class FeedHttpTransport:
         user_agent: str = "SRPSS/FeedReader",
         should_continue: Callable[[], bool] | None = None,
         session: "requests.Session | None" = None,
+        dns_timeout: float = DEFAULT_DNS_TIMEOUT,
+        resolve: Callable[..., Any] | None = None,
     ) -> None:
         self.max_bytes = max(32 * 1024, int(max_bytes))
         self.timeout = (max(0.5, float(connect_timeout)), max(0.5, float(read_timeout)))
         self.user_agent = str(user_agent or "SRPSS/FeedReader")[:240]
         self.should_continue = should_continue
+        self.dns_timeout = max(0.1, float(dns_timeout))
+        # Bounded pre-resolution applies to the transport's own session. An
+        # injected session brings its own connection policy (tests pass a
+        # ``resolve`` explicitly when they exercise this seam).
+        self._resolve = resolve if resolve is not None else (
+            resolve_bounded if session is None else None)
         self._owns_session = session is None
         if session is None:
             # Keep the third-party HTTP stack entirely asleep until a real
@@ -112,6 +130,37 @@ class FeedHttpTransport:
 
     def _alive(self) -> bool:
         return True if self.should_continue is None else bool(self.should_continue())
+
+    def _connection_host(self, url: str) -> tuple[str, int]:
+        """The host the connection for ``url`` will actually resolve: its proxy's, if one applies."""
+        proxy = ""
+        proxies = dict(getattr(self.session, "proxies", None) or {})
+        if getattr(self.session, "trust_env", False):
+            import requests.utils
+
+            if requests.utils.getproxies():
+                proxies = {**requests.utils.get_environ_proxies(url), **proxies}
+        if proxies:
+            import requests.utils
+
+            proxy = requests.utils.select_proxy(url, proxies) or ""
+        target = urlparse(proxy if "://" in proxy else (f"http://{proxy}" if proxy else url))
+        default_port = 443 if target.scheme.casefold() in {"https", "wss"} else 80
+        return target.hostname or "", target.port or default_port
+
+    def _resolve_hop(self, url: str) -> None:
+        if self._resolve is None:
+            return
+        host, port = self._connection_host(url)
+        if not host:
+            return
+        try:
+            self._resolve(host, port, timeout=self.dns_timeout, should_continue=self.should_continue)
+        except (DnsLookupError, OSError) as exc:
+            if not self._alive():
+                raise FeedTransportError("feed fetch cancelled") from exc
+            # No HTTP status: offline-class, so it never starts discovery.
+            raise FeedTransportError(type(exc).__name__) from exc
 
     def close(self) -> None:
         """Release the internally-owned HTTP connection pool deterministically."""
@@ -154,14 +203,30 @@ class FeedHttpTransport:
 
         response = None
         try:
-            response = self.session.get(
-                target,
-                headers=headers,
-                timeout=self.timeout,
-                stream=True,
-                allow_redirects=True,
-            )
-            final_url = validate_feed_url(str(response.url or target))
+            current = target
+            for hop in range(MAX_REDIRECTS + 1):
+                self._resolve_hop(current)
+                if not self._alive():
+                    raise FeedTransportError("feed fetch cancelled")
+                response = self.session.get(
+                    current,
+                    headers=headers,
+                    timeout=self.timeout,
+                    stream=True,
+                    allow_redirects=False,
+                )
+                location = str(response.headers.get("Location") or "")
+                if int(response.status_code) not in _REDIRECT_STATUSES or not location:
+                    break
+                response.close()
+                response = None
+                if hop >= MAX_REDIRECTS:
+                    raise FeedTransportError("feed redirect limit")
+                try:
+                    current = validate_feed_url(urljoin(current, location))
+                except ValueError as exc:
+                    raise FeedTransportError("feed redirect target rejected") from exc
+            final_url = validate_feed_url(str(getattr(response, "url", "") or current))
             if response.status_code == 304:
                 return FeedHttpResponse(
                     status="not_modified",

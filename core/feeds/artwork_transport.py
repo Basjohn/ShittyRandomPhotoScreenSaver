@@ -17,6 +17,7 @@ from typing import Callable
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from .artwork import ArtworkCancelled, MAX_DOWNLOAD_BYTES, safe_artwork_url
+from .bounded_dns import resolve_bounded
 
 MAX_ARTWORK_REDIRECTS = 3
 CONNECT_TIMEOUT_SECONDS = 4.0
@@ -66,7 +67,7 @@ def _public_address(host: str, port: int, *, resolve: Callable[..., object]) -> 
 def fetch_artwork_bytes(
     url: str, *,
     still_needed: Callable[[], bool],
-    resolve: Callable[..., object] = socket.getaddrinfo,
+    resolve: Callable[..., object] | None = None,
     max_bytes: int = MAX_DOWNLOAD_BYTES,
     connect_timeout: float = CONNECT_TIMEOUT_SECONDS,
     read_timeout: float = READ_TIMEOUT_SECONDS,
@@ -88,7 +89,21 @@ def fetch_artwork_bytes(
         if time.monotonic() >= deadline:
             raise ArtworkFetchError("artwork time budget exhausted")
         scheme, host, port, request_target = _target(current)
-        address = _public_address(host, port, resolve=resolve)
+        hop_resolve = resolve
+        if hop_resolve is None:
+            # Bounded like the rest of the fetch: a stalled DNS server can
+            # neither outlast the connect budget nor ignore retirement.
+            dns_budget = min(max(0.1, connect_timeout), max(0.1, deadline - time.monotonic()))
+
+            def hop_resolve(name, number, type=socket.SOCK_STREAM, _budget=dns_budget):
+                return resolve_bounded(name, number, timeout=_budget,
+                                       should_continue=still_needed, type=type)
+        try:
+            address = _public_address(host, port, resolve=hop_resolve)
+        except ArtworkFetchError as exc:
+            if not still_needed():
+                raise ArtworkCancelled() from exc
+            raise
         if not still_needed():
             raise ArtworkCancelled()
         remaining = max(0.1, deadline - time.monotonic())
