@@ -362,8 +362,12 @@ def _is_html(response: FeedHttpResponse) -> bool:
     return media_type in {"text/html", "application/xhtml+xml"}
 
 
+DocumentAdapter = Callable[[bytes, str, int], "FeedDocument | None"]
+
+
 def _examine(
     response: FeedHttpResponse, *, url: str, max_items: int,
+    document_adapter: DocumentAdapter | None = None,
 ) -> tuple[FeedDocument | None, list[FeedCandidate]]:
     """What a fetched response offers: a feed, or the candidates a page points at.
 
@@ -371,7 +375,9 @@ def _examine(
     propagates for a real but empty feed. A page yields its advertised and
     linked candidates; a page that declares no feed but marks its own posts up
     as an IndieWeb h-feed is itself the feed. Obvious HTML is never handed to
-    the feed parser.
+    the feed parser. A caller's ``document_adapter`` may read a structured
+    payload that is not a feed (an image-listing JSON API, for example); it
+    returns ``None`` when the payload is not for it.
     """
     if not _is_html(response):
         try:
@@ -381,6 +387,10 @@ def _examine(
         except FeedEmptyError:
             raise
         except FeedParseError:
+            if document_adapter is not None:
+                adapted = document_adapter(response.payload, response.final_url or url, max_items)
+                if adapted is not None:
+                    return adapted, []
             if b"<html" not in response.payload[:8192].lower():
                 return None, []
     page_url = response.final_url or url
@@ -434,6 +444,7 @@ def resolve_feed(
     deadline_seconds: float = DISCOVERY_DEADLINE_SECONDS,
     should_continue: Callable[[], bool] | None = None,
     clock: Callable[[], float] = time.monotonic,
+    document_adapter: DocumentAdapter | None = None,
 ) -> FeedResolution:
     """Fetch ``url``; when it is not a feed, discover and verify one.
 
@@ -483,7 +494,8 @@ def resolve_feed(
     else:
         if response.status == "not_modified":
             return FeedResolution(response, None, primary, "direct", attempts)
-        document, found = _examine(response, url=primary, max_items=max_items)
+        document, found = _examine(response, url=primary, max_items=max_items,
+                                   document_adapter=document_adapter)
         if document is not None:
             return FeedResolution(response, document, primary, "direct", attempts)
         html_pages += 1
@@ -523,7 +535,8 @@ def resolve_feed(
         if response.status != "ok":
             continue
         try:
-            document, found = _examine(response, url=candidate.url, max_items=max_items)
+            document, found = _examine(response, url=candidate.url, max_items=max_items,
+                                       document_adapter=document_adapter)
         except FeedEmptyError:
             continue
         if document is not None:
