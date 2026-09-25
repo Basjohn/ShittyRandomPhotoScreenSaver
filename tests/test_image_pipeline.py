@@ -320,6 +320,7 @@ def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
     cache = SimpleNamespace(
         get=lambda key: store.get(key),
         put=lambda key, value: store.__setitem__(key, value),
+        remove=lambda key: store.pop(key, None) is not None,
     )
     engine = SimpleNamespace(_image_cache=cache, _process_supervisor=None)
     meta = SimpleNamespace(local_path=path, url=None)
@@ -346,11 +347,18 @@ def test_scaled_cache_keeps_equal_pixel_targets_separate_across_dpr():
     assert first is not None and second is not None
     assert first.presentation_image.pixel_size == (4, 4)
     assert second.presentation_image.pixel_size == (4, 4)
-    assert store[key_1x] is image_1x
-    assert store[key_2x] is image_2x
+    # Each DPR consumed its own derivative (navy vs blue), and both left the
+    # cache once their presentation owned the pixels.
+    assert first.presentation_image.rgba8[:3] == bytes(
+        (QColor("navy").red(), QColor("navy").green(), QColor("navy").blue())
+    )
+    assert second.presentation_image.rgba8[:3] == bytes(
+        (QColor("blue").red(), QColor("blue").green(), QColor("blue").blue())
+    )
+    assert store == {}
 
 
-def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
+def test_exact_scaled_hit_is_consumed_without_probing_raw_or_rewriting_cache():
     path = r"C:\wall\display-ready.jpg"
     scaled_key = _build_scaled_cache_key(
         path,
@@ -364,6 +372,7 @@ def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
     scaled = _solid_qimage(4, 4, QColor("green"))
     gets = []
     puts = []
+    removed = []
 
     def _get(key):
         gets.append(key)
@@ -373,6 +382,7 @@ def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
         _image_cache=SimpleNamespace(
             get=_get,
             put=lambda key, value: puts.append((key, value)),
+            remove=lambda key: removed.append(key) or True,
         ),
         _process_supervisor=None,
     )
@@ -395,12 +405,15 @@ def test_exact_scaled_hit_does_not_probe_raw_or_rewrite_cache():
     assert result.presentation_image.pixel_size == (4, 4)
     assert gets == [scaled_key]
     assert puts == []
-    assert engine._cache_runtime_stats["scaled_reuses_without_put"] == 1
+    # The presentation owns the pixels now; the consumed derivative leaves the
+    # cache instead of displacing the nearer lookahead.
+    assert removed == [scaled_key]
+    assert engine._cache_runtime_stats["scaled_consumed_released"] == 1
     assert engine._cache_runtime_stats["raw_hits"] == 0
     assert engine._cache_runtime_stats["raw_misses"] == 0
 
 
-def test_worker_success_does_not_decode_or_cache_redundant_raw(
+def test_worker_success_caches_neither_raw_nor_its_consumed_result(
     tmp_path,
     monkeypatch,
 ):
@@ -447,8 +460,9 @@ def test_worker_success_does_not_decode_or_cache_redundant_raw(
     assert result.presentation_image.pixel_size == (4, 4)
     assert result.presentation_image.source_path == str(path)
     assert str(path) not in store
-    assert len(puts) == 1
-    assert "|scaled:" in puts[0]
+    # The result is consumed by this batch's presentation; caching it only
+    # duplicated the frame (reused 1 time in 53 in the Windows evidence).
+    assert puts == []
     assert engine._cache_runtime_stats["worker_requests"] == 1
     assert engine._cache_runtime_stats["worker_authority_failures"] == 0
 

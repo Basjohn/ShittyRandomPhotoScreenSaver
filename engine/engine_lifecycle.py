@@ -359,7 +359,7 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
                     "scaled_prefetch_completed=%d scaled_derivations=%d "
                     "raw_released_after_scaled=%d raw_prefetch_paths=%d "
                     "raw_prefetch_skipped_display_ready=%d "
-                    "scaled_reuses_without_put=%d "
+                    "scaled_consumed_released=%d "
                     "prefetch_resume_scheduled=%d prefetch_resume_runs=%d",
                     int(cache_flow.get("raw_hits", 0)),
                     int(cache_flow.get("raw_misses", 0)),
@@ -378,7 +378,7 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
                             0,
                         )
                     ),
-                    int(cache_flow.get("scaled_reuses_without_put", 0)),
+                    int(cache_flow.get("scaled_consumed_released", 0)),
                     int(cache_flow.get("prefetch_resume_scheduled", 0)),
                     int(cache_flow.get("prefetch_resume_runs", 0)),
                 )
