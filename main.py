@@ -11,6 +11,12 @@ import time
 from pathlib import Path
 from enum import Enum
 
+# Before anything imports numpy (the engine graph does), in this process and in
+# every worker it spawns: see core/native_threads.py.
+from core.native_threads import configure_native_thread_pools
+
+configure_native_thread_pools()
+
 from rendering.quick.bootstrap import (
     configure_quick_environment,
     configure_quick_graphics,
