@@ -52,6 +52,7 @@ from rendering.quick.startup_desktop_capture import capture_startup_desktop_pixm
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.startup_reveal import (
     QUICK_STARTUP_DESKTOP_CROSSFADE_DURATION_MS,
+    QUICK_STARTUP_REVEAL_DURATION_MS,
     QuickStartupRevealCoordinator,
 )
 from rendering.quick.state import (
@@ -236,6 +237,12 @@ class DisplayManager(QObject):
         self._startup_reveal_emitted = False
         self._startup_reveal_deadline_armed = False
         self._quick_startup_reveal: QuickStartupRevealCoordinator | None = None
+        # Screens the shared reveal drives, fixed when it starts (every awaited
+        # display normally; only the ready ones after the stall deadline). A
+        # display outside it keeps its widgets closed until its own first
+        # wallpaper and Quick readiness, then gets its own one-shot reveal.
+        self._startup_reveal_cohort: frozenset[int] | None = None
+        self._late_startup_reveals: Dict[int, QuickStartupRevealCoordinator] = {}
         
         self._transition_work_pending = False
         self._quick_transition_batch_spec: ResolvedQuickTransitionSpec | None = None
@@ -4085,12 +4092,23 @@ class DisplayManager(QObject):
             parameters=(),
         )
 
-    def _apply_quick_startup_reveal_opacity(self, opacity: float) -> int:
-        """Apply one shared startup gate without rewriting family-authored fades."""
+    def _apply_quick_startup_reveal_opacity(
+        self,
+        opacity: float,
+        *,
+        screens: frozenset[int] | None = None,
+    ) -> int:
+        """Apply the startup gate to ``screens`` (all displays when ``None``).
+
+        Family-authored fades are never rewritten; each display's host stores
+        its own gate, so a root admitted later inherits that display's value.
+        """
 
         affected = 0
         for display in tuple(self.displays):
             if display.is_retired:
+                continue
+            if screens is not None and int(display.screen_index) not in screens:
                 continue
             affected += len(display.presenter.set_startup_reveal_opacity(opacity))
             try:
@@ -4124,11 +4142,17 @@ class DisplayManager(QObject):
                 or int(manager._runtime_generation or 0) != generation
             ):
                 return 0
-            return manager._apply_quick_startup_reveal_opacity(opacity)
+            # Priming closes every display; once started, the shared fade
+            # drives only its cohort and never a stalled sibling.
+            return manager._apply_quick_startup_reveal_opacity(
+                opacity,
+                screens=manager._startup_reveal_cohort,
+            )
 
         coordinator = QuickStartupRevealCoordinator(
             runtime_generation=generation,
             opacity_sink=_opacity_sink,
+            duration_ms=QUICK_STARTUP_REVEAL_DURATION_MS,
             parent=self,
         )
         coordinator.completed.connect(self._on_quick_startup_reveal_finished)
@@ -4143,9 +4167,18 @@ class DisplayManager(QObject):
         )
 
     def _mark_startup_reveal_ready(self, screen_index: int) -> None:
-        """Start the coordinated reveal once every selected display is ready."""
+        """Start the coordinated reveal once every selected display is ready.
 
-        self._startup_reveal_screens.add(int(screen_index))
+        A display that becomes ready after the shared reveal started without it
+        gets its own one-shot reveal instead of joining (or restarting) the
+        shared fade.
+        """
+
+        screen = int(screen_index)
+        self._startup_reveal_screens.add(screen)
+        if self._startup_reveal_started:
+            self._start_late_display_reveal(screen)
+            return
         self._evaluate_startup_reveal()
 
     def _evaluate_startup_reveal(self, *, stall_deadline_expired: bool = False) -> None:
@@ -4154,8 +4187,9 @@ class DisplayManager(QObject):
         The reveal waits for every selected, non-failed display. When at least
         one display is ready and another is not, one generation-fenced one-shot
         deadline bounds the wait; on expiry the shared reveal starts for the
-        ready displays and the stall is reported. A late display joins at the
-        gate's current opacity (1.0 once complete).
+        ready displays only and the stall is reported. A stalled display's
+        widgets stay closed until it is ready on its own
+        (``_start_late_display_reveal``).
         """
 
         if self._startup_reveal_emitted or self._startup_reveal_started:
@@ -4179,6 +4213,7 @@ class DisplayManager(QObject):
             )
 
         self._startup_reveal_started = True
+        self._startup_reveal_cohort = frozenset(ready)
         coordinator = self._quick_startup_reveal
         if coordinator is None:
             # Defensive no-animation shape: completion must still reflect the
@@ -4194,6 +4229,61 @@ class DisplayManager(QObject):
             int(self._runtime_generation or 0),
             len(expected),
             coordinator.target_count,
+        )
+        coordinator.start()
+
+    def _start_late_display_reveal(self, screen_index: int) -> None:
+        """Give one display that missed the shared reveal its own one-shot fade.
+
+        Same coordinator type and duration as the shared reveal, scoped to this
+        display's gate; the shared fade and its lifecycle completion are not
+        touched. Idempotent per display and generation.
+        """
+
+        cohort = self._startup_reveal_cohort
+        if (
+            self._retired
+            or self._quick_startup_reveal is None
+            or cohort is None
+            or screen_index in cohort
+            or screen_index in self._late_startup_reveals
+        ):
+            return
+        generation = int(self._runtime_generation or 0)
+        manager_ref = weakref.ref(self)
+        screens = frozenset({screen_index})
+
+        def _opacity_sink(opacity: float) -> int:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or int(manager._runtime_generation or 0) != generation
+            ):
+                return 0
+            return manager._apply_quick_startup_reveal_opacity(opacity, screens=screens)
+
+        def _on_completed(completed_generation: int) -> None:
+            logger.info(
+                "[STARTUP_REVEAL] Late display reveal complete generation=%s screen=%s",
+                completed_generation,
+                screen_index,
+            )
+
+        coordinator = QuickStartupRevealCoordinator(
+            runtime_generation=generation,
+            opacity_sink=_opacity_sink,
+            duration_ms=QUICK_STARTUP_REVEAL_DURATION_MS,
+            parent=self,
+        )
+        coordinator.completed.connect(_on_completed)
+        self._late_startup_reveals[screen_index] = coordinator
+        logger.info(
+            "[STARTUP_REVEAL] Late display ready; starting its own reveal "
+            "generation=%s screen=%s shared_cohort=%s",
+            generation,
+            screen_index,
+            sorted(cohort),
         )
         coordinator.start()
 
@@ -4239,8 +4329,14 @@ class DisplayManager(QObject):
         self.startup_reveal_completed.emit(int(generation))
 
     def _cancel_quick_startup_reveal(self) -> None:
-        """Retire the generation's shared reveal without false completion."""
+        """Retire the generation's shared and late reveals without false completion."""
 
+        late_reveals = tuple(self._late_startup_reveals.values())
+        self._late_startup_reveals = {}
+        self._startup_reveal_cohort = None
+        for late in late_reveals:
+            late.cancel()
+            late.deleteLater()
         coordinator = self._quick_startup_reveal
         self._quick_startup_reveal = None
         if coordinator is None:
