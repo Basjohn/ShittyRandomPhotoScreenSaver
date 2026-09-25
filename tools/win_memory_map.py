@@ -716,8 +716,27 @@ def _find_srpss_pid(*, wait: bool = False) -> int:
             if proc.info["create_time"] >= not_before and _is_srpss_saver(proc)
         ]
         if candidates:
-            candidates.sort(key=lambda p: p.info["create_time"])
-            return int(candidates[-1].info["pid"])
+            if wait:
+                # A venv python.exe is a launcher stub that starts the real
+                # interpreter as a child a moment later with the same script;
+                # let it appear, then keep the process whose child is not a saver.
+                time.sleep(3.0)
+                candidates = [
+                    proc
+                    for proc in psutil.process_iter(["pid", "name", "cmdline", "create_time"])
+                    if proc.info["create_time"] >= not_before and _is_srpss_saver(proc)
+                ]
+            pids = {proc.info["pid"] for proc in candidates}
+            leaves = []
+            for proc in candidates:
+                try:
+                    if not any(child.pid in pids for child in proc.children()):
+                        leaves.append(proc)
+                except psutil.Error:
+                    continue
+            leaves.sort(key=lambda p: p.info["create_time"])
+            if leaves:
+                return int(leaves[-1].info["pid"])
         if not wait:
             raise SystemExit("no running SRPSS main process found; pass --pid")
         time.sleep(5.0)
