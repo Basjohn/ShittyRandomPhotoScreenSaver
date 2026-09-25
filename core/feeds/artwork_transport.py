@@ -18,6 +18,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from .artwork import ArtworkCancelled, MAX_DOWNLOAD_BYTES, safe_artwork_url
 from core.network.bounded_dns import resolve_bounded
+from core.network.tls import verified_client_context
 
 MAX_ARTWORK_REDIRECTS = 3
 CONNECT_TIMEOUT_SECONDS = 4.0
@@ -116,7 +117,7 @@ def iter_public_image(
         timeout = min(max(0.1, connect_timeout), remaining)
         if scheme == "https":
             connection = http.client.HTTPSConnection(
-                host, port, timeout=timeout, context=ssl.create_default_context())
+                host, port, timeout=timeout, context=verified_client_context())
         else:
             connection = http.client.HTTPConnection(host, port, timeout=timeout)
         # http.client retains the hostname for TLS SNI/certificate verification
