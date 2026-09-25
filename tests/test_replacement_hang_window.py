@@ -139,3 +139,25 @@ def test_monitor_topology_rebuild_uses_the_shared_replacement_path(engine, monke
 
     assert calls == [{"event": "monitor_topology", "show_first_image": False}]
     assert engine._pending_monitor_replay_image is engine._current_image
+
+
+def test_hang_dump_goes_to_the_resolved_log_dir_not_the_working_directory(
+    tmp_path,
+    monkeypatch,
+):
+    import core.logging.logger as logger_module
+
+    log_dir = tmp_path / "resolved_logs"
+    log_dir.mkdir()
+    elsewhere = tmp_path / "System32"
+    elsewhere.mkdir()
+    monkeypatch.setattr(logger_module, "_ACTIVE_LOG_DIR", log_dir)
+    monkeypatch.chdir(elsewhere)
+
+    hang_watchdog.arm("probe_window", timeout_s=30.0)
+    hang_watchdog.disarm("probe_window")
+
+    dump = log_dir / "hang_stacks.log"
+    assert hang_watchdog.dump_path() == dump
+    assert "HANG WATCHDOG ARMED label=probe_window" in dump.read_text(encoding="utf-8")
+    assert not (elsewhere / "logs").exists()

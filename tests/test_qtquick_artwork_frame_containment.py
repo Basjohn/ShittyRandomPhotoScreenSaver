@@ -13,15 +13,24 @@ import math
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QPointF, QUrl
+from PySide6.QtCore import QEventLoop, QPointF, QTimer, QUrl
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlProperty
 from PySide6.QtQuick import QQuickItem, QQuickWindow
-from PySide6.QtTest import QTest
 
 from core.settings.default_contract import require_canonical_default
 
 pytestmark = pytest.mark.usefixtures("qt_app")
+
+
+def _wait_releasing_gil(ms: int) -> None:
+    # QTest.qWait keeps the GIL while it processes events (PySide 6.9.1). The
+    # first expose then waits for the render thread, which needs the GIL for
+    # the Python window's connectNotify override lookup during
+    # ShaderEffectSource sync: a deadlock. QEventLoop.exec releases the GIL.
+    loop = QEventLoop()
+    QTimer.singleShot(ms, loop.quit)
+    loop.exec()
 QML_ROOT = Path(__file__).resolve().parents[1] / "rendering" / "quick" / "qml"
 SCALE = 2.0
 
@@ -62,7 +71,7 @@ class _Scene:
         self.window.show()
 
     def grab(self) -> QImage:
-        QTest.qWait(1400)  # asynchronous decode + ArtworkFadeImage's fade-in
+        _wait_releasing_gil(1400)  # asynchronous decode + ArtworkFadeImage's fade-in
         return self.window.grabWindow()
 
     def close(self) -> None:

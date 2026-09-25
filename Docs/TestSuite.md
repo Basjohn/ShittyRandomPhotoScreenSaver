@@ -332,6 +332,7 @@ Historical Bugs R-82/R-83 and related worker/lifetime records own the mechanisms
 - do not add obsolete coverage merely because it once represented a migration gate;
 - add durable regressions for current behavior likely to recur;
 - keep environment-specific coverage visible rather than silently dropping it.
+- never wait with `QTest.qWait` around a threaded-render `QQuickWindow`: it keeps the GIL while processing events, and the first expose then deadlocks against the render thread's GIL acquisition. Use `qtbot.wait` or `QEventLoop.exec()`, which release the GIL (R-96).
 
 ### Goldens and replays
 
