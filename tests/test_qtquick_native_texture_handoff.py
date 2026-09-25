@@ -276,3 +276,33 @@ def test_adopted_textures_never_enter_the_upload_or_release_byte_ledger(retained
     node.release_resources()
     snapshot = telemetry.snapshot()
     assert snapshot.image_upload_bytes == 0 and snapshot.image_release_bytes == 0
+
+
+def test_parked_transition_node_pins_neither_frame(qt_app) -> None:
+    """After a transition the warm custom node keeps its programs, not the run's frames."""
+
+    import gc
+
+    from rendering.quick.render.background_node import BackgroundRenderNode, SlideProofState
+
+    node = BackgroundRenderNode(RenderNodeTelemetry(gui_thread_id=1), screen_index=0, frame_trace=None)
+    source, destination = _image("parked-source", value=40), _image("parked-destination", value=50)
+    node.synchronize(
+        logical_size=(2.0, 1.0),
+        device_pixel_ratio=1.0,
+        state=SlideProofState(),
+        presentation_image=source,
+        transition_run=_run(source, destination),
+    )
+    del source, destination
+    # The retained scene node parks the custom branch this way when the
+    # transition ends (steady native path).
+    node.release_presentation_textures()
+    gc.collect()
+
+    alive = {
+        obj.identity
+        for obj in gc.get_objects()
+        if isinstance(obj, PresentationImage) and obj.identity.startswith("parked-")
+    }
+    assert alive == set()
