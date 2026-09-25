@@ -1026,3 +1026,25 @@ class TestSettingsManagerManualFloorClamp:
         widgets = manager.get("widgets")
         assert widgets["media"]["font_family"] == "Segoe UI"
         assert "widgets.media.font_family" not in repairs
+
+
+def test_settings_reads_leave_no_reference_cycles(tmp_path) -> None:
+    import gc
+
+    manager = SettingsManager(storage_base_dir=tmp_path)
+    gc.collect()
+    gc.set_debug(gc.DEBUG_SAVEALL)
+    try:
+        for _ in range(50):
+            manager.get("widgets")
+            manager.get("display.show_on_monitors")
+            manager.get("timing.interval")
+        gc.collect()
+        leaked = [
+            obj for obj in gc.garbage
+            if type(obj).__name__ == "function" and "SettingsManager.get" in obj.__qualname__
+        ]
+    finally:
+        gc.set_debug(0)
+        gc.garbage.clear()
+    assert leaked == []
