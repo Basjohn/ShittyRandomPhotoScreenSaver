@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from typing import Optional, TextIO
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_log_dir, get_logger
 
 logger = get_logger(__name__)
 
@@ -38,14 +38,14 @@ _dump_file: Optional[TextIO] = None
 
 
 def dump_path() -> Path:
-    """Return the dedicated stack-dump file path (best-effort ``logs/``)."""
+    """Return the stack-dump file in the process's resolved log directory.
 
-    base = Path("logs")
-    try:
-        base.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        base = Path.cwd()
-    return base / "hang_stacks.log"
+    A relative ``logs/`` followed the working directory, which for a screensaver
+    started by Windows is usually ``System32``: the dump landed away from the
+    other logs, or could not be written at all.
+    """
+
+    return get_log_dir() / "hang_stacks.log"
 
 
 def arm(label: str, *, timeout_s: float = 20.0) -> None:

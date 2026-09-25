@@ -91,6 +91,12 @@ paths that a wedged replacement triggers, and from the interaction that followed
 - `core.mc.is_mc_build()` constructed a full `SettingsManager` (migrations, repair, synchronous durability flush)
   for every per-window, menu and interaction query. That was 21 managers on MainThread for one cold start plus one
   rebuild. It now reads the side-effect-free entry-point profile.
+- `hang_watchdog.dump_path()` wrote `logs/hang_stacks.log` relative to the working directory, which for a screensaver
+  started by Windows is usually `System32`. The dump now goes to the resolved log directory beside the other logs.
+- Test harness: `tests/test_qtquick_artwork_frame_containment.py` waited with `QTest.qWait`, which keeps the GIL
+  while it processes events. The first expose then waited for a render thread that was itself waiting for the GIL
+  (shiboken's `connectNotify` override lookup during `ShaderEffectSource` sync), and the whole suite wedged. It now
+  waits with `QEventLoop.exec()`. This is the same deadlock class, confined to tests.
 
 ## Regression Coverage
 
@@ -104,6 +110,7 @@ paths that a wedged replacement triggers, and from the interaction that followed
   opacity bar at the real 1,800 ms.
 - `tests/test_qtquick_monitor_wake_reconcile.py::test_work_area_only_change_does_not_rebuild_healthy_displays`
 - `tests/test_mc_entrypoint_contract.py::test_mc_identity_is_resolved_without_constructing_settings`
+- `tests/test_replacement_hang_window.py::test_hang_dump_goes_to_the_resolved_log_dir_not_the_working_directory`
 - `tools/linux_xvfb_hotplug_churn.py` drives the unmodified app through real Qt screen add/remove on Xvfb. It is
   Linux development evidence, not Windows evidence.
 
