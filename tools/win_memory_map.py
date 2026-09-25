@@ -673,33 +673,54 @@ def diff(a: dict[str, Any], b: dict[str, Any], *, top: int = 30) -> str:
     return "\n".join(lines)
 
 
-def _find_srpss_pid(*, wait: bool = False) -> int:
-    while True:
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_SAVER_SCRIPTS = ("main.py", "main_mc.py", "main_diagnostic.py")
+_SAVER_EXES = ("srpss.exe", "srpss_diagnostic.exe", "srpss_media_center.exe")
+
+
+def _is_srpss_saver(proc: Any) -> bool:
+    """The saver's main process: this repository's entry script, or a frozen saver exe."""
+
+    name = (proc.info.get("name") or "").lower()
+    if name in _SAVER_EXES:
+        return True
+    cmdline = proc.info.get("cmdline") or []
+    if any("multiprocessing" in part for part in cmdline):
+        return False
+    for part in cmdline[1:]:
+        if Path(part).name.lower() not in _SAVER_SCRIPTS:
+            continue
+        script = Path(part)
+        if not script.is_absolute():
+            try:
+                script = Path(proc.cwd()) / script
+            except Exception:
+                return False
         try:
-            return _find_srpss_pid_once()
-        except SystemExit:
-            if not wait:
-                raise
-        time.sleep(5.0)
+            return script.resolve().parent == _REPO_ROOT
+        except OSError:
+            return False
+    return False
 
 
-def _find_srpss_pid_once() -> int:
+def _find_srpss_pid(*, wait: bool = False) -> int:
+    """Return the newest saver process; with ``wait``, one started after this call."""
+
     import psutil
 
-    candidates = []
-    for proc in psutil.process_iter(["pid", "name", "cmdline", "create_time"]):
-        cmd = " ".join(proc.info.get("cmdline") or []).lower()
-        name = (proc.info.get("name") or "").lower()
-        if "multiprocessing" in cmd or "--multiprocessing-fork" in cmd:
-            continue
-        if name.startswith("srpss") or "main.py" in cmd or "main_mc.py" in cmd or "main_diagnostic.py" in cmd:
-            if "win_memory_map" in cmd:
-                continue
-            candidates.append(proc)
-    if not candidates:
-        raise SystemExit("no running SRPSS main process found; pass --pid")
-    candidates.sort(key=lambda p: p.info["create_time"])
-    return int(candidates[-1].info["pid"])
+    not_before = time.time() if wait else 0.0
+    while True:
+        candidates = [
+            proc
+            for proc in psutil.process_iter(["pid", "name", "cmdline", "create_time"])
+            if proc.info["create_time"] >= not_before and _is_srpss_saver(proc)
+        ]
+        if candidates:
+            candidates.sort(key=lambda p: p.info["create_time"])
+            return int(candidates[-1].info["pid"])
+        if not wait:
+            raise SystemExit("no running SRPSS main process found; pass --pid")
+        time.sleep(5.0)
 
 
 def _open_counters(pid: int) -> tuple[Any, Any, int]:
