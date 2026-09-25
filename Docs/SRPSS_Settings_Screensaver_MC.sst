@@ -18,7 +18,7 @@
       "max_concurrent": 2,
       "max_items": 16,
       "max_memory_mb": 256,
-      "prefetch_ahead": 5
+      "prefetch_ahead": 4
     },
     "display": {
       "gl_depth_bits": 24,

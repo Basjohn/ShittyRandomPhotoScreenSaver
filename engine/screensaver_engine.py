@@ -242,7 +242,7 @@ class ScreensaverEngine(QObject):
         # Caching / prefetch
         self._image_cache: Optional[ImageCache] = None
         self._prefetcher: Optional[ImagePrefetcher] = None
-        self._prefetch_ahead: int = 5
+        self._prefetch_ahead: int = int(require_canonical_default("cache.prefetch_ahead"))
         # One generation/token-scoped deferred prefetch intent.  The claim can
         # wait on an active image batch without polling; a replacement generation
         # simply supersedes an older claim rather than inheriting a stale bool.
