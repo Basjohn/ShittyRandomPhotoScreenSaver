@@ -14,7 +14,7 @@ import time
 from typing import Callable
 import weakref
 
-from PySide6.QtCore import QCoreApplication, QObject, QTimer
+from PySide6.QtCore import QCoreApplication, QMetaObject, QObject, Qt, QTimer
 
 from core.logging.logger import get_logger
 
@@ -57,6 +57,29 @@ def _runtime_event(reason: str) -> str:
     if "dialog" in reason:
         return "settings_dialog"
     return "runtime"
+
+
+def request_application_quit(reason: str) -> bool:
+    """Ask the event loop to quit without Python waiting on a Quick render thread.
+
+    ``QCoreApplication.quit()`` called from Python on the GUI thread sends
+    ``QEvent::Quit`` synchronously, and ``QGuiApplication`` then closes every
+    open top-level window inside that same call. PySide holds the GIL for the
+    whole call, so a Quick render thread that is running Python at that moment
+    (``updatePaintNode``, a DirectConnection render-phase slot, a Python
+    ``QSGRenderNode``) can never finish the render stop the window close waits
+    for: every Python thread stops. Queueing the native ``quit()`` slot lets Qt
+    call it from the event loop with no Python frame holding the GIL; ``quit()``
+    keeps its own "only while ``exec()`` runs" rule.
+    """
+
+    app = QCoreApplication.instance()
+    if app is None:
+        return False
+    logger.info("[LIFECYCLE] Application quit requested reason=%s", reason)
+    return bool(
+        QMetaObject.invokeMethod(app, "quit", Qt.ConnectionType.QueuedConnection)
+    )
 
 
 def qt_replacement_may_run(engine: object | None) -> bool:
@@ -527,7 +550,7 @@ class RuntimeDestructionBarrier:
             )
             if self._is_terminal:
                 try:
-                    QCoreApplication.quit()
+                    request_application_quit("terminal_finalization_failed")
                 except Exception:
                     logger.error(
                         "[LIFECYCLE_BARRIER] Terminal finalization quit failed",

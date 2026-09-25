@@ -106,11 +106,24 @@ def arm(label: str, *, timeout_s: float = 20.0) -> None:
             logger.debug("[HANG_WATCHDOG] Failed to arm faulthandler", exc_info=True)
 
 
+def armed_label() -> Optional[str]:
+    """Return the label of the currently armed window, if any."""
+
+    with _lock:
+        return _armed_label
+
+
 def disarm(label: str = "") -> None:
-    """Cancel the pending stack dump after a healthy construction completes."""
+    """Cancel the pending stack dump after a healthy window completes.
+
+    A non-empty ``label`` disarms only that window, so a late completion edge
+    from one owner cannot cancel a window another owner armed since.
+    """
 
     global _armed_label, _dump_file
     with _lock:
+        if label and _armed_label is not None and _armed_label != label:
+            return
         try:
             faulthandler.cancel_dump_traceback_later()
         except Exception:

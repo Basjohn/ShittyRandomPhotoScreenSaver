@@ -31,6 +31,7 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state,
 )
 from rendering.runtime_input import suppress_runtime_pointer_input
+from engine.runtime_destruction import request_application_quit
 
 if TYPE_CHECKING:
     from engine.screensaver_engine import ScreensaverEngine
@@ -602,7 +603,7 @@ def _open_settings_after_runtime_destroyed(
         engine._active_settings_dialog = None
         engine._settings_dialog_active = False
         logger.exception("Failed to open settings dialog: %s", e)
-        QCoreApplication.quit()
+        request_application_quit("settings_dialog_failed")
 
 
 def _restart_after_settings_dialog_destroyed(
@@ -649,12 +650,23 @@ def _restart_after_settings_dialog_destroyed(
     )
 
 
+def replacement_watchdog_label(event: str, runtime_generation: int) -> str:
+    """Name one replacement generation's construction-to-reveal hang window."""
+
+    return "replacement_to_reveal:%s:generation=%d" % (event, int(runtime_generation))
+
+
 def _construct_and_start_replacement_runtime(
     engine: ScreensaverEngine,
     *,
     event: str,
+    show_first_image: bool = True,
 ) -> bool:
-    """Construct one replacement after destruction; reveal remains owner-gated."""
+    """Construct one replacement after destruction; reveal remains owner-gated.
+
+    Settings, CUSTOM and monitor-topology replacements all enter here, so one
+    path owns construction, the first image and the hang window around them.
+    """
 
     from engine.runtime_destruction import qt_replacement_may_run
 
@@ -665,14 +677,19 @@ def _construct_and_start_replacement_runtime(
         return False
     engine._runtime_lifecycle_event = event
 
-    # H1 diagnostic: the dual-display replacement generation intermittently hangs
-    # the main thread during screen-1 Media/native construction (H doc §3). A
-    # healthy replacement completes in well under a second, so arm an all-thread
-    # stack-dump watchdog and disarm it once construction returns; a fired dump
-    # names the exact wedged frame the breadcrumbs cannot.
+    # H1 diagnostic: dual-display replacement generations have wedged the whole
+    # process (every thread stops logging) both during construction and, on the
+    # 2026-09-25 double wake, after construction while the first image and first
+    # frames were still outstanding. A healthy replacement reaches its reveal in
+    # a few seconds, so the all-thread stack dump stays armed from construction
+    # to the generation's coordinated reveal (or its retirement); a fired dump
+    # names the wedged frame the breadcrumbs cannot.
     from core.diagnostics.hang_watchdog import arm as _arm_hang, disarm as _disarm_hang
 
-    _arm_hang("replacement_construction:%s" % event, timeout_s=20.0)
+    label = replacement_watchdog_label(event, int(getattr(engine, "_runtime_generation", 0)))
+    _arm_hang(label, timeout_s=20.0)
+    engine._replacement_watchdog_label = label
+    constructed = False
     try:
         log_lifecycle_resource_snapshot(
             engine,
@@ -681,7 +698,7 @@ def _construct_and_start_replacement_runtime(
         )
         if not engine._initialize_display():
             logger.error("Failed to initialize replacement display runtime; quitting")
-            QCoreApplication.quit()
+            request_application_quit("replacement_initialize_failed")
             return False
         log_lifecycle_resource_snapshot(
             engine,
@@ -689,18 +706,21 @@ def _construct_and_start_replacement_runtime(
             stage="after_replacement_before_first_frame",
         )
         engine._setup_rotation_timer()
-        if not engine.start():
+        if not engine.start(show_first_image=show_first_image):
             logger.error("Failed to start replacement display runtime; quitting")
-            QCoreApplication.quit()
+            request_application_quit("replacement_start_failed")
             return False
         log_lifecycle_resource_snapshot(
             engine,
             event=event,
             stage="after_restart",
         )
+        constructed = True
         return True
     finally:
-        _disarm_hang("replacement_construction:%s" % event)
+        if not constructed:
+            engine._replacement_watchdog_label = None
+            _disarm_hang(label)
 
 
 def on_custom_layout_reload_requested(

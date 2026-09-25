@@ -72,6 +72,12 @@ from rendering.quick.transitions.run_geometry import (
 logger = get_logger(__name__)
 REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
 MONITOR_RECONCILE_DELAY_MS = 250
+# Once one display of a generation is reveal-ready, a sibling that has not
+# reached its first frame within this bound no longer holds every other
+# display's widgets behind the closed startup gate. Healthy staggered displays
+# become ready within ~2 s of each other (100 ms show stagger, 200 ms image
+# stagger, 1.3 s desktop crossfade), so the bound only ever expires for a stall.
+QUICK_STARTUP_REVEAL_STALL_DEADLINE_MS = 6000
 MONITOR_TOPOLOGY_SCREEN_SIGNAL_NAMES = (
     "geometryChanged",
     "availableGeometryChanged",
@@ -223,8 +229,12 @@ class DisplayManager(QObject):
         # without pretending the snapshot is queue/history/current-image truth.
         self._startup_desktop_seed_screens: Set[int] = set()
         self._startup_reveal_screens: Set[int] = set()
+        # Screens whose Quick readiness failed this generation: they can never
+        # present, so they are not awaited by the reveal/first-frame gates.
+        self._startup_failed_screens: Set[int] = set()
         self._startup_reveal_started = False
         self._startup_reveal_emitted = False
+        self._startup_reveal_deadline_armed = False
         self._quick_startup_reveal: QuickStartupRevealCoordinator | None = None
         
         self._transition_work_pending = False
@@ -447,8 +457,15 @@ class DisplayManager(QObject):
             return default
 
     def _screen_signature_part(self, index: int, screen: QScreen) -> tuple[object, ...]:
+        """Facts whose change requires a whole-generation rebuild.
+
+        Work area (``availableGeometry``) is deliberately absent: a taskbar
+        move or auto-hide edge changes no window, scene or routing fact, and
+        each Quick window already re-applies its bound screen geometry on that
+        edge. Rebuilding every healthy display for it was pure churn. The
+        work-area signal stays subscribed as a wake/reconcile edge.
+        """
         geometry = self._call_screen_attr(screen, "geometry")
-        available = self._call_screen_attr(screen, "availableGeometry")
 
         def _geom_part(rect: object) -> tuple[int, int, int, int]:
             if rect is None:
@@ -477,7 +494,6 @@ class DisplayManager(QObject):
             str(self._call_screen_attr(screen, "serialNumber", "")),
             bool(screen is primary),
             _geom_part(geometry),
-            _geom_part(available),
             dpr,
         )
 
@@ -1703,6 +1719,11 @@ class DisplayManager(QObject):
                 unit.screen_index,
                 readiness.as_dict(),
             )
+            # A failed display cannot present this generation; its siblings'
+            # first-frame and reveal gates stop waiting for it.
+            self._startup_failed_screens.add(int(unit.screen_index))
+            self._evaluate_authoritative_first_frames()
+            self._evaluate_startup_reveal()
             return
         if readiness.qml_root_created and readiness.admission_open:
             self._mark_display_startup_ready(unit, startup_generation)
@@ -3607,6 +3628,9 @@ class DisplayManager(QObject):
             if startup_generation is not None and startup_generation == self._display_startup_generation:
                 self._display_startup_ready_expected.discard(id(display))
                 self._emit_display_startup_ready_if_complete(startup_generation)
+                # The removed display no longer holds its siblings' gates.
+                self._evaluate_authoritative_first_frames()
+                self._evaluate_startup_reveal()
             return False
 
     def _mark_display_startup_ready(self, display: QuickDisplayUnit, generation: int) -> None:
@@ -3958,10 +3982,21 @@ class DisplayManager(QObject):
         self.current_images[screen_index] = image_path
         self._authoritative_first_frame_screens.add(int(screen_index))
         logger.debug(f"Image displayed on screen {screen_index}: {image_path}")
-        expected = {
+        self._evaluate_authoritative_first_frames()
+        readiness = self._quick_readiness_by_screen.get(int(screen_index))
+        if readiness is not None and readiness.ready_for_reveal:
+            self._mark_startup_reveal_ready(int(screen_index))
+
+    def _startup_awaited_screens(self) -> Set[int]:
+        """Selected screens this generation's startup gates still wait for."""
+
+        return {
             int(getattr(display, "screen_index", -1))
             for display in self.displays
-        }
+        } - self._startup_failed_screens
+
+    def _evaluate_authoritative_first_frames(self) -> None:
+        expected = self._startup_awaited_screens()
         if (
             not self._authoritative_first_frame_emitted
             and expected
@@ -3971,9 +4006,6 @@ class DisplayManager(QObject):
             self.authoritative_first_frames_ready.emit(
                 int(self._runtime_generation or 0)
             )
-        readiness = self._quick_readiness_by_screen.get(int(screen_index))
-        if readiness is not None and readiness.ready_for_reveal:
-            self._mark_startup_reveal_ready(int(screen_index))
 
     def _prime_quick_startup_desktop_sources(
         self,
@@ -4114,17 +4146,37 @@ class DisplayManager(QObject):
         """Start the coordinated reveal once every selected display is ready."""
 
         self._startup_reveal_screens.add(int(screen_index))
-        expected = {
-            int(getattr(display, "screen_index", -1))
-            for display in self.displays
-        }
-        if (
-            self._startup_reveal_emitted
-            or self._startup_reveal_started
-            or not expected
-            or not expected.issubset(self._startup_reveal_screens)
-        ):
+        self._evaluate_startup_reveal()
+
+    def _evaluate_startup_reveal(self, *, stall_deadline_expired: bool = False) -> None:
+        """Reveal together, but never hold ready displays behind a stalled sibling.
+
+        The reveal waits for every selected, non-failed display. When at least
+        one display is ready and another is not, one generation-fenced one-shot
+        deadline bounds the wait; on expiry the shared reveal starts for the
+        ready displays and the stall is reported. A late display joins at the
+        gate's current opacity (1.0 once complete).
+        """
+
+        if self._startup_reveal_emitted or self._startup_reveal_started:
             return
+        expected = self._startup_awaited_screens()
+        ready = expected & self._startup_reveal_screens
+        if not expected or not ready:
+            return
+        stalled = expected - ready
+        if stalled:
+            if not stall_deadline_expired:
+                self._arm_startup_reveal_stall_deadline()
+                return
+            logger.warning(
+                "[STARTUP_REVEAL][FALLBACK] Revealing ready displays without a "
+                "stalled sibling generation=%s ready=%s stalled=%s deadline_ms=%d",
+                int(self._runtime_generation or 0),
+                sorted(ready),
+                sorted(stalled),
+                QUICK_STARTUP_REVEAL_STALL_DEADLINE_MS,
+            )
 
         self._startup_reveal_started = True
         coordinator = self._quick_startup_reveal
@@ -4144,6 +4196,31 @@ class DisplayManager(QObject):
             coordinator.target_count,
         )
         coordinator.start()
+
+    def _arm_startup_reveal_stall_deadline(self) -> None:
+        """Arm the one bounded reveal wait for this startup generation."""
+
+        if self._startup_reveal_deadline_armed:
+            return
+        self._startup_reveal_deadline_armed = True
+        manager_ref = weakref.ref(self)
+        startup_generation = self._display_startup_generation
+
+        def _expire() -> None:
+            manager = manager_ref()
+            if (
+                manager is None
+                or manager._retired
+                or manager._display_startup_generation != startup_generation
+            ):
+                return
+            manager._evaluate_startup_reveal(stall_deadline_expired=True)
+
+        _expire._srpss_runtime_generation = self._runtime_generation
+        from core.threading.manager import ThreadManager
+
+        scheduler = self._thread_manager or ThreadManager
+        scheduler.single_shot(QUICK_STARTUP_REVEAL_STALL_DEADLINE_MS, _expire)
 
     def _on_quick_startup_reveal_finished(self, generation: int) -> None:
         """Publish lifecycle completion only after the shared fade actually ends."""
@@ -4565,8 +4642,10 @@ class DisplayManager(QObject):
         self._authoritative_first_frame_emitted = False
         self._startup_desktop_seed_screens.clear()
         self._startup_reveal_screens.clear()
+        self._startup_failed_screens.clear()
         self._startup_reveal_started = False
         self._startup_reveal_emitted = False
+        self._startup_reveal_deadline_armed = False
         count = len(self.displays)
         logger.info("Cleaning up %d display runtimes", count)
 

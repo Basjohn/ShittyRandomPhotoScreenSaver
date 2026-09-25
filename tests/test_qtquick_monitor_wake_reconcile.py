@@ -165,7 +165,29 @@ def test_same_count_screen_metric_change_rebuilds_generation_authority(monkeypat
 
     assert changes == [1]
     assert manager.screen_count == 1
-    assert manager._screen_signature[0][-3] == (-1920, 0, 1920, 1080)
+    assert manager._screen_signature[0][-2] == (-1920, 0, 1920, 1080)
+    manager.disconnect_monitor_detection()
+
+
+def test_work_area_only_change_does_not_rebuild_healthy_displays(monkeypatch):
+    """A taskbar/work-area edge is reconciled, but it is not a topology change.
+
+    Each Quick window re-applies its bound screen geometry on this edge itself;
+    tearing down every healthy display for it was unnecessary churn.
+    """
+
+    screen = _Screen("DISPLAY1", 0, 2560, 1440)
+    manager, _app, scheduler = _manager(monkeypatch, [screen])
+    changes: list[int] = []
+    manager.monitors_changed.connect(changes.append)
+
+    screen._available = QRect(0, 0, 2560, 1380)
+    screen.availableGeometryChanged.emit(screen.availableGeometry())
+    assert len(scheduler.calls) == 1
+    scheduler.run_next()
+
+    assert changes == []
+    assert manager.screen_count == 1
     manager.disconnect_monitor_detection()
 
 
