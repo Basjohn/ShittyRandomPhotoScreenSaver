@@ -202,6 +202,15 @@ High-value suites include `test_qtquick_runtime.py`, `test_qtquick_window.py`, `
 
 **Runtime replacement / Settings admission:** `tests/test_qtquick_transition_controller.py` guards silent transition terminalization and forbids live `clear_all()` / `unit.clear()` from the full destruction path; `tests/test_visualizer_failover_adapter_retirement.py` guards manager + display-unit Visualizer owner detachment after confirmed retirement; `tests/test_audio_event_mailbox.py` guards bounded callback delivery and callback-cycle severing at retirement; and `tests/test_settings_dialog.py` guards semantic tab/section/builder restoration with top-of-section scroll anchoring. These are current lifecycle contracts. Qt/Windows execution is required for replacement-generation, retained-scene and native COM acceptance; pure source/default/mailbox gates alone do not close those physical checks.
 
+**Replacement first image, hang window, reveal ownership and quit (R-96):**
+- `test_monitor_replay_admission.py`: one first-image admission per replacement.
+- `test_replacement_hang_window.py`: one shared construction path and a hang window from construction to reveal.
+- `test_startup_reveal_stalled_display.py`: failed and stalled siblings; the two-monitor late-recovery bar reads each display's gate at the real 1,800 ms.
+- `test_quit_request_render_thread_gil.py`: a subprocess with a real threaded-GL window running the production node; the queued quit must exit, and `MODE=synchronous` reproduces the wedge.
+- `test_qtquick_native_texture_wrapper_retention.py`: uploads leave no Python `QSGTexture` wrappers (R-97).
+
+These bars run real engine/manager code on the real Qt loop. Native Windows wake and topology acceptance stays physical.
+
 ### 6.2 Widget normalization and CUSTOM
 
 Tests must distinguish:
@@ -312,7 +321,7 @@ Current injection/admission belongs to `rendering/widget_runtime_services.py`, r
 
 Cache tests protect useful bounded caches, ownership and reclamation, not arbitrary low memory numbers. Do not “fix” a cache test by destroying hot-cache value or turning event-driven work into polling.
 
-Historical Bugs R-82/R-83 and related worker/lifetime records own the mechanisms that justified permanent regressions. The test suite should encode their surviving invariants rather than repeat the incident diary here.
+Historical Bugs R-82/R-83 and related worker/lifetime records own the mechanisms that justified permanent regressions. `test_network_tls_context.py` protects the one verified direct-socket TLS context (R-98). The test suite should encode their surviving invariants rather than repeat the incident diary here.
 
 ## 7. Test infrastructure rules
 

@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-09-23
+Last updated: 2026-09-25
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -42,6 +42,9 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
+- [R-98 — Gmail IMAP Connected Unverified; Every Direct HTTPS Connection Reloaded The Trust Store](R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **FIXED IN CODE / AWAITING VALIDATION**. `imaplib` without a context is unverified; urllib/artwork built a Windows trust-store context per connection with the GIL held. One verified process context.
+- [R-97 — Overnight Main-Process Private Commit Growth](R-97_Overnight_Main_Process_Private_Commit_Growth.md) — **PARTIAL / AWAITING LOGS**. Image cache and VRAM flat; QSGTexture wrapper retention fixed; the Windows private-commit slope (+125 MB/h, USS +33 MB/h) awaits Windows attribution.
+- [R-96 — Double Wake Froze The Replacement Runtime](R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **FIXED IN CODE / AWAITING VALIDATION**. Two first images per rebuild, no hang window after construction, synchronous `quit()` GIL deadlock with render-thread Python, reveal held by a stalled sibling, work-area rebuilds.
 - [R-95 — Prepared Transition Geometry Never Matched Under R-63 Overscan](R-95_Prepared_Transition_Geometry_Never_Matched_Under_R63.md) — **SOLVED IN CODE**. COMPUTE keyed on the monitor rect, the renderer on the (larger) R-63 window: every Glass/Crumble run rebuilt on both render threads; key on the renderer's own size, prove a hit.
 - [R-94 — Melt's Float Noise Hash Cut The Photograph Into Rectangles](R-94_Melt_Float_Hash_Cut_The_Photo_Into_Rectangles.md) — **SOLVED IN CODE**. Compiler-rounding divergence in a chaotic float hash made each noise cell melt separately; exact integer lattice hash + field-render bar.
 - [R-93 — Media Commands And Refreshes Starved Behind Network IO](R-93_Media_Commands_Starved_Behind_Network_IO.md) — **SOLVED** (runtime audit PW-02). Dedicated lazy `media` lane; never the FIFO IO pool or the observation worker.

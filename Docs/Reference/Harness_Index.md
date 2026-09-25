@@ -360,6 +360,18 @@ Use only relevant existing diagnostic flag families such as:
 Keep observer overhead named. Do not invent another probe family when existing evidence can answer the
 question.
 
+Memory evidence comes from the existing `--usage` (plus `--life` for generation edges) logs:
+`python tools/memory_slope_report.py <log dir> --warmup-minutes 20` reports, per process and generation,
+warm-plateau slopes of private commit, USS, RSS, handles, image-cache bytes and VRAM, and each replacement's
+settled step. A step that repeats on equivalent rebuilds is retention; one bounded step is first use. Growth in
+private commit that USS does not share is committed memory that is no longer resident (R-97).
+`--handle-attribution` adds the Windows handle-type sidecar.
+
+Linux development only: `python tools/linux_xvfb_hotplug_churn.py --cycles N` runs the unmodified app on
+Xvfb/Mesa with RandR monitors, adds and removes the second monitor, and reports each generation's reveal latency
+and memory. A hang gets a `py-spy` dump. `--covered-display` keeps a display that is never exposed, which
+exercises the stalled-sibling reveal on real Quick windows. It is not Windows evidence (R-96).
+
 ## 11. Lifecycle
 
 Check as relevant:

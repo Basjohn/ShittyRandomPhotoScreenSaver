@@ -272,7 +272,7 @@ Preserve:
 - no black placeholder;
 - no stale image/texture pop;
 - no visualizer/shell flash;
-- coordinated multi-display reveal.
+- coordinated multi-display reveal that is never held by a stalled or failed sibling, and never opens a display before its own first wallpaper (Contracts § Startup composition).
 
 Separate:
 
