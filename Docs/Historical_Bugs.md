@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-09-23
+Last updated: 2026-09-25
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -13,6 +13,7 @@ not automatic current architecture instructions.
 
 ## Open / Watchlist Records
 
+- [R-97 — Overnight Main-Process Private Commit Growth](Historical_Bugs/R-97_Overnight_Main_Process_Private_Commit_Growth.md) — **PARTIAL / AWAITING LOGS**. Windows steady private-commit slope unattributed; attribution run sequenced in `Current_Plan.md`.
 - [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](Historical_Bugs/R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md) — **SOLVED / CHK26 GOLDEN**. CHK23 removed steady Python/PyOpenGL background redraw through retained Qt-native content; CHK26 removed proven duplicate non-stencil GL-state queries and was physically accepted neutral-or-better at repository commit `a0bf70932c`. CHK27–CHK29 then attributed the largest apparent residuals to Qt frame/render-phase ownership or small distributed Bubble/driver work and closed generic performance fishing. Reopen only from a concrete reproduced symptom.
 - [U-05 — MC Keyboard Focus / Ctrl Halo Runtime Input Family](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md)
 - [U-06 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss](Historical_Bugs/U-06_MC_Shadow_Cache_Corruption.md)
@@ -21,6 +22,8 @@ not automatic current architecture instructions.
 
 ## Active / Pending Acceptance Records
 
+- [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **AWAITING VALIDATION**. Windows dual-monitor built check in `Current_Plan.md`.
+- [R-98 — Gmail IMAP Connected Unverified](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **AWAITING VALIDATION**. Gmail refresh must still succeed with certificate verification on.
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](Historical_Bugs/R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md) — **REJECTED / ROLLED BACK**. Installed two-display validation showed materially worse pacing/FPS/headroom with Quick swap interval 1; production returned to the known-good interval-0 policy.
 - [R-82 — Scaled Prefetch Derivatives Could Permanently Occupy Budget After Raw Parent Eviction](Historical_Bugs/R-82_Scaled_Prefetch_Orphaned_Derivative_Budget.md) — **SOLVED**. The 58-minute Windows soak preserved scaled-prefetch liveness through sustained cache eviction pressure.
 - [R-83 — Reddit Sub-Millisecond Cooldown Could Re-enter The Due Path Synchronously](Historical_Bugs/R-83_Reddit_Submillisecond_Cooldown_Recursive_Rearm.md) — **SOLVED**. The 58-minute Windows soak showed no recursive zero-delay due storm or request multiplication.
@@ -37,6 +40,9 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-98 — Gmail IMAP Connected Unverified; Every Direct HTTPS Connection Reloaded The Trust Store](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **FIXED IN CODE / AWAITING VALIDATION**. `imaplib` without a context is unverified; urllib/artwork built a Windows trust-store context per connection with the GIL held. One verified process context.
+- [R-97 — Overnight Main-Process Private Commit Growth](Historical_Bugs/R-97_Overnight_Main_Process_Private_Commit_Growth.md) — **PARTIAL / AWAITING LOGS**. Image cache and VRAM flat; QSGTexture wrapper retention fixed; the Windows private-commit slope (+125 MB/h, USS +33 MB/h) awaits Windows attribution.
+- [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **FIXED IN CODE / AWAITING VALIDATION**. Two first images per rebuild, no hang window after construction, synchronous `quit()` GIL deadlock with render-thread Python, reveal held by a stalled sibling, work-area rebuilds.
 - [R-95 — Prepared Transition Geometry Never Matched Under R-63 Overscan](Historical_Bugs/R-95_Prepared_Transition_Geometry_Never_Matched_Under_R63.md) — **SOLVED IN CODE**. COMPUTE keyed on the monitor rect, the renderer on the (larger) R-63 window: every Glass/Crumble run rebuilt on both render threads; key on the renderer's own size, prove a hit.
 - [R-94 — Melt's Float Noise Hash Cut The Photograph Into Rectangles](Historical_Bugs/R-94_Melt_Float_Hash_Cut_The_Photo_Into_Rectangles.md) — **SOLVED IN CODE**. Compiler-rounding divergence in a chaotic float hash made each noise cell melt separately; exact integer lattice hash + field-render bar.
 - [R-93 — Media Commands And Refreshes Starved Behind Network IO](Historical_Bugs/R-93_Media_Commands_Starved_Behind_Network_IO.md) — **SOLVED** (runtime audit PW-02). Dedicated lazy `media` lane; never the FIFO IO pool or the observation worker.

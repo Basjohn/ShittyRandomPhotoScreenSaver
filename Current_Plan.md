@@ -76,7 +76,31 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 ## Display wake freeze and overnight memory (2026-09-25 evidence)
 
-- [x] **Per-display reveal ownership after the stalled-sibling deadline (operator 2026-09-25).** The shared 1,800 ms fade drives only the displays ready when it starts; a stalled display keeps widget opacity 0 until its own first wallpaper and Quick readiness, then gets its own one-shot 1,800 ms reveal; cold startup unchanged. Bar: `tests/test_startup_reveal_stalled_display.py::test_late_display_fades_in_on_its_own_after_its_first_wallpaper`.
+Records: R-96 (wake freeze and reveal), R-97 (memory), R-98 (TLS). Landed 2026-09-25: one first-image owner per replacement, a hang window from construction to reveal, queued quit, bounded and per-display reveal ownership, no work-area rebuilds, texture-wrapper retention, MC identity without `SettingsManager`, and one verified TLS context. Linux tooling: `tools/memory_slope_report.py`, `tools/linux_xvfb_hotplug_churn.py`.
+
+- [~] **Awaiting validation — Windows dual-monitor built check (R-96, R-98).** The operator procedure was given in chat on 2026-09-25. Pass requires all of:
+  - repeated double wakes reveal every generation;
+  - no `logs/hang_stacks.log` (if one appears, it is the evidence);
+  - no `[DISPLAY][FALLBACK]`, and at most one first-image admission per rebuild;
+  - `[STARTUP_REVEAL][FALLBACK]` only while a monitor is genuinely still waking;
+  - tray exit and a Settings round-trip exit cleanly;
+  - Gmail refreshes succeed with certificate verification (no `CERTIFICATE_VERIFY_FAILED`).
+- [ ] **Awaiting logs — Windows steady private-commit slope (R-97).** Private commit grows +125/+127 MB/h and USS +32/+34 MB/h, while the image cache and VRAM stay flat; it does not reproduce on Linux. Attribute it with one `--usage --life --handle-attribution` run, then one-family-off A/B runs (Gmail first, then Visualizer audio capture), read with `tools/memory_slope_report.py`. Fix the owning retention; never lower caches or disable prefetch to hide it.
+
+Side defects found while working (not yet fixed):
+
+- [ ] **Scaled prefetch holds the GIL on the background CPU lane.** In the 2026-09-25 evidence, all five Visualizer tick spikes (45–62 ms) coincide with `image.prefetch_scaled` work (lane execution max 69 ms), and `QImage.scaled` keeps the GIL. Move the scaling off the GIL with identical output (image worker, or a scaler that releases the GIL). Measure Visualizer tick tails before and after; GOLDEN Visualizer responsiveness applies.
+- [ ] **Gmail refresh adds ~1.5 main-process handles per refresh.** The +18–25 handles/h slope tracks the Gmail cadence. Classify the type with `--handle-attribution`, then fix at the owner.
+- [ ] **PyOpenGL/ctypes array types accumulate** (~20 new types over 140 rotations on the Linux soak). Find the per-call `(ctype * n)` construction and hoist it. Low priority.
+- [ ] **ThreadManager's process-wide cancelled-generation registry leaks between tests.** A generation cancelled by an earlier test rejects a later test's delayed callbacks; fixtures currently dodge this with unique generations. Isolate it for tests without weakening production fencing.
+- [ ] **Linux/Xvfb development-run reds, identical on base.** Classify each on the next Windows full gate as either environment-only or a real red:
+  - `test_main_reddit_helper_preload`;
+  - `test_qtquick_native_image_lifetime` (3 tests);
+  - `test_s_hotkey_opens_settings_without_crash`;
+  - `test_transition_distribution` (2 tests);
+  - `test_visualizer_presets` (oscilloscope case).
+
+  These are already known to be environment-only here: `test_reddit_helper_runtime` (`WindowsPath`), Gmail settings/bootstrap (`libpulse`), and `test_network_bounded_http` (the container proxy and no IPv6).
 
 ## Known failing tests and anomalies (tracked until resolved)
 
