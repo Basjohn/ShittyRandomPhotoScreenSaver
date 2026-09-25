@@ -745,13 +745,6 @@ class SettingsManager(QObject):
         Explicit defaults remain meaningful only for intentionally non-product
         runtime/session keys that have no canonical default.
         """
-        def to_plain(obj: Any) -> Any:
-            if isinstance(obj, Mapping):
-                return {k: to_plain(v) for k, v in obj.items()}
-            if isinstance(obj, list):
-                return [to_plain(v) for v in obj]
-            return obj
-
         key = self._canonicalize_key(key)
         default_was_explicit = default is not _NO_EXPLICIT_DEFAULT
         canonical_default = get_canonical_default(
@@ -784,7 +777,9 @@ class SettingsManager(QObject):
                 value = self._settings.value(key, default)
 
             if isinstance(value, Mapping):
-                return to_plain(value)
+                # A recursive closure defined in ``get`` used to make one
+                # reference cycle per settings read for the cyclic GC.
+                return self._to_plain_value(value)
 
             # Some QSettings backends (notably on Windows) round-trip
             # QVariantList items as strings. Normalize critical list-valued
