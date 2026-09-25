@@ -87,15 +87,17 @@ Records: R-96 (wake freeze and reveal), R-97 (memory), R-98 (TLS). Landed 2026-0
   - Gmail refreshes succeed with certificate verification (no `CERTIFICATE_VERIFY_FAILED`).
 - [ ] **Awaiting logs — Windows steady private-commit slope (R-97).** Private commit grows +125/+127 MB/h and USS +32/+34 MB/h, while the image cache and VRAM stay flat; it does not reproduce on Linux. Attribute it with one `--usage --life --handle-attribution` run, then one-family-off A/B runs (Gmail first, then Visualizer audio capture), read with `tools/memory_slope_report.py`. Fix the owning retention; never lower caches or disable prefetch to hide it.
 
-- [ ] **Memory footprint reduction (operator 2026-09-25, after the wake/memory fixes).** The historical ~500 MB is context, not a rollback target. Measure allocation owners, lifetimes and warm steady state before changing retention. Candidates to examine:
-  - image processing, prefetch and presentation buffers;
-  - transitions, widgets/QML, FEEDS and the Visualizer;
-  - native Qt resources;
-  - per-display and per-generation replication;
-  - stale references and connections;
-  - allocator churn.
+- [~] **Memory footprint reduction (operator 2026-09-25): R-99.** Four owners are fixed and measured on the real app:
+  - a consumed derivative leaves the cache (49% of prefetch work had been wasted);
+  - the parked transition node no longer pins the previous frame;
+  - OpenBLAS runs one thread (≈700 MB of commit per process on 24 CPUs);
+  - settings reads no longer create GC cycles.
 
-  Fix confirmed waste at its owner, then measure the reduced baseline and the sustained plateau under representative load. Acceptance: lower justified memory, bounded long-term use, and neutral or better performance. GOLDEN contracts and the current architecture stay intact; no synchronous processing, polling or retired mechanisms.
+  Awaiting the built check's Phase 3: `private_children_mb` ~816 → ≲ 200, main warm private roughly −700 MB, ~46 fewer threads.
+  - [ ] **Operator decision:** `cache.prefetch_ahead` 5 → 2? In the Windows data, 87% of consumed derivatives were built within two rotations. It saves ≈ 80–100 MB and only affects rapid manual skipping.
+  - [ ] The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules). A lean worker entry could save ~100 MB resident, but it must be validated under Nuitka multiprocessing first.
+  - [ ] Attribute the remaining non-resident main-process commit (driver?) with one Windows VMMap snapshot after the OpenBLAS fix.
+  - [ ] Small items: `linecache` keeps ~5 MB of source text; the `_schedule_prefetch_resume` closure makes one GC cycle per rotation.
 
 Side defects found while working (not yet fixed):
 

@@ -42,6 +42,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
+- [R-99 — Memory Footprint Audit (2026-09-25)](R-99_Memory_Footprint_Audit_2026-09-25.md) — **PARTIAL / AWAITING VALIDATION**. Consumed derivatives left in the cache (49% of 4K prefetch work wasted), a parked transition node pinning two frames, OpenBLAS committing ~700 MB per process on 24 CPUs, and a GC cycle per settings read: all fixed and measured. The lookahead depth is an operator decision.
 - [R-98 — Gmail IMAP Connected Unverified; Every Direct HTTPS Connection Reloaded The Trust Store](R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **FIXED IN CODE / AWAITING VALIDATION**. `imaplib` without a context is unverified; urllib/artwork built a Windows trust-store context per connection with the GIL held. One verified process context.
 - [R-97 — Overnight Main-Process Private Commit Growth](R-97_Overnight_Main_Process_Private_Commit_Growth.md) — **PARTIAL / AWAITING LOGS**. Image cache and VRAM flat; QSGTexture wrapper retention fixed; the Windows private-commit slope (+125 MB/h, USS +33 MB/h) awaits Windows attribution.
 - [R-96 — Double Wake Froze The Replacement Runtime](R-96_Double_Wake_Froze_The_Replacement_Runtime.md) — **FIXED IN CODE / AWAITING VALIDATION**. Two first images per rebuild, no hang window after construction, synchronous `quit()` GIL deadlock with render-thread Python, reveal held by a stalled sibling, work-area rebuilds.

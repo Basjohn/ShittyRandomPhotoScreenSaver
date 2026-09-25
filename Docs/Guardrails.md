@@ -203,6 +203,12 @@ owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nest
 
 **Never make Python on the GUI thread wait for a Quick render thread.** PySide 6.9.1 holds the GIL for ordinary Qt calls. Some calls wait synchronously for the threaded render loop: `QCoreApplication.quit()` closes every window inside the call, and `QScreen.grabWindow` does the same for a rendering window. Such a call deadlocks against a render thread that is running Python (`updatePaintNode`, a Python scene-graph node, a `DirectConnection` render slot), and every thread wedges (R-96, reproduced 3/3). Quit only through `request_application_quit(reason)`. Hide or close windows through the existing queued window paths. Capture the desktop only before first show. Treat any new call that stops or synchronizes the render loop as unsafe until a threaded-GL probe proves it safe.
 
+**Memory owners release at the consumer boundary.**
+- A cache entry whose pixels a presentation now owns must leave the cache.
+- A retained or parked render object keeps only what its next use needs: warm GL programs, not the finished run's frames.
+- Measure retention with phase-locked samples and with `gc.freeze()` disabled; frozen objects hide their references from `gc.get_referrers` (R-99).
+- The only sanctioned environment writes are third-party load-time settings that have no other interface: the Qt render-loop bootstrap and `core/native_threads.py`.
+
 **Release callbacks before deferred deletion.** A timer's callback usually holds its Qt parent (the owner) strongly. If
 `deleteLater()` leaves that release to the deferred delete, the owner's last reference can drop *inside the timer's own
 C++ destructor*; the owner's destructor then deletes the half-destroyed child again (a native abort in the next nested
