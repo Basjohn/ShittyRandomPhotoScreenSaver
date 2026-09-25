@@ -61,6 +61,10 @@ Attribution belongs on Windows: one `--usage --life --handle-attribution` run, t
 with `tools/memory_slope_report.py`. The Gmail per-connection TLS change (R-98) alters that path; judge it
 from the new run, not from this evidence.
 
+## Update: The Fixed Part Of The Commit Gap (R-99)
+
+The flat, never-touched commit is largely numpy's OpenBLAS thread pool: ~23 threads × a committed buffer each on the 24-CPU machine, which is ≈ 700 MB in the main process and again in the ImageWorker (816 MB private against 155 MB resident all night). It is now one thread (`core/native_threads.py`). That explains the fixed gap, not the slope. The slope stays open here.
+
 ## Is The Absolute Level Normal?
 
 About 700 MB of warm USS is expected for Qt Quick with 1–2 high-resolution displays, a 10-image decoded cache

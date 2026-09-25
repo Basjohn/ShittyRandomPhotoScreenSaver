@@ -346,6 +346,14 @@ Title/Artist/Album truth updates immediately, while `MediaMetadataColumn.qml` ma
 for one bounded presentation crossfade. Animation must never become data authority, alter alignment/layout authority or
 delay fresh metadata.
 
+### Wallpaper image cache and prefetch
+
+The decoded image cache (`utils/image_cache.py`, bounded by `cache.max_items`/`cache.max_memory_mb`) holds speculative lookahead only:
+- a raw decode stays until its display-ready derivative exists;
+- a derivative stays until a display consumes it.
+
+Once a display captures a derivative into its `PresentationImage`, the presentation owns the pixels and the derivative leaves the cache. ImageWorker results are not cached. Exact reuse happens per batch (`processed_by_transform`), never through the cache. A consumed derivative left at the LRU's recent end displaced the nearer lookahead and doubled the decode/scale work (R-99). The parked transition render node keeps its warm GL programs but no run or frame references. Numpy's OpenBLAS runs one thread in every process (`core/native_threads.py`, R-99).
+
 ## Shadow authority
 
 Canonical includes direction, Card enabled/opacity/blur/extra offset, Text enabled/opacity/extra offset, and Header

@@ -321,7 +321,11 @@ Current injection/admission belongs to `rendering/widget_runtime_services.py`, r
 
 Cache tests protect useful bounded caches, ownership and reclamation, not arbitrary low memory numbers. Do not “fix” a cache test by destroying hot-cache value or turning event-driven work into polling.
 
-Historical Bugs R-82/R-83 and related worker/lifetime records own the mechanisms that justified permanent regressions. `test_network_tls_context.py` protects the one verified direct-socket TLS context (R-98). The test suite should encode their surviving invariants rather than repeat the incident diary here.
+Historical Bugs R-82/R-83 and related worker/lifetime records own the mechanisms that justified permanent regressions. `test_network_tls_context.py` protects the one verified direct-socket TLS context (R-98). Memory-owner bars (R-99):
+- `test_image_pipeline.py`: consumed derivatives leave the cache.
+- `test_qtquick_native_texture_handoff.py::test_parked_transition_node_pins_neither_frame`
+- `test_native_thread_pools.py`: one OpenBLAS thread in the app and its spawned workers.
+- `test_settings_manager.py::test_settings_reads_leave_no_reference_cycles` The test suite should encode their surviving invariants rather than repeat the incident diary here.
 
 ## 7. Test infrastructure rules
 
