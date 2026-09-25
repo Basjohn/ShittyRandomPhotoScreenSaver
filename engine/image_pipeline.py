@@ -343,7 +343,7 @@ def _ensure_cache_runtime_stats(engine: ScreensaverEngine) -> Dict[str, int]:
         "raw_released_after_scaled": 0,
         "raw_prefetch_paths": 0,
         "raw_prefetch_skipped_display_ready": 0,
-        "scaled_reuses_without_put": 0,
+        "scaled_consumed_released": 0,
     }
     setattr(engine, "_cache_runtime_stats", stats)
     return stats
@@ -1004,11 +1004,6 @@ def _process_display_image_candidate(
     if processed_qimage is None or processed_qimage.isNull():
         return None
 
-    if cache is not None and not scaled_cache_hit:
-        cache.put(scaled_key, processed_qimage)
-    elif scaled_cache_hit:
-        _bump_cache_runtime_stat(engine, "scaled_reuses_without_put")
-
     if perf_trace is not None:
         perf_trace.mark(
             "display_processed",
@@ -1021,6 +1016,15 @@ def _process_display_image_candidate(
         processed_qimage,
         image_path=img_path,
     )
+    # The presentation now owns these pixels. Exact reuse is per batch
+    # (``processed_by_transform``), so neither a consumed prefetch derivative
+    # nor a fresh worker result has a later consumer. Keeping them cached
+    # duplicated every displayed frame, and a consumed derivative at the LRU's
+    # recent end displaced the nearer lookahead: 49% of prefetched derivatives
+    # were evicted unused and rebuilt in the 2026-09-22..25 evidence (R-99).
+    if scaled_cache_hit and cache is not None:
+        cache.remove(scaled_key)
+        _bump_cache_runtime_stat(engine, "scaled_consumed_released")
     if perf_trace is not None:
         perf_trace.mark(
             "presentation_captured",
