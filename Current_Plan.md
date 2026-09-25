@@ -74,6 +74,10 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 - Watch: PW-04 Feed model reset (trigger: FEEDS Custom 2–4 physical testing shows delegate/artwork churn). Parked: PR-02 (DC-04 stays documented), PR-01 resolve memo, PR-07, ST-01/02, VZ-05 epoch cache, VZ-07. Closed: LC-01, PR-05, PW-06, PW-03 Media, the prefetch double batch.
 
+## Display wake freeze and overnight memory (2026-09-25 evidence)
+
+- [x] **Per-display reveal ownership after the stalled-sibling deadline (operator 2026-09-25).** The shared 1,800 ms fade drives only the displays ready when it starts; a stalled display keeps widget opacity 0 until its own first wallpaper and Quick readiness, then gets its own one-shot 1,800 ms reveal; cold startup unchanged. Bar: `tests/test_startup_reveal_stalled_display.py::test_late_display_fades_in_on_its_own_after_its_first_wallpaper`.
+
 ## Known failing tests and anomalies (tracked until resolved)
 
 Pre-existing reds and runtime anomalies found while gating the runtime audit. Each stays here until fixed or explicitly retired; do not treat them as noise in a gate.
