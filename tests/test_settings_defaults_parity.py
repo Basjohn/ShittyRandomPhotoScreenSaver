@@ -136,7 +136,9 @@ class TestDefaultsArtifactParity:
         assert snapshot["widgets"]["weather"]["location"] == ""
         assert "latitude" not in snapshot["widgets"]["weather"]
         assert "longitude" not in snapshot["widgets"]["weather"]
-        assert snapshot["workers"]["fft"]["enabled"] is False
+        # Retired worker switches (RSS worker never started; no FFT worker).
+        assert "fft" not in snapshot["workers"]
+        assert "rss" not in snapshot["workers"]
 
         assert "custom_preset_backup" not in snapshot
         assert "preset" not in snapshot

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict
 
 from core.logging.logger import get_logger
 from core.steam.credentials import strip_secret_fields as strip_steam_secret_fields
-from core.settings.legacy_setting_aliases import promote_legacy_section_aliases
+from core.settings.legacy_setting_aliases import promote_legacy_section_aliases, RETIRED_SETTING_KEYS
 from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
 from core.settings.structured_input_compat import normalize_legacy_structured_mapping_shape
 from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
@@ -40,7 +40,7 @@ _SST_NON_IMPORTABLE_KEYS = frozenset({
     "display.refresh_adaptive",
     "display.render_backend_mode",
     "display.hw_accel",
-})
+}) | RETIRED_SETTING_KEYS
 
 
 def _deep_overlay_mapping(base: Mapping[str, Any], overlay: Mapping[str, Any]) -> Dict[str, Any]:

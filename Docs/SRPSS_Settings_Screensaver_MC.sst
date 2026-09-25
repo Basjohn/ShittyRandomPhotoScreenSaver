@@ -2061,10 +2061,8 @@
       }
     },
     "workers": {
-      "fft.enabled": false,
       "image.enabled": true,
-      "max_workers": "auto",
-      "rss.enabled": true
+      "max_workers": "auto"
     }
   },
   "snapshot_version": 1

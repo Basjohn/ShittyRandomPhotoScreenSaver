@@ -75,13 +75,6 @@ _DEFAULT_CONFIGS: Dict[WorkerType, WorkerTuningConfig] = {
         target_latency_ms=500,      # Speculative work has no foreground latency SLA
         max_latency_ms=5000,
     ),
-    WorkerType.RSS: WorkerTuningConfig(
-        request_queue_size=16,      # RSS fetches are infrequent
-        response_queue_size=32,     # Multiple images per feed
-        backpressure_policy=BackpressurePolicy.DROP_OLD,
-        target_latency_ms=1000,     # Network latency expected
-        max_latency_ms=10000,
-    ),
 }
 
 

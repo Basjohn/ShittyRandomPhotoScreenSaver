@@ -11,7 +11,6 @@ from .image_worker import (
     image_worker_main,
     speculative_image_worker_main,
 )
-from .rss_worker import RSSWorker, rss_worker_main
 
 __all__ = [
     "BaseWorker",
@@ -19,6 +18,4 @@ __all__ = [
     "SpeculativeImageWorker",
     "image_worker_main",
     "speculative_image_worker_main",
-    "RSSWorker",
-    "rss_worker_main",
 ]
