@@ -94,7 +94,6 @@ Records: R-96 (wake freeze and reveal), R-97 (memory), R-98 (TLS). Landed 2026-0
   - settings reads no longer create GC cycles.
 
   Awaiting the built check's Phase 3: `private_children_mb` ~816 → ≲ 200, main warm private roughly −700 MB, ~46 fewer threads.
-  - [ ] **Operator decision:** `cache.prefetch_ahead` 5 → 2? In the Windows data, 87% of consumed derivatives were built within two rotations. It saves ≈ 80–100 MB and only affects rapid manual skipping.
   - [ ] The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules). A lean worker entry could save ~100 MB resident, but it must be validated under Nuitka multiprocessing first.
   - [ ] Attribute the remaining non-resident main-process commit (driver?) with one Windows VMMap snapshot after the OpenBLAS fix.
   - [ ] Small items: `linecache` keeps ~5 MB of source text; the `_schedule_prefetch_resume` closure makes one GC cycle per rotation.
