@@ -367,6 +367,13 @@ settled step. A step that repeats on equivalent rebuilds is retention; one bound
 private commit that USS does not share is committed memory that is no longer resident (R-97).
 `--handle-attribution` adds the Windows handle-type sidecar.
 
+Which kind of memory grows is answered from outside the process: `python tools/win_memory_map.py capture --wait
+--at 20 60 --trace 5` waits for the saver, takes a VMMap-style map at each minute mark (image, mapped, heap with
+its owner heap, large heap blocks, thread stacks by start module, CPython arenas, other `VirtualAlloc`; commit and
+resident per category) and prints the diff; `--trace` adds private commit and working set every N seconds to a
+CSV. It only reads the target (no remote thread, no suspension), so it costs the saver nothing. `snapshot --pid`
+and `diff a.json b.json` work on single maps. Compare maps at the same display count and warm-up.
+
 Linux development only: `python tools/linux_xvfb_hotplug_churn.py --cycles N` runs the unmodified app on
 Xvfb/Mesa with RandR monitors, adds and removes the second monitor, and reports each generation's reveal latency
 and memory. A hang gets a `py-spy` dump. `--covered-display` keeps a display that is never exposed, which
