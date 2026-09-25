@@ -1685,7 +1685,7 @@ class SettingsDialog(QDialog):
             self,
             "No Image Sources",
             "You haven't configured any image sources!<br><br>"
-            "The screensaver needs at least one folder or RSS feed to display "
+            "The screensaver needs at least one folder or wallpaper feed to display "
             "images.<br><br>What would you like to do?",
             icon_type="warning",
             buttons=[
