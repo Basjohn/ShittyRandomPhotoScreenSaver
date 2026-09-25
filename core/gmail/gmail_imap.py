@@ -83,7 +83,14 @@ class GmailImapClient:
             if should_cancel is not None and should_cancel():
                 raise GmailFetchCancelled("imap:connect")
             raise
-        conn = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, timeout=IMAP_TIMEOUT)
+        from core.network.tls import verified_client_context
+
+        # Without a context imaplib uses an unverified one (no certificate or
+        # hostname check) and the app password would go to any interceptor.
+        conn = imaplib.IMAP4_SSL(
+            IMAP_HOST, IMAP_PORT, timeout=IMAP_TIMEOUT,
+            ssl_context=verified_client_context(),
+        )
         conn.login(self._email, self._password)
         self._supports_gmail_extensions = self._detect_gmail_extensions(conn)
         return conn

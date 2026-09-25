@@ -60,12 +60,15 @@ class _Connection:
         pass
 
 
+_TLS_CONTEXT = object()
+
+
 @pytest.fixture
 def network(monkeypatch):
     _Connection.responses = []
     monkeypatch.setattr(transport.http.client, "HTTPSConnection", _Connection)
     monkeypatch.setattr(transport.http.client, "HTTPConnection", _Connection)
-    monkeypatch.setattr(transport.ssl, "create_default_context", lambda: object())
+    monkeypatch.setattr(transport, "verified_client_context", lambda: _TLS_CONTEXT)
 
     def resolve(host, port, *, type):
         return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("8.8.8.8", port))]

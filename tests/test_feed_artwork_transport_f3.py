@@ -28,9 +28,11 @@ class _Connection:
     responses = []
     requests = []
     closes = 0
+    contexts = []
 
     def __init__(self, host, port, *, timeout, context=None):
         self.host, self.port, self.timeout, self.context = host, port, timeout, context
+        type(self).contexts.append(context)
         self.sock = SimpleNamespace(settimeout=lambda _: None)
 
     def request(self, method, target, *, headers):
@@ -46,15 +48,19 @@ class _Connection:
         type(self).closes += 1
 
 
+_TLS_CONTEXT = object()
+
+
 @pytest.fixture
 def network(monkeypatch):
     _Connection.responses = []
     _Connection.requests = []
     _Connection.closes = 0
+    _Connection.contexts = []
     connections = []
     monkeypatch.setattr(transport.http.client, "HTTPSConnection", _Connection)
     monkeypatch.setattr(transport.http.client, "HTTPConnection", _Connection)
-    monkeypatch.setattr(transport.ssl, "create_default_context", lambda: object())
+    monkeypatch.setattr(transport, "verified_client_context", lambda: _TLS_CONTEXT)
     monkeypatch.setattr(transport.socket, "create_connection",
                         lambda addr, timeout, source_address: connections.append(addr))
     def resolve(host, port, *, type):
@@ -72,6 +78,9 @@ def test_dns_is_pinned_for_tls_and_cache_fetch_does_not_delegate_redirects(netwo
     assert connections == [("8.8.8.8", 443), ("8.8.8.8", 443)]
     assert [row[3] for row in _Connection.requests] == ["/photo.png?secret=never-logged", "/new.png"]
     assert all(row[4]["Accept-Encoding"] == "identity" for row in _Connection.requests)
+    # Every hop reuses the process's one verified context (no per-fetch
+    # trust-store load holding the GIL).
+    assert _Connection.contexts == [_TLS_CONTEXT, _TLS_CONTEXT]
     assert _Connection.closes == 2
 
 

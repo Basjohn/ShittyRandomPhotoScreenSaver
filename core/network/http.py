@@ -151,7 +151,12 @@ def bounded_urlopen(
 
     target = request.full_url if isinstance(request, urllib.request.Request) else str(request)
     resolve_hop(target)
-    return urllib.request.build_opener(_BoundedRedirectHandler()).open(request, timeout=timeout)
+    from core.network.tls import verified_client_context
+
+    return urllib.request.build_opener(
+        _BoundedRedirectHandler(),
+        urllib.request.HTTPSHandler(context=verified_client_context()),
+    ).open(request, timeout=timeout)
 
 
 __all__ = [
