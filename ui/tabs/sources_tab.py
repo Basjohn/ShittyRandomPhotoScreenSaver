@@ -183,7 +183,7 @@ class SourcesTab(QWidget):
         self.ratio_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.ratio_slider.setRange(0, 100)
         self.ratio_slider.setObjectName("presetModeSlider")
-        self.ratio_slider.setToolTip("Drag to adjust the balance between local and RSS sources")
+        self.ratio_slider.setToolTip("Drag to adjust the balance between local folders and wallpaper feeds")
         self.ratio_slider.valueChanged.connect(self._on_ratio_slider_changed)
         self.ratio_slider.valueCommitted.connect(self._save_ratio)
         slider_column.addWidget(self.ratio_slider)
@@ -192,7 +192,7 @@ class SourcesTab(QWidget):
         slider_column.addWidget(self._ratio_notch_bar)
         frame_layout.addLayout(slider_column, 1)
 
-        self.rss_ratio_label = create_inline_label("40% RSS")
+        self.rss_ratio_label = create_inline_label("40% Feeds")
         self.rss_ratio_label.setMinimumWidth(100)
         self.rss_ratio_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         frame_layout.addWidget(self.rss_ratio_label)
@@ -201,7 +201,7 @@ class SourcesTab(QWidget):
 
         
         # RSS sources group
-        rss_group = QGroupBox("RSS / JSON Feed Sources")
+        rss_group = QGroupBox("Wallpaper Feeds")
         style_group_box(rss_group)
         rss_layout = QVBoxLayout(rss_group)
         rss_layout.setContentsMargins(0, 12, 0, 0)
@@ -209,7 +209,9 @@ class SourcesTab(QWidget):
         
         # Suggestion label (session-local; updated by "Just Make It Work")
         self.rss_suggestion_label = QLabel(
-            "<i>Suggested: Add high-quality RSS/JSON image feeds here.</i>"
+            "<i>RSS, Atom and JSON feeds, or JSON image listings. Only images at "
+            "least as large as your displays are kept; smaller ones are skipped "
+            "automatically.</i>"
         )
         self.rss_suggestion_label.setWordWrap(True)
         shared_styles.bind_shared_styles(
@@ -230,7 +232,7 @@ class SourcesTab(QWidget):
         self.rss_input = QLineEdit()
         self.rss_input.setObjectName("rssFeedInput")
         self.rss_input.setPlaceholderText(
-            "Enter RSS/JSON feed URL (e.g., https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=100)..."
+            "Feed or image-listing URL (e.g. https://www.reddit.com/r/EarthPorn/top/.json?t=week)..."
         )
         shared_styles.bind_shared_styles(
             self.rss_input, "RSS_INPUT_STYLE", base_style=""
@@ -255,7 +257,11 @@ class SourcesTab(QWidget):
         shared_styles.bind_shared_styles(
             self.just_make_it_work_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
         )
-        self.just_make_it_work_btn.setToolTip("Reset to robust default feeds (Flickr, Wikimedia, Bing, NASA)")
+        from sources.rss.constants import DEFAULT_RSS_FEEDS
+
+        self.just_make_it_work_btn.setToolTip(
+            "Replace the list with the default feeds: " + ", ".join(DEFAULT_RSS_FEEDS)
+        )
         self.just_make_it_work_btn.clicked.connect(self._on_just_make_it_work_clicked)
         self.remove_rss_btn = QPushButton("Remove Selected")
         shared_styles.bind_shared_styles(
@@ -275,14 +281,17 @@ class SourcesTab(QWidget):
         rss_layout.addLayout(rss_buttons)
         
         # RSS save to disk option
-        self.rss_save_to_disk = QCheckBox("Save RSS Images To Disk")
+        self.rss_save_to_disk = QCheckBox("Save Feed Images To Disk")
         self.rss_save_to_disk.setProperty("circleIndicator", True)
         shared_styles.bind_shared_styles(
             self.rss_save_to_disk,
             "CIRCLE_CHECKBOX_STYLE",
             base_style="",
         )
-        self.rss_save_to_disk.setToolTip("Hope you have space! All RSS feed images will be permanently saved to a folder of your choosing.")
+        self.rss_save_to_disk.setToolTip(
+            "Hope you have space! Every wallpaper feed image that is kept is also copied "
+            "to a folder of your choosing, and nothing is ever deleted from it."
+        )
         self.rss_save_to_disk.stateChanged.connect(self._on_rss_save_toggled)
         rss_layout.addWidget(self.rss_save_to_disk)
         
@@ -346,7 +355,7 @@ class SourcesTab(QWidget):
         
         # Update display labels
         self.local_ratio_label.setText(f"{local_ratio}% Local")
-        self.rss_ratio_label.setText(f"{100 - local_ratio}% RSS")
+        self.rss_ratio_label.setText(f"{100 - local_ratio}% Feeds")
         
         # Update ratio control visibility/enabled state
         self._update_ratio_control_state()
@@ -444,8 +453,8 @@ class SourcesTab(QWidget):
             # Use the same themed confirmation surface as the rest of Settings.
             if not StyledPopup.question(
                 self,
-                "Invalid RSS/JSON",
-                "Invalid RSS/JSON - Try Autocorrect?",
+                "Invalid Feed URL",
+                "That doesn't look like a feed URL - Try Autocorrect?",
                 yes_text="Try Autocorrect",
                 no_text="Fuck This (No)",
                 default_to_yes=True,
@@ -475,7 +484,7 @@ class SourcesTab(QWidget):
             self._emit_sources_changed()
             logger.info(f"Added RSS feed: {url}")
         else:
-            StyledPopup.show_info(self, "Duplicate", "This RSS feed is already added.")
+            StyledPopup.show_info(self, "Duplicate", "This feed is already added.")
     
     def _remove_rss(self) -> None:
         """Remove selected RSS feed source.
@@ -517,7 +526,7 @@ class SourcesTab(QWidget):
         confirmed = StyledPopup.question(
             self,
             "Remove All Feeds",
-            f"Remove all {self.rss_list.count()} RSS feeds?",
+            f"Remove all {self.rss_list.count()} wallpaper feeds?",
             yes_text="Yes",
             no_text="No",
             default_to_yes=False
@@ -554,7 +563,7 @@ class SourcesTab(QWidget):
         """Browse for RSS save directory."""
         directory = QFileDialog.getExistingDirectory(
             self,
-            "Select RSS Image Save Directory",
+            "Select Feed Image Save Directory",
             self.rss_save_dir_input.text() or str(Path.home())
         )
         
@@ -630,16 +639,16 @@ class SourcesTab(QWidget):
             StyledPopup.show_info(
                 self,
                 "Cache Empty",
-                "The RSS image cache is already empty.",
+                "The wallpaper feed image cache is already empty.",
             )
             return
 
         # Confirm before deleting using the central themed popup.
         if not StyledPopup.question(
             self,
-            "Clear RSS Cache",
-            f"This will delete {file_count} cached RSS images.<br><br>"
-            "The images will be re-downloaded on the next refresh.<br><br>"
+            "Clear Feed Cache",
+            f"This will delete {file_count} cached wallpaper feed images.<br><br>"
+            "New images are downloaded on the next refresh.<br><br>"
             "Continue?",
             yes_text="Yes",
             no_text="No",
@@ -756,7 +765,7 @@ class SourcesTab(QWidget):
     def _on_ratio_slider_changed(self, value: int) -> None:
         """Update ratio labels live; persistence commits on slider release."""
         self.local_ratio_label.setText(f"{value}% Local")
-        self.rss_ratio_label.setText(f"{100 - value}% RSS")
+        self.rss_ratio_label.setText(f"{100 - value}% Feeds")
     
     def _save_ratio(self, local_ratio: int) -> None:
         """Save the local ratio setting."""

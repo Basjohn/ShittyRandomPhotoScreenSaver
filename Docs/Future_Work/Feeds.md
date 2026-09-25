@@ -100,7 +100,7 @@ Implemented (see `Docs/Reference/Feeds.md`): RSS, Atom, JSON Feed 1.x, JF2 and I
 
 The wallpaper RSS path already uses the shared bounded document transport. Further consolidation is optional and must preserve wallpaper behavior rather than force code sharing.
 
-- [ ] Audit the apparently dormant process `RSSWorker` before removal or reuse. Registration/tests alone do not establish live ownership.
+- [x] Audited and removed the dormant `RSSWorker` process (2026-09-25): it was registered but never started, and wallpaper feeds acquire in-process on the shared core (`Docs/Reference/Feeds.md` § Wallpaper feeds).
 - [ ] Reuse normalization/image-candidate primitives only where it makes the wallpaper engine simpler without merging its image-primary cache/scheduling authority into FEEDS last-good item state.
 - [ ] Prove wallpaper parity before changing its remaining parser/cache/scheduler boundaries.
 
