@@ -308,11 +308,17 @@ class BackgroundRenderNode(QSGRenderNode):
         self._image_textures.reclaim(identity)
 
     def release_presentation_textures(self) -> None:
-        """Release transition/base image textures while preserving warm GL programs.
+        """Park after a transition: drop its images, keep warm GL programs.
 
         A texture lent to the retained native branch stays: it is showing it.
+        The parked node must not pin the finished run either: its request holds
+        the source and destination frames (2 x 33 MB per display at 4K) until
+        the next transition otherwise. ``synchronize`` supplies both again when
+        the custom branch is next activated.
         """
 
+        self._transition_run = None
+        self._presentation_image = None
         if not self._image_textures.has_resources:
             return
         context = QOpenGLContext.currentContext()
