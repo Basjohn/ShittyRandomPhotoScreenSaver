@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRectF
 from PySide6.QtGui import QImage
+import shiboken6
 from PySide6.QtQuick import (
     QQuickWindow,
     QSGImageNode,
@@ -24,6 +25,23 @@ from .telemetry import RenderNodeTelemetry
 logger = get_logger(__name__)
 # Unexpected adoption failures are logged once per distinct reason per process.
 _REPORTED_FALLBACKS: set[str] = set()
+
+
+def _release_owned_texture_wrapper(texture: QSGTexture) -> None:
+    """Drop the Python side of a texture the image node now owns.
+
+    PySide parents every ``QQuickWindow.createTextureFromImage()`` result to the
+    window's Python wrapper. The node deletes the C++ texture when the next
+    image replaces it, but that parent link kept one dangling wrapper alive per
+    upload for the whole window lifetime. Detaching removes the window's
+    reference; invalidating the wrapper (while this call still holds it) means
+    Python can never delete the C++ texture the node owns.
+    """
+
+    if not isinstance(texture, QSGTexture):
+        return  # only PySide wrappers carry the window parent link
+    texture.setParent(None)
+    shiboken6.invalidate(texture)
 
 
 class RetainedBackgroundSceneNode(QSGNode):
@@ -198,6 +216,8 @@ class RetainedBackgroundSceneNode(QSGNode):
             # one, so only now may the previous image's bytes (uploaded) or GL
             # texture (adopted, deleted by its host) go.
             self._image_node.setTexture(texture)
+            if not adopted:
+                _release_owned_texture_wrapper(texture)
             if previous_identity is not None and previous_adopted:
                 self._custom_node.reclaim_presentation_texture(previous_identity)
             self._native_image_source = image
