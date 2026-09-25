@@ -87,6 +87,16 @@ Records: R-96 (wake freeze and reveal), R-97 (memory), R-98 (TLS). Landed 2026-0
   - Gmail refreshes succeed with certificate verification (no `CERTIFICATE_VERIFY_FAILED`).
 - [ ] **Awaiting logs — Windows steady private-commit slope (R-97).** Private commit grows +125/+127 MB/h and USS +32/+34 MB/h, while the image cache and VRAM stay flat; it does not reproduce on Linux. Attribute it with one `--usage --life --handle-attribution` run, then one-family-off A/B runs (Gmail first, then Visualizer audio capture), read with `tools/memory_slope_report.py`. Fix the owning retention; never lower caches or disable prefetch to hide it.
 
+- [ ] **Memory footprint reduction (operator 2026-09-25, after the wake/memory fixes).** The historical ~500 MB is context, not a rollback target. Measure allocation owners, lifetimes and warm steady state before changing retention. Candidates to examine:
+  - image processing, prefetch and presentation buffers;
+  - transitions, widgets/QML, FEEDS and the Visualizer;
+  - native Qt resources;
+  - per-display and per-generation replication;
+  - stale references and connections;
+  - allocator churn.
+
+  Fix confirmed waste at its owner, then measure the reduced baseline and the sustained plateau under representative load. Acceptance: lower justified memory, bounded long-term use, and neutral or better performance. GOLDEN contracts and the current architecture stay intact; no synchronous processing, polling or retired mechanisms.
+
 Side defects found while working (not yet fixed):
 
 - [ ] **Scaled prefetch holds the GIL on the background CPU lane.** In the 2026-09-25 evidence, all five Visualizer tick spikes (45–62 ms) coincide with `image.prefetch_scaled` work (lane execution max 69 ms), and `QImage.scaled` keeps the GIL. Move the scaling off the GIL with identical output (image worker, or a scaler that releases the GIL). Measure Visualizer tick tails before and after; GOLDEN Visualizer responsiveness applies.
