@@ -400,7 +400,9 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
 
     # Only exit the Qt event loop if requested
     if exit_app:
-        QCoreApplication.quit()
+        from engine.runtime_destruction import request_application_quit
+
+        request_application_quit("engine_stop")
 
 
 def stop(
@@ -564,7 +566,9 @@ def stop(
         logger.exception("Engine stop failed: %s", e)
         if exit_app:
             try:
-                QCoreApplication.quit()
+                from engine.runtime_destruction import request_application_quit
+
+                request_application_quit("engine_stop_failed")
             except Exception as quit_error:
                 logger.error("Failed to quit application: %s", quit_error)
         raise

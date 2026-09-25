@@ -644,11 +644,17 @@ def run_screensaver(
                         logger.exception("Failed to open settings from system tray")
 
                 def _on_tray_exit() -> None:
+                    # A terminal stop quits once Quick retirement has drained.
+                    # A direct app.quit() here closed the still-live Quick
+                    # windows synchronously with the GIL held (and ended the
+                    # loop before retirement finished).
                     try:
                         engine.stop()
                     except Exception:
                         logger.exception("Failed to stop engine from system tray")
-                    app.quit()
+                        from engine.runtime_destruction import request_application_quit
+
+                        request_application_quit("tray_exit_stop_failed")
 
                 tray_icon.settings_requested.connect(_on_tray_settings)
                 tray_icon.exit_requested.connect(_on_tray_exit)

@@ -78,7 +78,7 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
         def _setup_rotation_timer(self):
             events.append(("setup_rotation_timer", None))
 
-        def start(self):
+        def start(self, *, show_first_image=True):
             events.append(("engine_start", None))
             return True
 
@@ -344,7 +344,7 @@ def test_custom_edit_reload_returns_then_admits_exactly_one_replacement(
         def _setup_rotation_timer(self):
             events.append(("setup_rotation_timer", None))
 
-        def start(self):
+        def start(self, *, show_first_image=True):
             events.append(("engine_start", None))
             return True
 
@@ -500,10 +500,12 @@ def test_terminal_stop_from_stopped_state_is_not_ignored(monkeypatch):
     engine = ScreensaverEngine()
     engine._state = EngineState.STOPPED
     exits = []
+    import engine.runtime_destruction as runtime_destruction
+
     monkeypatch.setattr(
-        engine_lifecycle.QCoreApplication,
-        "quit",
-        staticmethod(lambda: exits.append("quit")),
+        runtime_destruction,
+        "request_application_quit",
+        lambda reason: exits.append("quit"),
     )
 
     engine.stop(exit_app=True)

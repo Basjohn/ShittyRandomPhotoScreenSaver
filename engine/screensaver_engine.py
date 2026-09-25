@@ -223,6 +223,9 @@ class ScreensaverEngine(QObject):
         self._terminal_shutdown_requested = False
         self._active_settings_dialog = None
         self._runtime_lifecycle_event = "cold_start"
+        # Hang-watchdog window of the replacement generation still on its way
+        # to the coordinated reveal (engine_handlers owns arming it).
+        self._replacement_watchdog_label: Optional[str] = None
         self._lifecycle_rejected_callbacks: int = 0
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
@@ -320,8 +323,23 @@ class ScreensaverEngine(QObject):
         with self._state_lock:
             return self._state
     
+    def _end_replacement_watchdog(self, reason: str) -> None:
+        """Close the replacement generation's construction-to-reveal hang window."""
+
+        label = self._replacement_watchdog_label
+        if label is None:
+            return
+        self._replacement_watchdog_label = None
+        from core.diagnostics.hang_watchdog import disarm
+
+        disarm(label)
+        logger.debug("[LIFECYCLE] Replacement hang window closed reason=%s", reason)
+
     def _advance_runtime_generation(self, reason: str) -> int:
         """Invalidate all delayed publications owned by the current runtime."""
+        # A retiring generation's reveal window closes with it; its replacement
+        # arms its own.
+        self._end_replacement_watchdog("generation_retired")
         with self._state_lock:
             self._runtime_generation += 1
             generation = self._runtime_generation
@@ -974,8 +992,43 @@ class ScreensaverEngine(QObject):
             return
         self._pending_monitor_replay_image = None
         logger.info("[DISPLAY] Display generation ready; replaying current image generation=%s", generation)
-        if not self._load_and_display_image_async(image):
-            logger.error("[DISPLAY] Current-image replay async submission was rejected")
+        if self._admit_monitor_replay_image(image):
+            return
+        # The replay is this generation's first-image owner; only a rejected
+        # admission hands the first image to the bounded startup retry.
+        logger.error(
+            "[DISPLAY][FALLBACK] Current-image replay was not admitted; "
+            "first image passes to the bounded startup retry generation=%s",
+            generation,
+        )
+        self._schedule_startup_first_image_retry()
+
+    def _admit_monitor_replay_image(self, image: ImageMetadata) -> bool:
+        """Admit the topology replay as the replacement generation's one image batch.
+
+        The replay claims the same image-change owner as every other request.
+        Without the claim, the startup first-image retry (and the rotation
+        timer) saw no loading work and admitted a second batch into the same
+        fresh generation, advancing the queue and doubling foreground worker
+        work while the replacement was still bringing up its windows.
+        """
+
+        perf_trace = ImageChangePerfTrace(origin="monitor_replay")
+        if not self._try_begin_image_change_work():
+            perf_trace.finish("rejected", reason="image_change_active")
+            logger.error(
+                "[TRANSITION][IMAGE_CHANGE] request_rejected origin=monitor_replay "
+                "reason=image_change_active"
+            )
+            return False
+        perf_trace.mark("owner_claimed")
+        accepted = bool(
+            self._load_and_display_image_async(image, perf_trace=perf_trace)
+        )
+        if not accepted:
+            self._clear_unaccepted_image_change_work()
+            perf_trace.finish("submission_rejected")
+        return accepted
 
     def _on_authoritative_first_frames_ready(
         self,
@@ -1035,6 +1088,7 @@ class ScreensaverEngine(QObject):
                 runtime_generation,
             )
             return
+        self._end_replacement_watchdog("startup_reveal_completed")
         from core.logging.logger import (
             is_lifecycle_logging_enabled,
             is_perf_metrics_enabled,
@@ -1218,14 +1272,14 @@ class ScreensaverEngine(QObject):
         try:
             logger.info("Starting screensaver engine...")
             
-            # Show first image immediately unless a topology rebuild already
-            # submitted replay of the current image into this generation.
+            # Show first image immediately unless a topology rebuild replays the
+            # current image into this generation. That replay owns the first
+            # image once the generation's displays are ready; a parallel retry
+            # here would race it into a second batch.
             if show_first_image:
                 if not self._show_next_image(origin="startup"):
                     logger.warning("[FALLBACK] Failed to show first image")
                     self._schedule_startup_first_image_retry()
-            else:
-                self._schedule_startup_first_image_retry()
             
             # Start rotation timer
             if self._rotation_timer:
@@ -1367,6 +1421,8 @@ class ScreensaverEngine(QObject):
 
             if not image_meta:
                 logger.warning("[FALLBACK] No image from queue")
+                # No first frame can follow; this is not a wedged generation.
+                self._end_replacement_watchdog("no_image")
                 self.display_manager.show_error("No images available")
                 with self._loading_lock:
                     self._loading_in_progress = False
@@ -1416,6 +1472,11 @@ class ScreensaverEngine(QObject):
         """Best-effort bounded retry owned by one runtime generation."""
         max_attempts = 4
         if attempt > max_attempts:
+            logger.error(
+                "[LIFECYCLE][FALLBACK] Startup first-image retry exhausted (%s attempts)",
+                max_attempts,
+            )
+            self._end_replacement_watchdog("first_image_retry_exhausted")
             return
 
         delay_ms = 180
@@ -1892,42 +1953,22 @@ class ScreensaverEngine(QObject):
         self._pending_monitor_replay_image = replay_image
 
         def _rebuild_after_destruction() -> None:
+            from engine.engine_handlers import _construct_and_start_replacement_runtime
             from engine.runtime_destruction import qt_replacement_may_run
-            from core.performance.resource_metrics import (
-                log_lifecycle_resource_snapshot,
-            )
 
             if not qt_replacement_may_run(self):
                 return
-            self._runtime_lifecycle_event = "monitor_topology"
             suppress_runtime_pointer_input(
                 700,
                 reason="monitor_topology_runtime_reload",
             )
-            log_lifecycle_resource_snapshot(
-                self,
-                event="monitor_topology",
-                stage="before_replacement_construction",
-            )
             had_replay = self._pending_monitor_replay_image is not None
-            if not self._initialize_display():
+            if not _construct_and_start_replacement_runtime(
+                self,
+                event="monitor_topology",
+                show_first_image=not had_replay,
+            ):
                 self._pending_monitor_replay_image = None
-                QCoreApplication.quit()
-                return
-            log_lifecycle_resource_snapshot(
-                self,
-                event="monitor_topology",
-                stage="after_replacement_before_first_frame",
-            )
-            self._setup_rotation_timer()
-            if not self.start(show_first_image=not had_replay):
-                QCoreApplication.quit()
-                return
-            log_lifecycle_resource_snapshot(
-                self,
-                event="monitor_topology",
-                stage="after_restart",
-            )
 
         from engine.runtime_destruction import continue_after_runtime_destruction
 

@@ -414,7 +414,7 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
         stop=lambda exit_app=False, reason=None: None,
         _initialize_display=lambda: True,
         _setup_rotation_timer=lambda: None,
-        start=lambda: True,
+        start=lambda show_first_image=True: True,
     )
     monkeypatch.setattr(
         engine_handlers.ThreadManager,
