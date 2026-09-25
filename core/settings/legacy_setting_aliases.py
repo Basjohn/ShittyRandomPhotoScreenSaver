@@ -10,6 +10,16 @@ LEGACY_DOTTED_SETTING_ALIASES = {
     "input.hard_exit": "input.interaction_mode",
 }
 
+# Settings whose consumer no longer exists. They are removed from persisted
+# profiles at load (``SettingsManager.validate_and_repair``) and skipped at SST
+# import, so older exports cannot bring them back. The RSS worker process was
+# registered but never started (wallpaper feeds run in-process on the shared
+# feed core), and no FFT worker ever existed.
+RETIRED_SETTING_KEYS = frozenset({
+    "workers.rss.enabled",
+    "workers.fft.enabled",
+})
+
 
 def is_legacy_setting_alias(key: object) -> bool:
     return str(key) in LEGACY_DOTTED_SETTING_ALIASES
@@ -46,6 +56,7 @@ def promote_legacy_section_aliases(
 
 __all__ = [
     "LEGACY_DOTTED_SETTING_ALIASES",
+    "RETIRED_SETTING_KEYS",
     "is_legacy_setting_alias",
     "promote_legacy_section_aliases",
 ]

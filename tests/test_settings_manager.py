@@ -332,6 +332,35 @@ class TestSettingsManagerCacheInvalidation:
         assert manager._settings.contains("widgets.gmail.width") is False
         assert manager.get("widgets.gmail.width") == canonical_width
 
+    def test_retired_worker_settings_leave_saved_profiles_and_imports(self, tmp_path: Path) -> None:
+        def _open() -> SettingsManager:
+            return SettingsManager(
+                organization="TestOrg",
+                application="RetiredWorkerProfile",
+                storage_base_dir=tmp_path / "profile",
+            )
+
+        manager = _open()
+        # A profile saved by an older build carries the retired worker switches.
+        manager._settings.setValue("workers.rss.enabled", True)
+        manager._settings.setValue("workers.fft.enabled", False)
+        assert manager._settings.flush(timeout=5.0)
+        del manager
+
+        reloaded = _open()
+        assert reloaded._settings.contains("workers.rss.enabled") is False
+        assert reloaded._settings.contains("workers.fft.enabled") is False
+        assert reloaded.get("workers.image.enabled") is True
+
+        # An older SST export cannot bring them back.
+        snapshot_path = tmp_path / "old_export.sst"
+        snapshot_path.write_text(json.dumps({"snapshot": {"workers": {
+            "rss.enabled": True, "fft.enabled": True, "image.enabled": True,
+        }}}), encoding="utf-8")
+        assert reloaded.import_from_sst(str(snapshot_path), merge=True) is True
+        assert reloaded._settings.contains("workers.rss.enabled") is False
+        assert reloaded._settings.contains("workers.fft.enabled") is False
+
     def test_import_from_sst_marks_visualizer_schema_current_after_widget_normalization(
         self,
         tmp_path: Path,

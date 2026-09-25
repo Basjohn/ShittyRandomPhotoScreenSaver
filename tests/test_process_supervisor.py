@@ -33,7 +33,8 @@ class TestWorkerTypes:
         """Verify all expected worker types are defined."""
         assert WorkerType.IMAGE.value == "image"
         assert WorkerType.IMAGE_PREFETCH.value == "image_prefetch"
-        assert WorkerType.RSS.value == "rss"
+        # WorkerType.RSS was retired: it was registered but never started;
+        # wallpaper feeds run in-process on the shared feed core.
         # WorkerType.TRANSITION was retired: transitions are GPU/Quick-owned and
         # no longer run in a supervised worker process.
     
@@ -69,7 +70,6 @@ class TestMessageType:
     def test_worker_specific_messages(self):
         """Verify worker-specific message types exist."""
         assert MessageType.IMAGE_DECODE.value == "image_decode"
-        assert MessageType.RSS_FETCH.value == "rss_fetch"
         # MessageType.TRANSITION_PRECOMPUTE was retired with the transition worker.
 
 
@@ -95,11 +95,11 @@ class TestWorkerMessage:
     def test_message_serialization(self):
         """Test message to_dict and from_dict."""
         original = WorkerMessage(
-            msg_type=MessageType.RSS_FETCH,
+            msg_type=MessageType.IMAGE_PRESCALE,
             seq_no=42,
             correlation_id="corr-456",
-            payload={"feeds": ["feed1", "feed2"]},
-            worker_type=WorkerType.RSS,
+            payload={"path": "a.jpg", "target_size": [4, 4]},
+            worker_type=WorkerType.IMAGE_PREFETCH,
         )
         
         data = original.to_dict()
@@ -157,7 +157,7 @@ class TestWorkerResponse:
     def test_response_serialization(self):
         """Test response to_dict and from_dict."""
         original = WorkerResponse(
-            msg_type=MessageType.RSS_RESULT,
+            msg_type=MessageType.IMAGE_RESULT,
             seq_no=10,
             correlation_id="corr-789",
             success=True,
@@ -274,7 +274,7 @@ class TestHealthStatus:
     def test_healthy_check(self):
         """Test is_healthy() method."""
         health = HealthStatus(
-            worker_type=WorkerType.RSS,
+            worker_type=WorkerType.IMAGE_PREFETCH,
             state=WorkerState.RUNNING,
         )
         health.record_heartbeat()
@@ -347,14 +347,14 @@ class TestHealthStatus:
     def test_health_serialization(self):
         """Test health status to_dict."""
         health = HealthStatus(
-            worker_type=WorkerType.RSS,
+            worker_type=WorkerType.IMAGE_PREFETCH,
             state=WorkerState.RUNNING,
             pid=54321,
         )
         health.record_heartbeat()
         
         data = health.to_dict()
-        assert data["worker_type"] == "rss"
+        assert data["worker_type"] == "image_prefetch"
         assert data["state"] == "RUNNING"
         assert data["pid"] == 54321
         assert data["is_healthy"] is True
@@ -427,8 +427,8 @@ class TestProcessSupervisor:
         assert seq2 == seq1 + 1
         
         # Different worker types have separate sequences
-        seq_rss = supervisor._next_seq(WorkerType.RSS)
-        assert seq_rss == 1
+        seq_prefetch = supervisor._next_seq(WorkerType.IMAGE_PREFETCH)
+        assert seq_prefetch == 1
         
         supervisor.shutdown()
 
@@ -742,22 +742,6 @@ class TestWorkerContracts:
         assert "path" in msg.payload
         assert "target_size" in msg.payload
         assert "cache_key" in msg.payload
-    
-    def test_rss_worker_contract(self):
-        """Test RSSWorker message contract."""
-        msg = WorkerMessage(
-            msg_type=MessageType.RSS_FETCH,
-            seq_no=1,
-            correlation_id="rss-001",
-            payload={
-                "feeds": ["https://example.com/feed.xml"],
-                "max_items": 20,
-                "ttl_hint": 3600,
-            },
-            worker_type=WorkerType.RSS,
-        )
-        assert "feeds" in msg.payload
-        assert "max_items" in msg.payload
     
     # Removed test_transition_worker_contract: the TransitionPrepWorker and its
     # MessageType.TRANSITION_PRECOMPUTE / WorkerType.TRANSITION were retired when

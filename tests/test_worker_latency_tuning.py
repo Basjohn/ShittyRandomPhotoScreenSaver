@@ -76,12 +76,6 @@ class TestGetWorkerConfig:
         assert config.target_latency_ms == 500
         assert config.max_latency_ms == 5000
 
-    def test_rss_worker_config(self):
-        """Test RSS worker has network-tolerant config."""
-        config = get_worker_config(WorkerType.RSS)
-        assert config.target_latency_ms == 1000
-        assert config.max_latency_ms == 10000
-    
 
 class TestGetAllConfigs:
     """Tests for get_all_configs function."""
@@ -191,11 +185,11 @@ class TestLatencyMonitor:
         """Test getting all metrics."""
         monitor = LatencyMonitor()
         monitor.record_latency(WorkerType.IMAGE, 50.0)
-        monitor.record_latency(WorkerType.RSS, 10.0)
+        monitor.record_latency(WorkerType.IMAGE_PREFETCH, 10.0)
         
         all_metrics = monitor.get_all_metrics()
         assert WorkerType.IMAGE in all_metrics
-        assert WorkerType.RSS in all_metrics
+        assert WorkerType.IMAGE_PREFETCH in all_metrics
     
     def test_reset_all(self):
         """Test resetting all metrics."""

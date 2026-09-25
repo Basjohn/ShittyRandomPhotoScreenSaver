@@ -1211,6 +1211,13 @@ class SettingsManager(QObject):
         repairs = {}
         
         with self._lock:
+            from core.settings.legacy_setting_aliases import RETIRED_SETTING_KEYS
+
+            for retired_key in sorted(RETIRED_SETTING_KEYS):
+                if self._settings.contains(retired_key):
+                    self._settings.remove(retired_key)
+                    repairs[retired_key] = "Removed retired setting"
+
             # Validate sources.folders - must be list
             folders = self._settings.value('sources.folders')
             if folders is not None and not isinstance(folders, list):

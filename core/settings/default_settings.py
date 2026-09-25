@@ -1093,7 +1093,4 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                          'show_details_row': True,
                          'show_five_day_forecast': False,
                          'show_forecast': True}},
- 'workers': {'fft': {'enabled': False},
-             'image': {'enabled': True},
-             'max_workers': 'auto',
-             'rss': {'enabled': True}}}
+ 'workers': {'image': {'enabled': True}, 'max_workers': 'auto'}}

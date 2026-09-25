@@ -40,7 +40,6 @@ from core.process.supervisor import ProcessSupervisor
 from core.process.workers import (
     image_worker_main,
     speculative_image_worker_main,
-    rss_worker_main,
 )
 
 from engine.display_manager import DisplayManager
@@ -550,8 +549,7 @@ class ScreensaverEngine(QObject):
                 WorkerType.IMAGE_PREFETCH,
                 speculative_image_worker_main,
             )
-            self._process_supervisor.register_worker_factory(WorkerType.RSS, rss_worker_main)
-            logger.info("ProcessSupervisor initialized with 3 worker factories")
+            logger.info("ProcessSupervisor initialized with 2 worker factories")
             
             logger.info("Core systems initialized successfully")
             return True
