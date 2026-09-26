@@ -321,6 +321,8 @@ def test_glass_collision_and_reshatter_options_load_and_persist(qapp, settings_m
     transitions = deepcopy(settings_manager.get("transitions", {}))
     glass = dict(transitions.get("glass_shatter") or {})
     glass["collisions"] = True
+    # Pin both values: the canonical reshatter default is operator-owned and may change.
+    glass["reshatter"] = False
     transitions["glass_shatter"] = glass
     transitions.setdefault("activation", {})["Glass Shatter"] = True
     settings_manager.set("transitions", transitions)
