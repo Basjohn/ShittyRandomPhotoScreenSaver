@@ -469,20 +469,8 @@ def update_about_header_images(dialog: "SettingsDialog") -> None:
         if src is None or src.isNull():
             return
 
-        target_w = max(1, int(round(src.width() * scale * dpr)))
-        target_h = max(1, int(round(src.height() * scale * dpr)))
-
-        scaled = src.scaled(
-            target_w,
-            target_h,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        if dpr != 1.0:
-            try:
-                scaled.setDevicePixelRatio(dpr)
-            except Exception:
-                logger.debug("[SETTINGS] Exception suppressed")
+        from ui.widgets.dpr_pixmap import scale_pixmap_for_dpr
+        scaled = scale_pixmap_for_dpr(src, src.width() * scale, src.height() * scale, dpr)
 
         label.setPixmap(scaled)
 

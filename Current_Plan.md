@@ -1,6 +1,6 @@
 # SRPSS | Current Plan
 
-## Guided Setup / Quick Start (ACTIVE, not started)
+## Guided Setup / Quick Start (ACTIVE)
 
 Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`.
 

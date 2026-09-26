@@ -424,9 +424,8 @@ def _run_missing_sources_onboarding(app: QApplication, settings: SettingsManager
             logger.debug("Failed to stop onboarding AnimationManager", exc_info=True)
         app.setQuitOnLastWindowClosed(previous_quit_on_last_window)
 
-    folders = settings.get('sources.folders')
-    rss_feeds = settings.get('sources.rss_feeds')
-    configured = bool(folders) or bool(rss_feeds)
+    from core.sources.readiness import has_image_sources
+    configured = has_image_sources(settings)
     logger.info(
         "Source onboarding finished configured=%s; %s RUN startup",
         configured,
@@ -458,10 +457,8 @@ def run_screensaver(
     settings = SettingsManager()
 
     # Check if sources are configured (using dot notation)
-    folders = settings.get('sources.folders')
-    rss_feeds = settings.get('sources.rss_feeds')
-    
-    if not folders and not rss_feeds:
+    from core.sources.readiness import has_image_sources
+    if not has_image_sources(settings):
         logger.warning("No image sources configured - opening settings dialog")
         MessageBox = _message_box_class()
         msg = MessageBox(
