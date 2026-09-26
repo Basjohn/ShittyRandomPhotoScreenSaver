@@ -79,7 +79,7 @@ class SteamConnectionController:
         return normalized, validate_credential_input(normalized, profile_identifier)
 
     def test_and_save_credentials(
-        self, api_key: str | None, profile_identifier: str | None,
+        self, api_key: str | None, profile_identifier: str | None, *, is_current=lambda: True,
     ) -> SteamConnectionStatus:
         """Test an entered key, then delegate accepted persistence to the DPAPI owner."""
         normalized, validation = self.validate_input(api_key, profile_identifier)
@@ -87,6 +87,8 @@ class SteamConnectionController:
             status = SteamConnectionStatus(validation.message, "warning", bool(profile_identifier), False)
             self._on_status(status)
             return status
+        if not is_current():
+            return SteamConnectionStatus("Connection setup was closed.", "cancelled", False, False)
         result = validate_connection(api_key=normalized, steamid=profile_identifier)
         if result.status != SteamResultStatus.SUCCESS:
             status = SteamConnectionStatus(
@@ -95,6 +97,8 @@ class SteamConnectionController:
             )
             self._on_status(status)
             return status
+        if not is_current():
+            return SteamConnectionStatus("Connection setup was closed.", "cancelled", False, False)
         save_credentials(SteamCredentialPayload(api_key=normalized, profile_identifier=profile_identifier))
         status = SteamConnectionStatus(
             "Steam identity and API key were verified and stored securely.", "connected", True, True,
