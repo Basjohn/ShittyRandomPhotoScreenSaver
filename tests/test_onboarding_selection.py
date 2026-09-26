@@ -170,3 +170,39 @@ def test_ready_page_accounts_are_optional_and_do_not_block(qapp, settings, monke
         assert "Gmail: Needs setup" in page.summary.text()
     finally:
         page.deleteLater()
+
+
+def test_transition_strip_is_ninety_percent_wide_and_undistorted(qapp) -> None:
+    from ui.onboarding.selection_pages import TransitionStrip, _transition_manifest
+
+    strip = TransitionStrip()
+    try:
+        strip.set_transition("crossfade")
+        row = _transition_manifest()["crossfade"]
+        assert row["path"].endswith(".png") and len(row["progress"]) == 3
+        count, frame_width, frame_height = strip._layout(1000)
+        assert count == 3
+        assert frame_width * 3 + strip.GAP * 2 == 900  # 90% of the width
+        assert abs(frame_width / frame_height - 16 / 9) < 1e-9
+        assert strip.heightForWidth(1000) == round(frame_height)
+        strip.resize(1000, strip.heightForWidth(1000))
+        image = strip.grab().toImage()
+        background = image.pixelColor(2, 2)
+        assert image.pixelColor(40, 60) == background  # the 5% side margin stays clear
+        assert image.pixelColor(200, 100) != background  # the first frame is painted
+    finally:
+        strip.deleteLater()
+
+
+def test_widget_previews_never_upscale_past_native_pixels(qapp) -> None:
+    from ui.onboarding.common import ImagePanel, asset_path
+
+    panel = ImagePanel(asset_path("onboarding/widget_system_audio_osd.png"), upscale=False)
+    try:
+        source = panel._source.size()
+        panel.resize(source.width() * 3, source.height() * 3)
+        panel._rescale()
+        shown = panel.pixmap()
+        assert shown.width() <= source.width() and shown.height() <= source.height()
+    finally:
+        panel.deleteLater()

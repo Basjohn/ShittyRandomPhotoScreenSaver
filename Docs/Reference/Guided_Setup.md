@@ -9,8 +9,17 @@ requires an image source. QUICK START always allows a manual rerun, regardless o
 
 `ui/onboarding/wizard.py` owns page navigation. Pages are built on first visit and edit the ordinary Settings keys.
 `core/sources/readiness.py` is the shared source-readiness rule; `sources/rss/curated.py` is the one Just Make It Work
-operation used by Sources, the close popup and Guided Setup. Skip is available only on Sources after readiness and
-changes no other settings.
+operation used by Sources, the close popup and Guided Setup. Skip sits in the Guided Setup header (there is no
+separate Close); it leaves at any step, offers an unapplied Arrange draft first and changes no other settings.
+
+- Sources is two large buckets, Folders and Online Wallpaper Feeds (feeds need internet). Custom feed addresses are
+  added there through the same autocorrect as the Sources tab (`ui/tabs/sources_tab.py:autocorrect_feed_url`).
+- Displays: clicking a display in the diagram switches it on or off (filled when on); one display always stays on.
+- Interaction: Media Center builds keep interaction on, so the screensaver-only choice is greyed with a tooltip.
+- Widget Setup (large buckets) includes Clocks: the shared analogue/digital face and a timezone per enabled clock.
+  Choosing a face clears per-display face overrides so the choice shows everywhere.
+- Large buckets are `build_bucket_toggle(..., large=True)`: the theme QSS keys a quarter-larger geometry on the
+  `bucketSize` property.
 
 Displays use the existing ALL or 1-based monitor selection. The theme page and full Themes tab share
 `ui/settings_theme_selection.py`; the existing Keep Synced relationship alone controls Widget Theme changes.
@@ -75,10 +84,15 @@ run by onboarding.
   `tools/onboarding_sheet_previews.py` replaces every widget preview except Clocks with cut-outs of the real cards
   (card rectangles are data in that tool; re-measure them if the sheet is replaced).
 - Every widget preview is transparent around its card with a free-hanging SE shadow, so it sits on any theme.
-- Transition stills sample 25%, 50% and 75% of the resolved effect (Block Spins samples off its edge-on midpoint)
-  using the fixed bundled artwork pair.
+- Widget previews render at 2x device pixels (the sheet is a 2x screenshot and is cut at native size). Settings
+  shows them at no more than one source pixel per physical pixel (`ImagePanel(..., upscale=False)`), so small cards
+  stay sharp at their true size instead of being stretched.
+- Transition strips sample 25%, 50% and 75% of the resolved effect (Block Spins samples off its edge-on midpoint)
+  from the operator artworks `GonnadsBIIIGYProdBlue.jpg` -> `MassiveDS.jpg`, as three unlabelled 800x450 frames
+  side by side. `TransitionStrip` paints the gaps and the percentage labels as live text, 90% of the page width.
 - Captures wait for decoded logos, avatars and artwork and for artwork fades; a readiness failure is a capture
-  failure, not permission to ship a blank placeholder. PNG only, 10 MB budget.
+  failure, not permission to ship a blank placeholder. Lossless PNG only (never JPEG), 24 MB budget; a rebuild
+  removes generated files the new set no longer contains.
 
 The build asset check requires the preview directory and operator-provided `images/SRPSSWitch.png`. See
 `Docs/Future_Work/Guided_Setup.md` for remaining acceptance and `Docs/Architecture/Persisted_Input_Compatibility.md`

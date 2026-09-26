@@ -30,19 +30,27 @@ def test_onboarding_preview_manifest_covers_visible_catalogues() -> None:
     }
 
 
-def test_onboarding_preview_assets_are_nonempty_pngs_with_declared_dimensions() -> None:
+def test_onboarding_preview_assets_match_declared_formats_and_dimensions() -> None:
     from PIL import Image
 
     manifest = json.loads((ASSETS / "manifest.json").read_text(encoding="utf-8"))
-    for row in (*manifest["widgets"], *manifest["transitions"]):
-        path = ASSETS / row["path"]
-        assert path.is_file() and path.stat().st_size > 0
-        with Image.open(path) as image:
-            assert image.format == "PNG"
-            assert list(image.size) == row["size"]
-    total = sum(path.stat().st_size for path in ASSETS.glob("*.png"))
-    assert total <= 10 * 1024 * 1024
-    assert manifest["total_png_bytes"] == total
+    for rows, expected in ((manifest["widgets"], "PNG"), (manifest["transitions"], "PNG")):
+        for row in rows:
+            path = ASSETS / row["path"]
+            assert path.is_file() and path.stat().st_size > 0
+            with Image.open(path) as image:
+                assert image.format == expected
+                assert list(image.size) == row["size"]
+    for row in manifest["transitions"]:
+        # Strips are unlabelled frames side by side; Settings paints the labels.
+        frame_width, frame_height = row["frame_size"]
+        assert row["size"] == [frame_width * len(row["progress"]), frame_height]
+    generated = [*ASSETS.glob("widget_*.png"), *ASSETS.glob("transition_*.png")]
+    total = sum(path.stat().st_size for path in generated)
+    assert total <= 24 * 1024 * 1024
+    assert manifest["total_bytes"] == total
+    # Lossless only: no stale lossy files are left to ship.
+    assert not list(ASSETS.glob("*.jpg"))
 
 
 def test_default_foundry_dispatches_isolated_qpa_workers(monkeypatch, tmp_path) -> None:
