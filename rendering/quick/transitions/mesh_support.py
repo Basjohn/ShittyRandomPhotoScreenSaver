@@ -22,16 +22,17 @@ uniform sampler2D uImage;
 void main() { FragColor = texture(uImage, vec2(vUv.x, 1.0-vUv.y)); }
 """
 
-def pack_floats(values) -> tuple[array, ctypes.Array]:
-    """Pack floats as C ``float`` without star-unpacking into a ctypes constructor.
+def pack_floats(values) -> bytes:
+    """Pack floats as C ``float`` bytes, ready for ``glBufferData``.
 
     Byte-identical to ``(ctypes.c_float * n)(*values)`` at roughly a third of the
-    cost (Glass default: 153k floats, 14 ms -> 4 ms on the render thread). The
-    returned ctypes array is a view of the returned ``array``; keep both alive
-    until the upload has consumed them.
+    cost (Glass default: 153k floats, 14 ms -> 4 ms on the render thread), and it
+    creates no ctypes array type. ctypes caches one type per array length
+    forever, so building ``c_float * n`` for a per-run mesh size added one
+    permanent type per distinct size (R-99); PyOpenGL passes ``bytes`` as a
+    plain pointer.
     """
-    storage = array("f", values)
-    return storage, (ctypes.c_float * len(storage)).from_buffer(storage)
+    return array("f", values).tobytes()
 
 
 def bind_frame(program: int, uniforms: dict[str, int], frame: QuickTransitionRenderFrame) -> None:
@@ -96,13 +97,10 @@ class MeshResources:
             self._meshes[key] = (vao, vbo, 0)
             if not vao or not vbo:
                 raise RuntimeError(f"{self.label} mesh allocation failed")
-            if packed_bytes:
-                values = (ctypes.c_float * float_count).from_buffer_copy(vertices)
-            else:
-                _storage, values = pack_floats(vertices)
+            data = bytes(vertices) if packed_bytes else pack_floats(vertices)
             gl.glBindVertexArray(vao)
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo)
-            gl.glBufferData(gl.GL_ARRAY_BUFFER, ctypes.sizeof(values), values, gl.GL_STATIC_DRAW)
+            gl.glBufferData(gl.GL_ARRAY_BUFFER, len(data), data, gl.GL_STATIC_DRAW)
             offset = 0
             for index, size in enumerate(attributes):
                 gl.glEnableVertexAttribArray(index)

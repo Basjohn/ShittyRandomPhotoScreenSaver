@@ -81,6 +81,7 @@ Expected on Windows (not yet observed):
 - The steady private-commit slope is still R-97.
 - Small items (closed 2026-09-26):
   - The prefetch-resume callback re-armed itself from inside its own closure, leaving one garbage cycle per rotation. It is now a module-level function bound with `functools.partial`.
+  - ctypes array types accumulated (~20 per 140 rotations on the Linux soak; 22 over 132 offscreen runs): Glass and Crumble mesh uploads built `c_float * n` for a per-run size, and ctypes caches one type per length forever. Uploads now pass plain `bytes` (0 new types over the same runs).
   - `linecache` holds ~5 MB of source text after traceback formatting. Not changed: each file is cached once, so the cost is fixed and bounded by the source size (not growth), and it is zero in the shipped Nuitka build, which contains no `.py` sources. Clearing it would mean touching every traceback formatter for a source-run-only 5 MB.
 
 ## Regression Coverage
@@ -90,3 +91,4 @@ Expected on Windows (not yet observed):
 - `tests/test_native_thread_pools.py`
 - `tests/test_settings_manager.py::test_settings_reads_leave_no_reference_cycles`
 - `tests/test_image_pipeline.py::test_prefetch_resume_leaves_no_reference_cycle_per_rotation`
+- `tests/test_transition_upload_types.py`
