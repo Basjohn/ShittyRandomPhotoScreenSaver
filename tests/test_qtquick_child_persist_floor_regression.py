@@ -9,6 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 from types import SimpleNamespace
 
+from rendering.custom_layout_commit import _write_item  # shared CUSTOM item write
 import pytest
 from PySide6.QtCore import QPoint, QRect, QSize
 
@@ -96,7 +97,7 @@ def test_child_records_survive_owner_write_and_committed_rehydrate_after_parent_
     original = deepcopy(item.current_size_payload[CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY])
     widgets = {family: {"enabled": True, "position": "Custom", "monitor": "1"}}
     custom_map = load_custom_layout_map(widgets)
-    owner._write_item(widgets, custom_map, item, descriptor, "1")
+    _write_item(widgets, custom_map, item, descriptor, "1", owner._bindings["display:roundtrip"])
     write_custom_layout_map(widgets, custom_map)
 
     # Reopen through the actual committed reader, never by just comparing an
@@ -214,7 +215,7 @@ def test_parent_content_gesture_and_reopen_remain_physically_bounded_with_imposs
 
     widgets = {family: {"enabled": True, "position": "Custom", "monitor": "1"}}
     custom_map = load_custom_layout_map(widgets)
-    owner._write_item(widgets, custom_map, item, descriptor, "1")
+    _write_item(widgets, custom_map, item, descriptor, "1", owner._bindings["display:roundtrip"])
     write_custom_layout_map(widgets, custom_map)
     resolved = resolve_quick_committed_variant_state(
         widgets, screen, family, geometry_variant="default",

@@ -117,7 +117,9 @@ def test_committed_child_header_and_refresh_reopen_in_real_retained_family_and_e
     owner._descriptors = {item.source_key: descriptor}
     widgets = {family: {"enabled": True, "position": "Custom", "monitor": "1"}}
     custom = load_custom_layout_map(widgets)
-    owner._write_item(widgets, custom, item, descriptor, "1")
+    # The runtime owner's item write moved to the shared CUSTOM commit module.
+    from rendering.custom_layout_commit import _write_item
+    _write_item(widgets, custom, item, descriptor, "1", owner._bindings["display:reopen"])
     write_custom_layout_map(widgets, custom)
     persisted = deepcopy(widgets)
     resolved = resolve_quick_committed_variant_state(

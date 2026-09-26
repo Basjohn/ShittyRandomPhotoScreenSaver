@@ -299,33 +299,22 @@ OverlayWidget {
                 cursorShape: Qt.PointingHandCursor
             }
 
-            Canvas {
-                id: refreshCanvas
+            // The same retained refresh glyph as Games You Follow / Gmail.
+            ShadowedText {
+                objectName: "feedRefreshGlyph"
                 anchors.fill: parent
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    ctx.strokeStyle = feedRoot.feedModel.headerTextColor
-                    ctx.globalAlpha = refreshHover.hovered && refreshTarget.canActivate ? 1.0 : 0.78
-                    ctx.lineWidth = 1.7
-                    ctx.lineCap = "round"
-                    ctx.beginPath()
-                    ctx.arc(width / 2, height / 2, 7.0, -0.4, 4.8)
-                    ctx.stroke()
-                    ctx.beginPath()
-                    ctx.moveTo(width / 2 + 6.5, height / 2 - 4.0)
-                    ctx.lineTo(width / 2 + 8.0, height / 2 + 0.4)
-                    ctx.lineTo(width / 2 + 3.5, height / 2 - 0.3)
-                    ctx.stroke()
-                }
-                Connections {
-                    target: feedRoot.feedModel
-                    function onStateChanged() { refreshCanvas.requestPaint() }
-                }
-                Connections {
-                    target: refreshHover
-                    function onHoveredChanged() { refreshCanvas.requestPaint() }
-                }
+                text: "↻"
+                textFormat: Text.PlainText
+                font.pixelSize: Math.min(parent.width, parent.height) * 0.72
+                color: refreshHover.hovered && refreshTarget.canActivate
+                    ? "white" : feedRoot.feedModel.headerTextColor
+                opacity: refreshHover.hovered && refreshTarget.canActivate ? 1.0 : 0.78
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                shadowEnabled: feedRoot.feedModel.textShadowEnabled
+                shadowColor: feedRoot.feedModel.textShadowColor
+                shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
+                shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
             }
 
             TapHandler {
