@@ -115,6 +115,30 @@ def _single_shot_generation_cancelled(key: str) -> bool:
         return key in _cancelled_single_shot_generations
 
 
+def forget_idle_generation_cancellations_for_tests() -> int:
+    """Test-boundary hook: forget cancelled generations with no work left.
+
+    Production never calls this: a retired generation must keep rejecting
+    late publications forever. Tests reuse small generation numbers, so a
+    generation cancelled by one test would otherwise reject the next test's
+    callbacks. Only a generation with no queued UI callback and no pending
+    single-shot is forgotten; one that still has queued work stays cancelled,
+    so its stale callbacks are still rejected. Returns the number forgotten.
+    """
+    with _ui_diagnostic_lock:
+        queued = _ui_diagnostics["queued_by_generation"]
+        scheduled = _ui_diagnostics["scheduled_single_shots_by_generation"]
+        idle_ui = {key for key in _cancelled_ui_generations
+                   if not queued.get(key) and not scheduled.get(key)}
+        _cancelled_ui_generations.difference_update(idle_ui)
+        pending_shots = {key for key, count in scheduled.items() if count}
+    with _single_shot_registry_lock:
+        idle_shots = {key for key in _cancelled_single_shot_generations
+                      if key not in pending_shots and not _single_shot_timers.get(key)}
+        _cancelled_single_shot_generations.difference_update(idle_shots)
+    return len(idle_ui) + len(idle_shots)
+
+
 def _register_single_shot_timer(key: str, timer: QTimer) -> bool:
     with _single_shot_registry_lock:
         if key in _cancelled_single_shot_generations:
