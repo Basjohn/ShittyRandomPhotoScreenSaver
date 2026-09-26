@@ -99,6 +99,7 @@ class ArrangeModel:
         self._authored_keys: set[CustomLayoutKey] = set()
         self._entry_keys: set[CustomLayoutKey] = set()
         self._reset_keys: set[CustomLayoutKey] = set()
+        self._loaded_slot: str | None = None
         self._dirty = False
         self._estimates: dict[str, Any] = {}
         # (display identity, vertical guides, horizontal guides) of the last move.
@@ -661,13 +662,14 @@ class ArrangeModel:
 
     def discard(self) -> None:
         self.widgets = deepcopy(self._committed)
-        self._reset_keys.clear(); self._dirty = False; self._build_session()
+        self._reset_keys.clear(); self._loaded_slot = None; self._dirty = False; self._build_session()
 
     def load_slot(self, slot_id: object) -> bool:
         if get_layout_slot_payload(self.widgets, slot_id) is None:
             return False
         if not apply_layout_slot(self.widgets, slot_id):
             return False
+        self._loaded_slot = str(slot_id)
         self._reset_keys.clear(); self._dirty = True; self._build_session(); return True
 
     def save_slot(self, slot_id: object) -> bool:
@@ -678,18 +680,35 @@ class ArrangeModel:
             self.widgets = deepcopy(self._committed)
         return saved
 
-    def apply(self) -> dict[str, Any]:
-        if not self._dirty:
-            return deepcopy(self._committed)
-        projected = self._session_projection()
-        self.widgets = projected
-        self._apply_resets(self.widgets)
-        self._committed = deepcopy(self.widgets)
-        self._reset_keys.clear(); self._dirty = False; self._build_session()
-        return deepcopy(self.widgets)
+    def apply(self, base: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """Commit the draft and return the widgets map to persist.
 
-    def _session_projection(self) -> dict[str, Any]:
-        candidate = deepcopy(self.widgets)
+        ``base`` is the current Settings map.  The draft is merged onto it
+        rather than replacing it with this editor's snapshot, so a write made
+        elsewhere while the draft was pending (a Widgets-page toggle, a slot
+        saved from Quick Start) survives Apply.  Arrange never switches widgets
+        on or off, so their ``enabled`` state stays as ``base`` has it -- unless
+        a loaded slot is being applied, which is the slot's own authority.
+        """
+        if not self._dirty:
+            return deepcopy(dict(base)) if base is not None else deepcopy(self._committed)
+        source = deepcopy(dict(base)) if base is not None else deepcopy(self.widgets)
+        if base is not None and self._loaded_slot is not None:
+            apply_layout_slot(source, self._loaded_slot)
+        projected = self._session_projection(source)
+        self._apply_resets(projected)
+        if base is not None and self._loaded_slot is None:
+            for key, section in base.items():
+                target = projected.get(key)
+                if isinstance(section, Mapping) and "enabled" in section and isinstance(target, dict):
+                    target["enabled"] = section["enabled"]
+        self.widgets = projected
+        self._committed = deepcopy(projected)
+        self._reset_keys.clear(); self._loaded_slot = None; self._dirty = False; self._build_session()
+        return deepcopy(projected)
+
+    def _session_projection(self, source: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        candidate = deepcopy(dict(source)) if source is not None else deepcopy(self.widgets)
         displays = {identity: display.commit_value() for identity, display in self._display_map.items()}
         # Viewing an authored item must not promote it.  Commit only existing
         # CUSTOM entries and authored entries the operator actually touched.

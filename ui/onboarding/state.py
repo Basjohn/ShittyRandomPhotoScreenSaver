@@ -68,7 +68,8 @@ def saved_account_states(settings) -> dict[str, bool]:
 
 def current_setup_summary(settings) -> dict[str, object]:
     widgets = _widgets(settings)
-    sources = bool(settings.get("sources.folders") or settings.get("sources.rss_feeds"))
+    from core.sources.readiness import has_image_sources
+    sources = has_image_sources(settings)  # the one shared readiness rule
     enabled = sum(
         1 for family in get_widget_family_catalog()
         if is_widget_family_effective(widgets, family.family_id)

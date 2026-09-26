@@ -32,8 +32,9 @@ class SetupPage(Page):
         self.body.addWidget(text_label("A few finishing touches", heading=True))
         self.body.addWidget(text_label("Open a section to configure the widgets you chose. Accounts are optional; you can finish them later in Settings."))
         self.dependencies = selected_setup_dependencies(settings)
+        titles = {"reddit": "Reddit", "reddit2": "Reddit 2", "feeds": "Feeds"}
         for dependency in self.dependencies:
-            toggle, container, layout = build_bucket_toggle(self.body, dependency.title(), expanded=False)
+            toggle, container, layout = build_bucket_toggle(self.body, titles.get(dependency, dependency.title()), expanded=False)
             built = [False]
             def build(checked, dep=dependency, target=layout, marker=built):
                 if checked and not marker[0]:
