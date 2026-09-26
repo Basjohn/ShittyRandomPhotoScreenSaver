@@ -205,3 +205,29 @@ def test_widget_stack_predictor_treats_media_visualizer_as_fixed_block_for_right
 
     assert can_stack is False
     assert "Media" in message
+
+
+def test_widget_stack_predictor_includes_presented_feed_cards_only():
+    """Feed cards stack at runtime like every ordinary card, so the Settings hint
+    counts them; a card that would not present (disabled, no address, no
+    publisher, CUSTOM position) is not an obstacle."""
+    from ui.widget_stack_predictor import WidgetType, build_widget_estimates, get_position_status_for_widget
+
+    settings = {
+        "feeds_custom_1": {"enabled": True, "feed_url": "https://example.test/rss",
+                           "position": "Bottom Left", "preferred_width": 600, "preferred_height": 300},
+        "feeds_custom_2": {"enabled": True, "feed_url": "", "position": "Bottom Left"},
+        "feeds_custom_3": {"enabled": True, "feed_url": "https://example.test/rss", "position": "Custom"},
+        "feeds_news_world": {"enabled": True, "position": "Bottom Left"},
+        "feeds_news_us": {"enabled": True, "providers": [], "position": "Bottom Left"},
+        "feeds_news_tech": {"enabled": False, "position": "Bottom Left"},
+    }
+    estimates = build_widget_estimates(settings, defaults=_widget_defaults())
+    feeds = {est.widget_type: est for est in estimates if est.widget_type.value.startswith("feeds_")}
+    assert set(feeds) == {WidgetType.FEEDS_CUSTOM_1, WidgetType.FEEDS_NEWS_WORLD}
+    assert (feeds[WidgetType.FEEDS_CUSTOM_1].estimated_width,
+            feeds[WidgetType.FEEDS_CUSTOM_1].estimated_height) == (600, 300)
+
+    _can_stack, message = get_position_status_for_widget(
+        settings, WidgetType.FEEDS_NEWS_WORLD, "Bottom Left", "1", defaults=_widget_defaults())
+    assert "Custom 1" in message

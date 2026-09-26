@@ -500,6 +500,12 @@ def test_settings_news_cards_round_trip_publisher_choices(qt_app, settings_manag
         config: dict = {}
         apply_widget_section_save_results(config, results)
         assert config["feeds_news_world"]["providers"] == ["bbc_world", "npr_world"]
+
+        # The card's position row reports stacking like every other card.
+        tab._set_combo_text(getattr(tab, feed_attr("feeds_news_gaming", "position")), "Middle Right")
+        tab._set_combo_text(getattr(tab, feed_attr("feeds_news_world", "position")), "Middle Right")
+        tab._update_stack_status()
+        assert "Gaming News" in getattr(tab, feed_attr("feeds_news_world", "stack_status")).text()
         for widget_id in NEWS_WIDGET_IDS:
             for bucket in ("source", "content", "layout", "appearance"):
                 key = f"{widget_id.removeprefix('feeds_')}_{bucket}"
