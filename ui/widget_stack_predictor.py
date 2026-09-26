@@ -121,6 +121,7 @@ class WidgetType(Enum):
     FEEDS_NEWS_POLITICS = "feeds_news_politics"
     FEEDS_NEWS_GAMING = "feeds_news_gaming"
     FEEDS_NEWS_TECH = "feeds_news_tech"
+    FEEDS_NEWS_ANIME = "feeds_news_anime"
 
 
 @dataclass
@@ -707,6 +708,7 @@ def _get_widget_display_name(widget_type: WidgetType) -> str:
         WidgetType.FEEDS_NEWS_POLITICS: "Politics",
         WidgetType.FEEDS_NEWS_GAMING: "Gaming News",
         WidgetType.FEEDS_NEWS_TECH: "Tech News",
+        WidgetType.FEEDS_NEWS_ANIME: "Anime News",
     }
     return names.get(widget_type, widget_type.value)
 

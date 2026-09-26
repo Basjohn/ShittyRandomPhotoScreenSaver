@@ -57,7 +57,7 @@ def test_system_stats_settings_roundtrip_preserves_canonical_product_scope(
             for toggle in tab._system_stats_controls_container.findChildren(
                 QToolButton
             )
-            if toggle.text() == "Layout & Typography"
+            if toggle.text() == "Layout"
         )
         assert layout_toggle.isChecked() is False
         tab._set_combo_text(tab.system_stats_position, "Bottom Right")

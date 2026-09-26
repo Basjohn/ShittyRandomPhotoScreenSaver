@@ -244,7 +244,7 @@ def _build_feed_service(widget_id: str, widgets_config: Mapping[str, Any]) -> An
     A CUSTOM slot gets one lease; a NEWS card gets one lease per selected
     provider on the same shared family owner.
     """
-    from core.feeds.config import feed_widget_config
+    from core.feeds.config import feed_widget_config, feeds_refresh_minutes
     from core.feeds.news import NewsFeedConfig
     from widgets.feed_runtime import (
         FeedRuntimeConfig,
@@ -257,9 +257,10 @@ def _build_feed_service(widget_id: str, widgets_config: Mapping[str, Any]) -> An
     config = feed_widget_config(widget_id, values if isinstance(values, Mapping) else {})
     if not config.configured:
         return None
+    refresh_minutes = feeds_refresh_minutes(widgets_config)
     if isinstance(config, NewsFeedConfig):
-        return NewsRuntimeService(config=NewsRuntimeConfig.from_news(config))
-    return FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config))
+        return NewsRuntimeService(config=NewsRuntimeConfig.from_news(config, refresh_minutes))
+    return FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config, refresh_minutes))
 
 
 def _inject_feed_service(widget: Any, service: Any) -> None:
@@ -791,6 +792,7 @@ _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "feeds_news_politics": _FEED_SERVICE_SPEC,
     "feeds_news_gaming": _FEED_SERVICE_SPEC,
     "feeds_news_tech": _FEED_SERVICE_SPEC,
+    "feeds_news_anime": _FEED_SERVICE_SPEC,
     "weather": _WEATHER_SERVICE_SPEC,
     "media": _MEDIA_SERVICE_SPEC,
     "spotify_volume": _MEDIA_VOLUME_SERVICE_SPEC,

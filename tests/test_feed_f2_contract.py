@@ -31,10 +31,14 @@ def test_feeds_family_is_bounded_and_dormant_by_default():
         "feeds_news_politics",
         "feeds_news_gaming",
         "feeds_news_tech",
+        "feeds_news_anime",
     )
     assert require_canonical_default("widgets.family_activation.feeds") is False
     for widget_id in FEED_WIDGET_IDS:
         assert require_canonical_default(f"widgets.{widget_id}.enabled") is False
+        # One family cadence (widgets.feeds), never a per-card refresh period.
+        assert "refresh_minutes" not in require_canonical_default(f"widgets.{widget_id}")
+    assert require_canonical_default("widgets.feeds") == {"refresh_minutes": 15}
 
 
 def test_every_feed_card_runs_the_same_runtime_descriptor():
@@ -68,7 +72,7 @@ def test_feeds_settings_section_is_lazy_descriptor_owned_for_every_feed_card():
     descriptor = get_widget_settings_section_descriptor("feeds")
     assert descriptor is not None
     assert descriptor.builder_module == "ui.tabs.widgets_tab_feeds"
-    assert descriptor.persisted_widget_keys == FEED_WIDGET_IDS
+    assert descriptor.persisted_widget_keys == ("feeds",) + FEED_WIDGET_IDS
 
 
 def test_feed_subtitle_toggle_has_canonical_default_for_every_custom_slot():
@@ -83,7 +87,7 @@ def test_feed_subtitle_toggle_has_canonical_default_for_every_custom_slot():
 
 def test_settings_feed_probe_is_explicit_and_never_bound_to_url_typing():
     source = _text("ui/tabs/widgets_tab_feeds.py")
-    assert "test_button.clicked.connect(lambda _checked=False, n=slot: _test_feed(tab, n))" in source
+    assert "lambda _checked=False, n=slot: _test_feed(tab, n)" in source
     assert "url.textChanged.connect" not in source
     assert "url.editingFinished.connect(tab._save_settings)" in source
     assert "probe_feed_url(url)" in source

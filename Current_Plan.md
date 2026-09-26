@@ -26,7 +26,7 @@ Landed 2026-09-25: the never-started RSS worker, `WorkerType.RSS` and the dead `
 
 ### NEWS categories
 
-- [~] **Awaiting physical check.** World, US, Politics, Gaming and Tech cards merge their selected publishers (CBS, ABC, BBC, NPR, Ars Technica, PC Gamer, Eurogamer; two or three per category) newest first on the shared path, with the publisher named on each row. Physical: `Docs/Future_Work/Feeds.md` § NEWS categories.
+- [~] **Awaiting physical check.** World, US, Politics, Gaming, Tech and Anime cards merge their selected publishers (16-22 per category in the catalog, about five selected by default) newest first on the shared path, with the publisher named on each row. The Feeds page is nested News/Custom buckets with one Feeds-wide Refresh. Physical: `Docs/Future_Work/Feeds.md` § NEWS categories.
 
 ### Magnet links
 

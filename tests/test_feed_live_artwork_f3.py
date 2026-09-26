@@ -93,12 +93,12 @@ def teardown_function():
 def test_settings_bucket_schema_contains_every_live_feed_builder_identity():
     from core.settings.default_settings import DEFAULT_SETTINGS
     canonical = DEFAULT_SETTINGS["ui"]["widget_bucket_states"]
-    for bucket in ("custom1_source", "custom1_content", "custom1_layout", "custom1_appearance"):
+    for bucket in ("custom_1_source", "custom_1_content", "custom_1_layout", "custom_1_appearance"):
         assert canonical[f"feeds:{bucket}"] is False
-    normalized = normalize_widget_bucket_states(canonical, {"feeds:custom1_source": True})
-    assert normalized["feeds:custom1_source"]
+    normalized = normalize_widget_bucket_states(canonical, {"feeds:custom_1_source": True})
+    assert normalized["feeds:custom_1_source"]
     assert not any(normalized[f"feeds:{name}"] for name in (
-        "custom1_content", "custom1_layout", "custom1_appearance"))
+        "custom_1_content", "custom_1_layout", "custom_1_appearance"))
     assert require_canonical_default("widgets.feeds_custom_1.show_images") is True
 
 
@@ -127,7 +127,7 @@ def test_cached_news_paints_before_one_source_owned_artwork_completion(tmp_path,
         "enabled": True, "name": "Photos", "feed_url": "https://example.test/feed.xml",
         "view_mode": "grid", "item_limit": 3, "show_images": True,
     })
-    lease = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config),
+    lease = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config, 15),
                              generation=42, manager=manager, ui_dispatch=lambda callback: callback(),
                              schedule=schedule,
                              task_priority=0)
@@ -154,7 +154,7 @@ def test_cached_news_paints_before_one_source_owned_artwork_completion(tmp_path,
 
     # A later activation reuses durable art with no extra image requests.
     second = Consumer()
-    later = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config),
+    later = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config, 15),
                              generation=43, manager=Manager(),
                              ui_dispatch=lambda callback: callback(),
                              schedule=lambda _delay, _callback: (lambda: None),
@@ -175,7 +175,7 @@ def test_image_disabled_source_has_no_artwork_submissions(monkeypatch):
         "enabled": True, "feed_url": "https://example.test/feed.xml",
         "show_images": False, "view_mode": "grid",
     })
-    lease = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config),
+    lease = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config, 15),
                              generation=44, manager=manager,
                              ui_dispatch=lambda callback: callback(),
                              schedule=lambda _delay, _callback: (lambda: None),
@@ -232,7 +232,7 @@ def test_artwork_warms_only_rows_an_active_card_can_show(tmp_path, monkeypatch):
             "enabled": True, "feed_url": "https://example.test/feed.xml",
             "view_mode": "list", "item_limit": item_limit, "show_images": True,
         })
-        lease = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config),
+        lease = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config, 15),
                                  generation=45, manager=Manager(),
                                  ui_dispatch=lambda callback: callback(),
                                  schedule=lambda _delay, _callback: (lambda: None),

@@ -29,11 +29,11 @@ class FeedRuntimeConfig:
     item_limit: int
 
     @classmethod
-    def from_custom(cls, config: CustomFeedConfig) -> "FeedRuntimeConfig":
+    def from_custom(cls, config: CustomFeedConfig, refresh_minutes: int) -> "FeedRuntimeConfig":
         return cls(
             widget_id=config.widget_id,
             source_spec=config.source_spec(),
-            refresh_minutes=max(5, min(24 * 60, int(config.refresh_minutes))),
+            refresh_minutes=max(5, min(24 * 60, int(refresh_minutes))),
             show_images=bool(config.show_images),
             view_mode=config.view_mode,
             item_limit=int(config.item_limit),
@@ -50,6 +50,9 @@ class _SourceState:
     work_token: int = 0
     work_cancel: Event = field(default_factory=Event)
     due_at: float = 0.0
+    # A persisted failure backoff is a floor, never pulled early to share a
+    # wake-up with other sources.
+    due_is_backoff: bool = False
     artwork_attempted_at: float | None = None
     # Leading stories covered by the last artwork job (see _artwork_limit).
     artwork_item_limit: int = 0
@@ -60,6 +63,14 @@ _SHARED: dict[tuple[str, object], "_FeedFamilyOwner"] = {}
 
 def shared_feed_owner_count() -> int:
     return len(_SHARED)
+
+
+# A source due within this share of its interval joins a wake-up early.
+_BATCH_WINDOW_SHARE = 0.25
+
+
+def _batch_window_seconds(refresh_minutes: int) -> float:
+    return max(0.0, float(refresh_minutes) * 60.0 * _BATCH_WINDOW_SHARE)
 
 
 def _default_schedule(delay_ms: int, callback: Callable[[], None]) -> Callable[[], bool]:
@@ -526,8 +537,10 @@ class _FeedFamilyOwner:
     def _update_due(self, state: _SourceState, result: FeedRefreshResult) -> None:
         now = self._now()
         health = result.health
+        state.due_is_backoff = False
         if health.backoff_until is not None and health.backoff_until > now:
             state.due_at = float(health.backoff_until)
+            state.due_is_backoff = True
             return
         success = health.last_success_at
         if success is not None:
@@ -541,13 +554,20 @@ class _FeedFamilyOwner:
         state.due_at = now
 
     def _admit_due_work(self) -> None:
+        """Submit every due source, plus any ordinary one due within the batch window.
+
+        Sources whose refreshes drifted apart (a new card, a slow endpoint, a
+        cache-first start) would otherwise each wake the family separately.
+        Taking a source a little early joins it to this wake-up, and since all
+        of them then succeed together they stay aligned: one burst of
+        conditional fetches per interval, not one wake-up per source.
+        """
         now = self._now()
         for state in tuple(self._states.values()):
-            if (
-                not state.in_flight
-                and self._active_leases_for_state(state)
-                and state.due_at <= now
-            ):
+            if state.in_flight or not self._active_leases_for_state(state):
+                continue
+            window = 0.0 if state.due_is_backoff else _batch_window_seconds(state.refresh_minutes)
+            if state.due_at <= now + window:
                 self._submit(state, cache_only=False, force=False)
 
     def _reschedule(self) -> None:
@@ -716,11 +736,11 @@ class NewsRuntimeConfig:
     item_limit: int
 
     @classmethod
-    def from_news(cls, config: NewsFeedConfig) -> "NewsRuntimeConfig":
+    def from_news(cls, config: NewsFeedConfig, refresh_minutes: int) -> "NewsRuntimeConfig":
         return cls(
             widget_id=config.widget_id,
             providers=tuple(config.providers),
-            refresh_minutes=max(5, min(24 * 60, int(config.refresh_minutes))),
+            refresh_minutes=max(5, min(24 * 60, int(refresh_minutes))),
             show_images=bool(config.show_images),
             view_mode=config.view_mode,
             item_limit=int(config.item_limit),

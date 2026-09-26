@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from core.feeds.config import FEED_WIDGET_IDS, feed_widget_config
+from core.feeds.config import FEED_WIDGET_IDS, FEEDS_FAMILY_KEY, feed_widget_config
 from core.feeds.models import (
     FeedDocument,
     FeedHealth,
@@ -48,6 +48,11 @@ def _result(*items, status="available", fetched_at=1000.0, artwork=(), failure="
     )
 
 
+def _providers(*provider_ids):
+    by_id = {provider.provider_id: provider for provider in NEWS_PROVIDERS}
+    return tuple(by_id[provider_id] for provider_id in provider_ids)
+
+
 def _failed(failure="FeedTransportError"):
     return FeedRefreshResult("unavailable", None, FeedHealth(consecutive_failures=1), failure=failure)
 
@@ -55,11 +60,32 @@ def _failed(failure="FeedTransportError"):
 # --- catalog -----------------------------------------------------------------
 
 
-def test_every_category_has_at_least_two_independent_publishers():
+def test_every_category_outlives_many_publishers_withdrawing():
+    # Durability floor: a category survives several publishers dropping or
+    # moving their feeds, not just one.
     for category in NEWS_CATEGORIES:
         providers = news_providers_for(category.widget_id)
-        assert len(providers) >= 2, category.widget_id
-        assert len({provider.display_name for provider in providers}) >= 2, category.widget_id
+        assert len({provider.display_name for provider in providers}) >= 12, category.widget_id
+
+
+def test_catalog_tables_are_consistent():
+    from core.feeds import news
+
+    assert set(news._CATALOG) == {category.category for category in NEWS_CATEGORIES}
+    used = {key for rows in news._CATALOG.values() for _pid, key, _url in rows}
+    assert used == set(news._PUBLISHERS)  # no orphan publisher entries
+    for provider in NEWS_PROVIDERS:
+        assert urlsplit(provider.home_url).scheme == "https"
+        assert urlsplit(provider.directory_url).scheme == "https"
+
+
+def test_default_selections_name_catalog_publishers_only():
+    # Withdrawing a catalog row must also drop it from the category default.
+    for widget_id in NEWS_WIDGET_IDS:
+        selected = require_canonical_default(f"widgets.{widget_id}.providers")
+        available = [provider.provider_id for provider in news_providers_for(widget_id)]
+        assert selected and set(selected) <= set(available), widget_id
+        assert selected == [pid for pid in available if pid in selected]  # catalog order
 
 
 def test_provider_identity_is_stable_and_independent_of_the_endpoint():
@@ -75,18 +101,15 @@ def test_provider_identity_is_stable_and_independent_of_the_endpoint():
         assert spec.allow_endpoint_migration is True
 
 
-def test_news_defaults_select_every_catalog_publisher_and_stay_dormant():
+def test_news_defaults_stay_dormant():
     for widget_id in NEWS_WIDGET_IDS:
         assert require_canonical_default(f"widgets.{widget_id}.enabled") is False
-        assert require_canonical_default(f"widgets.{widget_id}.providers") == [
-            provider.provider_id for provider in news_providers_for(widget_id)
-        ]
 
 
 def test_news_widget_ids_follow_the_custom_slots_in_feed_order():
     assert FEED_WIDGET_IDS[4:] == NEWS_WIDGET_IDS == (
         "feeds_news_world", "feeds_news_us", "feeds_news_politics",
-        "feeds_news_gaming", "feeds_news_tech",
+        "feeds_news_gaming", "feeds_news_tech", "feeds_news_anime",
     )
 
 
@@ -96,25 +119,26 @@ def test_news_widget_ids_follow_the_custom_slots_in_feed_order():
 def test_news_config_keeps_catalog_order_and_ignores_unknown_publishers():
     config = NewsFeedConfig.from_mapping(
         "feeds_news_world",
-        {"enabled": "yes", "providers": ["npr_world", "abc_world", "nonsense", "cbs_world"]},
+        {"enabled": "yes", "providers": ["abc_world", "npr_world", "withdrawn_world", "cbs_world"]},
     )
     assert config.enabled is True
     assert config.name == "World News"
-    assert [provider.provider_id for provider in config.providers] == ["cbs_world", "npr_world"]
+    assert [provider.provider_id for provider in config.providers] == ["cbs_world", "npr_world", "abc_world"]
     assert config.configured is True
-    assert feed_widget_config("feeds_news_world", {}).providers == news_providers_for("feeds_news_world")
+    assert [p.provider_id for p in feed_widget_config("feeds_news_world", {}).providers] == (
+        require_canonical_default("widgets.feeds_news_world.providers"))
 
 
 def test_news_config_without_publishers_is_unconfigured_and_malformed_input_repairs():
     assert NewsFeedConfig.from_mapping("feeds_news_us", {"providers": []}).configured is False
     repaired = NewsFeedConfig.from_mapping(
         "feeds_news_us",
-        {"providers": "cbs_us", "view_mode": "carousel", "item_limit": 999, "refresh_minutes": 1},
+        {"providers": "cbs_us", "view_mode": "carousel", "item_limit": 999},
     )
-    assert repaired.providers == news_providers_for("feeds_news_us")
+    assert [p.provider_id for p in repaired.providers] == require_canonical_default(
+        "widgets.feeds_news_us.providers")
     assert repaired.view_mode == "list"
     assert repaired.item_limit == 40
-    assert repaired.refresh_minutes == 5
     with pytest.raises(ValueError):
         NewsFeedConfig.from_mapping("feeds_custom_1", {})
 
@@ -123,7 +147,7 @@ def test_news_config_without_publishers_is_unconfigured_and_malformed_input_repa
 
 
 def test_merge_is_newest_first_with_publisher_attribution_and_undated_last():
-    cbs, bbc, npr = news_providers_for("feeds_news_world")
+    cbs, bbc, npr = _providers("cbs_world", "bbc_world", "npr_world")
     merged = merge_news_results(
         (cbs, bbc, npr),
         {
@@ -145,7 +169,7 @@ def test_merge_is_newest_first_with_publisher_attribution_and_undated_last():
 
 
 def test_merge_dedups_exact_story_urls_only():
-    cbs, bbc, _npr = news_providers_for("feeds_news_world")
+    cbs, bbc = _providers("cbs_world", "bbc_world")
     merged = merge_news_results(
         (cbs, bbc),
         {
@@ -166,7 +190,7 @@ def test_merge_dedups_exact_story_urls_only():
 
 
 def test_merge_remaps_local_artwork_to_namespaced_ids_and_caps_items():
-    cbs, bbc, _npr = news_providers_for("feeds_news_world")
+    cbs, bbc = _providers("cbs_world", "bbc_world")
     merged = merge_news_results(
         (cbs, bbc),
         {
@@ -187,7 +211,7 @@ def test_merge_remaps_local_artwork_to_namespaced_ids_and_caps_items():
 
 
 def test_a_failed_publisher_never_blanks_the_healthy_ones():
-    cbs, bbc, npr = news_providers_for("feeds_news_world")
+    cbs, bbc, npr = _providers("cbs_world", "bbc_world", "npr_world")
     merged = merge_news_results(
         (cbs, bbc, npr),
         {"cbs_world": _failed(), "bbc_world": _result(_item("x", 200)), "npr_world": _failed()},
@@ -263,7 +287,7 @@ def _service(monkeypatch, sources, *, widget_id="feeds_news_world", values=None)
     config = NewsFeedConfig.from_mapping(widget_id, values or {"enabled": True})
     manager = _Manager()
     service = NewsRuntimeService(
-        config=NewsRuntimeConfig.from_news(config), generation=5, manager=manager,
+        config=NewsRuntimeConfig.from_news(config, 15), generation=5, manager=manager,
         ui_dispatch=lambda fn: fn(), schedule=lambda _delay, _cb: (lambda: None), task_priority=0,
     )
     consumer = _Consumer()
@@ -278,7 +302,8 @@ def test_news_service_runs_each_publisher_as_an_ordinary_lease_on_the_shared_own
         "news_bbc_world": _Source(no_cache, _result(_item("x", 200))),
         "news_npr_world": _Source(no_cache, _failed()),
     }
-    service, consumer, _manager = _service(monkeypatch, sources)
+    service, consumer, _manager = _service(
+        monkeypatch, sources, values={"enabled": True, "providers": ["cbs_world", "bbc_world", "npr_world"]})
     assert service.start() is True
     assert service.is_running() is True
     assert feed_runtime.shared_feed_owner_count() == 1
@@ -300,7 +325,9 @@ def test_news_service_reports_unavailable_only_after_every_publisher_failed(monk
     sources = {
         f"news_{pid}": _Source(no_cache, _failed()) for pid in ("cbs_us", "abc_us", "npr_us")
     }
-    service, consumer, _manager = _service(monkeypatch, sources, widget_id="feeds_news_us")
+    service, consumer, _manager = _service(
+        monkeypatch, sources, widget_id="feeds_news_us",
+        values={"enabled": True, "providers": ["cbs_us", "abc_us", "npr_us"]})
     service.start()
     assert len(consumer.accepted) == 1
     result, from_cache = consumer.accepted[0]
@@ -329,8 +356,16 @@ def test_news_runtime_service_is_built_for_news_ids_only():
         assert _RUNTIME_SERVICE_SPECS[widget_id] is _RUNTIME_SERVICE_SPECS["feeds_custom_1"]
     service = _build_feed_service("feeds_news_tech", {"feeds_news_tech": {"enabled": True}})
     assert isinstance(service, NewsRuntimeService)
-    assert [p.provider_id for p in service.config.providers] == ["cbs_technology", "abc_technology", "ars_all"]
+    assert [p.provider_id for p in service.config.providers] == require_canonical_default(
+        "widgets.feeds_news_tech.providers")
+    assert service.config.refresh_minutes == require_canonical_default("widgets.feeds.refresh_minutes")
     service.retire()
+    # The one family cadence reaches every card's leases.
+    shared = _build_feed_service("feeds_news_tech", {"feeds": {"refresh_minutes": 45},
+                                                     "feeds_news_tech": {"enabled": True}})
+    assert shared.config.refresh_minutes == 45
+    assert {lease.config.refresh_minutes for _pid, lease in shared._leases} == {45}
+    shared.retire()
     assert _build_feed_service("feeds_news_tech", {"feeds_news_tech": {"providers": []}}) is None
 
 
@@ -411,7 +446,7 @@ def test_news_rows_name_their_publisher_in_real_qml(qt_app):
 
     now = 1_900_000_000.0
     merged = merge_news_results(
-        news_providers_for("feeds_news_world"),
+        _providers("cbs_world", "bbc_world"),
         {"cbs_world": _result(_item("a", int(now) - 7200, title="Harbour reopens")),
          "bbc_world": _result(_item("x", int(now) - 60, title="Summit opens"))},
     )
@@ -494,19 +529,24 @@ def test_settings_news_cards_round_trip_publisher_choices(qt_app, settings_manag
         assert hint.isHidden()
         getattr(tab, news_provider_attr("feeds_news_world", "npr_world")).setChecked(True)
 
-        by_id = dict(zip(FEED_WIDGET_IDS, save_feeds_settings(tab)))
+        tab.feeds_refresh_minutes.setValue(30)
+        by_id = dict(zip((FEEDS_FAMILY_KEY,) + FEED_WIDGET_IDS, save_feeds_settings(tab)))
+        assert by_id[FEEDS_FAMILY_KEY] == {"refresh_minutes": 30}
+        assert all("refresh_minutes" not in by_id[widget_id] for widget_id in FEED_WIDGET_IDS)
         assert by_id["feeds_news_world"]["providers"] == ["bbc_world", "npr_world"]
         assert by_id["feeds_news_world"]["view_mode"] == "grid"
         assert by_id["feeds_news_world"]["enabled"] is True
         assert "name" not in by_id["feeds_news_world"]
         assert by_id["feeds_news_gaming"]["item_limit"] == 20
-        assert by_id["feeds_news_gaming"]["providers"] == ["ars_gaming", "pcgamer_all", "eurogamer_all"]
+        assert by_id["feeds_news_gaming"]["providers"] == require_canonical_default(
+            "widgets.feeds_news_gaming.providers")
         assert by_id["feeds_news_us"]["enabled"] is False
 
         results = collect_widget_section_save_results(tab, {})
         config: dict = {}
         apply_widget_section_save_results(config, results)
         assert config["feeds_news_world"]["providers"] == ["bbc_world", "npr_world"]
+        assert config[FEEDS_FAMILY_KEY] == {"refresh_minutes": 30}
 
         # The card's position row reports stacking like every other card.
         tab._set_combo_text(getattr(tab, feed_attr("feeds_news_gaming", "position")), "Middle Right")
@@ -517,5 +557,7 @@ def test_settings_news_cards_round_trip_publisher_choices(qt_app, settings_manag
             for bucket in ("source", "content", "layout", "appearance"):
                 key = f"{widget_id.removeprefix('feeds_')}_{bucket}"
                 assert isinstance(tab.get_widget_bucket_state("feeds", key), bool)
+        load_feeds_settings(tab, {FEEDS_FAMILY_KEY: {"refresh_minutes": 2}})
+        assert tab.feeds_refresh_minutes.value() == 5  # bounded like the runtime
     finally:
         tab.deleteLater()

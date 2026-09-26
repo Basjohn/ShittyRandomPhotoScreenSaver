@@ -129,6 +129,7 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
             "feeds_news_politics",
             "feeds_news_gaming",
             "feeds_news_tech",
+            "feeds_news_anime",
         ),
         settings_section_id="feeds",
         description="Durable RSS/Atom feeds with bounded custom slots and curated news categories.",
