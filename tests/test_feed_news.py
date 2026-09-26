@@ -485,6 +485,13 @@ def test_settings_news_cards_round_trip_publisher_choices(qt_app, settings_manag
         })
         assert getattr(tab, news_provider_attr("feeds_news_world", "bbc_world")).isChecked()
         assert not getattr(tab, news_provider_attr("feeds_news_world", "cbs_world")).isChecked()
+        # Unticking every publisher warns that the card will not appear.
+        hint = getattr(tab, feed_attr("feeds_news_world", "selection_hint"))
+        assert hint.isHidden()
+        getattr(tab, news_provider_attr("feeds_news_world", "bbc_world")).setChecked(False)
+        assert not hint.isHidden()
+        getattr(tab, news_provider_attr("feeds_news_world", "bbc_world")).setChecked(True)
+        assert hint.isHidden()
         getattr(tab, news_provider_attr("feeds_news_world", "npr_world")).setChecked(True)
 
         by_id = dict(zip(FEED_WIDGET_IDS, save_feeds_settings(tab)))
