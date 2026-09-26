@@ -87,6 +87,55 @@ def pytest_sessionstart(session):
         pass
 
 
+# ---------------------------------------------------------------------------
+# Qt exit tripwire: one real QCoreApplication.exit() poisons the whole process
+# ---------------------------------------------------------------------------
+# pytest never runs QCoreApplication.exec(). Outside it, exit() leaves Qt's
+# per-thread quit flag set, so every later nested QEventLoop.exec() (qtbot.wait
+# / waitUntil / local loops) returns at once and unrelated event-loop tests fail
+# in cascade (measured: the loop's own timer never runs; only a real exec()
+# clears it; quit() outside exec() is harmless). Production reaches exit(1) by
+# fail-closed paths such as a replacement destruction-barrier timeout (R-53),
+# which is correct there but leaves this process's Qt state untrustworthy.
+# Tests that exercise those paths stub exit with monkeypatch and never reach
+# the real one. Anything that does reach it stops the session right after that
+# test, naming it, instead of letting later tests fail for the wrong reason.
+_QT_EXIT_CODES: list[int] = []
+
+
+def _install_qt_exit_tripwire() -> None:
+    from PySide6.QtCore import QCoreApplication
+
+    real_exit = QCoreApplication.exit
+    if getattr(real_exit, "_srpss_exit_tripwire", False):
+        return
+
+    def exit_tripwire(returnCode: int = 0) -> None:  # noqa: N803 - Qt's name
+        _QT_EXIT_CODES.append(int(returnCode))
+        real_exit(returnCode)
+
+    exit_tripwire._srpss_exit_tripwire = True
+    QCoreApplication.exit = staticmethod(exit_tripwire)
+
+
+_install_qt_exit_tripwire()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item, nextitem):
+    yield
+    if _QT_EXIT_CODES:
+        code = _QT_EXIT_CODES[0]
+        _QT_EXIT_CODES.clear()
+        pytest.exit(
+            f"{item.nodeid} reached the real QCoreApplication.exit({code}) (e.g. a "
+            "runtime destruction-barrier timeout). Every later Qt event loop in this "
+            "process would return immediately, so later results would be invalid. "
+            "Fix or isolate that test, then run the remaining tests in a fresh process.",
+            returncode=3,
+        )
+
+
 @pytest.fixture(scope='session')
 def qt_app():
     """Create QApplication instance for tests."""
