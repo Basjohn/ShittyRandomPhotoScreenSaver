@@ -98,11 +98,14 @@ def test_feed_qml_never_loads_remote_images_or_owns_network_cadence():
     assert 'source: parent.visible ? feedImageSource : ""' in qml  # F3: local URI only.
 
 
-def test_feed_external_action_is_http_only_until_f4():
+def test_feed_external_actions_are_http_pages_and_validated_magnets_only():
     source = _text("rendering/quick/widgets/feeds.py")
     assert 'scheme in {"http", "https"}' in source
+    assert "return _browser_action_url(value) or admitted_magnet_uri(value)" in source
     action = _text("core/widget_product_actions.py")
-    assert "Magnet and managed torrent" in action
+    assert "admitted_magnet_uri(normalized_url)" in action
+    helper = _text("helpers/reddit_helper_worker.py")
+    assert "admitted_magnet_uri(url)" in helper
 
 
 def test_f3_exposes_image_control_with_persisted_settings_and_local_only_rendering():

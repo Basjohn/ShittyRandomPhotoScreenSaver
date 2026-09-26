@@ -14,7 +14,7 @@ Landed 2026-09-25: the never-started RSS worker, `WorkerType.RSS` and the dead `
 
 ### Accepted current-tree evidence
 
-- [x] `feeds_custom_1` uses the shared bounded RSS/Atom transport/parser/cache/source/runtime path, retained List/Grid/Compact QML, HTTP/S-only external actions, event-admitted local artwork and the ordinary shared Edit/CUSTOM owner.
+- [x] `feeds_custom_1` uses the shared bounded RSS/Atom transport/parser/cache/source/runtime path, retained List/Grid/Compact QML, HTTP/S (and, since 2026-09-26, validated magnet) external actions, event-admitted local artwork and the ordinary shared Edit/CUSTOM owner.
 - [x] The requested consolidated Windows regression gate is green on the current tree. Do not retain older focused pass counts as current acceptance evidence.
 - [x] Physical Custom 1 artwork editing is accepted for free X/Y/width/height adjustment, with Grid text/content reflow following the changed artwork geometry rather than preserving a fixed landscape slot.
 - [x] Physical source adaptability has exercised an image-sparse Hacker News feed plus image-bearing GitHub and Ars feeds. Image absence is a valid feed/content state, and tested story links reached the correct external destinations.
@@ -27,6 +27,10 @@ Landed 2026-09-25: the never-started RSS worker, `WorkerType.RSS` and the dead `
 ### NEWS categories
 
 - [~] **Awaiting physical check.** World, US, Politics, Gaming and Tech cards merge their selected publishers (CBS, ABC, BBC, NPR, Ars Technica, PC Gamer, Eurogamer; two or three per category) newest first on the shared path, with the publisher named on each row. Physical: `Docs/Future_Work/Feeds.md` § NEWS categories.
+
+### Magnet links
+
+- [~] **Awaiting physical check.** A validated BitTorrent magnet row opens in the registered torrent client (MC direct; saver through the Winlogon helper, which must be rebuilt first). Physical: `Docs/Future_Work/Feeds.md` § Torrent and magnet actions.
 
 ### Custom 2–4
 
