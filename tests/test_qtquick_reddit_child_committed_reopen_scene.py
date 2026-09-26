@@ -206,11 +206,15 @@ def test_committed_child_header_and_refresh_reopen_in_real_retained_family_and_e
         )
         assert age_ago.x() - age_value.width() == pytest.approx(2.0, abs=0.02)
         # The 01HR/AGO compact rail is independent of the title clearance.
-        # In flipped layout the title ends at least 6 logical pixels before
-        # the age rail; the same root-level titleAgeGap is used unflipped.
+        # In flipped layout the title ends exactly the root-level titleAgeGap
+        # before the age rail (the same gap is used unflipped). That gap is at
+        # least 8 logical pixels and grows as the card scales down, so the
+        # painted clearance never shrinks below ~9 device pixels.
         post_title = _one(reopened.item, "redditPostTitle_0")
+        title_age_gap = float(reopened.item.property("titleAgeGap"))
+        assert title_age_gap >= 8.0
         assert age_rail.x() - (post_title.x() + post_title.width()) == pytest.approx(
-            6.0, abs=0.03,
+            title_age_gap, abs=0.03,
         )
         assert reopened.item.x() == pytest.approx(geometry.x, abs=1.0)
         assert reopened.item.y() == pytest.approx(geometry.y, abs=1.0)
