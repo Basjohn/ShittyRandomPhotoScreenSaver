@@ -424,6 +424,9 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
         repo_root / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
         repo_root / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
         repo_root / "images" / "system_stats_tools.svg",
+        # Guided Setup reads these generated release assets; the operator-owned
+        # Witch artwork remains a separate loud required build dependency.
+        repo_root / "images" / "SRPSSWitch.png",
         # PyInstaller toolchain pins for the (default-selected) Reddit Helper job.
         repo_root / "build_deps" / "requirements_helper.txt",
     )
@@ -432,6 +435,7 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
             result.errors.append(f"Required build asset is missing: {asset}")
 
     required_asset_dirs = (
+        repo_root / "images" / "onboarding",
         repo_root / "themes",
         repo_root / "themes" / "widgets",
         repo_root / "presets" / "visualizer_modes",
@@ -440,6 +444,10 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
     for directory in required_asset_dirs:
         if not directory.is_dir():
             result.errors.append(f"Required product asset directory is missing: {directory}")
+
+    onboarding_assets = repo_root / "images" / "onboarding"
+    if onboarding_assets.is_dir() and not any(onboarding_assets.glob("*.png")):
+        result.errors.append("No generated Guided Setup PNG preview assets were found under images/onboarding")
 
     if (repo_root / "themes").is_dir() and not any((repo_root / "themes").glob("*.srtheme")):
         result.errors.append("No shipped Settings .srtheme files were found under themes")
