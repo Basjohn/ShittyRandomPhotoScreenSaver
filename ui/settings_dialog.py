@@ -1679,8 +1679,8 @@ class SettingsDialog(QDialog):
             self._show_no_sources_popup()
             return
         if self._guided_setup_panel is not None:
-            # Retire account inputs/workers and drop any Arrange draft.
-            self._guided_setup_panel.close_setup(False)
+            # Offers any unapplied Arrange draft, then retires account inputs/workers.
+            self._guided_setup_panel.request_close()
         
         try:
             current_index = self.content_stack.currentIndex()

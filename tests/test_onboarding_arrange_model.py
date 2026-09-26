@@ -474,3 +474,23 @@ def test_arrange_page_refreshes_selected_list_route_after_drag_finishes(qt_app) 
         assert "display 1" in page.item_list.item(0).text()
     finally:
         page.deleteLater()
+
+
+def test_apply_merges_onto_current_settings_instead_of_a_stale_snapshot() -> None:
+    """A write made elsewhere while a draft is pending must survive Apply."""
+    widgets = _widgets()
+    model = ArrangeModel(widgets, (_display(),))
+    item = next(iter(model.session.active_items()))
+    model.move(item.source_key, item.current_global_rect.translated(-200, 120))
+
+    current = deepcopy(widgets)
+    current["weather"]["enabled"] = False          # toggled on another page meanwhile
+    current["weather"]["location"] = "Oslo"        # an unrelated content edit
+    current["layout_slots"] = {"slots": {"3": {"version": 2, "widgets": {}}}}  # slot saved elsewhere
+    result = model.apply(base=current)
+
+    assert result["weather"]["enabled"] is False
+    assert result["weather"]["location"] == "Oslo"
+    assert result["layout_slots"] == current["layout_slots"]
+    assert result["weather"]["position"] == "Custom"   # the draft's placement landed
+    assert "screen:test" in result["custom_layout"]["displays"]

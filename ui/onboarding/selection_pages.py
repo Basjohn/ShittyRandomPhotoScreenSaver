@@ -218,7 +218,7 @@ TRANSITION_COPY = {
     "crossfade": "One image gently fades into the next.", "slide": "The next image slides into view.",
     "wipe": "A moving edge reveals the next image.", "warp_dissolve": "A swirling distortion blends the images.",
     "blinds": "Strips open to reveal the next image.", "block_flip": "Bands flip over to reveal the next image.",
-    "block_spins": "The whole picture turns over in 3D. At the halfway point you see its thin edge.", "burn": "A burning edge consumes the old image.",
+    "block_spins": "The whole picture turns over in 3D.", "burn": "A burning edge consumes the old image.",
     "crumble": "The old image breaks apart and falls away.", "diffuse": "The old image scatters into the new image.",
     "exploding_tiles": "Tiles burst outward to uncover the next image.", "glass_shatter": "The picture fractures into glass shards.",
     "ink_bloom": "Organic ink shapes spread across the picture.", "melt_drip": "The image melts into falling drips.",
@@ -231,7 +231,7 @@ class TransitionsPage(Page):
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("How should your wallpapers change?", heading=True))
-        self.body.addWidget(text_label("Select transitions to include in the available effects and random pool. Each preview shows 25%, 50% and 75% of the change."))
+        self.body.addWidget(text_label("Select transitions to include in the available effects and random pool. Each preview shows three moments of the change."))
         self.rows = CheckList(); self.rows.setMinimumHeight(130); self.rows.setMaximumHeight(200)
         self.body.addWidget(self.rows)
         self.preview = ImagePanel(asset_path("onboarding/transition_crossfade.png"))
@@ -263,7 +263,8 @@ class TransitionsPage(Page):
         if item is None: return
         key = item.data(Qt.ItemDataRole.UserRole+1)
         self.preview.set_source(asset_path(f"onboarding/transition_{key}.png"))
-        self.description.setText(item.text() + " — " + TRANSITION_COPY[key])
+        copy = TRANSITION_COPY.get(key)
+        self.description.setText(item.text() + (" — " + copy if copy else ""))
 
     def _toggle(self, item):
         cfg = self.settings.get("transitions")

@@ -537,7 +537,8 @@ class ArrangePage(Page):
 
     def apply(self) -> bool:
         if self.model is None: return False
-        if self.model.pending: self.settings.set("widgets", self.model.apply())
+        # Merge onto current Settings: other pages may have written meanwhile.
+        if self.model.pending: self.settings.set("widgets", self.model.apply(base=self.settings.get("widgets")))
         self._pending_changed(); return True
 
     def discard(self):

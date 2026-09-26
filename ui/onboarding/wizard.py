@@ -38,7 +38,7 @@ class GuidedSetupPanel(QWidget):
         top = QHBoxLayout()
         top.addWidget(text_label("GUIDED SETUP", heading=True))
         top.addStretch()
-        top.addWidget(action("Close", lambda: self.close_setup(False), secondary=True))
+        top.addWidget(action("Close", self.request_close, secondary=True))
         layout.addLayout(top)
         self.progress = text_label("")
         layout.addWidget(self.progress)
@@ -130,6 +130,16 @@ class GuidedSetupPanel(QWidget):
     def finish(self):
         if has_image_sources(self.settings):
             self.close_setup(True)
+
+    def request_close(self) -> None:
+        """Close from the header; an unapplied Arrange draft is offered first."""
+        arrange = self.pages.get("arrange", (None,))[0]
+        if arrange is not None and arrange.model is not None and arrange.model.pending:
+            from ui.styled_popup import StyledPopup
+            if StyledPopup.question(self, "Arrange changes", "Apply your Arrange changes before closing?",
+                                    yes_text="Apply", no_text="Discard", default_to_yes=True):
+                arrange.apply()
+        self.close_setup(False)
 
     def close_setup(self, completed: bool) -> None:
         """Retire account inputs and any Arrange draft, then hand back to Settings."""
