@@ -115,7 +115,7 @@ def _lease(manager, slot: str, url: str):
         "show_images": True, "view_mode": "grid",
     })
     lease = FeedRuntimeLease(
-        config=FeedRuntimeConfig.from_custom(config), generation=91, manager=manager,
+        config=FeedRuntimeConfig.from_custom(config, 15), generation=91, manager=manager,
         ui_dispatch=lambda fn: fn(), schedule=lambda _ms, _fn: (lambda: None), task_priority=0)
     consumer = _Consumer()
     lease.attach_consumer(consumer)

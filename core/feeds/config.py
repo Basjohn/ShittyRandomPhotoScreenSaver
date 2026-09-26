@@ -27,7 +27,6 @@ class CustomFeedConfig:
     feed_url: str
     view_mode: FeedViewMode
     item_limit: int
-    refresh_minutes: int
     show_images: bool
     show_subtitle: bool
 
@@ -49,10 +48,6 @@ class CustomFeedConfig:
             item_limit = int(raw.get("item_limit", defaults["item_limit"]))
         except (TypeError, ValueError):
             item_limit = int(defaults["item_limit"])
-        try:
-            refresh_minutes = int(raw.get("refresh_minutes", defaults["refresh_minutes"]))
-        except (TypeError, ValueError):
-            refresh_minutes = int(defaults["refresh_minutes"])
         raw_enabled = raw.get("enabled", defaults["enabled"])
         default_enabled = bool(defaults["enabled"])
         if isinstance(raw_enabled, bool):
@@ -109,7 +104,6 @@ class CustomFeedConfig:
             feed_url=feed_url,
             view_mode=view,  # type: ignore[arg-type]
             item_limit=max(3, min(40, item_limit)),
-            refresh_minutes=max(5, min(24 * 60, refresh_minutes)),
             show_images=show_images,
             show_subtitle=show_subtitle,
         )
@@ -138,6 +132,26 @@ class CustomFeedConfig:
             display_name=self.name,
             max_items=max(40, self.item_limit),
         )
+
+
+# The whole Feeds family refreshes on one cadence (``widgets.feeds``), so
+# every card's sources fall due together and share one wake-up.
+FEEDS_FAMILY_KEY = "feeds"
+FEED_REFRESH_MINUTES_RANGE = (5, 24 * 60)
+
+
+def feeds_refresh_minutes(widgets: Mapping[str, object] | None) -> int:
+    """The family refresh interval from a ``widgets`` mapping, bounded."""
+
+    default = int(require_canonical_default(f"widgets.{FEEDS_FAMILY_KEY}.refresh_minutes"))
+    family = widgets.get(FEEDS_FAMILY_KEY) if isinstance(widgets, Mapping) else None
+    raw = family.get("refresh_minutes", default) if isinstance(family, Mapping) else default
+    try:
+        minutes = int(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        minutes = default
+    low, high = FEED_REFRESH_MINUTES_RANGE
+    return max(low, min(high, minutes))
 
 
 def feed_widget_config(

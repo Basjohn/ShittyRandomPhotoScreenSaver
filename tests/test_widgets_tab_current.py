@@ -1435,7 +1435,7 @@ def test_widget_bucket_toggles_default_closed(qt_app, settings_manager):
             (tab._media_controls_container, "Provider & Layout"),
             (tab._reddit_controls_container, "Reddit 1"),
             (tab._reddit_controls_container, "Link Behavior"),
-            (tab._reddit_controls_container, "Shared Layout & Typography"),
+            (tab._reddit_controls_container, "Shared Layout"),
             (tab._reddit_controls_container, "Shared Appearance"),
         )
         for container, text in checks:

@@ -30,7 +30,7 @@ from core.settings.widget_family_catalog import (
 )
 from rendering.games_followed_child_roles import FOLLOWED_CHILD_ROLES
 from rendering.feed_child_roles import FEED_CONTENT_EXTENT_MINIMUM, FEED_CUSTOM_CHILD_ROLES
-from core.feeds.config import CUSTOM_FEED_WIDGET_IDS, FEED_WIDGET_IDS
+from core.feeds.config import CUSTOM_FEED_WIDGET_IDS, FEED_WIDGET_IDS, FEEDS_FAMILY_KEY
 from core.feeds.news import NEWS_WIDGET_IDS, news_providers_for
 
 _FEED_SLOT_NUMBERS: tuple[int, ...] = tuple(range(1, len(CUSTOM_FEED_WIDGET_IDS) + 1))
@@ -43,7 +43,7 @@ def feed_settings_attr_stem(widget_id: str) -> str:
 
 
 _FEED_SHARED_CONTROL_NAMES: tuple[str, ...] = (
-    "enabled", "view_mode", "item_limit", "refresh_minutes", "show_images", "show_subtitle",
+    "enabled", "view_mode", "item_limit", "show_images", "show_subtitle",
     "position", "monitor_combo", "margin", "font_combo", "font_size",
     "preferred_width", "preferred_height", "show_background", "bg_opacity", "border_opacity",
 )
@@ -496,9 +496,11 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         saver_module="ui.tabs.widgets_tab_feeds",
         saver_name="save_feeds_settings",
         saver_guard_attrs=tuple(f"{feed_settings_attr_stem(w)}_enabled" for w in FEED_WIDGET_IDS),
-        persisted_widget_keys=FEED_WIDGET_IDS,
+        # The family key (one shared refresh) first, then one card per widget.
+        persisted_widget_keys=(FEEDS_FAMILY_KEY,) + FEED_WIDGET_IDS,
         signal_block_attrs=(
-            tuple(
+            ("feeds_refresh_minutes",)
+            + tuple(
                 f"{feed_settings_attr_stem(w)}_{name}"
                 for w in FEED_WIDGET_IDS
                 for name in _FEED_SHARED_CONTROL_NAMES

@@ -116,18 +116,18 @@ def test_settings_feeds_section_builds_and_round_trips_all_four_slots(qt_app, se
                                "view_mode": "grid", "item_limit": 9},
             "feeds_custom_3": {"enabled": False, "name": "Three", "feed_url": ""},
             "feeds_custom_4": {"enabled": True, "name": "Four", "feed_url": "https://a.example/rss",
-                               "refresh_minutes": 45},
+                               "refresh_minutes": 45},  # retired per-card key: ignored, dropped on save
         }
         load_feeds_settings(tab, widgets)
         payloads = save_feeds_settings(tab)
-        # One payload per Feed card (CUSTOM slots, then NEWS categories).
+        # The family payload, then one per Feed card (CUSTOM slots, then NEWS).
         from core.feeds.config import FEED_WIDGET_IDS
-        assert len(payloads) == len(FEED_WIDGET_IDS)
-        by_id = dict(zip(FEED_WIDGET_IDS[:4], payloads))
+        assert len(payloads) == 1 + len(FEED_WIDGET_IDS)
+        by_id = dict(zip(FEED_WIDGET_IDS[:4], payloads[1:]))
         assert by_id["feeds_custom_2"]["view_mode"] == "grid"
         assert by_id["feeds_custom_2"]["item_limit"] == 9
         assert by_id["feeds_custom_3"]["enabled"] is False
-        assert by_id["feeds_custom_4"]["refresh_minutes"] == 45
+        assert "refresh_minutes" not in by_id["feeds_custom_4"]
         assert [by_id[key]["name"] for key in by_id] == ["One", "Two", "Three", "Four"]
 
         # The descriptor layer accepts the tuple shape and writes every slot.

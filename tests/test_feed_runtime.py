@@ -56,14 +56,13 @@ class _Consumer:
         self.accepted.append((result, from_cache))
 
 
-def _config(widget_id="feeds_custom_1", *, refresh_minutes=15):
+def _config(widget_id="feeds_custom_1"):
     return CustomFeedConfig.from_mapping(
         widget_id,
         {
             "enabled": True,
             "name": "Goblin",
             "feed_url": "https://example.test/feed.xml",
-            "refresh_minutes": refresh_minutes,
         },
     )
 
@@ -109,7 +108,7 @@ def test_leases_share_one_generation_owner_and_cache_first_source(monkeypatch):
         scheduled.append((delay_ms, callback))
         return lambda: None
 
-    config = FeedRuntimeConfig.from_custom(_config())
+    config = FeedRuntimeConfig.from_custom(_config(), 15)
     first = FeedRuntimeLease(config=config, generation=99, manager=manager, ui_dispatch=lambda fn: fn(), schedule=schedule, task_priority=0)
     second = FeedRuntimeLease(config=config, generation=99, manager=manager, ui_dispatch=lambda fn: fn(), schedule=schedule, task_priority=0)
     c1, c2 = _Consumer(99), _Consumer(99)
@@ -142,7 +141,7 @@ def test_manual_refresh_is_generation_owned_and_bounded_to_one_inflight(monkeypa
         return source
     monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
     lease = FeedRuntimeLease(
-        config=FeedRuntimeConfig.from_custom(_config()),
+        config=FeedRuntimeConfig.from_custom(_config(), 15),
         generation=3,
         manager=manager,
         ui_dispatch=lambda fn: fn(),
@@ -166,7 +165,7 @@ def test_detach_consumer_severs_callback_without_becoming_second_lifetime_owner(
         return source
     monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
     lease = FeedRuntimeLease(
-        config=FeedRuntimeConfig.from_custom(_config()),
+        config=FeedRuntimeConfig.from_custom(_config(), 15),
         generation=5,
         manager=manager,
         ui_dispatch=lambda fn: fn(),
@@ -204,7 +203,7 @@ def test_empty_cache_immediately_performs_one_network_refresh(monkeypatch):
         return source
     monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
     lease = FeedRuntimeLease(
-        config=FeedRuntimeConfig.from_custom(_config()),
+        config=FeedRuntimeConfig.from_custom(_config(), 15),
         generation=8,
         manager=manager,
         ui_dispatch=lambda fn: fn(),
@@ -235,12 +234,12 @@ def test_shared_source_cadence_recomputes_when_faster_lease_retires(monkeypatch)
     schedule = lambda _ms, _fn: (lambda: None)
 
     slower = FeedRuntimeLease(
-        config=FeedRuntimeConfig.from_custom(_config(refresh_minutes=30)),
+        config=FeedRuntimeConfig.from_custom(_config(), 30),
         generation=21, manager=manager, ui_dispatch=lambda fn: fn(),
         schedule=schedule, task_priority=0,
     )
     faster = FeedRuntimeLease(
-        config=FeedRuntimeConfig.from_custom(_config(refresh_minutes=5)),
+        config=FeedRuntimeConfig.from_custom(_config(), 5),
         generation=21, manager=manager, ui_dispatch=lambda fn: fn(),
         schedule=schedule, task_priority=0,
     )
@@ -281,7 +280,7 @@ def test_inactive_last_consumer_releases_http_source_without_waiting_for_generat
 
     monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
     lease = FeedRuntimeLease(
-        config=FeedRuntimeConfig.from_custom(_config()),
+        config=FeedRuntimeConfig.from_custom(_config(), 15),
         generation=31, manager=manager, ui_dispatch=lambda fn: fn(),
         schedule=lambda _ms, _fn: (lambda: None), task_priority=0,
     )
@@ -312,13 +311,13 @@ def test_same_endpoint_different_custom_slots_share_one_source_state(monkeypatch
     schedule = lambda _ms, _fn: (lambda: None)
     one = FeedRuntimeLease(
         config=FeedRuntimeConfig.from_custom(CustomFeedConfig.from_mapping(
-            "feeds_custom_1", {"enabled": True, "name": "One", "feed_url": "https://example.test/feed.xml", "refresh_minutes": 15}
-        )), generation=44, manager=manager, ui_dispatch=lambda fn: fn(), schedule=schedule, task_priority=0,
+            "feeds_custom_1", {"enabled": True, "name": "One", "feed_url": "https://example.test/feed.xml"}
+        ), 15), generation=44, manager=manager, ui_dispatch=lambda fn: fn(), schedule=schedule, task_priority=0,
     )
     two = FeedRuntimeLease(
         config=FeedRuntimeConfig.from_custom(CustomFeedConfig.from_mapping(
-            "feeds_custom_2", {"enabled": True, "name": "Two", "feed_url": "https://example.test/feed.xml", "refresh_minutes": 30}
-        )), generation=44, manager=manager, ui_dispatch=lambda fn: fn(), schedule=schedule, task_priority=0,
+            "feeds_custom_2", {"enabled": True, "name": "Two", "feed_url": "https://example.test/feed.xml"}
+        ), 30), generation=44, manager=manager, ui_dispatch=lambda fn: fn(), schedule=schedule, task_priority=0,
     )
     one.attach_consumer(_Consumer(44))
     two.attach_consumer(_Consumer(44))
@@ -394,7 +393,7 @@ def test_reactivation_reuses_retained_result_without_reloading_cache(monkeypatch
 
     monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
     lease = FeedRuntimeLease(
-        config=FeedRuntimeConfig.from_custom(_config()),
+        config=FeedRuntimeConfig.from_custom(_config(), 15),
         generation=52, manager=manager, ui_dispatch=lambda fn: fn(),
         schedule=lambda _ms, _fn: (lambda: None), task_priority=0,
     )
@@ -470,7 +469,7 @@ def _lease_for_url(manager, *, slot, url, generation=81):
         "refresh_minutes": 15,
     })
     lease = FeedRuntimeLease(
-        config=FeedRuntimeConfig.from_custom(config), generation=generation,
+        config=FeedRuntimeConfig.from_custom(config, 15), generation=generation,
         manager=manager, ui_dispatch=lambda fn: fn(),
         schedule=lambda _ms, _fn: (lambda: None), task_priority=0,
     )
@@ -558,3 +557,85 @@ def test_cancelled_inflight_source_never_publishes_on_reactivation(monkeypatch):
     manager.finish(1)
     assert source.cache_calls == 1 and len(consumer.accepted) == 1
     lease.retire()
+
+
+class _FreshOnRefresh(_Source):
+    """Cached result first; every network refresh succeeds now."""
+
+    def refresh(self, *, force=False):
+        self.refresh_calls += 1
+        return _result()
+
+
+def _batch_owner(monkeypatch, ages_s, *, backoff=None):
+    """One owner over cached sources last refreshed ``ages_s`` ago."""
+    now = time.time()
+    sources = {}
+
+    def source_for(_owner, state):
+        host = state.spec.url.split("/")[2]
+        state.source = sources[host]
+        return state.source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    manager = _Manager()
+    leases = []
+    for index, age in enumerate(ages_s):
+        host = f"s{index}.example"
+        cached = _result(now - age)
+        if backoff and index in backoff:
+            cached = FeedRefreshResult(
+                cached.status, cached.snapshot,
+                FeedHealth(last_checked_at=now - age, last_success_at=now - age,
+                           backoff_until=now + backoff[index]),
+                changed=False,
+            )
+        sources[host] = _FreshOnRefresh(cached)
+        config = CustomFeedConfig.from_mapping(
+            f"feeds_custom_{index + 1}",
+            {"enabled": True, "name": host, "feed_url": f"https://{host}/feed.xml"},
+        )
+        lease = FeedRuntimeLease(
+            config=FeedRuntimeConfig.from_custom(config, 15), generation=77, manager=manager,
+            ui_dispatch=lambda fn: fn(), schedule=lambda _ms, _fn: (lambda: None), task_priority=0,
+        )
+        lease.attach_consumer(_Consumer(77))
+        leases.append(lease)
+    for lease in leases:
+        assert lease.start()
+    owner = leases[0]._owner
+    assert all(lease._owner is owner for lease in leases)
+    return owner, leases, sources, now
+
+
+def test_sources_due_close_together_share_one_wake_up(monkeypatch):
+    # 15 min cadence, so a 225 s batch window. Due in 300 s, 480 s and 800 s:
+    # nothing is due at start; when the first falls due, the second (180 s
+    # later) joins its wake-up and the third (500 s later) does not.
+    owner, leases, sources, now = _batch_owner(monkeypatch, (600, 420, 100))
+    assert all(source.refresh_calls == 0 for source in sources.values())
+    first_due = min(state.due_at for state in owner._states.values())
+    owner._now = lambda: first_due
+    owner._admit_due_work()
+    calls = [sources[f"s{i}.example"].refresh_calls for i in range(3)]
+    assert calls == [1, 1, 0]
+    # Having succeeded together, the two now fall due together.
+    due = {state.spec.url.split("/")[2]: state.due_at for state in owner._states.values()}
+    assert abs(due["s0.example"] - due["s1.example"]) < 1.0
+    for lease in leases:
+        lease.retire()
+
+
+def test_a_backing_off_source_is_never_pulled_early_into_a_wake_up(monkeypatch):
+    owner, leases, sources, now = _batch_owner(
+        monkeypatch, (15 * 60, 15 * 60), backoff={1: 60.0})
+    assert sources["s0.example"].refresh_calls == 1  # due at start
+    assert sources["s1.example"].refresh_calls == 0
+    owner._now = lambda: now + 30.0  # backoff ends in 30 s: inside any batch window
+    owner._admit_due_work()
+    assert sources["s1.example"].refresh_calls == 0
+    owner._now = lambda: now + 60.0
+    owner._admit_due_work()
+    assert sources["s1.example"].refresh_calls == 1
+    for lease in leases:
+        lease.retire()

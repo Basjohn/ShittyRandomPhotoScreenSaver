@@ -116,6 +116,10 @@ def test_only_preexisting_local_image_multieffects_remain() -> None:
         "BrandedHeader.qml",
         "FriendPulsePresentation.qml",
         "MediaPresentation.qml",
+        # ed474c08: story artwork adopted the same local rounded-mask
+        # artwork-frame contract (static layers, enabled only while visible).
+        "FeedPresentation.qml",
+        "GamesYouFollowPresentation.qml",
     }
     found = set()
     for path in QML.glob("*.qml"):

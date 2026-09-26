@@ -116,7 +116,7 @@ def build_system_stats_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
 
     layout_toggle, layout_body, layout_controls = build_bucket_toggle(
         controls,
-        "Layout & Typography",
+        "Layout",
         expanded=tab.get_widget_bucket_state("system_stats", "layout"),
         on_toggle=lambda checked: tab.set_widget_bucket_state(
             "system_stats", "layout", checked

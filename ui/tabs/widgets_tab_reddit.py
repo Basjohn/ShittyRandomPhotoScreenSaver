@@ -132,7 +132,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     shared_layout_toggle, shared_layout_body, shared_layout_layout = build_bucket_toggle(
         _rc_layout,
-        "Shared Layout & Typography",
+        "Shared Layout",
         expanded=tab.get_widget_bucket_state("reddit", "shared_layout"),
         on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "shared_layout", checked),
         defer_initial_visibility=True,
