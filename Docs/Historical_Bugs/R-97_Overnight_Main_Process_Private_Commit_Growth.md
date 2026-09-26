@@ -113,6 +113,13 @@ saver with two NEWS cards and Custom 1 at a 5-minute refresh (7 min, one full re
 Windows thread-pool workers (0.6/min, unchanged) and 2 Python threads that never exited (the resolver pool
 reaching its peak concurrency); no SRPSS thread was created and destroyed.
 
+Evening censuses (2026-09-26, operator at the desktop, 8 min each) also showed short-lived Windows shell pool
+threads starting in `SHCore.dll`: 4 to 9 per run (0.5 to 1.1/min, living 30 to 140 s), about 1.7 to 3.8 MB/h of
+driver state at 57 KB each. They are not SRPSS threads and not caused by any change that day: the same count
+appeared with Feeds off and with that morning's code (6303b40f, 9 per run) run from a detached worktree, while the
+morning's unattended runs had none. Like the pool workers above, they track desktop activity rather than saver
+work, so the unattended overnight run is the measure.
+
 ## Is The Absolute Level Normal?
 
 About 700 MB of warm USS is expected for Qt Quick with 1–2 high-resolution displays, a 10-image decoded cache
