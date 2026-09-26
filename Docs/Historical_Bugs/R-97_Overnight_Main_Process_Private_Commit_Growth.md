@@ -106,8 +106,9 @@ commit shows no slope over the run.
 persistent thread or an existing lane (see `Docs/Guardrails.md`).
 
 **Remaining.** The Windows thread-pool workers (≈ 2–3 MB/h at the observed rate) come from system components
-(COM/WinRT/audio). `bounded_dns` still starts one short-lived thread per network lookup, a few dozen an hour.
-Neither is a measurable slope yet.
+(COM/WinRT/audio) and are not SRPSS threads. `bounded_dns` used to start one short-lived thread per network
+lookup (a few dozen an hour, more once NEWS multiplied feed sources); since 2026-09-26 it resolves on at most
+eight persistent resolver threads, started only as concurrent lookups first need them.
 
 ## Is The Absolute Level Normal?
 
@@ -121,6 +122,8 @@ is committed but not resident, and that gap is what grows.
   only that thread is ever started, and shutdown stops it.
 - `tests/test_native_thread_pools.py::test_qt_image_pool_keeps_its_threads_instead_of_recreating_them`: with a short
   expiry Qt's image pool recreates threads between images; with the production setting the same threads are reused.
+- `tests/test_feed_dns_stall.py::test_lookups_reuse_persistent_resolvers_instead_of_a_thread_each`: forty lookups
+  create no thread; the deadline, cancellation, cap and exit-fence tests in the same file are unchanged.
 - `tests/test_qtquick_native_texture_wrapper_retention.py`: 40 uploads through the production node on a real
   threaded-GL window leave ≤1 wrapper, and the latest image is still shown.
 - `tools/memory_slope_report.py`: warm-plateau slopes and settled replacement steps from existing logs.
