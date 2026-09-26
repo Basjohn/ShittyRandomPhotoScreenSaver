@@ -688,7 +688,7 @@ OverlayWidget {
                         ? secondaryText + "  " + presenceText
                         : presenceText).toUpperCase()
                     color: rowGameHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor
-                    font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.72; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
+                    font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.72; verticalAlignment: Text.AlignVCenter; fontSizeMode: Text.HorizontalFit; minimumPointSize: 6.0; elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                     HoverHandler { id: rowGameHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.gameActionRequested(index) }
@@ -1006,7 +1006,9 @@ OverlayWidget {
                         : presenceText).toUpperCase()
                     color: gridGameHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.68
-                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; maximumLineCount: 2; wrap: true; elide: Text.ElideRight
+                    // Long game names shrink to fit the tile's two lines; elision
+                    // is only the last resort below the minimum size.
+                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; maximumLineCount: 2; wrap: true; fontSizeMode: Text.Fit; minimumPointSize: 6.0; elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                     HoverHandler { id: gridGameHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.gameActionRequested(index) }
