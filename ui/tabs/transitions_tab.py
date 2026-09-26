@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QGroupBox, QScrollArea, QPushButton, QButtonGroup,
     QSpinBox, QDoubleSpinBox,
 )
-from PySide6.QtCore import QTimer, Signal, Qt
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
@@ -1597,8 +1597,9 @@ class TransitionsTab(QWidget):
         scroll = getattr(self, "_scroll_area", None)
         if scroll is None:
             return
+        # 0 survives the later layout pass (a range change only clamps values
+        # above the new maximum), so no deferred second reset is needed.
         scroll.verticalScrollBar().setValue(0)
-        QTimer.singleShot(0, lambda: scroll.verticalScrollBar().setValue(0))
 
     def get_view_state(self) -> dict[str, str]:
         """Persist the selected Transition pill, never a pixel scroll offset."""

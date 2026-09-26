@@ -756,7 +756,6 @@ class SettingsDialog(QDialog):
         # runtime -> Settings -> runtime round-trip is deterministic even after
         # lazy hydration changes content height. ``ui.last_tab_scroll`` remains
         # a tolerated legacy schema member but is intentionally ignored.
-        self._suppress_scroll_capture: bool = False
         self._tab_keys = ["sources", "display", "transitions", "widgets", "visualizers", "accessibility", "themes", "about", "quick_start"]
         self._force_initial_sources_tab = os.getenv(
             "SRPSS_SETTINGS_FORCE_INITIAL_TAB_SOURCES", "0"
@@ -1573,31 +1572,20 @@ class SettingsDialog(QDialog):
         return f"tab_{index}"
 
     def _reset_scroll_for_tab(self, index: int, widget: Optional[QWidget]) -> None:
-        """Open the selected semantic section at its top after layout settles."""
+        """Open the selected semantic section at its top.
+
+        Synchronous on purpose: 0 survives the switch's later layout pass (a
+        range change only clamps values above the new maximum), so a deferred
+        timer reset would do no extra work.
+        """
 
         if index < 0:
             return
         if self._tab_scroll_widgets.get(index) is None and widget is not None:
             self._register_tab_scroll_area(index, widget)
         scroll = self._tab_scroll_widgets.get(index)
-        if scroll is None:
-            return
-        scrollbar = scroll.verticalScrollBar()
-
-        def _apply_scroll() -> None:
-            try:
-                self._suppress_scroll_capture = True
-                scrollbar.setValue(0)
-            except Exception:
-                logger.debug(
-                    "Failed to reset scroll for tab %s",
-                    self._tab_key_for_index(index),
-                    exc_info=True,
-                )
-            finally:
-                self._suppress_scroll_capture = False
-
-        self._schedule_runtime_single_shot(0, _apply_scroll)
+        if scroll is not None:
+            scroll.verticalScrollBar().setValue(0)
 
     def _save_last_tab(self, index: int) -> None:
         if index < 0 or index >= len(self._tab_keys):
@@ -1659,11 +1647,7 @@ class SettingsDialog(QDialog):
         if index < 0 or index >= len(self.tab_buttons):
             index = 0
         index = self._admit_top_level_tab_index(index)
-        self._suppress_scroll_capture = True
-        try:
-            self._switch_tab(index, animate=False)
-        finally:
-            self._suppress_scroll_capture = False
+        self._switch_tab(index, animate=False)
 
     def closeEvent(self, event):
         self._closing = True

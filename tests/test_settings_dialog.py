@@ -829,3 +829,32 @@ def test_themes_page_switch_opens_at_top_without_a_deferred_reset(qapp, settings
         assert scrollbar.value() == 0
     finally:
         tab.deleteLater()
+
+
+def test_tab_switch_opens_scrolled_tab_at_top_without_a_timer(
+    qapp, settings_manager, animation_manager, monkeypatch
+):
+    """The reset is synchronous and survives the switch's later layout pass."""
+    from core.threading.manager import ThreadManager
+
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    dialog.resize(900, 520)
+    qapp.processEvents()
+    widgets_index = dialog._tab_index_for_key("widgets")
+    sources_index = dialog._tab_index_for_key("sources")
+    dialog._switch_tab(widgets_index, animate=False)
+    for _ in range(5):
+        qapp.processEvents()
+    scrollbar = dialog.widgets_tab._scroll_area.verticalScrollBar()
+    assert scrollbar.maximum() > 0
+    dialog._switch_tab(sources_index, animate=False)
+    scrollbar.setValue(scrollbar.maximum())
+    deferred = []
+    monkeypatch.setattr(ThreadManager, "single_shot", staticmethod(lambda *args, **kwargs: deferred.append(args)))
+    dialog._switch_tab(widgets_index, animate=False)
+    assert scrollbar.value() == 0
+    for _ in range(5):
+        qapp.processEvents()
+    assert scrollbar.value() == 0
+    dialog._closing = True
+    dialog.deleteLater()
