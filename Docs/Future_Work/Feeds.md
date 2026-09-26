@@ -62,14 +62,9 @@ Implemented (see `Docs/Reference/Feeds.md`): RSS, Atom, JSON Feed 1.x, JF2 and I
 
 ## Torrent and magnet actions
 
-Not started, deliberately. A `.torrent` item link over HTTP/S (Nyaa's `<link>`) already opens through the ordinary action and the browser hands the file to the torrent client. A magnet action must also pass the secure Winlogon handoff, whose helper (`helpers/reddit_helper_worker.py`) admits only HTTP/S. Widening that is an R-02 boundary change that needs the operator present for its physical gate, so it is not done unattended.
+Magnet links open in the registered torrent client since 2026-09-26 (operator-approved, with the condition that validation adds no hover/highlight cost): one strict rule in `core/feeds/magnet.py`, run once per published row and once per click at the product action and the secure helper (`Docs/Reference/Feeds.md` § Runtime ownership). Titles already fall back to a magnet's `dn=`. A managed `.torrent` download is not planned: an HTTP/S `.torrent` link (Nyaa's `<link>`) opens in the browser, which hands the file to the client.
 
-- [ ] Keep authored title first. A missing title falls back to magnet `dn=`, then the entry's own text, then enclosure filename or URL-derived text (implemented in `entry_title_and_summary`); machine-ish cleanup applies only to URL-derived fallback text.
-- [ ] Add a separate allowlisted `open_magnet` capability with bounded syntax validation. Do not broaden HTTP/S open into generic URI execution.
-- [ ] Fetch `.torrent` enclosures only after explicit user action, with strict response-size/content checks into an SRPSS-owned managed action-cache directory.
-- [ ] Add a separate `open_torrent_file` capability restricted to validated `.torrent` files in that managed directory. Never add arbitrary-file opening.
-- [ ] Retire these actions with their owning generation and disable them during CUSTOM input capture.
-- [ ] Require a physical Windows gate with the default torrent handler before considering the feature accepted.
+- [~] Physical: in MC, click a magnet row of a magnet feed and confirm the torrent client opens it. On the saver, rebuild the helper first (the installed one still admits HTTP/S only and would drop the entry), then click a magnet row and confirm the client opens after the saver exits.
 
 ## Legacy wallpaper RSS consolidation
 

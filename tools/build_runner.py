@@ -551,6 +551,9 @@ def helper_input_paths(
         repo_root / "core" / "logging" / "logger.py",
         repo_root / "core" / "mc.py",
         repo_root / "core" / "windows" / "browser_window_routing.py",
+        # The magnet admission rule is shared with the saver side.
+        repo_root / "core" / "feeds" / "__init__.py",
+        repo_root / "core" / "feeds" / "magnet.py",
         repo_root / "build_deps" / "requirements_helper.txt",
         repo_root / "tools" / "build_layout.ps1",
         repo_root / "versioning.py",

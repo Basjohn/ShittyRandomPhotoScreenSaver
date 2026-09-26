@@ -21,6 +21,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
 
 from core.feeds.config import CustomFeedConfig, feed_widget_config
+from core.feeds.magnet import admitted_magnet_uri
 from core.feeds.models import FeedRefreshResult
 from core.feeds.news import NewsFeedConfig
 from core.feeds.projection import FeedDisplay, FeedDisplayRow, project_feed
@@ -233,6 +234,11 @@ def _browser_action_url(value: object) -> str:
     return target if scheme in {"http", "https"} else ""
 
 
+def _item_action_url(value: object) -> str:
+    """A story's clickable target: an HTTP(S) page or an admissible magnet link."""
+    return _browser_action_url(value) or admitted_magnet_uri(value)
+
+
 def _age_label(timestamp: int | None, now_ts: float | None = None) -> str:
     if not timestamp:
         return ""
@@ -415,6 +421,10 @@ class FeedRowsModel(QAbstractListModel):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._rows: tuple[FeedDisplayRow, ...] = ()
+        # Each row's admitted click target, validated once per published row
+        # set: role reads, hover and clicks never re-validate.
+        self._action_urls: tuple[str, ...] = ()
+        self._admitted_actions: frozenset[str] = frozenset()
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
         return 0 if parent.isValid() else len(self._rows)
@@ -429,7 +439,7 @@ class FeedRowsModel(QAbstractListModel):
             self.SummaryRole: row.summary,
             self.AuthorRole: row.author,
             self.AgeRole: _age_label(row.published_at),
-            self.UrlRole: _browser_action_url(row.action_url),
+            self.UrlRole: self._action_urls[index.row()],
             self.ImageRole: row.image_source,
             int(Qt.ItemDataRole.DisplayRole): row.title,
         }.get(int(role))
@@ -449,12 +459,18 @@ class FeedRowsModel(QAbstractListModel):
     def rows(self) -> tuple[FeedDisplayRow, ...]:
         return self._rows
 
+    def is_admitted_action(self, url: str) -> bool:
+        return bool(url) and url in self._admitted_actions
+
     def replace_rows(self, rows: Iterable[FeedDisplayRow]) -> bool:
         resolved = tuple(rows)
         if resolved == self._rows:
             return False
+        action_urls = tuple(_item_action_url(row.action_url) for row in resolved)
         self.beginResetModel()
         self._rows = resolved
+        self._action_urls = action_urls
+        self._admitted_actions = frozenset(url for url in action_urls if url)
         self.endResetModel()
         return True
 
@@ -608,17 +624,17 @@ class FeedPresentationModel(QObject):
         return True
 
     def admit_url(self, url: object) -> bool:
+        """Only a target this card is currently showing: one set lookup per click."""
         if not self._active or not self._interaction_enabled:
             return False
-        target = _browser_action_url(url)
+        target = str(url or "").strip()
         if not target:
             return False
-        if self._display is not None and target == _browser_action_url(self._display.home_url):
+        if self._rows.is_admitted_action(target):
             return True
-        return any(
-            _browser_action_url(row.action_url) == target
-            for row in self._rows.rows
-            if _browser_action_url(row.action_url)
+        return bool(
+            self._display is not None
+            and target == _browser_action_url(self._display.home_url)
         )
 
 

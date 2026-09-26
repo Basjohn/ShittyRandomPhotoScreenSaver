@@ -352,8 +352,14 @@ def _validate_queue_payload(data: Any) -> Dict[str, Any]:
         if not isinstance(url, str) or not url.strip() or len(url.encode("utf-8")) > 8192:
             raise ValueError("invalid or oversized URL")
         parsed = urlsplit(url.strip())
-        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("URL must use HTTP or HTTPS")
+        if parsed.scheme.lower() == "magnet":
+            # A Feed magnet opens in the registered torrent client; the same
+            # strict rule as the saver side (info hash, RFC 3986 text only).
+            from core.feeds.magnet import admitted_magnet_uri
+            if not admitted_magnet_uri(url):
+                raise ValueError("invalid magnet link")
+        elif parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("URL must use HTTP or HTTPS, or be a magnet link")
     else:
         command = data.get("command")
         if (
@@ -1159,6 +1165,9 @@ def _handle_open_url(data: Dict[str, Any]) -> tuple[bool, str, float | None]:
 
     if launched:
         logging.info("Launch request completed (%.2f ms): %s", duration * 1000.0, safe_url)
+        if str(url).strip().lower().startswith("magnet:"):
+            # The torrent client raises itself; there is no browser to find.
+            return True, "", None
 
         # Best-effort only. A foreground failure must not turn a successful
         # browser launch into a helper failure.

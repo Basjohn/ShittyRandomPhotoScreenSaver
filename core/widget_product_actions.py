@@ -89,11 +89,13 @@ def dispatch_feed_url_product_action(
     request_saver_exit: Callable[[], None],
     interactive_build: bool,
 ) -> bool:
-    """Execute one already-admitted HTTP(S) Feed item action.
+    """Execute one already-admitted Feed item action.
 
-    F2 intentionally supports browser URLs only.  Magnet and managed torrent
-    actions are separate future capabilities and must not be smuggled through
-    this generic URL seam.
+    Exactly two targets are admitted: an HTTP(S) page, and a BitTorrent magnet
+    link that passes ``core.feeds.magnet`` (opened by the user's registered
+    torrent client). No other scheme is ever handed to the opener. Managed
+    ``.torrent`` downloads are not an action here; an HTTP(S) ``.torrent`` link
+    opens in the browser like any page.
     """
     normalized_url = str(url or "").strip()
     if not normalized_url:
@@ -103,7 +105,12 @@ def dispatch_feed_url_product_action(
         parsed = urlsplit(normalized_url)
     except ValueError:
         return False
-    if parsed.scheme.casefold() not in {"http", "https"} or not parsed.hostname:
+    scheme = parsed.scheme.casefold()
+    if scheme == "magnet":
+        from core.feeds.magnet import admitted_magnet_uri
+        if not admitted_magnet_uri(normalized_url):
+            return False
+    elif scheme not in {"http", "https"} or not parsed.hostname:
         return False
     if not bool(opener(normalized_url)):
         return False
