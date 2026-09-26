@@ -104,6 +104,18 @@ OverlayWidget {
     }
     readonly property real subtitleHeight: hasHeaderSubtitle
         ? Math.ceil(subtitleMetrics.height) : 0.0
+    // NEWS rows name their publisher beside the age; the list rail widens to
+    // that text. CUSTOM rows keep the fixed age rail.
+    FontMetrics {
+        id: metaMetrics
+        font.family: feedRoot.feedModel.fontFamily
+        font.pixelSize: Math.max(8.0, feedRoot.feedModel.fontSize - 3.0)
+    }
+    function rowMetaText(author, age) {
+        if (!feedModel.showSourceAttribution || author.length === 0)
+            return age
+        return age.length > 0 ? author.toUpperCase() + " · " + age : author.toUpperCase()
+    }
     readonly property real subtitleGap: 2.5
     readonly property real headerHeight: Math.max(
         36.0, headerFrame.implicitHeight * childWidthScale("header")
@@ -395,10 +407,14 @@ OverlayWidget {
                         ? artworkX + artworkWidth + 6.0 : 8.0
                     readonly property real contentRight: hasArt && !feedRoot.headerFlipped
                         ? artworkX - 6.0 : width - 8.0
-                    readonly property real ageWidth: Math.min(
-                        Math.max(48.0, feedRoot.feedModel.fontSize * 4.6),
-                        Math.max(48.0, (contentRight - contentLeft) * 0.30)
-                    )
+                    readonly property string metaText: feedRoot.rowMetaText(feedAuthor, feedAge)
+                    readonly property real ageWidth: feedRoot.feedModel.showSourceAttribution
+                        ? Math.min(
+                            Math.max(48.0, Math.ceil(metaMetrics.advanceWidth(metaText)) + 2.0),
+                            Math.max(48.0, (contentRight - contentLeft) * 0.45))
+                        : Math.min(
+                            Math.max(48.0, feedRoot.feedModel.fontSize * 4.6),
+                            Math.max(48.0, (contentRight - contentLeft) * 0.30))
                     readonly property real ageX: feedRoot.headerFlipped
                         ? contentLeft : Math.max(contentLeft, contentRight - ageWidth)
                     readonly property real titleX: feedRoot.headerFlipped
@@ -507,7 +523,8 @@ OverlayWidget {
                         y: 5.0
                         width: listRow.ageWidth
                         height: Math.max(16.0, implicitHeight)
-                        text: feedAge
+                        text: listRow.metaText
+                        elide: feedRoot.feedModel.showSourceAttribution ? Text.ElideRight : Text.ElideNone
                         color: Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
                                        feedRoot.feedModel.textColor.b, feedRoot.feedModel.textColor.a * 0.58)
                         font.family: feedRoot.feedModel.fontFamily
@@ -566,6 +583,7 @@ OverlayWidget {
                     required property string feedItemId
                     required property string feedTitle
                     required property string feedSummary
+                    required property string feedAuthor
                     required property string feedAge
                     required property string feedUrl
                     required property string feedImageSource
@@ -792,7 +810,8 @@ OverlayWidget {
                         y: gridCard.height - 24.0
                         width: Math.max(0.0, gridCard.width - gridCard.contentMargin * 2.0)
                         height: 18.0
-                        text: feedAge
+                        text: feedRoot.rowMetaText(feedAuthor, feedAge)
+                        elide: feedRoot.feedModel.showSourceAttribution ? Text.ElideRight : Text.ElideNone
                         color: Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
                                        feedRoot.feedModel.textColor.b, feedRoot.feedModel.textColor.a * 0.55)
                         font.family: feedRoot.feedModel.fontFamily

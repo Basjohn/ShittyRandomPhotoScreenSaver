@@ -10,16 +10,16 @@ def _text(relative: str) -> str:
 
 def test_feed_descriptor_and_retained_model_own_independent_xy_extent():
     descriptors = _text("rendering/widget_descriptors.py")
-    start = descriptors.index("def _feed_custom_runtime_descriptor(")
+    start = descriptors.index("def _feed_runtime_descriptor(")
     block = descriptors[start:descriptors.index("WIDGET_RUNTIME_DESCRIPTORS", start)]
     assert 'content_extent_axes=("horizontal", "vertical")' in block
     assert 'content_extent_minimum_size=FEED_CONTENT_EXTENT_MINIMUM' in block
 
-    from core.feeds.config import CUSTOM_FEED_WIDGET_IDS
+    from core.feeds.config import FEED_WIDGET_IDS
     from rendering.feed_child_roles import FEED_CONTENT_EXTENT_MINIMUM
     from rendering.widget_descriptors import get_widget_runtime_descriptor
 
-    for widget_id in CUSTOM_FEED_WIDGET_IDS:
+    for widget_id in FEED_WIDGET_IDS:
         descriptor = get_widget_runtime_descriptor(widget_id)
         assert descriptor.content_extent_axes == ("horizontal", "vertical")
         assert descriptor.content_extent_minimum_size == FEED_CONTENT_EXTENT_MINIMUM

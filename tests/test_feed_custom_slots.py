@@ -120,8 +120,10 @@ def test_settings_feeds_section_builds_and_round_trips_all_four_slots(qt_app, se
         }
         load_feeds_settings(tab, widgets)
         payloads = save_feeds_settings(tab)
-        assert len(payloads) == 4
-        by_id = dict(zip(("feeds_custom_1", "feeds_custom_2", "feeds_custom_3", "feeds_custom_4"), payloads))
+        # One payload per Feed card (CUSTOM slots, then NEWS categories).
+        from core.feeds.config import FEED_WIDGET_IDS
+        assert len(payloads) == len(FEED_WIDGET_IDS)
+        by_id = dict(zip(FEED_WIDGET_IDS[:4], payloads))
         assert by_id["feeds_custom_2"]["view_mode"] == "grid"
         assert by_id["feeds_custom_2"]["item_limit"] == 9
         assert by_id["feeds_custom_3"]["enabled"] is False

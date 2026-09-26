@@ -239,16 +239,26 @@ _WEATHER_SERVICE_SPEC = RuntimeServiceSpec(
 
 
 def _build_feed_service(widget_id: str, widgets_config: Mapping[str, Any]) -> Any:
-    """Build one lightweight CUSTOM-feed lease without waking network I/O."""
-    from core.feeds.config import CustomFeedConfig
-    from widgets.feed_runtime import FeedRuntimeConfig, FeedRuntimeLease
+    """Build one lightweight Feed service without waking network I/O.
+
+    A CUSTOM slot gets one lease; a NEWS card gets one lease per selected
+    provider on the same shared family owner.
+    """
+    from core.feeds.config import feed_widget_config
+    from core.feeds.news import NewsFeedConfig
+    from widgets.feed_runtime import (
+        FeedRuntimeConfig,
+        FeedRuntimeLease,
+        NewsRuntimeConfig,
+        NewsRuntimeService,
+    )
 
     values = widgets_config.get(widget_id, {}) if isinstance(widgets_config, Mapping) else {}
-    config = CustomFeedConfig.from_mapping(
-        widget_id, values if isinstance(values, Mapping) else {}
-    )
+    config = feed_widget_config(widget_id, values if isinstance(values, Mapping) else {})
     if not config.configured:
         return None
+    if isinstance(config, NewsFeedConfig):
+        return NewsRuntimeService(config=NewsRuntimeConfig.from_news(config))
     return FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config))
 
 
@@ -776,6 +786,11 @@ _RUNTIME_SERVICE_SPECS: dict[str, RuntimeServiceSpec] = {
     "feeds_custom_2": _FEED_SERVICE_SPEC,
     "feeds_custom_3": _FEED_SERVICE_SPEC,
     "feeds_custom_4": _FEED_SERVICE_SPEC,
+    "feeds_news_world": _FEED_SERVICE_SPEC,
+    "feeds_news_us": _FEED_SERVICE_SPEC,
+    "feeds_news_politics": _FEED_SERVICE_SPEC,
+    "feeds_news_gaming": _FEED_SERVICE_SPEC,
+    "feeds_news_tech": _FEED_SERVICE_SPEC,
     "weather": _WEATHER_SERVICE_SPEC,
     "media": _MEDIA_SERVICE_SPEC,
     "spotify_volume": _MEDIA_VOLUME_SERVICE_SPEC,

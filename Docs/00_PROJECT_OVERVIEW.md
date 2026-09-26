@@ -33,7 +33,7 @@ Performance/freshness changes are evidence-gated and symptom-driven. Treat the a
 
 ## Current feature-extension boundary
 
-FEEDS is an active product family with one admitted retained widget, `feeds_custom_1`, on the shared bounded RSS/Atom transport/parser/cache/runtime path. Custom 2–4 and all NEWS identities remain dormant behind the expansion/provider gates in `Docs/Future_Work/Feeds.md`; the implemented contract lives in `Docs/Reference/Feeds.md`, and the research NEWS catalog is not product availability.
+FEEDS is an active product family of nine retained cards on the shared bounded feed transport/parser/cache/runtime path: four CUSTOM slots (any feed or website address) and five NEWS categories that merge vetted no-signup publisher feeds. The implemented contract lives in `Docs/Reference/Feeds.md`; remaining acceptance work is in `Docs/Future_Work/Feeds.md`.
 
 Games You Follow and the independently enabled master-volume/mute OSD are implemented ordinary retained Quick widgets. Their current source, cache, presentation and lifecycle requirements live in `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md`; they do not need a new presentation stack, Settings authority or implementation queue. `Current_Plan.md` contains only currently active work. New transitions instead enter the canonical transition registry/host with lazy, self-contained implementations rather than a second experimental runtime.
 

@@ -30,9 +30,23 @@ from core.settings.widget_family_catalog import (
 )
 from rendering.games_followed_child_roles import FOLLOWED_CHILD_ROLES
 from rendering.feed_child_roles import FEED_CONTENT_EXTENT_MINIMUM, FEED_CUSTOM_CHILD_ROLES
-from core.feeds.config import CUSTOM_FEED_WIDGET_IDS
+from core.feeds.config import CUSTOM_FEED_WIDGET_IDS, FEED_WIDGET_IDS
+from core.feeds.news import NEWS_WIDGET_IDS, news_providers_for
 
 _FEED_SLOT_NUMBERS: tuple[int, ...] = tuple(range(1, len(CUSTOM_FEED_WIDGET_IDS) + 1))
+
+
+def feed_settings_attr_stem(widget_id: str) -> str:
+    """Settings attribute stem of one Feed card: ``feeds_custom2``, ``feeds_news_world``."""
+
+    return widget_id.replace("feeds_custom_", "feeds_custom")
+
+
+_FEED_SHARED_CONTROL_NAMES: tuple[str, ...] = (
+    "enabled", "view_mode", "item_limit", "refresh_minutes", "show_images", "show_subtitle",
+    "position", "monitor_combo", "margin", "font_combo", "font_size",
+    "preferred_width", "preferred_height", "show_background", "bg_opacity", "border_opacity",
+)
 from rendering.custom_layout_contract import (
     get_custom_layout_restore_entry,
     load_custom_layout_map,
@@ -478,19 +492,22 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         builder_name="build_feeds_ui",
         loader_module="ui.tabs.widgets_tab_feeds",
         loader_name="load_feeds_settings",
-        loader_guard_attrs=tuple(f"feeds_custom{n}_enabled" for n in _FEED_SLOT_NUMBERS),
+        loader_guard_attrs=tuple(f"{feed_settings_attr_stem(w)}_enabled" for w in FEED_WIDGET_IDS),
         saver_module="ui.tabs.widgets_tab_feeds",
         saver_name="save_feeds_settings",
-        saver_guard_attrs=tuple(f"feeds_custom{n}_enabled" for n in _FEED_SLOT_NUMBERS),
-        persisted_widget_keys=CUSTOM_FEED_WIDGET_IDS,
-        signal_block_attrs=tuple(
-            f"feeds_custom{n}_{name}"
-            for n in _FEED_SLOT_NUMBERS
-            for name in (
-                "enabled", "name", "url", "view_mode", "item_limit", "refresh_minutes",
-                "position", "monitor_combo", "margin", "font_combo", "font_size",
-                "preferred_width", "preferred_height", "show_background", "bg_opacity",
-                "border_opacity",
+        saver_guard_attrs=tuple(f"{feed_settings_attr_stem(w)}_enabled" for w in FEED_WIDGET_IDS),
+        persisted_widget_keys=FEED_WIDGET_IDS,
+        signal_block_attrs=(
+            tuple(
+                f"{feed_settings_attr_stem(w)}_{name}"
+                for w in FEED_WIDGET_IDS
+                for name in _FEED_SHARED_CONTROL_NAMES
+            )
+            + tuple(f"feeds_custom{n}_{name}" for n in _FEED_SLOT_NUMBERS for name in ("name", "url"))
+            + tuple(
+                f"{w}_provider_{provider.provider_id}"
+                for w in NEWS_WIDGET_IDS
+                for provider in news_providers_for(w)
             )
         ),
     ),
@@ -755,22 +772,22 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
         control_attrs=("reddit_font_size",),
         anchor_attr="reddit_font_size",
     ),
-    # One independent lock scope per CUSTOM slot inside the shared Feeds page
-    # (the Steam pattern); slot 1 keeps its original ``feeds`` scope id.
+    # One independent lock scope per Feed card inside the shared Feeds page
+    # (the Steam pattern); CUSTOM slot 1 keeps its original ``feeds`` scope id.
     *(
         WidgetCustomResizeLockDescriptor(
-            section_id="feeds" if n == 1 else f"feeds_custom_{n}",
+            section_id="feeds" if w == CUSTOM_FEED_WIDGET_IDS[0] else w,
             settings_section_id="feeds",
-            widget_ids=(f"feeds_custom_{n}",),
-            position_combo_attrs=(f"feeds_custom{n}_position",),
+            widget_ids=(w,),
+            position_combo_attrs=(f"{feed_settings_attr_stem(w)}_position",),
             control_attrs=(
-                f"feeds_custom{n}_font_size",
-                f"feeds_custom{n}_preferred_width",
-                f"feeds_custom{n}_preferred_height",
+                f"{feed_settings_attr_stem(w)}_font_size",
+                f"{feed_settings_attr_stem(w)}_preferred_width",
+                f"{feed_settings_attr_stem(w)}_preferred_height",
             ),
-            anchor_attr=f"feeds_custom{n}_preferred_width",
+            anchor_attr=f"{feed_settings_attr_stem(w)}_preferred_width",
         )
-        for n in _FEED_SLOT_NUMBERS
+        for w in FEED_WIDGET_IDS
     ),
     WidgetCustomResizeLockDescriptor(
         section_id="gmail",
@@ -848,8 +865,8 @@ WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS: tuple[WidgetCustomPositionOptionDescr
     WidgetCustomPositionOptionDescriptor("reddit", "reddit_position"),
     WidgetCustomPositionOptionDescriptor("reddit2", "reddit2_position"),
     *(
-        WidgetCustomPositionOptionDescriptor(f"feeds_custom_{n}", f"feeds_custom{n}_position")
-        for n in _FEED_SLOT_NUMBERS
+        WidgetCustomPositionOptionDescriptor(w, f"{feed_settings_attr_stem(w)}_position")
+        for w in FEED_WIDGET_IDS
     ),
     WidgetCustomPositionOptionDescriptor("gmail", "gmail_position"),
     WidgetCustomPositionOptionDescriptor("steam_progress", "steam_progress_position"),
@@ -1627,8 +1644,8 @@ GMAIL_CUSTOM_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
         uniform_scale=True, movable=True,
     ),
 )
-def _feed_custom_runtime_descriptor(widget_id: str) -> WidgetRuntimeDescriptor:
-    """Every CUSTOM Feed slot runs the identical descriptor; only identity differs."""
+def _feed_runtime_descriptor(widget_id: str) -> WidgetRuntimeDescriptor:
+    """Every Feed card (CUSTOM or NEWS) runs the identical descriptor; only identity differs."""
 
     return WidgetRuntimeDescriptor(
         widget_id=widget_id,
@@ -1870,7 +1887,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         content_extent_axes=("horizontal", "vertical"),
         custom_child_roles=REDDIT_CUSTOM_CHILD_ROLES,
     ),
-    *(_feed_custom_runtime_descriptor(widget_id) for widget_id in CUSTOM_FEED_WIDGET_IDS),
+    *(_feed_runtime_descriptor(widget_id) for widget_id in FEED_WIDGET_IDS),
     WidgetRuntimeDescriptor(
         widget_id="gmail",
         attr_name="gmail_widget",

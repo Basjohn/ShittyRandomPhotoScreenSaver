@@ -20,8 +20,9 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
 
-from core.feeds.config import CustomFeedConfig
+from core.feeds.config import CustomFeedConfig, feed_widget_config
 from core.feeds.models import FeedRefreshResult
+from core.feeds.news import NewsFeedConfig
 from core.feeds.projection import FeedDisplay, FeedDisplayRow, project_feed
 from core.settings.default_contract import require_canonical_default
 from core.settings.shadow_direction import resolve_directional_extensions, resolve_signed_offset
@@ -248,7 +249,8 @@ def _age_label(timestamp: int | None, now_ts: float | None = None) -> str:
 
 @dataclass(frozen=True)
 class FeedPresentationConfig:
-    custom: CustomFeedConfig
+    # The card's headless source settings: a CUSTOM slot or a NEWS category.
+    custom: CustomFeedConfig | NewsFeedConfig
     font_family: str
     font_size: int
     text_color: tuple[int, int, int, int]
@@ -262,8 +264,8 @@ class FeedPresentationConfig:
     header_text_color: tuple[int, int, int, int]
     preferred_width: int
     preferred_height: int
-    # 1-based rank among enabled, configured CUSTOM slots that share this
-    # slot's monogram initial (slot order); 0 when the initial is unique.
+    # 1-based rank among enabled, configured Feed cards that share this
+    # card's monogram initial (FEED_WIDGET_IDS order); 0 when it is unique.
     monogram_ordinal: int
 
     @classmethod
@@ -279,7 +281,7 @@ class FeedPresentationConfig:
         values = widgets.get(widget_id, {}) if isinstance(widgets, Mapping) else {}
         if not isinstance(values, Mapping):
             values = {}
-        custom = CustomFeedConfig.from_mapping(widget_id, values)
+        custom = feed_widget_config(widget_id, values)
         text = resolve_primary_text_color(
             values=values,
             defaults=canonical,
@@ -333,16 +335,16 @@ def feed_monogram_initial(name: str) -> str:
 
 
 def _monogram_ordinal(widgets: Mapping[str, object], widget_id: str) -> int:
-    """Deterministic collision ordinal across the live CUSTOM slots.
+    """Deterministic collision ordinal across the live Feed cards.
 
-    Only enabled, configured slots present cards, so only they can collide.
+    Only enabled, configured cards are presented, so only they can collide.
     """
-    from core.feeds.config import CUSTOM_FEED_WIDGET_IDS
+    from core.feeds.config import FEED_WIDGET_IDS
 
     live: list[tuple[str, str]] = []
-    for slot_id in CUSTOM_FEED_WIDGET_IDS:
+    for slot_id in FEED_WIDGET_IDS:
         raw = widgets.get(slot_id, {}) if isinstance(widgets, Mapping) else {}
-        config = CustomFeedConfig.from_mapping(slot_id, raw if isinstance(raw, Mapping) else {})
+        config = feed_widget_config(slot_id, raw if isinstance(raw, Mapping) else {})
         if slot_id == widget_id or (config.enabled and config.configured):
             live.append((slot_id, feed_monogram_initial(config.name)))
     initial = next((value for slot_id, value in live if slot_id == widget_id), None)
@@ -540,6 +542,10 @@ class FeedPresentationModel(QObject):
         if not self.is_feed_consumer_alive():
             return
         snapshot = result.snapshot
+        if snapshot is None and from_cache and result.failure == "no_cache":
+            # First run: nothing cached yet and the network fetch follows at
+            # once. A cache miss is not a source failure; keep loading.
+            return
         if snapshot is not None:
             old_view_state = self._view_state
             old_status_text = self._status_text
@@ -735,6 +741,11 @@ class FeedPresentationModel(QObject):
     @Property(bool, constant=True)
     def showSubtitle(self) -> bool:
         return bool(self.config.custom.show_subtitle)
+
+    @Property(bool, constant=True)
+    def showSourceAttribution(self) -> bool:
+        """NEWS rows name their publisher (the row author) beside the age."""
+        return isinstance(self.config.custom, NewsFeedConfig)
 
     @Property(str, notify=stateChanged)
     def viewState(self) -> str:

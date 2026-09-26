@@ -13,15 +13,7 @@ FEEDS is one bounded ordinary-widget family, not a runtime widget factory. Four 
 
 All four CUSTOM slots are admitted to runtime through one path. A user-visible custom name is presentation state, never persistence, registry or cache identity. Four CUSTOM slots remain the product ceiling unless a later measured design explicitly changes it. Disabled/unconfigured slots are dormant.
 
-Five NEWS identities are reserved for later provider-backed categories:
-
-- `feeds_news_world`
-- `feeds_news_us`
-- `feeds_news_politics`
-- `feeds_news_gaming`
-- `feeds_news_tech`
-
-Their presence in research/catalog code is not a shipping promise. No NEWS identity enters Settings/runtime until its provider gate below is satisfied.
+Five NEWS category identities (`feeds_news_world`, `_us`, `_politics`, `_gaming`, `_tech`) are admitted through the same path; each merges its selected publishers (`Docs/Reference/Feeds.md` § NEWS).
 
 ## Expansion guardrails
 
@@ -49,27 +41,11 @@ Admitted 2026-09-26 through the **same** descriptor/runtime/source/QML/Edit path
 
 - [~] Physical: two or more slots live on the saver at once (different endpoints, then the same endpoint in two slots); Settings round-trip of every slot.
 
-## NEWS provider probation
+## NEWS categories
 
-NEWS is a technical-provider qualification problem, not an editorial-ranking feature.
+Admitted 2026-09-26 (operator: the multi-day probation is not a durability gate). Every shipped publisher passed the native probe on 2026-09-24 and 2026-09-26; ABC's world feed was empty both days and was dropped for BBC and NPR. Publisher choice rules stay: no API keys, sign-in, third-party RSS reconstruction, scraping or browser automation; at least two independent publishers per category; technical health only, never editorial scoring. A publisher that dies is replaced in `core/feeds/news.py` (same ID when the publisher moved its feed, a new ID otherwise), never by changing the card's identity.
 
-- [ ] Run repeated native `tools/feed_probe.py` probation on Windows for each candidate over multiple sessions/days. A single successful HTTP response is insufficient evidence.
-- [ ] Require at least **two independent viable no-signup providers per category** before that category is admitted.
-- [ ] Reject providers that require API keys, account sign-in, third-party RSS reconstruction, article scraping, browser automation or credentials.
-- [ ] Record stable provider ID, display name, category, endpoint, homepage/attribution and terms-reference metadata before promotion.
-- [ ] Convert malformed/edge documents found during probation into frozen deterministic parser fixtures.
-- [ ] Keep Settings source checks explicit/asynchronous. Opening Settings must not cause a provider-validation storm.
-- [ ] Under a stable provider ID, endpoint replacement may retain the previous last-good snapshot while the replacement is unhealthy, but old ETag/Last-Modified values must never be sent to the new endpoint.
-
-Technical health labels describe reachability/parser viability only. SRPSS does not score political slant, editorial quality or story importance.
-
-## NEWS projection
-
-- [ ] Admit the five stable NEWS widget identities only after their provider-category gates pass.
-- [ ] Merge selected providers chronologically by publication time while retaining provider attribution.
-- [ ] Allow exact feed identity/canonical-URL dedup only. Do not use semantic/fuzzy political-story suppression or infer equivalence between outlets' coverage.
-- [ ] One failed provider retains that provider's last-good state and must not blank healthy providers.
-- [ ] Reuse the shared FEEDS transport/parser/cache/runtime/presentation modes and local-artwork rules. Do not build five bespoke NEWS engines.
+- [~] Physical: enable two or three NEWS cards with images on (List and Grid); stories from each publisher interleave by time with the publisher named on every row; the subtitle lists the publishers; TEST SOURCES reports each publisher; untick one publisher, Save, and its stories leave on the next runtime; offline restart keeps last-good stories.
 
 ## Feed formats
 

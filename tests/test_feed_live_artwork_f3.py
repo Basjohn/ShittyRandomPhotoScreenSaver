@@ -194,3 +194,65 @@ def test_feed_article_rows_have_event_driven_hover_and_pointer_affordance():
     assert 'id: gridHover' in qml
     assert qml.count('cursorShape: Qt.PointingHandCursor') >= 3  # refresh + list + grid
     assert 'enabled: parent.canActivate' in qml
+
+
+def test_artwork_warms_only_rows_an_active_card_can_show(tmp_path, monkeypatch):
+    """Stories past every card's item limit never show art, so none is fetched,
+    published or protected from eviction. A card with a larger limit joining an
+    already-warmed source gets exactly one more bounded warm."""
+    from core.feeds import artwork_transport
+    from core.settings import storage_paths
+
+    monkeypatch.setattr(storage_paths, "get_feed_cache_dir", lambda profile=None: tmp_path)
+    requested = []
+
+    def fetch(url, **_kwargs):
+        requested.append(url)
+        out = BytesIO()
+        Image.new("RGB", (32, 24), (len(requested) * 30 % 255, 90, 160)).save(out, format="PNG")
+        return out.getvalue()
+
+    monkeypatch.setattr(artwork_transport, "fetch_artwork_bytes", fetch)
+    now = time.time()
+    items = tuple(
+        FeedItem(str(i), f"Story {i}", f"https://example.test/{i}", images=(
+            FeedImageCandidate(f"https://cdn.example.test/{i}.jpg", relation="media"),))
+        for i in range(1, 7)
+    )
+    result = FeedRefreshResult(
+        "available",
+        FeedSnapshot(FeedDocument("Six", "https://example.test", "rss20", items), fetched_at=now),
+        FeedHealth(last_success_at=now, last_checked_at=now),
+    )
+    source = Source(result)
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", lambda owner, state: source)
+
+    def lease_for(widget_id, item_limit):
+        config = CustomFeedConfig.from_mapping(widget_id, {
+            "enabled": True, "feed_url": "https://example.test/feed.xml",
+            "view_mode": "list", "item_limit": item_limit, "show_images": True,
+        })
+        lease = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(config),
+                                 generation=45, manager=Manager(),
+                                 ui_dispatch=lambda callback: callback(),
+                                 schedule=lambda _delay, _callback: (lambda: None),
+                                 task_priority=0)
+        consumer = Consumer()
+        lease.attach_consumer(consumer)
+        return lease, consumer
+
+    small, small_consumer = lease_for("feeds_custom_1", 3)
+    assert small.start()
+    warmed = dict(small_consumer.accepted[-1][0].local_artwork_by_item)
+    assert set(warmed) == {"1", "2", "3"}
+    assert sorted(requested) == [f"https://cdn.example.test/{i}.jpg" for i in (1, 2, 3)]
+
+    # Same endpoint, larger limit: one more warm, new requests only for 4 and 5.
+    large, large_consumer = lease_for("feeds_custom_2", 5)
+    assert large.start()
+    widened = dict(large_consumer.accepted[-1][0].local_artwork_by_item)
+    assert set(widened) == {"1", "2", "3", "4", "5"}
+    assert len(requested) == 5
+    assert "https://cdn.example.test/6.jpg" not in requested
+    small.retire()
+    large.retire()
