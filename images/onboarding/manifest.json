@@ -1,0 +1,314 @@
+{
+  "format": "png",
+  "version": 1,
+  "widgets": [
+    {
+      "family_id": "clocks",
+      "path": "widget_clocks.png",
+      "size": [
+        820,
+        433
+      ]
+    },
+    {
+      "family_id": "weather",
+      "path": "widget_weather.png",
+      "size": [
+        788,
+        475
+      ]
+    },
+    {
+      "family_id": "media",
+      "path": "widget_media.png",
+      "size": [
+        868,
+        420
+      ]
+    },
+    {
+      "family_id": "visualizers",
+      "path": "widget_visualizers.png",
+      "size": [
+        737,
+        504
+      ]
+    },
+    {
+      "family_id": "reddit",
+      "path": "widget_reddit.png",
+      "size": [
+        868,
+        252
+      ]
+    },
+    {
+      "family_id": "feeds",
+      "path": "widget_feeds.png",
+      "size": [
+        868,
+        413
+      ]
+    },
+    {
+      "family_id": "gmail",
+      "path": "widget_gmail.png",
+      "size": [
+        857,
+        395
+      ]
+    },
+    {
+      "family_id": "steam",
+      "path": "widget_steam.png",
+      "size": [
+        868,
+        532
+      ]
+    },
+    {
+      "family_id": "system_audio_osd",
+      "path": "widget_system_audio_osd.png",
+      "size": [
+        617,
+        149
+      ]
+    },
+    {
+      "family_id": "system_stats",
+      "path": "widget_system_stats.png",
+      "size": [
+        425,
+        470
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "transition_id": "crossfade",
+      "path": "transition_crossfade.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "slide",
+      "path": "transition_slide.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "wipe",
+      "path": "transition_wipe.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "warp_dissolve",
+      "path": "transition_warp_dissolve.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "block_flip",
+      "path": "transition_block_flip.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "block_spins",
+      "path": "transition_block_spins.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.38,
+        0.46,
+        0.58
+      ]
+    },
+    {
+      "transition_id": "blinds",
+      "path": "transition_blinds.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "diffuse",
+      "path": "transition_diffuse.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "ripple",
+      "path": "transition_ripple.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "crumble",
+      "path": "transition_crumble.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "particle",
+      "path": "transition_particle.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "burn",
+      "path": "transition_burn.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "glass_shatter",
+      "path": "transition_glass_shatter.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "exploding_tiles",
+      "path": "transition_exploding_tiles.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "pixel_accretion",
+      "path": "transition_pixel_accretion.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "ink_bloom",
+      "path": "transition_ink_bloom.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    },
+    {
+      "transition_id": "melt_drip",
+      "path": "transition_melt_drip.png",
+      "size": [
+        1440,
+        294
+      ],
+      "progress": [
+        0.25,
+        0.5,
+        0.75
+      ]
+    }
+  ],
+  "generation": {
+    "widgets": "hidden Windows-QPA QQuickRenderControl worker",
+    "gl": "hidden Windows-QPA QOffscreenSurface worker"
+  },
+  "total_png_bytes": 8892548
+}
