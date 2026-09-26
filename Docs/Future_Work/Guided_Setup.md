@@ -375,8 +375,9 @@ bugs.
 
 - [x] Canvas: the selected displays, placed by their real relative `QScreen.geometry()` and aspect. It is a
       projection, not persisted geometry.
-- [~] Items (lightweight wireframe boxes, optionally with the preview asset). Open: widgets without CUSTOM support
-      are currently omitted from the canvas instead of shown as fixed, non-draggable boxes:
+- [x] Items (lightweight wireframe boxes, optionally with the preview asset). Every current widget descriptor supports
+      CUSTOM placement, so the non-draggable case is empty. The canvas gap was Media hidden under a Visualizer drawn on
+      top of it; the Visualizer now docks through the saver's shared rule (`rendering/visualizer_media_adjacency.py`):
   - one box per effective widget per display it appears on (`monitor: ALL` gives one per selected display, as the
     runtime does);
   - the Clock box uses the variant active on that display (`_clock_variant_from_widgets`);
@@ -415,8 +416,7 @@ bugs.
 
 ### Slice I | Tests, docs, visual self-check, cleanup
 
-- [~] Tests (§4), then the relevant existing suites (2026-09-26: onboarding, Settings, defaults, startup, slots,
-      CUSTOM, account and desktop suites green, 486 tests; §4 not yet audited item by item): Settings, defaults, capability, CUSTOM geometry and slots,
+- [x] Tests (§4), then the relevant existing suites (2026-09-27 audit below): Settings, defaults, capability, CUSTOM geometry and slots,
       monitor/display, widget descriptors, credentials, lifecycle.
 - [x] Internal visual check through offscreen captures: Welcome at 100% and 200% DPR, Sources, Theme before and after
       a live switch, Widget gallery, one conditional setup page (enabled and D1-disabled), Transition gallery, Arrange
@@ -427,6 +427,37 @@ bugs.
 - [x] Docs: `Docs/Reference/Guided_Setup.md`, plus Contracts entries for the trigger, Silence, shared wizard/Quick
       Start authority, D1, the Arrange boundary (D2-D5), dormancy and preview-foundry maintenance. No changelog prose.
 - [ ] Delete the `Current_Plan.md` pointer when the feature is accepted.
+
+## Audit 2026-09-27 (whole implementation)
+
+Fixed in `307e4cd4` and the Arrange commit before it:
+
+- Arrange Apply replaced the whole widgets map with the editor's snapshot, silently undoing writes made elsewhere while
+  a draft was pending. It now merges onto current Settings.
+- Closing Guided Setup dropped an unapplied Arrange draft without asking.
+- The Visualizer was drawn over Media instead of docked. Arrange also raised when Media was off and the Visualizer on.
+- Reset hid the box until Apply.
+- Keyboard nudges could snap back onto the guide they were leaving.
+- The setup summary duplicated the source-readiness rule.
+- A transition without copy raised a KeyError.
+
+Checked and sound:
+
+- the no-source decision and Silence;
+- Sources/JMIW/Skip through the shared owners;
+- `show_on_monitors` format (the Display tab's 1-based ints or `ALL`);
+- one-open-bucket accordions;
+- desktop gating fails closed;
+- account workers are fenced by page lifetime, and the Gmail commit runs on the GUI thread after verification;
+- theme selection is transactional with rollback;
+- the CUSTOM commit extraction matches the old owner (also covered by the owner suites);
+- content-sized placement: uniform modes use live content × scale, Clock uses its font payload, and the Visualizer
+  uses its payload viewport;
+- the preview foundry makes no network calls and imports no credential owners.
+
+Deliberate simplification: one Transitions checkbox writes both activation and random-pool membership (the full tab
+keeps them separate). Test 23 below predates D2: an authored move now creates a content-sized entry. Test 33 can no
+longer be proven against the removed owner code; the commit behaviour tests cover it.
 
 ## 4. Tests (minimum)
 
