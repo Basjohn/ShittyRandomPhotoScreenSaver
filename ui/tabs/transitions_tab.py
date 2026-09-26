@@ -865,6 +865,9 @@ class TransitionsTab(QWidget):
                 self.crumble_weight_combo.setCurrentIndex(idx)
             except Exception as e:
                 logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+            self.crumble_collisions_check.setChecked(bool(SettingsManager.to_bool(
+                crumble.get('collisions', canonical_crumble['collisions']),
+                bool(canonical_crumble['collisions']))))
 
         if hasattr(self, 'particle_group'):
             canonical_particle = canonical_transitions['particle']
@@ -1304,6 +1307,18 @@ class TransitionsTab(QWidget):
         self.crumble_weight_combo.currentTextChanged.connect(self._save_settings)
         crumble_weight_row.addWidget(self.crumble_weight_combo)
         crumble_weight_row.addStretch()
+
+        collide_row = self._aligned_row(crumble_layout, "", wrap=False)
+        self.crumble_collisions_check = QCheckBox("Slabs Collide")
+        self.crumble_collisions_check.setProperty("circleIndicator", True)
+        self.crumble_collisions_check.setToolTip(
+            "Falling slabs bounce off each other instead of passing through, and a "
+            "standing slab struck by a falling one is knocked loose."
+        )
+        self.crumble_collisions_check.setChecked(bool(_transition_default("crumble.collisions")))
+        self.crumble_collisions_check.stateChanged.connect(self._save_settings)
+        collide_row.addWidget(self.crumble_collisions_check)
+        collide_row.addStretch()
 
         self._build_surface_controls(crumble_layout, "crumble")
         self._specific_group_host_layout.addWidget(self.crumble_group)
@@ -1843,6 +1858,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'crumble_piece_count_spin', None),
             getattr(self, 'crumble_complexity_spin', None),
             getattr(self, 'crumble_weight_combo', None),
+            getattr(self, 'crumble_collisions_check', None),
             # Particle widgets
             getattr(self, 'particle_mode_combo', None),
             getattr(self, 'particle_direction_combo', None),
@@ -2254,6 +2270,7 @@ class TransitionsTab(QWidget):
                 'piece_count': self.crumble_piece_count_spin.value(),
                 'crack_complexity': self.crumble_complexity_spin.value(),
                 'weighting': self.crumble_weight_combo.currentText(),
+                'collisions': self.crumble_collisions_check.isChecked(),
             }
         else:
             crumble = _existing_subdict('crumble')

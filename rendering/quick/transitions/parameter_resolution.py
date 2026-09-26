@@ -250,6 +250,7 @@ def _resolve_crumble(
             "depth": max(.2, min(1.5, _number(_value(cfg, defaults, "depth"), float(defaults["depth"])))),
             **_surface_values(cfg, defaults, ("thickness", "debris")),
             "weight_mode": weight_mode,
+            "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
         },
     )
 
