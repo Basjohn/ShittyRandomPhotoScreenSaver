@@ -34,7 +34,7 @@ class SetupPage(Page):
         self.dependencies = selected_setup_dependencies(settings)
         titles = {"reddit": "Reddit", "reddit2": "Reddit 2", "feeds": "Feeds"}
         for dependency in self.dependencies:
-            toggle, container, layout = build_bucket_toggle(self.body, titles.get(dependency, dependency.title()), expanded=False)
+            toggle, container, layout = build_bucket_toggle(self.body, titles.get(dependency, dependency.title()), expanded=False, large=True)
             built = [False]
             def build(checked, dep=dependency, target=layout, marker=built):
                 if checked and not marker[0]:
@@ -84,6 +84,63 @@ class SetupPage(Page):
             return True
         layout.addWidget(text_label(ACCOUNT_DESKTOP_MESSAGE))
         return False
+
+    def _build_clocks(self, layout):
+        from PySide6.QtWidgets import QButtonGroup, QHBoxLayout
+        from ui.widgets.styled_combo_box import StyledComboBox
+        from widgets.timezone_utils import get_common_timezones, get_local_timezone
+        widgets = self.settings.get("widgets") or {}
+        layout.addWidget(text_label("Clock face, shared by every clock:"))
+        faces = QButtonGroup(layout.parentWidget())
+        faces.setExclusive(True)
+        current = str((widgets.get("clock") or {}).get("display_mode") or "analog").lower()
+        face_row = QHBoxLayout()
+        for mode, title in (("analog", "Analogue"), ("digital", "Digital")):
+            choice = checkbox(title)
+            choice.setChecked(mode == current)
+            choice.toggled.connect(lambda checked, value=mode: checked and self._set_clock_face(value))
+            faces.addButton(choice)
+            face_row.addWidget(choice)
+        face_row.addStretch()
+        layout.addLayout(face_row)
+        zones = get_common_timezones()
+        for widget_id, name in (("clock", "Clock 1"), ("clock2", "Clock 2"), ("clock3", "Clock 3")):
+            section = widgets.get(widget_id) or {}
+            if not section.get("enabled"):
+                continue
+            row = QHBoxLayout()
+            label = text_label(f"{name} timezone")
+            label.setMinimumWidth(130)
+            row.addWidget(label)
+            combo = StyledComboBox()
+            combo.setMinimumWidth(220)
+            for display_name, zone in zones:
+                combo.addItem(display_name, zone)
+            zone = str(section.get("timezone") or "local")
+            if combo.findData(zone) < 0:
+                combo.addItem(zone, zone)
+            combo.setCurrentIndex(combo.findData(zone))
+            combo.currentIndexChanged.connect(
+                lambda _index, box=combo, key=f"widgets.{widget_id}.timezone": self.settings.set(key, box.currentData()))
+            row.addWidget(combo)
+            def detect(box=combo):
+                detected = get_local_timezone()
+                if box.findData(detected) < 0:
+                    box.addItem(f"Detected: {detected}", detected)
+                box.setCurrentIndex(box.findData(detected))
+            row.addWidget(action("Detect", detect, secondary=True))
+            row.addStretch()
+            layout.addLayout(row)
+
+    def _set_clock_face(self, mode):
+        """An explicit wizard choice applies everywhere, so per-display flips reset."""
+        widgets = self.settings.get("widgets")
+        for widget_id in ("clock", "clock2", "clock3"):
+            section = widgets.get(widget_id)
+            if isinstance(section, dict):
+                section.pop("display_mode_overrides", None)
+        widgets["clock"]["display_mode"] = mode
+        self.settings.set("widgets", widgets)
 
     def _build_weather(self, layout):
         from ui.widgets.geocode_completer import GeocodeCompleter

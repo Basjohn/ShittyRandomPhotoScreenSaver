@@ -42,9 +42,12 @@ if str(ROOT) not in sys.path:
 # hanging off it, so they sit naturally on any Settings theme.
 _SHADOW_MARGIN: Final = 36
 _SHADOW_KEEP: Final = 30
-# PNG only (Qt's built-in codec; WebP/JPEG plugins are unproven in the frozen
-# builds).  Seventeen photographic transition triptychs dominate the total.
-_ASSET_BUDGET_BYTES: Final = 10 * 1024 * 1024
+# Rendered at 2x device pixels so Settings on high-DPI displays shows every
+# preview at one source pixel per physical pixel (never upscaled).
+_PREVIEW_DPR: Final = 2.0
+# Everything is lossless PNG (Qt's built-in codec).  Transition strips are
+# flat-colour artwork, which PNG compresses well and lossy codecs smear.
+_ASSET_BUDGET_BYTES: Final = 24 * 1024 * 1024
 _SCENE_SIZE: Final = (1400, 1000)
 _WIDGET_ORIGIN: Final = (60.0, 60.0)
 
@@ -233,7 +236,7 @@ class _HiddenQuickScene:
     :meth:`render` is called.
     """
 
-    def __init__(self, width: int, height: int) -> None:
+    def __init__(self, width: int, height: int, *, dpr: float = _PREVIEW_DPR) -> None:
         from OpenGL import GL as gl
         from PySide6.QtCore import QObject, QSize
         from PySide6.QtGui import QGuiApplication, QOffscreenSurface, QOpenGLContext
@@ -246,7 +249,9 @@ class _HiddenQuickScene:
         if self.app is None or self.app.platformName().strip().lower() != "windows":
             raise RuntimeError("preview capture requires the hidden Windows-QPA GL worker")
         self._gl = gl
-        self.width, self.height = width, height
+        self.dpr = float(dpr)
+        # Logical scene size; the texture holds dpr x as many device pixels.
+        self.width, self.height = round(width * self.dpr), round(height * self.dpr)
         self.context = QOpenGLContext()
         if not self.context.create():
             raise RuntimeError("hidden preview GL context is unavailable")
@@ -263,10 +268,12 @@ class _HiddenQuickScene:
         self._make_current()
         self.texture = int(gl.glGenTextures(1))
         gl.glBindTexture(gl.GL_TEXTURE_2D, self.texture)
-        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0,
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, self.width, self.height, 0,
                         gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
         gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
-        self.window.setRenderTarget(QQuickRenderTarget.fromOpenGLTexture(self.texture, QSize(width, height)))
+        target = QQuickRenderTarget.fromOpenGLTexture(self.texture, QSize(self.width, self.height))
+        target.setDevicePixelRatio(self.dpr)
+        self.window.setRenderTarget(target)
 
         self.owner = QObject()
         self.factory = QuickSceneFactory(self.owner)
@@ -399,14 +406,15 @@ def _capture_item(scene: _HiddenQuickScene, item, *, minimum_ms: int = 1100):
         raise RuntimeError(f"{error}: {_unsettled_images(item)}") from None
     frame = scene.read()
     rect = item.mapRectToScene(QRectF(0.0, 0.0, item.width(), item.height()))
-    left = max(0, int(rect.left()) - _SHADOW_MARGIN)
-    top = max(0, int(rect.top()) - _SHADOW_MARGIN)
-    right = min(frame.width, int(rect.right()) + _SHADOW_MARGIN + 1)
-    bottom = min(frame.height, int(rect.bottom()) + _SHADOW_MARGIN + 1)
-    return _trim_to_card(frame.crop((left, top, right, bottom)))
+    k, margin = scene.dpr, round(_SHADOW_MARGIN * scene.dpr)
+    left = max(0, int(rect.left() * k) - margin)
+    top = max(0, int(rect.top() * k) - margin)
+    right = min(frame.width, int(rect.right() * k) + margin + 1)
+    bottom = min(frame.height, int(rect.bottom() * k) + margin + 1)
+    return _trim_to_card(frame.crop((left, top, right, bottom)), dpr=k)
 
 
-def _trim_to_card(region):
+def _trim_to_card(region, *, dpr: float = _PREVIEW_DPR):
     """Crop evenly around the card body so its directional shadow stays subtle."""
 
     alpha = region.getchannel("A")
@@ -415,7 +423,7 @@ def _trim_to_card(region):
     bounds = alpha.point(lambda value: 255 if value > threshold else 0).getbbox()
     if bounds is None:
         raise RuntimeError("preview capture rendered no pixels")
-    pad = _SHADOW_KEEP
+    pad = round(_SHADOW_KEEP * dpr)
     return region.crop((max(0, bounds[0] - pad), max(0, bounds[1] - pad),
                         min(region.width, bounds[2] + pad), min(region.height, bounds[3] + pad)))
 
@@ -438,7 +446,7 @@ def _place_preferred(scene: _HiddenQuickScene, presentation, *, scale: float = 1
 def _frame_preview(image, destination: Path) -> tuple[int, int]:
     from PIL import Image
 
-    image.thumbnail((820, 560), Image.Resampling.LANCZOS)
+    image.thumbnail((1800, 1200), Image.Resampling.LANCZOS)
     image.save(destination, "PNG", optimize=True)
     return image.width, image.height
 
@@ -637,7 +645,7 @@ def _preview_clocks(scene: _HiddenQuickScene, art: Path):
         _place_preferred(scene, presentation)
         captures.append(_capture_item(scene, presentation.item))
         presentation.retire()
-    gap = 12
+    gap = round(12 * scene.dpr)
     height = max(image.height for image in captures)
     combined = Image.new("RGBA", (sum(image.width for image in captures) + gap, height), (0, 0, 0, 0))
     x = 0
@@ -942,12 +950,15 @@ def _preview_visualizers(scene: _HiddenQuickScene, art: Path):
     scene.settle(minimum_ms=300, until=lambda: True)
     frame = scene.read()
     rect = root.mapRectToScene(QRectF(0.0, 0.0, width, height))
-    left, top = int(rect.left()), int(rect.top())
+    k = scene.dpr
+    left, top = int(rect.left() * k), int(rect.top() * k)
+    pixel_width, pixel_height, margin = round(width * k), round(height * k), round(_SHADOW_MARGIN * k)
     with Image.open(bars_path) as bars:
-        frame.alpha_composite(bars.convert("RGBA"), (left, top))
+        bars = bars.convert("RGBA").resize((pixel_width, pixel_height), Image.Resampling.LANCZOS)
+        frame.alpha_composite(bars, (left, top))
     loader.setProperty("active", False)
-    return _trim_to_card(frame.crop((left - _SHADOW_MARGIN, top - _SHADOW_MARGIN,
-                                     left + width + _SHADOW_MARGIN, top + height + _SHADOW_MARGIN)))
+    return _trim_to_card(frame.crop((left - margin, top - margin,
+                                     left + pixel_width + margin, top + pixel_height + margin)), dpr=k)
 
 
 # Widget family id -> preview builder.  Builders return either a retained
@@ -1186,6 +1197,16 @@ def _render_spectrum_preview(path: Path, *, width: int, height: int):
         context.doneCurrent(); surface.destroy()
 
 
+# One strip per transition: three frames side by side, no gaps or labels.
+# Settings paints the gaps and the progress labels itself so text stays crisp.
+TRANSITION_FRAME_SIZE: Final = (800, 450)
+_TRANSITION_ARTWORK: Final = (
+    # (approved operator artwork, vertical crop centre for 16:9)
+    (Path("D:/Artwork/Projects/GonnaBeAHero/GonnadsBIIIGYProdBlue.jpg"), 0.15),
+    (Path("D:/Artwork/Projects/Hunguponyou/Finals/MassiveDS.jpg"), 0.45),
+)
+
+
 def _build_transition_previews(output: Path) -> list[dict[str, object]]:
     from PIL import Image
     from rendering.quick.transitions.implementation_registry import iter_quick_transition_implementations
@@ -1193,25 +1214,21 @@ def _build_transition_previews(output: Path) -> list[dict[str, object]]:
 
     source_path, destination_path = _prepare_transition_artwork(output)
     source, destination = Image.open(source_path), Image.open(destination_path)
+    frame_width, frame_height = TRANSITION_FRAME_SIZE
     rows: list[dict[str, object]] = []
     for implementation in iter_quick_transition_implementations():
-        capture = TransitionCapture(480, 270, source, destination)
+        capture = TransitionCapture(frame_width, frame_height, source, destination)
         try:
             run = _resolved_transition_run(capture, implementation.transition_id)
             samples = _TRANSITION_SAMPLES.get(implementation.transition_id, _DEFAULT_TRANSITION_SAMPLES)
             frames = [capture.render(run, progress)[0] for progress in samples]
-            triptych = Image.new("RGBA", (1440, 294), "#151b24")
+            strip = Image.new("RGB", (frame_width * len(frames), frame_height))
             for index, frame in enumerate(frames):
-                triptych.paste(frame, (index * 480, 24))
-            from PIL import ImageDraw, ImageFont
-            draw = ImageDraw.Draw(triptych)
-            font = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 16)
-            for index, label in enumerate(f"{round(value * 100)}%" for value in samples):
-                draw.text((index * 480 + 12, 1), label, font=font, fill=(235, 242, 250))
+                strip.paste(frame.convert("RGB"), (index * frame_width, 0))
             name = f"transition_{implementation.transition_id}.png"
-            triptych.save(output / name, "PNG", optimize=True)
+            strip.save(output / name, "PNG", optimize=True)
             rows.append({"transition_id": implementation.transition_id, "path": name,
-                         "size": [1440, 294], "progress": list(samples)})
+                         "size": list(strip.size), "progress": list(samples)})
         finally:
             capture.close()
     return rows
@@ -1220,16 +1237,14 @@ def _build_transition_previews(output: Path) -> list[dict[str, object]]:
 def _prepare_transition_artwork(output: Path) -> tuple[Path, Path]:
     """Bundle the approved operator artworks as fixed preview inputs."""
     from PIL import Image, ImageOps
-    approved = (
-        Path("D:/Artwork/Projects/Monsters/Letting1B.jpg"),
-        Path("D:/Artwork/Projects/Hunguponyou/Finals/MassiveDS.jpg"),
-    )
     targets = (output / "transition_source.png", output / "transition_destination.png")
-    for source, target in zip(approved, targets, strict=True):
+    for (source, centre), target in zip(_TRANSITION_ARTWORK, targets, strict=True):
         if not source.is_file():
             raise RuntimeError(f"approved transition artwork is missing: {source}")
         with Image.open(source) as original:
-            ImageOps.fit(original.convert("RGB"), (480, 270), Image.Resampling.LANCZOS).save(target, "PNG", optimize=True)
+            fitted = ImageOps.fit(original.convert("RGB"), TRANSITION_FRAME_SIZE,
+                                  Image.Resampling.LANCZOS, centering=(0.5, centre))
+            fitted.save(target, "PNG", optimize=True)
     return targets
 
 
@@ -1360,29 +1375,35 @@ def _manifest_payload(output: Path) -> dict[str, object]:
         path = output / name
         if not path.is_file():
             raise RuntimeError(f"onboarding preview is missing {name}")
+        samples = list(_TRANSITION_SAMPLES.get(item.transition_id, _DEFAULT_TRANSITION_SAMPLES))
         with Image.open(path) as image:
-            if image.format != "PNG" or image.width <= 0 or image.height <= 0:
-                raise RuntimeError(f"onboarding preview is not a valid PNG: {name}")
+            if image.format != "PNG" or image.size != (TRANSITION_FRAME_SIZE[0] * len(samples), TRANSITION_FRAME_SIZE[1]):
+                raise RuntimeError(f"onboarding transition strip is not a valid PNG strip: {name}")
             transitions.append({
                 "transition_id": item.transition_id,
                 "path": name,
                 "size": [image.width, image.height],
-                "progress": list(_TRANSITION_SAMPLES.get(item.transition_id, _DEFAULT_TRANSITION_SAMPLES)),
+                "frame_size": list(TRANSITION_FRAME_SIZE),
+                "progress": samples,
             })
-    total = sum(path.stat().st_size for path in output.glob("*.png"))
+    total = sum(path.stat().st_size for path in _generated_assets(output))
     if total > _ASSET_BUDGET_BYTES:
-        raise RuntimeError(f"onboarding preview assets exceed 10 MB ({total} bytes)")
+        raise RuntimeError(f"onboarding preview assets exceed {_ASSET_BUDGET_BYTES // (1024 * 1024)} MB ({total} bytes)")
     return {
         "format": "png",
-        "version": 1,
+        "version": 2,
         "widgets": widgets,
         "transitions": transitions,
         "generation": {
             "widgets": "hidden Windows-QPA QQuickRenderControl worker",
             "gl": "hidden Windows-QPA QOffscreenSurface worker",
         },
-        "total_png_bytes": total,
+        "total_bytes": total,
     }
+
+
+def _generated_assets(output: Path) -> list[Path]:
+    return sorted(path for pattern in ("widget_*.png", "transition_*.png") for path in output.glob(pattern))
 
 
 def _write_manifest(output: Path) -> dict[str, object]:
@@ -1412,9 +1433,13 @@ def build(output: Path) -> dict[str, object]:
         manifest = _write_manifest(staging)
         _raise_if_guard_attempts(audit_log)
         output.mkdir(parents=True, exist_ok=True)
-        for staged in staging.iterdir():
-            if staged.is_file():
-                shutil.copy2(staged, output / staged.name)
+        staged_names = {staged.name for staged in staging.iterdir() if staged.is_file()}
+        # Retire generated files the new set no longer contains (e.g. a format change).
+        for stale in (*output.glob("widget_*"), *output.glob("transition_*")):
+            if stale.is_file() and stale.name not in staged_names:
+                stale.unlink()
+        for name in staged_names:
+            shutil.copy2(staging / name, output / name)
     return manifest
 
 

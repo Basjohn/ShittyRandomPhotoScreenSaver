@@ -14,7 +14,7 @@ try:
 except Exception:  # pragma: no cover - PySide test/import fallback
     Shiboken = None  # type: ignore[assignment]
 
-from PySide6.QtCore import QSignalBlocker, Signal, Qt
+from PySide6.QtCore import QSignalBlocker, QSize, Signal, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -1737,8 +1737,12 @@ def build_bucket_toggle(
     *,
     accordion_owner: QWidget | None = None,
     accordion_scope: object | Callable[[], object] | None = None,
+    large: bool = False,
 ) -> tuple[QToolButton, QWidget, QVBoxLayout]:
     """Create one shared collapsible Settings bucket.
+
+    ``large`` is the 25%-larger feature bucket used by Guided Setup pages; the
+    theme QSS keys its geometry on the ``bucketSize`` property.
 
     Buckets under the same local scope form a synchronous accordion: opening one
     closes its checked peers before revealing the new body.  Persistence remains
@@ -1752,6 +1756,9 @@ def build_bucket_toggle(
     toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
     toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     toggle.setAutoRaise(True)
+    if large:
+        toggle.setProperty("bucketSize", "large")
+        toggle.setIconSize(QSize(15, 15))
 
     toggle_row = QHBoxLayout()
     toggle_row.addWidget(toggle)

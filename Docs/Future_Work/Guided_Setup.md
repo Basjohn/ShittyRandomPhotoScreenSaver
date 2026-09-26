@@ -333,7 +333,7 @@ bugs.
     backgrounds that suit transparency; otherwise give each preview a neat semantic border on dark grey.
   - Transitions: `TransitionCapture` with a fixed D8 source/destination pair, rendered as a 25% | 50% | 75% triptych.
   - Visualizer (optional): stills from real render code with fixed fake spectrum state.
-  - Writes PNG (§1.17) to `images/onboarding/` within a size budget (≤ 10 MB total; raised from 8 MB on 2026-09-26 for the photographic transition triptychs plus real-screenshot widget cut-outs); deterministic output.
+  - Writes lossless PNG (§1.17) to `images/onboarding/` within a size budget (≤ 24 MB total; raised on 2026-09-27 for 2x-DPR widget previews and 800x450-per-frame transition strips; JPEG was tried and rejected by the operator); deterministic output.
     Onboarding never runs the foundry.
 - [x] The agent inspects every generated image and fixes clipping, settlement and framing itself.
 - [x] `tools/build_runner.py` checks the onboarding asset directory exists and is non-empty.

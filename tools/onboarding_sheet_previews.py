@@ -62,12 +62,15 @@ FAMILIES: Final = {
 # Media's volume slider sits beside its card at the product's own spacing.
 _ATTACHED_GAPS: Final = {("spotify", "spotify_volume")}
 
-_GAP: Final = 26
-_MAX_SIZE: Final = (820, 560)
-_SHADOW_OFFSET: Final = (5, 6)      # the default SE card shadow
-_SHADOW_BLUR: Final = 9
+# Cards keep the sheet's native pixels (a 2x-DPR screenshot); Settings shows
+# them at up to one source pixel per physical pixel, so nothing is resampled
+# twice.  Only an oversized family is reduced.
+_GAP: Final = 40
+_MAX_SIZE: Final = (1800, 1200)
+_SHADOW_OFFSET: Final = (10, 12)    # the default SE card shadow at 2x
+_SHADOW_BLUR: Final = 16
 _SHADOW_OPACITY: Final = 0.62
-_SHADOW_PAD: Final = 24
+_SHADOW_PAD: Final = 44
 
 
 def _bright(pixels: numpy.ndarray) -> numpy.ndarray:

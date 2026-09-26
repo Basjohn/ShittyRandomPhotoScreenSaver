@@ -3,6 +3,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
+from PySide6.QtCore import Qt
 
 from core.settings.defaults import get_default_settings
 from core.sources.readiness import has_image_sources
@@ -54,20 +55,61 @@ def test_one_settings_no_source_decision(settings, sources, silenced, expected):
     assert calls == ([expected] if expected else [])
 
 
-def test_sources_readiness_and_skip_do_not_change_other_settings(qapp, settings):
+def test_sources_readiness_does_not_change_other_settings(qapp, settings):
     page = SourcesPage(settings)
     before = deepcopy(settings.values)
-    assert not page.can_continue() and not page.skip.isEnabled()
+    assert not page.can_continue()
+    assert not hasattr(page, "skip")  # Skip lives in the Guided Setup header only
     settings.set("sources.folders", ["C:/Pictures"])
     page.refresh()
-    assert page.can_continue() and page.skip.isEnabled()
-    finished = []
-    page.finishRequested.connect(lambda: finished.append(True))
-    page.skip.click()
-    assert finished == [True]
+    assert page.can_continue()
+    assert page.folders_toggle.text() == "Folders  ·  1"
     before["sources"]["folders"] = ["C:/Pictures"]
     assert settings.values == before
     page.deleteLater()
+
+
+def test_sources_page_is_two_large_buckets_and_adds_custom_feeds(qapp, settings):
+    page = SourcesPage(settings)
+    try:
+        for toggle in (page.folders_toggle, page.feeds_toggle):
+            assert toggle.property("bucketSize") == "large"
+        assert page.feeds_toggle.text() == "Online Wallpaper Feeds"
+        assert page.feeds_enabled.text() == "Online Wallpaper Feeds"
+        page.custom_feed.setText("example.org/wallpapers.rss")
+        page.add_custom_feed()
+        assert settings.get("sources.rss_feeds") == ["https://example.org/wallpapers.rss"]
+        assert page.can_continue()
+        custom = next(page.feeds.item(i) for i in range(page.feeds.count())
+                      if page.feeds.item(i).data(Qt.ItemDataRole.UserRole) == "https://example.org/wallpapers.rss")
+        custom.setCheckState(Qt.CheckState.Unchecked)
+        assert settings.get("sources.rss_feeds") == []
+        # Unticked custom feeds stay listed so they can be ticked again.
+        assert any(page.feeds.item(i).data(Qt.ItemDataRole.UserRole) == "https://example.org/wallpapers.rss"
+                   for i in range(page.feeds.count()))
+        page.custom_feed.setText("not a feed")
+        page.add_custom_feed()
+        assert settings.get("sources.rss_feeds") == []
+        assert "web address" in page.custom_message.text()
+    finally:
+        page.deleteLater()
+
+
+def test_header_skip_replaces_close_and_leaves_settings_alone(qapp, settings):
+    from PySide6.QtWidgets import QPushButton
+    from ui.onboarding.wizard import GuidedSetupPanel
+    wizard = GuidedSetupPanel(settings)
+    before = deepcopy(settings.values)
+    finished = []
+    wizard.finished.connect(finished.append)
+    try:
+        texts = [button.text() for button in wizard.findChildren(QPushButton)]
+        assert "Close" not in texts and texts.count("Skip") == 1
+        wizard.skip.click()
+        assert finished == [False]
+        assert settings.values == before
+    finally:
+        wizard.deleteLater()
 
 
 @pytest.mark.parametrize("choice,finishes", [("skip",True),("continue",False)])
@@ -92,6 +134,19 @@ def test_curated_action_shared_and_both_followups(qapp, settings, monkeypatch, c
     assert captured["message"] == "You're lazy and so am I! Skip the rest?"
     assert captured["buttons"] == [("No, I can do it!", "continue"), ("Skip", "skip")]
     page.deleteLater()
+
+
+def test_media_center_keeps_interaction_on_and_greys_the_other_choice(qapp, settings):
+    settings.get_application_name = lambda: "Screensaver_MC"
+    page = InteractionPage(settings)
+    try:
+        assert page.group.button(1).isChecked()
+        assert not page.group.button(0).isEnabled()
+        assert "Media Center" in page.group.button(0).toolTip()
+        page.demonstrate()
+        assert "secure link handoff" in page.demo.text()
+    finally:
+        page.deleteLater()
 
 
 def test_interaction_changes_only_interaction_setting(qapp, settings):
@@ -126,6 +181,57 @@ def test_display_selection_keeps_one_connected_screen_and_hydration_is_read_only
         assert settings.get("display.show_on_monitors") == "ALL"
     finally:
         page.deleteLater()
+
+
+def test_display_diagram_click_toggles_a_display(qapp, settings, monkeypatch):
+    from PySide6.QtCore import QRect
+    from ui.onboarding import basic_pages
+    screens = [SimpleNamespace(name=lambda: "Left", geometry=lambda: QRect(0, 0, 1920, 1080)),
+               SimpleNamespace(name=lambda: "Right", geometry=lambda: QRect(1920, 0, 1920, 1080))]
+    monkeypatch.setattr(basic_pages.QGuiApplication, "screens", staticmethod(lambda: screens))
+    settings.set("display.show_on_monitors", "ALL")
+    page = DisplaysPage(settings)
+    try:
+        page.diagram.resize(400, 170)
+        assert page.diagram.active == {1, 2}
+        right = page.diagram._rects()[1].center()
+        assert page.diagram._hit(right) == 2
+        page.diagram.displayClicked.emit(2)
+        assert settings.get("display.show_on_monitors") == [1]
+        assert page.diagram.active == {1} and not page.all.isChecked()
+        page.diagram.displayClicked.emit(1)  # the last active display stays on
+        assert settings.get("display.show_on_monitors") == [1]
+        page.diagram.displayClicked.emit(2)
+        assert settings.get("display.show_on_monitors") == [1, 2]
+    finally:
+        page.deleteLater()
+
+
+def test_widget_setup_clocks_section_sets_face_and_timezones(qapp, settings, monkeypatch):
+    import ui.onboarding.state as state
+    from PySide6.QtWidgets import QCheckBox, QToolButton
+    from ui.onboarding.setup_page import SetupPage
+    from ui.widgets.styled_combo_box import StyledComboBox
+    settings.values["widgets"]["clock"]["enabled"] = True
+    settings.values["widgets"]["clock2"]["enabled"] = True
+    settings.values["widgets"]["clock2"]["display_mode_overrides"] = {"screen": "digital"}
+    assert state.selected_setup_dependencies(settings)[0] == "clocks"
+    monkeypatch.setattr(state, "selected_setup_dependencies", lambda _settings: ("clocks",))
+    page = SetupPage(settings)
+    try:
+        toggle = page.findChildren(QToolButton)[0]
+        assert toggle.text() == "Clocks" and toggle.property("bucketSize") == "large"
+        toggle.setChecked(True)
+        combos = page.findChildren(StyledComboBox)
+        assert len(combos) == 2  # Clock 1 and Clock 2 are on; Clock 3 is not
+        combos[1].setCurrentIndex(combos[1].findData("Asia/Tokyo") if combos[1].findData("Asia/Tokyo") >= 0 else 1)
+        assert settings.get("widgets.clock2.timezone") == combos[1].currentData()
+        digital = next(box for box in page.findChildren(QCheckBox) if box.text() == "Digital")
+        digital.setChecked(True)
+        assert settings.get("widgets.clock.display_mode") == "digital"
+        assert "display_mode_overrides" not in settings.get("widgets.clock2")
+    finally:
+        page.retire(); page.deleteLater()
 
 
 def test_wizard_lazy_rerun_and_manual_launch_ignores_silence(qapp, settings):

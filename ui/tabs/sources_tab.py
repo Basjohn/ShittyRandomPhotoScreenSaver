@@ -29,6 +29,53 @@ from ui.styled_popup import StyledPopup
 logger = get_logger(__name__)
 
 
+def autocorrect_feed_url(url: str) -> str:
+    """Best-effort autocorrect for common RSS/JSON URL mistakes.
+
+    - Adds missing ``http://`` / ``https://``
+    - Normalizes obviously broken hosts such as ``.reddit.com``
+      to ``www.reddit.com``
+    - Leaves the rest of the URL intact; the wallpaper-feed coordinator
+      (``sources.rss.coordinator``) resolves site addresses to their feeds.
+    """
+    text = (url or "").strip()
+    if not text:
+        return text
+
+    if not text.startswith(("http://", "https://")):
+        # Default to https for safety; backend can still decide
+        # whether to switch to JSON endpoints, etc.
+        text = "https://" + text.lstrip("/")
+
+    try:
+        parsed = urlparse(text)
+        scheme = parsed.scheme or "https"
+        netloc = parsed.netloc
+        path = parsed.path or "/"
+        query = parsed.query
+
+        # Handle inputs like "reddit.com/..." where host ended up
+        # in the path instead of netloc.
+        if not netloc and path:
+            parts = path.lstrip("/").split("/", 1)
+            candidate_host = parts[0]
+            rest = "/" + parts[1] if len(parts) > 1 else "/"
+            if "." in candidate_host:
+                netloc = candidate_host
+                path = rest or "/"
+
+        host = (netloc or "").lower()
+        # Fix obviously broken reddit hosts like ".reddit.com".
+        if host in (".reddit.com", "reddit.com") or host.endswith(".reddit.com") and host.startswith("."):
+            netloc = "www.reddit.com"
+
+        rebuilt = urlunparse((scheme, netloc, path, "", query, ""))
+        return rebuilt
+    except Exception as e:
+        logger.debug("[MISC] Exception suppressed: %s", e)
+        return text
+
+
 class _RatioNotchBar(QWidget):
     _H_MARGIN = 14
 
@@ -575,50 +622,7 @@ class SourcesTab(QWidget):
             logger.info(f"RSS save directory set to: {directory}")
 
     def _autocorrect_feed_url(self, url: str) -> str:
-        """Best-effort autocorrect for common RSS/JSON URL mistakes.
-
-        - Adds missing ``http://`` / ``https://``
-        - Normalizes obviously broken hosts such as ``.reddit.com``
-          to ``www.reddit.com``
-        - Leaves the rest of the URL intact; the wallpaper-feed coordinator
-          (``sources.rss.coordinator``) resolves site addresses to their feeds.
-        """
-        text = (url or "").strip()
-        if not text:
-            return text
-
-        if not text.startswith(("http://", "https://")):
-            # Default to https for safety; backend can still decide
-            # whether to switch to JSON endpoints, etc.
-            text = "https://" + text.lstrip("/")
-
-        try:
-            parsed = urlparse(text)
-            scheme = parsed.scheme or "https"
-            netloc = parsed.netloc
-            path = parsed.path or "/"
-            query = parsed.query
-
-            # Handle inputs like "reddit.com/..." where host ended up
-            # in the path instead of netloc.
-            if not netloc and path:
-                parts = path.lstrip("/").split("/", 1)
-                candidate_host = parts[0]
-                rest = "/" + parts[1] if len(parts) > 1 else "/"
-                if "." in candidate_host:
-                    netloc = candidate_host
-                    path = rest or "/"
-
-            host = (netloc or "").lower()
-            # Fix obviously broken reddit hosts like ".reddit.com".
-            if host in (".reddit.com", "reddit.com") or host.endswith(".reddit.com") and host.startswith("."):
-                netloc = "www.reddit.com"
-
-            rebuilt = urlunparse((scheme, netloc, path, "", query, ""))
-            return rebuilt
-        except Exception as e:
-            logger.debug("[MISC] Exception suppressed: %s", e)
-            return text
+        return autocorrect_feed_url(url)
 
     def _on_clear_rss_cache_clicked(self) -> None:
         """Clear downloaded RSS/JSON images from the shared cache.

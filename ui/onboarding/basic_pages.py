@@ -7,10 +7,14 @@ from PySide6.QtWidgets import (
 )
 
 from core.sources.readiness import has_image_sources
+from ui.onboarding.state import is_media_center_profile
 from sources.rss.curated import apply_curated_wallpaper_feeds
 from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, CheckList, silence_check, text_label, SILENCE_TEXT
 from ui.settings_theme_runtime import get_active_settings_theme
 from ui.styled_popup import StyledPopup
+
+
+MC_INTERACTION_TOOLTIP = "Media Center builds keep Interaction Mode always enabled."
 
 
 class WelcomePage(Page):
@@ -41,35 +45,52 @@ class SourcesPage(Page):
 
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
+        from PySide6.QtWidgets import QLineEdit
+        from ui.tabs.shared_styles import build_bucket_toggle
         self.body.addWidget(text_label(
             "You put on your robe and wizard hat.\n"
             "Sources matter the most. Where do you want your wallpapers from?", heading=True
         ))
-        self.body.addWidget(text_label("Folders on this computer"))
+        folders = list(settings.get("sources.folders") or [])
+        feeds_open = bool(settings.get("sources.rss_feeds")) and not folders
+        self.folders_toggle, _, folder_layout = build_bucket_toggle(self.body, "Folders", expanded=not feeds_open, large=True)
+        folder_layout.addWidget(text_label("Picture folders on this computer or your network."))
         self.folders = QListWidget()
-        self.folders.setMinimumHeight(90)
-        self.body.addWidget(self.folders, 1)
+        self.folders.setMinimumHeight(110)
+        folder_layout.addWidget(self.folders)
         row = QHBoxLayout()
         row.addWidget(action("Add folder…", self.add_folder))
         row.addWidget(action("Remove selected", self.remove_folder, secondary=True))
         row.addStretch()
-        self.body.addLayout(row)
-        self.feeds_enabled = checkbox("Wallpaper Feeds")
+        folder_layout.addLayout(row)
+        self.feeds_toggle, _, feed_layout = build_bucket_toggle(self.body, "Online Wallpaper Feeds", expanded=feeds_open, large=True)
+        feed_layout.addWidget(text_label("Wallpapers downloaded from the internet. They need a working connection."))
+        self.feeds_enabled = checkbox("Online Wallpaper Feeds")
+        self.feeds_enabled.setToolTip("Turn on SRPSS's curated online wallpaper feeds (requires internet).")
         self.feeds_enabled.toggled.connect(self.toggle_feeds)
-        self.body.addWidget(self.feeds_enabled)
+        feed_layout.addWidget(self.feeds_enabled)
         self.feeds = CheckList()
-        self.feeds.setMinimumHeight(100)
+        self.feeds.setMinimumHeight(150)
         self.feeds.itemChanged.connect(self.change_feed)
-        self.body.addWidget(self.feeds, 1)
+        feed_layout.addWidget(self.feeds)
+        custom = QHBoxLayout()
+        self.custom_feed = QLineEdit()
+        self.custom_feed.setPlaceholderText("Add your own: paste a feed or site address…")
+        self.custom_feed.setToolTip("An RSS/Atom feed, a Reddit subreddit address, or a site that publishes one.")
+        self.custom_feed.returnPressed.connect(self.add_custom_feed)
+        custom.addWidget(self.custom_feed, 1)
+        custom.addWidget(action("Add feed", self.add_custom_feed))
+        feed_layout.addLayout(custom)
+        self.custom_message = text_label("")
+        feed_layout.addWidget(self.custom_message)
+        self._custom_feeds = []
         self.reason = text_label("")
         self.body.addWidget(self.reason)
         shortcuts = QHBoxLayout()
         shortcuts.addWidget(action("Just Make It Work", self.make_it_work, secondary=True))
-        self.skip = action("Skip", self.finishRequested.emit, secondary=True)
-        shortcuts.addWidget(self.skip)
         shortcuts.addStretch()
         self.body.addLayout(shortcuts)
-        self.body.addWidget(text_label("Skip finishes now and leaves every other setting as it is."))
+        self.body.addStretch()
         self.refresh()
 
     def refresh(self):
@@ -78,21 +99,26 @@ class SourcesPage(Page):
         self.folders.clear()
         self.folders.addItems(list(self.settings.get("sources.folders") or []))
         current = list(self.settings.get("sources.rss_feeds") or [])
+        for url in current:
+            if url not in DEFAULT_RSS_FEEDS.values() and url not in self._custom_feeds:
+                self._custom_feeds.append(url)
         with QSignalBlocker(self.feeds_enabled):
             self.feeds_enabled.setChecked(bool(current))
         with QSignalBlocker(self.feeds):
             self.feeds.clear()
             names = {url: name for name, url in DEFAULT_RSS_FEEDS.items()}
-            for url in dict.fromkeys([*DEFAULT_RSS_FEEDS.values(), *current]):
+            for url in dict.fromkeys([*DEFAULT_RSS_FEEDS.values(), *self._custom_feeds]):
                 item = QListWidgetItem(names.get(url, url))
                 item.setData(Qt.ItemDataRole.UserRole, url)
                 item.setToolTip(url)
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(Qt.CheckState.Checked if url in current else Qt.CheckState.Unchecked)
                 self.feeds.addItem(item)
+        folders = self.folders.count()
+        self.folders_toggle.setText(f"Folders  ·  {folders}" if folders else "Folders")
+        self.feeds_toggle.setText(f"Online Wallpaper Feeds  ·  {len(current)} on" if current else "Online Wallpaper Feeds")
         ready = self.can_continue()
-        self.reason.setText("Ready to continue." if ready else "Add a folder or turn on a wallpaper feed to continue.")
-        self.skip.setEnabled(ready)
+        self.reason.setText("Ready to continue." if ready else "Add a folder or turn on an online wallpaper feed to continue.")
         self.readinessChanged.emit()
 
     def can_continue(self):
@@ -129,6 +155,24 @@ class SourcesPage(Page):
         self.settings.set("sources.rss_feeds", feeds)
         self.refresh()
 
+    def add_custom_feed(self):
+        raw = self.custom_feed.text().strip()
+        if not raw:
+            return
+        from ui.tabs.sources_tab import autocorrect_feed_url
+        url = raw if raw.startswith(("http://", "https://")) else autocorrect_feed_url(raw).strip()
+        if not url.startswith(("http://", "https://")) or "." not in url.split("//", 1)[-1]:
+            self.custom_message.setText("That doesn't look like a web address. Paste a full feed or site address.")
+            return
+        feeds = list(self.settings.get("sources.rss_feeds") or [])
+        if url not in feeds:
+            self.settings.set("sources.rss_feeds", [*feeds, url])
+        if url not in self._custom_feeds:
+            self._custom_feeds.append(url)
+        self.custom_feed.clear()
+        self.custom_message.setText(f"Added {url}" + ("" if url == raw else " (corrected from what you typed)."))
+        self.refresh()
+
     def make_it_work(self):
         apply_curated_wallpaper_feeds(self.settings)
         self.refresh()
@@ -140,27 +184,89 @@ class SourcesPage(Page):
 
 
 class DisplayDiagram(QWidget):
+    """The Windows display arrangement; click a display to switch it on or off."""
+
+    displayClicked = Signal(int)  # 1-based display number
+
     def __init__(self, screens, parent=None):
         super().__init__(parent)
         self.screens = screens
-        self.setMinimumHeight(160)
+        self.active = set()
+        self._hover = 0
+        self.setMinimumHeight(170)
+        self.setMouseTracking(True)
+
+    def set_active(self, numbers):
+        self.active = set(numbers)
+        self.update()
+
+    def _rects(self):
+        if not self.screens:
+            return []
+        bounds = QRectF(self.screens[0].geometry())
+        for screen in self.screens[1:]:
+            bounds = bounds.united(QRectF(screen.geometry()))
+        scale = min((self.width()-24) / bounds.width(), (self.height()-24) / bounds.height())
+        left = (self.width() - bounds.width() * scale) / 2
+        top = (self.height() - bounds.height() * scale) / 2
+        rects = []
+        for screen in self.screens:
+            g = screen.geometry()
+            rects.append(QRectF(left+(g.x()-bounds.x())*scale, top+(g.y()-bounds.y())*scale,
+                                g.width()*scale, g.height()*scale).adjusted(3, 3, -3, -3))
+        return rects
+
+    def _hit(self, point):
+        for number, rect in enumerate(self._rects(), 1):
+            if rect.contains(point):
+                return number
+        return 0
 
     def paintEvent(self, event):
         if not self.screens:
             return
         theme = get_active_settings_theme()
+        def color(token, alpha=None):
+            value = QColor(*theme.color(token).as_tuple())
+            if alpha is not None:
+                value.setAlpha(alpha)
+            return value
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        bounds = QRectF(self.screens[0].geometry())
-        for screen in self.screens[1:]:
-            bounds = bounds.united(QRectF(screen.geometry()))
-        scale = min((self.width()-24) / bounds.width(), (self.height()-24) / bounds.height())
-        painter.setPen(QPen(QColor(*theme.color("chrome.outer_border").as_tuple()), 2))
-        for index, screen in enumerate(self.screens, 1):
-            g = screen.geometry()
-            rect = QRectF(12+(g.x()-bounds.x())*scale, 12+(g.y()-bounds.y())*scale, g.width()*scale, g.height()*scale)
-            painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 5, 5)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(index))
+        font = self.font(); font.setBold(True); font.setPointSizeF(font.pointSizeF() + 4)
+        painter.setFont(font)
+        for number, rect in enumerate(self._rects(), 1):
+            on = number in self.active
+            hovered = number == self._hover
+            fill = color("control.list.selected_accent", 150 if hovered else 120) if on else color("control.button.hover_surface" if hovered else "control.button.surface", 110)
+            border = color("control.list.selected_accent") if on else color("control.button.border", 225 if hovered else 165)
+            painter.setBrush(fill)
+            painter.setPen(QPen(border, 3.0 if on else 2.0))
+            painter.drawRoundedRect(rect, 6, 6)
+            painter.setPen(color("panel.group.text"))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(number) + ("" if on else "\noff"))
+
+    def mouseMoveEvent(self, event):
+        hover = self._hit(event.position())
+        if hover != self._hover:
+            self._hover = hover
+            self.setCursor(Qt.CursorShape.PointingHandCursor if hover else Qt.CursorShape.ArrowCursor)
+            self.setToolTip(f"Display {hover}: click to switch it on or off" if hover else "")
+            self.update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self._hover = 0
+        self.update()
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event):
+        number = self._hit(event.position()) if event.button() == Qt.MouseButton.LeftButton else 0
+        if number:
+            self.displayClicked.emit(number)
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
 
 class DisplaysPage(Page):
@@ -169,9 +275,11 @@ class DisplaysPage(Page):
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("Where should the screensaver appear?", heading=True))
-        self.body.addWidget(text_label("Choose the displays you want to use. The diagram follows their arrangement in Windows."))
+        self.body.addWidget(text_label("Click a display to switch it on or off. The diagram follows their arrangement in Windows."))
         self.screens = QGuiApplication.screens()
-        self.body.addWidget(DisplayDiagram(self.screens))
+        self.diagram = DisplayDiagram(self.screens)
+        self.diagram.displayClicked.connect(self.toggle_display)
+        self.body.addWidget(self.diagram)
         self.all = checkbox("All displays, including displays connected later")
         self.body.addWidget(self.all)
         self.checks = []
@@ -195,8 +303,19 @@ class DisplaysPage(Page):
             with QSignalBlocker(check):
                 check.setChecked(selected == "ALL" or index in (selected if isinstance(selected, list) else []))
                 check.setEnabled(selected != "ALL")
+        self.diagram.set_active(i for i, check in enumerate(self.checks, 1) if check.isChecked())
         self.reason.setText("" if self.can_continue() else "Select at least one connected display to continue.")
         self.readinessChanged.emit()
+
+    def toggle_display(self, number):
+        """Diagram click: flip one display, leaving "All displays" when needed."""
+        active = {i for i, check in enumerate(self.checks, 1) if check.isChecked()}
+        active ^= {number}
+        if not active:
+            self.reason.setText("At least one display has to stay on.")
+            return
+        self.settings.set("display.show_on_monitors", sorted(active))
+        self.refresh()
 
     def can_continue(self):
         return self.all.isChecked() or any(check.isChecked() for check in self.checks)
@@ -268,6 +387,7 @@ class InteractionPage(Page):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("Look, or interact?", heading=True))
         self.body.addWidget(text_label("Use widgets to open stories and control media. On the screensaver, external links use SRPSS's secure handoff and may close the saver. Hold Ctrl for temporary interaction when it is off."))
+        self.media_center = is_media_center_profile(settings)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         for enabled, title, detail in (
@@ -279,6 +399,12 @@ class InteractionPage(Page):
             choice.toggled.connect(lambda checked, value=enabled: checked and self.settings.set("input.interaction_mode", value))
             self.group.addButton(choice, int(enabled))
             self.body.addWidget(choice)
+        if self.media_center:
+            # MC builds keep Interaction Mode always on (engine and Display tab agree).
+            screensaver = self.group.button(0)
+            screensaver.setEnabled(False)
+            screensaver.setToolTip(MC_INTERACTION_TOOLTIP)
+            self.group.button(1).setToolTip(MC_INTERACTION_TOOLTIP)
         self.body.addSpacing(8)
         self.body.addWidget(text_label("Try it on a practice story", heading=False))
         self.card = _PracticeStoryCard()
@@ -289,13 +415,16 @@ class InteractionPage(Page):
         self.body.addStretch()
         self.refresh()
 
+    def _interaction_on(self):
+        return self.media_center or bool(self.settings.get("input.interaction_mode"))
+
     def refresh(self):
-        button = self.group.button(int(bool(self.settings.get("input.interaction_mode"))))
+        button = self.group.button(int(self._interaction_on()))
         with QSignalBlocker(button):
             button.setChecked(True)
 
     def demonstrate(self, ctrl_held: bool = False):
-        if self.settings.get("input.interaction_mode") or ctrl_held:
+        if self._interaction_on() or ctrl_held:
             self.demo.setText("On the saver, this click would open the story in your browser through the secure link handoff.")
         else:
             self.demo.setText("Nothing happens: the saver treats a plain click as 'wake up'. Hold Ctrl while clicking to open the story.")

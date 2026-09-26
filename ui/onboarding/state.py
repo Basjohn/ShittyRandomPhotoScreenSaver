@@ -33,11 +33,17 @@ def _member_enabled(widgets: Mapping[str, Any], widget_id: str) -> bool:
     return bool(isinstance(section, Mapping) and section.get("enabled", False))
 
 
+def is_media_center_profile(settings) -> bool:
+    """The Media Center build forces interaction on (same test as the Display tab)."""
+    name = getattr(settings, "get_application_name", None)
+    return callable(name) and name() == "Screensaver_MC"
+
+
 def selected_setup_dependencies(settings) -> tuple[str, ...]:
     """Return selected effective setup dependencies in wizard order."""
     widgets = _widgets(settings)
     selected: list[str] = []
-    for family_id, dependency in (("weather", "weather"), ("steam", "steam"), ("gmail", "gmail"), ("reddit", "reddit"), ("feeds", "feeds")):
+    for family_id, dependency in (("clocks", "clocks"), ("weather", "weather"), ("steam", "steam"), ("gmail", "gmail"), ("reddit", "reddit"), ("feeds", "feeds")):
         if not is_widget_family_effective(widgets, family_id):
             continue
         family = next((entry for entry in get_widget_family_catalog() if entry.family_id == family_id), None)
@@ -85,4 +91,4 @@ def current_setup_summary(settings) -> dict[str, object]:
         and bool(visualizer.get("enabled"))
         and is_widget_family_effective(widgets, "visualizers")
     )
-    return {"sources": sources, "folders": len(settings.get("sources.folders") or ()), "feeds": len(settings.get("sources.rss_feeds") or ()), "displays": display, "interaction": bool(settings.get("input.interaction_mode")), "families": enabled, "accounts": saved_account_states(settings), "visualizer_modes": modes if visualizer_active else (), "transitions": sum(bool(value) for value in activation.values()) if isinstance(activation, Mapping) else 0}
+    return {"sources": sources, "folders": len(settings.get("sources.folders") or ()), "feeds": len(settings.get("sources.rss_feeds") or ()), "displays": display, "interaction": is_media_center_profile(settings) or bool(settings.get("input.interaction_mode")), "families": enabled, "accounts": saved_account_states(settings), "visualizer_modes": modes if visualizer_active else (), "transitions": sum(bool(value) for value in activation.values()) if isinstance(activation, Mapping) else 0}

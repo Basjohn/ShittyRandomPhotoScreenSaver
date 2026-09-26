@@ -100,9 +100,15 @@ def silence_check(settings) -> QCheckBox:
 
 
 class ImagePanel(QLabel):
-    """Decode once; rescale on geometry/DPR changes, never from paintEvent."""
-    def __init__(self, path: Path, parent=None):
+    """Decode once; rescale on geometry/DPR changes, never from paintEvent.
+
+    ``upscale=False`` (previews) never draws more than one source pixel per
+    physical pixel: a small preview stays sharp at its true size instead of
+    being stretched blurry on a high-DPI display.
+    """
+    def __init__(self, path: Path, parent=None, *, upscale=True):
         super().__init__(parent)
+        self._upscale = upscale
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMinimumSize(160, 120)
@@ -131,7 +137,12 @@ class ImagePanel(QLabel):
         key = (self.width(), self.height(), self.devicePixelRatioF())
         if key != self._last_scale:
             self._last_scale = key
-            self.setPixmap(scale_pixmap_for_dpr(self._source, key[0], key[1], key[2]))
+            width, height, dpr = key
+            if not self._upscale:
+                dpr = max(1.0, dpr)
+                width = min(width, self._source.width() / dpr)
+                height = min(height, self._source.height() / dpr)
+            self.setPixmap(scale_pixmap_for_dpr(self._source, width, height, key[2]))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

@@ -38,7 +38,9 @@ class GuidedSetupPanel(QWidget):
         top = QHBoxLayout()
         top.addWidget(text_label("GUIDED SETUP", heading=True))
         top.addStretch()
-        top.addWidget(action("Close", self.request_close, secondary=True))
+        self.skip = action("Skip", self.request_close, secondary=True)
+        self.skip.setToolTip("Leave Guided Setup now. Everything you have already chosen is kept; nothing else changes.")
+        top.addWidget(self.skip)
         layout.addLayout(top)
         self.progress = text_label("")
         layout.addWidget(self.progress)
@@ -132,7 +134,7 @@ class GuidedSetupPanel(QWidget):
             self.close_setup(True)
 
     def request_close(self) -> None:
-        """Close from the header; an unapplied Arrange draft is offered first."""
+        """Skip from the header; an unapplied Arrange draft is offered first."""
         arrange = self.pages.get("arrange", (None,))[0]
         if arrange is not None and arrange.model is not None and arrange.model.pending:
             from ui.styled_popup import StyledPopup

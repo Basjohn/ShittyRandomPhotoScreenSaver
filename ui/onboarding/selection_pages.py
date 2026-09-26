@@ -1,9 +1,13 @@
 """Lazy Settings selection surfaces, backed by canonical admission and theme owners."""
 from __future__ import annotations
 
+import json
 from copy import deepcopy
-from PySide6.QtCore import QSignalBlocker, Signal, Qt
-from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
+from functools import lru_cache
+
+from PySide6.QtCore import QRectF, QSignalBlocker, QSize, QSizeF, Signal, Qt
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPixmap
+from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QListWidget, QListWidgetItem, QSizePolicy, QVBoxLayout, QWidget
 
 from core.settings.capability_activation import (
     is_transition_activated, is_widget_family_effective,
@@ -16,6 +20,7 @@ from rendering.transition_registry import iter_transition_descriptors
 from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, CheckList, text_label
 from ui.onboarding.state import current_setup_summary, saved_account_states
 from ui.settings_theme_catalog import get_current_settings_theme_catalog, read_persisted_theme_id
+from ui.widgets.dpr_pixmap import scale_pixmap_for_dpr
 from ui.settings_theme_selection import apply_settings_theme_selection
 from ui.widget_theme_selection import read_widget_theme_state
 
@@ -123,7 +128,7 @@ class WidgetsPage(Page):
         family = item.data(Qt.ItemDataRole.UserRole+1)
         self.panel_layout.addWidget(text_label(family.label, heading=True))
         self.panel_layout.addWidget(text_label(family.description))
-        preview = ImagePanel(asset_path(f"onboarding/widget_{family.family_id}.png"))
+        preview = ImagePanel(asset_path(f"onboarding/widget_{family.family_id}.png"), upscale=False)
         preview.setMinimumHeight(170); preview.setMaximumHeight(260)
         self.panel_layout.addWidget(preview, 1)
         widgets = self.settings.get("widgets")
@@ -227,16 +232,145 @@ TRANSITION_COPY = {
 }
 
 
+@lru_cache(maxsize=1)
+def _transition_manifest() -> dict[str, dict]:
+    rows = json.loads(asset_path("onboarding/manifest.json").read_text(encoding="utf-8"))["transitions"]
+    return {row["transition_id"]: row for row in rows}
+
+
+class TransitionStrip(QWidget):
+    """Three moments of one transition, with painted gaps and live-text labels.
+
+    The strip image carries only pixels; progress labels are drawn here so
+    they stay crisp at any DPR.  It uses 90% of the available width, centred,
+    and never distorts the 16:9 frames.
+    """
+
+    GAP = 10
+    WIDTH_SHARE = 0.9
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+        self.transition_id = None
+        self._source = QPixmap()
+        self._progress = ()
+        self._frames = []
+        self._frames_key = None
+
+    def set_transition(self, transition_id):
+        row = _transition_manifest()[transition_id]
+        source = QPixmap(str(asset_path("onboarding/" + row["path"])))
+        if source.isNull():
+            raise FileNotFoundError(f"Guided Setup transition preview missing or unreadable: {row['path']}")
+        self.transition_id = transition_id
+        self._source = source
+        self._progress = tuple(row["progress"])
+        self._frames_key = None
+        self.updateGeometry()
+        self.update()
+
+    def _layout(self, width):
+        count = max(1, len(self._progress) or 3)
+        strip = width * self.WIDTH_SHARE
+        frame_width = max(1.0, (strip - self.GAP * (count - 1)) / count)
+        return count, frame_width, frame_width * 9 / 16
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return round(self._layout(width)[2])
+
+    def sizeHint(self):
+        return QSize(640, self.heightForWidth(640))
+
+    def minimumSizeHint(self):
+        return QSize(240, self.heightForWidth(240))
+
+    def _scaled_frames(self, frame_width, frame_height):
+        key = (round(frame_width), round(frame_height), self.devicePixelRatioF(), self._source.cacheKey())
+        if key != self._frames_key:
+            count = max(1, len(self._progress))
+            source_width = self._source.width() // count
+            self._frames = [
+                scale_pixmap_for_dpr(self._source.copy(index * source_width, 0, source_width, self._source.height()),
+                                     frame_width, frame_height, key[2])
+                for index in range(count)
+            ]
+            self._frames_key = key
+        return self._frames
+
+    def paintEvent(self, _event):
+        if self._source.isNull():
+            return
+        count, frame_width, frame_height = self._layout(self.width())
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        left = (self.width() - (frame_width * count + self.GAP * (count - 1))) / 2
+        top = max(0.0, (self.height() - frame_height) / 2)
+        font = self.font()
+        font.setBold(True)
+        font.setPointSizeF(font.pointSizeF() + 0.5)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        for index, frame in enumerate(self._scaled_frames(frame_width, frame_height)):
+            target = QRectF(left + index * (frame_width + self.GAP), top, frame_width, frame_height)
+            clip = QPainterPath()
+            clip.addRoundedRect(target, 8.0, 8.0)
+            painter.save()
+            painter.setClipPath(clip)
+            logical = QSizeF(frame.width(), frame.height()) / frame.devicePixelRatio()
+            painter.drawPixmap(QRectF(target.center().x() - logical.width() / 2,
+                                      target.center().y() - logical.height() / 2,
+                                      logical.width(), logical.height()), frame, QRectF(frame.rect()))
+            painter.restore()
+            if index < len(self._progress):
+                text = f"{round(self._progress[index] * 100)}%"
+                badge = QRectF(target.left() + 8, target.top() + 8,
+                               metrics.horizontalAdvance(text) + 16, metrics.height() + 6)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(0, 0, 0, 165))
+                painter.drawRoundedRect(badge, badge.height() / 2, badge.height() / 2)
+                painter.setPen(QColor(245, 247, 250))
+                painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
+
+
+def _prominent_scrollbar_style() -> str:
+    """A scrollbar people notice: always shown, wider, accent-coloured handle."""
+    from ui.settings_theme_runtime import get_active_settings_theme
+    theme = get_active_settings_theme()
+
+    def rgba(token, alpha):
+        red, green, blue = theme.color(token).as_tuple()[:3]
+        return f"rgba({red}, {green}, {blue}, {alpha})"
+
+    return (
+        "QScrollBar:vertical { width: 18px; margin: 2px 2px 2px 4px; border-radius: 8px;"
+        f" border: 1.5px solid {rgba('control.button.border', 200)};"
+        f" background: {rgba('control.button.surface', 190)}; }}"
+        " QScrollBar::handle:vertical { min-height: 40px; margin: 1px; border-radius: 6px;"
+        f" background: {rgba('control.list.selected_accent', 235)}; }}"
+        f" QScrollBar::handle:vertical:hover {{ background: {rgba('control.list.selected_accent', 255)}; }}"
+        " QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+        " QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
+    )
+
+
 class TransitionsPage(Page):
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("How should your wallpapers change?", heading=True))
         self.body.addWidget(text_label("Select transitions to include in the available effects and random pool. Each preview shows three moments of the change."))
-        self.rows = CheckList(); self.rows.setMinimumHeight(130); self.rows.setMaximumHeight(200)
+        self.rows = CheckList(); self.rows.setMinimumHeight(190); self.rows.setMaximumHeight(270)
+        self.rows.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.body.addWidget(self.rows)
-        self.preview = ImagePanel(asset_path("onboarding/transition_crossfade.png"))
-        self.preview.setMinimumHeight(180)
-        self.body.addWidget(self.preview, 1)
+        self.more = text_label("")
+        self.body.addWidget(self.more)
+        self.preview = TransitionStrip()
+        self.body.addWidget(self.preview)
         self.description = text_label(""); self.body.addWidget(self.description)
         self.status = text_label(""); self.body.addWidget(self.status)
         self.rows.itemChanged.connect(self._toggle)
@@ -256,13 +390,15 @@ class TransitionsPage(Page):
                 item.setCheckState(Qt.CheckState.Checked if is_transition_activated(cfg, descriptor.setting_name) else Qt.CheckState.Unchecked)
                 self.rows.addItem(item)
             self.rows.setCurrentRow(max(0, min(selected, self.rows.count()-1)))
+        self.rows.verticalScrollBar().setStyleSheet(_prominent_scrollbar_style())
+        self.more.setText(f"{self.rows.count()} transitions: scroll the list to see them all.")
         self._show(self.rows.currentItem(), None)
         self.status.setText("Random selection is on." if cfg["random_always"] else "Your current manual transition choice is kept when available.")
 
     def _show(self, item, previous):
         if item is None: return
         key = item.data(Qt.ItemDataRole.UserRole+1)
-        self.preview.set_source(asset_path(f"onboarding/transition_{key}.png"))
+        self.preview.set_transition(key)
         copy = TRANSITION_COPY.get(key)
         self.description.setText(item.text() + (" — " + copy if copy else ""))
 

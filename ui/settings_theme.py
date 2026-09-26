@@ -294,6 +294,12 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     font-size: 11px;
                     font-weight: 500;
                 }
+                /* Guided Setup feature buckets: a quarter larger than the norm. */
+                QToolButton[autoRaise="true"][bucketSize="large"] {
+                    padding: 5px 12px;
+                    font-size: 14px;
+                    border-radius: 4px;
+                }
                 QToolButton[autoRaise="true"]:hover {
                     background-color: %(bucket_closed_hover_surface)s;
                     border-color: %(bucket_closed_hover_border)s;
