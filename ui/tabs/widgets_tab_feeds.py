@@ -262,6 +262,12 @@ def _selected_news_providers(tab: "WidgetsTab", widget_id: str) -> list[str]:
     ]
 
 
+def _update_news_selection_hint(tab: "WidgetsTab", widget_id: str) -> None:
+    hint = getattr(tab, feed_attr(widget_id, "selection_hint"), None)
+    if hint is not None:
+        hint.setVisible(not _selected_news_providers(tab, widget_id))
+
+
 def _test_news_sources(tab: "WidgetsTab", widget_id: str) -> None:
     selected = set(_selected_news_providers(tab, widget_id))
     providers = [(p.display_name, p.url) for p in news_providers_for(widget_id) if p.provider_id in selected]
@@ -319,7 +325,12 @@ def _build_news_source(tab: "WidgetsTab", widget_id: str, layout: QVBoxLayout, p
         checkbox.setChecked(provider.provider_id in selected)
         checkbox.setToolTip(f"{provider.url}\nFeed directory: {provider.directory_url}")
         checkbox.stateChanged.connect(tab._save_settings)
+        checkbox.stateChanged.connect(lambda _state=0, w=widget_id: _update_news_selection_hint(tab, w))
         layout.addWidget(checkbox)
+    hint = put("selection_hint", QLabel("No publisher selected: this card will not appear."))
+    hint.setStyleSheet(f"{STATUS_LABEL_STYLE} color: #FF9800;")
+    layout.addWidget(hint)
+    _update_news_selection_hint(tab, widget_id)
 
     probe_row = QHBoxLayout()
     probe_row.setContentsMargins(0, 0, 0, 0)
@@ -581,6 +592,7 @@ def _load_card(tab: "WidgetsTab", widget_id: str, widgets: Mapping[str, Any]) ->
         for provider in news_providers_for(widget_id):
             getattr(tab, news_provider_attr(widget_id, provider.provider_id)).setChecked(
                 provider.provider_id in chosen)
+        _update_news_selection_hint(tab, widget_id)
     else:
         _control(tab, widget_id, "name").setText(tab._config_str(widget_id, values, "name"))
         _control(tab, widget_id, "url").setText(tab._config_str(widget_id, values, "feed_url"))
