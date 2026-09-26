@@ -8,12 +8,14 @@ SHARED_STYLES = ROOT / "ui" / "tabs" / "shared_styles.py"
 
 def test_widget_glow_use_theme_uses_canonical_compact_action_style() -> None:
     source = DISPLAY_TAB.read_text(encoding="utf-8")
-    anchor = 'self.widget_glow_use_theme_btn = QPushButton("Use Theme")'
+    anchor = 'self.widget_glow_use_theme_btn = OutlinedButton("Use Theme", role="secondary")'
     start = source.index(anchor)
     block = source[start : start + 900]
 
-    assert '"COMPACT_ACTION_BUTTON_STYLE"' in block
-    assert '"GHOST_ACTION_BUTTON_STYLE"' not in block
+    # The secondary OutlinedButton role is the compact action style with a
+    # seam-free painted border (ui/widgets/outlined_button.py).
+    from ui.widgets.outlined_button import _ROLES
+    assert _ROLES["secondary"][0] == "COMPACT_ACTION_BUTTON_STYLE"
     assert "self.widget_glow_use_theme_btn.setFixedHeight(30)" in block
 
 

@@ -39,6 +39,7 @@ from ui.flow_layout import FlowContainer
 from ui.widgets import StyledComboBox
 from ui.styled_popup import ColorSwatchButton, StyledPopup
 from ui.tabs import shared_styles
+from ui.widgets.outlined_button import OutlinedButton
 from ui.tabs.shared_styles import (
     add_aligned_row,
     build_bucket_toggle,
@@ -870,14 +871,11 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reset_colors_row.setContentsMargins(0, 4, 0, 2)
     reset_colors_row.setSpacing(12)
     reset_colors_row.addStretch()
-    tab.reset_widget_colors_to_theme_btn = QPushButton("Reset All Colours to Theme")
+    tab.reset_widget_colors_to_theme_btn = OutlinedButton("Reset All Colours to Theme", role="primary")
     tab.reset_widget_colors_to_theme_btn.setFixedHeight(30)
     tab.reset_widget_colors_to_theme_btn.setToolTip(
         "One-shot profile cleanup: normalize all ordinary per-widget colour overrides "
         "back to canonical inherit values. The selected Widget Theme/Custom palette is unchanged."
-    )
-    shared_styles.bind_shared_styles(
-        tab.reset_widget_colors_to_theme_btn, "GHOST_ACTION_BUTTON_STYLE", base_style=""
     )
     tab.reset_widget_colors_to_theme_btn.clicked.connect(
         lambda _checked=False, owner=tab: _on_reset_family_colors_to_theme(owner)
@@ -914,13 +912,10 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     button_row.setSpacing(12)
     button_row.addStretch()
 
-    tab.reset_widget_positions_btn = QPushButton("Reset Widget Positions")
+    tab.reset_widget_positions_btn = OutlinedButton("Reset Widget Positions", role="primary")
     tab.reset_widget_positions_btn.setFixedHeight(32)
     tab.reset_widget_positions_btn.setToolTip(
         "Restore all widget positions and monitor routes to the application defaults for this profile."
-    )
-    shared_styles.bind_shared_styles(
-        tab.reset_widget_positions_btn, "GHOST_ACTION_BUTTON_STYLE", base_style=""
     )
     tab.reset_widget_positions_btn.clicked.connect(tab._on_reset_widget_positions_to_defaults_clicked)
     button_row.addWidget(tab.reset_widget_positions_btn)
@@ -958,11 +953,8 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.cache_clear_status_label.setWordWrap(True)
     shared_styles.apply_shared_label_style(tab.cache_clear_status_label, "INFO_LABEL_STYLE")
     cache_button_row.addWidget(tab.cache_clear_status_label, 1)
-    tab.clear_selected_caches_btn = QPushButton("Clear Selected Caches")
+    tab.clear_selected_caches_btn = OutlinedButton("Clear Selected Caches", role="primary")
     tab.clear_selected_caches_btn.setFixedHeight(32)
-    shared_styles.bind_shared_styles(
-        tab.clear_selected_caches_btn, "GHOST_ACTION_BUTTON_STYLE", base_style=""
-    )
     tab.clear_selected_caches_btn.clicked.connect(lambda: _on_clear_selected_caches(tab))
     cache_button_row.addWidget(tab.clear_selected_caches_btn)
     cache_layout.addLayout(cache_button_row)

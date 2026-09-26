@@ -526,15 +526,11 @@ class DisplayTab(QWidget):
             self._on_widget_glow_color_changed
         )
         widget_glow_color_row.addWidget(self.widget_glow_color_btn)
-        self.widget_glow_use_theme_btn = QPushButton("Use Theme")
+        from ui.widgets.outlined_button import OutlinedButton
+        self.widget_glow_use_theme_btn = OutlinedButton("Use Theme", role="secondary")
         self.widget_glow_use_theme_btn.setFixedHeight(30)
         self.widget_glow_use_theme_btn.setToolTip(
             "Clear the explicit glow colour and inherit the active Widget Theme card border."
-        )
-        shared_styles.bind_shared_styles(
-            self.widget_glow_use_theme_btn,
-            "COMPACT_ACTION_BUTTON_STYLE",
-            base_style="",
         )
         self.widget_glow_use_theme_btn.clicked.connect(
             self._use_widget_theme_glow_color
