@@ -89,7 +89,6 @@ Records: R-96 (wake freeze and reveal), R-97 (memory), R-98 (TLS). Landed 2026-0
 
   Awaiting the built check's Phase 3: `private_children_mb` ~816 → ≲ 200, main warm private roughly −700 MB, ~46 fewer threads.
   - [ ] The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules). A lean worker entry could save ~100 MB resident, but it must be validated under Nuitka multiprocessing first.
-  - [ ] Small items: `linecache` keeps ~5 MB of source text; the `_schedule_prefetch_resume` closure makes one GC cycle per rotation.
 
 Side defects found while working (not yet fixed):
 

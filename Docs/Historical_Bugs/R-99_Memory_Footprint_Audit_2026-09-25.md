@@ -79,7 +79,9 @@ Expected on Windows (not yet observed):
 - **The ImageWorker imports the whole app** (~1,060 modules: engine, UI, Visualizer, Qt Quick) because `spawn` re-imports `main.py`'s top level. Its resident set could drop by ~100 MB with a lean worker entry. This needs Nuitka multiprocessing validation, so it is not changed blind.
 - **The remaining non-resident main-process commit** is the NVIDIA OpenGL driver (2026-09-26 native maps, `tools/win_memory_map.py`): a write-combined upload pool that fills to a bounded ~360–480 MB on one 4K display, plus the driver's own heap. The heap's growth was R-97's slope, caused by thread churn and now fixed.
 - The steady private-commit slope is still R-97.
-- Small items: `linecache` keeps ~5 MB of source text from traceback formatting; the `_schedule_prefetch_resume` closure makes one cycle per rotation.
+- Small items (closed 2026-09-26):
+  - The prefetch-resume callback re-armed itself from inside its own closure, leaving one garbage cycle per rotation. It is now a module-level function bound with `functools.partial`.
+  - `linecache` holds ~5 MB of source text after traceback formatting. Not changed: each file is cached once, so the cost is fixed and bounded by the source size (not growth), and it is zero in the shipped Nuitka build, which contains no `.py` sources. Clearing it would mean touching every traceback formatter for a source-run-only 5 MB.
 
 ## Regression Coverage
 
@@ -87,3 +89,4 @@ Expected on Windows (not yet observed):
 - `tests/test_qtquick_native_texture_handoff.py::test_parked_transition_node_pins_neither_frame`
 - `tests/test_native_thread_pools.py`
 - `tests/test_settings_manager.py::test_settings_reads_leave_no_reference_cycles`
+- `tests/test_image_pipeline.py::test_prefetch_resume_leaves_no_reference_cycle_per_rotation`
