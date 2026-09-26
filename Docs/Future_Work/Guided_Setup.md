@@ -1,6 +1,7 @@
 # Guided Setup / Quick Start | implementation plan (live checklist)
 
-**Status:** ACTIVE, implementation in progress. This file owns execution of the feature. Tick items as they land and delete
+**Status:** ACTIVE, implemented and committed (2026-09-26); open items are marked `[ ]`/`[~]` below, then the operator's
+physical pass (§5). This file owns execution of the feature. Tick items as they land and delete
 nothing until the feature ships; then move the durable parts into `Docs/Reference/Guided_Setup.md` and
 `Docs/Contracts.md` and retire this file. `Current_Plan.md` only points here.
 
@@ -275,22 +276,23 @@ bugs.
 
 ### Slice B | No-source routing, Silence!, wizard shell, Welcome, Sources
 
-- [ ] `sources.guided_setup_silenced` default added; artifacts regenerated; `check_defaults_authority` green.
-- [ ] One no-source owner:
+- [x] `sources.guided_setup_silenced` default added; artifacts regenerated; `check_defaults_authority` green.
+- [x] One no-source owner:
   - no sources + Silence OFF → Guided Setup;
   - no sources + Silence ON → the existing `StyledPopup` "No Image Sources";
   - sources present → nothing automatic.
-- [ ] `main.py`: the plain `QMessageBox` is removed. The RUN-interrupted onboarding opens Settings, and Settings
+- [x] `main.py`: the plain `QMessageBox` is removed. The RUN-interrupted onboarding opens Settings, and Settings
       shows Guided Setup (or the popup, per Silence) once, right after its shell is shown (one deferred call, not a
       recurring timer).
-- [ ] CONFIG / MC / tray Settings with no sources: same single decision after show; the close guard still refuses a
+- [x] CONFIG / MC / tray Settings with no sources: same single decision after show; the close guard still refuses a
       source-less close exactly as today.
-- [ ] Manual launch from Quick Start ignores Silence. Closing the wizard while source-less leaves the existing close
+- [x] Manual launch from Quick Start ignores Silence. Closing the wizard while source-less leaves the existing close
       guard in charge; no `onboarding_completed` flag exists anywhere.
-- [ ] Wizard shell: a large themed dialog owned by Settings, Back/Next, pages created lazily, live Settings-theme
+- [x] Wizard shell (2026-09-26: hosted inside the Settings window, replacing sidebar and tabs while open, so it
+      shares the native backdrop, theme and title bar; a separate opaque dialog could not): a large themed dialog owned by Settings, Back/Next, pages created lazily, live Settings-theme
       subscription through the existing owner (no QSS monolith, hardcoded colours, parallel theme cache, emoji or
       stock Windows wizard look), correct at 100/125/150/200% DPR.
-- [ ] Welcome: `images/SRPSSWitch.png` (present locally, D6; add it to `required_assets`), left-aligned, aspect kept, scaled with the shared DPR scaler
+- [x] Welcome: `images/SRPSSWitch.png` (present locally, D6; add it to `required_assets`), left-aligned, aspect kept, scaled with the shared DPR scaler
       only on size/DPR change, never per paint, never cropped or stretched. Copy **verbatim**:
   - Heading, bold and underlined: **You're Inside A Wizard Harry!**
   - Body: "Your first time inside someone is special and confusing.
@@ -298,7 +300,7 @@ bugs.
   - Primary **Next**. **Silence!** is a circle checkbox, visually secondary and away from Next, with a tooltip or
     second line: "When SRPSS has no image sources, show the simple No Image Sources popup instead of opening Guided
     Setup automatically."
-- [ ] Sources. Copy **verbatim**: "You put on your robe and wizard hat.
+- [x] Sources. Copy **verbatim**: "You put on your robe and wizard hat.
       Sources matter the most. Where do you want your wallpapers from?"
   - Folders add/remove and a basic Wallpaper Feeds on/off/list, through the existing Sources owners. No wizard-only
     lists and no advanced RSS/cache/ratio options.
@@ -311,20 +313,20 @@ bugs.
 
 ### Slice C | Displays, Theme, Interaction
 
-- [ ] Displays: plain-English intro. Lists the live `QScreen`s with name, resolution and a small relative diagram
+- [x] Displays: plain-English intro. Lists the live `QScreen`s with name, resolution and a small relative diagram
       (from `QScreen.geometry()`). Selection reads and writes `display.show_on_monitors` exactly as the Display tab
       does (`'ALL'` or a 1-based list). At least one display stays selected. Mixed DPR stays in Qt logical
       coordinates; no new identity.
 - [x] Theme: installed Settings themes listed; a click applies immediately through the existing runtime and restyles
       the wizard. Widget Theme follows only through `widget_theme.keep_synced` (existing behaviour); a decoupled Widget
       Theme is never overwritten. No screenshots.
-- [ ] Interaction: two large exclusive choices writing only `input.interaction_mode`, with a D9 mock card. The mock
+- [x] Interaction: two large exclusive choices writing only `input.interaction_mode`, with a D9 mock card. The mock
       starts no network, launches no browser, touches no handoff and builds no feed widget. Verify the framing text
       (§1.10) before using it.
 
 ### Slice D | Preview foundry and Widgets page
 
-- [ ] `tools/onboarding_preview_foundry.py`: offscreen only, fixtures only, no network (a socket guard fails the run
+- [x] `tools/onboarding_preview_foundry.py`: offscreen only, fixtures only, no network (a socket guard fails the run
       on any connection attempt), no credentials imported.
   - Widgets: build each onboarding-visible family's real production presentation with deterministic representative
     data and a known shipped Widget Theme; let layout settle; capture; crop and pad to the asset contract. Prefer
@@ -333,9 +335,9 @@ bugs.
   - Visualizer (optional): stills from real render code with fixed fake spectrum state.
   - Writes PNG (§1.17) to `images/onboarding/` within a size budget (≤ 10 MB total; raised from 8 MB on 2026-09-26 for the photographic transition triptychs plus real-screenshot widget cut-outs); deterministic output.
     Onboarding never runs the foundry.
-- [ ] The agent inspects every generated image and fixes clipping, settlement and framing itself.
-- [ ] `tools/build_runner.py` checks the onboarding asset directory exists and is non-empty.
-- [ ] Widgets page. Copy **verbatim**: "Widgets are what make the experience special, and messy.
+- [x] The agent inspects every generated image and fixes clipping, settlement and framing itself.
+- [x] `tools/build_runner.py` checks the onboarding asset directory exists and is non-empty.
+- [x] Widgets page. Copy **verbatim**: "Widgets are what make the experience special, and messy.
       Pick the ones you might actually give a shit about."
   - Gallery on the left, one row per catalogue family (label from the catalogue). A persistent preview panel on the
     right shows the asset, name, description and a requirement marker (READY, NEEDS STEAM, NEEDS GMAIL, NEEDS
@@ -346,81 +348,83 @@ bugs.
 
 ### Slice E | Widget Setup (conditional)
 
-- [ ] Built from the selections; a page or section exists only if its dependency is selected.
-- [ ] Weather: location through the existing `geocode_completer` / Open-Meteo owner (user-typed lookups only).
-- [ ] Steam (D1 gating), copy **verbatim**: "SRPSS sends you to Steam's own sign-in and API-key pages. Your Steam
+- [x] Built from the selections; a page or section exists only if its dependency is selected.
+- [x] Weather: location through the existing `geocode_completer` / Open-Meteo owner (user-typed lookups only).
+- [x] Steam (D1 gating), copy **verbatim**: "SRPSS sends you to Steam's own sign-in and API-key pages. Your Steam
       password never enters SRPSS. Your Steam identity and API key are stored encrypted for your Windows account."
       Uses the slice-A controller: OpenID page, API-key page or paste and Save & Test, validation before durable
       replacement, DPAPI only, no plaintext fallback. The key lives only in the input field while being typed.
-- [ ] Gmail (D1 gating), IMAP App Password path by default, copy **verbatim**: "Use a Google App Password, not your
+- [x] Gmail (D1 gating), IMAP App Password path by default, copy **verbatim**: "Use a Google App Password, not your
       normal Google password. SRPSS tests the connection directly with Gmail and stores the credential encrypted for
       your Windows account." Uses the existing backend and storage with verified TLS; OAuth stays in full Settings.
-- [ ] Reddit / Reddit 2: subreddit names only (examples `wallpapers`, `pcgaming`, `cats`; `r/` optional and
+- [x] Reddit / Reddit 2: subreddit names only (examples `wallpapers`, `pcgaming`, `cats`; `r/` optional and
       stripped). Format validation only, no live check (rate limits).
-- [ ] FEEDS: News category checkboxes (the category cards from `core/feeds/news.py`, default publishers kept), through
+- [x] FEEDS: News category checkboxes (the category cards from `core/feeds/news.py`, default publishers kept), through
       the existing Feeds settings owner. Custom slots stay in full Settings.
-- [ ] No secret enters a generic wizard object, a log, a preview asset or a fixture.
+- [x] No secret enters a generic wizard object, a log, a preview asset or a fixture.
 
 ### Slice F | Visualizer and Transitions
 
-- [ ] Visualizer: enable, admitted modes (`mode_activation`), its `monitor` if exposed, and optional preview stills.
+- [x] Visualizer: enable, admitted modes (`mode_activation`), its `monitor` if exposed, and optional preview stills.
       No tuning, AGC, energy floors, mode internals or presets.
-- [ ] Transitions: admitted transitions with triptych previews and a one-line description; basic enable writes
+- [x] Transitions: admitted transitions with triptych previews and a one-line description; basic enable writes
       `activation` and `pool` exactly as the Transitions tab does, keeping `random_always` semantics. No per-effect
       parameters.
 
 ### Slice G | Arrange (restricted editor over canonical CUSTOM)
 
-- [ ] Canvas: the selected displays, placed by their real relative `QScreen.geometry()` and aspect. It is a
+- [x] Canvas: the selected displays, placed by their real relative `QScreen.geometry()` and aspect. It is a
       projection, not persisted geometry.
-- [ ] Items (lightweight wireframe boxes, optionally with the preview asset):
+- [~] Items (lightweight wireframe boxes, optionally with the preview asset). Open: widgets without CUSTOM support
+      are currently omitted from the canvas instead of shown as fixed, non-draggable boxes:
   - one box per effective widget per display it appears on (`monitor: ALL` gives one per selected display, as the
     runtime does);
   - the Clock box uses the variant active on that display (`_clock_variant_from_widgets`);
   - boxes for widgets without CUSTOM support are shown but not draggable.
-- [ ] Every CUSTOM-capable widget is freely arrangeable (D2, D3): free move, uniform scale with the shared
+- [x] Every CUSTOM-capable widget is freely arrangeable (D2, D3): free move, uniform scale with the shared
       minimums, drag to another display (monitor route plus rect translated into the target's normalised space, then
       clamp and `choose_best_screen_for_global_rect` / `should_transfer_rect_to_screen`), and Reset.
       - An authored widget becomes a content-sized entry on its first move or scale, or when its derived **Free
         placement** checkbox is ticked.
       - Merely selecting or viewing writes nothing.
       - Explicit entries keep explicit semantics.
-- [ ] Snapping reuses only the existing neutral helpers in `custom_layout_contract.py`; no second snap system.
-- [ ] Transaction: the draft is a `CustomLayoutSession`. Pointer moves never write settings; Apply/Next commits
+- [x] Snapping reuses only the existing neutral helpers in `custom_layout_contract.py`; no second snap system.
+- [x] Transaction: the draft is a `CustomLayoutSession`. Pointer moves never write settings; Apply/Next commits
       through `commit_custom_session` (D4); Cancel discards.
-- [ ] Reset (per widget): the established reset. Remove that display's CUSTOM entry and restore `position` /
+- [x] Reset (per widget): the established reset. Remove that display's CUSTOM entry and restore `position` /
       `monitor` from `custom_layout_restore`. Child customisation elsewhere is untouched.
-- [ ] Layout slots (D5): list, Load into editor, Save to slot (picker, overwrite confirm) and the hotkey hint.
-- [ ] Opening Arrange starts no Weather, Steam, Gmail, FEEDS, audio, network or QML runtime root.
+- [x] Layout slots (D5): list, Load into editor, Save to slot (picker, overwrite confirm) and the hotkey hint.
+- [x] Opening Arrange starts no Weather, Steam, Gmail, FEEDS, audio, network or QML runtime root.
 
 ### Slice H | Quick Start page and Ready
 
-- [ ] Nav entry **QUICK START**, anchored bottom-left under About with visual separation, with a new
+- [x] Nav entry **QUICK START**, anchored bottom-left under About with visual separation, with a new
       `_SettingsTabVectorIcon` drawing (compass or guide mark, no emoji). The page is lazy, and the Arrange editor
       inside it is lazy again.
-- [ ] Contents, following the existing bucket UX:
+- [x] Contents, following the existing bucket UX:
   - a brief start-here line and a concise current-setup summary (cheap reads only);
   - **Run Guided Setup Again**, which starts from current settings and ignores Silence;
   - **Arrange Widgets**;
   - the Layout Slots area (D5: list, load into editor, save to slot, hotkey hint);
   - **Reset Widget Layouts**, which resets parent layouts only, with wording that says exactly that;
   - the **Silence!** circle checkbox with its explanation.
-- [ ] Ready page: a summary such as displays, sources, interaction, widget count, account states (Steam connected /
+- [x] Ready page: a summary such as displays, sources, interaction, widget count, account states (Steam connected /
       Gmail needs setup from the existing non-decrypting saved-connection checks), Visualizer modes and transition
       count. Unfinished optional accounts are marked, not blocking. Buttons **Back to Arrange** and **Finish**;
       Finish changes nothing that was not explicitly changed.
 
 ### Slice I | Tests, docs, visual self-check, cleanup
 
-- [ ] Tests (§4), then the relevant existing suites: Settings, defaults, capability, CUSTOM geometry and slots,
+- [~] Tests (§4), then the relevant existing suites (2026-09-26: onboarding, Settings, defaults, startup, slots,
+      CUSTOM, account and desktop suites green, 486 tests; §4 not yet audited item by item): Settings, defaults, capability, CUSTOM geometry and slots,
       monitor/display, widget descriptors, credentials, lifecycle.
-- [ ] Internal visual check through offscreen captures: Welcome at 100% and 200% DPR, Sources, Theme before and after
+- [x] Internal visual check through offscreen captures: Welcome at 100% and 200% DPR, Sources, Theme before and after
       a live switch, Widget gallery, one conditional setup page (enabled and D1-disabled), Transition gallery, Arrange
       with one and two monitors, Ready, Quick Start.
       Look for clipping, a blurry Witch, DPR errors, overflow, poor spacing, stale theme tokens, preview aspect errors,
       buttons below the viewport, Skip/JMIW reading as primary, monitor cards outside the canvas, boxes losing
       identity, and invisible hover/focus. Fix what is found.
-- [ ] Docs: `Docs/Reference/Guided_Setup.md`, plus Contracts entries for the trigger, Silence, shared wizard/Quick
+- [x] Docs: `Docs/Reference/Guided_Setup.md`, plus Contracts entries for the trigger, Silence, shared wizard/Quick
       Start authority, D1, the Arrange boundary (D2-D5), dormancy and preview-foundry maintenance. No changelog prose.
 - [ ] Delete the `Current_Plan.md` pointer when the feature is accepted.
 
