@@ -136,6 +136,20 @@ def pytest_runtest_teardown(item, nextitem):
         )
 
 
+@pytest.fixture(autouse=True)
+def _forget_idle_generation_cancellations():
+    """Tests reuse generation numbers; a cancellation must not outlive its test.
+
+    Only generations with no queued or scheduled work are forgotten (see
+    ``forget_idle_generation_cancellations_for_tests``); production fencing is
+    untouched.
+    """
+    yield
+    manager = sys.modules.get("core.threading.manager")
+    if manager is not None:
+        manager.forget_idle_generation_cancellations_for_tests()
+
+
 @pytest.fixture(scope='session')
 def qt_app():
     """Create QApplication instance for tests."""
