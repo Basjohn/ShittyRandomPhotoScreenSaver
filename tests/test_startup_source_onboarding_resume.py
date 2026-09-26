@@ -36,12 +36,13 @@ def _compile_function(name: str, namespace: dict[str, object]):
 def test_missing_source_run_resumes_instead_of_returning_through_config() -> None:
     run_node = _function("run_screensaver")
     segment = ast.get_source_segment(SOURCE, run_node) or ""
-    no_source_start = segment.index("if not folders and not rss_feeds:")
+    no_source_start = segment.index("if not has_image_sources(settings):")
     engine_start = segment.index("# Create and start screensaver engine")
     no_source_block = segment[no_source_start:engine_start]
 
     assert "_run_missing_sources_onboarding(app, settings)" in no_source_block
     assert "return run_config(app)" not in no_source_block
+    assert "MessageBox" not in no_source_block
     assert "Sources configured during onboarding; continuing RUN startup" in no_source_block
 
 

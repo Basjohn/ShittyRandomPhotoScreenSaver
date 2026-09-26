@@ -59,6 +59,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | runtime audit register, evidence and operator decisions (the admitted queue and its order live in `Current_Plan.md`) | `Docs/Future_Work/Runtime_Audit/00_Index.md` |
 | current FEEDS vertical-slice architecture (source/cache/artwork/header/CUSTOM) | `Docs/Reference/Feeds.md` |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
+| Guided Setup / Quick Start / Settings Arrange | `Docs/Reference/Guided_Setup.md`; acceptance in `Docs/Future_Work/Guided_Setup.md` |
 | logging / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |
 | documentation maintenance | `Docs/Guides/Documentation_Maintenance.md` |
 | test inventory / retirement | `Docs/TestSuite.md` |

@@ -71,6 +71,15 @@ because GODZIP workspaces intentionally omit `themes/`. Do not restore a loader,
 use native-backdrop workarounds, or add a fail-open theme path. The complete permanent contract is
 `Docs/Architecture/Settings_Theme_Architecture.md`.
 
+## Guided Setup / Quick Start
+
+Settings owns one no-source decision after show: Guided Setup unless `sources.guided_setup_silenced` selects the
+existing popup. Manual Quick Start ignores Silence. Both use normal Settings owners and shared source/account/theme
+operations. Account setup requires the calling thread's interactive Default desktop. Arrange stages the canonical
+CUSTOM session and shared commit, with content-sized anchors for placements whose live content Settings cannot
+measure. It admits no provider, QML or audio runtime. Static previews are release assets, never live render work in
+Settings. Product and ownership details: `Docs/Reference/Guided_Setup.md`.
+
 ## Runtime Widget Themes / semantic visuals
 
 Runtime Widget Themes (`.srwtheme`) are separate from the Settings QWidget theme. They are **colour/semantic bundles only**. `Widgets -> General -> Style Overrides` contains Card Surface, Card Border, Header Fill and Card Border Width: the three colour edits fork a named Widget Theme into persisted `Custom`, while Border Width remains global geometry styling outside Widget Theme schema. Branded-header family colour swatches are retired; header Fill/Text/Border resolve through Widget Theme semantics instead of a Media/Gmail/Reddit/Steam Settings bucket. Existing non-header per-family colour swatches remain higher-precedence only when intentionally authored. `Reset All Colours to Theme` is an explicit operator normalization/cleanup action that normalizes ordinary Clock/Weather/Reddit/Gmail/Media/Steam family colour fields (and card alpha fields that make a colour explicit) back to canonical implicit-Inherit values; it never runs at startup and never changes the selected Widget Theme/Custom palette. Specialized optional visual roles are sparse and inherit through one resolver (`intentional family override -> exact role -> semantic parent -> local/current semantic value -> preserved fallback`); `local.*` roles are presentation context and never persistence. Visualizer-authored colours remain outside this generic reset/theme authority. The retained Context Menu has no family override and consumes the generation-scoped Widget Theme palette directly.

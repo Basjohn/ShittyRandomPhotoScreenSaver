@@ -53,6 +53,7 @@
     },
     "sources": {
       "folders": [],
+      "guided_setup_silenced": false,
       "local_ratio": 55,
       "mode": "folders",
       "rss_background_cap": 30,
