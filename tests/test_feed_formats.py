@@ -267,3 +267,35 @@ def test_page_suffix_feed_convention_resolves_a_subreddit_style_page():
     resolution = resolve_feed(web.fetch, "https://forum.test/r/programming")
     assert (resolution.feed_url, resolution.via) == ("https://forum.test/r/programming.rss", "conventional")
     assert len(web.calls) == 2
+
+
+def test_large_feeds_are_parsed_in_short_gil_holding_calls(monkeypatch):
+    """No single XML parser call gets a whole large feed: each is one bounded
+    chunk (a 1 MB feed in one call held the GIL ~7 ms), and the image markup
+    recovered from the chunked parse is unchanged."""
+    from xml.etree import ElementTree
+
+    from core.feeds import parser as feed_parser
+
+    items = "".join(
+        f'<item><title>Story {i}</title><link>https://example.test/{i}</link>'
+        f'<description><![CDATA[<p>{"x" * 4000}</p><img data-src="https://cdn.example.test/{i}.jpg">]]>'
+        f'</description></item>'
+        for i in range(60)
+    )
+    payload = f'<?xml version="1.0"?><rss version="2.0"><channel><title>Big</title>{items}</channel></rss>'.encode()
+    assert len(payload) > 3 * feed_parser._XML_PARSE_CHUNK_BYTES
+
+    fed: list[int] = []
+
+    class RecordingParser(ElementTree.XMLParser):
+        def feed(self, data):
+            fed.append(len(data))
+            return super().feed(data)
+
+    monkeypatch.setattr(feed_parser.ElementTree, "XMLParser", RecordingParser)
+    monkeypatch.setattr(feed_parser.ElementTree, "fromstring", None)  # never the one-shot parse
+    document = parse_feed_bytes(payload, source_url="https://example.test/feed.xml", max_items=60)
+    assert fed and max(fed) <= feed_parser._XML_PARSE_CHUNK_BYTES and sum(fed) == len(payload)
+    assert [item.images[0].url for item in document.items] == [
+        f"https://cdn.example.test/{i}.jpg" for i in range(60)]

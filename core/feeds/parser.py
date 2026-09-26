@@ -134,6 +134,20 @@ def _element_inner_markup(element: ElementTree.Element) -> str:
     return "".join(chunks)[:32768]
 
 
+# One XML parser call holds the GIL for its whole input; a 1 MB feed parsed in
+# one call held it ~7 ms, long enough to delay the visualizer's logical tick.
+# Feeding bounded chunks (as feedparser's SAX reader already does) keeps each
+# call well under a millisecond and builds the identical tree.
+_XML_PARSE_CHUNK_BYTES = 64 * 1024
+
+
+def _parse_xml_in_chunks(payload: bytes) -> ElementTree.Element:
+    parser = ElementTree.XMLParser()
+    for start in range(0, len(payload), _XML_PARSE_CHUNK_BYTES):
+        parser.feed(payload[start:start + _XML_PARSE_CHUNK_BYTES])
+    return parser.close()
+
+
 def _raw_entry_image_markup(payload: bytes) -> tuple[tuple[str, ...], ...]:
     """Extract only per-entry HTML/XHTML fields needed for image discovery.
 
@@ -143,7 +157,7 @@ def _raw_entry_image_markup(payload: bytes) -> tuple[tuple[str, ...], ...]:
     """
 
     try:
-        root = ElementTree.fromstring(bytes(payload))
+        root = _parse_xml_in_chunks(bytes(payload))
     except (ElementTree.ParseError, TypeError, ValueError):
         return ()
 
