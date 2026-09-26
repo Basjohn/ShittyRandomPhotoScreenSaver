@@ -1671,14 +1671,9 @@ class SettingsDialog(QDialog):
     
     def _has_image_sources(self) -> bool:
         """Check if user has configured at least one image source (folder or RSS feed)."""
-        try:
-            folders = self._settings.get('sources.folders')
-            rss_feeds = self._settings.get('sources.rss_feeds')
-            return bool(folders) or bool(rss_feeds)
-        except Exception:
-            logger.debug("[SETTINGS] Exception suppressed")
-            return False
-    
+        from core.sources.readiness import has_image_sources
+        return has_image_sources(self._settings)
+
     def _show_no_sources_popup(self) -> None:
         """Use the central themed popup when no image source is configured."""
         popup = StyledPopup(
@@ -1730,13 +1725,9 @@ class SettingsDialog(QDialog):
     def _on_add_default_sources(self) -> None:
         """Add curated RSS feeds as default sources."""
         try:
-            # Use the same curated feed contract as the Sources tab.
-            from sources.rss.constants import DEFAULT_RSS_FEEDS
-            curated_feeds = list(DEFAULT_RSS_FEEDS.values())
-            
-            self._settings.set('sources.rss_feeds', curated_feeds)
-            self._settings.save()
-            
+            from sources.rss.curated import apply_curated_wallpaper_feeds
+            curated_feeds = apply_curated_wallpaper_feeds(self._settings)
+
             # Reload sources tab if it exists
             tab = self._get_tab_instance('sources')
             if tab and hasattr(tab, '_load_settings'):

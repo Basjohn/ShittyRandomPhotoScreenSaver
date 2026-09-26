@@ -678,14 +678,11 @@ class SourcesTab(QWidget):
         Photojournal, Wallhaven) plus Bing for 1080p setups. Images are admitted
         only when they fill every connected display, so no feed needs rules.
         """
-        # Import DEFAULT_RSS_FEEDS from modular RSS package
-        from sources.rss.constants import DEFAULT_RSS_FEEDS
-        curated_feeds = list(DEFAULT_RSS_FEEDS.values())
+        from sources.rss.curated import apply_curated_wallpaper_feeds
 
         self._suppress_source_change_signals = True
         try:
-            self._settings.set('sources.rss_feeds', curated_feeds)
-            self._settings.save()
+            curated_feeds = apply_curated_wallpaper_feeds(self._settings)
 
             self.rss_list.clear()
             for feed in curated_feeds:

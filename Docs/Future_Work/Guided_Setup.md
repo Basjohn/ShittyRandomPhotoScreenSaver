@@ -1,6 +1,6 @@
 # Guided Setup / Quick Start | implementation plan (live checklist)
 
-**Status:** ACTIVE, not started. This file owns execution of the feature. Tick items as they land and delete
+**Status:** ACTIVE, implementation in progress. This file owns execution of the feature. Tick items as they land and delete
 nothing until the feature ships; then move the durable parts into `Docs/Reference/Guided_Setup.md` and
 `Docs/Contracts.md` and retire this file. `Current_Plan.md` only points here.
 
@@ -236,9 +236,9 @@ bugs.
 
 ### Slice A | Foundations extracted with parity (no user-visible change)
 
-- [ ] `core/sources/readiness.py::has_image_sources(settings)` (same rule as today); `main.py` (both sites) and
+- [x] `core/sources/readiness.py::has_image_sources(settings)` (same rule as today); `main.py` (both sites) and
       `SettingsDialog._has_image_sources` call it.
-- [ ] One curated-sources function (e.g. `sources/rss/curated.py::apply_curated_wallpaper_feeds(settings)`, replacing
+- [x] One curated-sources function (e.g. `sources/rss/curated.py::apply_curated_wallpaper_feeds(settings)`, replacing
       `sources.rss_feeds` with `DEFAULT_RSS_FEEDS` values exactly as today); the dialog and the Sources tab call it.
       Dialog-specific follow-ups (reload tab, close) stay in the dialog.
 - [ ] `is_interactive_user_desktop()` (D1) with a Windows test using a fake Win32 layer; unknown → False.
@@ -251,7 +251,7 @@ bugs.
       Parity test: for recorded sessions (move, display transfer, duplicates on ALL, removal, clock variant,
       visualizer viewport, content extent, children), the persisted `widgets` map is byte-identical before and after
       the extraction.
-- [ ] Reusable DPR pixmap scaler extracted from `settings_about_tab.py`; About uses it unchanged.
+- [x] Reusable DPR pixmap scaler extracted from `settings_about_tab.py`; About uses it unchanged.
 - **Done when:** full Settings/CUSTOM/defaults/Steam/Gmail gates green with zero behaviour change.
 
 ### Slice A2 | Content-sized CUSTOM entries in the runtime (D2)
