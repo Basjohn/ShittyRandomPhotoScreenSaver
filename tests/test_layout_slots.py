@@ -502,3 +502,22 @@ def test_layout_slot_round_trips_custom_child_size_and_placement_without_aliasin
     assert saved["custom_layout"]["displays"]["serial:A"][
         "abandonment_issues"
     ]["default"]["size_payload"]["child_geometry"]["artwork"]["y_offset"] == -0.08
+
+
+def test_widget_absent_from_the_slot_loads_disabled():
+    """Operator repro 2026-09-26: GAMING NEWS on, load a slot saved before it existed."""
+    from core.settings.default_contract import require_canonical_default
+
+    widgets = deepcopy(require_canonical_default("widgets"))
+    del widgets["feeds_news_gaming"]  # the card did not exist when slot 1 was saved
+    widgets["weather"]["enabled"] = True
+    assert save_layout_slot(widgets, "1")
+
+    widgets["feeds_news_gaming"] = deepcopy(require_canonical_default("widgets.feeds_news_gaming"))
+    widgets["feeds_news_gaming"]["enabled"] = True
+    widgets["family_activation"]["feeds"] = True
+    assert apply_layout_slot(widgets, "1")
+
+    assert widgets["feeds_news_gaming"]["enabled"] is False
+    assert widgets["weather"]["enabled"] is True  # captured widgets keep their saved state
+    assert widgets["family_activation"]["feeds"] is True  # families are not slot state

@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 from core.settings.capability_activation import is_widget_family_effective
-from core.settings.widget_family_catalog import get_family_id_for_widget
+from core.settings.widget_family_catalog import get_family_id_for_widget, get_widget_family_catalog
 
 
 LAYOUT_SLOTS_VERSION = 1
@@ -325,7 +325,22 @@ def apply_layout_slot(
                 # to activate a family/capability or satisfy its dependencies.
                 continue
             current_section[key_text] = deepcopy(value)
+
+    # A slot is the whole layout. Every widget section is captured (``enabled``
+    # is a layout field), so a widget missing from the slot did not exist when
+    # it was saved -- e.g. a FEEDS card added later -- and loads switched off
+    # instead of keeping whatever the current layout had.
+    for widget_id in _catalog_widget_ids():
+        section = widgets_config.get(widget_id)
+        if widget_id not in payload_sections and isinstance(section, dict) and section.get("enabled"):
+            section["enabled"] = False
     return True
+
+
+def _catalog_widget_ids() -> tuple[str, ...]:
+    return tuple(
+        member for family in get_widget_family_catalog() for member in family.member_widget_ids
+    )
 
 
 def get_layout_slot_payload(
