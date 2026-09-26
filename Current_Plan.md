@@ -111,7 +111,6 @@ Side defects found while working (not yet fixed):
 
 Pre-existing reds and runtime anomalies found while gating the runtime audit. Each stays here until fixed or explicitly retired; do not treat them as noise in a gate.
 
-- [ ] **Stale Reddit title/age gap bar (pre-existing).** `tests/test_qtquick_reddit_child_committed_reopen_scene.py` (2 tests) expects a 6 px title-to-AGO gap; `RedditPresentation.qml` `titleAgeGap` floors it at 8 px (`max(8, 9 / presentationScale)`). Fails identically on a clean HEAD worktree (2026-09-24). Decide which is intended, then fix the other.
 - [ ] **A runtime-barrier timeout poisons every later Qt event loop in the test process (pre-existing, found 2026-09-25).**
   - On Linux full-suite runs, `test_s_hotkey_workflow.py::test_s_hotkey_opens_settings_without_crash` never completes its destruction barrier, because a `QuickDisplayUnit`/`QuickDisplayPresenter` Python owner is retained. It fails the same way on base.
   - The barrier timeout (8,000 ms) equals the test's `waitUntil` (8,000 ms). When the timeout wins, the non-terminal timeout path's `QCoreApplication.exit(1)` sets Qt's per-thread `quitNow`. From then on every nested `QEventLoop.exec()` (`qtbot.wait`/`waitUntil`) returns immediately, and later event-loop tests fail in cascade: `test_s_hotkey_workflow`, `test_settings_dialog`, `test_single_shot_handle`, `test_startup_reveal_stalled_display`, `test_steam_phase3_settings_descriptors`.
