@@ -110,6 +110,9 @@ Item {
         Item {
             id: logoBox
             objectName: header.logoObjectName
+            // Centre on the row like the text column; a Row otherwise top-aligns
+            // the 25 px logo above a taller label (monograms sat ~3 px high).
+            anchors.verticalCenter: parent.verticalCenter
             visible: header.logoSource.toString().length > 0
             width: visible ? header.logoSize : 0.0
             height: visible ? header.logoSize : 0.0
