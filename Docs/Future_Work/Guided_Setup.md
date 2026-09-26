@@ -315,7 +315,7 @@ bugs.
       (from `QScreen.geometry()`). Selection reads and writes `display.show_on_monitors` exactly as the Display tab
       does (`'ALL'` or a 1-based list). At least one display stays selected. Mixed DPR stays in Qt logical
       coordinates; no new identity.
-- [ ] Theme: installed Settings themes listed; a click applies immediately through the existing runtime and restyles
+- [x] Theme: installed Settings themes listed; a click applies immediately through the existing runtime and restyles
       the wizard. Widget Theme follows only through `widget_theme.keep_synced` (existing behaviour); a decoupled Widget
       Theme is never overwritten. No screenshots.
 - [ ] Interaction: two large exclusive choices writing only `input.interaction_mode`, with a D9 mock card. The mock
