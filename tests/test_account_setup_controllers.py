@@ -40,6 +40,28 @@ def test_steam_controller_validates_before_dpapi_save(monkeypatch) -> None:
     assert emitted == [status]
 
 
+
+def test_steam_controller_drops_verified_save_after_lifetime_closes(monkeypatch) -> None:
+    saved = []
+    emitted = []
+    monkeypatch.setattr(
+        controllers,
+        "validate_connection",
+        lambda **_kwargs: SimpleNamespace(status=controllers.SteamResultStatus.SUCCESS),
+    )
+    monkeypatch.setattr(controllers, "save_credentials", saved.append)
+    lifetime = iter((True, False))
+
+    status = controllers.SteamConnectionController(emitted.append).test_and_save_credentials(
+        "abcdef0123456789abcdef0123456789",
+        "76561197960265728",
+        is_current=lambda: next(lifetime),
+    )
+
+    assert status.state == "cancelled"
+    assert saved == []
+    assert emitted == []
+
 def test_gmail_imap_controller_only_saves_after_a_successful_test() -> None:
     events = []
 
