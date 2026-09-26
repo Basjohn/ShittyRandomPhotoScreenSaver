@@ -236,8 +236,11 @@ OverlayWidget {
         // Publisher/feed metadata is deliberately *outside* the branded pill.
         // It follows the semantic header rail, stays visually secondary, and
         // never inflates the shared BrandedHeader or its CUSTOM hit geometry.
+        // Every feed string is plain text: publishers' titles are data, so a
+        // literal "<canvas>" stays text and no markup can load a remote image.
         ShadowedText {
             id: headerSubtitle
+            textFormat: Text.PlainText
             objectName: "feedHeaderSubtitle"
             visible: feedRoot.hasHeaderSubtitle
             x: feedRoot.headerFlipped
@@ -498,6 +501,7 @@ OverlayWidget {
 
                     ShadowedText {
                         id: listTitle
+                        textFormat: Text.PlainText
                         x: listRow.titleX
                         y: 4.0
                         width: Math.max(0.0, listRow.titleRight - x)
@@ -519,6 +523,7 @@ OverlayWidget {
 
                     ShadowedText {
                         id: ageText
+                        textFormat: Text.PlainText
                         x: listRow.ageX
                         y: 5.0
                         width: listRow.ageWidth
@@ -537,6 +542,7 @@ OverlayWidget {
                     }
 
                     ShadowedText {
+                        textFormat: Text.PlainText
                         x: listRow.titleX
                         y: listTitle.y + listTitle.height + 2.0
                         width: Math.max(0.0, listRow.titleRight - x)
@@ -751,6 +757,7 @@ OverlayWidget {
 
                     ShadowedText {
                         id: gridTitle
+                        textFormat: Text.PlainText
                         x: gridCard.textX
                         y: gridCard.textTop
                         width: gridCard.textWidth
@@ -781,6 +788,7 @@ OverlayWidget {
 
                     ShadowedText {
                         id: gridSummary
+                        textFormat: Text.PlainText
                         x: gridCard.textX
                         y: gridTitle.y + gridTitle.height + 2.0
                         width: gridCard.textWidth
@@ -806,6 +814,7 @@ OverlayWidget {
 
                     ShadowedText {
                         id: gridAge
+                        textFormat: Text.PlainText
                         x: gridCard.contentMargin
                         y: gridCard.height - 24.0
                         width: Math.max(0.0, gridCard.width - gridCard.contentMargin * 2.0)
@@ -916,6 +925,7 @@ OverlayWidget {
         }
 
         ShadowedText {
+            textFormat: Text.PlainText
             anchors.centerIn: parent
             visible: feedRoot.feedModel.viewState === "loading" ||
                      feedRoot.feedModel.viewState === "empty" ||
@@ -938,6 +948,7 @@ OverlayWidget {
 
     ShadowedText {
         id: footer
+        textFormat: Text.PlainText
         objectName: "feedOverflowSummary"
         x: feedRoot.childOffsetX("overflow")
         y: feedRoot.layoutHeight - feedRoot.footerHeight + feedRoot.childOffsetY("overflow")
