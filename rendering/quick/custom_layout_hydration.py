@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from rendering.custom_layout_contract import (
+    CONTENT_SIZED_PAYLOAD_KEY,
     CustomLayoutEntry,
     clamp_local_rect_to_bounds,
     denormalize_local_rect,
@@ -111,7 +112,13 @@ def resolve_quick_committed_variant_state(
 
     def _state_from_entry(
         source: CustomLayoutEntry,
-    ) -> tuple[OverlayWidgetGeometry, dict[str, object]]:
+    ) -> tuple[OverlayWidgetGeometry, dict[str, object]] | None:
+        # Content-sized entries are resolved only by OverlayGeometryBinding once
+        # the retained item reports its real content.  Returning the historical
+        # stored outer box here would seed Clock's variant handler with a guessed
+        # explicit rectangle and later fight the live content policy.
+        if source.size_payload.get(CONTENT_SIZED_PAYLOAD_KEY) is True:
+            return None
         local = clamp_local_rect_to_bounds(
             denormalize_local_rect(source.rect, screen.geometry().size()),
             screen.geometry().size(),
@@ -142,7 +149,10 @@ def resolve_quick_committed_variant_state(
     if source_entry is None:
         return None
 
-    source_geometry, source_payload = _state_from_entry(source_entry)
+    source_state = _state_from_entry(source_entry)
+    if source_state is None:
+        return None
+    source_geometry, source_payload = source_state
     from rendering.quick.widgets.clock import (
         ClockPresentationConfig,
         derive_clock_variant_geometry,
@@ -209,15 +219,18 @@ def apply_quick_committed_payloads(
     for widget_id in unit.presenter.bound_widget_ids:
         presentation = unit.presenter.presentation_for_widget_id(widget_id)
         variant = geometry_variant_for_presentation(widget_id, presentation, widgets)
+        entry = resolve_quick_custom_entry(
+            widgets, screen, widget_id, geometry_variant=variant,
+        )
         state = resolve_quick_committed_variant_state(
             widgets,
             screen,
             widget_id,
             geometry_variant=variant,
         )
-        if state is None:
+        if state is None and entry is None:
             continue
-        _geometry, size_payload = state
+        size_payload = dict(entry.size_payload) if entry is not None else state[1]
         retained = host.presentation_for_model_identity(widget_id)
         if retained is not None:
             retained.apply_custom_layout_size_payload(size_payload)

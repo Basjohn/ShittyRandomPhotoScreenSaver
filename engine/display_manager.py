@@ -2593,16 +2593,29 @@ class DisplayManager(QObject):
             )
             if custom_entry is not None:
                 from rendering.custom_layout_contract import (
+                    CONTENT_SIZED_PAYLOAD_KEY,
                     clamp_local_rect_to_bounds,
                     denormalize_local_rect,
+                    resolve_content_sized_rect,
                 )
                 from rendering.custom_layout_session import normalize_viewport_extent
 
                 screen_size = chosen.runtime.window.screen().geometry().size()
-                local_rect = clamp_local_rect_to_bounds(
-                    denormalize_local_rect(custom_entry.rect, screen_size),
-                    screen_size,
-                )
+                if custom_entry.size_payload.get(CONTENT_SIZED_PAYLOAD_KEY) is True:
+                    local_rect = resolve_content_sized_rect(
+                        custom_entry.rect,
+                        custom_entry.size_payload.get("_placement_anchor"),
+                        (
+                            float(custom_entry.size_payload.get("width", 100)),
+                            float(custom_entry.size_payload.get("height", 80)),
+                        ),
+                        screen_size,
+                    )
+                else:
+                    local_rect = clamp_local_rect_to_bounds(
+                        denormalize_local_rect(custom_entry.rect, screen_size),
+                        screen_size,
+                    )
                 from widgets.spotify_visualizer.presentation_orientation import (
                     CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
                     CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,
@@ -3572,6 +3585,13 @@ class DisplayManager(QObject):
                 thread_manager=self._thread_manager,
                 committed_rect_resolver=lambda widget_id, live_screen=screen: (
                     resolve_quick_committed_geometry(
+                        self._widgets_config_snapshot,
+                        live_screen,
+                        widget_id,
+                    )
+                ),
+                committed_entry_resolver=lambda widget_id, live_screen=screen: (
+                    resolve_quick_custom_entry(
                         self._widgets_config_snapshot,
                         live_screen,
                         widget_id,

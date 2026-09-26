@@ -41,6 +41,7 @@ from .state import QuickWindowPolicy
 from .transitions.state import TransitionRequest, TransitionRun
 from .widgets.family_binder import OrdinaryFamilyAdapter
 from .widgets.host import OverlayWidgetGeometry
+from rendering.custom_layout_contract import CustomLayoutEntry
 
 logger = get_logger(__name__)
 
@@ -148,6 +149,8 @@ class QuickDisplayUnit:
         thread_manager: Any | None = None,
         committed_rect_resolver: Callable[[str], OverlayWidgetGeometry | None]
         | None = None,
+        committed_entry_resolver: Callable[[str], CustomLayoutEntry | None]
+        | None = None,
         committed_variant_state_resolver: Callable[
             [str, str], tuple[OverlayWidgetGeometry, Mapping[str, object]] | None
         ]
@@ -161,6 +164,7 @@ class QuickDisplayUnit:
             shadow_values=shadow_values,
             thread_manager=thread_manager,
             committed_rect_resolver=committed_rect_resolver,
+            committed_entry_resolver=committed_entry_resolver,
             committed_variant_state_resolver=committed_variant_state_resolver,
         )
 

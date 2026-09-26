@@ -246,7 +246,7 @@ bugs.
 - [x] Steam and Gmail connection controllers extracted from the `WidgetsTab`-bound handlers into small classes that
       take callbacks for status text; the Widgets tab keeps identical behaviour (existing Steam/Gmail settings tests
       stay green; add parity tests). Credentials stay in their DPAPI owners; nothing new is persisted.
-- [ ] CUSTOM commit extracted: `rendering/custom_layout_commit.py::commit_custom_session(widgets, session,
+- [x] CUSTOM commit extracted: `rendering/custom_layout_commit.py::commit_custom_session(widgets, session,
       descriptors, displays)`, where `displays` maps identity → (screen signature aliases, `QRect` geometry, monitor
       route). `CustomLayoutOwner.save` calls it.
       Parity test: for recorded sessions (move, display transfer, duplicates on ALL, removal, clock variant,
@@ -257,15 +257,15 @@ bugs.
 
 ### Slice A2 | Content-sized CUSTOM entries in the runtime (D2)
 
-- [ ] `rendering/custom_layout_contract.py`: parse and write `_size_from_content` / `_placement_anchor`, and a pure
+- [x] `rendering/custom_layout_contract.py`: parse and write `_size_from_content` / `_placement_anchor`, and a pure
       `resolve_content_sized_rect(stored_rect, anchor, content_size, display_size)`, plus the anchor-choice rule
       (display thirds or snapped edge).
-- [ ] Runtime committed-geometry path (`resolve_quick_committed_variant_state`, `OverlayGeometryPolicy` /
+- [x] Runtime committed-geometry path (`resolve_quick_committed_variant_state`, `OverlayGeometryPolicy` /
       `OverlayGeometryBinding`): content-sized entries resolve from the live content size, per resize mode, then the
       existing clamp; explicit entries are untouched.
-- [ ] `custom_layout_owner` admission and Save (via `commit_custom_session` from slice A): move-only edits keep an
+- [x] `custom_layout_owner` admission and Save (via `commit_custom_session` from slice A): move-only edits keep an
       item content-sized with a recomputed anchor; resize, extent or child edits write explicit entries.
-- [ ] Tests:
+- [x] Tests:
   - for every anchor option and margin, a content-sized entry created at the anchor point resolves to exactly the
     rect `resolve_anchored_geometry` gives, for several content sizes;
   - explicit entries resolve byte-identically to before;

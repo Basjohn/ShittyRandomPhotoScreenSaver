@@ -53,6 +53,7 @@ from .widgets.geometry_resolver import (
     connect_overlay_preferred_size,
     resolve_overlay_geometry_policy,
 )
+from rendering.custom_layout_contract import CONTENT_SIZED_PAYLOAD_KEY, CustomLayoutEntry
 from .widgets.host import OverlayWidgetGeometry
 
 logger = get_logger(__name__)
@@ -192,6 +193,8 @@ class QuickDisplayPresenter:
         thread_manager: Any | None = None,
         committed_rect_resolver: Callable[[str], OverlayWidgetGeometry | None]
         | None = None,
+        committed_entry_resolver: Callable[[str], CustomLayoutEntry | None]
+        | None = None,
         committed_variant_state_resolver: Callable[
             [str, str], tuple[OverlayWidgetGeometry, Mapping[str, object]] | None
         ]
@@ -223,6 +226,7 @@ class QuickDisplayPresenter:
             config
         )
         resolve_committed = committed_rect_resolver or (lambda _widget_id: None)
+        resolve_committed_entry = committed_entry_resolver or (lambda _widget_id: None)
         resolve_variant_state = committed_variant_state_resolver or (
             lambda _widget_id, _variant: None
         )
@@ -237,11 +241,19 @@ class QuickDisplayPresenter:
         policies = {}
 
         def initial_geometry(widget_id: str) -> OverlayWidgetGeometry:
+            committed_entry = resolve_committed_entry(widget_id)
             policy = resolve_overlay_geometry_policy(
-                widget_id, config, committed_rect=resolve_committed(widget_id)
+                widget_id,
+                config,
+                committed_rect=(
+                    None if committed_entry is not None
+                    and committed_entry.size_payload.get(CONTENT_SIZED_PAYLOAD_KEY) is True
+                    else resolve_committed(widget_id)
+                ),
+                committed_entry=committed_entry,
             )
             policies[widget_id] = policy
-            if policy.has_committed_rect:
+            if policy.committed_rect is not None:
                 return policy.committed_rect  # type: ignore[return-value]
             # Provisional; the content-size binding corrects it immediately from
             # the family's real declared preferred size on connection below.
@@ -271,8 +283,16 @@ class QuickDisplayPresenter:
                 continue
             policy = policies.get(widget_id)
             if policy is None:
+                committed_entry = resolve_committed_entry(widget_id)
                 policy = resolve_overlay_geometry_policy(
-                    widget_id, config, committed_rect=resolve_committed(widget_id)
+                    widget_id,
+                    config,
+                    committed_rect=(
+                        None if committed_entry is not None
+                        and committed_entry.size_payload.get(CONTENT_SIZED_PAYLOAD_KEY) is True
+                        else resolve_committed(widget_id)
+                    ),
+                    committed_entry=committed_entry,
                 )
             presentation = self.presentation_for_widget_id(widget_id)
             family_geometry_sink = getattr(presentation, "set_geometry", None)
@@ -482,6 +502,8 @@ class QuickDisplayPresenter:
         widget_id: str,
         geometry: OverlayWidgetGeometry,
         size_payload: Mapping[str, object],
+        *,
+        committed_entry: CustomLayoutEntry | None = None,
     ) -> None:
         """Promote one retained geometry-only CUSTOM edit into its binding.
 
@@ -520,7 +542,7 @@ class QuickDisplayPresenter:
             set_commit_handler(binding.set_committed_rect)
         apply_payload(dict(size_payload))
         self._custom_widget_ids.add(identity)
-        binding.set_committed_rect(geometry)
+        binding.set_committed_rect(geometry, committed_entry=committed_entry)
 
     def set_layout_observer(
         self, observer: Callable[[str, OverlayWidgetGeometry], None] | None
