@@ -97,26 +97,12 @@ def _run_random_transition_prepare(
 
 
 def test_random_transition_pool_can_select_burn_when_hw_accel_enabled() -> None:
+    # Exhaustive: every registered transition is named, so one added later
+    # (pooled by default) cannot leak into this single-member pool.
     transitions = {
         "type": "Random",
         "random_always": True,
-        "pool": {
-            "Crossfade": False,
-            "Slide": False,
-            "Wipe": False,
-            "Diffuse": False,
-            "Block Puzzle Flip": False,
-            "Blinds": False,
-            "3D Block Spins": False,
-            "Ripple": False,
-            "Warp Dissolve": False,
-            "Crumble": False,
-            "Particle": False,
-            "Burn": True,
-            # Pooled by default since their acceptance; excluded here.
-            "Glass Shatter": False,
-            "Melt Drip": False,
-        },
+        "pool": {name: name == "Burn" for name in get_transition_setting_names()},
     }
     settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
     engine = _EngineStub(settings)
@@ -168,25 +154,25 @@ def test_random_rotation_never_writes_settings_or_authored_directions() -> None:
 
 
 def test_random_transition_distribution_is_approximately_uniform_for_enabled_pool() -> None:
+    expected_types = {
+        "Crossfade",
+        "Slide",
+        "Wipe",
+        "Diffuse",
+        "Block Puzzle Flip",
+        "Blinds",
+        "3D Block Spins",
+        "Ripple",
+        "Warp Dissolve",
+        "Crumble",
+        "Particle",
+        "Burn",
+    }
+    # Exhaustive pool: transitions registered later stay out unless listed.
     transitions = {
         "type": "Random",
         "random_always": True,
-        "pool": {
-            "Crossfade": True,
-            "Slide": True,
-            "Wipe": True,
-            "Diffuse": True,
-            "Block Puzzle Flip": True,
-            "Blinds": True,
-            "3D Block Spins": True,
-            "Ripple": True,
-            "Warp Dissolve": True,
-            "Crumble": True,
-            "Particle": True,
-            "Burn": True,
-            "Glass Shatter": False,
-            "Melt Drip": False,
-        },
+        "pool": {name: name in expected_types for name in get_transition_setting_names()},
         "activation": {name: True for name in get_transition_setting_names()},
     }
     settings = _FakeSettingsManager(transitions=transitions, hw_accel=True)
@@ -202,20 +188,6 @@ def test_random_transition_distribution_is_approximately_uniform_for_enabled_poo
     finally:
         random.setstate(rng_state)
 
-    expected_types = {
-        "Crossfade",
-        "Slide",
-        "Wipe",
-        "Diffuse",
-        "Block Puzzle Flip",
-        "Blinds",
-        "3D Block Spins",
-        "Ripple",
-        "Warp Dissolve",
-        "Crumble",
-        "Particle",
-        "Burn",
-    }
     assert set(counts) == expected_types
 
     expected = draws / len(expected_types)

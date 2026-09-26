@@ -778,8 +778,14 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
         prefix = vp.MODE_KEY_PREFIXES[mode][0]
 
         widgets_cfg = manager.get("widgets", {}) or {}
+        # Default mode activation is an operator choice (Oscilloscope ships
+        # off); the mode under test must be selectable whatever it is.
+        from core.settings.default_contract import require_canonical_default
+        activation = dict(require_canonical_default("widgets.spotify_visualizer.mode_activation"))
+        activation[mode] = True
         widgets_cfg["spotify_visualizer"] = {
             "mode": mode,
+            "mode_activation": activation,
             f"preset_{mode}": custom_index,
             "energy_boost": 1.11,
             "use_raw_energy": True,
