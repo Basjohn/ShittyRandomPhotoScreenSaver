@@ -65,6 +65,42 @@ from the new run, not from this evidence.
 
 The flat, never-touched commit is largely numpy's OpenBLAS thread pool: ~23 threads × a committed buffer each on the 24-CPU machine, which is ≈ 700 MB in the main process and again in the ImageWorker (816 MB private against 155 MB resident all night). It is now one thread (`core/native_threads.py`). That explains the fixed gap, not the slope. The slope stays open here.
 
+## Attribution 2026-09-26 (native maps plus seven-run comparison)
+
+`tools/win_memory_map.py` maps of `main_mc.py` (one 4K display) put the growing private commit in one category:
+NVIDIA OpenGL (`nvoglv64.dll`) write-combined memory (`PAGE_READWRITE | PAGE_WRITECOMBINE`), 420 → 444 → 479 MB over
+55 min with ~27 MB resident. The other `VirtualAlloc`, heap, large heap blocks, CPython arenas and stacks were flat
+or cache-bounded. The chunks are surface-sized: 32,640 KiB is exactly 3840 × 2176 × 4, i.e. the 3840 × 2162 R-63
+window or a 3840 × 2160 texture with rows padded to 2176. In that MC setup the pool is bounded: a relaunch sat at
+476–484 MB for a full hour. So in MC, driver write-combined memory is bounded rather than growing. Most of the
+"committed but not resident" gap is this driver pool.
+
+Across every run with `--usage` logs of at least 1 h (plateau generation state from the teardown records):
+
+| Run | Plateau | Pixel shift | Unattended (window active, displays off) | Result |
+|---|---|---|---|---|
+| 09-12 05:44 diagnostic | 3.3 h | no record | yes | +142 MB/h |
+| 09-14 03:53 diagnostic | 9.9 h | off | yes | +0.1 MB/h |
+| 09-22 08:01 diagnostic | 6.1 h | on | yes | +125 MB/h |
+| 09-23 09:07 MC | 1.2 h | off | no | flat |
+| 09-25 02:17 diagnostic | 5.3 h | on | yes | +127 MB/h |
+| 09-25 13:00 source | 3.0 h | on | yes | +135 MB/h |
+| 09-26 00:46 MC | 1.0 h | on (rate 2) | no | flat |
+
+Slope appears only with pixel shift on and the saver unattended. The two cannot be separated with existing data:
+the saver window being active and the displays being off always coincide. Also established from the logs:
+- growth is time-continuous (+0.3 MB per 15 s sample), not a step at each shift;
+- phase-locked per rotation cycle it is the same for every transition type;
+- scene/swap rates are identical sloped and flat (~91 swaps/s, 11 ms spacing);
+- the swap interval was 0 in every run;
+- the 09-12 slope predates the runtime audit. "New" matches pixel shift having been off in most recent testing.
+
+Audited without a finding: the pixel-shift controller and publish path (a property write only on change, once per
+shift), the `pixelShiftLayer` Translate and its only consumer (Edit-only mapping), the native cursor controller
+(cached cursors; shift publishes return early) and the Visualizer clip host (one static VBO). No production change
+was made. The remaining discriminator is one attended Screensaver-profile run with pixel shift on and display sleep
+disabled: slope then means the focused-window path, flat means the displays-off path.
+
 ## Is The Absolute Level Normal?
 
 About 700 MB of warm USS is expected for Qt Quick with 1–2 high-resolution displays, a 10-image decoded cache

@@ -85,7 +85,7 @@ Records: R-96 (wake freeze and reveal), R-97 (memory), R-98 (TLS). Landed 2026-0
   - `[STARTUP_REVEAL][FALLBACK]` only while a monitor is genuinely still waking;
   - tray exit and a Settings round-trip exit cleanly;
   - Gmail refreshes succeed with certificate verification (no `CERTIFICATE_VERIFY_FAILED`).
-- [ ] **Awaiting logs — Windows steady private-commit slope (R-97).** Private commit grows +125/+127 MB/h and USS +32/+34 MB/h, while the image cache and VRAM stay flat; it does not reproduce on Linux. Attribute it with one `--usage --life --handle-attribution` run, then one-family-off A/B runs (Gmail first, then Visualizer audio capture), read with `tools/memory_slope_report.py`. Fix the owning retention; never lower caches or disable prefetch to hide it.
+- [ ] **Windows steady private-commit slope (R-97).** Private commit grows +125–142 MB/h, with USS at about +35 MB/h. The growing memory is NVIDIA driver write-combined memory (`tools/win_memory_map.py`). Across seven runs it slopes only with pixel shift on and the saver unattended (window active, displays off); it stays flat with pixel shift off unattended (09-14, 10 h) and with pixel shift on attended. R-97 § Attribution 2026-09-26 has the table and what was ruled out. Next discriminator: one attended Screensaver-profile run with pixel shift on and display sleep disabled. Fix the owning path; never lower caches, disable prefetch or turn features off to hide it.
 
 - [~] **Memory footprint reduction (operator 2026-09-25): R-99.** Four owners are fixed and measured on the real app:
   - a consumed derivative leaves the cache (49% of prefetch work had been wasted);
