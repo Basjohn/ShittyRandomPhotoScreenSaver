@@ -69,3 +69,64 @@ def test_openblas_runs_single_threaded_in_the_app_and_its_spawned_workers(tmp_pa
     out = completed.stdout + completed.stderr
     assert "PARENT 1" in completed.stdout, out
     assert "CHILD 1" in completed.stdout, out
+
+
+import pytest
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Qt's private image pool is resolved through MSVC exports")
+def test_qt_image_pool_keeps_its_threads_instead_of_recreating_them(qt_app):
+    """R-97: Qt's private image pool must not recreate threads for every image.
+
+    With the default 30 s idle expiry and a 40 s rotation, each wallpaper made
+    the pool start its threads again; the NVIDIA GL driver keeps ~70 KB per
+    thread ever created. The probe shortens the expiry to show the churn, then
+    applies the production setting and shows the same threads are reused.
+    """
+    import ctypes
+
+    import psutil
+    from PySide6.QtCore import QEventLoop, Qt, QTimer
+    from PySide6.QtGui import QImage
+
+    from core.native_threads import (
+        _qt_gui_pool_expiry_functions,
+        qt_gui_pool_expiry_ms,
+        retain_qt_gui_pool_threads,
+    )
+
+    resolved = _qt_gui_pool_expiry_functions()
+    assert resolved is not None, "Qt6Gui no longer exports qtGuiThreadPool; R-97 fix is inert"
+    pool, _get_expiry, set_expiry = resolved
+    source = QImage(4096, 2400, QImage.Format.Format_RGB32)
+    source.fill(0x336699)
+
+    def burst() -> None:
+        source.scaled(3000, 1700, Qt.AspectRatioMode.IgnoreAspectRatio,
+                      Qt.TransformationMode.SmoothTransformation)
+
+    def idle(ms: int) -> None:
+        loop = QEventLoop()
+        QTimer.singleShot(ms, loop.quit)
+        loop.exec()
+
+    def thread_ids() -> set[int]:
+        return {t.id for t in psutil.Process().threads()}
+
+    # Short expiry: threads created for one image are gone before the next.
+    set_expiry(pool, 100)
+    burst()
+    idle(600)
+    before = thread_ids()
+    burst()
+    churned = thread_ids() - before
+    assert churned, "the probe no longer exercises Qt's multithreaded scaling"
+
+    # Production setting: the threads persist and the next image reuses them.
+    assert retain_qt_gui_pool_threads() is True
+    assert qt_gui_pool_expiry_ms() == -1
+    burst()
+    idle(600)
+    before = thread_ids()
+    burst()
+    assert thread_ids() - before == set()

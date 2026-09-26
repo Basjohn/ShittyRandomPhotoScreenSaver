@@ -82,7 +82,7 @@ Records: R-96 (wake freeze and reveal), R-97 (memory), R-98 (TLS). Landed 2026-0
   - `[STARTUP_REVEAL][FALLBACK]` only while a monitor is genuinely still waking;
   - tray exit and a Settings round-trip exit cleanly;
   - Gmail refreshes succeed with certificate verification (no `CERTIFICATE_VERIFY_FAILED`).
-- [ ] **Windows steady private-commit slope (R-97).** Private commit grows +125–142 MB/h, with USS at about +35 MB/h. The growing memory is NVIDIA driver write-combined memory (`tools/win_memory_map.py`). Across seven runs it slopes only with pixel shift on and the saver unattended (window active, displays off); it stays flat with pixel shift off unattended (09-14, 10 h) and with pixel shift on attended. R-97 § Attribution 2026-09-26 has the table and what was ruled out. Next discriminator: one attended Screensaver-profile run with pixel shift on and display sleep disabled. Fix the owning path; never lower caches, disable prefetch or turn features off to hide it.
+- [~] **Awaiting validation: Windows steady private-commit slope (R-97).** Root cause: SRPSS created ~30 threads/min (a new heartbeat `threading.Timer` every 3 s; Qt's private image pool recreated by every wallpaper), and the NVIDIA GL driver keeps ~70 KB per thread ever created. Both owners fixed 2026-09-26: one persistent heartbeat thread, and the Qt image pool keeps its ≤ 8 threads. The invisible full saver went from ~140 MB/h to +4 MB/h with 0 new app threads. Physical: one unattended overnight run with `--usage`; `tools/memory_slope_report.py` should show a flat warm plateau.
 
 - [~] **Memory footprint reduction (operator 2026-09-25): R-99.** Four owners are fixed and measured on the real app:
   - a consumed derivative leaves the cache (49% of prefetch work had been wasted);
@@ -92,7 +92,6 @@ Records: R-96 (wake freeze and reveal), R-97 (memory), R-98 (TLS). Landed 2026-0
 
   Awaiting the built check's Phase 3: `private_children_mb` ~816 → ≲ 200, main warm private roughly −700 MB, ~46 fewer threads.
   - [ ] The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules). A lean worker entry could save ~100 MB resident, but it must be validated under Nuitka multiprocessing first.
-  - [ ] Attribute the remaining non-resident main-process commit (driver?) with one Windows VMMap snapshot after the OpenBLAS fix.
   - [ ] Small items: `linecache` keeps ~5 MB of source text; the `_schedule_prefetch_resume` closure makes one GC cycle per rotation.
 
 Side defects found while working (not yet fixed):

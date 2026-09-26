@@ -77,7 +77,7 @@ Expected on Windows (not yet observed):
 
 - **Lookahead depth: decided 4 (operator, 2026-09-25).** On Windows (40 s median rotation) a consumed derivative was built a median 0.8 rotations ahead: 87% within two rotations and 97% within four. The canonical default moved 5 → 4 so the lookahead stays even across two displays instead of carrying one odd derivative that is likely to be wasted. It trims bounded cache, not the R-97 slope. Existing profiles keep their persisted value.
 - **The ImageWorker imports the whole app** (~1,060 modules: engine, UI, Visualizer, Qt Quick) because `spawn` re-imports `main.py`'s top level. Its resident set could drop by ~100 MB with a lean worker entry. This needs Nuitka multiprocessing validation, so it is not changed blind.
-- **The remaining non-resident main-process commit** (~500 MB expected after OpenBLAS) is most likely the GPU driver. It needs a Windows VMMap snapshot.
+- **The remaining non-resident main-process commit** is the NVIDIA OpenGL driver (2026-09-26 native maps, `tools/win_memory_map.py`): a write-combined upload pool that fills to a bounded ~360–480 MB on one 4K display, plus the driver's own heap. The heap's growth was R-97's slope, caused by thread churn and now fixed.
 - The steady private-commit slope is still R-97.
 - Small items: `linecache` keeps ~5 MB of source text from traceback formatting; the `_schedule_prefetch_resume` closure makes one cycle per rotation.
 

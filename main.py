@@ -952,6 +952,14 @@ def main(*, entrypoint: str = "main"):
     QImageReader.setAllocationLimit(1024)  # 1GB in MB
     logger.info("Qt image allocation limit: 1GB (supports 8K+ images, per-image on-demand)")
     
+    # Qt's private image pool must keep its threads: recreating them every
+    # rotation leaks GL-driver per-thread state (R-97).
+    from core.native_threads import retain_qt_gui_pool_threads
+    if retain_qt_gui_pool_threads():
+        logger.info("[THREADS] Qt image pool threads retained (no idle expiry)")
+    elif sys.platform == "win32":
+        logger.warning("[THREADS] Qt image pool not reachable; its threads keep the default 30 s expiry")
+
     logger.info("Qt Application created: %s", app.applicationName())
     if diagnostic_record is not None:
         diagnostic_record("qapplication_created")

@@ -1,13 +1,13 @@
 # R-97 — Overnight Main-Process Private Commit Growth
 
 Date: 2026-09-25  
-Status: PARTIAL / AWAITING LOGS — one Windows retention was fixed; the Windows steady slope is not yet attributed
+Status: AWAITING VALIDATION — root cause found and fixed 2026-09-26 (thread churn × GL-driver per-thread state); awaiting an unattended physical run
 
 ## Classification
 
 - [ ] COMPLETELY FUCKED
-- [x] PARTIAL
-- [ ] AWAITING VALIDATION
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
 - [ ] SOLVED
 
 ## Observed Failure
@@ -45,7 +45,7 @@ background's `QSGImageNode` owns and deletes the C++ texture, so every upload le
 alive for the window's lifetime. The probe counted 40 wrappers for 40 images, and ≤1 after the fix
 (`_release_owned_texture_wrapper`). Each wrapper is small, so this fix alone cannot account for +125 MB/h.
 
-## Open: The Windows Steady Slope
+## Original Hypotheses (Superseded By The Root Cause Below)
 
 Private commit grows about four times faster than USS. The ~93 MB/h difference is memory that is committed but no
 longer resident: written once, never touched again, and trimmed from the working set. That is the signature of
@@ -65,41 +65,49 @@ from the new run, not from this evidence.
 
 The flat, never-touched commit is largely numpy's OpenBLAS thread pool: ~23 threads × a committed buffer each on the 24-CPU machine, which is ≈ 700 MB in the main process and again in the ImageWorker (816 MB private against 155 MB resident all night). It is now one thread (`core/native_threads.py`). That explains the fixed gap, not the slope. The slope stays open here.
 
-## Attribution 2026-09-26 (native maps plus seven-run comparison)
+## Root Cause (2026-09-26): Thread Churn × NVIDIA Per-Thread State
 
-`tools/win_memory_map.py` maps of `main_mc.py` (one 4K display) put the growing private commit in one category:
-NVIDIA OpenGL (`nvoglv64.dll`) write-combined memory (`PAGE_READWRITE | PAGE_WRITECOMBINE`), 420 → 444 → 479 MB over
-55 min with ~27 MB resident. The other `VirtualAlloc`, heap, large heap blocks, CPython arenas and stacks were flat
-or cache-bounded. The chunks are surface-sized: 32,640 KiB is exactly 3840 × 2176 × 4, i.e. the 3840 × 2162 R-63
-window or a 3840 × 2160 texture with rows padded to 2176. In that MC setup the pool is bounded: a relaunch sat at
-476–484 MB for a full hour. So in MC, driver write-combined memory is bounded rather than growing. Most of the
-"committed but not resident" gap is this driver pool.
+**Category.** `tools/win_memory_map.py` maps of the real saver, running invisibly (opacity 0, click-through) on the
+operator's machine with the displays asleep, put the whole slope in one 1 GB read/write `VirtualAlloc` reservation.
+Its commit grew +55.6 MB in 25 min (~133 MB/h), only ~25% resident. Its content is the NVIDIA OpenGL driver's own
+heap: 218,000 pointers into `nvoglv64.dll` and driver assembly shader text. Write-combined driver memory, the heap,
+large heap blocks and CPython arenas were flat or cache-bounded.
 
-Across every run with `--usage` logs of at least 1 h (plateau generation state from the teardown records):
+**Owner.** Diffing that heap over four idle minutes showed one ~72 KB driver object added about every 3 s. Each
+holds a table of ~125 slots pointing at one static driver stub (a per-thread GL dispatch table in its "no current
+context" state) and a per-thread RNG state. A Qt Quick window alone stayed flat (+5.6 MB/h) until a short-lived
+Python thread was added every 50 ms; then it grew 34 MB per 30 s, ~57 KB per thread. The driver keeps per-thread
+state for every thread a GL process ever creates and, at least with the displays off, never returns it.
 
-| Run | Plateau | Pixel shift | Unattended (window active, displays off) | Result |
-|---|---|---|---|---|
-| 09-12 05:44 diagnostic | 3.3 h | no record | yes | +142 MB/h |
-| 09-14 03:53 diagnostic | 9.9 h | off | yes | +0.1 MB/h |
-| 09-22 08:01 diagnostic | 6.1 h | on | yes | +125 MB/h |
-| 09-23 09:07 MC | 1.2 h | off | no | flat |
-| 09-25 02:17 diagnostic | 5.3 h | on | yes | +127 MB/h |
-| 09-25 13:00 source | 3.0 h | on | yes | +135 MB/h |
-| 09-26 00:46 MC | 1.0 h | on (rate 2) | no | flat |
+SRPSS created threads continuously (external census of the running saver, 4 min):
 
-Slope appears only with pixel shift on and the saver unattended. The two cannot be separated with existing data:
-the saver window being active and the displays being off always coincide. Also established from the logs:
-- growth is time-continuous (+0.3 MB per 15 s sample), not a step at each shift;
-- phase-locked per rotation cycle it is the same for every transition type;
-- scene/swap rates are identical sloped and flat (~91 swaps/s, 11 ms spacing);
-- the swap interval was 0 in every run;
-- the 09-12 slope predates the runtime audit. "New" matches pixel shift having been off in most recent testing.
+| Source | New threads | Lifetime | Driver commit |
+|---|---|---|---|
+| `ProcessSupervisor` heartbeat: a new `threading.Timer` per 3 s tick | 20.2/min | 2.8 s | ≈ 86 MB/h |
+| Qt's private image pool (`QGuiApplicationPrivate::qtGuiThreadPool`, ≤ 8 threads, 30 s idle expiry) recreated by every 40 s wallpaper | 10.0/min | 37.7 s | ≈ 43 MB/h |
 
-Audited without a finding: the pixel-shift controller and publish path (a property write only on change, once per
-shift), the `pixelShiftLayer` Translate and its only consumer (Edit-only mapping), the native cursor controller
-(cached cursors; shift publishes return early) and the Visualizer clip host (one static VBO). No production change
-was made. The remaining discriminator is one attended Screensaver-profile run with pixel shift on and display sleep
-disabled: slope then means the focused-window path, flat means the displays-off path.
+That is ≈ 130 MB/h against the observed 125–142 MB/h, and 86 MB/h against the 88 MB/h of an idle saver (no
+widgets, no rotation, no rendering). The earlier Screensaver-vs-MC and pixel-shift correlations were confounded by
+attended versus unattended runs; the same invisible saver grew at +144 MB/h with pixel shift on and off.
+
+**Fix.**
+- The supervisor heartbeat is one persistent daemon thread (`srpss-worker-heartbeat`) that waits on an event
+  between checks. Interval, checks, restarts and non-blocking shutdown are unchanged.
+- `core/native_threads.retain_qt_gui_pool_threads()` (called once after `QApplication`) sets the private image
+  pool's idle expiry to "never" through Qt's exported accessor, the same export-by-handle pattern as the PR-04
+  texture bridge. The pool keeps its own maximum of 8, so this is a bounded one-time cost. If the export is ever
+  missing it changes nothing and logs a warning.
+
+**Measured after the fix** (same invisible full-activity run, 10 min): 0 new Python threads, 0 new Qt threads,
+6 Windows thread-pool workers (0.6/min, ~200 s each). Driver heap +4 MB/h and converging (was ~140 MB/h). Private
+commit shows no slope over the run.
+
+**Rule.** A GL process must not create threads per tick, per image or per request. Periodic work runs on a
+persistent thread or an existing lane (see `Docs/Guardrails.md`).
+
+**Remaining.** The Windows thread-pool workers (≈ 2–3 MB/h at the observed rate) come from system components
+(COM/WinRT/audio). `bounded_dns` still starts one short-lived thread per network lookup, a few dozen an hour.
+Neither is a measurable slope yet.
 
 ## Is The Absolute Level Normal?
 
@@ -109,6 +117,10 @@ is committed but not resident, and that gap is what grows.
 
 ## Regression Coverage
 
+- `tests/test_process_supervisor.py::TestHeartbeatThreadLifetime`: heartbeat checks run on one persistent thread,
+  only that thread is ever started, and shutdown stops it.
+- `tests/test_native_thread_pools.py::test_qt_image_pool_keeps_its_threads_instead_of_recreating_them`: with a short
+  expiry Qt's image pool recreates threads between images; with the production setting the same threads are reused.
 - `tests/test_qtquick_native_texture_wrapper_retention.py`: 40 uploads through the production node on a real
   threaded-GL window leave ≤1 wrapper, and the latest image is still shown.
 - `tools/memory_slope_report.py`: warm-plateau slopes and settled replacement steps from existing logs.
