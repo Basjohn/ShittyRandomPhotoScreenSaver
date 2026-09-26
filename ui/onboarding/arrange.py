@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import weakref
 
-from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QHBoxLayout, QListWidget, QListWidgetItem, QSizePolicy, QVBoxLayout, QWidget
 from PySide6.QtGui import QGuiApplication
@@ -21,7 +21,13 @@ from ui.widgets import StyledComboBox
 
 
 class _ArrangeCanvas(QWidget):
-    """A scaled, event-owned projection; it never represents persisted coordinates."""
+    """A scaled, event-owned projection; it never represents persisted coordinates.
+
+    Drag a box to move it (across displays too), drag a corner handle to scale
+    it uniformly, Ctrl+wheel scales, arrow keys nudge (Shift for 10 px),
+    Delete resets, Escape clears the selection.  Dashed boxes still follow
+    their authored anchor; solid boxes are placed.
+    """
 
     changed = Signal()
     selectionChanged = Signal()
@@ -31,6 +37,7 @@ class _ArrangeCanvas(QWidget):
     _MAX_HEIGHT = 560
     _PAD = 10
     _LABEL_BAND = 24  # display names sit below their rectangles, never under widgets
+    _HANDLE = 9
 
     def __init__(self, model: ArrangeModel, parent=None) -> None:
         super().__init__(parent)
@@ -39,11 +46,17 @@ class _ArrangeCanvas(QWidget):
         policy.setHeightForWidth(True)
         self.setSizePolicy(policy)
         self.setMinimumHeight(self._MIN_HEIGHT)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)
         self._selected = None
+        self._hovered = None
         self._drag_origin: QPoint | None = None
         self._original_rect: QRect | None = None
-        self.setMouseTracking(True)
+        self._scale_origin: float | None = None
+        self._scale_applied = 1.0
+        self._dragging = False
 
+    # ---- geometry -----------------------------------------------------------
     def _bounds(self) -> QRect:
         rectangles = [display.geometry for display in self.model.displays]
         if not rectangles:
@@ -88,37 +101,64 @@ class _ArrangeCanvas(QWidget):
         bounds, scale, origin = self._bounds(), self._scale(), self._origin()
         return QPoint(bounds.x() + round((point.x() - origin.x()) / scale), bounds.y() + round((point.y() - origin.y()) / scale))
 
+    # ---- hit testing --------------------------------------------------------
+    def _item_at(self, point: QPoint):
+        return next((item for item in reversed(self._paint_order())
+                     if self._project(item.current_global_rect).contains(point)), None)
+
+    def _paint_order(self):
+        items = list(self.model.session.active_items())
+        items.sort(key=lambda item: item is self._selected)  # selected paints (and hits) last
+        return items
+
+    def _handles(self, item) -> list[QRectF]:
+        rect = QRectF(self._project(item.current_global_rect))
+        half = self._HANDLE / 2
+        return [QRectF(corner.x() - half, corner.y() - half, self._HANDLE, self._HANDLE)
+                for corner in (rect.topLeft(), rect.topRight(), rect.bottomLeft(), rect.bottomRight())]
+
+    def _on_handle(self, point: QPoint) -> bool:
+        item = self._selected
+        return bool(item is not None and item.resize_capable
+                    and any(handle.adjusted(-3, -3, 3, 3).contains(QPointF(point)) for handle in self._handles(item)))
+
+    def _display_under(self, item):
+        centre = item.current_global_rect.center()
+        return next((display for display in self.model.displays if display.geometry.contains(centre)), None)
+
+    def _describe(self, item) -> str:
+        rect = item.current_global_rect
+        state = ("follows its authored anchor (drag to place it freely)" if self.model.is_authored(item.source_key)
+                 else "size follows content" if item.content_sized else "placed")
+        return (f"{self.model.item_label(item.source_key)} · display {self.model.display_route(item.source_key)}"
+                f" · ≈{rect.width()}×{rect.height()} · {state}")
+
+    # ---- painting -----------------------------------------------------------
     def paintEvent(self, _event) -> None:
         theme = get_active_settings_theme()
         color = lambda token: QColor(*theme.color(token).as_tuple())
+        accent = color("control.list.selected_accent"); accent.setAlpha(255)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color("panel.group.surface"))
         painter.drawRoundedRect(QRectF(self.rect()), 8.0, 8.0)
         small = self.font(); small.setPointSizeF(max(7.0, small.pointSizeF() - 1.0))
+        target = self._display_under(self._selected) if (self._dragging and self._selected is not None) else None
         for display in self.model.displays:
             rect = QRectF(self._project(display.geometry)).adjusted(1, 1, -1, -1)
-            painter.setPen(QPen(color("panel.border"), 2.0))
+            painter.setPen(QPen(accent if display is target else color("panel.border"), 3.0 if display is target else 2.0))
             painter.setBrush(color("panel.subsection.surface"))
             painter.drawRoundedRect(rect, 4.0, 4.0)
-        items = list(self.model.session.active_items())
-        items.sort(key=lambda item: item is self._selected)  # selected paints last
-        for item in items:
-            rect = QRectF(self._project(item.current_global_rect))
-            selected = item is self._selected
-            fill = color("control.button.surface"); fill.setAlpha(235 if selected else 205)
-            painter.setPen(QPen(color("control.button.pressed_border") if selected else color("control.button.border"), 2.5 if selected else 1.75))
-            painter.setBrush(fill)
-            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), 3.0, 3.0)
-            if rect.width() < 28 or rect.height() < 14:
-                continue
-            painter.setFont(small)
-            painter.setPen(color("control.button.text"))
-            metrics = painter.fontMetrics()
-            name = metrics.elidedText(self.model.item_label(item.source_key), Qt.TextElideMode.ElideRight, int(rect.width() - 8))
-            painter.drawText(rect.adjusted(4, 2, -4, -2), Qt.AlignmentFlag.AlignCenter, name)
-        # Display names in the reserved band under each display.
+            if display is target:
+                # The display a drop would land on.
+                wash = QColor(accent); wash.setAlpha(34)
+                painter.setPen(Qt.PenStyle.NoPen); painter.setBrush(wash)
+                painter.drawRoundedRect(rect, 4.0, 4.0)
+        for item in self._paint_order():
+            self._paint_item(painter, item, color, accent, small)
+        if self._dragging:
+            self._paint_guides(painter, accent)
         painter.setFont(small)
         painter.setPen(color("panel.group.text"))
         for display in self.model.displays:
@@ -126,25 +166,166 @@ class _ArrangeCanvas(QWidget):
             label = f"Display {display.monitor_route}  ·  {display.geometry.width()}×{display.geometry.height()}"
             painter.drawText(QRectF(rect.left(), rect.bottom() + 4, rect.width(), self._LABEL_BAND - 6),
                              Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, label)
+        if self.hasFocus() and self._selected is None and not self.model.session.active_items():
+            painter.drawText(QRectF(self.rect()), Qt.AlignmentFlag.AlignCenter, "No widgets are enabled.")
+
+    def _paint_item(self, painter, item, color, accent, small) -> None:
+        rect = QRectF(self._project(item.current_global_rect)).adjusted(0.75, 0.75, -0.75, -0.75)
+        selected = item is self._selected
+        hovered = item is self._hovered
+        authored = self.model.is_authored(item.source_key)
+        fill = color("control.list.selected_surface" if selected else "control.button.hover_surface" if hovered else "control.button.surface")
+        fill.setAlpha(max(fill.alpha(), 225))
+        border = color("control.button.border")
+        border.setAlpha(255 if selected else (225 if hovered else 165))
+        pen = QPen(border, 2.75 if selected else (2.25 if hovered else 1.75))
+        if authored and not selected:
+            pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.setBrush(fill)
+        painter.drawRoundedRect(rect, 3.0, 3.0)
+        if rect.width() >= 28 and rect.height() >= 14:
+            painter.setFont(small)
+            painter.setPen(color("control.button.text"))
+            metrics = painter.fontMetrics()
+            name = metrics.elidedText(self.model.item_label(item.source_key), Qt.TextElideMode.ElideRight, int(rect.width() - 8))
+            if rect.height() >= 2.4 * metrics.height():
+                size = f"≈{item.current_global_rect.width()}×{item.current_global_rect.height()}"
+                painter.drawText(rect.adjusted(4, 2, -4, -rect.height() / 2 + 1), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, name)
+                faint = color("control.button.text"); faint.setAlpha(150)
+                painter.setPen(faint)
+                painter.drawText(rect.adjusted(4, rect.height() / 2 + 1, -4, -2), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                                 metrics.elidedText(size, Qt.TextElideMode.ElideRight, int(rect.width() - 8)))
+            else:
+                painter.drawText(rect.adjusted(4, 2, -4, -2), Qt.AlignmentFlag.AlignCenter, name)
+        if selected and item.resize_capable:
+            painter.setPen(QPen(color("panel.group.surface"), 1.5))
+            painter.setBrush(accent)
+            for handle in self._handles(item):
+                painter.drawRoundedRect(handle, 2.0, 2.0)
+
+    def _paint_guides(self, painter, accent) -> None:
+        snap = self.model.last_snap
+        if snap is None:
+            return
+        identity, vertical, horizontal = snap
+        display = next((d for d in self.model.displays if d.identity == identity), None)
+        if display is None:
+            return
+        area = QRectF(self._project(display.geometry))
+        scale = self._scale()
+        pen = QPen(accent, 1.5, Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        for guide in vertical:
+            x = area.left() + guide.position * scale
+            painter.drawLine(QPointF(x, area.top()), QPointF(x, area.bottom()))
+        for guide in horizontal:
+            y = area.top() + guide.position * scale
+            painter.drawLine(QPointF(area.left(), y), QPointF(area.right(), y))
+
+    # ---- interaction ----------------------------------------------------------
+    def _select(self, item) -> None:
+        self._selected = item
+        self.model.session.select_item(item)
+        self.selectionChanged.emit()
+        self.update()
 
     def mousePressEvent(self, event) -> None:
-        if event.button() != Qt.MouseButton.LeftButton: return
-        self._selected = next((item for item in reversed(self.model.session.active_items()) if self._project(item.current_global_rect).contains(event.position().toPoint())), None)
-        if self._selected is not None:
-            self._drag_origin = event.position().toPoint(); self._original_rect = QRect(self._selected.current_global_rect)
-            self.model.session.select_item(self._selected)
-        self.selectionChanged.emit()
-        self.changed.emit(); self.update()
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
+        point = event.position().toPoint()
+        if self._on_handle(point):
+            centre = QPointF(self._project(self._selected.current_global_rect).center())
+            self._scale_origin = max(4.0, (QPointF(point) - centre).manhattanLength())
+            self._scale_applied = 1.0
+            self._dragging = False
+            return
+        item = self._item_at(point)
+        self._select(item)
+        if item is not None:
+            self._drag_origin = point; self._original_rect = QRect(item.current_global_rect)
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def mouseMoveEvent(self, event) -> None:
-        if self._selected is None or self._drag_origin is None or self._original_rect is None: return
-        delta = self._unproject_delta(event.position().toPoint() - self._drag_origin)
-        rect = QRect(self._original_rect); rect.translate(delta)
-        self.model.move(self._selected.source_key, rect, cursor_global=self._unproject_point(event.position().toPoint())); self.changed.emit(); self.update()
+        point = event.position().toPoint()
+        if self._scale_origin is not None and self._selected is not None:
+            centre = QPointF(self._project(self._selected.current_global_rect).center())
+            wanted = max(0.05, (QPointF(point) - centre).manhattanLength() / self._scale_origin)
+            self._scale_by(wanted / self._scale_applied)
+            self._scale_applied = wanted
+            return
+        if self._selected is not None and self._drag_origin is not None and self._original_rect is not None:
+            if not self._dragging and (point - self._drag_origin).manhattanLength() < 3:
+                return
+            self._dragging = True
+            delta = self._unproject_delta(point - self._drag_origin)
+            rect = QRect(self._original_rect); rect.translate(delta)
+            self.model.move(self._selected.source_key, rect, cursor_global=self._unproject_point(point))
+            self.changed.emit(); self.update()
+            return
+        hovered = self._item_at(point)
+        if hovered is not self._hovered:
+            self._hovered = hovered
+            self.setToolTip(self._describe(hovered) if hovered is not None else "")
+            self.update()
+        if self._on_handle(point):
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif hovered is not None:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        else:
+            self.unsetCursor()
 
     def mouseReleaseEvent(self, _event) -> None:
+        was_editing = self._dragging or self._scale_origin is not None
         self._drag_origin = None; self._original_rect = None
-        self.dragFinished.emit()
+        self._scale_origin = None; self._dragging = False
+        self.model.last_snap = None
+        self.unsetCursor()
+        self.update()
+        if was_editing:
+            self.dragFinished.emit()
+
+    def leaveEvent(self, event) -> None:
+        super().leaveEvent(event)
+        if self._hovered is not None:
+            self._hovered = None; self.update()
+
+    def _scale_by(self, factor: float) -> None:
+        item = self._selected
+        if item is None or not item.resize_capable or abs(factor - 1.0) < 1e-4:
+            return
+        self.model.scale(item.source_key, factor)
+        self.changed.emit(); self.update()
+
+    def wheelEvent(self, event) -> None:
+        if self._selected is not None and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._scale_by(1.05 if event.angleDelta().y() > 0 else 1 / 1.05)
+            self.dragFinished.emit()
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+    def keyPressEvent(self, event) -> None:
+        item = self._selected
+        key = event.key()
+        if key == Qt.Key.Key_Escape and item is not None:
+            self._select(None); return
+        if item is None:
+            super().keyPressEvent(event); return
+        step = 10 if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else 1
+        offsets = {Qt.Key.Key_Left: (-step, 0), Qt.Key.Key_Right: (step, 0), Qt.Key.Key_Up: (0, -step), Qt.Key.Key_Down: (0, step)}
+        if key in offsets:
+            dx, dy = offsets[key]
+            rect = QRect(item.current_global_rect); rect.translate(dx, dy)
+            self.model.move(item.source_key, rect, snap=False)
+            self.changed.emit(); self.dragFinished.emit(); self.update()
+            return
+        if key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self.model.reset(item.source_key)
+            self.changed.emit(); self.dragFinished.emit(); self.update()
+            return
+        super().keyPressEvent(event)
 
 
 class ArrangePage(Page):
@@ -157,6 +338,7 @@ class ArrangePage(Page):
         self.model: ArrangeModel | None = None
         self.body.addWidget(text_label("Arrange widgets freely. Changes stay in this draft until you apply them.", heading=True))
         self.canvas_holder = QVBoxLayout(); self.body.addLayout(self.canvas_holder)
+        self.body.addWidget(text_label("Drag a box to move it, including onto another display. Drag a corner, or Ctrl+scroll, to scale. Arrow keys nudge (Shift for 10 px), Delete resets. Dashed boxes still follow their original anchor."))
         chooser = QHBoxLayout()
         self.item_list = QListWidget()
         self.item_list.setMaximumHeight(118)
