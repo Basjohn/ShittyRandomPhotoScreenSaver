@@ -65,7 +65,10 @@ def test_owner_referrer_snapshot_names_attribute_closure_and_log_record() -> Non
     # __dict__; no broad parent-graph walk is needed.
     record.widget_manager = owner
 
-    snapshot = ownership_trace.capture_owner_referrers(owner)
+    # This bar is about what the capture finds, not its budget (covered below):
+    # every gc.get_referrers call walks the whole heap, so late in a large test
+    # process the 75 ms production default can run out before the LogRecord.
+    snapshot = ownership_trace.capture_owner_referrers(owner, max_elapsed_ms=10_000.0)
     descriptors = list(_walk_descriptors(snapshot))
 
     assert any(
