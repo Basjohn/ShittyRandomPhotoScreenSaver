@@ -33,3 +33,7 @@ The separate `assets/news_inline` subtree is restricted to 96 images or 64 MiB p
 ## Change and regression contract
 
 A source or QML change must retain bounded cache-first admission, timestamp ranking, followed-set provenance, shared deadline retirement, stable delegates, semantic header/theme parity and actual painted CUSTOM X/Y/flip geometry. Recheck default QML visible story count against the Python authored layout across wide, tall and grid shapes; customized child rails may calculate their own bounded paint capacity but may not rewrite the parent preferred extent. Use native Qt for paint/interaction claims and a bounded physical check for affected visual or source behavior. Report test evidence against the exact changed tree; automated coverage does not certify unobserved appearance or real network parity.
+
+## Open physical check
+
+- [ ] When a newly refreshed syndicated Steam article actually contains its validated original article URL, verify that exact article opens that destination. Older cached records without that URL correctly fall back to the app news hub. This check must not trigger a whole followed-set sweep.

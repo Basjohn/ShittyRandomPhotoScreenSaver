@@ -1,7 +1,7 @@
 # R-96 — Double Wake Froze The Replacement Runtime
 
 Date: 2026-09-25  
-Status: FIXED IN CODE / AWAITING VALIDATION — Windows dual-monitor built check (`Current_Plan.md`)
+Status: FIXED IN CODE / AWAITING VALIDATION — Windows dual-monitor built check (§ Validation)
 
 ## Classification
 
@@ -119,3 +119,14 @@ paths that a wedged replacement triggers, and from the interaction that followed
 Never make Python on the GUI thread wait for a Quick render thread (`Docs/Guardrails.md` § Lifecycle). A replacement
 generation has one first-image admission owner, and its hang window covers construction through reveal
 (`Docs/Contracts.md` § Runtime replacement and monitor topology).
+
+## Validation (operator, Windows dual-monitor built check; covers R-98 too)
+
+Pass requires all of:
+
+- repeated double wakes reveal every generation;
+- no `logs/hang_stacks.log` (if one appears, it is the evidence);
+- no `[DISPLAY][FALLBACK]`, and at most one first-image admission per rebuild;
+- `[STARTUP_REVEAL][FALLBACK]` only while a monitor is genuinely still waking;
+- tray exit and a Settings round-trip exit cleanly;
+- Gmail refreshes succeed with certificate verification (no `CERTIFICATE_VERIFY_FAILED`, R-98).

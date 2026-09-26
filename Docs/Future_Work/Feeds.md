@@ -69,6 +69,8 @@ Magnet links open in the registered torrent client since 2026-09-26 (operator-ap
 
 ## Legacy wallpaper RSS consolidation
 
+- [~] Physical (next ordinary run with wallpaper feeds): the session pass logs `[RSS_COORD] Pass:` then `+1 WxH` lines only at or above the displays' size; a stale pool retires a third after replacements land; nothing under the displays' size is shown.
+
 The wallpaper RSS path already uses the shared bounded document transport. Further consolidation is optional and must preserve wallpaper behavior rather than force code sharing.
 
 - [x] Audited and removed the dormant `RSSWorker` process (2026-09-25): it was registered but never started, and wallpaper feeds acquire in-process on the shared core (`Docs/Reference/Feeds.md` § Wallpaper feeds).
