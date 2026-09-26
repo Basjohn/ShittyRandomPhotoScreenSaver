@@ -22,6 +22,7 @@ from ui.settings_theme_catalog import (SettingsThemeCatalog, activate_catalog_th
     get_current_settings_theme_catalog, persist_settings_theme_selection,
     read_persisted_theme_id, resolve_persisted_settings_theme)
 from ui.settings_theme_runtime import get_active_settings_theme, set_active_settings_theme
+from ui.settings_theme_selection import apply_settings_theme_selection
 from ui.widget_theme_catalog import get_current_widget_theme_catalog
 from ui.widget_theme_runtime import CUSTOM_WIDGET_THEME_ID, WidgetThemeState
 from ui.widget_theme_selection import (
@@ -319,28 +320,12 @@ class ThemesTab(QWidget):
                 )
                 return
 
-        previous_theme=get_active_settings_theme()
-        previous_settings_id=read_persisted_theme_id(self._settings)
         try:
-            activate_catalog_theme(entry)
-            persist_settings_theme_selection(self._settings,self._catalog,entry.theme_id)
+            apply_settings_theme_selection(self._settings, self._catalog, entry.theme_id)
             if state.keep_synced:
                 self._resync_widget_theme_for_settings(entry.theme_id)
         except Exception as exc:
             logger.warning("Settings theme selection failed for %s: %s",entry.theme_id,exc,exc_info=True)
-            try:
-                set_active_settings_theme(previous_theme)
-                previous_entry=self._catalog.entry_by_id(previous_settings_id)
-                if previous_entry is not None:
-                    persist_settings_theme_selection(
-                        self._settings,self._catalog,previous_entry.theme_id
-                    )
-                if state.keep_synced:
-                    activate_widget_theme_state(
-                        self._settings,state,settings_theme_id=previous_settings_id,persist=True
-                    )
-            except Exception:
-                logger.debug("Failed to restore previous linked theme pair",exc_info=True)
             self._restore_previous_item(previous)
             self.theme_status.setText(f"Could not apply {entry.name!r}; the previous theme remains active.")
             return
