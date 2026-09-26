@@ -27,9 +27,9 @@ def text_label(text: str, *, heading=False) -> QLabel:
 
 
 def action(text: str, callback, *, secondary=False) -> QPushButton:
-    button = QPushButton(text)
+    from ui.widgets.outlined_button import OutlinedButton
+    button = OutlinedButton(text, role="secondary" if secondary else "primary")
     button.setMinimumHeight(36)
-    shared_styles.bind_shared_styles(button, "COMPACT_ACTION_BUTTON_STYLE" if secondary else "GHOST_ACTION_BUTTON_STYLE")
     button.clicked.connect(lambda _checked=False: callback())
     return button
 

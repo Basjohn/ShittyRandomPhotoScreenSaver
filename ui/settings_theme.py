@@ -287,7 +287,7 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                 QToolButton[autoRaise="true"] {
                     background-color: %(bucket_closed_surface)s;
                     color: %(bucket_closed_text)s;
-                    border: 1px solid %(bucket_closed_border)s;
+                    border: 1.5px solid %(bucket_closed_border)s;
                     border-radius: 3px;
                     padding: 3px 8px;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';

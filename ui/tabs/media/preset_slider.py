@@ -163,20 +163,15 @@ class VisualizerPresetSlider(QWidget):
         slider_column.addWidget(self._notch_bar)
         row.addLayout(slider_column, 1)
 
-        self._edit_btn = QPushButton("Edit Preset")
+        from ui.widgets.outlined_button import OutlinedButton
+        self._edit_btn = OutlinedButton("Edit Preset", role="secondary")
         self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
         self._edit_btn.setFixedWidth(100)
-        bind_shared_styles(
-            self._edit_btn, "COMPACT_ACTION_BUTTON_STYLE", base_style=""
-        )
         self._edit_btn.clicked.connect(self._open_preset_json)
         row.addWidget(self._edit_btn)
 
-        self._custom_action_btn = QPushButton("Move To Custom")
+        self._custom_action_btn = OutlinedButton("Move To Custom", role="secondary")
         self._custom_action_btn.setFixedWidth(140)
-        bind_shared_styles(
-            self._custom_action_btn, "COMPACT_ACTION_BUTTON_STYLE", base_style=""
-        )
         self._custom_action_btn.clicked.connect(self._on_custom_action_clicked)
         row.addWidget(self._custom_action_btn)
 
