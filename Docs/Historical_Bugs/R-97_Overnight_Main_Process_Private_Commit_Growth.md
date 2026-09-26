@@ -108,7 +108,10 @@ persistent thread or an existing lane (see `Docs/Guardrails.md`).
 **Remaining.** The Windows thread-pool workers (≈ 2–3 MB/h at the observed rate) come from system components
 (COM/WinRT/audio) and are not SRPSS threads. `bounded_dns` used to start one short-lived thread per network
 lookup (a few dozen an hour, more once NEWS multiplied feed sources); since 2026-09-26 it resolves on at most
-eight persistent resolver threads, started only as concurrent lookups first need them.
+eight persistent resolver threads, started only as concurrent lookups first need them. Census of the invisible
+saver with two NEWS cards and Custom 1 at a 5-minute refresh (7 min, one full refresh of six publishers): 4
+Windows thread-pool workers (0.6/min, unchanged) and 2 Python threads that never exited (the resolver pool
+reaching its peak concurrency); no SRPSS thread was created and destroyed.
 
 ## Is The Absolute Level Normal?
 
