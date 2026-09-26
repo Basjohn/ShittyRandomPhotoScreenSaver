@@ -26,7 +26,13 @@ import numpy as np
 
 from core.logging.logger import get_logger
 
-from .fracture_geometry import crumble_cells, fracture_cells, fracture_vertex_array, fracture_vertices
+from .crumble_dynamics import (
+    MOTION_ATTRIBUTES,
+    bake_crumble_motion,
+    release_motions,
+    still_motion_table,
+)
+from .fracture_geometry import crumble_cells, fracture_cells, fracture_vertex_array
 from .glass_dynamics import EXTRA_FLOATS, piece_extras, solve_glass_pieces
 
 logger = get_logger(__name__)
@@ -34,8 +40,10 @@ logger = get_logger(__name__)
 # Prism data (as Crumble), then per-piece events: life2, then two stages of
 # kick4, spin4, pivot2 (a split piece can crack once more).
 GLASS_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 2, 4, 4, 2, 4, 4, 2)
-CRUMBLE_CHUNK_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 3)
-CRUMBLE_DEBRIS_STRIDE = 6
+# Prism data, crack coordinates, then per-chunk motion (see crumble_dynamics).
+CRUMBLE_CHUNK_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 3) + MOTION_ATTRIBUTES
+# Seam point, parent centre, parent variation and size, parent release (+pad).
+CRUMBLE_DEBRIS_STRIDE = 8
 
 _T = TypeVar("_T")
 
@@ -134,13 +142,16 @@ _DEBRIS_GRAINS = {
 }
 
 
-def debris_instances(seed: float, shards, amount: float) -> tuple[float, ...]:
+def debris_instances(seed: float, shards, amount: float, *, releases) -> tuple[float, ...]:
     """Seeded chips broken off the real crack borders; ``amount`` drives count and size.
 
     Each run picks a grain (fine, mixed or chunky) and a hot spot, so debris
     concentrates along the cracks nearest it instead of an even sprinkle.
-    Metadata: seam point, parent centre, parent variation, size.
+    Metadata: seam point, parent centre, parent variation, size, and the
+    parent's release time (``releases``, aligned with ``shards``) so a chip
+    breaks off exactly when its chunk falls, including a knocked-loose one.
     """
+    release_of = {id(shard): float(release) for shard, release in zip(shards, releases)}
 
     rng = random.Random(seed)
     grain = sorted(_DEBRIS_GRAINS)[rng.randrange(len(_DEBRIS_GRAINS))]
@@ -169,59 +180,99 @@ def debris_instances(seed: float, shards, amount: float) -> tuple[float, ...]:
         y = first[1] + (second[1] - first[1]) * fraction
         parent_x, parent_y = shard.center
         size = (smallest + (largest - smallest) * rng.random() ** 1.4) * growth
-        values.extend((x, y, parent_x, parent_y, shard.variation, size))
+        values.extend((x, y, parent_x, parent_y, shard.variation, size, release_of[id(shard)], 0.0))
     return tuple(values)
 
 
-def crumble_vertices(shards, aspect: float) -> tuple[float, ...]:
+def crumble_vertices(shards, aspect: float) -> np.ndarray:
     """Add crack coordinates on the real polygon borders of the shared solids.
 
     Each front fan triangle has exactly one external polygon edge. Distance
     from that edge and distance along it interpolate across the face; fan
     diagonals receive no crack. Shared edges use the same orientation/phase.
     The prism itself is unchanged, including its closed sides and bevels.
+    Returns float64 rows of 15: the 12 prism floats, then distance, along and
+    phase (vectorised over every triangle).
     """
-    solid = fracture_vertices(shards, aspect)
-    result = []
-    for start in range(0, len(solid), 36):
-        triangle = [solid[start + offset:start + offset + 12] for offset in (0, 12, 24)]
-        if triangle[0][9] == 0.0:
-            a, b = sorted((triangle[1][:2], triangle[2][:2]))
-            dx, dy = (b[0] - a[0]) * aspect, b[1] - a[1]
-            length = math.hypot(dx, dy)
-            phase = (a[0] + b[0]) * 63.55 + (a[1] + b[1]) * 155.85
-            # Viewport borders are not fractures between pieces.
-            outer = ((a[0] == b[0] and a[0] in (0.0, 1.0)) or
-                     (a[1] == b[1] and a[1] in (0.0, 1.0)))
-            for vertex in triangle:
-                x, y = (vertex[0] - a[0]) * aspect, vertex[1] - a[1]
-                distance = abs(dx * y - dy * x) / length
-                along = (x * dx + y * dy) / (length * length)
-                result.extend((*vertex, 10.0 if outer else distance, along, phase))
-        else:
-            for vertex in triangle:
-                result.extend((*vertex, 10.0, 0.0, 0.0))
-    return tuple(result)
+    solid = fracture_vertex_array(shards, aspect)
+    triangles = solid.reshape(-1, 3, 12)
+    crack = np.zeros((len(triangles), 3, 3))
+    crack[:, :, 0] = 10.0
+    front = triangles[:, 0, 9] == 0.0
+    if front.any():
+        tri = triangles[front]
+        first, second = tri[:, 1, :2], tri[:, 2, :2]
+        # Order the external edge's ends (lexicographically) so a shared edge
+        # gets the same orientation and phase from both of its cells.
+        swap = (second[:, 0] < first[:, 0]) | ((second[:, 0] == first[:, 0]) & (second[:, 1] < first[:, 1]))
+        a = np.where(swap[:, None], second, first)
+        b = np.where(swap[:, None], first, second)
+        dx, dy = (b[:, 0] - a[:, 0]) * aspect, b[:, 1] - a[:, 1]
+        length = np.hypot(dx, dy)
+        phase = (a[:, 0] + b[:, 0]) * 63.55 + (a[:, 1] + b[:, 1]) * 155.85
+        # Viewport borders are not fractures between pieces.
+        outer = (((a[:, 0] == b[:, 0]) & ((a[:, 0] == 0.0) | (a[:, 0] == 1.0)))
+                 | ((a[:, 1] == b[:, 1]) & ((a[:, 1] == 0.0) | (a[:, 1] == 1.0))))
+        x = (tri[:, :, 0] - a[:, None, 0]) * aspect
+        y = tri[:, :, 1] - a[:, None, 1]
+        distance = np.abs(dx[:, None] * y - dy[:, None] * x) / length[:, None]
+        along = (x * dx[:, None] + y * dy[:, None]) / (length * length)[:, None]
+        rows = crack[front]
+        rows[:, :, 0] = np.where(outer[:, None], 10.0, distance)
+        rows[:, :, 1] = along
+        rows[:, :, 2] = phase[:, None]
+        crack[front] = rows
+    return np.concatenate((triangles, crack), axis=2).reshape(-1, 15)
+
+
+def crumble_chunk_bytes(shards, aspect: float, motions) -> bytes:
+    """``crumble_vertices`` rows, each followed by its chunk's motion constants.
+
+    ``motions`` is aligned with ``shards``; a vertex finds its chunk by the
+    chunk centre it already carries, in one vectorised gather.
+    """
+    rows = crumble_vertices(shards, aspect)
+    unique, inverse = np.unique(rows[:, 2:4], axis=0, return_inverse=True)
+    chunk_of = {shard.center: index for index, shard in enumerate(shards)}
+    lookup = np.asarray([chunk_of[(float(x), float(y))] for x, y in unique], dtype=np.int64)
+    motion = np.asarray([m.floats(row) for row, m in enumerate(motions)], dtype=np.float64)
+    return np.hstack((rows, motion[lookup[inverse.ravel()]])).astype(np.float32).tobytes()
 
 
 @dataclass(frozen=True, slots=True)
 class CrumbleGeometry:
     chunks: bytes
     debris: bytes  # empty when the debris amount is zero
+    # Per chunk, MOTION_FRAMES RGBA32F keyframes (offset xyz, extra tumble):
+    # the baked collision response; all zero without collisions.
+    motion: bytes
+    chunk_count: int
 
 
 def crumble_geometry_key(parameters: Mapping[str, object], aspect: float) -> tuple:
-    seed, pieces, complexity, _weight, _depth, _thickness, debris = crumble_parameters(parameters)
-    return ("crumble", seed, pieces, complexity, float(aspect), debris)
+    seed, pieces, complexity, weight, depth, thickness, debris = crumble_parameters(parameters)
+    collisions = bool(parameters.get("collisions", False))
+    # Depth and thickness shape the contact solve only; without collisions they
+    # are shader uniforms and must not force a geometry rebuild.
+    return ("crumble", seed, pieces, complexity, float(aspect), debris, weight, collisions,
+            depth if collisions else 0.0, thickness if collisions else 0.0)
 
 
 def build_crumble_geometry(key: tuple) -> CrumbleGeometry:
-    _name, seed, pieces, complexity, aspect, debris = key
+    _name, seed, pieces, complexity, aspect, debris, weight, collisions, depth, thickness = key
     shards = crumble_cells(seed, pieces, aspect, complexity)
-    chunks = _pack(crumble_vertices(shards, aspect))
+    motions = release_motions(shards, seed, weight)
+    if collisions:
+        motions, table = bake_crumble_motion(shards, motions, aspect, depth, thickness, seed)
+    else:
+        table = still_motion_table(len(shards))
+    chunks = crumble_chunk_bytes(shards, aspect, motions)
+    table_bytes = table.astype(np.float32).tobytes()
     if debris <= 0.0:
-        return CrumbleGeometry(chunks, b"")
-    return CrumbleGeometry(chunks, _pack(debris_instances(seed, shards, debris)))
+        return CrumbleGeometry(chunks, b"", table_bytes, len(shards))
+    releases = [chunk.begin for chunk in motions]
+    chips = _pack(debris_instances(seed, shards, debris, releases=releases))
+    return CrumbleGeometry(chunks, chips, table_bytes, len(shards))
 
 
 # --- Shared prepared-geometry store -----------------------------------------

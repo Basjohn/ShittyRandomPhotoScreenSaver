@@ -6,10 +6,18 @@ from rendering.gl_programs.crumble_program import (
     CRUMBLE_VERTEX,
     DEBRIS_VERTEX,
 )
+from rendering.quick.transitions.crumble_dynamics import release_motions
 from rendering.quick.transitions.run_geometry import (
+    CRUMBLE_DEBRIS_STRIDE as _STRIDE,
     crumble_parameters as _crumble_parameters,
-    debris_instances as _debris_instances,
+    debris_instances as _chip_instances,
 )
+
+
+def _debris_instances(seed, shards, amount):
+    """Debris for the chunks' own seeded releases (top first)."""
+    releases = [motion.begin for motion in release_motions(shards, seed, 0.0)]
+    return _chip_instances(seed, shards, amount, releases=releases)
 from rendering.quick.transitions.fracture_geometry import fracture_cells
 import numpy as np
 import pytest
@@ -55,10 +63,10 @@ def test_debris_metadata_is_bounded_seeded_and_tied_to_static_fracture():
     shards = crumble_cells(12, 128, 16 / 9, 2.0)
     first = _debris_instances(12.5, shards, 0.65)
     assert (
-        first == _debris_instances(12.5, shards, 0.65) and 12 <= len(first) // 6 <= 512
+        first == _debris_instances(12.5, shards, 0.65) and 12 <= len(first) // _STRIDE <= 512
     )
     assert first != _debris_instances(19.5, shards, 0.65)
-    size_metadata = first[5::6]
+    size_metadata = first[5::_STRIDE]
     assert len({round(value, 4) for value in size_metadata}) > 8
     assert max(size_metadata) - min(size_metadata) > 0.4
 
@@ -166,12 +174,11 @@ def test_debris_amount_drives_chip_count_and_size():
     import statistics
 
     from rendering.quick.transitions.fracture_geometry import crumble_cells
-    from rendering.quick.transitions.run_geometry import debris_instances as _debris_instances
 
     shards = crumble_cells(12.5, 35, 16 / 9, 1.8)
     by_amount = {amount: _debris_instances(12.5, shards, amount) for amount in (0.2, 0.65, 1.0)}
-    counts = [len(values) // 6 for values in by_amount.values()]
-    sizes = [statistics.mean(values[5::6]) for values in by_amount.values()]
+    counts = [len(values) // _STRIDE for values in by_amount.values()]
+    sizes = [statistics.mean(values[5::_STRIDE]) for values in by_amount.values()]
     assert counts[0] < counts[1] < counts[2], counts
     assert sizes[0] < sizes[1] < sizes[2], sizes
 
@@ -211,17 +218,19 @@ def test_real_driver_each_crumble_control_changes_the_volume(qt_app, field, valu
 
 def test_crumble_preserves_fractional_seed_identity_and_seam_origins():
     from rendering.quick.transitions.fracture_geometry import crumble_cells
-    from rendering.quick.transitions.run_geometry import debris_instances as _debris_instances
     import numpy as np
 
     first = crumble_cells(12.1, 16, 16 / 9, 1.0)
     assert first != crumble_cells(12.9, 16, 16 / 9, 1.0)
     parents = {shard.center: shard for shard in first}
-    instances = np.asarray(_debris_instances(12.1, first, 0.65)).reshape(-1, 6)
+    release = {shard.center: motion.begin for shard, motion in zip(first, release_motions(first, 12.1, 0.0))}
+    instances = np.asarray(_debris_instances(12.1, first, 0.65)).reshape(-1, _STRIDE)
     for instance in instances:
-        # Every chip breaks off a real border of its own parent piece.
+        # Every chip breaks off a real border of its own parent piece, and
+        # breaks off exactly when that piece is released.
         shard = parents[tuple(instance[2:4])]
         assert instance[4] == shard.variation
+        assert instance[6] == release[shard.center]
         on_edge = False
         for index, corner in enumerate(shard.polygon):
             a = np.asarray(corner)

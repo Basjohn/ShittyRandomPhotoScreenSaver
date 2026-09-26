@@ -111,6 +111,7 @@
       "smoke_enabled": true
     },
     "crumble": {
+      "collisions": false,
       "crack_complexity": 11.0,
       "debris": 0.85,
       "depth": 0.45,

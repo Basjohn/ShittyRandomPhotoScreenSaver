@@ -71,7 +71,10 @@ def test_future_transition_parameters_are_bounded_and_seeded_once(
     assert params["seed"] == 1234
     if transition_id == "glass_shatter":
         assert params["shards"] == 180 and params["depth"] == pytest.approx(1.5)
-        assert params["collisions"] is False and params["reshatter"] is False
+        # Glass's event options follow the canonical defaults (operator-owned).
+        from core.settings.default_contract import require_canonical_default
+        assert params["collisions"] is bool(require_canonical_default("transitions.glass_shatter.collisions"))
+        assert params["reshatter"] is bool(require_canonical_default("transitions.glass_shatter.reshatter"))
     elif transition_id == "exploding_tiles":
         assert params["columns"] == 48 and params["depth"] == pytest.approx(1.5)
     elif transition_id == "pixel_accretion":
