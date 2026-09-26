@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 from shiboken6 import Shiboken
 
+from core.account_setup.controllers import GmailConnectionController, GmailOperationResult
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
 from core.settings.widget_capacity_policy import (
@@ -328,6 +329,17 @@ def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
         _set_visible_if_changed(out_btn, False)
 
 
+def _apply_gmail_connection_result(tab: WidgetsTab, result: GmailOperationResult) -> None:
+    """Project reusable connection-controller status into this tab only."""
+    status_label = getattr(tab, "gmail_auth_status", None)
+    if status_label is not None:
+        status_label.setText(result.message)
+
+
+def _gmail_connection_controller(tab: WidgetsTab) -> GmailConnectionController:
+    return GmailConnectionController(lambda result: _apply_gmail_connection_result(tab, result))
+
+
 def _update_backend_panels(tab: WidgetsTab, *, use_backend: bool = True) -> None:
     """Show/hide OAuth vs IMAP panels based on current backend mode."""
     backend = _get_gmail_backend() if use_backend else None
@@ -453,8 +465,8 @@ def _continue_gmail_authorize(tab: WidgetsTab, backend, mgr) -> None:
     if status_label is not None:
         status_label.setText("Browser opened — complete sign-in...")
 
-    success = backend.start_oauth_flow()
-    if not success:
+    result = _gmail_connection_controller(tab).start_oauth(backend)
+    if not result.success:
         _refresh_gmail_auth_state(tab)
 
 
@@ -529,7 +541,7 @@ def _on_gmail_sign_out_clicked(tab: WidgetsTab) -> None:
     if not StyledPopup.question(tab, "Sign Out of Gmail", "Remove Gmail credentials and sign out?"):
         return
     try:
-        backend.sign_out()
+        _gmail_connection_controller(tab).sign_out(backend)
     except Exception as exc:
         logger.warning("[GMAIL_TAB] Sign-out failed: %s", exc)
     _refresh_gmail_auth_state(tab)
@@ -544,7 +556,10 @@ def _on_gmail_backend_changed(tab: WidgetsTab, mode_text: str) -> None:
     if not getattr(backend, "is_initialized", True):
         _begin_gmail_backend_bootstrap(tab)
         return
-    backend.mode = GmailBackendMode.IMAP if mode_text == "IMAP (App Password)" else GmailBackendMode.OAUTH
+    _gmail_connection_controller(tab).select_backend(
+        backend,
+        GmailBackendMode.IMAP if mode_text == "IMAP (App Password)" else GmailBackendMode.OAUTH,
+    )
     _refresh_gmail_auth_state(tab)
 
 
@@ -576,8 +591,8 @@ def _on_gmail_imap_save(tab: WidgetsTab) -> None:
     generation = int(getattr(tab, "_gmail_imap_save_generation", 0)) + 1
     tab._gmail_imap_save_generation = generation
 
-    def _test_credentials() -> bool:
-        return backend.test_imap_credentials(email_addr, app_pw)
+    def _test_credentials() -> GmailOperationResult:
+        return GmailConnectionController().test_imap(backend, email_addr, app_pw)
 
     def _finish(result) -> None:
         def _apply_result() -> None:
@@ -585,11 +600,17 @@ def _on_gmail_imap_save(tab: WidgetsTab) -> None:
                 return
             if save_btn is not None:
                 save_btn.setEnabled(True)
-            success = bool(getattr(result, "success", False) and getattr(result, "result", False))
+            operation = getattr(result, "result", None)
+            success = bool(getattr(result, "success", False) and isinstance(operation, GmailOperationResult) and operation.success)
             if success:
-                backend.save_imap_credentials(email_addr, app_pw)
+                try:
+                    GmailConnectionController().save_verified_imap(backend, email_addr, app_pw, operation)
+                except RuntimeError:
+                    if status_label:
+                        status_label.setText("Encrypted Gmail storage failed; please try again.")
+                    return
                 if status_label:
-                    status_label.setText(f"Connected (IMAP: {email_addr})")
+                    status_label.setText(operation.message)
                 StyledPopup.show_success(tab, "Gmail IMAP", "Connection successful!")
             else:
                 if status_label:

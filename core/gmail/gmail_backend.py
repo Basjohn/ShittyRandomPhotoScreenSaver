@@ -341,9 +341,6 @@ class GmailBackend(QObject):
 
     def save_imap_credentials(self, email_address: str, app_password: str) -> None:
         """Store IMAP credentials (DPAPI-encrypted)."""
-        self._imap_email = email_address
-        self._imap_password = app_password
-        self._imap_client = None
         try:
             if self._imap_creds_path is None:
                 raise RuntimeError("Gmail backend is not initialized")
@@ -351,7 +348,11 @@ class GmailBackend(QObject):
             save_encrypted(self._imap_creds_path, data)
             logger.info("[GMAIL_BACKEND] IMAP credentials saved for %s", email_address)
         except Exception as exc:
-            logger.error("[GMAIL_BACKEND] Failed to save IMAP creds: %s", exc)
+            logger.error("[GMAIL_BACKEND] Failed to save encrypted IMAP credentials")
+            raise RuntimeError("Encrypted Gmail storage failed; saved connection was not replaced") from exc
+        self._imap_email = email_address
+        self._imap_password = app_password
+        self._imap_client = None
         self.auth_state_changed.emit()
 
     def clear_imap_credentials(self) -> None:

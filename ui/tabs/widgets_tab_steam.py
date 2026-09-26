@@ -37,17 +37,12 @@ from core.steam.abandonment_issues import (
     parse_appid_list,
 )
 from core.steam.achievement_pulse_cache import load_recent_game_titles_from_cache
-from core.steam.backend import validate_connection
+from core.account_setup.controllers import SteamConnectionController, SteamConnectionStatus
 from core.steam.credentials import (
-    SteamCredentialPayload,
-    disconnect_account,
     get_storage_status,
     normalize_api_key,
     read_credential_metadata,
-    save_credentials,
-    validate_credential_input,
 )
-from core.steam.models import SteamResultStatus
 from core.steam.openid import SteamOpenIdLinkSession
 from core.threading.manager import ThreadManager
 from core.windows.secure_url_launcher import open_url
@@ -241,6 +236,21 @@ def _set_saved_connection_feedback(tab: "WidgetsTab", message: str | None, *, su
     label.show()
 
 
+def _apply_steam_connection_status(tab: "WidgetsTab", status: SteamConnectionStatus) -> None:
+    """Project presentation-neutral controller output into the retained tab controls."""
+    _set_connection_checks(tab, identity_ready=status.identity_ready, key_ready=status.key_ready)
+    _set_connection_status(tab, status.message, state=status.state)
+    if status.feedback is not None:
+        _set_saved_connection_feedback(tab, status.feedback, success=status.feedback_success)
+
+
+def _steam_connection_controller(tab: "WidgetsTab") -> SteamConnectionController:
+    return SteamConnectionController(
+        lambda status: _apply_steam_connection_status(tab, status),
+        storage_status_reader=get_storage_status,
+    )
+
+
 def _hydrate_saved_connection_status(tab: "WidgetsTab") -> None:
     """Hydrate safe persisted status without decrypting or contacting Steam."""
 
@@ -248,17 +258,9 @@ def _hydrate_saved_connection_status(tab: "WidgetsTab") -> None:
         return
     tab._steam_storage_status_hydrated = True
     _set_saved_connection_feedback(tab, None)
-    status = get_storage_status()
-    if status.storage_available and status.has_credentials:
-        _set_connection_checks(tab, identity_ready=True, key_ready=True)
-        _set_connection_status(tab, "Saved Steam identity and API key are available.", state="connected")
-        return
-    identity_ready = bool(getattr(tab, "_steam_pending_profile_identifier", None))
-    _set_connection_checks(tab, identity_ready=identity_ready, key_ready=False)
-    if identity_ready:
-        _set_connection_status(tab, "Steam ID is linked. Add your Web API key to finish connecting.")
-    else:
-        _set_connection_status(tab, status.message, state="warning")
+    _steam_connection_controller(tab).inspect_saved_connection(
+        getattr(tab, "_steam_pending_profile_identifier", None),
+    )
 
 
 def _get_steam_thread_manager(tab: "WidgetsTab") -> ThreadManager:
@@ -283,20 +285,9 @@ def _get_steam_thread_manager(tab: "WidgetsTab") -> ThreadManager:
 
 def _on_steam_check_saved_connection(tab: "WidgetsTab") -> None:
     """Explicitly inspect non-secret DPAPI storage status without decrypting it."""
-    status = get_storage_status()
-    if status.storage_available and status.has_credentials:
-        _set_connection_checks(tab, identity_ready=True, key_ready=True)
-        _set_connection_status(tab, "Saved Steam identity and API key are available.", state="connected")
-        _set_saved_connection_feedback(tab, "Connected Successfully", success=True)
-        return
-    identity_ready = bool(getattr(tab, "_steam_pending_profile_identifier", None))
-    _set_connection_checks(tab, identity_ready=identity_ready, key_ready=False)
-    if identity_ready:
-        _set_connection_status(tab, "Steam ID is linked. Add your Web API key to finish connecting.", state="pending")
-        _set_saved_connection_feedback(tab, "Reconnection Needed")
-        return
-    _set_connection_status(tab, status.message, state="warning")
-    _set_saved_connection_feedback(tab, "Reconnection Needed")
+    _steam_connection_controller(tab).inspect_saved_connection(
+        getattr(tab, "_steam_pending_profile_identifier", None), explicit=True,
+    )
 
 
 def _on_steam_connect_id(tab: "WidgetsTab") -> None:
@@ -314,8 +305,7 @@ def _on_steam_connect_id(tab: "WidgetsTab") -> None:
     if popup.result_value != "open":
         return
     try:
-        session = SteamOpenIdLinkSession()
-        login_url = session.start()
+        session, login_url = _steam_connection_controller(tab).begin_identity_link()
         tab._steam_openid_session = session
         generation = int(getattr(tab, "_steam_connection_generation", 0)) + 1
         tab._steam_connection_generation = generation
@@ -499,9 +489,9 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
 
 def _submit_steam_credentials(tab: "WidgetsTab", api_key: str) -> bool:
     """Start validation for a normalized user-entered key and report acceptance."""
-    api_key = normalize_api_key(api_key)
     profile_identifier = getattr(tab, "_steam_pending_profile_identifier", None)
-    validation = validate_credential_input(api_key, profile_identifier)
+    controller = _steam_connection_controller(tab)
+    api_key, validation = controller.validate_input(api_key, profile_identifier)
     if not validation.can_test:
         _set_connection_status(tab, validation.message, state="warning")
         return False
@@ -509,25 +499,21 @@ def _submit_steam_credentials(tab: "WidgetsTab", api_key: str) -> bool:
     tab._steam_connection_generation = generation
     _set_connection_status(tab, "Testing Steam API key before encrypted storage.")
 
-    def _test_and_save() -> tuple[bool, str]:
-        result = validate_connection(api_key=api_key, steamid=profile_identifier)
-        if result.status != SteamResultStatus.SUCCESS:
-            return False, "Steam did not accept this API key and identity pair. Your saved connection was left unchanged."
-        save_credentials(SteamCredentialPayload(api_key=api_key, profile_identifier=profile_identifier))
-        return True, "Steam identity and API key were verified and stored securely."
+    def _test_and_save() -> SteamConnectionStatus:
+        return SteamConnectionController().test_and_save_credentials(api_key, profile_identifier)
 
     def _finished(task_result) -> None:
         def _apply_result() -> None:
             if getattr(tab, "_steam_connection_generation", None) != generation:
                 return
-            success = bool(task_result.success and task_result.result and task_result.result[0])
-            if success:
-                _set_connection_checks(tab, identity_ready=True, key_ready=True)
-                _set_connection_status(tab, task_result.result[1], state="connected")
+            status = task_result.result if task_result.success else None
+            if isinstance(status, SteamConnectionStatus):
+                _apply_steam_connection_status(tab, status)
                 return
-            _set_connection_checks(tab, identity_ready=True, key_ready=False)
-            message = task_result.result[1] if task_result.success and task_result.result else "Steam credential test failed. Your saved connection was left unchanged."
-            _set_connection_status(tab, message, state="error")
+            _apply_steam_connection_status(tab, SteamConnectionStatus(
+                "Steam credential test failed. Your saved connection was left unchanged.",
+                "error", True, False,
+            ))
         ThreadManager.run_on_ui_thread(_apply_result)
 
     try:
@@ -561,10 +547,9 @@ def _on_steam_disconnect(tab: "WidgetsTab") -> None:
         def _apply_result() -> None:
             if getattr(tab, "_steam_connection_generation", None) != generation:
                 return
-            if task_result.success:
+            if task_result.success and isinstance(task_result.result, SteamConnectionStatus):
                 tab._steam_pending_profile_identifier = None
-                _set_connection_checks(tab, identity_ready=False, key_ready=False)
-                _set_connection_status(tab, "Steam is disconnected.", state="warning")
+                _apply_steam_connection_status(tab, task_result.result)
                 _apply_achievement_selection_titles(tab, ())
             else:
                 _set_connection_status(tab, "Steam disconnect did not complete. Please try again.", state="error")
@@ -572,7 +557,7 @@ def _on_steam_disconnect(tab: "WidgetsTab") -> None:
 
     try:
         _get_steam_thread_manager(tab).submit_io_task(
-            disconnect_account,
+            lambda: SteamConnectionController().disconnect(),
             task_id=f"steam_disconnect_{generation}",
             callback=_finished,
         )

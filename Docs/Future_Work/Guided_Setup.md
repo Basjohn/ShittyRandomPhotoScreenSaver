@@ -46,6 +46,7 @@ the architecture and this plan answer. All design decisions below are settled (�
    - **No visible windows in probes, tools or tests.** The preview foundry and every capture use the offscreen QPA
      (`QT_QPA_PLATFORM=offscreen`, `QT_QPA_FONTDIR=C:/Windows/Fonts`, software Quick backend for QML, offscreen GL
      context for transitions). Never construct `QuickDisplayWindow` or call `show_on_screen` for a capture.
+   - **Approved capture exception (2026-09-26):** this Windows offscreen QPA cannot create OpenGL contexts. The operator authorizes a separate Windows-QPA GL capture worker using only hidden `QOffscreenSurface` (no visible windows). Ordinary QWidget/QML captures remain offscreen QPA. This is an asset-authoring boundary, never a runtime fallback.
    - New Settings UI copies the existing UX (Steam-style nested buckets, closed by default, one open bucket per level,
      one-sentence intros, explanations in tooltips, short names such as "Layout").
    - No live Reddit calls in tests or tools (rate limits). No live network or credentials in the foundry.
@@ -241,8 +242,8 @@ bugs.
 - [x] One curated-sources function (e.g. `sources/rss/curated.py::apply_curated_wallpaper_feeds(settings)`, replacing
       `sources.rss_feeds` with `DEFAULT_RSS_FEEDS` values exactly as today); the dialog and the Sources tab call it.
       Dialog-specific follow-ups (reload tab, close) stay in the dialog.
-- [ ] `is_interactive_user_desktop()` (D1) with a Windows test using a fake Win32 layer; unknown → False.
-- [ ] Steam and Gmail connection controllers extracted from the `WidgetsTab`-bound handlers into small classes that
+- [x] `is_interactive_user_desktop()` (D1) with a Windows test using a fake Win32 layer; unknown → False.
+- [x] Steam and Gmail connection controllers extracted from the `WidgetsTab`-bound handlers into small classes that
       take callbacks for status text; the Widgets tab keeps identical behaviour (existing Steam/Gmail settings tests
       stay green; add parity tests). Credentials stay in their DPAPI owners; nothing new is persisted.
 - [ ] CUSTOM commit extracted: `rendering/custom_layout_commit.py::commit_custom_session(widgets, session,
