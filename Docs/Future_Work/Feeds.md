@@ -11,7 +11,7 @@ FEEDS is one bounded ordinary-widget family, not a runtime widget factory. Four 
 - `feeds_custom_3`
 - `feeds_custom_4`
 
-Only `feeds_custom_1` is currently admitted to runtime. A user-visible custom name is presentation state, never persistence, registry or cache identity. Four CUSTOM slots remain the product ceiling unless a later measured design explicitly changes it. Disabled/unconfigured slots are dormant.
+All four CUSTOM slots are admitted to runtime through one path. A user-visible custom name is presentation state, never persistence, registry or cache identity. Four CUSTOM slots remain the product ceiling unless a later measured design explicitly changes it. Disabled/unconfigured slots are dormant.
 
 Five NEWS identities are reserved for later provider-backed categories:
 
@@ -43,16 +43,11 @@ Before multiplying sources or identities, re-check **durability, content adaptab
 
 Closed 2026-09-24: the Edit transaction, Show Feed Subtitle, offline last-good restart and in-flight disable/replace were physically accepted (see `Current_Plan.md`). Do not reopen accepted artwork reflow, source-link routing, click-highlight or subtitle behaviour without a reproduced defect.
 
-## Custom 2–4 activation gate
+## Custom 2–4 activation
 
-All remaining CUSTOM slots must use the **same** descriptor/runtime/source/QML/Edit path as Custom 1. Do not clone provider objects, schedulers, caches, QML files, geometry owners or Settings schemas.
+Admitted 2026-09-26 through the **same** descriptor/runtime/source/QML/Edit path as Custom 1: a generated runtime descriptor per slot, one `FeedFamilyAdapter`, one retained presentation and a slot-parameterized Settings builder. Multi-source behaviour is covered by `tests/test_feed_runtime.py` (independent endpoints, retire-A-keeps-B, shared-endpoint dedup, cancelled work never publishes), `tests/test_feed_artwork_multisource.py` (eviction protection across sources) and `tests/test_feed_custom_slots.py` (admission, ordinals, Settings round-trip). Same-initial names carry a deterministic monogram ordinal through the existing cached vector path.
 
-- [ ] Run two independent active endpoints simultaneously. Cancel/retire A while B remains active; A must not cancel, delay, back off or publish into B. Reactivating A must reuse valid retained/last-good state when appropriate.
-- [ ] Verify identical active endpoints deduplicate acquisition while each widget retains independent presentation settings.
-- [x] Simultaneous artwork warming and eviction (2026-09-24): protection is read at eviction time from the owner's live published set and eviction is least-recently-used; a retired source's image job evicts nothing. `tests/test_feed_artwork_multisource.py`.
-- [x] Retirement during native DNS/connect/read stalls (2026-09-24): DNS was the unbounded step and is now bounded and cancellable (`core/network/bounded_dns.py`); connect is bounded by its 4 s timeout, reads by the 8 s read timeout with cancellation between chunks. `tests/test_feed_dns_stall.py` proves the IO lane frees and exit neither waits nor lingers.
-- [ ] Add deterministic small monogram collision ordinals for same-initial custom names through the existing cached vector-monogram path. Do not introduce a second glyph/header renderer.
-- [ ] Admit Custom 2/3/4 through the existing registry/descriptors/Settings family only after those multi-source gates pass.
+- [~] Physical: two or more slots live on the saver at once (different endpoints, then the same endpoint in two slots); Settings round-trip of every slot.
 
 ## NEWS provider probation
 

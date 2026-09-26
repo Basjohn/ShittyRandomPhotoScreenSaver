@@ -34,12 +34,9 @@ Landed 2026-09-25: the never-started RSS worker, `WorkerType.RSS` and the dead `
 - [x] Modern feed formats are physically accepted (2026-09-24): Mastodon posts read as text titles, Daring Fireball's JSON Feed renders with dates and images, and Reddit resolves through the `.rss` suffix.
 - [x] The secure Winlogon handoff remains the external-link authority: saver-side queue admission is the success boundary, helper wake is best-effort, and helper readiness never gates normal saver exit. Reddit/Reddit2, Gmail, FEEDS and Steam-family actions stay behind the same product-action/session boundary rather than calling direct browser APIs from retained runtime code.
 
-### Multi-CUSTOM expansion gate
+### Custom 2–4
 
-Custom 2–4 remain dormant until the same shared codepath is proven with more than one active source. Do **not** clone providers, QML, editor state, schedulers or persistence owners.
-
-- [ ] Exercise two simultaneous independent endpoints through refresh, cancellation, one-source retirement and reactivation. Retiring A must not cancel, delay or publish into B; identical endpoints must continue to share one source transaction where privacy/cache identity permits it.
-- [ ] Add deterministic Custom 2–4 monogram collision ordinals through the existing cached vector-monogram path, then admit the remaining fixed IDs through the same descriptor/runtime/QML component.
+- [~] **Awaiting physical check.** All four CUSTOM slots run through the Custom 1 path (generated descriptors, one adapter, one presentation, one Settings builder with per-slot controls and CUSTOM-lock scopes); same-initial names get a monogram ordinal. Physical: two slots with different feeds live together, then the same feed in two slots (fetched once, independent display settings); Settings save/reopen of every slot.
 
 ### Independent Games You Follow verification
 
