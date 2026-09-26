@@ -83,6 +83,26 @@ def test_a_dns_outage_cannot_pile_up_lookup_threads():
     assert bounded_dns.lookups_in_progress() == 0
 
 
+def test_lookups_reuse_persistent_resolvers_instead_of_a_thread_each():
+    """R-97: the GL driver keeps per-thread state for every thread the process
+    ever creates, so a lookup per fetch must not mean a new thread per fetch."""
+    used: list[int] = []
+
+    def answer(host, port, family=0, type=0):
+        used.append(threading.get_ident())
+        return [(2, 1, 6, "", ("192.0.2.7", port))]
+
+    resolve_bounded("warm.example.test", 443, timeout=1.0, getaddrinfo=answer)
+    before = {t.ident for t in threading.enumerate() if t.name == "srpss-dns"}
+    for index in range(40):
+        resolve_bounded(f"host{index}.example.test", 443, timeout=1.0, getaddrinfo=answer)
+    after = {t.ident for t in threading.enumerate() if t.name == "srpss-dns"}
+    assert after == before
+    assert set(used) <= before
+    assert all(t.daemon for t in threading.enumerate() if t.name == "srpss-dns")
+    assert bounded_dns.lookups_in_progress() == 0
+
+
 def test_answers_errors_and_literal_addresses_pass_through():
     answer = resolve_bounded("ok.example.test", 80, timeout=1.0,
                              getaddrinfo=lambda *a: [(2, 1, 6, "", ("192.0.2.9", 80))])

@@ -9,10 +9,14 @@ process alive, because the interpreter joins thread-pool workers (measured
 2026-09-24: a 12 s stall held the engine's 5 s exit wait and then the process
 for 12.2 s).
 
-Here the lookup runs on a short-lived daemon thread while the caller waits in
-short slices for the answer, its deadline, its own cancellation or the process
-exit fence. An abandoned lookup finishes on its own and its answer is dropped;
-a daemon thread never holds process exit. Lookups in progress are capped, so a
+Here the lookup runs on a resolver thread while the caller waits in short
+slices for the answer, its deadline, its own cancellation or the process exit
+fence. An abandoned lookup finishes on its own and its answer is dropped. The
+resolver threads are persistent daemons, started only as concurrent lookups
+first need them and then reused: a GL process must not create a thread per
+request, because the display driver keeps per-thread state for every thread
+the process ever creates (R-97). A daemon thread never holds process exit.
+Lookups in progress are capped, which also caps the resolver threads, so a
 persistent DNS outage cannot pile up threads: at the cap a new lookup fails at
 once as a transient network failure. A successful lookup also leaves the
 answer in the operating system's resolver cache for the connection that
@@ -27,6 +31,7 @@ left to wait for.
 from __future__ import annotations
 
 import ipaddress
+import queue
 import socket
 import threading
 import time
@@ -38,7 +43,36 @@ _WAIT_SLICE_SECONDS = 0.05
 
 _lock = threading.Lock()
 _in_progress = 0
+# Persistent resolver threads started so far; never more than the lookups ever
+# in progress at once, so it is bounded by MAX_LOOKUPS_IN_PROGRESS.
+_resolvers = 0
 _admission_closed = threading.Event()
+
+
+class _Lookup:
+    __slots__ = ("run", "done", "outcome")
+
+    def __init__(self, run: Callable[[], Any]) -> None:
+        self.run = run
+        self.done = threading.Event()
+        self.outcome: dict[str, Any] = {}
+
+
+_lookups: "queue.SimpleQueue[_Lookup]" = queue.SimpleQueue()
+
+
+def _resolver_loop() -> None:
+    global _in_progress
+    while True:
+        lookup = _lookups.get()
+        try:
+            lookup.outcome["answer"] = lookup.run()
+        except BaseException as exc:  # handed to the waiting caller, if any
+            lookup.outcome["error"] = exc
+        finally:
+            with _lock:
+                _in_progress -= 1
+            lookup.done.set()
 
 
 class DnsLookupError(OSError):
@@ -74,7 +108,7 @@ def resolve_bounded(
     A literal IP address needs no DNS and is answered directly. Resolution
     errors (``socket.gaierror``) propagate unchanged.
     """
-    global _in_progress
+    global _in_progress, _resolvers
     getaddrinfo = getaddrinfo or socket.getaddrinfo
     if _admission_closed.is_set():
         raise DnsLookupError("network admission closed for process exit")
@@ -89,26 +123,23 @@ def resolve_bounded(
         if _in_progress >= MAX_LOOKUPS_IN_PROGRESS:
             raise DnsLookupError("too many DNS lookups in progress")
         _in_progress += 1
-    done = threading.Event()
-    outcome: dict[str, Any] = {}
-
-    def _lookup() -> None:
-        global _in_progress
+        # One resolver per lookup in progress: a queued lookup never waits
+        # behind a stalled one.
+        start_resolver = _in_progress > _resolvers
+        if start_resolver:
+            _resolvers += 1
+    if start_resolver:
         try:
-            outcome["answer"] = getaddrinfo(host, port, family, type)
-        except BaseException as exc:  # handed to the waiting caller, if any
-            outcome["error"] = exc
-        finally:
+            threading.Thread(target=_resolver_loop, name="srpss-dns", daemon=True).start()
+        except RuntimeError as exc:
             with _lock:
                 _in_progress -= 1
-            done.set()
-
-    try:
-        threading.Thread(target=_lookup, name="srpss-dns", daemon=True).start()
-    except RuntimeError as exc:
-        with _lock:
-            _in_progress -= 1
-        raise DnsLookupError("DNS lookup could not start") from exc
+                _resolvers -= 1
+            raise DnsLookupError("DNS lookup could not start") from exc
+    lookup = _Lookup(lambda: getaddrinfo(host, port, family, type))
+    _lookups.put(lookup)
+    done = lookup.done
+    outcome = lookup.outcome
 
     deadline = time.monotonic() + max(0.05, float(timeout))
     while True:
