@@ -168,6 +168,7 @@ def test_settings_dialog_has_tabs(qapp, settings_manager, animation_manager):
         "accessibility",
         "themes",
         "about",
+        "quick_start",
     ]
     assert dialog._tab_keys == expected_keys
 

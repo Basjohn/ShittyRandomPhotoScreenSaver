@@ -343,6 +343,13 @@ class _SettingsTabVectorIcon(QWidget):
                 1.0,
             )
 
+    def _draw_quick_start(self, painter: QPainter, rect: QRectF) -> None:
+        painter.drawEllipse(rect.adjusted(1, 1, -1, -1))
+        center = rect.center()
+        painter.drawLine(QPointF(center.x()-5, center.y()+5), QPointF(center.x()+5, center.y()-5))
+        painter.drawLine(QPointF(center.x()+5, center.y()-5), QPointF(center.x()+1, center.y()-4))
+        painter.drawLine(QPointF(center.x()+5, center.y()-5), QPointF(center.x()+4, center.y()-1))
+
     def _draw_about(self, painter: QPainter, rect: QRectF) -> None:
         painter.drawEllipse(rect.adjusted(1.5, 1.5, -1.5, -1.5))
         center_x = rect.center().x()
@@ -377,6 +384,8 @@ class _SettingsTabVectorIcon(QWidget):
             self._draw_accessibility(painter, rect)
         elif icon_name == "themes":
             self._draw_themes(painter, rect)
+        elif icon_name == "quick_start":
+            self._draw_quick_start(painter, rect)
         elif icon_name == "about":
             self._draw_about(painter, rect)
         else:
@@ -734,6 +743,9 @@ class SettingsDialog(QDialog):
         self._background_hydration_delay_ms = 1500
         self._background_hydration_step_delay_ms = 150
         self._closing = False
+        self._no_sources_decision_pending = True
+        self._guided_setup_panel = None
+        self._guided_setup_host = None
         self._backdrop_applied = False
         # Native backdrop state is dialog-owned. Acrylic and Glass both use one
         # AccentPolicy owner; the target state replaces the previous one directly,
@@ -745,7 +757,7 @@ class SettingsDialog(QDialog):
         # lazy hydration changes content height. ``ui.last_tab_scroll`` remains
         # a tolerated legacy schema member but is intentionally ignored.
         self._suppress_scroll_capture: bool = False
-        self._tab_keys = ["sources", "display", "transitions", "widgets", "visualizers", "accessibility", "themes", "about"]
+        self._tab_keys = ["sources", "display", "transitions", "widgets", "visualizers", "accessibility", "themes", "about", "quick_start"]
         self._force_initial_sources_tab = os.getenv(
             "SRPSS_SETTINGS_FORCE_INITIAL_TAB_SOURCES", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
@@ -1067,6 +1079,8 @@ class SettingsDialog(QDialog):
         self.accessibility_tab_btn = TabButton("Accessibility", "accessibility")
         self.themes_tab_btn = TabButton("Themes", "themes")
         self.about_tab_btn = TabButton("About", "about")
+        # Title case like its siblings; all-caps did not fit the 200 px sidebar.
+        self.quick_start_tab_btn = TabButton("Quick Start", "quick_start")
 
         self._tab_button_by_key = {
             "sources": self.sources_tab_btn,
@@ -1077,12 +1091,15 @@ class SettingsDialog(QDialog):
             "accessibility": self.accessibility_tab_btn,
             "themes": self.themes_tab_btn,
             "about": self.about_tab_btn,
+            "quick_start": self.quick_start_tab_btn,
         }
         self.tab_buttons = [self._tab_button_by_key[key] for key in self._tab_keys]
         
-        for btn in self.tab_buttons:
+        for btn in self.tab_buttons[:-1]:
             sidebar_layout.addWidget(btn)
         sidebar_layout.addStretch()
+        sidebar_layout.addSpacing(16)
+        sidebar_layout.addWidget(self.quick_start_tab_btn)
         
         # Right content area with stacked widget
         self.content_stack = QStackedWidget()
@@ -1108,6 +1125,7 @@ class SettingsDialog(QDialog):
             "accessibility": lambda: AccessibilityTab(self._settings, parent=self.content_stack),
             "themes": lambda: ThemesTab(self._settings, parent=self.content_stack),
             "about": self._create_about_tab,
+            "quick_start": self._create_quick_start_tab,
         }
         for key in self._tab_keys:
             placeholder = QWidget()
@@ -1123,7 +1141,13 @@ class SettingsDialog(QDialog):
         content_layout.addWidget(sidebar)
         content_layout.addWidget(self.content_stack, 1)
 
-        main_layout.addLayout(content_layout)
+        # Guided Setup temporarily replaces the sidebar + tab area inside this
+        # same window (same backdrop, theme, title bar and lifetime).
+        self._shell_content = QWidget()
+        self._shell_content.setLayout(content_layout)
+        self._shell_stack = QStackedWidget()
+        self._shell_stack.addWidget(self._shell_content)
+        main_layout.addWidget(self._shell_stack, 1)
 
         # Bottom margin placeholder (separator line painted in paintEvent)
         bottom_spacer = QWidget()
@@ -1151,6 +1175,52 @@ class SettingsDialog(QDialog):
         apply_shadows_to_existing(self)
 
 
+
+    def _create_quick_start_tab(self) -> QWidget:
+        from ui.onboarding.quick_start import QuickStartPage
+        return QuickStartPage(self._settings, self.run_guided_setup, parent=self.content_stack)
+
+    def run_guided_setup(self) -> None:
+        """Show Guided Setup in place of the sidebar and tabs (never a second window)."""
+        if self._guided_setup_panel is not None or self._closing:
+            return
+        from ui.onboarding.wizard import GuidedSetupPanel
+        host = QWidget()
+        layout = QVBoxLayout(host)
+        # Same insets as the normal sidebar/content row.
+        layout.setContentsMargins(10, 10, 10, 9)
+        panel = GuidedSetupPanel(self._settings, host)
+        layout.addWidget(panel)
+        panel.finished.connect(self._end_guided_setup)
+        self._guided_setup_panel = panel
+        self._guided_setup_host = host
+        self._shell_stack.addWidget(host)
+        self._shell_stack.setCurrentWidget(host)
+        # The watcher variant: wizard pages are built lazily after this call.
+        apply_shadows_to_inputs(host)
+
+    def _end_guided_setup(self, _completed: bool = False) -> None:
+        host = self._guided_setup_host
+        self._guided_setup_panel = None
+        self._guided_setup_host = None
+        if host is None:
+            return
+        self._shell_stack.setCurrentWidget(self._shell_content)
+        self._shell_stack.removeWidget(host)
+        host.deleteLater()
+        self._reload_all_tab_settings()
+        quick_start = self._tab_widgets.get("quick_start")
+        refresh = getattr(quick_start, "refresh", None)
+        if callable(refresh):
+            refresh()
+
+    def _decide_no_sources_after_show(self) -> None:
+        if self._closing or not self.isVisible() or self._has_image_sources():
+            return
+        if self._settings.get('sources.guided_setup_silenced'):
+            self._show_no_sources_popup()
+        else:
+            self.run_guided_setup()
 
     def _create_about_tab(self) -> QWidget:
         """Create about tab. Delegates to ui.settings_about_tab."""
@@ -1243,7 +1313,7 @@ class SettingsDialog(QDialog):
             i
             for i in range(len(self._tab_keys))
             if i not in self._built_tab_indices
-            and self._tab_key_for_index(i) not in {"widgets", "visualizers"}
+            and self._tab_key_for_index(i) not in {"widgets", "visualizers", "quick_start"}
         ]
         if not remaining:
             return
@@ -1608,6 +1678,9 @@ class SettingsDialog(QDialog):
             event.ignore()
             self._show_no_sources_popup()
             return
+        if self._guided_setup_panel is not None:
+            # Retire account inputs/workers and drop any Arrange draft.
+            self._guided_setup_panel.close_setup(False)
         
         try:
             current_index = self.content_stack.currentIndex()
@@ -2233,6 +2306,10 @@ class SettingsDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         _record_diagnostic_stage("settings_show_event_activation_enabled")
         self._start_background_tab_hydration()
+        if self._no_sources_decision_pending:
+            self._no_sources_decision_pending = False
+            self._schedule_runtime_single_shot(0, self._decide_no_sources_after_show)
+
 
         # AccentPolicy is the native composition contract for this layered
         # QWidget. Apply the selected material once during the normal first-show

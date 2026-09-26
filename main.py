@@ -460,22 +460,6 @@ def run_screensaver(
     from core.sources.readiness import has_image_sources
     if not has_image_sources(settings):
         logger.warning("No image sources configured - opening settings dialog")
-        MessageBox = _message_box_class()
-        msg = MessageBox(
-            MessageBox.Icon.Information,
-            "No Sources Configured",
-            "No image sources have been configured.\n\n"
-            "Please add folders or RSS feeds in the settings dialog.\n\n"
-            "This dialog will close automatically in 10 seconds.",
-        )
-        msg.setWindowFlags(msg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        msg.raise_()
-        msg.activateWindow()
-        # Auto-close after 10 seconds — uses QTimer.singleShot (static, no
-        # compositor active at this point so no performance concern).
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(10_000, msg.accept)
-        msg.exec()
         if not _run_missing_sources_onboarding(app, settings):
             logger.info("RUN launch ended after source onboarding without configured sources")
             return 0

@@ -84,7 +84,7 @@ class GeocodeCompleter(QCompleter):
     def _on_text_edited(self, text: str) -> None:
         """Called every keystroke. Debounces via single_shot then fires IO task."""
         text = text.strip()
-        if len(text) < _MIN_QUERY_LEN:
+        if self._closed.is_set() or len(text) < _MIN_QUERY_LEN:
             return
 
         with self._lock:
@@ -99,9 +99,15 @@ class GeocodeCompleter(QCompleter):
     def _fire_fetch(self, query: str) -> None:
         """Called on UI thread after debounce. Submits IO task if query is still current."""
         with self._lock:
-            if query != self._pending_query:
+            if self._closed.is_set() or query != self._pending_query:
                 return
         self._threads.submit_io_task(self._do_fetch, query)
+
+    def retire(self) -> None:
+        """Fence a closing Settings page immediately, before deferred Qt deletion."""
+        self._closed.set()
+        with self._lock:
+            self._pending_query = ""
 
     # ------------------------------------------------------------------
     def _do_fetch(self, query: str) -> None:
@@ -117,7 +123,7 @@ class GeocodeCompleter(QCompleter):
                 return not closed.is_set() and query == self._pending_query
 
         results = self._fetch_cities(query, should_continue=_still_wanted)
-        if results:
+        if results and _still_wanted():
             self._signals.results_ready.emit(results)
 
     # ------------------------------------------------------------------
@@ -163,7 +169,7 @@ class GeocodeCompleter(QCompleter):
     # ------------------------------------------------------------------
     def _on_results(self, cities: List[str]) -> None:
         """Slot called on UI thread when geocode results arrive."""
-        if not cities:
+        if self._closed.is_set() or not cities:
             return
         self._model.setStringList(cities)
         # Re-trigger completion popup with new data

@@ -30,6 +30,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
            'widget_glow_on_hover': True},
  'queue': {'history_size': 50, 'shuffle': True},
  'sources': {'folders': [],
+             'guided_setup_silenced': False,
              'local_ratio': 55,
              'mode': 'folders',
              'rss_background_cap': 30,
