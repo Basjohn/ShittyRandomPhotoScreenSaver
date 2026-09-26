@@ -45,6 +45,8 @@ Admitted 2026-09-26 through the **same** descriptor/runtime/source/QML/Edit path
 
 Admitted 2026-09-26 (operator: the multi-day probation is not a durability gate). Every shipped publisher passed the native probe on 2026-09-24 and 2026-09-26; ABC's world feed was empty both days and was dropped for BBC and NPR. Publisher choice rules stay: no API keys, sign-in, third-party RSS reconstruction, scraping or browser automation; at least two independent publishers per category; technical health only, never editorial scoring. A publisher that dies is replaced in `core/feeds/news.py` (same ID when the publisher moved its feed, a new ID otherwise), never by changing the card's identity.
 
+An invisible real-saver run (opacity 0, copied profile, 2026-09-26) admitted World (List) and Tech (Grid) beside Custom 1: all six publisher caches were written and each artwork warm covered only the card's 12 rows.
+
 - [~] Physical: enable two or three NEWS cards with images on (List and Grid); stories from each publisher interleave by time with the publisher named on every row; the subtitle lists the publishers; TEST SOURCES reports each publisher; untick one publisher, Save, and its stories leave on the next runtime; offline restart keeps last-good stories.
 
 ## Feed formats
