@@ -9,7 +9,6 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 import math
-from types import SimpleNamespace
 from typing import Any, Mapping
 
 from PySide6.QtCore import QPoint, QRect
@@ -32,7 +31,7 @@ from rendering.custom_layout_contract import (
     get_custom_layout_restore_entry,
     remove_screen_layout_entry,
     should_transfer_rect_to_screen,
-    snap_local_rect_for_edit,
+    resolve_snap_local_rect_for_edit,
     write_custom_layout_map,
 )
 from rendering.custom_child_geometry import (
@@ -58,8 +57,9 @@ from rendering.widget_descriptors import (
     get_custom_persistence_monitor_settings_key_for_widget,
     get_custom_persistence_position_settings_key_for_widget,
 )
-from ui.widget_stack_predictor import build_widget_estimates
-from rendering.widget_stacking import DisplayStackParticipant, build_display_stack_plan
+from ui.widget_stack_predictor import build_widget_estimates, estimate_media_size, estimate_spotify_vis_size
+from rendering.visualizer_media_adjacency import resolve_visualizer_media_origin
+from rendering.widget_stacking import DisplayStackObstacle, DisplayStackParticipant, build_display_stack_plan
 
 
 @dataclass(frozen=True)
@@ -97,9 +97,12 @@ class ArrangeModel:
         self.session = CustomLayoutSession()
         self._descriptors_by_key: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         self._authored_keys: set[CustomLayoutKey] = set()
+        self._entry_keys: set[CustomLayoutKey] = set()
         self._reset_keys: set[CustomLayoutKey] = set()
         self._dirty = False
         self._estimates: dict[str, Any] = {}
+        # (display identity, vertical guides, horizontal guides) of the last move.
+        self.last_snap: tuple[str, tuple, tuple] | None = None
         self._build_session()
 
     def _refresh_estimates(self) -> None:
@@ -149,51 +152,104 @@ class ArrangeModel:
             return self.displays
         return tuple(display for display in self.displays if display.monitor_route == route)
 
-    def _authored_rect(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay, *, include_stack: bool = True) -> QRect:
-        section = self._route_section_for(descriptor)
-        estimate = self._estimates.get(descriptor.widget_id)
-        if estimate is None:
-            # The Settings stack predictor intentionally omits the transient
-            # System Audio OSD.  Its normal presentation contract already owns
-            # a configured outer preferred box, so use that exact canonical
-            # metadata rather than synthesising a generic canvas fallback.
-            configured_width = section.get("preferred_width") if isinstance(section, Mapping) else None
-            configured_height = section.get("preferred_height") if isinstance(section, Mapping) else None
-            try:
-                width, height = int(configured_width), int(configured_height)
-            except (TypeError, ValueError):
-                width = height = 0
-            if width > 0 and height > 0:
-                estimate = SimpleNamespace(
-                    estimated_width=width,
-                    estimated_height=height,
-                    position=section.get("position"),
-                )
+    def _authored_route(self, descriptor: WidgetRuntimeDescriptor) -> tuple[str, int]:
+        """The authored anchor and margin; a CUSTOM route reads its saved restore anchor."""
 
-        if estimate is None:
-            # A partial per-display reset leaves another display CUSTOM.  Project
-            # the saved authored route only for this canvas estimate.
-            projected = deepcopy(self.widgets)
-            restore = get_custom_layout_restore_entry(
-                load_custom_layout_restore_map(projected), descriptor.widget_id,
-            )
-            route_key = get_effective_position_settings_key_for_widget(descriptor.widget_id, projected)
-            route = projected.get(route_key)
-            if not isinstance(route, dict) or restore is None:
-                raise ValueError(f"Arrange has no current size estimate for authored {descriptor.widget_id!r}")
-            route["position"] = restore["position"]; route["monitor"] = restore["monitor"]
-            estimate = next((entry for entry in build_widget_estimates(projected, defaults=require_canonical_default("widgets")) if str(entry.widget_type.value) == descriptor.widget_id), None)
-            if estimate is None:
-                raise ValueError(f"Arrange has no restored size estimate for {descriptor.widget_id!r}")
+        section = self._route_section_for(descriptor)
         if not isinstance(section, Mapping):
             raise ValueError(f"Arrange has no widget settings section for {descriptor.widget_id!r}")
-        margin = int(section["margin"])
-        width, height = int(estimate.estimated_width), int(estimate.estimated_height)
+        position = str(section.get("position", "") or "")
+        if position.strip().casefold() == "custom":
+            restore = get_custom_layout_restore_entry(
+                load_custom_layout_restore_map(self.widgets), descriptor.widget_id,
+            )
+            if restore is not None:
+                position = str(restore["position"])
+        return position, int(section.get("margin", 0) or 0)
+
+    @staticmethod
+    def _anchored(position: str, margin: int, width: int, height: int, display: ArrangeDisplay) -> QRect:
         width, height = min(width, display.geometry.width()), min(height, display.geometry.height())
-        position = str(estimate.position).casefold()
-        x = margin if "left" in position else (display.geometry.width() - width - margin if "right" in position else (display.geometry.width() - width) // 2)
-        y = margin if "top" in position else (display.geometry.height() - height - margin if "bottom" in position else (display.geometry.height() - height) // 2)
-        base = QRect(display.geometry.x() + x, display.geometry.y() + y, width, height)
+        anchor = position.casefold()
+        x = margin if "left" in anchor else (display.geometry.width() - width - margin if "right" in anchor else (display.geometry.width() - width) // 2)
+        y = margin if "top" in anchor else (display.geometry.height() - height - margin if "bottom" in anchor else (display.geometry.height() - height) // 2)
+        return QRect(display.geometry.x() + x, display.geometry.y() + y, width, height)
+
+    def _estimated_size(self, descriptor: WidgetRuntimeDescriptor) -> tuple[int, int]:
+        estimate = self._estimates.get(descriptor.widget_id)
+        if estimate is not None:
+            return int(estimate.estimated_width), int(estimate.estimated_height)
+        section = self._section_for(descriptor)
+        if descriptor.widget_id == "spotify_visualizer":
+            # The stack predictor omits the Visualizer when Media is off; size
+            # it from the same estimators the predictor uses.
+            defaults = require_canonical_default("widgets")
+            media = {**defaults["media"], **(self.widgets.get("media") or {})}
+            media_width, _ = estimate_media_size(int(media["font_size"]), int(media["artwork_size"]))
+            return estimate_spotify_vis_size(section, media_width=media_width)
+        # The predictor also omits the transient System Audio OSD; its
+        # presentation owns an exact configured preferred box.
+        try:
+            width, height = int(section.get("preferred_width")), int(section.get("preferred_height"))
+        except (TypeError, ValueError):
+            width = height = 0
+        if width > 0 and height > 0:
+            return width, height
+        # A CUSTOM-routed widget (e.g. still customised on another display) is
+        # omitted by the predictor; estimate it on its saved authored route.
+        projected = deepcopy(self.widgets)
+        restore = get_custom_layout_restore_entry(
+            load_custom_layout_restore_map(projected), descriptor.widget_id,
+        )
+        route = projected.get(get_effective_position_settings_key_for_widget(descriptor.widget_id, projected))
+        if isinstance(route, dict) and restore is not None:
+            route["position"] = restore["position"]; route["monitor"] = restore["monitor"]
+            estimate = next((entry for entry in build_widget_estimates(projected, defaults=require_canonical_default("widgets"))
+                             if str(entry.widget_type.value) == descriptor.widget_id), None)
+            if estimate is not None:
+                return int(estimate.estimated_width), int(estimate.estimated_height)
+        raise ValueError(f"Arrange has no size estimate for authored {descriptor.widget_id!r}")
+
+    def _ordinary_on(self, widget_id: str, display: ArrangeDisplay) -> bool:
+        """Effective, routed to ``display`` and not a CUSTOM entry there."""
+
+        descriptor = self.descriptors.get(widget_id)
+        if descriptor is None or not self._effective(descriptor) or display not in self._routed_displays(descriptor):
+            return False
+        return self._existing_entry(descriptor, display, self._variants_for(descriptor, display)[0]) is None
+
+    def _docked_pair(self, display: ArrangeDisplay) -> tuple[QRect | None, QRect | None]:
+        """Media (unstacked) and the Visualizer docked to it, as the saver places them."""
+
+        if not self._ordinary_on("spotify_visualizer", display):
+            return None, None
+        visualizer = self.descriptors["spotify_visualizer"]
+        vis_width, vis_height = self._estimated_size(visualizer)
+        position, margin = self._authored_route(visualizer)
+        if not self._ordinary_on("media", display):
+            # Media disabled: the Visualizer takes Media's authored anchor.
+            return None, self._anchored(position, margin, vis_width, vis_height, display)
+        media = self.descriptors["media"]
+        media_width, media_height = self._estimated_size(media)
+        media_rect = self._anchored(*self._authored_route(media), media_width, media_height, display)
+        local_media = media_rect.translated(-display.geometry.x(), -display.geometry.y())
+        width = min(vis_width, display.geometry.width()); height = min(vis_height, display.geometry.height())
+        x, y, _overfull = resolve_visualizer_media_origin(
+            (local_media.x(), local_media.y(), local_media.width(), local_media.height()),
+            (width, height), (display.geometry.width(), display.geometry.height()),
+        )
+        return media_rect, QRect(display.geometry.x() + round(x), display.geometry.y() + round(y), width, height)
+
+    def _authored_rect(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay, *, include_stack: bool = True) -> QRect:
+        if descriptor.widget_id in ("media", "spotify_visualizer"):
+            media_rect, visualizer_rect = self._docked_pair(display)
+            docked = visualizer_rect if descriptor.widget_id == "spotify_visualizer" else media_rect
+            if docked is not None:
+                # The saver pins this pair (Media fixed, Visualizer docked);
+                # other cards stack around them.
+                return docked
+        width, height = self._estimated_size(descriptor)
+        base = self._anchored(*self._authored_route(descriptor), width, height, display)
         if not include_stack or not bool(self.widgets.get("global", {}).get("stacking_enabled", require_canonical_default("widgets.global.stacking_enabled"))):
             return base
         offset = self._stack_offset(descriptor, display)
@@ -202,28 +258,34 @@ class ArrangeModel:
     def _stack_offset(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> QPoint:
         """Project the runtime's authored stacking plan into the draft canvas."""
 
+        media_rect, visualizer_rect = self._docked_pair(display)
+        pinned = {"spotify_visualizer"} | ({"media"} if media_rect is not None else set())
+        obstacles = [
+            DisplayStackObstacle(key=key, x=rect.x() - display.geometry.x(), y=rect.y() - display.geometry.y(),
+                                 width=rect.width(), height=rect.height())
+            for key, rect in (("media", media_rect), ("spotify_visualizer", visualizer_rect)) if rect is not None
+        ]
         participants: list[DisplayStackParticipant] = []
         for order, candidate in enumerate(self.descriptors.values()):
-            if not candidate.supports_custom_position_slot or not self._effective(candidate):
+            if candidate.widget_id in pinned or not candidate.supports_custom_position_slot:
                 continue
-            if display not in self._routed_displays(candidate):
+            if not self._ordinary_on(candidate.widget_id, display):
                 continue
-            if self._existing_entry(candidate, display, self._variants_for(candidate, display)[0]) is not None:
-                continue
-            section = self._route_section_for(candidate)
-            if str(section.get("position", "")).strip().casefold() == "custom":
+            position, margin = self._authored_route(candidate)
+            if position.strip().casefold() == "custom":
                 continue
             rect = self._authored_rect(candidate, display, include_stack=False)
             participants.append(DisplayStackParticipant(
                 key=candidate.widget_id,
-                position_key=str(section.get("position", "Top Right")),
+                position_key=position or "Top Right",
                 base_x=rect.x() - display.geometry.x(),
                 base_y=rect.y() - display.geometry.y(),
                 width=rect.width(), height=rect.height(), order=order,
-                margin=int(section.get("margin", 0) or 0),
+                margin=margin,
             ))
         plan = build_display_stack_plan(
             participants,
+            obstacles=obstacles,
             container_width=display.geometry.width(),
             container_height=display.geometry.height(),
         )
@@ -246,6 +308,7 @@ class ArrangeModel:
         self.session = CustomLayoutSession()
         self._descriptors_by_key.clear()
         self._authored_keys.clear()
+        self._entry_keys.clear()
         for descriptor in self.descriptors.values():
             if not descriptor.supports_custom_position_slot or not self._effective(descriptor):
                 continue
@@ -255,16 +318,11 @@ class ArrangeModel:
                     entry = self._existing_entry(descriptor, display, variant)
                     if entry is None:
                         rect = self._authored_rect(descriptor, display)
-                        section = self._section_for(descriptor)
-                        if descriptor.custom_layout_resize_mode == "clock_font":
-                            payload = {"font_size": int(section["font_size"])}
-                        elif descriptor.custom_layout_resize_mode == "visualizer_rect":
-                            payload = {"width": rect.width(), "height": rect.height()}
-                        else:
-                            payload = {}
+                        payload = self._authored_payload(descriptor, rect)
                         content_sized = False
                         self._authored_keys.add(key)
                     else:
+                        self._entry_keys.add(key)
                         local = clamp_local_rect_to_bounds(denormalize_local_rect(entry.rect, display.geometry.size()), display.geometry.size())
                         rect = QRect(display.geometry.x() + local.x(), display.geometry.y() + local.y(), local.width(), local.height())
                         payload = dict(entry.size_payload)
@@ -316,6 +374,22 @@ class ArrangeModel:
                     self._descriptors_by_key[key] = descriptor
         self.session.refresh_duplicate_state()
 
+    def _authored_payload(self, descriptor: WidgetRuntimeDescriptor, rect: QRect) -> dict[str, Any]:
+        section = self._section_for(descriptor)
+        if descriptor.custom_layout_resize_mode == "clock_font":
+            return {"font_size": int(section["font_size"])}
+        if descriptor.custom_layout_resize_mode == "visualizer_rect":
+            return {"width": rect.width(), "height": rect.height()}
+        return {}
+
+    def is_authored(self, key: CustomLayoutKey) -> bool:
+        """True while the widget still follows its authored anchor (no CUSTOM entry)."""
+        return key in self._authored_keys
+
+    def _touch(self, key: CustomLayoutKey) -> None:
+        """A new placement supersedes a pending reset of the same entry."""
+        self._reset_keys.discard(key)
+
     def item(self, key: CustomLayoutKey) -> CustomLayoutSessionItem:
         return self.session.item(key)
 
@@ -355,15 +429,21 @@ class ArrangeModel:
             self.reset(key)
             return
         item = self.item(key)
+        self._touch(key)
         if key in self._authored_keys:
             self._promote_routed_duplicates(item)
             self._dirty = True
             self.session.notify_item_changed(item)
 
-    def move(self, key: CustomLayoutKey, global_rect: QRect, *, cursor_global: QPoint | None = None) -> None:
-        """Move through the same intentional cross-display policy as Runtime Edit."""
+    def move(self, key: CustomLayoutKey, global_rect: QRect, *, cursor_global: QPoint | None = None, snap: bool = True) -> None:
+        """Move through the same intentional cross-display policy as Runtime Edit.
+
+        ``snap=False`` (keyboard nudges) only clamps, so a 1 px nudge is never
+        pulled back onto the guide it is leaving.
+        """
 
         item = self.item(key)
+        self._touch(key)
         source = self._display_map[item.current_display_identity]
         source_screen = self._screen_map[source.identity]
         candidate = choose_best_screen_for_global_rect(
@@ -380,7 +460,14 @@ class ArrangeModel:
         ):
             display = self._display_map[candidate.identity]
         peers = [QRect(peer.current_global_rect.x() - display.geometry.x(), peer.current_global_rect.y() - display.geometry.y(), peer.current_global_rect.width(), peer.current_global_rect.height()) for peer in self.session.active_items() if peer is not item and peer.current_display_identity == display.identity]
-        local = snap_local_rect_for_edit(QRect(global_rect.x() - display.geometry.x(), global_rect.y() - display.geometry.y(), global_rect.width(), global_rect.height()), display.geometry.size(), peer_rects=peers)
+        requested = QRect(global_rect.x() - display.geometry.x(), global_rect.y() - display.geometry.y(), global_rect.width(), global_rect.height())
+        if snap:
+            resolution = resolve_snap_local_rect_for_edit(requested, display.geometry.size(), peer_rects=peers)
+            local = resolution.rect
+            self.last_snap = (display.identity, resolution.vertical_guides, resolution.horizontal_guides)
+        else:
+            local = clamp_local_rect_to_bounds(requested, display.geometry.size(), min_size=quick_custom_minimum_size(item))
+            self.last_snap = None
         if key in self._authored_keys:
             self._promote_routed_duplicates(item)
         resolved = QRect(display.geometry.x() + local.x(), display.geometry.y() + local.y(), local.width(), local.height())
@@ -394,6 +481,7 @@ class ArrangeModel:
 
     def transfer(self, key: CustomLayoutKey, target_identity: str, global_rect: QRect) -> None:
         item = self.item(key)
+        self._touch(key)
         target = self._display_map[target_identity]
         local = clamp_local_rect_to_bounds(QRect(global_rect.x() - target.geometry.x(), global_rect.y() - target.geometry.y(), global_rect.width(), global_rect.height()), target.geometry.size())
         if key in self._authored_keys:
@@ -409,6 +497,7 @@ class ArrangeModel:
         item = self.item(key); descriptor = self._descriptors_by_key[key]
         if not item.resize_capable:
             return
+        self._touch(key)
         if key in self._authored_keys:
             self._promote_routed_duplicates(item)
         display = self._display_map[item.current_display_identity]
@@ -518,11 +607,41 @@ class ArrangeModel:
         self._authored_keys.discard(key); self.session.notify_item_changed(item)
 
     def reset(self, key: CustomLayoutKey) -> None:
+        """Return the widget to its authored anchor now; Apply removes its CUSTOM entry.
+
+        The box stays on the canvas at the authored estimate (dashed, following
+        its anchor) instead of vanishing until Apply.  Moving it again makes a
+        new placement that supersedes the pending reset.
+        """
+
         item = self.item(key)
-        self._reset_keys.add(key)
-        item.removed = True
+        descriptor = self._descriptors_by_key[key]
+        home = self._display_map[key.display_identity]
+        if key in self._entry_keys:
+            self._reset_keys.add(key)
+        self._authored_keys.add(key)
+        # Estimate as if the entry were already gone (its display drops out of
+        # stacking exclusions only after Apply, so project on a reset draft).
+        rect = self._reset_rect(descriptor, home)
+        item.set_current_display(home.identity, monitor_route=item.source_monitor_route)
+        item.set_geometry(rect, size_payload=self._authored_payload(descriptor, rect), resize_scale=1.0)
+        item.content_sized = False
+        item.placement_anchor = None
+        item.removed = False
         self._dirty = True
         self.session.refresh_duplicate_state(); self.session.notify_item_changed(item)
+
+    def _reset_rect(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> QRect:
+        saved = self.widgets
+        projected = deepcopy(self.widgets)
+        self._apply_resets(projected, keys=(CustomLayoutKey(descriptor.widget_id, display.identity, self._variants_for(descriptor, display)[0]),))
+        try:
+            self.widgets = projected
+            self._refresh_estimates()
+            return self._authored_rect(descriptor, display)
+        finally:
+            self.widgets = saved
+            self._refresh_estimates()
 
     def _promote_routed_duplicates(self, item: CustomLayoutSessionItem) -> None:
         """An ALL route needs a committed content-sized peer on every display."""
@@ -585,11 +704,11 @@ class ArrangeModel:
             commit_custom_session(candidate, changed_session, changed_descriptors, displays)
         return candidate
 
-    def _apply_resets(self, widgets: dict[str, Any]) -> None:
+    def _apply_resets(self, widgets: dict[str, Any], *, keys=None) -> None:
         """Remove only the selected parent/display entry; never erase other screens' children."""
         custom = load_custom_layout_map(widgets)
         restore = load_custom_layout_restore_map(widgets)
-        for key in self._reset_keys:
+        for key in (self._reset_keys if keys is None else keys):
             display = self._display_map[key.display_identity]
             for alias in display.signature_aliases:
                 remove_screen_layout_entry(custom, alias, key.widget_id, key.geometry_variant)

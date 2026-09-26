@@ -2291,50 +2291,22 @@ class DisplayManager(QObject):
                 None,
             )
 
-        gap = 20.0
-        media_x = float(media_rect.x - bounds.x)
-        media_y = float(media_rect.y - bounds.y)
-        media_width = float(media_rect.width)
-        media_height = float(media_rect.height)
-        below_space = float(bounds.height) - (media_y + media_height)
-        above_space = media_y
+        from rendering.visualizer_media_adjacency import resolve_visualizer_media_origin
 
-        x = max(0.0, min(media_x, float(bounds.width) - vis_width))
-        below_y = media_y + media_height + gap
-        above_y = media_y - gap - vis_height
-        below_fits = below_y + vis_height <= float(bounds.height)
-        above_fits = above_y >= 0.0
-        if below_fits or above_fits:
-            if below_fits and (not above_fits or below_space >= above_space):
-                y = below_y
-            else:
-                y = above_y
-        else:
-            # Exceptional very-tall pair: keep adjacency by trying horizontal
-            # free space before conceding that the display is genuinely overfull.
-            right_x = media_x + media_width + gap
-            left_x = media_x - gap - vis_width
-            right_space = float(bounds.width) - (media_x + media_width)
-            left_space = media_x
-            y = max(0.0, min(media_y, float(bounds.height) - vis_height))
-            if right_x + vis_width <= float(bounds.width) or left_x >= 0.0:
-                if right_x + vis_width <= float(bounds.width) and (
-                    left_x < 0.0 or right_space >= left_space
-                ):
-                    x = right_x
-                else:
-                    x = left_x
-            else:
-                # No side can contain the pair. Preserve the stronger relation
-                # on the larger vertical side and clamp, then report the overfill.
-                y = (
-                    max(0.0, min(below_y, float(bounds.height) - vis_height))
-                    if below_space >= above_space
-                    else max(0.0, min(above_y, float(bounds.height) - vis_height))
-                )
-                logger.warning(
-                    "[SPOTIFY_VIS] Media+Visualizer ordinary pair exceeds available adjacent space"
-                )
+        x, y, overfull = resolve_visualizer_media_origin(
+            (
+                float(media_rect.x - bounds.x),
+                float(media_rect.y - bounds.y),
+                float(media_rect.width),
+                float(media_rect.height),
+            ),
+            (vis_width, vis_height),
+            (float(bounds.width), float(bounds.height)),
+        )
+        if overfull:
+            logger.warning(
+                "[SPOTIFY_VIS] Media+Visualizer ordinary pair exceeds available adjacent space"
+            )
 
         return (x, y, vis_width, vis_height, media_rect)
 
