@@ -7,7 +7,7 @@ nothing until the feature ships; then move the durable parts into `Docs/Referenc
 **Goal:** a complete GUIDED SETUP wizard and a permanent QUICK START Settings page, taken through implementation,
 automated tests, generated preview assets, docs/contracts and the agent's own visual inspection. The operator's only
 role is one final physical acceptance pass (§ Final operator handoff). Do not stop for ordinary design questions that
-the architecture and this plan answer. Stop only for the decisions marked **OPERATOR** below if they are still open.
+the architecture and this plan answer. All design decisions below are settled (§2); stop only for a real blocker.
 
 ---
 
@@ -91,7 +91,10 @@ Each of these was checked in the tree. Re-verify before relying on one; the tree
    preferred content size plus a Python anchor (`rendering/quick/widgets/geometry_resolver.py`). It is known only
    after QML layout. For six of eight resize modes (`UNIFORM_TRANSFORM_RESIZE_MODES`) the committed CUSTOM rect *is*
    the outer box and content scales to fill it, so promoting an authored widget to CUSTOM at an *estimated* size (the
-   stack predictor's) visibly rescales it on the next run. Hence decision D2.
+   stack predictor's) visibly rescales it on the next run: `OverlayGeometryPolicy.resolve` returns a committed
+   rect whole and ignores content size. What *is* exact in Settings is an authored widget's **anchor point**. For
+   example, Top Right with margin m is the display's top-right corner inset by m, whatever the widget's size. Hence
+   decision D2.
 7. **Your X/Y point, concretely.** Each CUSTOM parent carries, besides its rect:
    - a uniform `resize_scale` (payload `_custom_resize_scale`);
    - an optional `content_extent` X/Y reflow box, declared by ten families (`content_extent_axes`);
@@ -106,7 +109,11 @@ Each of these was checked in the tree. Re-verify before relying on one; the tree
    stores the whole `custom_layout` + `custom_layout_restore` plus every widget's layout fields (enabled, position,
    monitor, margin, font family and size, clock display mode and per-display overrides, and so on).
    `apply_layout_slot` replays them onto a widgets map, and never re-enables a family the user has deactivated.
-   Today they are saved and loaded only from the runtime (`DisplayManager._save_layout_slot` / `_load_layout_slot`).
+   Today they are saved and loaded only from the runtime (`DisplayManager._save_layout_slot` / `_load_layout_slot`),
+   by key on the saver (`rendering/runtime_input.py`): **1**-**9** and **0** load, and **Shift** with the same key saves.
+20. **The Position combo's "Custom" option is already the free-placement switch.** Settings enables it only when a
+    CUSTOM entry exists (`WidgetsTab._refresh_custom_position_option_state` → `has_saved_custom_layout_for_widget`).
+    Any "free arrange" control must be derived from that state, never a second stored flag.
 9. **Theme.** `widget_theme = {custom, keep_synced (default True), selected_id}`; the Settings theme selection is
    `ui.settings_theme_selection`. Keep Synced is the only bridge.
 10. **Interaction.** `input.interaction_mode` (default False). Holding Ctrl temporarily admits widget interaction
@@ -126,7 +133,7 @@ Each of these was checked in the tree. Re-verify before relying on one; the tree
 15. **Responsive image.** `ui/settings_about_tab.py` already scales pixmaps for DPR (`devicePixelRatioF`,
     `setDevicePixelRatio`, smooth scaling). Extract and reuse it for the Witch rather than writing a second scaler.
 16. **`images/SRPSSWitch.png` is untracked.** The build bundles `images/` whole (`--include-data-dir=images=images`),
-    so a clean checkout or another machine would ship without it. Slice B adds it to git (decision D6).
+    so a build from another checkout would ship without it. It stays operator-managed; see D6.
 17. **WebP is not proven in the frozen build.** Preview assets are **PNG** unless both Nuitka builds are shown to ship
     `qwebp` and a frozen-build test loads one.
 18. **The secure-desktop test today is a heuristic.** `secure_url_launcher` classifies Winlogon/Services by
@@ -151,34 +158,66 @@ Each of these was checked in the tree. Re-verify before relying on one; the tree
     "For your protection, account setup is turned off while SRPSS runs as the screensaver. Open SRPSS from Windows
     Screen Saver Settings (Settings button) to connect Steam or Gmail." The step is then marked NEEDS SETUP on Ready
     and in Quick Start.
-- **D2. Arrange moves authored widgets by anchor; free placement and scaling are for CUSTOM widgets.**
-  - A widget that already has a CUSTOM entry for that display: free move, display transfer, uniform scale, Reset.
-  - An authored widget (no CUSTOM entry): drawn at the stack-predictor estimate, marked as auto-sized, and dragged
-    between the existing anchor zones (Top/Middle/Bottom × Left/Center/Right) and displays. This writes only the
-    existing `position` / `monitor` fields, so runtime resolves the real size and nothing rescales.
-  - Free placement of an authored widget starts in Runtime Edit (right-click → Edit); the widget is CUSTOM from then
-    on and Quick Start edits it freely.
-  - **OPERATOR** may instead choose "promote at an estimate and accept a size change on first run". It is not
-    recommended: it silently rescales content.
-- **D3. Pure uniform scaling in Quick Start.** Resize in Arrange is uniform scale only, through the same helpers
-  Runtime Edit uses: `scale_quick_size_payload`, `quick_custom_payload_minimum_scale`, `quick_custom_minimum_size`
-  and `CUSTOM_LAYOUT_MIN_RESIZE_SCALE`.
-  - Any existing `content_extent`, `viewport_extent`, content rotation and child sizes are carried through byte for
-    byte, never created or edited.
+- **D2. Every widget is freely arrangeable: content-sized CUSTOM placement.** A widget placed or scaled from
+  Settings gets an ordinary CUSTOM entry whose position is explicit but whose **size keeps following its content**,
+  so nothing Settings cannot measure is ever frozen into the entry.
+  - **Carrier.** Two keys in the entry's existing `size_payload` (no new schema, no new settings key):
+    `_size_from_content: true` and `_placement_anchor: "<h>,<v>"` (h in left, center, right; v in top, center,
+    bottom), plus the existing `_custom_resize_scale`. The stored rect records where the user put the box. The anchor
+    says which point of it is authoritative on each axis (left edge, centre or right edge; top, centre or bottom).
+  - **Runtime.** The committed-geometry path resolves a content-sized entry as the family's real size (preferred
+    content size × `_custom_resize_scale` for the uniform modes; the scaled `font_size` payload for `clock_font`; the
+    payload width/height for `visualizer_rect`), placed so its anchor point lands on the stored point, then the
+    existing containment clamp. Every other entry resolves exactly as today.
+  - **Exactness.** An authored widget's anchor point is exact in Settings (§1.6), so turning free placement on at the
+    current spot reproduces the authored placement pixel for pixel, for any content size; a test asserts it for every
+    anchor option and margin. Moving and uniform scaling are exact too, because size is never guessed, only
+    displayed. Settings draws the box at the stack-predictor estimate × scale, labelled "size follows content".
+  - **The anchor** is chosen deterministically from where the box ends up: the display third its centre falls in on
+    each axis, or the edge it is snapped to. That keeps a widget pushed against the right edge flush right at its real
+    width.
+  - **Free placement control (operator's idea, made derived).** The Arrange side panel has a **Free placement**
+    circle checkbox per widget per display. It is checked exactly when a CUSTOM entry exists, reading the same state
+    as the Position combo's "Custom" gate; it is never stored.
+    - Checking it creates a content-sized entry at the widget's current anchored spot (no visible change at runtime).
+    - Dragging or scaling an authored widget checks it automatically.
+    - Unchecking it is Reset: the entry is removed and `position` / `monitor` come back from `custom_layout_restore`.
+    - Widgets without CUSTOM support show it disabled with the reason.
+  - **Stacking edge case.** Authored widgets sharing an anchor get runtime stack offsets that CUSTOM widgets do not.
+    When free placement is turned on for a stacked widget, start it at the stack predictor's offset and show it on the
+    canvas so the user sees and fixes any overlap.
+  - **Runtime Edit parity.**
+    - Runtime Edit admits a content-sized entry at its live rect.
+    - If that session resizes it, changes an extent or edits children, Save writes an ordinary explicit entry (today's
+      behaviour, since Edit measures the live size).
+    - A move-only edit keeps it content-sized, recomputing the anchor from the new spot, so later font or config
+      changes in Settings still resize it.
+  - **Compatibility.** An older build reads a content-sized entry as an explicit rect at the estimated size (visible
+    only on downgrade). Record this in `Docs/Architecture/Persisted_Input_Compatibility.md`.
+- **D3. Uniform scaling only in Quick Start.** Resize in Arrange is uniform scale, through the same helpers Runtime
+  Edit uses (`scale_quick_size_payload`, `quick_custom_payload_minimum_scale`, `quick_custom_minimum_size`,
+  `CUSTOM_LAYOUT_MIN_RESIZE_SCALE`). For content-sized entries it changes `_custom_resize_scale` (and the Clock
+  `font_size` payload); for explicit entries it also scales the rect about its anchor point.
+  - Existing `content_extent`, `viewport_extent`, content rotation and child sizes are carried through byte for byte,
+    never created or edited.
   - Widgets with X/Y reflow show a one-line hint: "Width and height reflow: use Edit Mode on the saver."
 - **D4. One commit path.** Arrange stages edits in a `CustomLayoutSession` (the same working-state class) and commits
   through a presentation-neutral function extracted from `custom_layout_owner.save/_write_item` (slice A). The
   runtime owner then calls the same function. Byte-identical persisted output for the same session is a test.
-- **D5. Layout slots in Quick Start (operator addition).** Quick Start lists the ten slots with a short summary (which
-  widgets and displays each covers, empty or not). **Load into editor** applies `apply_layout_slot` to a deep copy of
-  the widgets map, projects that draft into the Arrange canvas, and commits only on Apply, through the same
-  persistence as `DisplayManager._load_layout_slot`; Cancel discards it.
-  - The UI states plainly that a slot also restores the fonts, positions, monitors and clock modes it saved, not only
-    rects.
-  - Saving slots from Quick Start is **not** in scope unless the operator asks (it would be `save_layout_slot`, same
-    helper).
-- **D6. `images/SRPSSWitch.png` gets committed in slice B**, and added to `tools/build_runner.py` `required_assets`,
-  because the feature depends on it. This plan is the operator's authorisation.
+- **D5. Layout slots in Quick Start (operator addition).** A **Layout Slots** area lists the ten slots with a short
+  summary (which widgets and displays each covers, or empty).
+  - **Load into editor** applies `apply_layout_slot` to a deep copy of the widgets map and projects that draft into
+    the Arrange canvas. It commits only on Apply, through the same persistence as `DisplayManager._load_layout_slot`;
+    Cancel discards.
+  - **Save to slot** has a slot picker (1-9, 0, showing which are occupied, and confirming before overwriting). It
+    runs `save_layout_slot` on the committed widgets map, so an unsaved Arrange draft must be applied first; the
+    button says so when a draft is pending.
+  - The UI states plainly that a slot also stores and restores fonts, positions, monitors and clock modes, not only
+    boxes.
+  - A one-line hint in the same area: "On the saver, 1-9 and 0 load a slot; Shift with the same key saves to it."
+- **D6. `images/SRPSSWitch.png` stays operator-managed.** It already exists in the operator's working tree, and the
+  build bundles `images/` from it. Do not commit it (operator-owned). Add it to `tools/build_runner.py`
+  `required_assets` so a build without it fails loudly instead of shipping a broken Welcome page.
 - **D7. Silence! lives at `sources.guided_setup_silenced` (default False)** in canonical defaults, with artifacts
   regenerated. Reset to Defaults resets it like any preference.
 - **D8. Shipped preview art is operator-owned or generated.** Transition source/destination images come from
@@ -215,6 +254,24 @@ bugs.
 - [ ] Reusable DPR pixmap scaler extracted from `settings_about_tab.py`; About uses it unchanged.
 - **Done when:** full Settings/CUSTOM/defaults/Steam/Gmail gates green with zero behaviour change.
 
+### Slice A2 | Content-sized CUSTOM entries in the runtime (D2)
+
+- [ ] `rendering/custom_layout_contract.py`: parse and write `_size_from_content` / `_placement_anchor`, and a pure
+      `resolve_content_sized_rect(stored_rect, anchor, content_size, display_size)`, plus the anchor-choice rule
+      (display thirds or snapped edge).
+- [ ] Runtime committed-geometry path (`resolve_quick_committed_variant_state`, `OverlayGeometryPolicy` /
+      `OverlayGeometryBinding`): content-sized entries resolve from the live content size, per resize mode, then the
+      existing clamp; explicit entries are untouched.
+- [ ] `custom_layout_owner` admission and Save (via `commit_custom_session` from slice A): move-only edits keep an
+      item content-sized with a recomputed anchor; resize, extent or child edits write explicit entries.
+- [ ] Tests:
+  - for every anchor option and margin, a content-sized entry created at the anchor point resolves to exactly the
+    rect `resolve_anchored_geometry` gives, for several content sizes;
+  - explicit entries resolve byte-identically to before;
+  - an Edit move keeps content-sizing, and an Edit resize converts to explicit;
+  - layout slots carry the keys through save and load.
+- **Done when:** the runtime, CUSTOM, slot and geometry suites are green; historical R-63 and R-88 checked.
+
 ### Slice B | No-source routing, Silence!, wizard shell, Welcome, Sources
 
 - [ ] `sources.guided_setup_silenced` default added; artifacts regenerated; `check_defaults_authority` green.
@@ -232,7 +289,7 @@ bugs.
 - [ ] Wizard shell: a large themed dialog owned by Settings, Back/Next, pages created lazily, live Settings-theme
       subscription through the existing owner (no QSS monolith, hardcoded colours, parallel theme cache, emoji or
       stock Windows wizard look), correct at 100/125/150/200% DPR.
-- [ ] Welcome: `images/SRPSSWitch.png` committed (D6), left-aligned, aspect kept, scaled with the shared DPR scaler
+- [ ] Welcome: `images/SRPSSWitch.png` (present locally, D6; add it to `required_assets`), left-aligned, aspect kept, scaled with the shared DPR scaler
       only on size/DPR change, never per paint, never cropped or stretched. Copy **verbatim**:
   - Heading, bold and underlined: **You're Inside A Wizard Harry!**
   - Body: "Your first time inside someone is special and confusing.
@@ -320,17 +377,19 @@ bugs.
     runtime does);
   - the Clock box uses the variant active on that display (`_clock_variant_from_widgets`);
   - boxes for widgets without CUSTOM support are shown but not draggable.
-- [ ] CUSTOM widgets (D2, D3): free move, uniform scale with the shared minimums, drag to another display (monitor
-      route plus rect translated into the target's normalised space, then clamp and `choose_best_screen_for_global_rect`
-      / `should_transfer_rect_to_screen`), Reset.
-- [ ] Authored widgets (D2): drag snaps to anchor zones and displays, writing `position` / `monitor` only; merely
-      selecting or viewing writes nothing.
+- [ ] Every CUSTOM-capable widget is freely arrangeable (D2, D3): free move, uniform scale with the shared
+      minimums, drag to another display (monitor route plus rect translated into the target's normalised space, then
+      clamp and `choose_best_screen_for_global_rect` / `should_transfer_rect_to_screen`), and Reset.
+      - An authored widget becomes a content-sized entry on its first move or scale, or when its derived **Free
+        placement** checkbox is ticked.
+      - Merely selecting or viewing writes nothing.
+      - Explicit entries keep explicit semantics.
 - [ ] Snapping reuses only the existing neutral helpers in `custom_layout_contract.py`; no second snap system.
 - [ ] Transaction: the draft is a `CustomLayoutSession`. Pointer moves never write settings; Apply/Next commits
       through `commit_custom_session` (D4); Cancel discards.
 - [ ] Reset (per widget): the established reset. Remove that display's CUSTOM entry and restore `position` /
       `monitor` from `custom_layout_restore`. Child customisation elsewhere is untouched.
-- [ ] Layout slots (D5): list and Load into editor.
+- [ ] Layout slots (D5): list, Load into editor, Save to slot (picker, overwrite confirm) and the hotkey hint.
 - [ ] Opening Arrange starts no Weather, Steam, Gmail, FEEDS, audio, network or QML runtime root.
 
 ### Slice H | Quick Start page and Ready
@@ -342,7 +401,7 @@ bugs.
   - a brief start-here line and a concise current-setup summary (cheap reads only);
   - **Run Guided Setup Again**, which starts from current settings and ignores Silence;
   - **Arrange Widgets**;
-  - the layout slots list (D5);
+  - the Layout Slots area (D5: list, load into editor, save to slot, hotkey hint);
   - **Reset Widget Layouts**, which resets parent layouts only, with wording that says exactly that;
   - the **Silence!** circle checkbox with its explanation.
 - [ ] Ready page: a summary such as displays, sources, interaction, widget count, account states (Steam connected /
@@ -388,7 +447,12 @@ without persisting, and Apply persists the same map `DisplayManager._load_layout
 account steps on a non-Default or unknown desktop and shows the explanation; they are enabled on Default;
 36. uniform scale in Arrange equals Runtime Edit's wheel scale for every resize mode (`clock_font` payload,
 `visualizer_rect` payload, uniform modes); 37. the Steam and Gmail controller extraction preserves Widgets tab
-behaviour.
+behaviour; 38. D2 exactness: free placement turned on at the anchored spot resolves to the anchored rect for every
+anchor, margin and content size; 39. a content-sized entry follows a later content change (for example a font
+size); 40. the Free placement checkbox is derived (checked iff an entry exists, unchecking equals Reset, never
+stored); 41. Save to slot writes exactly what `save_layout_slot` writes on the committed map, confirms before
+overwriting, and refuses while a draft is pending; 42. explicit CUSTOM entries resolve byte-identically after slice
+A2.
 
 Do not fix the unrelated reds in §1.19 to make a gate green.
 
@@ -405,8 +469,9 @@ One pass, after everything above is green and self-inspected:
 - widget previews and selections;
 - one Steam/Gmail/Weather/Reddit/FEEDS setup path, including the D1 message when started by Windows as the screensaver;
 - transition previews;
-- Arrange: move, scale and display reassignment of a CUSTOM widget; anchor move of an authored widget; load a
-  layout slot, then Apply and Cancel;
+- Arrange: free-place and scale a never-moved widget (it keeps its real size on the saver); move, scale and
+  reassign the display of an already-customised widget; tick and untick Free placement; load a layout slot (Apply and
+  Cancel); save to a slot, then load it on the saver with its number key;
 - Runtime Edit sees Quick Start changes, and Quick Start sees a later Runtime Edit change;
 - child edits survive parent manipulation;
 - final runtime start;

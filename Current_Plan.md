@@ -2,7 +2,7 @@
 
 ## Guided Setup / Quick Start (ACTIVE, not started)
 
-Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Open operator decision there: D2 (authored widgets move by anchor in Quick Start; free placement starts in Runtime Edit).
+Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`.
 
 ## Runtime audit 2026-09-22 | accepted 2026-09-23/24
 
