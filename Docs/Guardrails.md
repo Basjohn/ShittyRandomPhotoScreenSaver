@@ -208,6 +208,7 @@ owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nest
 - A retained or parked render object keeps only what its next use needs: warm GL programs, not the finished run's frames.
 - Measure retention with phase-locked samples and with `gc.freeze()` disabled; frozen objects hide their references from `gc.get_referrers` (R-99).
 - The only sanctioned environment writes are third-party load-time settings that have no other interface: the Qt render-loop bootstrap and `core/native_threads.py`.
+- **No thread churn in a GL process.** The NVIDIA OpenGL driver keeps ~70 KB of per-thread state for every thread the process ever creates and does not return it (R-97). Periodic or per-image work runs on a persistent thread or an existing lane: never a `threading.Timer` per tick, a thread per request, or a pool that retires idle threads and recreates them (Qt's image pool is kept by `core/native_threads.retain_qt_gui_pool_threads`). Measure churn from outside by counting new thread IDs per minute.
 
 **Release callbacks before deferred deletion.** A timer's callback usually holds its Qt parent (the owner) strongly. If
 `deleteLater()` leaves that release to the deferred delete, the owner's last reference can drop *inside the timer's own

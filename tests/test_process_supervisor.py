@@ -750,3 +750,47 @@ class TestWorkerContracts:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestHeartbeatThreadLifetime:
+    """R-97: heartbeat monitoring must never create a new OS thread per tick.
+
+    The NVIDIA OpenGL driver keeps ~70 KB of per-thread state for every thread
+    a GL process ever creates, so a threading.Timer per 3 s tick was a steady
+    86 MB/h commit slope.
+    """
+
+    def test_heartbeat_runs_on_one_persistent_thread_and_stops_on_shutdown(self, monkeypatch):
+        supervisor = ProcessSupervisor()
+        supervisor._heartbeat_interval_s = 0.02
+        checks = []
+        monkeypatch.setattr(supervisor, "_heartbeat_check", lambda: checks.append(threading.get_ident()))
+        started = []
+        real_start = threading.Thread.start
+
+        def counting_start(thread):
+            started.append(thread.name)
+            return real_start(thread)
+
+        monkeypatch.setattr(threading.Thread, "start", counting_start)
+        try:
+            supervisor._ensure_heartbeat_monitoring()
+            supervisor._ensure_heartbeat_monitoring()  # idempotent while running
+            deadline = threading.Event()
+            for _ in range(200):
+                if len(checks) >= 5:
+                    break
+                deadline.wait(0.01)
+            assert len(checks) >= 5
+            # Every check ran on the same thread, and only one thread was ever started.
+            assert len(set(checks)) == 1
+            assert started == ["srpss-worker-heartbeat"]
+        finally:
+            thread = supervisor._heartbeat_thread
+            supervisor.shutdown(timeout=0.1)
+        if thread is not None:
+            thread.join(1.0)
+            assert not thread.is_alive()
+        count = len(checks)
+        threading.Event().wait(0.1)
+        assert len(checks) == count  # no checks after shutdown

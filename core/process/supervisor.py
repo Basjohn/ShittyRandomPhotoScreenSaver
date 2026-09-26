@@ -97,8 +97,12 @@ class ProcessSupervisor:
         self._worker_factories: dict[str, Callable] = {}
         self._seq_counters: dict[str, int] = {wt: 0 for wt in WorkerType}
         
-        # Heartbeat monitoring
-        self._heartbeat_timer: Optional[threading.Timer] = None
+        # Heartbeat monitoring: one persistent thread for the supervisor's life.
+        # A threading.Timer per tick started a new OS thread every interval, and
+        # a GL driver keeps per-thread state for every thread a process ever
+        # creates (NVIDIA: ~70 KB each, never returned) -- 86 MB/h (R-97).
+        self._heartbeat_thread: Optional[threading.Thread] = None
+        self._heartbeat_stop = threading.Event()
         self._heartbeat_interval_s = HealthStatus.HEARTBEAT_INTERVAL_MS / 1000.0
         
         # Correlated response buffering so one caller cannot steal another
@@ -962,10 +966,10 @@ class ProcessSupervisor:
         logger.info("ProcessSupervisor shutting down...")
         self._shutdown = True
 
-        # Stop heartbeat monitoring
-        if self._heartbeat_timer:
-            self._heartbeat_timer.cancel()
-            self._heartbeat_timer = None
+        # Stop heartbeat monitoring. Like the old timer cancel this does not
+        # wait: the loop sees the event at its next wait and exits.
+        self._heartbeat_stop.set()
+        self._heartbeat_thread = None
 
         for worker_type in WorkerType:
             self._stop_response_listener(
@@ -1490,18 +1494,27 @@ class ProcessSupervisor:
     def _ensure_heartbeat_monitoring(self) -> None:
         """Start heartbeat monitoring if not already running.
 
-        POLICY EXEMPTION: Uses threading.Timer directly because this is
+        POLICY EXEMPTION: uses a plain ``threading.Thread`` because this is
         core process infrastructure that operates independently of Qt.
         ThreadManager requires QCoreApplication which may not be available
-        in all contexts where ProcessSupervisor operates.
+        in all contexts where ProcessSupervisor operates. It is one thread for
+        the supervisor's lifetime, never one per tick (R-97).
         """
-        if self._heartbeat_timer is None and not self._shutdown:
-            self._heartbeat_timer = threading.Timer(
-                self._heartbeat_interval_s,
-                self._heartbeat_check,
+        if self._heartbeat_thread is None and not self._shutdown:
+            thread = threading.Thread(
+                target=self._heartbeat_loop,
+                name="srpss-worker-heartbeat",
+                daemon=True,
             )
-            self._heartbeat_timer.daemon = True
-            self._heartbeat_timer.start()
+            self._heartbeat_thread = thread
+            thread.start()
+
+    def _heartbeat_loop(self) -> None:
+        """Check workers every interval until shutdown; first check after one interval."""
+        while not self._heartbeat_stop.wait(self._heartbeat_interval_s):
+            if self._shutdown:
+                return
+            self._heartbeat_check()
     
     def _heartbeat_check(self) -> None:
         """Check heartbeat status of all running workers."""
@@ -1568,15 +1581,6 @@ class ProcessSupervisor:
                 self.restart(worker_type)
             except Exception as e:
                 logger.exception("Failed to restart %s worker: %s", worker_type.value, e)
-        
-        # Schedule next check
-        if not self._shutdown:
-            self._heartbeat_timer = threading.Timer(
-                self._heartbeat_interval_s,
-                self._heartbeat_check,
-            )
-            self._heartbeat_timer.daemon = True
-            self._heartbeat_timer.start()
     
     def _broadcast_health(self, worker_type: WorkerType) -> None:
         """Broadcast health status change via EventSystem."""
