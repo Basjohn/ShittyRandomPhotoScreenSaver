@@ -87,9 +87,9 @@ class QuickCrumbleRenderer:
             raise RuntimeError("Quick Crumble debris allocation failed")
         gl.glBindVertexArray(vao)
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self._debris_vbo)
-        packed = (ctypes.c_float * float_count).from_buffer_copy(geometry.debris)
+        # Plain bytes: a per-run ``c_float * n`` type would be cached forever.
         gl.glBufferData(
-            gl.GL_ARRAY_BUFFER, ctypes.sizeof(packed), packed, gl.GL_STATIC_DRAW
+            gl.GL_ARRAY_BUFFER, len(geometry.debris), geometry.debris, gl.GL_STATIC_DRAW
         )
         for location, offset in ((2, 0), (3, 2), (4, 4)):
             gl.glEnableVertexAttribArray(location)

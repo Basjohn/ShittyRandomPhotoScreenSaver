@@ -49,8 +49,7 @@ def _clean_prepared_store():
 
 def test_pack_floats_is_byte_identical_to_ctypes_constructor() -> None:
     values = fracture_vertices(fracture_cells(9, 40, _ASPECT), _ASPECT)
-    storage, packed = pack_floats(values)
-    assert bytes(packed) == storage.tobytes() == _ctypes_reference(values)
+    assert pack_floats(values) == _ctypes_reference(values)
 
 
 def test_glass_geometry_matches_the_previous_render_thread_build() -> None:
