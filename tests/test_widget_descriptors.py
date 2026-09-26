@@ -686,6 +686,11 @@ def test_service_runtime_contract_queries_follow_descriptor_contract():
         "feeds_custom_2",
         "feeds_custom_3",
         "feeds_custom_4",
+        "feeds_news_world",
+        "feeds_news_us",
+        "feeds_news_politics",
+        "feeds_news_gaming",
+        "feeds_news_tech",
         "gmail",
     )
 
@@ -975,6 +980,11 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
         "feeds_custom_2",
         "feeds_custom_3",
         "feeds_custom_4",
+        "feeds_news_world",
+        "feeds_news_us",
+        "feeds_news_politics",
+        "feeds_news_gaming",
+        "feeds_news_tech",
         "achievement_pulse",
         "abandonment_issues",
         "friend_pulse",

@@ -1,4 +1,4 @@
-"""Native feed probation harness for CUSTOM and future NEWS sources.
+"""Native feed probe for CUSTOM addresses and the shipped NEWS publishers.
 
 This tool is reporting/orchestration only. Source viability is evaluated by the
 exact same ``core.feeds.probe`` seam used by Settings TEST FEED, preventing a
@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.feeds.news_candidates import NEWS_CANDIDATES
+from core.feeds.news import NEWS_CATEGORIES, NEWS_PROVIDERS
 from core.feeds.normalization import redacted_url_for_log
 from core.feeds.probe import probe_feed_url
 
@@ -57,8 +57,8 @@ def probe(label: str, url: str, *, max_items: int = 50) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Probe RSS/Atom sources through SRPSS production feed transport")
     parser.add_argument("--url", action="append", default=[], help="custom feed URL; may be supplied more than once")
-    parser.add_argument("--catalog", action="store_true", help="probe all inert NEWS research candidates")
-    parser.add_argument("--category", choices=("world", "us", "politics", "gaming", "tech"))
+    parser.add_argument("--catalog", action="store_true", help="probe every shipped NEWS publisher feed")
+    parser.add_argument("--category", choices=tuple(category.category for category in NEWS_CATEGORIES))
     parser.add_argument("--json", dest="json_path", help="optional output JSON path")
     args = parser.parse_args(argv)
 
@@ -66,10 +66,10 @@ def main(argv: list[str] | None = None) -> int:
     for index, url in enumerate(args.url, start=1):
         targets.append((f"custom_{index}", url))
     if args.catalog:
-        for candidate in NEWS_CANDIDATES:
-            if args.category and candidate.category != args.category:
+        for provider in NEWS_PROVIDERS:
+            if args.category and provider.category != args.category:
                 continue
-            targets.append((candidate.candidate_id, candidate.url))
+            targets.append((provider.provider_id, provider.url))
     if not targets:
         parser.error("provide --url or --catalog")
 

@@ -7,11 +7,15 @@ from typing import Mapping
 from core.settings.default_contract import require_canonical_default
 
 from .models import FeedSourceSpec, FeedViewMode
+from .news import NEWS_WIDGET_IDS, NewsFeedConfig
 from .normalization import endpoint_fingerprint
 from .transport import normalize_feed_address, validate_feed_url
 
 
 CUSTOM_FEED_WIDGET_IDS = tuple(f"feeds_custom_{index}" for index in range(1, 5))
+# Every FEEDS widget identity, CUSTOM slots first: the order admission,
+# monogram ordinals and Settings persistence follow.
+FEED_WIDGET_IDS = CUSTOM_FEED_WIDGET_IDS + NEWS_WIDGET_IDS
 _VALID_VIEW_MODES = frozenset({"list", "grid", "compact"})
 
 
@@ -134,3 +138,13 @@ class CustomFeedConfig:
             display_name=self.name,
             max_items=max(40, self.item_limit),
         )
+
+
+def feed_widget_config(
+    widget_id: str, value: Mapping[str, object] | None
+) -> "CustomFeedConfig | NewsFeedConfig":
+    """The headless config of any FEEDS widget (CUSTOM slot or NEWS card)."""
+
+    if widget_id in NEWS_WIDGET_IDS:
+        return NewsFeedConfig.from_mapping(widget_id, value)
+    return CustomFeedConfig.from_mapping(widget_id, value)

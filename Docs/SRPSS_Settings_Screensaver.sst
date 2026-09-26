@@ -331,6 +331,26 @@
         "feeds:custom4_content": false,
         "feeds:custom4_layout": false,
         "feeds:custom4_source": false,
+        "feeds:news_gaming_appearance": false,
+        "feeds:news_gaming_content": false,
+        "feeds:news_gaming_layout": false,
+        "feeds:news_gaming_source": false,
+        "feeds:news_politics_appearance": false,
+        "feeds:news_politics_content": false,
+        "feeds:news_politics_layout": false,
+        "feeds:news_politics_source": false,
+        "feeds:news_tech_appearance": false,
+        "feeds:news_tech_content": false,
+        "feeds:news_tech_layout": false,
+        "feeds:news_tech_source": false,
+        "feeds:news_us_appearance": false,
+        "feeds:news_us_content": false,
+        "feeds:news_us_layout": false,
+        "feeds:news_us_source": false,
+        "feeds:news_world_appearance": false,
+        "feeds:news_world_content": false,
+        "feeds:news_world_layout": false,
+        "feeds:news_world_source": false,
         "media:appearance": false,
         "media:artwork_header": false,
         "media:controls": false,
@@ -775,6 +795,211 @@
         "position": "Bottom Center",
         "preferred_height": 420,
         "preferred_width": 560,
+        "refresh_minutes": 15,
+        "show_background": true,
+        "show_images": true,
+        "show_subtitle": true,
+        "view_mode": "list"
+      },
+      "feeds_news_gaming": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.3,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 14,
+        "item_limit": 12,
+        "margin": 30,
+        "monitor": "1",
+        "position": "Bottom Center",
+        "preferred_height": 420,
+        "preferred_width": 560,
+        "providers": [
+          "ars_gaming",
+          "pcgamer_all",
+          "eurogamer_all"
+        ],
+        "refresh_minutes": 15,
+        "show_background": true,
+        "show_images": true,
+        "show_subtitle": true,
+        "view_mode": "list"
+      },
+      "feeds_news_politics": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.3,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 14,
+        "item_limit": 12,
+        "margin": 30,
+        "monitor": "1",
+        "position": "Top Center",
+        "preferred_height": 420,
+        "preferred_width": 560,
+        "providers": [
+          "cbs_politics",
+          "abc_politics",
+          "npr_politics"
+        ],
+        "refresh_minutes": 15,
+        "show_background": true,
+        "show_images": true,
+        "show_subtitle": true,
+        "view_mode": "list"
+      },
+      "feeds_news_tech": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.3,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 14,
+        "item_limit": 12,
+        "margin": 30,
+        "monitor": "1",
+        "position": "Middle Right",
+        "preferred_height": 420,
+        "preferred_width": 560,
+        "providers": [
+          "cbs_technology",
+          "abc_technology",
+          "ars_all"
+        ],
+        "refresh_minutes": 15,
+        "show_background": true,
+        "show_images": true,
+        "show_subtitle": true,
+        "view_mode": "list"
+      },
+      "feeds_news_us": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.3,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 14,
+        "item_limit": 12,
+        "margin": 30,
+        "monitor": "1",
+        "position": "Middle Left",
+        "preferred_height": 420,
+        "preferred_width": 560,
+        "providers": [
+          "cbs_us",
+          "abc_us",
+          "npr_us"
+        ],
+        "refresh_minutes": 15,
+        "show_background": true,
+        "show_images": true,
+        "show_subtitle": true,
+        "view_mode": "list"
+      },
+      "feeds_news_world": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.3,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 14,
+        "item_limit": 12,
+        "margin": 30,
+        "monitor": "1",
+        "position": "Middle Right",
+        "preferred_height": 420,
+        "preferred_width": 560,
+        "providers": [
+          "cbs_world",
+          "bbc_world",
+          "npr_world"
+        ],
         "refresh_minutes": 15,
         "show_background": true,
         "show_images": true,

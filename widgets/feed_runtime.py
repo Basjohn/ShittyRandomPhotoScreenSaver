@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from core.feeds.config import CustomFeedConfig
 from core.feeds.models import FeedRefreshResult, FeedSourceSpec
+from core.feeds.news import NewsFeedConfig, NewsProvider, merge_news_results
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,8 @@ class FeedRuntimeConfig:
     refresh_minutes: int
     show_images: bool
     view_mode: str
+    # Rows the card can show; only these stories' artwork is warmed.
+    item_limit: int
 
     @classmethod
     def from_custom(cls, config: CustomFeedConfig) -> "FeedRuntimeConfig":
@@ -33,6 +36,7 @@ class FeedRuntimeConfig:
             refresh_minutes=max(5, min(24 * 60, int(config.refresh_minutes))),
             show_images=bool(config.show_images),
             view_mode=config.view_mode,
+            item_limit=int(config.item_limit),
         )
 
 
@@ -47,6 +51,8 @@ class _SourceState:
     work_cancel: Event = field(default_factory=Event)
     due_at: float = 0.0
     artwork_attempted_at: float | None = None
+    # Leading stories covered by the last artwork job (see _artwork_limit).
+    artwork_item_limit: int = 0
 
 
 _SHARED: dict[tuple[str, object], "_FeedFamilyOwner"] = {}
@@ -298,20 +304,36 @@ class _FeedFamilyOwner:
             )
         return state.source
 
+    def _artwork_limit(self, state: _SourceState) -> int:
+        """Leading stories whose artwork any active image-showing card can show.
+
+        Rows past a card's item limit never show art, so they are never warmed
+        or published. That keeps each source's protected artwork within its
+        cards' limits, which keeps the shared cache near its bounds as NEWS
+        adds publishers.
+        """
+        return max(
+            (lease.config.item_limit for lease in self._active_leases_for_state(state)
+             if lease.config.show_images and lease.config.view_mode != "compact"),
+            default=0,
+        )
+
     def _artwork_needed(self, state: _SourceState) -> bool:
         snapshot = state.last_result.snapshot if state.last_result is not None else None
+        limit = self._artwork_limit(state)
         return bool(
             snapshot is not None
-            and state.artwork_attempted_at != snapshot.fetched_at
-            and any(item.images for item in snapshot.document.items)
-            and any(lease.config.show_images and lease.config.view_mode != "compact"
-                    for lease in self._active_leases_for_state(state))
+            and limit > 0
+            and (state.artwork_attempted_at != snapshot.fetched_at
+                 # A card with a larger limit joined an already-warmed source.
+                 or limit > state.artwork_item_limit)
+            and any(item.images for item in snapshot.document.items[:limit])
         )
 
     @staticmethod
     def _warm_artwork(
         result: FeedRefreshResult, *, cancel: Event,
-        protected: Callable[[], frozenset[str]],
+        protected: Callable[[], frozenset[str]], item_limit: int,
     ) -> FeedRefreshResult:
         """One event-admitted follow-on job, never a per-image timer/owner.
 
@@ -338,7 +360,7 @@ class _FeedFamilyOwner:
             return fetch_artwork_bytes(url, still_needed=needed,
                                        max_seconds=min(7.5, remaining))
         try:
-            warm = cache.warm(snapshot.document.items, fetch_bytes=fetch,
+            warm = cache.warm(snapshot.document.items[:max(1, int(item_limit))], fetch_bytes=fetch,
                               still_needed=needed, protected_sources=protected)
         except ArtworkCancelled:
             raise
@@ -358,6 +380,9 @@ class _FeedFamilyOwner:
         cache_key = state.spec.cache_key
         owner_ref = weakref.ref(self)
         base_artwork_result = state.last_result if artwork_only else None
+        artwork_limit = self._artwork_limit(state) if artwork_only else 0
+        if artwork_only:
+            state.artwork_item_limit = artwork_limit
         # Eviction protection is read when the worker prunes, from the owner's
         # immutable published set (replaced whole on the GUI thread): never a
         # submit-time copy that misses another source publishing meanwhile,
@@ -375,7 +400,7 @@ class _FeedFamilyOwner:
                 if base_artwork_result is None:
                     raise RuntimeError("missing accepted feed artwork source")
                 return owner._warm_artwork(base_artwork_result, cancel=cancel,
-                                           protected=protected)
+                                           protected=protected, item_limit=artwork_limit)
             source = owner._source_for(state)
             return source.load_cached() if cache_only else source.refresh(force=force)
 
@@ -445,6 +470,7 @@ class _FeedFamilyOwner:
             # next admitted consumer may resume via activation, not a timer.
             if artwork_only:
                 state.artwork_attempted_at = None
+                state.artwork_item_limit = 0
             # Reattached consumers must get fresh work; no canceled result may
             # publish or persist a synthetic network failure/backoff.
             self._release_source(state)
@@ -678,6 +704,190 @@ class FeedRuntimeLease:
 
     def is_running(self) -> bool:
         return self._running and not self._retired
+
+
+@dataclass(frozen=True)
+class NewsRuntimeConfig:
+    widget_id: str
+    providers: tuple[NewsProvider, ...]
+    refresh_minutes: int
+    show_images: bool
+    view_mode: str
+    item_limit: int
+
+    @classmethod
+    def from_news(cls, config: NewsFeedConfig) -> "NewsRuntimeConfig":
+        return cls(
+            widget_id=config.widget_id,
+            providers=tuple(config.providers),
+            refresh_minutes=max(5, min(24 * 60, int(config.refresh_minutes))),
+            show_images=bool(config.show_images),
+            view_mode=config.view_mode,
+            item_limit=int(config.item_limit),
+        )
+
+    def provider_config(self, provider: NewsProvider) -> FeedRuntimeConfig:
+        # Any one publisher may supply every visible row of the merged card.
+        return FeedRuntimeConfig(
+            widget_id=f"{self.widget_id}:{provider.provider_id}",
+            source_spec=provider.source_spec(),
+            refresh_minutes=self.refresh_minutes,
+            show_images=self.show_images,
+            view_mode=self.view_mode,
+            item_limit=self.item_limit,
+        )
+
+
+class _NewsProviderConsumer:
+    """One provider lease's consumer; refers back to its NEWS service weakly."""
+
+    def __init__(self, service: "NewsRuntimeService", provider_id: str, generation: object) -> None:
+        self._service_ref = weakref.ref(service)
+        self._provider_id = provider_id
+        self._runtime_generation = generation
+
+    def is_feed_consumer_alive(self) -> bool:
+        service = self._service_ref()
+        return bool(service is not None and service._consumer_alive())
+
+    def on_feed_runtime_result(self, result: FeedRefreshResult, *, from_cache: bool) -> None:
+        service = self._service_ref()
+        if service is not None:
+            service._accept_provider(self._provider_id, result, from_cache=from_cache)
+
+
+class NewsRuntimeService:
+    """One NEWS card: an ordinary lease per provider on the shared family owner.
+
+    Providers are plain FEEDS sources, so cadence, cache-first admission,
+    conditional fetches, backoff, artwork and retirement belong to the family
+    owner exactly as for CUSTOM. This service only keeps each provider's latest
+    accepted result and publishes their merge to the one presentation. It has
+    the same lifetime API as ``FeedRuntimeLease``.
+    """
+
+    def __init__(
+        self,
+        *,
+        config: NewsRuntimeConfig,
+        generation: object = None,
+        manager: Any = None,
+        ui_dispatch: Callable[[Callable[[], None]], object] | None = None,
+        schedule: Callable[[int, Callable[[], None]], object] | None = None,
+        task_priority: object | None = None,
+    ) -> None:
+        self.config = config
+        self._leases = tuple(
+            (
+                provider.provider_id,
+                FeedRuntimeLease(
+                    config=config.provider_config(provider),
+                    generation=generation,
+                    manager=manager,
+                    ui_dispatch=ui_dispatch,
+                    schedule=schedule,
+                    task_priority=task_priority,
+                ),
+            )
+            for provider in config.providers
+        )
+        # Leases hold their consumers weakly; the service keeps them alive.
+        self._provider_consumers: tuple[_NewsProviderConsumer, ...] = ()
+        self._results: dict[str, tuple[FeedRefreshResult, bool]] = {}
+        self._consumer_ref: weakref.ReferenceType | None = None
+        self._retired = False
+
+    def attach_consumer(self, consumer: object) -> None:
+        if self._retired or self._consumer_ref is not None:
+            raise RuntimeError("NEWS service may be attached only once")
+        self._consumer_ref = weakref.ref(consumer)
+        generation = getattr(consumer, "_runtime_generation", None)
+        bridges = []
+        for provider_id, lease in self._leases:
+            bridge = _NewsProviderConsumer(self, provider_id, generation)
+            lease.attach_consumer(bridge)
+            bridges.append(bridge)
+        self._provider_consumers = tuple(bridges)
+
+    def set_thread_manager(self, manager: Any, *, generation: object = None) -> None:
+        if self._retired:
+            raise RuntimeError("cannot change a retired NEWS service's worker")
+        for _provider_id, lease in self._leases:
+            lease.set_thread_manager(manager, generation=generation)
+
+    def start(self) -> bool:
+        if self._retired:
+            return False
+        started = [lease.start() for _provider_id, lease in self._leases]
+        return any(started)
+
+    def _consumer(self) -> object | None:
+        return self._consumer_ref() if self._consumer_ref is not None else None
+
+    def _consumer_alive(self) -> bool:
+        consumer = self._consumer()
+        if self._retired or consumer is None:
+            return False
+        alive = getattr(consumer, "is_feed_consumer_alive", None)
+        return bool(alive()) if callable(alive) else True
+
+    def _accept_provider(self, provider_id: str, result: FeedRefreshResult, *, from_cache: bool) -> None:
+        if self._retired:
+            return
+        self._results[provider_id] = (result, bool(from_cache))
+        consumer = self._consumer()
+        if consumer is None or not self._consumer_alive():
+            return
+        merged = merge_news_results(
+            self.config.providers,
+            {pid: accepted for pid, (accepted, _cached) in self._results.items()},
+        )
+        if merged.snapshot is None and (
+            len(self._results) < len(self._leases)
+            or any(accepted.failure == "no_cache" for accepted, _cached in self._results.values())
+        ):
+            # No provider has a story yet and one has not finished its first
+            # network fetch: the card stays loading rather than failed.
+            return
+        cached = all(
+            was_cached for accepted, was_cached in self._results.values()
+            if accepted.snapshot is not None or merged.snapshot is None
+        )
+        accept = getattr(consumer, "on_feed_runtime_result", None)
+        if callable(accept):
+            accept(merged, from_cache=cached)
+
+    def request_refresh(self) -> bool:
+        if self._retired:
+            return False
+        admitted = [lease.request_refresh() for _provider_id, lease in self._leases]
+        return any(admitted)
+
+    def detach_consumer(self, consumer: object | None = None) -> None:
+        current = self._consumer()
+        if consumer is not None and current is not consumer:
+            return
+        self._consumer_ref = None
+
+    def stop(self) -> None:
+        for _provider_id, lease in self._leases:
+            lease.stop()
+
+    def retire(self) -> None:
+        if self._retired:
+            return
+        self._retired = True
+        for _provider_id, lease in self._leases:
+            lease.retire()
+        self._provider_consumers = ()
+        self._results.clear()
+        self._consumer_ref = None
+
+    def is_retired(self) -> bool:
+        return self._retired
+
+    def is_running(self) -> bool:
+        return not self._retired and any(lease.is_running() for _provider_id, lease in self._leases)
 
 
 def reset_shared_feed_runtime_for_tests() -> None:

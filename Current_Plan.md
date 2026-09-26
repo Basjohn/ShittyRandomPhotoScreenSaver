@@ -1,15 +1,5 @@
 # SRPSS | Current Plan
 
-## NEWS provider probation log (run once per day)
-
-Run `python tools/feed_probe.py --catalog` once per calendar day and add one row (newest first). **Satisfied** for a category when two independent providers have each passed on at least 6 of 7 separate days, every pass `via=direct` (a discovery rescue means the endpoint moved: update the candidate, restart its count), and neither provider's newest item is older than 72 h on its last three runs. Only then may that category's NEWS widget be admitted (`Docs/Future_Work/Feeds.md` § NEWS provider probation).
-
-| Date | US (CBS, ABC) | World (CBS, ABC) | Politics (CBS, ABC) | Tech (CBS, ABC, Ars) | Gaming (Ars, PC Gamer) | Notes |
-|---|---|---|---|---|---|---|
-| 2026-09-24 | ok 30 / ok 25 | ok 30 / **FAIL** empty feed | ok 30 / ok 25 (newest 16 h) | ok 30 / ok 25 / ok 20 | ok 20 (newest 47 h) / ok 50 | 10/11; all direct. CBS images 0 = parser gap (item-level `<image>URL</image>` unread), not absent art. |
-
-Tally toward 6/7 days: US 1/1 both; World CBS 1/1, ABC 0/1; Politics 1/1 both; Tech 1/1 all; Gaming 1/1 both.
-
 ## Wallpaper feeds (image RSS) | rebuild on the shared feed core (ACTIVE)
 
 Assessment 2026-09-24: of the 12 default feeds only NASA and Wallhaven ever yielded images (Bing's relative, HTML-escaped image URLs never downloaded; all 9 Flickr public feeds max out at 1024 px in every format and were downloaded then deleted each pass); the 30-image pool was 16–19 days old because a full cache skipped downloads and nothing rotated; per-site parser branches and domain tables; failures only recorded for Reddit feeds; unconditional feed re-downloads; no byte cap, public-address check or honest User-Agent on image downloads; a dead facade and a never-started worker process. It stays a separate product (wallpaper pool, rotation, save-to-disk) but acquires through the FEEDS core. Operator rules: fill mode is the yardstick; larger than the displays is good, smaller is not; crop is not judged in advance; no Wikimedia.
@@ -24,7 +14,7 @@ Landed 2026-09-25: the never-started RSS worker, `WorkerType.RSS` and the dead `
 
 ### Accepted current-tree evidence
 
-- [x] `feeds_custom_1` is the only admitted FEEDS runtime widget. It uses the shared bounded RSS/Atom transport/parser/cache/source/runtime path, retained List/Grid/Compact QML, HTTP/S-only external actions, event-admitted local artwork and the ordinary shared Edit/CUSTOM owner.
+- [x] `feeds_custom_1` uses the shared bounded RSS/Atom transport/parser/cache/source/runtime path, retained List/Grid/Compact QML, HTTP/S-only external actions, event-admitted local artwork and the ordinary shared Edit/CUSTOM owner.
 - [x] The requested consolidated Windows regression gate is green on the current tree. Do not retain older focused pass counts as current acceptance evidence.
 - [x] Physical Custom 1 artwork editing is accepted for free X/Y/width/height adjustment, with Grid text/content reflow following the changed artwork geometry rather than preserving a fixed landscape slot.
 - [x] Physical source adaptability has exercised an image-sparse Hacker News feed plus image-bearing GitHub and Ars feeds. Image absence is a valid feed/content state, and tested story links reached the correct external destinations.
@@ -33,6 +23,10 @@ Landed 2026-09-25: the never-started RSS worker, `WorkerType.RSS` and the dead `
 - [x] Custom 1 closure is physically accepted (2026-09-24): full Edit transaction (alignment flip, resize, child edits, Reset, Ctrl-Z, lock, Save, re-entry, fresh runtime), Show Feed Subtitle off/on with Save/reopen, last-good through an offline restart and reconnect, and disable/replace while work was in flight.
 - [x] Modern feed formats are physically accepted (2026-09-24): Mastodon posts read as text titles, Daring Fireball's JSON Feed renders with dates and images, and Reddit resolves through the `.rss` suffix.
 - [x] The secure Winlogon handoff remains the external-link authority: saver-side queue admission is the success boundary, helper wake is best-effort, and helper readiness never gates normal saver exit. Reddit/Reddit2, Gmail, FEEDS and Steam-family actions stay behind the same product-action/session boundary rather than calling direct browser APIs from retained runtime code.
+
+### NEWS categories
+
+- [~] **Awaiting physical check.** World, US, Politics, Gaming and Tech cards merge their selected publishers (CBS, ABC, BBC, NPR, Ars Technica, PC Gamer, Eurogamer; two or three per category) newest first on the shared path, with the publisher named on each row. Physical: `Docs/Future_Work/Feeds.md` § NEWS categories.
 
 ### Custom 2–4
 
@@ -69,7 +63,7 @@ Transition terminalization, Visualizer owner retirement and shared Core Audio ca
 
 `Docs/Future_Work/Runtime_Audit/` holds the register (00, including the accepted-items table with commits and closing evidence), item detail (01–05), structure and the considered-and-rejected list (06), historical-bug constraints (07) and the open-item evidence (08). The whole admitted queue (TX-01/02, LC-05/06, PR-01/03, PR-04 Stages A+B, PW-01/02/03-Clock/05, VZ-01/03/04/05) is accepted from the 2026-09-23 19:29–19:35 run, earlier physical runs and automated bars; the 19:29 trace also exposed and closed a TX-01 duplicate Glass geometry build.
 
-- Watch: PW-04 Feed model reset (trigger: FEEDS Custom 2–4 physical testing shows delegate/artwork churn). Parked: PR-02 (DC-04 stays documented), PR-01 resolve memo, PR-07, ST-01/02, VZ-05 epoch cache, VZ-07. Closed: LC-01, PR-05, PW-06, PW-03 Media, the prefetch double batch.
+- Watch: PW-04 Feed model reset (trigger: FEEDS Custom 2–4 or NEWS physical testing shows delegate/artwork churn; a NEWS card republishes once per publisher result). Parked: PR-02 (DC-04 stays documented), PR-01 resolve memo, PR-07, ST-01/02, VZ-05 epoch cache, VZ-07. Closed: LC-01, PR-05, PW-06, PW-03 Media, the prefetch double batch.
 
 ## Display wake freeze and overnight memory (2026-09-25 evidence)
 
