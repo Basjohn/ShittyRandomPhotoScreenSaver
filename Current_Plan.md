@@ -1,5 +1,9 @@
 # SRPSS | Current Plan
 
+## Guided Setup / Quick Start (ACTIVE, not started)
+
+Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Open operator decision there: D2 (authored widgets move by anchor in Quick Start; free placement starts in Runtime Edit).
+
 ## Runtime audit 2026-09-22 | accepted 2026-09-23/24
 
 `Docs/Future_Work/Runtime_Audit/` holds the register (00, including the accepted-items table with commits and closing evidence), item detail (01–05), structure and the considered-and-rejected list (06), historical-bug constraints (07) and the open-item evidence (08). The whole admitted queue (TX-01/02, LC-05/06, PR-01/03, PR-04 Stages A+B, PW-01/02/03-Clock/05, VZ-01/03/04/05) is accepted from the 2026-09-23 19:29–19:35 run, earlier physical runs and automated bars; the 19:29 trace also exposed and closed a TX-01 duplicate Glass geometry build.
