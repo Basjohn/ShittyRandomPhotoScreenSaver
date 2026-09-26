@@ -111,14 +111,7 @@ lookup (a few dozen an hour, more once NEWS multiplied feed sources); since 2026
 eight persistent resolver threads, started only as concurrent lookups first need them. Census of the invisible
 saver with two NEWS cards and Custom 1 at a 5-minute refresh (7 min, one full refresh of six publishers): 4
 Windows thread-pool workers (0.6/min, unchanged) and 2 Python threads that never exited (the resolver pool
-reaching its peak concurrency); no SRPSS thread was created and destroyed.
-
-Evening censuses (2026-09-26, operator at the desktop, 8 min each) also showed short-lived Windows shell pool
-threads starting in `SHCore.dll`: 4 to 9 per run (0.5 to 1.1/min, living 30 to 140 s), about 1.7 to 3.8 MB/h of
-driver state at 57 KB each. They are not SRPSS threads and not caused by any change that day: the same count
-appeared with Feeds off and with that morning's code (6303b40f, 9 per run) run from a detached worktree, while the
-morning's unattended runs had none. Like the pool workers above, they track desktop activity rather than saver
-work, so the unattended overnight run is the measure.
+reaching its peak concurrency); no SRPSS thread was created and destroyed.[^shcore]
 
 ## Is The Absolute Level Normal?
 
@@ -137,3 +130,5 @@ is committed but not resident, and that gap is what grows.
 - `tests/test_qtquick_native_texture_wrapper_retention.py`: 40 uploads through the production node on a real
   threaded-GL window leave ≤1 wrapper, and the latest image is still shown.
 - `tools/memory_slope_report.py`: warm-plateau slopes and settled replacement steps from existing logs.
+
+[^shcore]: Attended censuses (2026-09-26 evening) also showed 4-9 short-lived Windows shell pool threads per 8 min in `SHCore.dll` (about 2-4 MB/h of driver state). The same appeared with Feeds off and with that morning's code, and never in unattended runs: Windows reacting to desktop activity, not SRPSS. Not worth pursuing unless it ever shows up as contention.

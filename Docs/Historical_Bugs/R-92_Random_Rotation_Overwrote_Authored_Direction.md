@@ -1,7 +1,7 @@
 # R-92 — Random Transition Rotation Overwrote The User's Authored Direction
 
 Date: 2026-09-22  
-Status: FIXED IN CODE — `e3c6ce82` (runtime audit TX-02); physical check open (`Current_Plan.md`)
+Status: FIXED IN CODE — `e3c6ce82` (runtime audit TX-02); physical check open (operator)
 
 ## Classification
 

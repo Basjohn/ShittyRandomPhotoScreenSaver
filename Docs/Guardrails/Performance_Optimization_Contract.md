@@ -13,7 +13,7 @@ Cross-links:
 - Bubble temporal fidelity: `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - R-69 failed viewport-compression lesson: `Docs/Historical_Bugs/R-69_Bubble_Extreme_Viewport_Global_Radius_Compression.md`
 - R-71 audio-allocation/GC history: `Docs/Historical_Bugs/R-71_Visualizer_Audio_Per_Frame_Task_And_DSP_State_Allocation.md`
-- final installed/physical acceptance: `Current_Plan.md` + `Docs/TestSuite.md`
+- final installed/physical acceptance: the feature's own Reference/Future_Work/Historical_Bugs doc + `Docs/TestSuite.md`
 
 ## 1. Definition of good performance
 

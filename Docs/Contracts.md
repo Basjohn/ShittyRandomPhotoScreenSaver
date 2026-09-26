@@ -76,6 +76,8 @@ Canonical defaults remain the identity/schema registry, so unknown bucket keys s
 are sparse. Legacy full boolean maps normalize
 to one open winner per local scope and are rewritten sparsely on the next bucket interaction, not during Settings startup.
 
+**Runtime -> Settings round-trip:** Settings reopens on the last top-level tab and its semantic subsection/builder (Widgets, Visualizers, Display, Transitions, Themes). Only the semantic selection persists; restored content is anchored at the top, never a replayed pixel scroll.
+
 **Lazy Settings-section lifetime:** family body retirement invalidates queued/coalesced UI callbacks admitted by the old
 section generation and drops retained references to child QObjects before `deleteLater()`. Generic follow-up UI refreshes
 must validate the underlying C++ QObject before dereference and prune stale wrappers. Never keep hidden bodies alive, pump

@@ -70,3 +70,7 @@ Until the operator activates this gate, **do not promote Sphere into shared/perm
 ## Current shared-boundary rule
 
 Sphere-specific presentation controls remain confined to Sphere-owned descriptor/capture/runtime/renderer/config branches. Permanent-mode runtimes/renderers and shared logical analysis must not gain Sphere-specific behavior merely to tidy the experiment. Any proposed extraction into shared infrastructure is a **promotion** and must pass the dormant golden gate above.
+
+## Open operator gate: energy-floor controls
+
+The independent fragment and particle minimum-energy settings are implemented with curated/default and user-authored preset protection. Remaining: the native Windows settings/preset run and active-music observation of independent floor effects, Reset and Custom Save/reopen. Do not retune authored values on the operator's behalf.
