@@ -112,6 +112,15 @@ class WidgetType(Enum):
     ABANDONMENT_ISSUES = "abandonment_issues"
     FRIEND_PULSE = "friend_pulse"
     SYSTEM_STATS = "system_stats"
+    FEEDS_CUSTOM_1 = "feeds_custom_1"
+    FEEDS_CUSTOM_2 = "feeds_custom_2"
+    FEEDS_CUSTOM_3 = "feeds_custom_3"
+    FEEDS_CUSTOM_4 = "feeds_custom_4"
+    FEEDS_NEWS_WORLD = "feeds_news_world"
+    FEEDS_NEWS_US = "feeds_news_us"
+    FEEDS_NEWS_POLITICS = "feeds_news_politics"
+    FEEDS_NEWS_GAMING = "feeds_news_gaming"
+    FEEDS_NEWS_TECH = "feeds_news_tech"
 
 
 @dataclass
@@ -621,6 +630,31 @@ def build_widget_estimates(
             )
         )
 
+    # A Feed card presents only when enabled and configured (an address for a
+    # CUSTOM slot, a publisher for a NEWS card); its authored size is its box.
+    from core.feeds.config import FEED_WIDGET_IDS, feed_widget_config
+
+    for section in FEED_WIDGET_IDS:
+        card = _resolved_widget_section(settings, defaults, section)
+        if str(card["position"]).strip().lower() == "custom":
+            continue
+        feed = feed_widget_config(section, card)
+        if not (feed.enabled and feed.configured):
+            continue
+        w, h = estimate_steam_card_size(
+            int(card["font_size"]),
+            int(card["preferred_width"]),
+            int(card["preferred_height"]),
+        )
+        estimates.append(WidgetEstimate(
+            widget_type=WidgetType(section),
+            position=str(card["position"]),
+            monitor=str(card["monitor"]),
+            enabled=True,
+            estimated_width=w,
+            estimated_height=h,
+        ))
+
     spotify_vis = _resolved_widget_section(settings, defaults, "spotify_visualizer")
     if (
         bool(media["enabled"])
@@ -664,6 +698,15 @@ def _get_widget_display_name(widget_type: WidgetType) -> str:
         WidgetType.ABANDONMENT_ISSUES: "Abandonment Issues",
         WidgetType.FRIEND_PULSE: "Friend Pulse",
         WidgetType.SYSTEM_STATS: "System Stats",
+        WidgetType.FEEDS_CUSTOM_1: "Custom 1",
+        WidgetType.FEEDS_CUSTOM_2: "Custom 2",
+        WidgetType.FEEDS_CUSTOM_3: "Custom 3",
+        WidgetType.FEEDS_CUSTOM_4: "Custom 4",
+        WidgetType.FEEDS_NEWS_WORLD: "World News",
+        WidgetType.FEEDS_NEWS_US: "US News",
+        WidgetType.FEEDS_NEWS_POLITICS: "Politics",
+        WidgetType.FEEDS_NEWS_GAMING: "Gaming News",
+        WidgetType.FEEDS_NEWS_TECH: "Tech News",
     }
     return names.get(widget_type, widget_type.value)
 

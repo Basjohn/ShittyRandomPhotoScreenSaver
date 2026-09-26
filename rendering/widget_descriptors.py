@@ -2795,6 +2795,8 @@ def _read_preview_attr(
             )
         if field.reader == "current_text_int":
             return int(widget.currentText())
+        if field.reader == "text":
+            return widget.text()
         if field.reader == "clock_display_mode":
             return "analog" if bool(widget.isChecked()) else "digital"
         return widget
@@ -3103,6 +3105,31 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
                 "font_size", "system_stats_font_size", "value"
             ),
         ),
+    ),
+    *(
+        WidgetStackPreviewDescriptor(
+            widget_id=w,
+            widget_type_key=w,
+            status_attr_name=f"{feed_settings_attr_stem(w)}_stack_status",
+            position_attr_name=f"{feed_settings_attr_stem(w)}_position",
+            monitor_attr_name=f"{feed_settings_attr_stem(w)}_monitor_combo",
+            fields=(
+                WidgetPreviewFieldDescriptor("enabled", f"{feed_settings_attr_stem(w)}_enabled", "checked"),
+                WidgetPreviewFieldDescriptor("position", f"{feed_settings_attr_stem(w)}_position", "current_text"),
+                WidgetPreviewFieldDescriptor("monitor", f"{feed_settings_attr_stem(w)}_monitor_combo", "current_text"),
+                WidgetPreviewFieldDescriptor("font_size", f"{feed_settings_attr_stem(w)}_font_size", "value"),
+                WidgetPreviewFieldDescriptor(
+                    "preferred_width", f"{feed_settings_attr_stem(w)}_preferred_width", "value"),
+                WidgetPreviewFieldDescriptor(
+                    "preferred_height", f"{feed_settings_attr_stem(w)}_preferred_height", "value"),
+                # A NEWS card's publishers repair from canonical (all selected).
+                *(
+                    (WidgetPreviewFieldDescriptor("feed_url", f"{feed_settings_attr_stem(w)}_url", "text"),)
+                    if w in CUSTOM_FEED_WIDGET_IDS else ()
+                ),
+            ),
+        )
+        for w in FEED_WIDGET_IDS
     ),
 )
 
