@@ -180,12 +180,15 @@ def test_first_edit_entry_preserves_visible_visualizer_origin(qt_app):
     manager._refresh_all_quick_context_menus = lambda: None
     try:
         _configure_visualizer(visualizer, playing=True)
-        visualizer.set_authored_outer_origin(730., 420.)
+        # TEST INPUT, NOT A DEFAULT GOLDEN: stay inside the offscreen QPA's
+        # smaller screen too, so this tests Edit admission rather than clamping.
+        authored_origin = (100., 100.)
+        visualizer.set_authored_outer_origin(*authored_origin)
         visualizer.bind(engine_generation=3, activation_id=5)
         visualizer._apply_resolved_presentation(visualizer._resolve_current_presentation())
         visualizer.start(interval_s=10.)
         before = unit.runtime.scene_controller.visualizer_item.presentation.outer_rect
-        assert before[:2] == (730., 420.)
+        assert before[:2] == authored_origin
         assert manager._start_quick_custom_layout_session()
         after = unit.runtime.scene_controller.visualizer_item.presentation.outer_rect
         assert after == before
@@ -659,6 +662,64 @@ def test_single_quick_custom_owner_save_commits_geometry_size_and_enabled(
             float(committed.width),
             float(committed.height),
         )
+        assert binding.policy.content_sized_entry is None
+    finally:
+        owner.retire()
+        unit.retire()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+def test_quick_custom_save_keeps_moved_content_entry_live_in_same_generation(
+    qt_app,
+) -> None:
+    """A move-only content entry keeps its real preferred-size policy after Save."""
+
+    widgets = _clock_widgets()
+    settings = _Settings(widgets)
+    unit, factory = _clock_unit(qt_app, widgets, generation=813)
+    owner = QuickCustomLayoutOwner(
+        settings_manager=settings,
+        participants_provider=lambda: (unit,),
+        visualizer_provider=lambda: (None, None),
+        reload_request=lambda _kind: pytest.fail("Save must not recreate a healthy runtime"),
+        live_config_commit=lambda widgets: None,
+    )
+    try:
+        assert owner.start() is True
+        session = owner.session
+        assert session is not None
+        item = session.items()[0]
+        screen = unit.runtime.window.screen().geometry()
+        target = QRect(screen.x() + 600, screen.y() + 48, 220, 110)
+        # Simulate a hydrated content-sized CUSTOM entry.  Runtime Edit moving
+        # that entry changes its anchor but does not turn it into an explicit
+        # resize policy.
+        item.content_sized = True
+        item.baseline_content_sized = True
+        item.placement_anchor = "right,top"
+        item.baseline_placement_anchor = "right,top"
+        item.set_geometry(target)
+        session.notify_item_changed(item)
+
+        assert owner.save() is True
+        binding = next(
+            entry
+            for widget_id, entry in unit.presenter._geometry_bindings
+            if widget_id == "clock"
+        )
+        assert binding.policy.content_sized_entry is not None
+        binding.update_content_size((180.0, 70.0))
+        first = unit.presenter.geometry_for("clock")
+        binding.update_content_size((260.0, 96.0))
+        second = unit.presenter.geometry_for("clock")
+        assert first is not None and second is not None
+        assert second.width == pytest.approx(260.0)
+        assert second.height == pytest.approx(96.0)
+        # The persisted right/top anchor remains fixed while content changes.
+        assert first.x + first.width == pytest.approx(second.x + second.width)
+        assert first.y == pytest.approx(second.y)
+        assert binding.policy.content_sized_entry is not None
     finally:
         owner.retire()
         unit.retire()

@@ -32,6 +32,10 @@ CUSTOM_LAYOUT_SNAP_GUTTER_PX = 30
 CUSTOM_LAYOUT_GUTTER_SNAG_THRESHOLD_PX = 5
 CUSTOM_LAYOUT_TRANSFER_THRESHOLD_PX = 28
 CUSTOM_LAYOUT_MIN_WIDGET_SIZE = QSize(80, 48)
+CONTENT_SIZED_PAYLOAD_KEY = "_size_from_content"
+PLACEMENT_ANCHOR_PAYLOAD_KEY = "_placement_anchor"
+_PLACEMENT_HORIZONTAL = ("left", "center", "right")
+_PLACEMENT_VERTICAL = ("top", "center", "bottom")
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,74 @@ class CustomLayoutEntry:
             "size_payload": dict(self.size_payload),
             "resize_mode": self.resize_mode,
         }
+
+
+def parse_content_placement_anchor(value: object) -> tuple[str, str] | None:
+    """Parse the compact ``"horizontal,vertical"`` content anchor carrier."""
+
+    horizontal, separator, vertical = str(value or "").strip().lower().partition(",")
+    if not separator or horizontal not in _PLACEMENT_HORIZONTAL or vertical not in _PLACEMENT_VERTICAL:
+        return None
+    return horizontal, vertical
+
+
+def choose_content_placement_anchor(rect: QRect, display_size: QSize) -> str:
+    """Choose the stable content anchor for a moved content-sized CUSTOM box.
+
+    A snapped display edge wins so an edge-aligned item remains edge-aligned as
+    its content changes.  Otherwise use display thirds, which keeps free moves
+    intuitive without inventing another persisted coordinate system.
+    """
+
+    width = max(1, int(display_size.width()))
+    height = max(1, int(display_size.height()))
+
+    def axis(start: int, span: int, extent: int, low: str, middle: str, high: str) -> str:
+        end = start + span
+        if abs(start) <= CUSTOM_LAYOUT_SNAP_THRESHOLD_PX:
+            return low
+        if abs(end - extent) <= CUSTOM_LAYOUT_SNAP_THRESHOLD_PX:
+            return high
+        centre = start + span / 2.0
+        if centre < extent / 3.0:
+            return low
+        if centre > extent * 2.0 / 3.0:
+            return high
+        return middle
+
+    return "%s,%s" % (
+        axis(rect.x(), rect.width(), width, "left", "center", "right"),
+        axis(rect.y(), rect.height(), height, "top", "center", "bottom"),
+    )
+
+
+def resolve_content_sized_rect(
+    stored_rect: NormalizedRect,
+    anchor: object,
+    content_size: tuple[float, float],
+    display_size: QSize,
+) -> QRect:
+    """Resolve a normalized content-sized entry through its stored anchor.
+
+    ``stored_rect`` contributes only the authoritative anchor point; live
+    content supplies the width and height.  The existing CUSTOM containment
+    clamp remains the final geometry authority.
+    """
+
+    parsed = parse_content_placement_anchor(anchor)
+    if parsed is None:
+        raise ValueError("invalid content-sized CUSTOM placement anchor")
+    width = max(1, int(round(float(content_size[0]))))
+    height = max(1, int(round(float(content_size[1]))))
+    stored = denormalize_local_rect(stored_rect, display_size)
+    horizontal, vertical = parsed
+    point_x = stored.x() if horizontal == "left" else (stored.x() + stored.width() / 2.0 if horizontal == "center" else stored.x() + stored.width())
+    point_y = stored.y() if vertical == "top" else (stored.y() + stored.height() / 2.0 if vertical == "center" else stored.y() + stored.height())
+    x = point_x if horizontal == "left" else (point_x - width / 2.0 if horizontal == "center" else point_x - width)
+    y = point_y if vertical == "top" else (point_y - height / 2.0 if vertical == "center" else point_y - height)
+    return clamp_local_rect_to_bounds(
+        QRect(int(round(x)), int(round(y)), width, height), display_size
+    )
 
 
 @dataclass(frozen=True)

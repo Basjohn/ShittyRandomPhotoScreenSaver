@@ -28,7 +28,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
+from PySide6.QtCore import QSize
+
 from .host import OverlayWidgetGeometry
+from rendering.custom_layout_contract import (
+    CONTENT_SIZED_PAYLOAD_KEY,
+    PLACEMENT_ANCHOR_PAYLOAD_KEY,
+    CustomLayoutEntry,
+    resolve_content_sized_rect,
+)
+from rendering.quick.custom_layout_size import is_uniform_transform_resize_mode
 
 
 # Matches the legacy min-visible clamp: a widget may be dragged/anchored partly
@@ -153,10 +162,11 @@ class OverlayGeometryPolicy:
     anchor: OverlayAnchor
     margin: float
     committed_rect: OverlayWidgetGeometry | None = None
+    content_sized_entry: CustomLayoutEntry | None = None
 
     @property
     def has_committed_rect(self) -> bool:
-        return self.committed_rect is not None
+        return self.committed_rect is not None or self.content_sized_entry is not None
 
     def resolve(
         self,
@@ -165,6 +175,24 @@ class OverlayGeometryPolicy:
     ) -> OverlayWidgetGeometry:
         if self.committed_rect is not None:
             return self.committed_rect
+        if self.content_sized_entry is not None:
+            entry = self.content_sized_entry
+            try:
+                scale = float(entry.size_payload.get("_custom_resize_scale", 1.0))
+            except (TypeError, ValueError):
+                scale = 1.0
+            scale = max(1.0e-6, scale) if is_uniform_transform_resize_mode(entry.resize_mode) else 1.0
+            local = resolve_content_sized_rect(
+                entry.rect,
+                entry.size_payload.get(PLACEMENT_ANCHOR_PAYLOAD_KEY),
+                (float(content_size[0]) * scale, float(content_size[1]) * scale),
+                QSize(int(round(display_bounds.width)), int(round(display_bounds.height))),
+            )
+            return OverlayWidgetGeometry(
+                float(display_bounds.x) + local.x(),
+                float(display_bounds.y) + local.y(),
+                float(local.width()), float(local.height()),
+            )
         return resolve_anchored_geometry(
             content_size=content_size,
             anchor=self.anchor,
@@ -196,6 +224,7 @@ def resolve_overlay_geometry_policy(
     widgets_config: Mapping[str, object] | None,
     *,
     committed_rect: OverlayWidgetGeometry | None = None,
+    committed_entry: CustomLayoutEntry | None = None,
 ) -> OverlayGeometryPolicy:
     """Resolve the anchor + margin geometry policy for one widget instance.
 
@@ -226,11 +255,18 @@ def resolve_overlay_geometry_policy(
     except ValueError:
         anchor = canonical_anchor
     margin = _resolve_margin(values, canonical)
+    content_sized_entry = (
+        committed_entry
+        if committed_entry is not None
+        and committed_entry.size_payload.get(CONTENT_SIZED_PAYLOAD_KEY) is True
+        else None
+    )
     return OverlayGeometryPolicy(
         widget_id=str(widget_id),
         anchor=anchor,
         margin=margin,
         committed_rect=committed_rect,
+        content_sized_entry=content_sized_entry,
     )
 
 
@@ -315,25 +351,41 @@ class OverlayGeometryBinding:
         return self._reapply()
 
     def set_committed_rect(
-        self, committed_rect: OverlayWidgetGeometry | None
+        self,
+        committed_rect: OverlayWidgetGeometry | None,
+        *,
+        committed_entry: CustomLayoutEntry | None = None,
     ) -> OverlayWidgetGeometry | None:
-        """Replace the Python-owned committed rectangle and reapply once.
+        """Replace the Python-owned committed CUSTOM state and reapply once.
 
         Dynamic family variants (currently Clock analogue/digital CUSTOM shapes)
         must update the same geometry binding that owns preferred-size replay.
         Otherwise a later implicit-size signal can replay the stale prior variant
-        over pixels that the family changed directly.
+        over pixels that the family changed directly.  A just-persisted
+        content-sized entry remains a live-content policy; an explicit resize
+        deliberately replaces that policy with its measured rectangle.
         """
 
         if self._retired:
             return None
-        if committed_rect == self._policy.committed_rect:
+        content_sized_entry = (
+            committed_entry
+            if committed_entry is not None
+            and committed_entry.size_payload.get(CONTENT_SIZED_PAYLOAD_KEY) is True
+            else None
+        )
+        effective_rect = None if content_sized_entry is not None else committed_rect
+        if (
+            effective_rect == self._policy.committed_rect
+            and content_sized_entry == self._policy.content_sized_entry
+        ):
             return None
         self._policy = OverlayGeometryPolicy(
             widget_id=self._policy.widget_id,
             anchor=self._policy.anchor,
             margin=self._policy.margin,
-            committed_rect=committed_rect,
+            committed_rect=effective_rect,
+            content_sized_entry=content_sized_entry,
         )
         return self._reapply()
 
@@ -401,16 +453,24 @@ class OverlayGeometryBinding:
             anchor=self._policy.anchor,
             margin=self._policy.margin,
             committed_rect=None,
+            content_sized_entry=None,
         )
         geometry = authored_policy.resolve(content_size, self._display_bounds)
         sink(geometry)
         return geometry
 
     def _reapply(self) -> OverlayWidgetGeometry | None:
-        # A committed CUSTOM rectangle does not need a content size; anchored
-        # placement does. Without a content size yet, there is nothing to apply.
-        if self._policy.has_committed_rect:
+        # An explicit committed CUSTOM rectangle does not need a content size.
+        # A content-sized committed entry does: its normalized anchor persists,
+        # while the retained family's real preferred size supplies its extent.
+        if self._policy.committed_rect is not None:
             geometry = self._policy.resolve((1.0, 1.0), self._display_bounds)
+        elif self._policy.content_sized_entry is not None:
+            if self._last_content_size is None:
+                return None
+            geometry = self._policy.resolve(
+                self._last_content_size, self._display_bounds
+            )
         elif self._last_content_size is not None:
             geometry = self._policy.resolve(
                 self._last_content_size, self._display_bounds

@@ -6,6 +6,9 @@ from PySide6.QtCore import QPoint, QRect, QSize
 import inspect
 
 from rendering import custom_layout_contract
+from rendering.custom_layout_commit import commit_custom_session
+from rendering.custom_layout_session import CustomLayoutKey, CustomLayoutSession, CustomLayoutSessionItem
+from rendering.widget_descriptors import get_widget_runtime_descriptor
 from rendering.custom_layout_contract import (
     CustomLayoutEntry,
     CUSTOM_LAYOUT_TRANSFER_THRESHOLD_PX,
@@ -18,6 +21,8 @@ from rendering.custom_layout_contract import (
     get_widget_layout_variant_payload,
     load_custom_layout_map,
     normalize_local_rect,
+    choose_content_placement_anchor,
+    resolve_content_sized_rect,
     resolve_resize_edge_snap,
     resolve_snap_local_rect_for_edit,
     resolve_uniform_scale_snap,
@@ -86,6 +91,73 @@ def test_normalize_and_clamp_rect_helpers_are_display_local():
     clamped = clamp_local_rect_to_bounds(QRect(950, 470, 120, 80), display_size)
     assert clamped.right() <= display_size.width() - 1
     assert clamped.bottom() <= display_size.height() - 1
+
+
+@pytest.mark.parametrize(
+    ("anchor", "rect"),
+    [
+        ("left,top", QRect(20, 30, 200, 100)),
+        ("center,top", QRect(400, 30, 200, 100)),
+        ("right,top", QRect(780, 30, 200, 100)),
+        ("left,center", QRect(20, 250, 200, 100)),
+        ("center,center", QRect(400, 250, 200, 100)),
+        ("right,center", QRect(780, 250, 200, 100)),
+        ("left,bottom", QRect(20, 470, 200, 100)),
+        ("center,bottom", QRect(400, 470, 200, 100)),
+        ("right,bottom", QRect(780, 470, 200, 100)),
+    ],
+)
+def test_content_sized_rect_preserves_each_authoritative_anchor(anchor, rect):
+    display = QSize(1000, 600)
+    stored = normalize_local_rect(rect, display)
+    for content_size in ((200.0, 100.0), (320.0, 180.0), (120.0, 60.0)):
+        resolved = resolve_content_sized_rect(stored, anchor, content_size, display)
+        horizontal, vertical = anchor.split(",")
+        stored_x = rect.x() if horizontal == "left" else (rect.x() + rect.width() / 2.0 if horizontal == "center" else rect.x() + rect.width())
+        stored_y = rect.y() if vertical == "top" else (rect.y() + rect.height() / 2.0 if vertical == "center" else rect.y() + rect.height())
+        resolved_x = resolved.x() if horizontal == "left" else (resolved.x() + resolved.width() / 2.0 if horizontal == "center" else resolved.x() + resolved.width())
+        resolved_y = resolved.y() if vertical == "top" else (resolved.y() + resolved.height() / 2.0 if vertical == "center" else resolved.y() + resolved.height())
+        assert resolved_x == pytest.approx(stored_x, abs=0.5)
+        assert resolved_y == pytest.approx(stored_y, abs=0.5)
+
+
+def test_content_anchor_prefers_snapped_edges_then_display_thirds():
+    display = QSize(900, 600)
+    assert choose_content_placement_anchor(QRect(5, 5, 200, 100), display) == "left,top"
+    assert choose_content_placement_anchor(QRect(695, 495, 200, 100), display) == "right,bottom"
+    assert choose_content_placement_anchor(QRect(350, 250, 200, 100), display) == "center,center"
+
+
+def test_commit_session_writes_content_sized_move_and_explicit_resize_forms():
+    session = CustomLayoutSession()
+    key = CustomLayoutKey("weather", "screen:test")
+    item = CustomLayoutSessionItem(
+        source_key=key,
+        model_identity="weather",
+        baseline_global_rect=QRect(20, 30, 200, 100),
+        current_global_rect=QRect(700, 30, 200, 100),
+        baseline_size_payload={},
+        current_size_payload={},
+        baseline_enabled=True,
+        current_enabled=True,
+        content_sized=True,
+        baseline_content_sized=True,
+    )
+    session.add_item(item)
+    descriptor = get_widget_runtime_descriptor("weather")
+    assert descriptor is not None
+    widgets = {"weather": {"enabled": True, "position": "Top Left", "monitor": "1"}}
+    displays = {"screen:test": (("screen:test",), QRect(0, 0, 1000, 600), "1")}
+    commit_custom_session(widgets, session, {key: descriptor}, displays)
+    payload = widgets["custom_layout"]["displays"]["screen:test"]["weather"]["default"]["size_payload"]
+    assert payload["_size_from_content"] is True
+    assert payload["_placement_anchor"] == "right,top"
+
+    item.set_geometry(QRect(700, 30, 240, 120), resize_scale=1.2)
+    commit_custom_session(widgets, session, {key: descriptor}, displays)
+    payload = widgets["custom_layout"]["displays"]["screen:test"]["weather"]["default"]["size_payload"]
+    assert "_size_from_content" not in payload
+    assert "_placement_anchor" not in payload
 
 
 def test_snap_local_rect_for_edit_snaps_to_display_edges_and_grid():

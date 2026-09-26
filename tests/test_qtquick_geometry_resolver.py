@@ -9,6 +9,7 @@ widget reachable on the display.
 from __future__ import annotations
 
 import pytest
+from rendering.custom_layout_contract import CustomLayoutEntry, NormalizedRect
 
 from rendering.quick.widgets.geometry_resolver import (
     MIN_VISIBLE_PX,
@@ -19,6 +20,78 @@ from rendering.quick.widgets.geometry_resolver import (
     resolve_overlay_geometry_policy,
 )
 from rendering.quick.widgets.host import OverlayWidgetGeometry
+
+
+def test_content_sized_committed_policy_follows_live_content_at_saved_anchor():
+    entry = CustomLayoutEntry(
+        widget_id="weather",
+        geometry_variant="default",
+        rect=NormalizedRect(0.8, 0.1, 0.18, 0.15),
+        size_payload={
+            "_size_from_content": True,
+            "_placement_anchor": "right,top",
+            "_custom_resize_scale": 1.5,
+        },
+        resize_mode="ordinary_uniform",
+    )
+    policy = resolve_overlay_geometry_policy(
+        "weather", {}, committed_entry=entry,
+    )
+    bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 600.0)
+    first = policy.resolve((100.0, 80.0), bounds)
+    second = policy.resolve((180.0, 120.0), bounds)
+    assert first.width == 150.0
+    assert second.width == 270.0
+    # The saved right edge remains authoritative while content changes.
+    assert first.x + first.width == pytest.approx(980.0)
+    assert second.x + second.width == pytest.approx(980.0)
+
+
+def test_clock_content_sized_variant_policy_uses_each_real_size_without_double_scale():
+    digital = CustomLayoutEntry(
+        widget_id="clock", geometry_variant="digital",
+        rect=NormalizedRect(0.5, 0.1, 0.2, 0.2),
+        size_payload={"_size_from_content": True, "_placement_anchor": "center,top", "_custom_resize_scale": 2.0},
+        resize_mode="clock_font",
+    )
+    analog = CustomLayoutEntry(
+        widget_id="clock", geometry_variant="analog",
+        rect=NormalizedRect(0.5, 0.5, 0.2, 0.2),
+        size_payload={"_size_from_content": True, "_placement_anchor": "center,center", "_custom_resize_scale": 2.0},
+        resize_mode="clock_font",
+    )
+    policy = resolve_overlay_geometry_policy("clock", {}, committed_entry=digital)
+    bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 600.0)
+    assert policy.resolve((120.0, 80.0), bounds).width == 120.0
+    written = []
+    binding = OverlayGeometryBinding(policy=policy, display_bounds=bounds, geometry_sink=written.append)
+    binding.update_content_size((120.0, 80.0))
+    # Clock font payloads carry their own real preferred sizes.  The generic
+    # uniform scale marker must not multiply a mode's real size a second time.
+    assert binding.current_geometry == OverlayWidgetGeometry(540.0, 60.0, 120.0, 80.0)
+    binding.set_committed_rect(
+        OverlayWidgetGeometry(0.0, 0.0, 1.0, 1.0), committed_entry=analog,
+    )
+    binding.update_content_size((300.0, 180.0))
+    assert binding.current_geometry == OverlayWidgetGeometry(450.0, 270.0, 300.0, 180.0)
+
+
+def test_explicit_commit_replaces_content_sized_policy():
+    entry = CustomLayoutEntry(
+        widget_id="clock", geometry_variant="digital",
+        rect=NormalizedRect(0.5, 0.1, 0.2, 0.2),
+        size_payload={"_size_from_content": True, "_placement_anchor": "center,top"},
+        resize_mode="clock_font",
+    )
+    policy = resolve_overlay_geometry_policy("clock", {}, committed_entry=entry)
+    bounds = OverlayWidgetGeometry(0.0, 0.0, 1000.0, 600.0)
+    written = []
+    binding = OverlayGeometryBinding(policy=policy, display_bounds=bounds, geometry_sink=written.append)
+    binding.update_content_size((120.0, 80.0))
+    explicit = OverlayWidgetGeometry(20.0, 30.0, 210.0, 110.0)
+    binding.set_committed_rect(explicit)
+    binding.update_content_size((360.0, 240.0))
+    assert binding.current_geometry == explicit
 
 
 def _reference_xy(anchor: OverlayAnchor, w, h, W, H, m):

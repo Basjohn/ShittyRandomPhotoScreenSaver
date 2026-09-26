@@ -153,6 +153,13 @@ class CustomLayoutSessionItem:
     authored_reference_size: ViewportExtent | None = None
     authored_size_payload: dict[str, Any] = field(default_factory=dict)
     authored_viewport_extent: ViewportExtent | None = None
+    # Content-sized CUSTOM entries retain their live preferred size after a
+    # move. Any real size/extent/child edit clears this flag and commits the
+    # measured rectangle as the explicit existing CUSTOM form.
+    content_sized: bool = False
+    baseline_content_sized: bool = False
+    placement_anchor: str | None = None
+    baseline_placement_anchor: str | None = None
 
     def __post_init__(self) -> None:
         self.model_identity = str(self.model_identity or self.source_key.widget_id)
@@ -223,6 +230,10 @@ class CustomLayoutSessionItem:
         self.authored_viewport_extent = normalize_viewport_extent(
             self.authored_viewport_extent
         )
+        self.content_sized = bool(self.content_sized)
+        self.baseline_content_sized = bool(self.baseline_content_sized)
+        self.placement_anchor = str(self.placement_anchor or "").strip() or None
+        self.baseline_placement_anchor = str(self.baseline_placement_anchor or "").strip() or None
         self.current_display_identity = (
             str(self.current_display_identity or "").strip()
             or self.source_key.display_identity
@@ -267,6 +278,7 @@ class CustomLayoutSessionItem:
         prior = self.current_child_sizes.get(normalized_id, CustomChildSize())
         if prior == size:
             return False
+        self.content_sized = False
         if size.is_authored:
             self.current_child_sizes.pop(normalized_id, None)
         else:
@@ -301,6 +313,13 @@ class CustomLayoutSessionItem:
         content_extent: ViewportExtent | None = None,
     ) -> None:
         self.current_global_rect = QRect(global_rect)
+        if (
+            size_payload is not None
+            or resize_scale is not None
+            or viewport_extent is not None
+            or content_extent is not None
+        ):
+            self.content_sized = False
         if size_payload is not None:
             self.current_size_payload = dict(size_payload)
         if resize_scale is not None:
@@ -350,6 +369,8 @@ class CustomLayoutSessionItem:
         self.current_viewport_extent = self.baseline_viewport_extent
         self.current_content_extent = self.baseline_content_extent
         self.current_child_sizes = dict(self.baseline_child_sizes)
+        self.content_sized = self.baseline_content_sized
+        self.placement_anchor = self.baseline_placement_anchor
         # The retained presentation re-derives this selected-parent floor. Never
         # carry a requirement from an abandoned edit gesture across Cancel/reset
         # semantics or a later re-entry.
@@ -372,6 +393,7 @@ class CustomLayoutSessionItem:
         """
 
         self.current_global_rect = QRect(global_rect)
+        self.content_sized = False
         self.current_size_payload = dict(size_payload)
         self.resize_scale = max(1.0e-6, float(resize_scale))
         self.current_content_extent = None
