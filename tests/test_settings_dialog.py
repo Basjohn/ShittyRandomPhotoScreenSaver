@@ -809,3 +809,23 @@ def test_settings_dialog_restores_themes_pill_semantically_at_top(
     assert themes.get_view_state() == {"page": "widgets"}
     qapp.processEvents()
     assert themes._scroll_area.verticalScrollBar().value() == 0
+
+
+def test_themes_page_switch_opens_at_top_without_a_deferred_reset(qapp, settings_manager):
+    """Scroll 0 survives the page switch's later layout pass; no timer needed."""
+    from ui.tabs.themes_tab import ThemesTab, _SETTING_THEMES_PAGE, _WIDGET_THEMES_PAGE
+
+    tab = ThemesTab(settings_manager)
+    try:
+        tab.resize(640, 320)
+        tab._select_page(_WIDGET_THEMES_PAGE)
+        qapp.processEvents()
+        scrollbar = tab._scroll_area.verticalScrollBar()
+        assert scrollbar.maximum() > 0
+        scrollbar.setValue(scrollbar.maximum())
+        tab._select_page(_SETTING_THEMES_PAGE)
+        for _ in range(5):
+            qapp.processEvents()
+        assert scrollbar.value() == 0
+    finally:
+        tab.deleteLater()

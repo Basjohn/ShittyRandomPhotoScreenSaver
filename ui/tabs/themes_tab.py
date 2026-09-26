@@ -11,7 +11,7 @@ Internal navigation:
 from __future__ import annotations
 from typing import Optional
 from time import perf_counter_ns
-from PySide6.QtCore import QLineF, QSignalBlocker, QTimer, QRectF, QSize, Qt
+from PySide6.QtCore import QLineF, QSignalBlocker, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QLabel, QListWidget,
     QListWidgetItem, QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
@@ -179,8 +179,9 @@ class ThemesTab(QWidget):
         scroll=getattr(self,"_scroll_area",None)
         if scroll is None:
             return
+        # 0 survives the page switch's later layout pass (a range change only
+        # clamps values above the new maximum), so no deferred second reset.
         scroll.verticalScrollBar().setValue(0)
-        QTimer.singleShot(0,lambda:scroll.verticalScrollBar().setValue(0))
 
     def get_view_state(self) -> dict[str,str]:
         page=self._page_stack.currentIndex()
