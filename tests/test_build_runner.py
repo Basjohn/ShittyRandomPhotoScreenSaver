@@ -234,6 +234,8 @@ def test_preflight_does_not_block_release_jobs_when_optional_diagnostic_is_missi
         tmp_path / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
         tmp_path / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
         tmp_path / "images" / "system_stats_tools.svg",
+        tmp_path / "images" / "SRPSSWitch.png",
+        tmp_path / "images" / "onboarding" / "widget_clocks.png",
         tmp_path / "themes" / "Default.srtheme",
         tmp_path / "themes" / "widgets" / "Default.srwtheme",
         tmp_path / "presets" / "visualizer_modes" / "bubble" / "preset_1.json",
