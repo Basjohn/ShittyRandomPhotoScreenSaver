@@ -319,15 +319,27 @@ class _FeedFamilyOwner:
         """Leading stories whose artwork any active image-showing card can show.
 
         Rows past a card's item limit never show art, so they are never warmed
-        or published. That keeps each source's protected artwork within its
-        cards' limits, which keeps the shared cache near its bounds as NEWS
-        adds publishers.
+        or published. A NEWS publisher's lease narrows that to its share of the
+        merged card (``FeedRuntimeLease.limit_artwork_rows``), so a card warms
+        about as many images as it has rows however many publishers it merges.
+        That keeps each source's protected artwork, and the shared cache, near
+        its bounds.
         """
         return max(
-            (lease.config.item_limit for lease in self._active_leases_for_state(state)
+            (lease.artwork_rows for lease in self._active_leases_for_state(state)
              if lease.config.show_images and lease.config.view_mode != "compact"),
             default=0,
         )
+
+    def artwork_rows_changed(self, lease: "FeedRuntimeLease") -> None:
+        """A lease's visible share grew: warm the newly visible art now (an event, not a timer)."""
+        if self._retired or lease not in self._active:
+            return
+        state = self._states.get(lease.config.source_spec.cache_key)
+        if state is None or state.in_flight or not self._artwork_needed(state):
+            return
+        state.artwork_attempted_at = state.last_result.snapshot.fetched_at
+        self._submit(state, cache_only=False, force=False, artwork_only=True)
 
     def _artwork_needed(self, state: _SourceState) -> bool:
         snapshot = state.last_result.snapshot if state.last_result is not None else None
@@ -623,6 +635,29 @@ class FeedRuntimeLease:
         self._owner: _FeedFamilyOwner | None = None
         self._running = False
         self._retired = False
+        # Leading stories whose art this lease's card can show; None means the
+        # card's item limit (a CUSTOM card shows its own rows).
+        self._artwork_rows: int | None = None
+
+    @property
+    def artwork_rows(self) -> int:
+        limit = int(self.config.item_limit)
+        return limit if self._artwork_rows is None else min(limit, self._artwork_rows)
+
+    def limit_artwork_rows(self, rows: int) -> None:
+        """Warm art only for this source's leading ``rows`` stories.
+
+        A NEWS card sets this to each publisher's share of its merged rows. A
+        larger share admits the newly visible art at once; a smaller one warms
+        nothing and evicts nothing already published.
+        """
+        rows = max(0, int(rows))
+        if rows == self._artwork_rows:
+            return
+        grew = rows > self.artwork_rows or self._artwork_rows is None
+        self._artwork_rows = rows
+        if grew and self._running and self._owner is not None:
+            self._owner.artwork_rows_changed(self)
 
     def attach_consumer(self, consumer: object) -> None:
         if self._retired or self._consumer_ref is not None:
@@ -811,6 +846,9 @@ class NewsRuntimeService:
             )
             for provider in config.providers
         )
+        # No art until the merge says which publishers' stories are on the card.
+        for _provider_id, lease in self._leases:
+            lease.limit_artwork_rows(0)
         # Leases hold their consumers weakly; the service keeps them alive.
         self._provider_consumers: tuple[_NewsProviderConsumer, ...] = ()
         self._results: dict[str, tuple[FeedRefreshResult, bool]] = {}
@@ -862,6 +900,12 @@ class NewsRuntimeService:
             self.config.providers,
             {pid: accepted for pid, (accepted, _cached) in self._results.items()},
         )
+        self._publish(consumer, merged)
+        # After publishing: a share that grows may warm art at once, and that
+        # publishes a newer merge, which must not be overtaken by this one.
+        self._limit_artwork_to_visible_rows(merged)
+
+    def _publish(self, consumer: object, merged: FeedRefreshResult) -> None:
         if merged.snapshot is None and (
             len(self._results) < len(self._leases)
             or any(accepted.failure == "no_cache" for accepted, _cached in self._results.values())
@@ -876,6 +920,28 @@ class NewsRuntimeService:
         accept = getattr(consumer, "on_feed_runtime_result", None)
         if callable(accept):
             accept(merged, from_cache=cached)
+
+    def _limit_artwork_to_visible_rows(self, merged: FeedRefreshResult) -> None:
+        """Give each publisher's lease its share of the rows this card can show.
+
+        A share is counted in that publisher's own feed order (what the artwork
+        warm walks), up to its last story among the card's leading rows. Until
+        every publisher has answered, the shares are not final and no art is
+        warmed; answers arrive within one bounded fetch, cached ones at once.
+        """
+        rows: dict[str, int] = {pid: 0 for pid, _lease in self._leases}
+        if merged.snapshot is not None and len(self._results) >= len(self._leases):
+            positions = {
+                pid: {item.item_id: index for index, item in enumerate(accepted.snapshot.document.items)}
+                for pid, (accepted, _cached) in self._results.items() if accepted.snapshot is not None
+            }
+            for item in merged.snapshot.document.items[:max(0, int(self.config.item_limit))]:
+                pid, _sep, item_id = item.item_id.partition(":")
+                index = positions.get(pid, {}).get(item_id)
+                if index is not None:
+                    rows[pid] = max(rows[pid], index + 1)
+        for pid, lease in self._leases:
+            lease.limit_artwork_rows(rows[pid])
 
     def request_refresh(self) -> bool:
         if self._retired:

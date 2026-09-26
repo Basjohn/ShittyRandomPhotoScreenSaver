@@ -561,3 +561,38 @@ def test_settings_news_cards_round_trip_publisher_choices(qt_app, settings_manag
         assert tab.feeds_refresh_minutes.value() == 5  # bounded like the runtime
     finally:
         tab.deleteLater()
+
+
+def test_feed_text_is_never_interpreted_as_markup_in_real_qml(qt_app):
+    """A publisher's title is data: ``<canvas>`` stays literal text and markup
+    such as ``<img src=http...>`` can never make QML fetch a remote image."""
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent, QQmlEngine
+    from PySide6.QtQuick import QQuickItem
+
+    def shadowed(item: QQuickItem) -> list[QQuickItem]:
+        found = [item] if item.objectName() in {"shadowedText", "feedHeaderSubtitle"} else []
+        for child in item.childItems():
+            found.extend(shadowed(child))
+        return found
+
+    title = 'The <canvas> element <img src="http://tracker.example/p.png">'
+    merged = merge_news_results(
+        _providers("cbs_world"), {"cbs_world": _result(_item("a", 1_900_000_000 - 60, title=title))})
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    for view_mode in ("list", "grid", "compact"):
+        model = _model("feeds_news_world", {"enabled": True, "show_images": False, "view_mode": view_mode})
+        model._active = True
+        model.on_feed_runtime_result(merged, from_cache=False)
+        component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_ROOT / "FeedPresentation.qml")))
+        root = component.createWithInitialProperties({"feedModel": model})
+        assert isinstance(root, QQuickItem), [error.toString() for error in component.errors()]
+        root.setWidth(560.0)
+        root.setHeight(420.0)
+        qt_app.processEvents()
+        texts = shadowed(root)
+        assert any(item.property("text") == title for item in texts), view_mode
+        assert texts and all(item.property("textFormat") == 0 for item in texts), view_mode  # PlainText
+        root.deleteLater()
+        qt_app.processEvents()

@@ -256,3 +256,78 @@ def test_artwork_warms_only_rows_an_active_card_can_show(tmp_path, monkeypatch):
     assert "https://cdn.example.test/6.jpg" not in requested
     small.retire()
     large.retire()
+
+
+def test_a_news_card_warms_art_only_for_the_rows_it_merges(tmp_path, monkeypatch):
+    """Each publisher warms only its share of the merged card's rows, not its
+    own item limit, so a card never fetches art for a story it cannot show
+    however many publishers it merges. Shares are set once every publisher
+    has answered, and a publisher whose share grows is warmed then (an event).
+    Each warm still adds at most MAX_IMAGES_PER_WARM new images per source."""
+    from core.feeds import artwork_transport
+    from core.feeds.news import NewsFeedConfig
+    from core.settings import storage_paths
+    from widgets.feed_runtime import NewsRuntimeConfig, NewsRuntimeService
+
+    monkeypatch.setattr(storage_paths, "get_feed_cache_dir", lambda profile=None: tmp_path)
+    requested = []
+
+    def fetch(url, **_kwargs):
+        requested.append(url)
+        out = BytesIO()
+        Image.new("RGB", (32, 24), (len(requested) * 7 % 255, 90, 160)).save(out, format="PNG")
+        return out.getvalue()
+
+    monkeypatch.setattr(artwork_transport, "fetch_artwork_bytes", fetch)
+    now = time.time()
+
+    def publisher(tag, newest, step):
+        items = tuple(
+            FeedItem(f"{tag}{i}", f"{tag} {i}", f"https://{tag}.example/{i}",
+                     published_at=int(newest - i * step),
+                     images=(FeedImageCandidate(f"https://cdn.{tag}.example/{i}.jpg", relation="media"),))
+            for i in range(12)
+        )
+        return Source(FeedRefreshResult(
+            "available",
+            FeedSnapshot(FeedDocument(tag, f"https://{tag}.example", "rss20", items), fetched_at=now),
+            FeedHealth(last_success_at=now, last_checked_at=now),
+        ))
+
+    # Interleaved: most visible rows come from cbs, some from bbc, few from npr.
+    sources = {
+        "news_cbs_world": publisher("cbs", now - 60, 60),
+        "news_bbc_world": publisher("bbc", now - 90, 300),
+        "news_npr_world": publisher("npr", now - 30, 3600),
+    }
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for",
+                        lambda owner, state: sources[state.spec.cache_key])
+    config = NewsFeedConfig.from_mapping("feeds_news_world", {
+        "enabled": True, "providers": ["cbs_world", "bbc_world", "npr_world"],
+        "item_limit": 12, "show_images": True, "view_mode": "list",
+    })
+    service = NewsRuntimeService(
+        config=NewsRuntimeConfig.from_news(config, 15), generation=46, manager=Manager(),
+        ui_dispatch=lambda callback: callback(), schedule=lambda _delay, _callback: (lambda: None),
+        task_priority=0,
+    )
+    consumer = Consumer()
+    service.attach_consumer(consumer)
+    assert service.start()
+
+    from core.feeds.artwork import MAX_IMAGES_PER_WARM
+
+    merged = consumer.accepted[-1][0]
+    visible = [item.item_id for item in merged.snapshot.document.items[:12]]
+    shares = {pid: sum(1 for row in visible if row.startswith(pid + ":"))
+              for pid in ("cbs_world", "bbc_world", "npr_world")}
+    assert all(shares.values()) and shares["cbs_world"] > MAX_IMAGES_PER_WARM
+    # Every fetched image belongs to a story on the card, none to a hidden one.
+    visible_urls = {f"https://cdn.{row.split(':')[1][:3]}.example/{row.split(':')[1][3:]}.jpg"
+                    for row in visible}
+    assert set(requested) <= visible_urls and len(requested) == len(set(requested))
+    art = set(dict(merged.local_artwork_by_item))
+    assert art <= set(visible)
+    for pid, share in shares.items():
+        assert sum(1 for row in art if row.startswith(pid + ":")) == min(share, MAX_IMAGES_PER_WARM)
+    service.retire()
