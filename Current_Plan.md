@@ -16,6 +16,10 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`.
 - [ ] **Watch (low priority, not visible): scaled prefetch holds the GIL on the background CPU lane.** `QImage.scaled` runs for up to ~70 ms per 4K derivative while holding the GIL. It is not a stutter: overnight on 2026-09-25 the Visualizer logical runtime skipped 125 of 1,812,107 steps (0.007%). R-99 already halved the scaling work. Measure on the next `--perf` run before acting: seconds with `dt_max_ms` > 25 in `[PERF_HUD]`, their overlap with `Scaled prefetch` lines in `screensaver_cache.log`, and `skipped_deadlines` in `[SPOTIFY_VIS][LOGICAL] Runtime stopped`. Only if overlap remains material, move the scaling off the GIL with identical output.
 - [ ] **Gmail refresh adds ~1.5 main-process handles per refresh.** The +18–25 handles/h slope tracks the Gmail cadence. Classify the type with `--handle-attribution`, then fix at the owner.
 
+## Layout slots | open development item
+
+- [ ] **Loading a slot leaves widgets on that the slot never had.** Operator repro (2026-09-26): GAMING NEWS on, load slot 1 (saved while GAMING NEWS was absent/disabled) → GAMING NEWS and other unsaved widgets stay on. Not a dormancy case. Likely owner: `core/settings/layout_slots.py`. `capture_layout_slot` records only sections that existed at save time, and `apply_layout_slot` touches only sections present in the payload, so a section missing from the slot (e.g. a FEEDS card added after the save) keeps its current `enabled`. Expected: a current-format slot is the whole layout, so an ordinary widget section absent from the payload loads disabled; the family/capability admission rule for turning things ON is unchanged. Needs a slot round-trip test (save without X, enable X, load → X off) plus the saver hotkey path (`DisplayManager._load_layout_slot`). Attend to once Guided Setup stabilises.
+
 ## Known failing tests and anomalies (tracked until resolved)
 
 Each stays here until fixed or explicitly retired; do not treat it as noise in a gate. Physical validation lives with each feature's own doc, not here.
