@@ -98,14 +98,6 @@ Side defects found while working (not yet fixed):
 - [ ] **Gmail refresh adds ~1.5 main-process handles per refresh.** The +18–25 handles/h slope tracks the Gmail cadence. Classify the type with `--handle-attribution`, then fix at the owner.
 - [ ] **PyOpenGL/ctypes array types accumulate** (~20 new types over 140 rotations on the Linux soak). Find the per-call `(ctype * n)` construction and hoist it. Low priority.
 - [ ] **ThreadManager's process-wide cancelled-generation registry leaks between tests.** A generation cancelled by an earlier test rejects a later test's delayed callbacks; fixtures currently dodge this with unique generations. Isolate it for tests without weakening production fencing.
-- [ ] **Linux/Xvfb development-run reds, identical on base.** Classify each on the next Windows full gate as either environment-only or a real red:
-  - `test_main_reddit_helper_preload`;
-  - `test_qtquick_native_image_lifetime` (3 tests);
-  - `test_s_hotkey_opens_settings_without_crash`;
-  - `test_transition_distribution` (2 tests);
-  - `test_visualizer_presets` (oscilloscope case).
-
-  These are already known to be environment-only here: `test_reddit_helper_runtime` (`WindowsPath`), Gmail settings/bootstrap (`libpulse`), and `test_network_bounded_http` (the container proxy and no IPv6).
 
 ## Known failing tests and anomalies (tracked until resolved)
 
