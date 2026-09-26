@@ -1187,6 +1187,63 @@ def test_notify_transition_complete_rearms_until_prefetcher_cooldown_expires(mon
     assert schedule_calls == [engine]
 
 
+def test_prefetch_resume_leaves_no_reference_cycle_per_rotation(monkeypatch):
+    """R-99: the resume callback used to re-arm itself from inside its own
+    closure, which left one garbage cycle for the cyclic GC every rotation."""
+    import gc
+
+    scheduler = _FakeScheduler()
+    cooldown = {"active": True}
+
+    class _FakeDisplayManager:
+        def has_running_transition(self):
+            return False
+
+        def has_transition_work_pending(self):
+            return False
+
+    class _FakePrefetcher:
+        def notify_transition_complete(self):
+            pass
+
+        def get_post_transition_delay_ms(self):
+            return 75
+
+        def is_in_post_transition_delay(self):
+            return cooldown["active"]
+
+        def get_remaining_post_transition_delay_ms(self):
+            return 17
+
+    engine = SimpleNamespace(
+        _prefetcher=_FakePrefetcher(), _prefetch_resume_scheduled=False,
+        _cache_runtime_stats={}, image_queue=None,
+        display_manager=_FakeDisplayManager(), thread_manager=scheduler,
+    )
+    monkeypatch.setattr("engine.image_pipeline.schedule_prefetch", lambda eng: None)
+
+    gc.collect()
+    gc.set_debug(gc.DEBUG_SAVEALL)
+    try:
+        for _ in range(20):
+            cooldown["active"] = True
+            notify_transition_complete(engine, screen_index=0)
+            scheduler.callbacks.pop(0)[1]()  # re-arms through the cooldown
+            cooldown["active"] = False
+            scheduler.callbacks.pop(0)[1]()  # runs
+        assert engine._cache_runtime_stats["prefetch_resume_runs"] == 20
+        gc.collect()
+        leaked = [
+            obj for obj in gc.garbage
+            if type(obj).__name__ == "function"
+            and getattr(obj, "__module__", "") == "engine.image_pipeline"
+        ]
+    finally:
+        gc.set_debug(0)
+        gc.garbage.clear()
+    assert leaked == []
+
+
 def test_image_pipeline_does_not_use_direct_qtimer_single_shot():
     import inspect
     import engine.image_pipeline as image_pipeline
