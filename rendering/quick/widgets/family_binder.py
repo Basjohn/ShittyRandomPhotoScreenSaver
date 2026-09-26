@@ -563,9 +563,9 @@ class RedditFamilyAdapter:
 class FeedFamilyAdapter:
     """Adapter for the bounded general Feeds family.
 
-    F2 deliberately admits only CUSTOM 1.  The remaining stable ids already
-    exist in the neutral family catalog but cannot wake runtime/provider work
-    until their later slices provide explicit descriptors and adapters.
+    Every CUSTOM slot runs through this one adapter and the same retained
+    presentation; the shared Feed runtime owner deduplicates identical
+    endpoints. NEWS ids stay reserved until their provider layer lands.
     """
 
     def __init__(
@@ -582,16 +582,19 @@ class FeedFamilyAdapter:
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        from core.feeds.config import CustomFeedConfig
+        from core.feeds.config import CUSTOM_FEED_WIDGET_IDS, CustomFeedConfig
 
-        widget_id = "feeds_custom_1"
-        values = widgets_config.get(widget_id, {})
-        if not isinstance(values, Mapping):
-            values = {}
-        config = CustomFeedConfig.from_mapping(widget_id, values)
-        # An enabled but unconfigured slot does not present a dead card and, more
-        # importantly, does not instantiate any Feed runtime/service owner.
-        return (widget_id,) if config.enabled and config.configured else ()
+        admitted: list[str] = []
+        for widget_id in CUSTOM_FEED_WIDGET_IDS:
+            values = widgets_config.get(widget_id, {})
+            if not isinstance(values, Mapping):
+                values = {}
+            config = CustomFeedConfig.from_mapping(widget_id, values)
+            # An enabled but unconfigured slot does not present a dead card and,
+            # more importantly, does not instantiate any Feed runtime/service owner.
+            if config.enabled and config.configured:
+                admitted.append(widget_id)
+        return tuple(admitted)
 
     def build(
         self,

@@ -54,12 +54,12 @@ def test_feed_monogram_is_once_cached_qpainter_vector_not_runtime_font_glyph():
     assert "QPainter(image)" in source
     assert "glyph_segments = {" in source
     assert "painter.drawLine(" in source
-    assert "glyph_pen.setWidthF(7.0)" in source
+    assert "draw(segments, width=7.0" in source
     assert 'return f"data:image/png;base64,{payload}"' in source
     assert "QFont" not in source
     assert "QPainterPath" not in source
     assert ".addText(" not in source
-    assert "_vector_monogram_data_uri(self.monogram, self.config.header_text_color)" in source
+    assert "self.monogram, self.config.header_text_color, self.config.monogram_ordinal" in source
 
 
 def test_feed_subtitle_is_small_metadata_below_not_inside_shared_header_pill():
@@ -76,7 +76,11 @@ def test_feed_subtitle_is_small_metadata_below_not_inside_shared_header_pill():
     assert "readonly property real subtitleGap: 2.5" in feed
     assert "y: headerFrame.y + headerFrame.height * headerFrame.scale + feedRoot.subtitleGap" in feed
     assert "feedModel.showSubtitle" in feed
-    assert "font.pointSize: Math.max(8.5, feedRoot.feedModel.fontSize - 3.0)" in feed
+    # Set in points through one FontMetrics-backed font (d3c7fe28), so the box
+    # is the font's real line height rather than fontSize read as pixels.
+    assert '"pointSize": Math.max(8.5, feedModel.fontSize - 3.0)' in feed
+    assert "font: feedRoot.subtitleFont" in feed
+    assert "FontMetrics {" in feed
     assert "elide: Text.ElideRight" in feed
 
 

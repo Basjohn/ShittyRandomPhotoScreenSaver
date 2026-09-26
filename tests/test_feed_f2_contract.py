@@ -36,18 +36,29 @@ def test_feeds_family_is_bounded_and_dormant_by_default():
     assert require_canonical_default("widgets.family_activation.feeds") is False
 
 
-def test_f2_admits_only_custom_1_runtime_descriptor():
-    descriptor = get_widget_runtime_descriptor("feeds_custom_1")
-    assert descriptor is not None
-    assert descriptor.settings_section_id == "feeds"
-    assert descriptor.service_backed is True
-    assert descriptor.supports_layout_edit_mode is True
-    assert descriptor.content_extent_axes == ("horizontal", "vertical")
-    assert descriptor.content_extent_minimum_size == (320, 180)
+def test_every_custom_slot_runs_the_same_runtime_descriptor_and_news_stays_dormant():
+    from dataclasses import replace
+
+    from core.feeds.config import CUSTOM_FEED_WIDGET_IDS
+
+    first = get_widget_runtime_descriptor("feeds_custom_1")
+    assert first is not None
+    assert first.settings_section_id == "feeds"
+    assert first.service_backed is True
+    assert first.supports_layout_edit_mode is True
+    assert first.content_extent_axes == ("horizontal", "vertical")
+    assert first.content_extent_minimum_size == (320, 180)
+    for widget_id in CUSTOM_FEED_WIDGET_IDS:
+        descriptor = get_widget_runtime_descriptor(widget_id)
+        assert descriptor is not None
+        # Identical apart from identity: no slot-specific runtime behaviour.
+        assert replace(
+            descriptor,
+            widget_id="feeds_custom_1",
+            attr_name="feeds_custom_1_widget",
+            settings_prefixes=("widgets.feeds_custom_1",),
+        ) == first
     for widget_id in (
-        "feeds_custom_2",
-        "feeds_custom_3",
-        "feeds_custom_4",
         "feeds_news_world",
         "feeds_news_us",
         "feeds_news_politics",
@@ -57,11 +68,13 @@ def test_f2_admits_only_custom_1_runtime_descriptor():
         assert get_widget_runtime_descriptor(widget_id) is None
 
 
-def test_feeds_settings_section_is_lazy_descriptor_owned_and_custom1_only():
+def test_feeds_settings_section_is_lazy_descriptor_owned_for_every_custom_slot():
+    from core.feeds.config import CUSTOM_FEED_WIDGET_IDS
+
     descriptor = get_widget_settings_section_descriptor("feeds")
     assert descriptor is not None
     assert descriptor.builder_module == "ui.tabs.widgets_tab_feeds"
-    assert descriptor.persisted_widget_keys == ("feeds_custom_1",)
+    assert descriptor.persisted_widget_keys == CUSTOM_FEED_WIDGET_IDS
 
 
 def test_feed_subtitle_toggle_has_canonical_default_for_every_custom_slot():
@@ -71,14 +84,14 @@ def test_feed_subtitle_toggle_has_canonical_default_for_every_custom_slot():
         ) is True
     settings = _text("ui/tabs/widgets_tab_feeds.py")
     assert 'QCheckBox("Show Feed Subtitle")' in settings
-    assert '"show_subtitle": bool(tab.feeds_custom1_show_subtitle.isChecked())' in settings
+    assert '"show_subtitle": bool(_control(tab, slot, "show_subtitle").isChecked())' in settings
 
 
 def test_settings_feed_probe_is_explicit_and_never_bound_to_url_typing():
     source = _text("ui/tabs/widgets_tab_feeds.py")
-    assert 'feeds_custom1_test_button.clicked.connect(lambda: _test_feed(tab))' in source
-    assert "feeds_custom1_url.textChanged.connect" not in source
-    assert "feeds_custom1_url.editingFinished.connect(tab._save_settings)" in source
+    assert "test_button.clicked.connect(lambda _checked=False, n=slot: _test_feed(tab, n))" in source
+    assert "url.textChanged.connect" not in source
+    assert "url.editingFinished.connect(tab._save_settings)" in source
     assert "probe_feed_url(url)" in source
     assert "Shiboken.isValid(owner)" in source
 
@@ -100,10 +113,10 @@ def test_feed_external_action_is_http_only_until_f4():
 
 def test_f3_exposes_image_control_with_persisted_settings_and_local_only_rendering():
     settings = _text("ui/tabs/widgets_tab_feeds.py")
-    assert '"show_images": bool(tab.feeds_custom1_show_images.isChecked())' in settings
-    assert 'tab.feeds_custom1_show_images.setChecked(tab._config_bool(' in settings
-    assert '"show_subtitle": bool(tab.feeds_custom1_show_subtitle.isChecked())' in settings
-    assert 'tab.feeds_custom1_show_subtitle.setChecked(tab._config_bool(' in settings
+    assert '"show_images": bool(_control(tab, slot, "show_images").isChecked())' in settings
+    assert '_control(tab, slot, "show_images").setChecked(tab._config_bool(' in settings
+    assert '"show_subtitle": bool(_control(tab, slot, "show_subtitle").isChecked())' in settings
+    assert '_control(tab, slot, "show_subtitle").setChecked(tab._config_bool(' in settings
     qml = _text("rendering/quick/qml/FeedPresentation.qml")
     assert 'source: parent.visible ? feedImageSource : ""' in qml
 

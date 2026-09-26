@@ -101,7 +101,7 @@ def _with_alpha(value: tuple[int, int, int, int], scale: float) -> QColor:
 
 @lru_cache(maxsize=64)
 def _vector_monogram_data_uri(
-    glyph: str, rgba: tuple[int, int, int, int]
+    glyph: str, rgba: tuple[int, int, int, int], ordinal: int = 0
 ) -> str:
     """Rasterize one retained wireframe monogram from vector segments.
 
@@ -186,14 +186,32 @@ def _vector_monogram_data_uri(
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawRoundedRect(QRectF(6.0, 6.0, 84.0, 84.0), 14.0, 14.0)
 
-    glyph_pen = QPen(color)
-    glyph_pen.setWidthF(7.0)
-    glyph_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    glyph_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    painter.setPen(glyph_pen)
-    for segment in segments:
-        (x1, y1), (x2, y2) = points[segment]
-        painter.drawLine(QPointF(x1 * 96.0, y1 * 96.0), QPointF(x2 * 96.0, y2 * 96.0))
+    # Same-initial CUSTOM slots carry a small ordinal in the lower-right
+    # corner; the letter shrinks toward the upper-left to make room. The
+    # ordinal uses the same segment alphabet, so there is no second renderer.
+    ordinal_label = str(int(ordinal)) if 1 <= int(ordinal) <= 9 else ""
+
+    def draw(segment_names, *, width, origin, scale):
+        pen = QPen(color)
+        pen.setWidthF(width)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        ox, oy = origin
+        sx, sy = scale
+        for segment in segment_names:
+            (x1, y1), (x2, y2) = points[segment]
+            painter.drawLine(
+                QPointF((ox + (x1 - 0.26) * sx) * 96.0, (oy + (y1 - 0.20) * sy) * 96.0),
+                QPointF((ox + (x2 - 0.26) * sx) * 96.0, (oy + (y2 - 0.20) * sy) * 96.0),
+            )
+
+    if ordinal_label:
+        draw(segments, width=6.0, origin=(0.24, 0.18), scale=(0.80, 0.80))
+        draw(glyph_segments[ordinal_label].split(), width=4.5,
+             origin=(0.63, 0.58), scale=(0.36, 0.40))
+    else:
+        draw(segments, width=7.0, origin=(0.26, 0.20), scale=(1.0, 1.0))
     painter.end()
 
     buffer = QBuffer()
@@ -244,6 +262,9 @@ class FeedPresentationConfig:
     header_text_color: tuple[int, int, int, int]
     preferred_width: int
     preferred_height: int
+    # 1-based rank among enabled, configured CUSTOM slots that share this
+    # slot's monogram initial (slot order); 0 when the initial is unique.
+    monogram_ordinal: int
 
     @classmethod
     def from_widgets_mapping(
@@ -298,7 +319,37 @@ class FeedPresentationConfig:
             header_text_color=header_text,
             preferred_width=_bounded_int(values.get("preferred_width"), int(canonical["preferred_width"]), 320, 1600),
             preferred_height=_bounded_int(values.get("preferred_height"), int(canonical["preferred_height"]), 180, 1800),
+            monogram_ordinal=_monogram_ordinal(widgets, widget_id),
         )
+
+
+def feed_monogram_initial(name: str) -> str:
+    """The configured name's first letter or digit, uppercased; ``F`` if none."""
+
+    for ch in str(name or "").strip():
+        if ch.isalnum():
+            return ch.upper()
+    return "F"
+
+
+def _monogram_ordinal(widgets: Mapping[str, object], widget_id: str) -> int:
+    """Deterministic collision ordinal across the live CUSTOM slots.
+
+    Only enabled, configured slots present cards, so only they can collide.
+    """
+    from core.feeds.config import CUSTOM_FEED_WIDGET_IDS
+
+    live: list[tuple[str, str]] = []
+    for slot_id in CUSTOM_FEED_WIDGET_IDS:
+        raw = widgets.get(slot_id, {}) if isinstance(widgets, Mapping) else {}
+        config = CustomFeedConfig.from_mapping(slot_id, raw if isinstance(raw, Mapping) else {})
+        if slot_id == widget_id or (config.enabled and config.configured):
+            live.append((slot_id, feed_monogram_initial(config.name)))
+    initial = next((value for slot_id, value in live if slot_id == widget_id), None)
+    sharing = [slot_id for slot_id, value in live if value == initial]
+    if len(sharing) < 2:
+        return 0
+    return sharing.index(widget_id) + 1
 
 
 @dataclass(frozen=True)
@@ -655,14 +706,13 @@ class FeedPresentationModel(QObject):
 
     @Property(str, notify=stateChanged)
     def monogram(self) -> str:
-        for ch in self.config.custom.name.strip():
-            if ch.isalnum():
-                return ch.upper()
-        return "F"
+        return feed_monogram_initial(self.config.custom.name)
 
     @Property(str, notify=stateChanged)
     def monogramSource(self) -> str:
-        return _vector_monogram_data_uri(self.monogram, self.config.header_text_color)
+        return _vector_monogram_data_uri(
+            self.monogram, self.config.header_text_color, self.config.monogram_ordinal
+        )
 
     @Property(str, notify=stateChanged)
     def feedTitle(self) -> str:

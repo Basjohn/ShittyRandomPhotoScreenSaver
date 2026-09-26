@@ -20,6 +20,7 @@ import uuid
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QToolButton
 
+from core.settings.widget_family_catalog import get_widget_family_descriptors
 from ui.tabs.widgets_tab import WidgetsTab
 from ui.tabs.shared_styles import SPINBOX_STYLE
 from core.settings import SettingsManager
@@ -80,6 +81,11 @@ class TestWidgetsTab:
         }
         assert owned_lock_scopes
 
+        # A deactivated family's page is never built (admission redirects to
+        # SETUP), so activate the family that owns this page first.
+        for family in get_widget_family_descriptors():
+            if family.settings_section_id == settings_section_id:
+                settings_manager.set(f"widgets.family_activation.{family.family_id}", True)
         tab = WidgetsTab(settings_manager, lazy_sections=True)
         try:
             idx = tab._widget_section_index(settings_section_id)

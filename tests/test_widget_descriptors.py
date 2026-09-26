@@ -683,6 +683,9 @@ def test_service_runtime_contract_queries_follow_descriptor_contract():
         "reddit",
         "reddit2",
         "feeds_custom_1",
+        "feeds_custom_2",
+        "feeds_custom_3",
+        "feeds_custom_4",
         "gmail",
     )
 
@@ -969,6 +972,9 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkey
         "reddit2",
         "gmail",
         "feeds_custom_1",
+        "feeds_custom_2",
+        "feeds_custom_3",
+        "feeds_custom_4",
         "achievement_pulse",
         "abandonment_issues",
         "friend_pulse",
