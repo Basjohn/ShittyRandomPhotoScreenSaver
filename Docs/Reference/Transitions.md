@@ -4,7 +4,7 @@ All effects use the canonical transition catalog, Settings activation and Random
 
 ## Expanded effects
 
-The expansion capabilities remain **deactivated by default** unless explicitly activated, except where accepted: Glass Shatter and Melt Drip are activated and in the Random pool by default (Melt at 8500 ms). Tendril Reveal was rejected and has been fully retired; it has no registry descriptor, Settings surface, renderer or shader, and stale persisted Tendril state is removed by canonical transition normalization. Melt was accepted by the operator on 2026-09-23 after its rework: the photograph itself melts from a chosen origin under gravity, without the rejected detached droplet bodies or ray-marched pseudo-volume. Remaining visual/load acceptance for the other effects is open in `Current_Plan.md` and `Docs/Future_Work/Transition_Expansion.md`. Existing activated effects and settings retain their values.
+The expansion capabilities remain **deactivated by default** unless explicitly activated, except where accepted: Glass Shatter and Melt Drip are activated and in the Random pool by default (Melt at 8500 ms). Tendril Reveal was rejected and has been fully retired; it has no registry descriptor, Settings surface, renderer or shader, and stale persisted Tendril state is removed by canonical transition normalization. Melt was accepted by the operator on 2026-09-23 after its rework: the photograph itself melts from a chosen origin under gravity, without the rejected detached droplet bodies or ray-marched pseudo-volume. Remaining visual/load acceptance is listed under Physical acceptance below. Existing activated effects and settings retain their values.
 
 | Effect | Appearance | Controls |
 | --- | --- | --- |
@@ -38,3 +38,38 @@ The expansion capabilities remain **deactivated by default** unless explicitly a
 `tools/transition_contact_sheet.py` produces textured progression frames, optional supplied-image contact sheets, and a 60-frame/two-second WebP with `--animate`. It accepts `--source` and `--destination` photos; `--quick-smoke` reuses the existing threaded QQuickWindow lifecycle harness. See `Docs/Reference/Harness_Index.md` for commands. Diagnostic timing includes context/driver effects and is not a claim of performance neutrality.
 
 Operator acceptance still needs actual photographs at authored duration, preferred glass sheen/tile density, both displays and representative heavy external load with active Visualizers. Automated pixel/scene evidence cannot close those perceptual/freshness gates.
+
+## Owners and invariants
+
+- `rendering/transition_registry.py` owns identities/activation participation; `core/settings/default_settings.py` owns values, with existing Settings UI/model/schema integration.
+- `rendering/quick/transitions/parameter_resolution.py` resolves settings, direction and seeds once before immutable `TransitionRequest` admission. `state.py` owns monotonic progress/exactly-once completion; effects never create clocks or CPU simulation loops.
+- `implementation_registry.py` lazily resolves implementations; `render_host.py` owns the context-local lifetime and inherited GL-state fence. The existing display render node remains the sole presentation surface.
+- `rendering/quick/transitions/implementations/block_spins.py` and `rendering/gl_programs/blockspin_program.py` prove mesh/depth resources inside Quick. Voxel Sphere is an independent consumer to inspect for small identical resource seams, not a transition foundation or base class.
+- Existing transition tests, `tools/qtquick_render_node_smoke.py` and `tools/qtquick_phase_c_effect_smoke.py` provide production host, endpoint, fence and real-GL seams.
+
+## Resource rules
+
+Feature-local: fracture topology and metadata, tile motion/material shaders, growth formulas, per-run seeds, image mapping. Justified shared primitives may include a small context-local mesh/program holder and fullscreen image underlay used by the actual new mesh consumers. They must stay lazy, own no clock, preserve failed-cleanup handles and support partial-allocation cleanup. Do not build a scene engine, generic physics, material hierarchy or always-live 3D subsystem. Instancing derived from `gl_InstanceID` needs no per-frame instance upload.
+
+Depth clears must stay within the transition viewport and restore scissor state; the existing host restores depth/cull/program/VAO/buffer/texture state on success and failure. Resources retire on disable/context retirement using the existing legal owner. Per-run buffers may be reused only while their geometry key matches.
+
+## Negative controls (binding)
+
+- Melt: no detached sphere/capsule/bulb bodies, no ray-marched pseudo-volume, no narrow wet-band front (rejected
+  2026-09-23), and no seams that cut the photograph into slabs (R-94: exact integer lattice hash).
+- Glass/Tiles: no premature in-viewport shrink or fade as a departure substitute; every piece leaves the frame.
+- Organic effects: no generic feathered mask under a new identity; Tendril Reveal stays retired.
+- No clocks, evolving CPU fluid simulations, parallel surfaces or fallback effects; per-run options are solved once
+  (Glass collisions/re-shatter, Crumble Slabs Collide) and evaluated analytically on the GPU.
+
+## Physical acceptance (open)
+
+Automated image differences are not aesthetic acceptance. One operator pass remains:
+
+- appearance and timing with actual photos at authored durations, including optics/depth controls;
+- Glass Shards Collide / Shards Break Again, and Crumble Slabs Collide (default and low Collapse Depth), judged in
+  motion;
+- Crumble crack complexity at its default (1.1 since 2026-09-27) and debris;
+- both displays with active music and representative heavy load: Visualizer freshness, frame-spacing tails and
+  transition first use;
+- the installed/frozen build: activation and Settings round-trip, repeated switch/interrupt/retire.

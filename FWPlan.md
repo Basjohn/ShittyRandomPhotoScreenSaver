@@ -4,7 +4,7 @@
 
 ## Active work
 
-The operator has active work in both FEEDS and transition expansion. `Current_Plan.md` owns sequencing; `Docs/Future_Work/Feeds.md` owns the remaining Custom 1 closure, multi-CUSTOM and NEWS/torrent gates, while `Docs/Future_Work/Transition_Expansion.md` owns transition-specific acceptance. The remaining Visualizer/UI ideas stay dormant.
+FEEDS and the transition expansion are implemented; their open physical acceptance lives at the end of `Docs/Reference/Feeds.md` and `Docs/Reference/Transitions.md`. `Current_Plan.md` owns active work. The remaining Visualizer/UI ideas stay dormant.
 
 Games You Follow and the system-audio OSD are implemented products, not backlog items; consult their references only when a concrete defect or extension is requested.
 
@@ -12,6 +12,7 @@ Games You Follow and the system-audio OSD are implemented products, not backlog 
 
 - [ ] **Deformable Blob Sphere and other 3D Visualizers**: own distinct mode/renderer lifecycle; do not mutate the accepted Voxel Sphere or Bubble reaction contract.
 - [ ] **Settings FlowContainer polish:** only for a demonstrated layout problem, not speculative restructuring.
+- [ ] **Wallpaper feed consolidation:** reuse FEEDS normalization/image-candidate primitives only where it makes the wallpaper engine simpler, without merging its image-primary cache/scheduling authority into FEEDS last-good state; prove wallpaper parity first.
 
 ## Activation gate
 

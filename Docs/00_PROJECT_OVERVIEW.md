@@ -25,7 +25,7 @@ The Qt Quick runtime is operator-accepted and is the sole production presentatio
 
 - Active product/bug work lives only in `Current_Plan.md`.
 - Persisted-input compatibility/schema-migration bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated). Caller-dead residue is deleted outright, not parked in a register.
-- Deferred product experiments live in `Future_Work.md` / focused future-work documents.
+- Deferred product experiments live in `Future_Work.md` and `FWPlan.md`.
 - Durable failed-method and regression history lives in `Docs/Historical_Bugs/`.
 - Superseded implementation decompositions are source-control history, not live documentation.
 
@@ -33,7 +33,7 @@ Performance/freshness changes are evidence-gated and symptom-driven. Treat the a
 
 ## Current feature-extension boundary
 
-FEEDS is an active product family of ten retained cards on the shared bounded feed transport/parser/cache/runtime path: four CUSTOM slots (any feed or website address) and six NEWS categories that merge vetted no-signup publisher feeds. The implemented contract lives in `Docs/Reference/Feeds.md`; remaining acceptance work is in `Docs/Future_Work/Feeds.md`.
+FEEDS is an active product family of ten retained cards on the shared bounded feed transport/parser/cache/runtime path: four CUSTOM slots (any feed or website address) and six NEWS categories that merge vetted no-signup publisher feeds. The implemented contract, invariants and remaining physical acceptance live in `Docs/Reference/Feeds.md`.
 
 Games You Follow and the independently enabled master-volume/mute OSD are implemented ordinary retained Quick widgets. Their current source, cache, presentation and lifecycle requirements live in `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md`; they do not need a new presentation stack, Settings authority or implementation queue. `Current_Plan.md` contains only currently active work. New transitions instead enter the canonical transition registry/host with lazy, self-contained implementations rather than a second experimental runtime.
 

@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-09-25
+Last updated: 2026-09-27
 
 Compact status/navigation index for significant SRPSS regressions. Full incident narratives live under
 `Docs/Historical_Bugs/`.
@@ -40,6 +40,8 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## Standalone R Records
 
+- [R-101 — Guided Setup / Settings Review 2026-09-27](Historical_Bugs/R-101_Guided_Setup_Settings_Review_2026-09-27.md) — **SOLVED IN CODE**. The wizard persisted every click (now a draft saved on Finish), Arrange lost updates, hover-focus list scrolling, QSS rounded-border seams, unthemed popups, light-theme indicators, blurry previews, a lost edit on close, and generated defaults copies; mechanisms and negative controls.
+- [R-100 — Runtime Audit 2026-09-22: Outcomes, Rejections and Closure](Historical_Bugs/R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md) — **CLOSED**. Accepted items with commits and bars; every item left watched/parked was rejected by the operator (2026-09-27); the considered-and-rejected list stays binding.
 - [R-99 — Memory Footprint Audit (2026-09-25)](Historical_Bugs/R-99_Memory_Footprint_Audit_2026-09-25.md) — **PARTIAL / AWAITING VALIDATION**. Consumed derivatives left in the cache (49% of 4K prefetch work wasted), a parked transition node pinning two frames, OpenBLAS committing ~700 MB per process on 24 CPUs, and a GC cycle per settings read: all fixed and measured. The lookahead depth is an operator decision.
 - [R-98 — Gmail IMAP Connected Unverified; Every Direct HTTPS Connection Reloaded The Trust Store](Historical_Bugs/R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **FIXED IN CODE / AWAITING VALIDATION**. `imaplib` without a context is unverified; urllib/artwork built a Windows trust-store context per connection with the GIL held. One verified process context.
 - [R-97 — Overnight Main-Process Private Commit Growth](Historical_Bugs/R-97_Overnight_Main_Process_Private_Commit_Growth.md) — **AWAITING VALIDATION**. Thread churn (a new heartbeat `threading.Timer` every 3 s, Qt's image pool recreated each wallpaper) × the NVIDIA GL driver's never-returned per-thread state (~70 KB each) ≈ 130 MB/h; fixed at both owners, measured flat; unattended physical run pending.

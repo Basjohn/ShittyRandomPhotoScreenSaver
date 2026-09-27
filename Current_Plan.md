@@ -1,8 +1,10 @@
 # SRPSS | Current Plan
 
-## Guided Setup / Quick Start (ACTIVE)
+Active development work only. Implemented features keep their open physical acceptance in their own reference
+(`Docs/Reference/Guided_Setup.md`, `Docs/Reference/Feeds.md`, `Docs/Reference/Transitions.md`); closed plans and
+audits are historicalised (`Docs/Historical_Bugs/R-100_...`, `R-101_...`).
 
-Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator review 2026-09-27, open items:
+## Memory and handles | open development items
 
 - [ ] **ImageWorker lean entry (R-99).** The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules). A lean worker entry could save ~100 MB resident, but it must be validated under Nuitka multiprocessing first.
 - [ ] **Watch (low priority, not visible): scaled prefetch holds the GIL on the background CPU lane.** `QImage.scaled` runs for up to ~70 ms per 4K derivative while holding the GIL. It is not a stutter: overnight on 2026-09-25 the Visualizer logical runtime skipped 125 of 1,812,107 steps (0.007%). R-99 already halved the scaling work. Measure on the next `--perf` run before acting: seconds with `dt_max_ms` > 25 in `[PERF_HUD]`, their overlap with `Scaled prefetch` lines in `screensaver_cache.log`, and `skipped_deadlines` in `[SPOTIFY_VIS][LOGICAL] Runtime stopped`. Only if overlap remains material, move the scaling off the GIL with identical output.
@@ -10,9 +12,9 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 
 ## Known failing tests and anomalies (tracked until resolved)
 
-Each stays here until fixed or explicitly retired; do not treat it as noise in a gate. Physical validation lives with each feature's own doc, not here.
+Each stays here until fixed or explicitly retired; do not treat it as noise in a gate.
 
-- [ ] **Spectrum extreme-viewport smoothness (pre-existing, not an audit regression).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Pre-dates the audit; do not reopen VZ-04 over it. Watch item until investigated separately.
+- [ ] **Spectrum extreme-viewport smoothness (pre-existing).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Watch item until investigated separately.
 
 ## Handoff and regression rules
 

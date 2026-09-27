@@ -1,6 +1,6 @@
 # Historical Bug Records
 
-Last updated: 2026-09-25
+Last updated: 2026-09-27
 
 Authoritative standalone incident records for significant SRPSS regressions.
 `Docs/Historical_Bugs.md` is the compact navigation/status map; files in this directory own the full
@@ -42,6 +42,8 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 
 ## R Records
 
+- [R-101 — Guided Setup / Settings Review 2026-09-27](R-101_Guided_Setup_Settings_Review_2026-09-27.md) — **SOLVED IN CODE**. Mechanisms and negative controls from the 2026-09-27 review.
+- [R-100 — Runtime Audit 2026-09-22: Outcomes, Rejections and Closure](R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md) — **CLOSED**. Accepted items; leftovers rejected 2026-09-27; binding rejected-ideas list.
 - [R-99 — Memory Footprint Audit (2026-09-25)](R-99_Memory_Footprint_Audit_2026-09-25.md) — **PARTIAL / AWAITING VALIDATION**. Consumed derivatives left in the cache (49% of 4K prefetch work wasted), a parked transition node pinning two frames, OpenBLAS committing ~700 MB per process on 24 CPUs, and a GC cycle per settings read: all fixed and measured. The lookahead depth is an operator decision.
 - [R-98 — Gmail IMAP Connected Unverified; Every Direct HTTPS Connection Reloaded The Trust Store](R-98_Gmail_IMAP_Unverified_TLS_And_Per_Connection_Trust_Store.md) — **FIXED IN CODE / AWAITING VALIDATION**. `imaplib` without a context is unverified; urllib/artwork built a Windows trust-store context per connection with the GIL held. One verified process context.
 - [R-97 — Overnight Main-Process Private Commit Growth](R-97_Overnight_Main_Process_Private_Commit_Growth.md) — **AWAITING VALIDATION**. Thread churn (a new heartbeat `threading.Timer` every 3 s, Qt's image pool recreated each wallpaper) × the NVIDIA GL driver's never-returned per-thread state (~70 KB each) ≈ 130 MB/h; fixed at both owners, measured flat; unattended physical run pending.
@@ -53,7 +55,7 @@ Historical incident-local labels such as `ACTIVE`, `PARTIAL` or `AWAITING VALIDA
 - [R-91 — Worker Processes Outlived A Crashed UI Process](R-91_Worker_Processes_Outlived_Crashed_UI.md) — **SOLVED**. Workers detect parent death; verified on a frozen build (worker gone 0.2 s after a hard parent exit).
 - [R-90 — Core Audio Endpoint Released Twice (ctypes.cast Shared A COM Pointer)](R-90_Core_Audio_Endpoint_Double_Release.md) — **SOLVED**. `QueryInterface`, never `ctypes.cast`, between COM interfaces; native real-endpoint rebind test.
 - [R-89 — Recurring Timer Released Its Owner Inside Its Own Deferred Deletion](R-89_Recurring_Timer_Owner_Released_Inside_Deferred_Delete.md) — **SOLVED**. The cross-file native abort; release timer callbacks before `deleteLater()`.
-- [R-88 — Qt Quick CUSTOM Edit paint, role lifetime, false test oracles and child-guide churn](R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md) — **SHARED EDIT/FAMILY GEOMETRY AND CHILD-GUIDE GATES ACCEPTED**; wider project/outer-guide churn remains a separately evidenced audit (candidates: `Docs/Future_Work/Runtime_Audit/00_Index.md`).
+- [R-88 — Qt Quick CUSTOM Edit paint, role lifetime, false test oracles and child-guide churn](R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md) — **SHARED EDIT/FAMILY GEOMETRY AND CHILD-GUIDE GATES ACCEPTED**; the wider churn audit closed as R-100 (leftovers rejected 2026-09-27).
 - [R-87 — Qt Quick High-Refresh Freshness / Scheduler Regression](R-87_QtQuick_HighRefresh_Freshness_And_Scheduler_Regression.md)
 - [R-86 — Forced VSync hypothesis for Qt Quick pacing](R-86_Legacy_Uncapped_Swap_Policy_Inherited_By_Qt_Quick.md)
 - [R-85 — Multi-Stage Monitor Wake Presented Two Distinct Valid Topologies Seconds Apart](R-85_MultiStage_Wake_Distinct_Topology_Reconciliation.md)

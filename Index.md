@@ -26,7 +26,7 @@ exact current source
 | `Docs/Guardrails/` | binding invariants and preflight contracts |
 | `Docs/Guides/` | maintained authoring/change procedures |
 | `Docs/Reference/` | current lookup/reference material and harness routing |
-| `Docs/Future_Work/` | genuinely pending or operator-activated implementation plans |
+| `Docs/Future_Work/` | genuinely pending or operator-activated implementation plans (currently none; implemented plans are historicalised) |
 | `Docs/Historical_Bugs/` | permanent regression/root-cause/failed-method evidence |
 
 Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite.
@@ -53,13 +53,11 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
-| transitions and material surfaces | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
-| active transition expansion | `Docs/Future_Work/Transition_Expansion.md` |
-| active Feeds acceptance/expansion work | `Docs/Future_Work/Feeds.md` |
-| runtime audit register, evidence and operator decisions (the admitted queue and its order live in `Current_Plan.md`) | `Docs/Future_Work/Runtime_Audit/00_Index.md` |
-| current FEEDS vertical-slice architecture (source/cache/artwork/header/CUSTOM) | `Docs/Reference/Feeds.md` |
+| transitions and material surfaces (open physical acceptance at the end of the reference) | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
+| runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Historical_Bugs/R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md` |
+| current FEEDS architecture, invariants and open physical acceptance | `Docs/Reference/Feeds.md` |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
-| Guided Setup / Quick Start / Settings Arrange | `Docs/Reference/Guided_Setup.md`; acceptance in `Docs/Future_Work/Guided_Setup.md` |
+| Guided Setup / Quick Start / Settings Arrange | `Docs/Reference/Guided_Setup.md` (open physical acceptance at its end) |
 | logging / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |
 | documentation maintenance | `Docs/Guides/Documentation_Maintenance.md` |
 | test inventory / retirement | `Docs/TestSuite.md` |
