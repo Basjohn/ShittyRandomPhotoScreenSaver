@@ -117,6 +117,7 @@ class DisplayManager(QObject):
     transition_completed = Signal(int)  # screen index
     previous_requested = Signal()  # Z key - go to previous image
     next_requested = Signal()  # X key - go to next image
+    save_image_requested = Signal(int)  # context menu - save the image on this display
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
     settings_target_requested = Signal(str)  # runtime widget -> semantic Settings target
@@ -1031,6 +1032,9 @@ class DisplayManager(QObject):
             return True
         if action == "next":
             self.next_requested.emit()
+            return True
+        if action == "save_image":
+            self.save_image_requested.emit(int(unit.screen_index))
             return True
         if action == "settings":
             if self._quick_custom_layout_owner.is_active:

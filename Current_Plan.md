@@ -10,9 +10,6 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 - [ ] **Import Settings.** Welcome page offers "Import Settings?"; a successful import skips and closes the wizard.
       Import (and the Settings tab) lets users choose: All, Display, Widgets, Transitions, Theme Choice, Custom
       Geometry Including Layouts, Misc (everything else). Credentials are never exported or imported.
-- [ ] **Context menu "Save Image".** Always shown. Saves the current image as-is to the Sources "Save Images" folder
-      if the user chose one, else `Pictures/SRPSS Collections`, which joins local sources after the first save. One
-      simple off-UI-thread copy: no timers, polls, prefetch changes, multiple sizes or I/O thrash.
 
 ## Runtime audit 2026-09-22 | accepted 2026-09-23/24
 
@@ -32,6 +29,12 @@ Each stays here until fixed or explicitly retired; do not treat it as noise in a
 
 - [ ] **One red present before 2026-09-26's FEEDS work (Windows, whole widgets/settings gate):**
   - `test_qtquick_transition_parameter_defaults.py::test_sparse_crumble_uses_canonical_piece_count_and_complexity`: the canonical Crumble `crack_complexity` default is 11.0 but Settings and the resolver cap it at 2.0. Operator decision: was 1.1 meant?
+- [ ] **Tests that show real windows.** `tests/test_qtquick_context_menu.py::test_retained_context_menu_draws_real_quick_pixels_and_clamps`
+      calls `QQuickWindow.show()` under pytest's Windows QPA, flashing a real window. Move such pixel tests to an
+      offscreen subprocess (pattern: `tests/test_onboarding_flow.py::test_hovering_transition_rows_inside_settings_does_not_scroll`)
+      and sweep `tests/` for other `.show()` calls.
+- [ ] **Context menu on very short displays.** The menu (now 9 rows plus Save Image) is ~500 logical px tall; it clamps
+      position but not size, so a display under ~510 logical px (e.g. 1024x768 at 150%) would overflow.
 - [ ] **Spectrum extreme-viewport smoothness (pre-existing, not an audit regression).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Pre-dates the audit; do not reopen VZ-04 over it. Watch item until investigated separately.
 
 ## Handoff and regression rules

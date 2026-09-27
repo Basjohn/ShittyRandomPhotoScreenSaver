@@ -201,6 +201,8 @@ class ScreensaverEngine(QObject):
         self._display_initialized: bool = False  # Still needed for display-specific init
         self._rotation_timer: Optional[QTimer] = None
         self._current_image: Optional[ImageMetadata] = None
+        # A sources.* key this engine is writing itself (see _register_collection_folder).
+        self._own_sources_write: Optional[str] = None
         self._pending_monitor_replay_image: Optional[ImageMetadata] = None
         self._display_image_accounting_snapshot = {
             "generation": None,
@@ -888,6 +890,7 @@ class ScreensaverEngine(QObject):
             )
             _connect_runtime_signal("previous_requested", self._on_previous_requested)
             _connect_runtime_signal("next_requested", self._on_next_requested)
+            _connect_runtime_signal("save_image_requested", self._on_save_image_requested)
             _connect_runtime_signal("cycle_transition_requested", self._on_cycle_transition)
             _connect_runtime_signal("settings_requested", self._on_settings_requested)
             _connect_runtime_signal(
@@ -1837,6 +1840,59 @@ class ScreensaverEngine(QObject):
         if self._show_next_image(origin="manual_next"):
             self._rebase_rotation_timer(reason="manual_next")
     
+    def _image_on_display(self, screen_index: int) -> Optional[ImageMetadata]:
+        """The image currently shown on one display (per-display history first)."""
+        history = self._display_image_history
+        if history and 0 <= int(screen_index) < len(history[-1]) and history[-1][int(screen_index)] is not None:
+            return history[-1][int(screen_index)]
+        return self._current_image
+
+    def _on_save_image_requested(self, screen_index: int) -> None:
+        """Context menu "Save Image": one copy of the file on disk, off the UI thread."""
+        from core.sources.image_collection import resolve_collection_target, save_image_to_collection
+
+        image = self._image_on_display(screen_index)
+        source = getattr(image, "local_path", None)
+        if not source or self.settings_manager is None or self.thread_manager is None:
+            logger.info("[COLLECTION] Save Image: nothing saveable on display %s", screen_index)
+            return
+        target = resolve_collection_target(self.settings_manager)
+
+        def _finished(task_result) -> None:
+            def _apply() -> None:
+                saved = task_result.result if task_result.success else None
+                if saved is None:
+                    logger.warning("[COLLECTION] Save Image failed for %s", source)
+                    return
+                logger.info("[COLLECTION] Saved %s -> %s", source, saved)
+                if target.is_default:
+                    self._register_collection_folder(target.directory)
+            ThreadManager.run_on_ui_thread(_apply)
+
+        self.thread_manager.submit_io_task(
+            save_image_to_collection, Path(source), target.directory,
+            task_id=f"save_image_{screen_index}", callback=_finished,
+        )
+
+    def _register_collection_folder(self, directory: Path) -> None:
+        """Add the default collection to local sources once, without a live rebuild.
+
+        The saved image is already in rotation, so rebuilding every source (and
+        clearing prefetch) for this one write would be pure cost; the running
+        engine records its own write and skips the rebuild. It takes effect on
+        the next source load like any other folder.
+        """
+        folders = list(self.settings_manager.get("sources.folders") or [])
+        if any(Path(folder) == directory for folder in folders):
+            return
+        self._own_sources_write = "sources.folders"
+        try:
+            self.settings_manager.set("sources.folders", [*folders, str(directory)])
+            self.settings_manager.save()
+        finally:
+            self._own_sources_write = None
+        logger.info("[COLLECTION] Added %s to local sources", directory)
+
     def _on_cycle_transition(self) -> None:
         """Delegates to engine.engine_handlers."""
         from engine.engine_handlers import on_cycle_transition
@@ -1923,6 +1979,8 @@ class ScreensaverEngine(QObject):
         elif setting_key.startswith('queue.shuffle'):
             self._update_shuffle_mode()
         elif setting_key.startswith('sources'):
+            if setting_key == getattr(self, "_own_sources_write", None):
+                return  # the collection folder this engine just registered itself
             self._on_sources_changed()
     
     def _on_monitors_changed(self, new_count: int) -> None:

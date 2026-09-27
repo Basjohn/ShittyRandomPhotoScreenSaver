@@ -271,6 +271,8 @@ def build_quick_context_menu_entries(
     entries = [
         QuickContextMenuEntry("previous", "◂  Previous Image"),
         QuickContextMenuEntry("next", "▸  Next Image"),
+        # Always offered: checking the image's source per open would add work.
+        QuickContextMenuEntry("save_image", "⤓  Save Image"),
         QuickContextMenuEntry("", "", kind="separator"),
         QuickContextMenuEntry(
             "",

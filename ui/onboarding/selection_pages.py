@@ -451,6 +451,7 @@ class TransitionsPage(Page):
 # (rendering/runtime_input.py), in the order people reach for them.
 CONTEXT_MENU_SUMMARY = (
     ("Previous / Next Image", "Step back to a picture you liked, or skip ahead."),
+    ("Save Image", "Keep the picture on screen in your collection."),
     ("Change Transition", "Pick one effect or Random."),
     ("Change Visualizer", "Switch the music Visualizer mode."),
     ("Edit Widget Layout", "Drag widgets anywhere, then Save Widget Layout."),
