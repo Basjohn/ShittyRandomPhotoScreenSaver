@@ -924,3 +924,46 @@ def test_accessibility_sections_line_up(qapp, settings_manager) -> None:
     finally:
         tab.hide()
         tab.deleteLater()
+
+
+def test_widgets_tab_save_batching_keeps_one_timer_and_flushes_on_close(qapp, settings_manager, animation_manager, monkeypatch):
+    """Rapid edits leave one live coalescing timer; closing Settings writes the pending edit."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    try:
+        dialog._switch_tab(dialog._tab_index_for_key("widgets"), animate=False)
+        for _ in range(3):
+            qapp.processEvents()
+        tab = dialog.widgets_tab
+        writes = []
+        monkeypatch.setattr(tab, "_save_settings_now", lambda token=None: writes.append(token))
+        handles = []
+        for _ in range(5):  # a slider drag
+            tab._save_settings()
+            handles.append(tab._save_coalesce_handle)
+        assert [h.active for h in handles] == [False, False, False, False, True]
+        tab.flush_pending_changes()  # what Settings' close path calls
+        assert writes == [None] and not handles[-1].active
+    finally:
+        dialog._closing = True
+        dialog.deleteLater()
+
+
+def test_visualizer_scroll_restore_waits_for_the_range_not_a_timer(qapp) -> None:
+    from types import SimpleNamespace
+    from PySide6.QtWidgets import QScrollBar
+    from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
+
+    owner = SimpleNamespace()
+    bar = QScrollBar()
+    bar.setRange(0, 100)
+    VisualizerSettingsContextMixin._restore_scroll_when_reachable(owner, bar, 400)
+    assert bar.value() == 100 or bar.value() == 0  # not reachable yet: nothing forced
+    bar.setRange(0, 300)
+    assert bar.value() != 400
+    bar.setRange(0, 900)  # the mode body finished laying out
+    assert bar.value() == 400
+    assert owner._pending_scroll_restore is None
+    bar.setRange(0, 1000)
+    bar.setValue(10)
+    bar.setRange(0, 1100)
+    assert bar.value() == 10  # the one-shot restore disconnected itself

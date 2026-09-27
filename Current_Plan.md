@@ -17,8 +17,7 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 Each stays here until fixed or explicitly retired; do not treat it as noise in a gate. Physical validation lives with each feature's own doc, not here.
 
 
-- [ ] **Widgets tab save coalescing timer.** `WidgetsTab` debounces saves with `_SAVE_COALESCE_MS` single-shots.
-      Check whether edge events (slider release, editing finished, toggles) can replace it under the timer policy.
+
 - [ ] **Tests that show real windows.** 21 test files call `.show()` under pytest's Windows QPA (a real window
       flashes): QWidget ones (`test_default_settings_editor`, `test_transitions_tab_setup`, `test_widgets_tab_setup`,
       `test_visualizer_alignment`, `test_main_run_lifetime`, `test_spectrum_shaping_current`) can use
