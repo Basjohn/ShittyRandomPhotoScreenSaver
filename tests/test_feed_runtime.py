@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 from types import SimpleNamespace
 
+import pytest
+
 from core.feeds.config import CustomFeedConfig
 from core.feeds.models import (
     FeedDocument,
@@ -13,6 +15,20 @@ from core.feeds.models import (
 )
 from widgets import feed_runtime
 from widgets.feed_runtime import FeedRuntimeConfig, FeedRuntimeLease
+
+
+@pytest.fixture(autouse=True)
+def _no_real_artwork_io(monkeypatch, tmp_path):
+    """The fake manager runs jobs inline: keep artwork passes off the network and the profile."""
+    from core.feeds import artwork_transport
+    from core.settings import storage_paths
+
+    def refuse(*_args, **_kwargs):
+        raise artwork_transport.ArtworkFetchError("network disabled in tests", retry_seconds=None)
+
+    monkeypatch.setattr(storage_paths, "get_feed_cache_dir", lambda profile=None: tmp_path)
+    monkeypatch.setattr(artwork_transport, "fetch_artwork_bytes", refuse)
+    monkeypatch.setattr(artwork_transport, "fetch_article_head", refuse)
 
 
 class _Manager:
@@ -74,7 +90,9 @@ def _result(now=None):
             title="Goblin Feed",
             home_url="https://example.test/",
             format="rss",
-            items=(FeedItem("1", "One", "https://example.test/one"),),
+            # Text-only and link-less: these tests count source/cache work, and a
+            # linked story would add the (separately tested) artwork pass.
+            items=(FeedItem("1", "One"),),
         ),
         fetched_at=now,
     )
@@ -638,4 +656,39 @@ def test_a_backing_off_source_is_never_pulled_early_into_a_wake_up(monkeypatch):
     owner._admit_due_work()
     assert sources["s1.example"].refresh_calls == 1
     for lease in leases:
+        lease.retire()
+
+
+def test_linked_text_only_story_gets_one_artwork_pass_that_reads_its_page(monkeypatch) -> None:
+    from core.feeds import artwork_transport
+
+    pages = []
+    monkeypatch.setattr(artwork_transport, "fetch_article_head",
+                        lambda url, **_kwargs: pages.append(url) or b"<head></head>")
+    result = _result()
+    linked = FeedItem("1", "One", "https://example.test/one")
+    result = FeedRefreshResult(
+        result.status,
+        FeedSnapshot(FeedDocument("Goblin Feed", "https://example.test/", "rss", (linked,)),
+                     fetched_at=result.snapshot.fetched_at),
+        result.health,
+        changed=False,
+    )
+    manager = _Manager()
+    source = _Source(result)
+
+    def source_for(_owner, state):
+        state.source = source
+        return source
+
+    monkeypatch.setattr(feed_runtime._FeedFamilyOwner, "_source_for", source_for)
+    lease = FeedRuntimeLease(config=FeedRuntimeConfig.from_custom(_config(), 15), generation=5, manager=manager,
+                             ui_dispatch=lambda fn: fn(), schedule=lambda delay, callback: (lambda: None),
+                             task_priority=0)
+    lease.attach_consumer(_Consumer(5))
+    try:
+        assert lease.start() is True
+        assert manager.submissions == 2  # cache load, then one artwork follow-on
+        assert pages == ["https://example.test/one"]
+    finally:
         lease.retire()

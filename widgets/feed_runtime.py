@@ -350,7 +350,9 @@ class _FeedFamilyOwner:
             and (state.artwork_attempted_at != snapshot.fetched_at
                  # A card with a larger limit joined an already-warmed source.
                  or limit > state.artwork_item_limit)
-            and any(item.images for item in snapshot.document.items[:limit])
+            # A story without feed images may still get its article's share
+            # image as a last resort (remembered, so usually a disk-only pass).
+            and any(item.images or item.action_url for item in snapshot.document.items[:limit])
         )
 
     @staticmethod
@@ -368,23 +370,27 @@ class _FeedFamilyOwner:
         if snapshot is None:
             return result
         from core.feeds.artwork import ArtworkCancelled, FeedArtworkCache
-        from core.feeds.artwork_transport import ArtworkFetchError, fetch_artwork_bytes
+        from core.feeds.artwork_transport import ArtworkFetchError, fetch_article_head, fetch_artwork_bytes
         from core.settings.storage_paths import detect_current_profile, get_feed_cache_dir
         cache = FeedArtworkCache(get_feed_cache_dir(detect_current_profile()) / "artwork")
         deadline = time.monotonic() + 8.0
         def needed() -> bool:
             return not cancel.is_set()
-        def fetch(url: str) -> bytes:
+        def remaining_seconds() -> float:
             if not needed():
                 raise ArtworkCancelled()
             remaining = deadline - time.monotonic()
             if remaining <= 0.1:
-                raise ArtworkFetchError("shared artwork deadline exhausted")
-            return fetch_artwork_bytes(url, still_needed=needed,
-                                       max_seconds=min(7.5, remaining))
+                # Never started, so nothing about this URL is remembered.
+                raise ArtworkFetchError("shared artwork deadline exhausted", retry_seconds=None)
+            return min(7.5, remaining)
+        def fetch(url: str) -> bytes:
+            return fetch_artwork_bytes(url, still_needed=needed, max_seconds=remaining_seconds())
+        def fetch_page(url: str) -> bytes:
+            return fetch_article_head(url, still_needed=needed, max_seconds=remaining_seconds())
         try:
             warm = cache.warm(snapshot.document.items[:max(1, int(item_limit))], fetch_bytes=fetch,
-                              still_needed=needed, protected_sources=protected)
+                              still_needed=needed, protected_sources=protected, fetch_page=fetch_page)
         except ArtworkCancelled:
             raise
         except (OSError, ValueError):

@@ -15,6 +15,7 @@ import ipaddress
 import logging
 import os
 import tempfile
+import time
 from typing import Callable, Iterable, Mapping
 
 from core.logging.logger import is_feeds_logging_enabled
@@ -22,14 +23,30 @@ from core.logging.tags import LOG_FAMILY_FEEDS, LOG_FAMILY_FIELD
 from urllib.parse import urlsplit
 
 from .models import FeedItem
+from .parser import article_share_image_url
 from .projection import ranked_image_candidates
 
 logger = logging.getLogger(__name__)
 
 # Hard upper bounds, independent of the document's declared dimensions or a
 # malicious Content-Length.  Conversion is worker-only and contains no Qt path.
-MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
-MAX_SOURCE_PIXELS = 16_000_000
+# Safety ceilings sized to real editorial images, not a size policy: publishers
+# ship full-size originals (Crunchyroll headers ~3 MB, NPR originals ~4 MB and
+# larger). Only the normalized <=640 px PNG is kept, under its own bound. A JPEG
+# is decoded at reduced scale (``draft``), so the pixel ceiling limits what is
+# actually decoded; it matters only for PNG/WebP/GIF, which cannot be drafted.
+# A URL that fails is remembered (``memo``) and not downloaded again on every
+# refresh.
+MAX_DOWNLOAD_BYTES = 16 * 1024 * 1024
+MAX_STORED_BYTES = 2 * 1024 * 1024
+MAX_SOURCE_PIXELS = 40_000_000
+# How long a failed optional-image URL is left alone before it is tried again:
+# a definite failure (too large, not an image, refused) is not downloaded again
+# on every feed refresh; a transient one (timeout, 5xx, 429) waits an hour.
+DEFINITE_RETRY_SECONDS = 7 * 24 * 3600
+TRANSIENT_RETRY_SECONDS = 3600
+PAGE_IMAGE_MEMO_SECONDS = 30 * 24 * 3600
+MEMO_MAX_FILES = 2048
 MAX_STORED_EDGE = 640
 MAX_IMAGES_PER_WARM = 4
 MAX_CANDIDATE_ATTEMPTS_PER_WARM = 8
@@ -128,7 +145,7 @@ class FeedArtworkCache:
             return False
         try:
             stat = path.stat()
-            if not 0 < stat.st_size <= MAX_DOWNLOAD_BYTES:
+            if not 0 < stat.st_size <= MAX_STORED_BYTES:
                 return False
             from PIL import Image
             with Image.open(path) as image:
@@ -163,11 +180,14 @@ class FeedArtworkCache:
         DecompressionBombError = Image.DecompressionBombError
         try:
             with Image.open(BytesIO(payload)) as original:
+                if original.format not in {"PNG", "JPEG", "WEBP", "GIF"}:
+                    raise ValueError("unsupported image format")
+                if original.format == "JPEG":
+                    # DCT scaling: decode directly at 1/2..1/8 size, never the full original.
+                    original.draft(original.mode, (MAX_STORED_EDGE, MAX_STORED_EDGE))
                 width, height = original.size
                 if width <= 0 or height <= 0 or width * height > MAX_SOURCE_PIXELS:
                     raise ValueError("image dimensions exceed bound")
-                if original.format not in {"PNG", "JPEG", "WEBP", "GIF"}:
-                    raise ValueError("unsupported image format")
                 # First frame only; never render/process a provider GIF timeline.
                 first = ImageOps.exif_transpose(original)
                 first.thumbnail((MAX_STORED_EDGE, MAX_STORED_EDGE), Image.Resampling.LANCZOS)
@@ -175,7 +195,7 @@ class FeedArtworkCache:
                 output = BytesIO()
                 rgb.save(output, format="PNG", optimize=False)
                 result = output.getvalue()
-                if not 0 < len(result) <= MAX_DOWNLOAD_BYTES:
+                if not 0 < len(result) <= MAX_STORED_BYTES:
                     raise ValueError("normalized image exceeds cache bound")
                 return result
         except (OSError, UnidentifiedImageError, OverflowError, DecompressionBombError) as exc:
@@ -203,6 +223,39 @@ class FeedArtworkCache:
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
+
+    def _memo_file(self, url: str) -> Path:
+        return self.directory / "memo" / (_key(url) + ".txt")
+
+    def _memo_get(self, url: str) -> tuple[str, str] | None:
+        """``(status, value)`` for a remembered URL, or ``None`` when unknown or expired."""
+        try:
+            status, expires, value = self._memo_file(url).read_text(encoding="utf-8").rstrip("\n").split("\t", 2)
+            if float(expires) > time.time():
+                return status, value
+        except (OSError, ValueError):
+            pass
+        return None
+
+    def _memo_put(self, url: str, status: str, value: str, seconds: float) -> None:
+        path = self._memo_file(url)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"{status}\t{time.time() + float(seconds):.0f}\t{value}\n", encoding="utf-8")
+        except OSError:
+            pass  # Optional memory; a failed write only means one more attempt later.
+
+    def _prune_memo(self) -> None:
+        directory = self.directory / "memo"
+        try:
+            entries = sorted((path.stat().st_mtime_ns, path) for path in directory.iterdir() if path.suffix == ".txt")
+        except OSError:
+            return
+        for _, path in entries[:max(0, len(entries) - MEMO_MAX_FILES)]:
+            try:
+                path.unlink()
+            except OSError:
+                pass
 
     def prune(self, *, protected: Iterable[str] = ()) -> int:
         """One bounded worker-only eviction after writes, never on render/read."""
@@ -239,6 +292,7 @@ class FeedArtworkCache:
         still_needed: Callable[[], bool],
         max_new: int = MAX_IMAGES_PER_WARM,
         protected_sources: Iterable[str] | Callable[[], Iterable[str]] = (),
+        fetch_page: Callable[[str], bytes] | None = None,
     ) -> ArtworkWarmResult:
         """Resolve local article art with bounded fallback and content identity.
 
@@ -247,8 +301,14 @@ class FeedArtworkCache:
         shared by multiple stories *and* detects identical normalized image bytes
         across otherwise-distinct URLs.  A duplicate-content discovery revokes the
         earlier claim and lets both stories try their next feed-advertised candidate.
-        Work remains source-event-owned and bounded; no article-page scraping,
-        presentation-time hashing, timer or second worker is introduced.
+        Work remains source-event-owned and bounded; no presentation-time
+        hashing, timer or second worker is introduced.
+
+        Last resort only: when every image the feed advertises for a story is
+        missing or has failed, ``fetch_page`` reads that article's ``<head>`` for
+        its declared share image. It shares the attempt budget, and the answer
+        (image, none or a failure) is remembered, so a page is read at most once
+        per memo period and a failing image URL is not downloaded every refresh.
 
         ``protected_sources`` may be a callable: eviction then protects what is
         published *when it prunes*, not what was published when this warm was
@@ -329,6 +389,95 @@ class FeedArtworkCache:
             requeue(previous)
             return True
 
+        page_lookups = memo_writes = 0
+
+        def select(item_id: str, candidate: str, source: str, digest: bytes) -> None:
+            digest_owner[digest] = item_id
+            digest_url[digest] = candidate
+            selected_url[item_id] = candidate
+            local[item_id] = source
+
+        def budget_left() -> bool:
+            return len(network_owned) < batch_budget and attempts < attempt_budget
+
+        def remember_failure(url: str, exc: BaseException) -> None:
+            nonlocal memo_writes
+            seconds = getattr(exc, "retry_seconds", DEFINITE_RETRY_SECONDS)
+            if isinstance(exc, OSError):
+                seconds = TRANSIENT_RETRY_SECONDS
+            if seconds:
+                self._memo_put(url, "failed", "", seconds)
+                memo_writes += 1
+
+        def acquire(item_id: str, candidate: str) -> str:
+            """Try one candidate: ``selected``, ``failed`` or ``budget`` (not attempted)."""
+            nonlocal attempts, created
+            if candidate in rejected_urls:
+                return "failed"
+            # Cached candidates were exhausted first. A file could appear only
+            # through another writer racing this worker; accept it if valid.
+            path = self._cached_path(candidate)
+            if path is not None:
+                try:
+                    digest = self._content_digest(path)
+                except OSError:
+                    return "failed"
+                if reject_duplicate(item_id, candidate, digest):
+                    return "failed"
+                select(item_id, candidate, path.as_uri(), digest)
+                return "selected"
+            if candidate in attempted_urls:
+                return "failed"
+            remembered = self._memo_get(candidate)
+            if remembered is not None and remembered[0] == "failed":
+                return "failed"
+            if not budget_left():
+                return "budget"
+            attempted_urls.add(candidate)
+            attempts += 1
+            try:
+                normalized = self._normalize_image(fetch_bytes(candidate))
+            except ArtworkCancelled:
+                raise
+            except (OSError, ValueError, TypeError) as exc:
+                remember_failure(candidate, exc)
+                return "failed"
+            digest = sha256(normalized).digest()
+            if reject_duplicate(item_id, candidate, digest):
+                return "failed"
+            try:
+                source = self._write(candidate, normalized, still_needed=still_needed)
+            except OSError:
+                return "failed"  # Local disk trouble is not the image's fault.
+            select(item_id, candidate, source, digest)
+            network_owned.add(item_id)
+            created += 1
+            return "selected"
+
+        def page_image(item: FeedItem) -> str:
+            """Last resort: the share image the article page declares (remembered)."""
+            nonlocal attempts, page_lookups, memo_writes
+            page = safe_artwork_url(item.action_url)
+            if not page:
+                return ""
+            remembered = self._memo_get(page)
+            if remembered is not None:
+                return safe_artwork_url(remembered[1]) if remembered[0] == "page" else ""
+            if fetch_page is None or not budget_left():
+                return ""
+            attempts += 1
+            page_lookups += 1
+            try:
+                image = safe_artwork_url(article_share_image_url(fetch_page(page), base_url=page))
+            except ArtworkCancelled:
+                raise
+            except (OSError, ValueError, TypeError) as exc:
+                remember_failure(page, exc)
+                return ""
+            self._memo_put(page, "page", image, PAGE_IMAGE_MEMO_SECONDS)
+            memo_writes += 1
+            return image
+
         while pending:
             if not still_needed():
                 raise ArtworkCancelled()
@@ -337,7 +486,6 @@ class FeedArtworkCache:
             if item_id in local:
                 continue
             candidates = candidates_by_item.get(item_id, ())
-            index = next_index[item_id]
 
             # Cache-first means *all* already-local fallbacks outrank a new
             # network attempt.  A previously failed preferred candidate must not
@@ -345,7 +493,7 @@ class FeedArtworkCache:
             # candidate is already durable on disk.  This scan is bounded by the
             # accepted per-item candidate list and performs no network work.
             cached_selected = False
-            for cached_index in range(index, len(candidates)):
+            for cached_index in range(next_index[item_id], len(candidates)):
                 candidate = candidates[cached_index]
                 if candidate in rejected_urls:
                     continue
@@ -359,63 +507,26 @@ class FeedArtworkCache:
                 next_index[item_id] = cached_index + 1
                 if reject_duplicate(item_id, candidate, digest):
                     continue
-                digest_owner[digest] = item_id
-                digest_url[digest] = candidate
-                selected_url[item_id] = candidate
-                local[item_id] = path.as_uri()
+                select(item_id, candidate, path.as_uri(), digest)
                 cached_selected = True
                 break
             if cached_selected:
                 continue
 
-            index = next_index[item_id]
-            while index < len(candidates):
-                candidate = candidates[index]
-                index += 1
-                next_index[item_id] = index
-                if candidate in rejected_urls:
-                    continue
-                # Cached candidates were exhausted above. A file could appear
-                # only through another writer racing this worker; re-check once
-                # before opening the bounded transport and accept it if valid.
-                path = self._cached_path(candidate)
-                if path is not None:
-                    try:
-                        digest = self._content_digest(path)
-                    except OSError:
-                        continue
-                    if reject_duplicate(item_id, candidate, digest):
-                        continue
-                    digest_owner[digest] = item_id
-                    digest_url[digest] = candidate
-                    selected_url[item_id] = candidate
-                    local[item_id] = path.as_uri()
+            outcome = "failed"
+            while next_index[item_id] < len(candidates):
+                outcome = acquire(item_id, candidates[next_index[item_id]])
+                if outcome == "budget":
                     break
-
-                if len(network_owned) >= batch_budget or attempts >= attempt_budget:
+                next_index[item_id] += 1
+                if outcome == "selected":
                     break
-                if candidate in attempted_urls:
-                    continue
-                attempted_urls.add(candidate)
-                attempts += 1
-                try:
-                    payload = fetch_bytes(candidate)
-                    normalized = self._normalize_image(payload)
-                    digest = sha256(normalized).digest()
-                    if reject_duplicate(item_id, candidate, digest):
-                        continue
-                    source = self._write(candidate, normalized, still_needed=still_needed)
-                    local[item_id] = source
-                    selected_url[item_id] = candidate
-                    digest_owner[digest] = item_id
-                    digest_url[digest] = candidate
-                    network_owned.add(item_id)
-                    created += 1
-                    break
-                except ArtworkCancelled:
-                    raise
-                except (OSError, ValueError, TypeError):
-                    continue
+            if item_id in local or outcome == "budget":
+                continue
+            # Every image the feed advertises for this story is missing or failed.
+            image = page_image(item_by_id[item_id])
+            if image and image not in candidates:
+                acquire(item_id, image)
 
         for candidate in set(selected_url.values()):
             try:
@@ -427,14 +538,16 @@ class FeedArtworkCache:
                 raise ArtworkCancelled()
             live = protected_sources() if callable(protected_sources) else protected_sources
             self.prune(protected=(*local.values(), *live))
+        if memo_writes:
+            self._prune_memo()
         shared_candidates = sum(1 for count in candidate_users.values() if count > 1)
         if is_feeds_logging_enabled():
             logger.info(
                 "[FEEDS][ARTWORK] items=%d distinct_candidates=%d shared_candidates=%d "
-                "content_duplicates=%d attempts=%d newly_cached=%d local_items=%d "
+                "content_duplicates=%d attempts=%d page_lookups=%d newly_cached=%d local_items=%d "
                 "unique_local_files=%d",
                 len(item_rows), len(distinct_candidate_urls), shared_candidates, content_duplicates,
-                attempts, created, len(local), len(set(local.values())),
+                attempts, page_lookups, created, len(local), len(set(local.values())),
                 extra={LOG_FAMILY_FIELD: (LOG_FAMILY_FEEDS,)},
             )
         return ArtworkWarmResult(local, attempts, created)
