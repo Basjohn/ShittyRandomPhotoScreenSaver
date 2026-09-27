@@ -28,6 +28,10 @@ prepositions lowercase, short tags in ALL CAPS, user data (paths, URLs, addresse
 - Sources is two large buckets, Folders and Online Wallpaper Feeds (feeds need internet). Custom feed addresses are
   added there through the same autocorrect as the Sources tab (`ui/tabs/sources_tab.py:autocorrect_feed_url`).
 - Displays: clicking a display in the diagram switches it on or off (filled when on); one display always stays on.
+  Each is listed with the resolution Windows shows and its scale (`2560 × 1440 · 150%`), read from the monitor
+  (`core/windows/monitor_resolution.py`), never Qt's rounded logical size. Leaving the page (and Finish) with exactly
+  one display selected routes every widget the saver could not show onto it (`route_widgets_to_single_monitor`:
+  numbered routes elsewhere move; `ALL` stays; authored restore routes follow).
 - Interaction: Media Center builds keep interaction on, so the screensaver-only choice is greyed with a tooltip.
 - Widget Setup (large buckets) includes Clocks: the shared analogue/digital face and a timezone per enabled clock.
   Choosing a face clears per-display face overrides so the choice shows everywhere.
@@ -81,6 +85,10 @@ The canvas uses the saver's own geometry, so boxes land where they are drawn:
   page, created when it opens; results are memoized per size-relevant draft fingerprint (placement fields, CUSTOM
   entries and slots excluded), so moves and resets reuse them and a real setting change re-measures once. The
   Visualizer is sized by its own `resolve_visualizer_presentation` (authored viewport fitted to the display).
+- **Units.** Layout is Qt logical pixels in both the saver and Arrange (`QScreen.geometry()`); only text shown to
+  people (display captions, box sizes) is device pixels, from each display's own resolution and scale.
+- **Clock faces.** A Clock's geometry variant is the face the saver presents (`clock_geometry_variant`: Clock 2/3
+  inherit the main Clock's face, per-display overrides by display signature).
 - **Placement.** Uncommitted boxes are placed by `rendering/quick/widgets/authored_layout_projection.py`, which
   composes the display presenter's anchor policy, display-wide stacking/shrink and `DisplayManager`'s Media+Visualizer
   docking with the saver's inputs and build order. Under global CUSTOM they sit on plain anchors and an uncommitted

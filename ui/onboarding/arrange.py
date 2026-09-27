@@ -13,6 +13,7 @@ from rendering.quick.custom_layout_size import CUSTOM_LAYOUT_MIN_RESIZE_SCALE
 from ui.widgets.continuous_border import OutlinedListWidget
 from core.settings.default_contract import require_canonical_default
 from core.settings.layout_slots import get_layout_slot_payload
+from core.windows.monitor_resolution import screen_device_size
 from rendering.quick.widgets.preferred_size_measurement import OrdinaryPreferredSizeMeter
 from ui.onboarding.arrange_model import ArrangeDisplay, ArrangeModel
 from ui.onboarding.common import Page, action, checkbox, text_label
@@ -150,11 +151,11 @@ class _ArrangeCanvas(QWidget):
         return next((display for display in self.model.displays if display.geometry.contains(centre)), None)
 
     def _describe(self, item) -> str:
-        rect = item.current_global_rect
+        width, height = self.model.device_size(item.source_key)
         state = ("follows its authored anchor (drag to place it freely)" if self.model.is_authored(item.source_key)
                  else "size follows content" if item.content_sized else "placed")
         return (f"{self.model.item_label(item.source_key)} · display {self.model.display_route(item.source_key)}"
-                f" · ≈{rect.width()}×{rect.height()} · {state}")
+                f" · {width} × {height} px · {state}")
 
     # ---- painting -----------------------------------------------------------
     def paintEvent(self, _event) -> None:
@@ -186,7 +187,8 @@ class _ArrangeCanvas(QWidget):
         painter.setPen(color("panel.group.text"))
         for display in self.model.displays:
             rect = QRectF(self._project(display.geometry))
-            label = f"Display {display.monitor_route}  ·  {display.geometry.width()}×{display.geometry.height()}"
+            width, height = display.resolution()
+            label = f"Display {display.monitor_route}  ·  {width} × {height}"
             painter.drawText(QRectF(rect.left(), rect.bottom() + 4, rect.width(), self._LABEL_BAND - 6),
                              Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, label)
         if self.hasFocus() and self._selected is None and not self.model.session.active_items():
@@ -213,7 +215,7 @@ class _ArrangeCanvas(QWidget):
             metrics = painter.fontMetrics()
             name = metrics.elidedText(self.model.item_label(item.source_key), Qt.TextElideMode.ElideRight, int(rect.width() - 8))
             if rect.height() >= 2.4 * metrics.height():
-                size = f"≈{item.current_global_rect.width()}×{item.current_global_rect.height()}"
+                size = "{} × {}".format(*self.model.device_size(item.source_key))
                 painter.drawText(rect.adjusted(4, 2, -4, -rect.height() / 2 + 1), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, name)
                 faint = color("control.button.text"); faint.setAlpha(150)
                 painter.setPen(faint)
@@ -436,7 +438,13 @@ class ArrangePage(Page):
         raw = self.settings.get("display.show_on_monitors", require_canonical_default("display.show_on_monitors"))
         selected = None if str(raw).upper() == "ALL" else {int(value) for value in raw if str(value).isdigit()} if isinstance(raw, (list, tuple, set)) else set()
         screens = list(QGuiApplication.screens())
-        return tuple(ArrangeDisplay(get_screen_signature(screen), get_screen_signature_aliases(screen), QRect(screen.geometry()), str(index + 1)) for index, screen in enumerate(screens) if selected is None or index + 1 in selected)
+        return tuple(
+            ArrangeDisplay(
+                get_screen_signature(screen), get_screen_signature_aliases(screen), QRect(screen.geometry()),
+                str(index + 1), float(screen.devicePixelRatio() or 1.0), screen_device_size(screen),
+            )
+            for index, screen in enumerate(screens) if selected is None or index + 1 in selected
+        )
 
     def refresh(self):
         if self.model is not None and self.model.pending: return

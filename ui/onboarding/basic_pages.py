@@ -304,9 +304,11 @@ class DisplaysPage(Page):
         self.all = checkbox("All displays, including displays connected later")
         self.body.addWidget(self.all)
         self.checks = []
+        from core.windows.monitor_resolution import describe_screen_resolution
+
         for index, screen in enumerate(self.screens, 1):
-            g = screen.geometry()
-            check = checkbox(f"{index} · {screen.name()} · {g.width()} × {g.height()} logical pixels")
+            # The resolution Windows shows (device pixels) and its scale.
+            check = checkbox(f"{index} · {screen.name()} · {describe_screen_resolution(screen)}")
             check.toggled.connect(self.save_selection)
             self.body.addWidget(check)
             self.checks.append(check)
@@ -340,6 +342,14 @@ class DisplaysPage(Page):
 
     def can_continue(self):
         return self.all.isChecked() or any(check.isChecked() for check in self.checks)
+
+    def leave(self):
+        # One selected display: every widget goes there (routing is only
+        # committed when the selection is, never while it is being toggled).
+        from ui.onboarding.state import route_widgets_to_single_display
+
+        route_widgets_to_single_display(self.settings)
+        return True
 
     def save_selection(self):
         selected = [i for i, check in enumerate(self.checks, 1) if check.isChecked()]

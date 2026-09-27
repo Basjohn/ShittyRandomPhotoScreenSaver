@@ -47,6 +47,9 @@ The existing user-desktop helper consumes only admitted queue work, waits for th
   own `presentation_model` and card style; uncommitted placement is the presenter's anchor/stacking and
   `DisplayManager`'s Media docking (`authored_layout_projection`). CUSTOM is global, so Apply after any placement
   saves the whole canvas; viewing or a slot load commits nothing and Reset keeps a box authored.
+  Clock entries use the face the saver presents (`clock_geometry_variant`), and generation start resolves them
+  the same way (`resolve_quick_committed_entry`). Layout is Qt logical pixels; resolution text is the monitor's
+  device size. Guided Setup with exactly one display selected routes every widget onto it.
   Settings-created CUSTOM entries use content-sized anchored placement; uniform scale is supported. Settings side
   (width/height) resize reuses Runtime Edit's geometry functions and is admitted only when the saved box, floor and
   child state need no live measurement; child geometry and content rotation remain runtime operations. Move-only runtime Save preserves content sizing;

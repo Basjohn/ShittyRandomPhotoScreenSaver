@@ -150,6 +150,10 @@ class GuidedSetupPanel(QWidget):
         return self.settings.pending or self._arrange_pending() is not None
 
     def _save(self) -> None:
+        # Finish can come before the Displays page is left (Sources finishes early).
+        from ui.onboarding.state import route_widgets_to_single_display
+
+        route_widgets_to_single_display(self.settings)
         arrange = self._arrange_pending()
         if arrange is not None:
             arrange.apply()
