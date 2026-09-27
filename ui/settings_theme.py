@@ -184,9 +184,10 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     border: 1.5px solid %(tab_disabled_border)s;
                 }
 
+                /* Border painted seam-free by the owners (continuous_border.py). */
                 #contentArea {
                     background-color: %(content_surface)s;
-                    border: 1.75px solid %(panel_border)s;
+                    border: 1.75px solid transparent;
                     border-radius: 8px;
                     padding: 20px;
                 }
@@ -195,10 +196,12 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     background: transparent;
                 }
 
+                /* Lists are OutlinedListWidget: the frame is painted as one
+                   seam-free path (ui/widgets/continuous_border.py). */
                 QListWidget {
                     background-color: %(list_surface)s;
                     color: %(list_text)s;
-                    border: 1px solid %(list_border)s;
+                    border: 2px solid transparent;
                     border-radius: 8px;
                     padding: 4px;
                 }
@@ -263,6 +266,10 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     spacing: 8px;
                 }
 
+                QCheckBox:disabled {
+                    color: %(label_disabled_text)s;
+                }
+
                 QCheckBox::indicator {
                     width: 18px;
                     height: 18px;
@@ -283,11 +290,12 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                 }
 
                 /* Collapsible Settings buckets. Geometry remains renderer-owned;
-                   ThemeSpec owns the palette. */
+                   ThemeSpec owns the palette. The border is painted seam-free by
+                   BucketToggle (ui/widgets/continuous_border.py). */
                 QToolButton[autoRaise="true"] {
                     background-color: %(bucket_closed_surface)s;
                     color: %(bucket_closed_text)s;
-                    border: 1.5px solid %(bucket_closed_border)s;
+                    border: 1.5px solid transparent;
                     border-radius: 3px;
                     padding: 3px 8px;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
@@ -296,18 +304,16 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                 }
                 /* Guided Setup feature buckets: a quarter larger than the norm. */
                 QToolButton[autoRaise="true"][bucketSize="large"] {
-                    padding: 5px 12px;
-                    font-size: 14px;
+                    padding: 4px 12px;
+                    font-size: 15px;
                     border-radius: 4px;
                 }
                 QToolButton[autoRaise="true"]:hover {
                     background-color: %(bucket_closed_hover_surface)s;
-                    border-color: %(bucket_closed_hover_border)s;
                 }
                 QToolButton[autoRaise="true"]:checked {
                     background-color: %(bucket_open_surface)s;
                     color: %(bucket_open_text)s;
-                    border-color: %(bucket_open_border)s;
                 }
                 QToolButton[autoRaise="true"]:checked:hover {
                     background-color: %(bucket_open_hover_surface)s;

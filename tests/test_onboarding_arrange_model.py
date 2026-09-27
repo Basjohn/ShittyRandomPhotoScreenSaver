@@ -246,7 +246,7 @@ def test_arrange_page_list_selects_small_or_overlapping_item_and_scales_content(
         page.scale_slider.setValue(125)
         assert item.content_sized is True
         assert item.resize_scale == pytest.approx(1.25)
-        assert "size follows content" in page.selection_hint.text()
+        assert "size follows content" in page.selection_hint.text().lower()
     finally:
         page.deleteLater()
 

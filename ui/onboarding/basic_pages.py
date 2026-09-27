@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from ui.widgets.continuous_border import OutlinedListWidget
 from core.sources.readiness import has_image_sources
 from ui.onboarding.state import is_media_center_profile
 from sources.rss.curated import apply_curated_wallpaper_feeds
@@ -55,7 +56,7 @@ class SourcesPage(Page):
         feeds_open = bool(settings.get("sources.rss_feeds")) and not folders
         self.folders_toggle, _, folder_layout = build_bucket_toggle(self.body, "Folders", expanded=not feeds_open, large=True)
         folder_layout.addWidget(text_label("Picture folders on this computer or your network."))
-        self.folders = QListWidget()
+        self.folders = OutlinedListWidget()
         self.folders.setMinimumHeight(110)
         folder_layout.addWidget(self.folders)
         row = QHBoxLayout()
@@ -116,7 +117,7 @@ class SourcesPage(Page):
                 self.feeds.addItem(item)
         folders = self.folders.count()
         self.folders_toggle.setText(f"Folders  ·  {folders}" if folders else "Folders")
-        self.feeds_toggle.setText(f"Online Wallpaper Feeds  ·  {len(current)} on" if current else "Online Wallpaper Feeds")
+        self.feeds_toggle.setText(f"Online Wallpaper Feeds  ·  {len(current)} ON" if current else "Online Wallpaper Feeds")
         ready = self.can_continue()
         self.reason.setText("Ready to continue." if ready else "Add a folder or turn on an online wallpaper feed to continue.")
         self.readinessChanged.emit()
@@ -176,8 +177,8 @@ class SourcesPage(Page):
     def make_it_work(self):
         apply_curated_wallpaper_feeds(self.settings)
         self.refresh()
-        popup = StyledPopup(self, "Guided Setup", "You're lazy and so am I! Skip the rest?",
-                            buttons=[("No, I can do it!", "continue"), ("Skip", "skip")], default_button_index=0)
+        popup = StyledPopup(self, "Guided Setup", "You're Lazy And So Am I! Skip The Rest?",
+                            buttons=[("No, I Can Do It!", "continue"), ("Skip", "skip")], default_button_index=0)
         popup.exec()
         if popup.result_value == "skip":
             self.finishRequested.emit()
@@ -244,7 +245,7 @@ class DisplayDiagram(QWidget):
             painter.setPen(QPen(border, 3.0 if on else 2.0))
             painter.drawRoundedRect(rect, 6, 6)
             painter.setPen(color("panel.group.text"))
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(number) + ("" if on else "\noff"))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(number) + ("" if on else "\nOFF"))
 
     def mouseMoveEvent(self, event):
         hover = self._hit(event.position())
@@ -341,6 +342,8 @@ class _PracticeStoryCard(QWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         from PySide6.QtGui import QPixmap
         self._art = QPixmap(str(asset_path("onboarding/transition_destination.png")))
+        self._scaled_art = QPixmap()
+        self._scaled_key = None
         self._pressed = False
 
     def paintEvent(self, _event):
@@ -355,15 +358,21 @@ class _PracticeStoryCard(QWidget):
         art = QRectF(rect.left() + 12, rect.top() + 12, (rect.height() - 24) * 16 / 9, rect.height() - 24)
         if not self._art.isNull():
             from PySide6.QtGui import QPainterPath
+            from ui.widgets.dpr_pixmap import scale_pixmap_for_dpr
+            key = (round(art.width()), round(art.height()), self.devicePixelRatioF())
+            if key != self._scaled_key:
+                # Smooth, DPR-aware scale once per size change (never per paint).
+                self._scaled_key = key
+                self._scaled_art = scale_pixmap_for_dpr(self._art, art.width(), art.height(), key[2])
             clip = QPainterPath(); clip.addRoundedRect(art, 6.0, 6.0)
             painter.save(); painter.setClipPath(clip)
-            painter.drawPixmap(art, self._art, QRectF(self._art.rect()))
+            painter.drawPixmap(art.topLeft(), self._scaled_art)
             painter.restore()
         text = QRectF(art.right() + 14, rect.top() + 14, rect.right() - art.right() - 26, rect.height() - 28)
         font = self.font(); font.setBold(True); font.setPointSizeF(font.pointSizeF() + 1.5)
         painter.setFont(font); painter.setPen(color("panel.group.text"))
         painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
-                         "A practice story: the lighthouse keeper's last night")
+                         "A Practice Story: The Lighthouse Keeper's Last Night")
         font.setBold(False); font.setPointSizeF(font.pointSizeF() - 2.5); painter.setFont(font)
         painter.setPen(color("control.button.text"))
         painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, "PRACTICE WIRE  ·  2H AGO")

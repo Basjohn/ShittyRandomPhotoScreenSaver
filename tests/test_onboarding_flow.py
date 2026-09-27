@@ -90,7 +90,7 @@ def test_sources_page_is_two_large_buckets_and_adds_custom_feeds(qapp, settings)
         page.custom_feed.setText("not a feed")
         page.add_custom_feed()
         assert settings.get("sources.rss_feeds") == []
-        assert "web address" in page.custom_message.text()
+        assert "web address" in page.custom_message.text().lower()
     finally:
         page.deleteLater()
 
@@ -131,8 +131,8 @@ def test_curated_action_shared_and_both_followups(qapp, settings, monkeypatch, c
     before["sources"]["rss_feeds"] = list(DEFAULT_RSS_FEEDS.values())
     assert settings.values == before
     assert bool(finished) is finishes
-    assert captured["message"] == "You're lazy and so am I! Skip the rest?"
-    assert captured["buttons"] == [("No, I can do it!", "continue"), ("Skip", "skip")]
+    assert captured["message"] == "You're Lazy And So Am I! Skip The Rest?"
+    assert captured["buttons"] == [("No, I Can Do It!", "continue"), ("Skip", "skip")]
     page.deleteLater()
 
 
@@ -144,7 +144,7 @@ def test_media_center_keeps_interaction_on_and_greys_the_other_choice(qapp, sett
         assert not page.group.button(0).isEnabled()
         assert "Media Center" in page.group.button(0).toolTip()
         page.demonstrate()
-        assert "secure link handoff" in page.demo.text()
+        assert "secure link handoff" in page.demo.text().lower()
     finally:
         page.deleteLater()
 

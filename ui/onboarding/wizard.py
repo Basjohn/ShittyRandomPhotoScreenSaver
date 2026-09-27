@@ -60,6 +60,12 @@ class GuidedSetupPanel(QWidget):
         shared_styles.bind_shared_styles(self, "CIRCLE_CHECKBOX_STYLE")
         self.show_page("welcome")
 
+    def paintEvent(self, event):
+        """Seam-free border plus a readability veil for Glass on bright desktops."""
+        from ui.widgets.continuous_border import paint_content_frame
+        super().paintEvent(event)
+        paint_content_frame(self, veil=True)
+
     def _build_page(self, key):
         if key in {"welcome", "sources", "displays", "interaction"}:
             from ui.onboarding import basic_pages
@@ -111,7 +117,7 @@ class GuidedSetupPanel(QWidget):
             return
         keys = self.step_keys()
         index = keys.index(self.current_key)
-        self.progress.setText(f"{index+1} of {len(keys)}  ·  {dict(self.STEPS)[self.current_key]}")
+        self.progress.setText(f"STEP {index+1} OF {len(keys)}  ·  {dict(self.STEPS)[self.current_key].upper()}")
         self.back.setEnabled(index > 0)
         self.next.setText("Finish" if self.current_key == "ready" else "Next")
         self.next.setEnabled(self.pages[self.current_key][0].can_continue())

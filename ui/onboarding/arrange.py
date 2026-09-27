@@ -10,6 +10,7 @@ from PySide6.QtGui import QGuiApplication
 
 from rendering.custom_layout_contract import get_screen_signature, get_screen_signature_aliases
 from rendering.quick.custom_layout_size import CUSTOM_LAYOUT_MIN_RESIZE_SCALE
+from ui.widgets.continuous_border import OutlinedListWidget
 from core.settings.default_contract import require_canonical_default
 from core.settings.layout_slots import get_layout_slot_payload
 from ui.onboarding.arrange_model import ArrangeDisplay, ArrangeModel
@@ -340,7 +341,7 @@ class ArrangePage(Page):
         self.canvas_holder = QVBoxLayout(); self.body.addLayout(self.canvas_holder)
         self.body.addWidget(text_label("Drag a box to move it, including onto another display. Drag a corner, or Ctrl+scroll, to scale. Arrow keys nudge (Shift for 10 px), Delete resets. Dashed boxes still follow their original anchor."))
         chooser = QHBoxLayout()
-        self.item_list = QListWidget()
+        self.item_list = OutlinedListWidget()
         self.item_list.setMaximumHeight(118)
         self.item_list.setToolTip("Choose a widget and display when boxes overlap or are too small to select on the canvas.")
         self.item_list.currentItemChanged.connect(self._select_list_item)

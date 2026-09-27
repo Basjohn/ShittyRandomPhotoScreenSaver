@@ -1749,7 +1749,8 @@ def build_bucket_toggle(
     owned by the caller's ``on_toggle`` callback; programmatic peer closure does
     not emit another persistence write.
     """
-    toggle = QToolButton()
+    from ui.widgets.continuous_border import BucketToggle
+    toggle = BucketToggle()
     toggle.setText(title)
     toggle.setCheckable(True)
     toggle.setChecked(expanded)
@@ -1758,7 +1759,7 @@ def build_bucket_toggle(
     toggle.setAutoRaise(True)
     if large:
         toggle.setProperty("bucketSize", "large")
-        toggle.setIconSize(QSize(15, 15))
+        toggle.setIconSize(QSize(11, 11))
 
     toggle_row = QHBoxLayout()
     toggle_row.addWidget(toggle)

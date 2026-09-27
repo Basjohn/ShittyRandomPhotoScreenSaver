@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QFrame, QSizePolicy,
 )
 from PySide6.QtGui import QPainter, QPen, QPalette
+from ui.widgets.continuous_border import OutlinedListWidget
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     NoWheelSlider,
@@ -175,7 +176,7 @@ class SourcesTab(QWidget):
         folder_layout.setSpacing(12)
         
         # Folder list
-        self.folder_list = QListWidget()
+        self.folder_list = OutlinedListWidget()
         self.folder_list.setMinimumHeight(150)
         folder_layout.addWidget(self.folder_list)
         
@@ -269,7 +270,7 @@ class SourcesTab(QWidget):
         rss_layout.addWidget(self.rss_suggestion_label)
         
         # RSS list
-        self.rss_list = QListWidget()
+        self.rss_list = OutlinedListWidget()
         self.rss_list.setMinimumHeight(150)
         rss_layout.addWidget(self.rss_list)
         
