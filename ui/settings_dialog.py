@@ -1651,6 +1651,12 @@ class SettingsDialog(QDialog):
         self._switch_tab(index, animate=False)
 
     def closeEvent(self, event):
+        # Geometry is saved here, first, on every close attempt (including one the
+        # no-sources prompt refuses); there is no resize/move save timer.
+        try:
+            self._save_geometry()
+        except Exception:
+            logger.debug("Failed to save dialog geometry on close", exc_info=True)
         self._closing = True
         self._background_tab_queue.clear()
         self._background_build_scheduled = False
@@ -1677,12 +1683,6 @@ class SettingsDialog(QDialog):
         except Exception:
             logger.debug("Failed to capture tab state on close", exc_info=True)
         
-        # Save window geometry for next session
-        try:
-            self._save_geometry()
-        except Exception:
-            logger.debug("Failed to save dialog geometry on close", exc_info=True)
-
         # First let already-built tabs commit any tab-local coalesced edits.
         # Never use _get_tab_instance here: close must not construct a dormant
         # Settings tab merely to flush it.  Visualizers uses this boundary for

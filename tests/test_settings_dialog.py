@@ -440,6 +440,12 @@ def test_resize_and_move_start_no_timers_and_close_saves_geometry_once(
         from PySide6.QtGui import QCloseEvent
         dialog.closeEvent(QCloseEvent())  # never shown in tests, so deliver close directly
         assert saves == [True]
+        settings_manager.set("sources.folders", [])
+        monkeypatch.setattr(dialog, "isVisible", lambda: True)
+        monkeypatch.setattr(dialog, "_show_no_sources_popup", lambda: None)
+        refused = QCloseEvent()
+        dialog.closeEvent(refused)  # the no-sources prompt refuses the close...
+        assert not refused.isAccepted() and saves == [True, True]  # ...geometry is still saved
     finally:
         dialog._closing = True
         dialog.deleteLater()
