@@ -1,6 +1,6 @@
 """Save the image on screen into the user's collection ("Save Image").
 
-The destination is the folder the user chose for Sources → Save Feed Images
+The destination is the folder the user chose for Sources → Save All RSS Images To Disk
 (``sources.rss_save_directory``) when they ever chose one; otherwise
 ``Pictures/SRPSS Collections``, which becomes a local source after its first
 save (the engine registers it without rebuilding the running sources).

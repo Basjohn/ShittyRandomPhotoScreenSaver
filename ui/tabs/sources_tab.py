@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-    QPushButton, QLineEdit, QFileDialog, QGroupBox, QCheckBox,
+    QLineEdit, QFileDialog, QCheckBox,
     QScrollArea, QFrame, QSizePolicy,
 )
 from PySide6.QtGui import QPainter, QPen, QPalette
@@ -18,7 +18,6 @@ from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
     NoWheelSlider,
     add_aligned_row,
-    style_group_box,
     create_inline_label,  # Added missing import
 )
 from PySide6.QtCore import Signal, Qt
@@ -27,6 +26,7 @@ from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
 from core.sources.folder_paths import contains_folder, display_folder_path, without_folder
 from ui.styled_popup import StyledPopup
+from ui.widgets.outlined_button import OutlinedButton
 
 logger = get_logger(__name__)
 
@@ -120,33 +120,32 @@ class _RatioNotchBar(QWidget):
 
 class SourcesTab(QWidget):
     """Sources configuration tab."""
-    
     # Signals
     sources_changed = Signal()
     _LABEL_WIDTH = 160
-    
+
     def __init__(self, settings: SettingsManager, parent: Optional[QWidget] = None):
         """
         Initialize sources tab.
-        
+
         Args:
             settings: Settings manager
             parent: Parent widget
         """
         super().__init__(parent)
-        
+
         self._settings = settings
         self._suppress_source_change_signals = False
         self._setup_ui()
         self._load_sources()
-        
+
         logger.debug("SourcesTab created")
-    
+
     def load_from_settings(self) -> None:
         """Reload all UI controls from settings manager (called after preset change)."""
         self._load_sources()
         logger.debug("[SOURCES_TAB] Reloaded from settings")
-    
+
     def _setup_ui(self) -> None:
         """Setup tab UI."""
         # Use a scroll area so this tab behaves consistently with the other
@@ -163,44 +162,131 @@ class SourcesTab(QWidget):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
-        
+
         # Title
         title = QLabel("Image Sources")
         shared_styles.apply_shared_label_style(title, "PAGE_TITLE_STYLE")
         layout.addWidget(title)
-        
-        # Folder sources group
-        folder_group = QGroupBox("Folder Sources")
-        style_group_box(folder_group)
-        folder_layout = QVBoxLayout(folder_group)
-        folder_layout.setContentsMargins(0, 12, 0, 0)
+
+        # Folders and Online Wallpaper Feeds: one accordion of buckets, closed by
+        # default like every Settings bucket; titles carry the counts.
+        self.folders_toggle, _folder_body, folder_layout = shared_styles.build_bucket_toggle(layout, "Folders")
         folder_layout.setSpacing(12)
-        
+
         # Folder list
         self.folder_list = OutlinedListWidget()
         self.folder_list.setMinimumHeight(150)
         folder_layout.addWidget(self.folder_list)
-        
+
         # Folder buttons
         folder_buttons = QHBoxLayout()
-        self.add_folder_btn = QPushButton("Add Folder...")
-        shared_styles.bind_shared_styles(
-            self.add_folder_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
-        )
+        self.add_folder_btn = OutlinedButton("Add Folder...", role="source")
         self.add_folder_btn.clicked.connect(self._add_folder)
-        self.remove_folder_btn = QPushButton("Remove Selected")
-        shared_styles.bind_shared_styles(
-            self.remove_folder_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
-        )
+        self.remove_folder_btn = OutlinedButton("Remove Selected", role="source")
         self.remove_folder_btn.clicked.connect(self._remove_folder)
         folder_buttons.addWidget(self.add_folder_btn)
         folder_buttons.addWidget(self.remove_folder_btn)
         folder_buttons.addStretch()
         folder_layout.addLayout(folder_buttons)
-        
-        layout.addWidget(folder_group)
-        
-        # Usage Ratio control (between folder and RSS groups)
+
+        self.feeds_toggle, _feeds_body, rss_layout = shared_styles.build_bucket_toggle(
+            layout, "Online Wallpaper Feeds"
+        )
+        rss_layout.setSpacing(12)
+
+        # Suggestion label (session-local; updated by "Just Make It Work")
+        self.rss_suggestion_label = QLabel(
+            "<i>RSS, Atom and JSON feeds, or JSON image listings. Only images at "
+            "least as large as your displays are kept; smaller ones are skipped "
+            "automatically.</i>"
+        )
+        self.rss_suggestion_label.setWordWrap(True)
+        shared_styles.bind_shared_styles(
+            self.rss_suggestion_label,
+            "INFO_LABEL_STYLE",
+            base_style="padding: 5px;",
+        )
+        rss_layout.addWidget(self.rss_suggestion_label)
+
+        # RSS list
+        self.rss_list = OutlinedListWidget()
+        self.rss_list.setMinimumHeight(150)
+        rss_layout.addWidget(self.rss_list)
+
+        # RSS input
+        rss_input = QHBoxLayout()
+        rss_input.setContentsMargins(0, 8, 0, 0)
+        self.rss_input = QLineEdit()
+        self.rss_input.setObjectName("rssFeedInput")
+        self.rss_input.setPlaceholderText(
+            "Feed or image-listing URL (e.g. https://www.reddit.com/r/EarthPorn/top/.json?t=week)..."
+        )
+        shared_styles.bind_shared_styles(
+            self.rss_input, "RSS_INPUT_STYLE", base_style=""
+        )
+        self.add_rss_btn = OutlinedButton("Add Feed", role="source")
+        self.add_rss_btn.clicked.connect(self._add_rss)
+        rss_input.addWidget(self.rss_input)
+        rss_input.addWidget(self.add_rss_btn)
+        rss_layout.addLayout(rss_input)
+
+        # RSS buttons
+        rss_buttons = QHBoxLayout()
+        self.clear_rss_cache_btn = OutlinedButton("Clear Cache", role="source")
+        self.clear_rss_cache_btn.clicked.connect(self._on_clear_rss_cache_clicked)
+        self.just_make_it_work_btn = OutlinedButton("Just Make It Work", role="source")
+        from sources.rss.constants import DEFAULT_RSS_FEEDS
+
+        self.just_make_it_work_btn.setToolTip(
+            "Replace the list with the default feeds: " + ", ".join(DEFAULT_RSS_FEEDS)
+        )
+        self.just_make_it_work_btn.clicked.connect(self._on_just_make_it_work_clicked)
+        self.remove_rss_btn = OutlinedButton("Remove Selected", role="source")
+        self.remove_rss_btn.clicked.connect(self._remove_rss)
+        self.remove_all_rss_btn = OutlinedButton("Remove All", role="source")
+        self.remove_all_rss_btn.clicked.connect(self._remove_all_rss)
+        rss_buttons.addWidget(self.clear_rss_cache_btn)
+        rss_buttons.addWidget(self.just_make_it_work_btn)
+        rss_buttons.addWidget(self.remove_rss_btn)
+        rss_buttons.addWidget(self.remove_all_rss_btn)
+        rss_buttons.addStretch()
+        rss_layout.addLayout(rss_buttons)
+
+        # RSS save to disk option
+        self.rss_save_to_disk = QCheckBox("Save All RSS Images To Disk")
+        self.rss_save_to_disk.setProperty("circleIndicator", True)
+        shared_styles.bind_shared_styles(
+            self.rss_save_to_disk,
+            "CIRCLE_CHECKBOX_STYLE",
+            base_style="",
+        )
+        self.rss_save_to_disk.setToolTip(
+            "Hope you have space! Every wallpaper feed image that is kept is also copied "
+            "to a folder of your choosing, and nothing is ever deleted from it."
+        )
+        self.rss_save_to_disk.stateChanged.connect(self._on_rss_save_toggled)
+        rss_layout.addWidget(self.rss_save_to_disk)
+
+        # RSS save directory (hidden by default)
+        save_dir_row, self.rss_save_dir_label = add_aligned_row(
+            rss_layout,
+            "Save Directory:",
+            label_width=self._LABEL_WIDTH,
+        )
+        self.rss_save_dir_input = QLineEdit()
+        self.rss_save_dir_input.setReadOnly(True)
+        self.rss_save_dir_input.setPlaceholderText("No directory selected...")
+        self.rss_save_dir_btn = OutlinedButton("Browse...", role="standard")
+        self.rss_save_dir_btn.clicked.connect(self._browse_rss_save_dir)
+        save_dir_row.addWidget(self.rss_save_dir_input)
+        save_dir_row.addWidget(self.rss_save_dir_btn)
+
+        # Hide save directory controls initially
+        self.rss_save_dir_label.setVisible(False)
+        self.rss_save_dir_input.setVisible(False)
+        self.rss_save_dir_btn.setVisible(False)
+
+        # Usage ratio, below both sources: interactable only when both exist.
         # Only interactable when both source types are configured
         ratio_row, self.ratio_label = add_aligned_row(
             layout,
@@ -248,128 +334,8 @@ class SourcesTab(QWidget):
 
         ratio_row.addWidget(self.ratio_frame, 1)
 
-        
-        # RSS sources group
-        rss_group = QGroupBox("Wallpaper Feeds")
-        style_group_box(rss_group)
-        rss_layout = QVBoxLayout(rss_group)
-        rss_layout.setContentsMargins(0, 12, 0, 0)
-        rss_layout.setSpacing(12)
-        
-        # Suggestion label (session-local; updated by "Just Make It Work")
-        self.rss_suggestion_label = QLabel(
-            "<i>RSS, Atom and JSON feeds, or JSON image listings. Only images at "
-            "least as large as your displays are kept; smaller ones are skipped "
-            "automatically.</i>"
-        )
-        self.rss_suggestion_label.setWordWrap(True)
-        shared_styles.bind_shared_styles(
-            self.rss_suggestion_label,
-            "INFO_LABEL_STYLE",
-            base_style="padding: 5px;",
-        )
-        rss_layout.addWidget(self.rss_suggestion_label)
-        
-        # RSS list
-        self.rss_list = OutlinedListWidget()
-        self.rss_list.setMinimumHeight(150)
-        rss_layout.addWidget(self.rss_list)
-        
-        # RSS input
-        rss_input = QHBoxLayout()
-        rss_input.setContentsMargins(0, 8, 0, 0)
-        self.rss_input = QLineEdit()
-        self.rss_input.setObjectName("rssFeedInput")
-        self.rss_input.setPlaceholderText(
-            "Feed or image-listing URL (e.g. https://www.reddit.com/r/EarthPorn/top/.json?t=week)..."
-        )
-        shared_styles.bind_shared_styles(
-            self.rss_input, "RSS_INPUT_STYLE", base_style=""
-        )
-        self.add_rss_btn = QPushButton("Add Feed")
-        shared_styles.bind_shared_styles(
-            self.add_rss_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
-        )
-        self.add_rss_btn.clicked.connect(self._add_rss)
-        rss_input.addWidget(self.rss_input)
-        rss_input.addWidget(self.add_rss_btn)
-        rss_layout.addLayout(rss_input)
-        
-        # RSS buttons
-        rss_buttons = QHBoxLayout()
-        self.clear_rss_cache_btn = QPushButton("Clear Cache")
-        shared_styles.bind_shared_styles(
-            self.clear_rss_cache_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
-        )
-        self.clear_rss_cache_btn.clicked.connect(self._on_clear_rss_cache_clicked)
-        self.just_make_it_work_btn = QPushButton("Just Make It Work")
-        shared_styles.bind_shared_styles(
-            self.just_make_it_work_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
-        )
-        from sources.rss.constants import DEFAULT_RSS_FEEDS
-
-        self.just_make_it_work_btn.setToolTip(
-            "Replace the list with the default feeds: " + ", ".join(DEFAULT_RSS_FEEDS)
-        )
-        self.just_make_it_work_btn.clicked.connect(self._on_just_make_it_work_clicked)
-        self.remove_rss_btn = QPushButton("Remove Selected")
-        shared_styles.bind_shared_styles(
-            self.remove_rss_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
-        )
-        self.remove_rss_btn.clicked.connect(self._remove_rss)
-        self.remove_all_rss_btn = QPushButton("Remove All")
-        shared_styles.bind_shared_styles(
-            self.remove_all_rss_btn, "SOURCE_ACTION_BUTTON_STYLE", base_style=""
-        )
-        self.remove_all_rss_btn.clicked.connect(self._remove_all_rss)
-        rss_buttons.addWidget(self.clear_rss_cache_btn)
-        rss_buttons.addWidget(self.just_make_it_work_btn)
-        rss_buttons.addWidget(self.remove_rss_btn)
-        rss_buttons.addWidget(self.remove_all_rss_btn)
-        rss_buttons.addStretch()
-        rss_layout.addLayout(rss_buttons)
-        
-        # RSS save to disk option
-        self.rss_save_to_disk = QCheckBox("Save Feed Images to Disk")
-        self.rss_save_to_disk.setProperty("circleIndicator", True)
-        shared_styles.bind_shared_styles(
-            self.rss_save_to_disk,
-            "CIRCLE_CHECKBOX_STYLE",
-            base_style="",
-        )
-        self.rss_save_to_disk.setToolTip(
-            "Hope you have space! Every wallpaper feed image that is kept is also copied "
-            "to a folder of your choosing, and nothing is ever deleted from it."
-        )
-        self.rss_save_to_disk.stateChanged.connect(self._on_rss_save_toggled)
-        rss_layout.addWidget(self.rss_save_to_disk)
-        
-        # RSS save directory (hidden by default)
-        save_dir_row, self.rss_save_dir_label = add_aligned_row(
-            rss_layout,
-            "Save Directory:",
-            label_width=self._LABEL_WIDTH,
-        )
-        self.rss_save_dir_input = QLineEdit()
-        self.rss_save_dir_input.setReadOnly(True)
-        self.rss_save_dir_input.setPlaceholderText("No directory selected...")
-        self.rss_save_dir_btn = QPushButton("Browse...")
-        self.rss_save_dir_btn.clicked.connect(self._browse_rss_save_dir)
-        save_dir_row.addWidget(self.rss_save_dir_input)
-        save_dir_row.addWidget(self.rss_save_dir_btn)
-        
-        # Hide save directory controls initially
-        self.rss_save_dir_label.setVisible(False)
-        self.rss_save_dir_input.setVisible(False)
-        self.rss_save_dir_btn.setVisible(False)
-        
-        layout.addWidget(rss_group)
-        
         layout.addStretch()
 
-        self._folder_section = folder_group
-        self._rss_section = rss_group
-        
         scroll.setWidget(content)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -382,13 +348,13 @@ class SourcesTab(QWidget):
         self.folder_list.clear()
         for folder in folders:
             self.folder_list.addItem(display_folder_path(folder))
-        
+
         # Load RSS feeds using dot notation
         rss_feeds = self._settings.get('sources.rss_feeds')
         self.rss_list.clear()
         for feed in rss_feeds:
             self.rss_list.addItem(feed)
-        
+
         # Load and display usage ratio
         local_ratio = self._settings.get('sources.local_ratio')
         try:
@@ -396,35 +362,35 @@ class SourcesTab(QWidget):
         except (ValueError, TypeError):
             local_ratio = 70
         local_ratio = max(0, min(100, local_ratio))
-        
+
         # Block signals to prevent save loops during load
         self.ratio_slider.blockSignals(True)
         self.ratio_slider.setValue(local_ratio)
         self.ratio_slider.blockSignals(False)
-        
+
         # Update display labels
         self.local_ratio_label.setText(f"{local_ratio}% Local")
         self.rss_ratio_label.setText(f"{100 - local_ratio}% Feeds")
-        
+
         # Update ratio control visibility/enabled state
         self._update_ratio_control_state()
-        
+
         # Load RSS save-to-disk settings with boolean normalization
         rss_save_enabled = self._settings.get_bool('sources.rss_save_to_disk')
 
         block = self.rss_save_to_disk.blockSignals(True)
         self.rss_save_to_disk.setChecked(rss_save_enabled)
         self.rss_save_to_disk.blockSignals(block)
-        
+
         rss_save_dir = self._settings.get('sources.rss_save_directory')
         if rss_save_dir:
             self.rss_save_dir_input.setText(rss_save_dir)
-        
+
         # Show/hide save directory controls based on checkbox
         self.rss_save_dir_label.setVisible(rss_save_enabled)
         self.rss_save_dir_input.setVisible(rss_save_enabled)
         self.rss_save_dir_btn.setVisible(rss_save_enabled)
-        
+
         logger.debug(f"Loaded {len(folders)} folders and {len(rss_feeds)} RSS feeds")
 
     def _emit_sources_changed(self) -> None:
@@ -442,11 +408,11 @@ class SourcesTab(QWidget):
             "Select Image Folder",
             str(Path.home())
         )
-        
+
         if folder:
             # Get current folders using dot notation
             folders = self._settings.get('sources.folders')
-            
+
             if not contains_folder(folders, folder):
                 folder = display_folder_path(folder)
                 folders.append(folder)
@@ -458,7 +424,7 @@ class SourcesTab(QWidget):
                 logger.info(f"Added folder source: {folder}")
             else:
                 StyledPopup.show_info(self, "Duplicate", "This folder is already added.")
-    
+
     def _remove_folder(self) -> None:
         """Remove selected folder source.
 
@@ -488,7 +454,7 @@ class SourcesTab(QWidget):
         self._update_ratio_control_state()
         self._emit_sources_changed()
         logger.info(f"Removed folder source: {folder}")
-    
+
     def _add_rss(self) -> None:
         """Add RSS feed source."""
         raw_url = self.rss_input.text().strip()
@@ -534,7 +500,7 @@ class SourcesTab(QWidget):
             logger.info(f"Added RSS feed: {url}")
         else:
             StyledPopup.show_info(self, "Duplicate", "This feed is already added.")
-    
+
     def _remove_rss(self) -> None:
         """Remove selected RSS feed source.
 
@@ -565,12 +531,12 @@ class SourcesTab(QWidget):
         self._update_ratio_control_state()
         self._emit_sources_changed()
         logger.info(f"Removed RSS feed: {url}")
-    
+
     def _remove_all_rss(self) -> None:
         """Remove all RSS feed sources."""
         if self.rss_list.count() == 0:
             return
-        
+
         # Confirm with user using styled popup
         confirmed = StyledPopup.question(
             self,
@@ -580,7 +546,7 @@ class SourcesTab(QWidget):
             no_text="No",
             default_to_yes=False
         )
-        
+
         if confirmed:
             self._settings.set('sources.rss_feeds', [])
             self._settings.save()
@@ -588,26 +554,26 @@ class SourcesTab(QWidget):
             self._update_ratio_control_state()
             self._emit_sources_changed()
             logger.info("Removed all RSS feeds")
-    
+
     def _on_rss_save_toggled(self, state: int) -> None:
         """Handle RSS save-to-disk checkbox toggle."""
         enabled = state == 2  # Qt.CheckState.Checked
-        
+
         # Show/hide directory controls
         self.rss_save_dir_label.setVisible(enabled)
         self.rss_save_dir_input.setVisible(enabled)
         self.rss_save_dir_btn.setVisible(enabled)
-        
+
         # If enabling and no directory set, prompt for one
         if enabled and not self.rss_save_dir_input.text():
             self._browse_rss_save_dir()
-        
+
         # Save setting
         self._settings.set('sources.rss_save_to_disk', enabled)
         self._settings.save()
         self._emit_sources_changed()
         logger.info(f"RSS save-to-disk {'enabled' if enabled else 'disabled'}")
-    
+
     def _browse_rss_save_dir(self) -> None:
         """Browse for RSS save directory."""
         directory = QFileDialog.getExistingDirectory(
@@ -615,7 +581,7 @@ class SourcesTab(QWidget):
             "Select Feed Image Save Directory",
             self.rss_save_dir_input.text() or str(Path.home())
         )
-        
+
         if directory:
             self.rss_save_dir_input.setText(directory)
             self._settings.set('sources.rss_save_directory', directory)
@@ -628,7 +594,7 @@ class SourcesTab(QWidget):
 
     def _on_clear_rss_cache_clicked(self) -> None:
         """Clear downloaded RSS/JSON images from the shared cache.
-        
+
         Shows a confirmation dialog before deleting to prevent accidental data loss.
         """
         # Count files before asking
@@ -640,7 +606,7 @@ class SourcesTab(QWidget):
                 file_count = sum(1 for f in cache_dir.glob('*') if f.is_file())
         except Exception as e:
             logger.debug("[MISC] Exception suppressed: %s", e)
-        
+
         if file_count == 0:
             StyledPopup.show_info(
                 self,
@@ -661,10 +627,10 @@ class SourcesTab(QWidget):
             default_to_yes=False,
         ):
             return
-        
+
         removed = self._clear_rss_cache()
         logger.info(f"RSS cache cleared via SourcesTab button: {removed} files removed")
-        
+
         StyledPopup.show_success(
             self,
             "Cache Cleared",
@@ -678,7 +644,7 @@ class SourcesTab(QWidget):
         deleting cached images.  Cache clearing remains an explicit action via
         the Clear Cache button; doing it here causes a settings-exit download
         storm and throws away still-useful wallpaper candidates.
-        
+
         Uses ``sources.rss.constants.DEFAULT_RSS_FEEDS``: sources measured to
         publish images well beyond 1080p (NASA Image of the Day, NASA JPL
         Photojournal, Wallhaven) plus Bing for 1080p setups. Images are admitted
@@ -734,19 +700,19 @@ class SourcesTab(QWidget):
         except Exception as e:
             logger.error(f"RSS cache clear failed: {e}")
         return removed
-    
+
     def _update_ratio_control_state(self) -> None:
         """Update ratio control enabled state based on source availability."""
         folders = self._settings.get('sources.folders')
         rss_feeds = self._settings.get('sources.rss_feeds')
-        
+
         has_folders = len(folders) > 0
         has_rss = len(rss_feeds) > 0
         both_available = has_folders and has_rss
-        
+
         # Only enable slider when both source types are configured
         self.ratio_slider.setEnabled(both_available)
-        
+
         # Update styling to indicate disabled state
         if both_available:
             shared_styles.bind_shared_styles(
@@ -764,12 +730,17 @@ class SourcesTab(QWidget):
             )
         self.local_ratio_label.setEnabled(both_available)
         self.rss_ratio_label.setEnabled(both_available)
-    
+        # Closed buckets still say what is configured (same wording as Guided Setup).
+        self.folders_toggle.setText(f"Folders  ·  {len(folders)}" if has_folders else "Folders")
+        self.feeds_toggle.setText(
+            f"Online Wallpaper Feeds  ·  {len(rss_feeds)} ON" if has_rss else "Online Wallpaper Feeds"
+        )
+
     def _on_ratio_slider_changed(self, value: int) -> None:
         """Update ratio labels live; persistence commits on slider release."""
         self.local_ratio_label.setText(f"{value}% Local")
         self.rss_ratio_label.setText(f"{100 - value}% Feeds")
-    
+
     def _save_ratio(self, local_ratio: int) -> None:
         """Save the local ratio setting."""
         current = self._settings.get('sources.local_ratio')

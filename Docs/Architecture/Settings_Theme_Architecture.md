@@ -202,7 +202,8 @@ The forged Settings outer edge/corner remains renderer-owned in `ui/settings_dia
 
 Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies their semantic visual parameters. Runtime screensaver widget shadow authority is separate.
 
-Rounded borders on buttons, buckets, lists, the content area and popups are painted as one `QPainterPath` stroke
+Rounded borders on action buttons (every `OutlinedButton` role: compact, standard and the Sources look, each keeping
+its original size), buckets, lists, the content area and popups are painted as one `QPainterPath` stroke
 (`ui/widgets/outlined_button.py`, `ui/widgets/continuous_border.py`); their QSS border stays transparent. Qt style
 sheets draw a rounded border as separate edge and corner pieces whose antialiased ends overlap, and a translucent
 theme border colour then shows seams (R-101). New outlined controls reuse these painters rather than a QSS border.

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox,
-    QSlider, QWidget, QPushButton,
+    QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -43,6 +43,7 @@ from ui.tabs.shared_styles import (
     finalize_bucket_body as _finalize_bucket_body,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
+from ui.widgets.outlined_button import OutlinedButton
 from ui.tabs.media.technical_controls import (
     collect_per_mode_technical_controls,
     load_per_mode_technical_controls,
@@ -406,14 +407,12 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     provider_row.addWidget(tab.media_provider_combo)
 
     # GET PLUGIN button — visible only when MusicBee is selected
-    tab._musicbee_plugin_btn = QPushButton("Get GSMTC Plugin")
+    tab._musicbee_plugin_btn = OutlinedButton("Get GSMTC Plugin", role="secondary")
     tab._musicbee_plugin_btn.setToolTip(
         "Opens the MusicBee Windows 10 Media Control Overlay plugin page.\n"
         "This plugin lets MusicBee register with Windows GSMTC for\n"
         "track info, artwork, and playback controls."
     )
-    tab._musicbee_plugin_btn.setMinimumHeight(28)
-    tab._musicbee_plugin_btn.setStyleSheet("padding: 4px 12px;")
     tab._musicbee_plugin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
     tab._musicbee_plugin_btn.clicked.connect(
         lambda: __import__('webbrowser').open(
@@ -1484,7 +1483,6 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
         spotify_vis_config['spectrum_ghost_alpha'] = tab.vis_ghost_opacity_slider.value() / 100.0
         spotify_vis_config['spectrum_ghost_decay'] = max(0.1, tab.vis_ghost_decay_slider.value() / 100.0)
     collect_visualizer_rainbow_state(tab, spotify_vis_config)
-    
     # Option A: only collect settings for the CURRENT visualizer mode to prevent
     # cross-mode pollution. Under lazy bodies the current mode may be unbuilt
     # while SETUP is active; collecting an unbuilt mode would require QWidgets that do not

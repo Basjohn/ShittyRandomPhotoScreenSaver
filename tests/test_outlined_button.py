@@ -5,10 +5,12 @@ import pytest
 from PySide6.QtGui import QColor
 
 from ui.settings_theme_runtime import get_active_settings_theme
-from ui.widgets.outlined_button import BORDER_WIDTH, OutlinedButton
+from ui.widgets.outlined_button import _ROLES, BORDER_WIDTH, OutlinedButton
 
 
-@pytest.mark.parametrize("role,token", [("secondary", "control.button.border")])
+@pytest.mark.parametrize("role,token", [("secondary", "control.button.border"),
+                                        ("standard", "control.button.border"),
+                                        ("source", "control.button.border")])
 def test_border_is_painted_as_one_continuous_stroke(qt_app, role, token) -> None:
     button = OutlinedButton("Apply", role=role)
     button.resize(160, 36)
@@ -21,7 +23,7 @@ def test_border_is_painted_as_one_continuous_stroke(qt_app, role, token) -> None
         alphas = [image.pixelColor(x, 0).alpha() for x in range(24, 136)]
         assert min(alphas) > 0
         assert max(alphas) - min(alphas) <= 12
-        assert BORDER_WIDTH >= 2.0
+        assert BORDER_WIDTH >= 2.0 and _ROLES[role][2] >= 1.5  # thin strokes seam less but still must paint
         assert expected.alpha() > 0
     finally:
         button.deleteLater()

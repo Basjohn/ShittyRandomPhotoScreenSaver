@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -57,6 +56,7 @@ from ui.tabs.shared_styles import (
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
+from ui.widgets.outlined_button import OutlinedButton
 from rendering.quick.widgets.achievement_pulse_layout import (
     ACHIEVEMENT_CAPSULE_BORDER_RGBA,
     ACHIEVEMENT_CAPSULE_FILL_RGBA,
@@ -437,7 +437,6 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
     layout.addWidget(key_field)
 
     button_row = QHBoxLayout()
-    from ui.widgets.outlined_button import OutlinedButton
     paste_button = OutlinedButton("Paste Key", role="secondary")
     save_button = OutlinedButton("Save && Test", role="secondary")
     cancel_button = OutlinedButton("Cancel", role="secondary")
@@ -1464,7 +1463,7 @@ def _build_card_group(
         never_row.addStretch()
 
         refresh_row = QHBoxLayout()
-        refresh_button = QPushButton("Refresh Steam Library")
+        refresh_button = OutlinedButton("Refresh Steam Library", role="standard")
         refresh_button.setToolTip(
             "Explicitly refresh owned and recent games through the shared Steam request policy."
         )
@@ -1643,7 +1642,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     connection_layout.addWidget(info)
 
     identity_row = _aligned_row(connection_layout, "Steam Identity:")
-    tab.steam_connect_id_btn = QPushButton("Connect ID")
+    tab.steam_connect_id_btn = OutlinedButton("Connect ID", role="standard")
     tab.steam_connect_id_btn.setToolTip("Link SteamID64 through Steam's official OpenID page.")
     tab.steam_connect_id_btn.clicked.connect(lambda: _on_steam_connect_id(tab))
     tab.steam_identity_check = QLabel("Not connected")
@@ -1652,7 +1651,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     identity_row.addStretch()
 
     key_row = _aligned_row(connection_layout, "Steam API Key:")
-    tab.steam_connect_api_key_btn = QPushButton("Connect API KEY")
+    tab.steam_connect_api_key_btn = OutlinedButton("Connect API KEY", role="standard")
     tab.steam_connect_api_key_btn.setToolTip("Open Steam's key page or explicitly paste a key to Save & Test.")
     tab.steam_connect_api_key_btn.clicked.connect(lambda: _on_steam_connect_api_key(tab))
     tab.steam_api_key_check = QLabel("Not connected")
@@ -1661,10 +1660,10 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     key_row.addStretch()
 
     connection_actions = QHBoxLayout()
-    tab.steam_check_connection_btn = QPushButton("Check Saved Connection")
+    tab.steam_check_connection_btn = OutlinedButton("Check Saved Connection", role="standard")
     tab.steam_check_connection_btn.setToolTip("Check DPAPI storage state without decrypting credentials or contacting Steam.")
     tab.steam_check_connection_btn.clicked.connect(lambda: _on_steam_check_saved_connection(tab))
-    tab.steam_disconnect_btn = QPushButton("Disconnect")
+    tab.steam_disconnect_btn = OutlinedButton("Disconnect", role="standard")
     tab.steam_disconnect_btn.clicked.connect(lambda: _on_steam_disconnect(tab))
     tab.steam_saved_connection_feedback = QLabel()
     tab.steam_saved_connection_feedback.setObjectName("steamSavedConnectionFeedback")

@@ -11,7 +11,7 @@ import weakref
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox, QLineEdit,
-    QSlider, QWidget, QPushButton, QGridLayout,
+    QSlider, QWidget, QGridLayout,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -40,6 +40,7 @@ from ui.tabs.shared_styles import (
     finalize_bucket_body as _finalize_bucket_body,
 )
 from ui.widgets import StyledComboBox
+from ui.widgets.outlined_button import OutlinedButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -737,7 +738,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_imap_password.setMinimumWidth(260)
     pw_row.addWidget(tab.gmail_imap_password)
 
-    tab.gmail_imap_save_btn = QPushButton("Save && Test")
+    tab.gmail_imap_save_btn = OutlinedButton("Save && Test", role="standard")
     tab.gmail_imap_save_btn.clicked.connect(lambda: _on_gmail_imap_save(tab))
     pw_row.addWidget(tab.gmail_imap_save_btn)
     pw_row.addStretch()
@@ -771,8 +772,8 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_auth_status.setMinimumWidth(180)
     auth_row.addWidget(tab.gmail_auth_status)
 
-    tab.gmail_authorize_btn = QPushButton("Authorize")
-    tab.gmail_sign_out_btn = QPushButton("Sign Out")
+    tab.gmail_authorize_btn = OutlinedButton("Authorize", role="standard")
+    tab.gmail_sign_out_btn = OutlinedButton("Sign Out", role="standard")
     auth_row.addWidget(tab.gmail_authorize_btn)
     auth_row.addWidget(tab.gmail_sign_out_btn)
     auth_row.addStretch()
@@ -1218,11 +1219,11 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_sound_file.textChanged.connect(tab._save_settings)
     sound_path_row.addWidget(tab.gmail_sound_file)
 
-    tab.gmail_sound_browse_btn = QPushButton("Browse...")
+    tab.gmail_sound_browse_btn = OutlinedButton("Browse...", role="standard")
     tab.gmail_sound_browse_btn.clicked.connect(lambda: _on_gmail_browse_sound(tab))
     sound_path_row.addWidget(tab.gmail_sound_browse_btn)
 
-    tab.gmail_sound_test_btn = QPushButton("Test")
+    tab.gmail_sound_test_btn = OutlinedButton("Test", role="standard")
     tab.gmail_sound_test_btn.clicked.connect(lambda: _on_gmail_test_sound(tab))
     sound_path_row.addWidget(tab.gmail_sound_test_btn)
     sound_path_row.addStretch()
