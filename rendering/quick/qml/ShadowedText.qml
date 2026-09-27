@@ -19,6 +19,9 @@ Item {
     property int horizontalAlignment: Text.AlignLeft
     property int verticalAlignment: Text.AlignTop
     property bool wrap: false
+    // Also break inside a word when one word is wider than the line, so a long
+    // name shrinks and wraps instead of spilling past its box.
+    property bool breakLongWords: false
     property int elide: Text.ElideNone
     property int fontSizeMode: Text.FixedSize
     property real minimumPointSize: 6.0
@@ -48,7 +51,8 @@ Item {
         color: shadowedText.shadowColor
         horizontalAlignment: shadowedText.horizontalAlignment
         verticalAlignment: shadowedText.verticalAlignment
-        wrapMode: shadowedText.wrap ? Text.WordWrap : Text.NoWrap
+        wrapMode: !shadowedText.wrap ? Text.NoWrap
+            : shadowedText.breakLongWords ? Text.WrapAtWordBoundaryOrAnywhere : Text.WordWrap
         elide: shadowedText.elide
         fontSizeMode: shadowedText.fontSizeMode
         minimumPointSize: shadowedText.minimumPointSize
@@ -67,7 +71,8 @@ Item {
         color: shadowedText.color
         horizontalAlignment: shadowedText.horizontalAlignment
         verticalAlignment: shadowedText.verticalAlignment
-        wrapMode: shadowedText.wrap ? Text.WordWrap : Text.NoWrap
+        wrapMode: !shadowedText.wrap ? Text.NoWrap
+            : shadowedText.breakLongWords ? Text.WrapAtWordBoundaryOrAnywhere : Text.WordWrap
         elide: shadowedText.elide
         fontSizeMode: shadowedText.fontSizeMode
         minimumPointSize: shadowedText.minimumPointSize

@@ -350,8 +350,11 @@ def test_friend_pulse_registry_runtime_and_qml_are_retained_only() -> None:
     assert "function friendStrokeWidth(baseWidth)" in qml
     assert "scaleAwareHeaderStrokeWidth" in qml
     assert qml.count("fontSizeMode: Text.Fit") >= 2
-    assert qml.count("maximumLineCount: 2") >= 3
-    assert qml.count("elide: Text.ElideNone") >= 2
+    # Names keep the documented two-line fit; the presence line is capped only by
+    # its box. Long words break before text spills, and elision is the last resort
+    # (the rendered behaviour is proven by the shrink-to-fit test below).
+    assert qml.count("maximumLineCount: 2") >= 2
+    assert qml.count("breakLongWords: true") >= 3
     assert "signal friendActionRequested(int rowIndex)" in qml
     assert "signal gameActionRequested(int rowIndex)" in qml
     assert "signal friendMenuActionRequested(string action, int rowIndex)" in qml
@@ -1236,4 +1239,51 @@ def test_friend_pulse_header_flip_moves_summary_to_opposite_rail_without_recreat
         window.deleteLater()
         component.deleteLater()
         engine.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("view_mode", ["rows", "grid"])
+def test_long_game_and_friend_names_shrink_to_fit_instead_of_truncating(qt_app, view_mode) -> None:
+    """Realistic long names shrink (Qt's own ``truncated`` stays false); never shown on screen."""
+    names = ("MasterChiefCollection", "TheLegendOfZeldaFan99", "NotAnotherGamerTag")
+    games = ("Warhammer 40,000: Space Marine 2", "Call of Duty: Modern Warfare III", "Red Dead Redemption 2")
+    model = _model(_RuntimeService(), view_mode=view_mode)
+    model.activate(object())
+    entries = tuple(
+        FriendPulseEntry(f"opaque-{i}", name, 10 + i, game, persona_state=1)
+        for i, (name, game) in enumerate(zip(names, games))
+    )
+    model.on_friend_pulse_runtime_snapshot(
+        FriendPulseSnapshot(status=SteamResultStatus.SUCCESS, authoritative=True, playing_count=3,
+                            online_count=3, entries=entries),
+        FriendPulseProjection("ready", "3 online", tuple(
+            FriendPulseRow(primary=entry.display_name, secondary=entry.game_name, presence_text="In game",
+                           online=True, game_appid=entry.game_appid,
+                           identity_fingerprint=entry.identity_fingerprint, friend_action_available=True)
+            for entry in entries)),
+    )
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_ROOT / "FriendPulsePresentation.qml")))
+    item = component.createWithInitialProperties({"friendPulseModel": model})
+    assert isinstance(item, QQuickItem), [error.toString() for error in component.errors()]
+    window = _show_item(item, model, qt_app)
+    try:
+        qt_app.processEvents()
+        checked = 0
+        for candidate in _visual_items(item):
+            if candidate.objectName() != "shadowedTextMain":
+                continue
+            text = str(candidate.property("text"))
+            if "IN GAME" in text or any(name.lower() in text.lower() for name in names):
+                checked += 1
+                assert candidate.property("truncated") is False, (view_mode, text)
+                assert candidate.property("contentWidth") <= candidate.width() + 0.5, (view_mode, text)
+        assert checked >= 6  # three names and three presence lines were rendered
+    finally:
+        window.close()
+        item.deleteLater()
+        engine.deleteLater()
+        model.retire()
         qt_app.processEvents()
