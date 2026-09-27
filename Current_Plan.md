@@ -4,9 +4,6 @@
 
 Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator review 2026-09-27, open items:
 
-- [ ] **Explicit save.** Every `SettingsManager.set` persists and publishes, so each wizard click saved. Pages edit a
-      draft; only Finish (or a confirmed Skip prompt) commits. A discarded draft restores the live theme. Ready page
-      copy: almost done, press Finish to save. Remove its "Back to Arrange" button (Back already exists).
 - [ ] **Readability on Glass.** 20% black veil inside the wizard's rounded border (no clipping outside it).
 - [ ] **Typography.** One casing rule across pages: buttons/buckets Title Case; longer labels/statements Title Case;
       short tags ALL CAPS ("OFF"). Never case user data (paths, URLs).

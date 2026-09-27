@@ -531,7 +531,14 @@ class ArrangePage(Page):
             if not StyledPopup.question(self, "Replace layout slot", f"Replace saved layout slot {slot_id}?", yes_text="Replace", no_text="Cancel", default_to_yes=False):
                 return
         if self.model.save_slot(slot_id):
-            self.settings.set("widgets", self.model.committed_widgets())
+            widgets = self.model.committed_widgets()
+            self.settings.set("widgets", widgets)
+            # Save to Slot is an explicit save: in Guided Setup it writes the
+            # slots straight through while the rest of the draft waits for Finish.
+            persist_now = getattr(self.settings, "persist_now", None)
+            if callable(persist_now):
+                from core.settings.layout_slots import LAYOUT_SLOTS_SETTINGS_KEY
+                persist_now(f"widgets.{LAYOUT_SLOTS_SETTINGS_KEY}", widgets[LAYOUT_SLOTS_SETTINGS_KEY])
             self.status.setText("Layout slot saved.")
             self._refresh_slot_choices()
 

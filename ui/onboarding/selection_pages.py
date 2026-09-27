@@ -414,14 +414,11 @@ class TransitionsPage(Page):
 
 
 class ReadyPage(Page):
-    arrangeRequested = Signal()
-
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
-        self.body.addWidget(text_label("You're ready", heading=True))
-        self.body.addWidget(text_label("Your choices are saved. Optional accounts can be connected later in Settings."))
+        self.body.addWidget(text_label("You're almost done", heading=True))
+        self.body.addWidget(text_label("Nothing is saved yet. Press Finish to save your settings. Optional accounts can be connected later in Settings."))
         self.summary = text_label(""); self.body.addWidget(self.summary)
-        self.body.addWidget(action("Back to Arrange", self.arrangeRequested.emit, secondary=True))
         self.body.addStretch()
 
     def refresh(self):

@@ -331,3 +331,66 @@ def test_retired_geocoder_drops_delayed_fetch_and_queued_results(qapp, monkeypat
     assert work == []
     assert completer._model.stringList() == before
     field.deleteLater()
+
+
+def test_wizard_never_saves_until_finish(qapp, settings):
+    """Moving through every page, including Ready, writes nothing; Finish commits."""
+    from ui.onboarding.wizard import GuidedSetupPanel
+    settings.set("sources.folders", ["C:/Pictures"])
+    settings.writes.clear()
+    wizard = GuidedSetupPanel(settings)
+    try:
+        wizard.go_next()  # Sources
+        wizard.pages["sources"][0].custom_feed.setText("https://example.org/feed.rss")
+        wizard.pages["sources"][0].add_custom_feed()
+        wizard.settings.set("widgets.weather.location", "Cape Town")
+        for key in ("displays", "interaction", "transitions", "ready"):
+            wizard.show_page(key)
+        assert settings.writes == []
+        assert settings.get("sources.rss_feeds") == []
+        assert wizard.settings.get("sources.rss_feeds") == ["https://example.org/feed.rss"]
+        assert wizard.has_unsaved_changes()
+        wizard.finish()
+        assert settings.get("sources.rss_feeds") == ["https://example.org/feed.rss"]
+        assert settings.get("widgets.weather.location") == "Cape Town"
+        assert not wizard.settings.pending
+    finally:
+        wizard.deleteLater()
+
+
+@pytest.mark.parametrize("answer,saved", [(True, True), (False, False)])
+def test_skip_with_changes_asks_before_saving(qapp, settings, monkeypatch, answer, saved):
+    from ui.onboarding.wizard import GuidedSetupPanel
+    from ui.styled_popup import StyledPopup
+    asked = []
+    monkeypatch.setattr(StyledPopup, "question", staticmethod(lambda *args, **kwargs: asked.append(args) or answer))
+    settings.writes.clear()
+    wizard = GuidedSetupPanel(settings)
+    finished = []
+    wizard.finished.connect(finished.append)
+    try:
+        wizard.settings.set("input.interaction_mode", True)
+        wizard.skip.click()
+        assert len(asked) == 1 and finished == [False]
+        assert (settings.writes == ["input.interaction_mode"]) is saved
+        assert bool(settings.get("input.interaction_mode")) is saved
+    finally:
+        wizard.deleteLater()
+
+
+def test_discarded_theme_preview_restores_the_live_theme(qapp, settings):
+    from ui.onboarding.draft import SettingsDraft
+    from ui.settings_theme_catalog import build_settings_theme_catalog
+    from ui.settings_theme_runtime import get_active_settings_theme
+    from ui.settings_theme_selection import apply_settings_theme_selection
+    catalog = build_settings_theme_catalog("themes")
+    before = get_active_settings_theme()
+    other = next(entry for entry in catalog.entries if entry.theme != before)
+    settings.values["widget_theme"]["keep_synced"] = False  # no Widget-theme catalog in this test
+    draft = SettingsDraft(settings)
+    settings.writes.clear()
+    apply_settings_theme_selection(draft, catalog, other.theme_id)
+    assert get_active_settings_theme() == other.theme  # live preview
+    assert settings.writes == []
+    draft.discard()
+    assert get_active_settings_theme() == before
