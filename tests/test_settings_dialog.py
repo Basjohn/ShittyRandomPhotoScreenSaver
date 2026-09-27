@@ -418,9 +418,31 @@ def test_settings_dialog_runtime_single_shot_wraps_bound_method_with_owner(
 
 
 def test_settings_dialog_move_does_not_schedule_shell_shadow_refresh():
-    """moveEvent should not trigger shell-shadow refresh churn."""
-    source = inspect.getsource(SettingsDialog.moveEvent)
-    assert "_schedule_shell_shadow_refresh()" not in source
+    """Moving the window does no work at all (no shadow refresh, no save timer)."""
+    assert "moveEvent" not in SettingsDialog.__dict__
+
+
+def test_resize_and_move_start_no_timers_and_close_saves_geometry_once(
+    qapp, settings_manager, animation_manager, monkeypatch
+):
+    from PySide6.QtCore import QTimer
+    settings_manager.set("sources.folders", ["C:/Pictures"])  # a normal close needs sources
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    saves = []
+    monkeypatch.setattr(dialog, "_save_geometry", lambda: saves.append(True))
+    try:
+        dialog.resize(1100, 780)
+        dialog.move(40, 50)
+        qapp.processEvents()
+        assert not [t for t in dialog.findChildren(QTimer) if "debounce" in (t.objectName() or "")]
+        assert not hasattr(dialog, "_resize_timer") and not hasattr(dialog, "_move_timer")
+        assert saves == []
+        from PySide6.QtGui import QCloseEvent
+        dialog.closeEvent(QCloseEvent())  # never shown in tests, so deliver close directly
+        assert saves == [True]
+    finally:
+        dialog._closing = True
+        dialog.deleteLater()
 
 
 def test_settings_dialog_switch_tab_does_not_schedule_shell_shadow_refresh():

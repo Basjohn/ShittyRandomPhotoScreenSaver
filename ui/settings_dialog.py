@@ -2211,25 +2211,7 @@ class SettingsDialog(QDialog):
             except Exception as e:
                 logger.debug("[SETTINGS] Exception suppressed: %s", e)
         
-        # Save geometry on resize (debounced to avoid excessive saves)
-        if hasattr(self, '_resize_timer'):
-            self._resize_timer.stop()
-        else:
-            self._resize_timer = QTimer(self)
-            self._resize_timer.setSingleShot(True)
-            self._resize_timer.timeout.connect(self._save_geometry)
-            try:
-                from core.resources.manager import ResourceManager
-                from core.resources.types import ResourceType
-                ResourceManager.get_or_create_app_shared().register_qt(
-                    self._resize_timer,
-                    resource_type=ResourceType.TIMER,
-                    description="Settings dialog resize debounce timer",
-                    group="qt",
-                )
-            except Exception:
-                pass
-        self._resize_timer.start(500)  # Save 500ms after resize stops
+        # Geometry is saved once, on close: every exit path closes the dialog.
         
         # Keep About header images scaled appropriately for the current
         # dialog width, but guard in case the About tab has not been
@@ -2278,29 +2260,6 @@ class SettingsDialog(QDialog):
             logger.debug("[SETTINGS] Exception suppressed: %s", e)
         self._log_perf_event("SettingsDialog.showEvent.total", show_start)
         _record_diagnostic_stage("settings_show_event_complete")
-    
-    def moveEvent(self, event):
-        """Handle move event to save geometry."""
-        super().moveEvent(event)
-        # Save geometry on move (debounced to avoid excessive saves)
-        if hasattr(self, '_move_timer'):
-            self._move_timer.stop()
-        else:
-            self._move_timer = QTimer(self)
-            self._move_timer.setSingleShot(True)
-            self._move_timer.timeout.connect(self._save_geometry)
-            try:
-                from core.resources.manager import ResourceManager
-                from core.resources.types import ResourceType
-                ResourceManager.get_or_create_app_shared().register_qt(
-                    self._move_timer,
-                    resource_type=ResourceType.TIMER,
-                    description="Settings dialog move debounce timer",
-                    group="qt",
-                )
-            except Exception:
-                pass
-        self._move_timer.start(500)  # Save 500ms after move stops
     
     def paintEvent(self, event):
         """Paint a white border at the dialog edge."""
