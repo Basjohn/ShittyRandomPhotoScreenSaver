@@ -166,14 +166,27 @@ class GuidedSetupPanel(QWidget):
             self._save()
             self.close_setup(True)
 
-    def request_close(self) -> None:
-        """Skip (or closing Settings): ask before saving anything chosen so far."""
+    def request_close(self) -> bool:
+        """Skip (or closing Settings): keep or discard the changes so far.
+
+        Returns False when the user chooses to stay in Guided Setup.
+        """
         if self.has_unsaved_changes():
             from ui.styled_popup import StyledPopup
-            if StyledPopup.question(self, "Guided Setup", "Save The Changes You Made In Guided Setup?",
-                                    yes_text="Save", no_text="Discard", default_to_yes=False):
+            popup = StyledPopup(
+                self, "Leave Guided Setup",
+                "Keep your changes so far, or discard them? Nothing is saved until you choose.",
+                icon_type="question",
+                buttons=[("Keep Changes", "keep"), ("Discard Changes", "discard"), ("Stay In Setup", "stay")],
+                default_button_index=0)
+            popup.exec()
+            choice = popup.result_value or "stay"  # closing the popup is not a decision
+            if choice == "stay":
+                return False
+            if choice == "keep":
                 self._save()
         self.close_setup(False)
+        return True
 
     def close_setup(self, completed: bool) -> None:
         """Retire account inputs and any Arrange draft, then hand back to Settings."""

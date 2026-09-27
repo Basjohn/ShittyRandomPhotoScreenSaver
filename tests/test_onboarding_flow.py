@@ -360,12 +360,16 @@ def test_wizard_never_saves_until_finish(qapp, settings):
         wizard.deleteLater()
 
 
-@pytest.mark.parametrize("answer,saved", [(True, True), (False, False)])
-def test_skip_with_changes_asks_before_saving(qapp, settings, monkeypatch, answer, saved):
+@pytest.mark.parametrize("answer,saved,left", [("keep", True, True), ("discard", False, True),
+                                               ("stay", False, False), (None, False, False)])
+def test_skip_with_changes_asks_keep_or_discard(qapp, settings, monkeypatch, answer, saved, left):
     from ui.onboarding.wizard import GuidedSetupPanel
     from ui.styled_popup import StyledPopup
-    asked = []
-    monkeypatch.setattr(StyledPopup, "question", staticmethod(lambda *args, **kwargs: asked.append(args) or answer))
+    shown = []
+    def fake_exec(popup):
+        shown.append([label for label, _value in popup._buttons])
+        popup._result_value = answer
+    monkeypatch.setattr(StyledPopup, "exec", fake_exec)
     settings.writes.clear()
     wizard = GuidedSetupPanel(settings)
     finished = []
@@ -373,9 +377,11 @@ def test_skip_with_changes_asks_before_saving(qapp, settings, monkeypatch, answe
     try:
         wizard.settings.set("input.interaction_mode", True)
         wizard.skip.click()
-        assert len(asked) == 1 and finished == [False]
+        assert shown == [["Keep Changes", "Discard Changes", "Stay In Setup"]]
+        assert finished == ([False] if left else [])
         assert (settings.writes == ["input.interaction_mode"]) is saved
-        assert bool(settings.get("input.interaction_mode")) is saved
+        if not left:
+            assert wizard.settings.pending  # staying keeps the draft
     finally:
         wizard.deleteLater()
 
