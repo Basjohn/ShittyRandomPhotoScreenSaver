@@ -758,7 +758,49 @@ def _build_spinbox_style() -> str:
 
 SPINBOX_STYLE = _build_spinbox_style()
 
-CIRCLE_CHECKBOX_STYLE = """
+_CIRCLE_INDICATORS = ("unchecked", "unchecked_hover", "checked", "checked_hover")
+
+
+def _circle_indicator_urls() -> dict[str, str]:
+    """Circle indicator images that contrast with the theme's checkbox text.
+
+    The shipped SVGs are white rings (for light-on-dark text).  A theme with
+    dark checkbox text gets the same drawings recoloured to that text colour,
+    written once per colour into the app-data cache (theme activation only,
+    never per frame).  Light-text themes keep the original resources.
+    """
+
+    text = _SETTINGS_THEME.color("control.checkbox.text")
+    resources = {name: f":/ui/assets/circle_checkbox_{name}.svg" for name in _CIRCLE_INDICATORS}
+    if QColor(text.r, text.g, text.b).lightnessF() >= 0.5:
+        return resources
+    colour = f"#{text.r:02x}{text.g:02x}{text.b:02x}"
+    try:
+        from PySide6.QtCore import QFile, QIODevice
+        from core.settings.storage_paths import get_cache_dir
+        directory = get_cache_dir() / "settings_indicators"
+        directory.mkdir(parents=True, exist_ok=True)
+        urls = {}
+        for name, resource in resources.items():
+            target = directory / f"circle_checkbox_{name}_{colour[1:]}.svg"
+            if not target.exists():
+                source = QFile(resource)
+                if not source.open(QIODevice.OpenModeFlag.ReadOnly):
+                    return resources
+                svg = bytes(source.readAll()).decode("utf-8")
+                source.close()
+                # Ring/dot take the text colour; the thin under-stroke inverts.
+                svg = svg.replace("#000000", "@@under@@").replace("#ffffff", colour).replace("@@under@@", "#ffffff")
+                target.write_text(svg, encoding="utf-8")
+            urls[name] = target.as_posix()
+        return urls
+    except OSError:
+        return resources
+
+
+def _build_circle_checkbox_style() -> str:
+    urls = _circle_indicator_urls()
+    style = """
 /* Circular indicator prototype (feature flag via `circleIndicator` dynamic property). */
 QCheckBox[circleIndicator='true'] {
     spacing: 10px;
@@ -787,29 +829,35 @@ QCheckBox[circleIndicator='true'][tightSpacing='true']::indicator {
 }
 
 QCheckBox[circleIndicator='true']::indicator:unchecked {
-    image: url(:/ui/assets/circle_checkbox_unchecked.svg);
+    image: url(@@unchecked@@);
 }
 
 QCheckBox[circleIndicator='true']::indicator:unchecked:hover {
-    image: url(:/ui/assets/circle_checkbox_unchecked_hover.svg);
+    image: url(@@unchecked_hover@@);
 }
 
 QCheckBox[circleIndicator='true']::indicator:checked {
-    image: url(:/ui/assets/circle_checkbox_checked.svg);
+    image: url(@@checked@@);
 }
 
 QCheckBox[circleIndicator='true']::indicator:checked:hover {
-    image: url(:/ui/assets/circle_checkbox_checked_hover.svg);
+    image: url(@@checked_hover@@);
 }
 
 QCheckBox[circleIndicator='true']::indicator:disabled {
-    image: url(:/ui/assets/circle_checkbox_unchecked.svg);
+    image: url(@@unchecked@@);
 }
 
 QCheckBox[circleIndicator='true']::indicator:disabled:checked {
-    image: url(:/ui/assets/circle_checkbox_checked.svg);
+    image: url(@@checked@@);
 }
 """
+    for name, url in urls.items():
+        style = style.replace("@@" + name + "@@", url)
+    return style
+
+
+CIRCLE_CHECKBOX_STYLE = _build_circle_checkbox_style()
 
 
 def _build_combobox_style() -> str:
@@ -1567,6 +1615,7 @@ _THEME_STYLE_BUILDERS = {
     "MODE_TOGGLE_BUTTON_STYLE": _build_mode_toggle_button_style,
     "TEXT_SECONDARY_COLOR_STYLE": _build_text_secondary_color_style,
     "SLIDER_STYLE": _build_slider_style,
+    "CIRCLE_CHECKBOX_STYLE": _build_circle_checkbox_style,
     "ACCESSIBILITY_TITLE_STYLE": _build_accessibility_title_style,
     "ACCESSIBILITY_DESC_STYLE": _build_accessibility_desc_style,
     "ACCESSIBILITY_SECTION_DESC_STYLE": _build_accessibility_section_desc_style,

@@ -39,7 +39,8 @@ def test_settings_qrc_and_raw_widget_images_remain_distinct_asset_paths() -> Non
     assert "fonts/Jost-Regular.ttf" in qrc
     assert "combobox_closed.svg" in qrc
     assert ":/ui/assets/fonts/Jost-Regular.ttf" in font_registration
-    assert ":/ui/assets/circle_checkbox_unchecked.svg" in styles
+    # Circle indicators come from the QRC lane (recoloured copies only for dark-text themes).
+    assert 'f":/ui/assets/circle_checkbox_{name}.svg"' in styles
     assert "assets_rc" in ui_init
 
     # Runtime branded/widget imagery deliberately stays on the raw images lane.
