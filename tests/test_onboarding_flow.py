@@ -394,3 +394,43 @@ def test_discarded_theme_preview_restores_the_live_theme(qapp, settings):
     assert settings.writes == []
     draft.discard()
     assert get_active_settings_theme() == before
+
+
+_HOVER_PROBE = r"""
+import sys, tempfile
+from pathlib import Path
+from PySide6.QtCore import QPoint
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication
+app = QApplication(["hover-probe"]); app.setStyle("windows11")
+assert app.platformName() == "offscreen"
+from core.animation import AnimationManager
+from core.settings.settings_manager import SettingsManager
+from ui.settings_dialog import SettingsDialog
+settings = SettingsManager(application="hoverprobe", storage_base_dir=Path(tempfile.mkdtemp()))
+settings.set("sources.folders", ["C:/Pictures"])
+dialog = SettingsDialog(settings, AnimationManager()); dialog.resize(1280, 820); dialog.show()
+for _ in range(20): app.processEvents()
+dialog.run_guided_setup(); panel = dialog._guided_setup_panel; panel.show_page("transitions")
+for _ in range(20): app.processEvents()
+rows = panel.pages["transitions"][0].rows; viewport = rows.viewport()
+before = (rows.currentRow(), rows.verticalScrollBar().value())
+for y in range(5, viewport.height() - 5, 7):
+    QTest.mouseMove(viewport, QPoint(60, y)); app.processEvents()
+print("RESULT", before, (rows.currentRow(), rows.verticalScrollBar().value()), flush=True)
+import os; os._exit(0)  # skip Qt teardown; the probe's answer is already out
+"""
+
+
+def test_hovering_transition_rows_inside_settings_does_not_scroll(tmp_path):
+    """Offscreen subprocess (never a visible window): hover alone must not move the list."""
+    import os, subprocess, sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_FONTDIR="C:/Windows/Fonts", PYTHONPATH=str(root))
+    completed = subprocess.run([sys.executable, "-c", _HOVER_PROBE], cwd=root, env=env,
+                               capture_output=True, text=True, timeout=180)
+    line = next((l for l in completed.stdout.splitlines() if l.startswith("RESULT")), None)
+    assert line is not None, completed.stderr[-3000:]
+    before, after = line.split(" ", 1)[1].split(") (")
+    assert before + ")" == "(" + after, line

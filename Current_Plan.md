@@ -12,7 +12,6 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
       notification sound checkbox, sound choice and Test.
 - [ ] **Visualizers page.** Much narrower mode list; a preview on the right per mode, cropped from the operator sheet
       `Visualizers.png` (Voxel Sphere: bordered with its background, or an offscreen fake-audio render).
-- [ ] **Transitions page.** The page scrolls by itself while the cursor merely hovers.
 - [ ] **Ready page.** Controls summary under a separator, focused on the context menu.
 - [ ] **Import Settings.** Welcome page offers "Import Settings?"; a successful import skips and closes the wizard.
       Import (and the Settings tab) lets users choose: All, Display, Widgets, Transitions, Theme Choice, Custom
