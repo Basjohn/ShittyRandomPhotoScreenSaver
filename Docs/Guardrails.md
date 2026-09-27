@@ -51,8 +51,9 @@ Promote the missing behavior into `Current_Plan.md` unless explicit product inte
 ### Defaults test-authority guardrail
 
 Mutable product defaults are policy, not test goldens. Tests that validate a user-facing default must derive the expected
-value from canonical authority (`core/settings/default_settings.py` / the canonical default contract) or prove generated
-artifact parity. Do not copy today’s default literal into unrelated Settings/runtime/UI tests.
+value from canonical authority (`core/settings/default_settings.py` / the canonical default contract). Do not copy
+today’s default literal into unrelated Settings/runtime/UI tests. The same applies to presets and user-facing copy:
+anything the operator or user can edit is asserted by structure or derived from its owner, never pinned verbatim.
 
 A literal expectation may remain only when the **literal itself** is the contract (for example a migration signature, hard
 safety/technical bound, protocol/schema constant, or accepted behavior golden). Mark it adjacent to the assertion with

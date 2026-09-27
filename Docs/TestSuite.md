@@ -408,7 +408,12 @@ When changing tests or this guide:
 6. mark **NEEDS RUN** only for current tests that genuinely require another environment;
 7. remove NEEDS RUN only after an actual intended-environment execution;
 8. update this file when test authority/architecture changes materially, not for every small assertion edit;
-9. put failure archaeology in Historical Bugs, not numbered checkpoint sections here.
+9. put failure archaeology in Historical Bugs, not numbered checkpoint sections here;
+10. never show a window on screen: a test that needs a real shown window (native handle, layout pass, compositor)
+    uses `tests/_invisible_windows.keep_off_screen` or `WA_DontShowOnScreen`; hover/focus behaviour that needs a live
+    platform runs in an offscreen-QPA subprocess;
+11. never pin what the operator or user can edit (defaults, presets, copy): derive it from its owner or assert
+    structure, and mark a genuinely fixed literal `EXACT-VALUE INVARIANT:` (`Docs/Guardrails.md`).
 
 A test-affecting slice is complete only when:
 
@@ -416,7 +421,7 @@ A test-affecting slice is complete only when:
 - directly runnable focused tests are green;
 - environment-blocked current coverage is described honestly;
 - obsolete tests are deleted/re-homed rather than converted into permanent skips;
-- defaults/generated artifacts are checked when Settings changed;
+- `tools/check_defaults_authority.py` passes when defaults changed;
 - maintained-profile membership is valid;
 - installed/Qt/GL evidence is requested where static/headless proof cannot close the claim.
 

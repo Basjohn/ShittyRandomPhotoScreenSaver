@@ -45,9 +45,8 @@ The resolved defaults tree is built once per profile and every accessor returns 
 ### Test expectations
 
 Tests are consumers of the same authority, not a second default registry. For an ordinary mutable product default, obtain
-the expected value from `require_canonical_default(...)`, `get_default_settings(...)`, or the generated artifact being
-validated. A default change should normally require one canonical edit plus regeneration of derived artifacts—not manual
-updates to scattered test literals.
+the expected value from `require_canonical_default(...)` or `get_default_settings(...)`. A default change is one
+canonical edit; there are no derived copies to regenerate and no scattered test literals to update.
 
 Retain a literal only when its exact value is independently contractual. Annotate those assertions with
 `EXACT-VALUE INVARIANT:` and the reason. Conversely, a behavior test is free to choose an explicit non-default stimulus or
