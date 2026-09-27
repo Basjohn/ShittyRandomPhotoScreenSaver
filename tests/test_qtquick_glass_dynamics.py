@@ -186,7 +186,9 @@ def test_events_do_not_pop(qt_app, mode):
 def test_each_option_changes_the_flight(qt_app, mode):
     capture = TransitionCapture(320, 180)
     try:
-        base = {"shards": 95, "depth": 1.0}
+        # TEST INPUT, NOT A DEFAULT GOLDEN: both options explicitly off (the shipped
+        # defaults are operator policy and may turn them on).
+        base = {"shards": 95, "depth": 1.0, "collisions": False, "reshatter": False}
         plain = capture.render(capture.run("glass_shatter", seed=417, direction="left",
                                            parameters=base), 0.55)[0]
         changed = capture.render(capture.run("glass_shatter", seed=417, direction="left",

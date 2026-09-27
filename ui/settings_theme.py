@@ -21,9 +21,13 @@ from ui.settings_theme_runtime import (
 )
 from ui.settings_theme_spec import SettingsThemeSpec
 from ui.settings_theme_qss import render_qss_color, render_qss_rgba255
-from ui.widgets.continuous_border import BUCKET_LARGE_PADDING, BUCKET_PADDING
 
 logger = get_logger(__name__)
+
+# Bucket header padding (vertical, horizontal): renderer geometry, read by this QSS and by
+# BucketToggle's own label layout (ui/widgets/continuous_border.py).
+BUCKET_PADDING = (3, 8)
+BUCKET_LARGE_PADDING = (4, 12)
 
 _THEMED_WIDGETS: WeakSet = WeakSet()
 

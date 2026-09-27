@@ -77,21 +77,25 @@ def test_glass_dynamic_geometry_keys_on_direction_and_depth() -> None:
 
 
 def test_crumble_geometry_matches_the_ctypes_packing_of_its_pure_builders() -> None:
-    from rendering.quick.transitions.crumble_dynamics import NO_EVENT, release_motions
+    from rendering.quick.transitions.crumble_dynamics import MOTION_FRAMES, release_motions
 
     key = crumble_geometry_key(_CRUMBLE, _ASPECT)
     shards = crumble_cells(123.25, 35, _ASPECT, 1.0)
     motions = release_motions(shards, 123.25, 3.0)
     geometry = build_crumble_geometry(key)
-    rows = np.frombuffer(geometry.chunks, dtype=np.float32).reshape(-1, 30)
+    vertices = crumble_vertices(shards, _ASPECT)
+    width = vertices.shape[1]
+    motion_width = len(motions[0].floats(0))  # aRelease (begin, drift, table row, 0) + aAxis
+    rows = np.frombuffer(geometry.chunks, dtype=np.float32).reshape(-1, width + motion_width)
     # Prism and crack columns are exactly the pure builder's; every vertex then
-    # carries its own chunk's motion constants.
-    assert rows[:, :15].tobytes() == _ctypes_reference(crumble_vertices(shards, _ASPECT).ravel().tolist())
-    by_centre = {shard.center: motion.floats() for shard, motion in zip(shards, motions)}
-    reference = np.asarray([by_centre[(float(x), float(y))]
-                            for x, y in crumble_vertices(shards, _ASPECT)[:, 2:4]], dtype=np.float32)
-    assert np.array_equal(rows[:, 15:], reference)
-    assert np.all(rows[:, 25] == NO_EVENT) and np.all(rows[:, 29] == NO_EVENT)  # collisions off
+    # carries its own chunk's motion constants, including its motion-table row.
+    assert rows[:, :width].tobytes() == _ctypes_reference(vertices.ravel().tolist())
+    by_centre = {shard.center: motion.floats(index) for index, (shard, motion) in enumerate(zip(shards, motions))}
+    reference = np.asarray([by_centre[(float(x), float(y))] for x, y in vertices[:, 2:4]], dtype=np.float32)
+    assert np.array_equal(rows[:, width:], reference)
+    # Collisions off: the baked motion table exists (one row per chunk) and is all zero.
+    table = np.frombuffer(geometry.motion, dtype=np.float32)
+    assert table.size == geometry.chunk_count * MOTION_FRAMES * 4 and not table.any()
     releases = [motion.begin for motion in motions]
     assert geometry.debris == _ctypes_reference(debris_instances(123.25, shards, 0.65, releases=releases))
 

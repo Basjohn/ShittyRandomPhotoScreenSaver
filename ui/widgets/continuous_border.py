@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QListWidget, QStackedWidget, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton, QWidget,
 )
 
+from ui.settings_theme import BUCKET_LARGE_PADDING, BUCKET_PADDING
 from ui.settings_theme_runtime import get_active_settings_theme
 
 
@@ -41,9 +42,6 @@ def stroke_rounded_border(widget: QWidget, color: QColor, width: float, radius: 
         painter.end()
 
 
-# Bucket header padding (vertical, horizontal); the theme QSS reads these too.
-BUCKET_PADDING = (3, 8)
-BUCKET_LARGE_PADDING = (4, 12)
 # Extra room between the arrow and the title, beyond Qt's native layout. The
 # windows11 down arrow fills its box, so natively it sat almost against the text.
 _BUCKET_TITLE_SHIFT = 1
