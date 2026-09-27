@@ -7,8 +7,7 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 - [ ] **Slider groove end caps (operator call).** Zoom-checked 2026-09-27: the groove's bevel uses separate top
       (translucent), bottom and side border colours, so the rounded end caps read brighter than the long edges. Not a
       compositing seam; decide whether to paint the groove as one path. Tooltip border (alpha 220) still unchecked.
-- [ ] **Accessibility tab alignment.** The Pixel Shift section's checkbox and slider start a few px right of the
-      Dimming section's (sections built with different row helpers); align them.
+
 - [ ] **ImageWorker lean entry (R-99).** The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules). A lean worker entry could save ~100 MB resident, but it must be validated under Nuitka multiprocessing first.
 - [ ] **Watch (low priority, not visible): scaled prefetch holds the GIL on the background CPU lane.** `QImage.scaled` runs for up to ~70 ms per 4K derivative while holding the GIL. It is not a stutter: overnight on 2026-09-25 the Visualizer logical runtime skipped 125 of 1,812,107 steps (0.007%). R-99 already halved the scaling work. Measure on the next `--perf` run before acting: seconds with `dt_max_ms` > 25 in `[PERF_HUD]`, their overlap with `Scaled prefetch` lines in `screensaver_cache.log`, and `skipped_deadlines` in `[SPOTIFY_VIS][LOGICAL] Runtime stopped`. Only if overlap remains material, move the scaling off the GIL with identical output.
 - [ ] **Gmail refresh adds ~1.5 main-process handles per refresh.** The +18–25 handles/h slope tracks the Gmail cadence. Classify the type with `--handle-attribution`, then fix at the owner.

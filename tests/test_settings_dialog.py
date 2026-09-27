@@ -903,3 +903,24 @@ def test_widgets_subtab_switch_opens_at_top_without_a_timer(qapp, settings_manag
     finally:
         dialog._closing = True
         dialog.deleteLater()
+
+
+def test_accessibility_sections_line_up(qapp, settings_manager) -> None:
+    """Dimming and Pixel Shift rows start at the same x (one shared section layout)."""
+    from ui.tabs.accessibility_tab import AccessibilityTab
+
+    from PySide6.QtCore import Qt
+    tab = AccessibilityTab(settings_manager)
+    try:
+        tab.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)  # laid out, never on screen
+        tab.resize(900, 700)
+        tab.show()
+        for _ in range(5):
+            qapp.processEvents()
+        def left(widget):
+            return widget.mapTo(tab, widget.rect().topLeft()).x()
+        assert left(tab.dimming_enabled) == left(tab.pixel_shift_enabled)
+        assert left(tab.dimming_opacity_slider) == left(tab.pixel_shift_rate_slider)
+    finally:
+        tab.hide()
+        tab.deleteLater()
