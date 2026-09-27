@@ -14,6 +14,7 @@ audits are historicalised (`Docs/Historical_Bugs/R-100_...`, `R-101_...`).
 
 - [ ] **Widgets-tab position warnings use stale size estimates.** `ui/widget_stack_predictor.py` (QWidget-era formulas; e.g. Reddit 350 px wide against a real 600) still drives `get_position_status_for_widget`. Arrange no longer uses it: it measures through the family QML (`preferred_size_measurement`). Move these warnings to the same measured sizes only if that adds no work to the Widgets tab until a warning is actually needed; otherwise retire the predictor's size formulas.
 
+- [ ] **Overfull authored displays: the stacking planner is slow.** `build_display_auto_scale_plan` costs ~0.75 s per pass on an overfull display (measured 2026-09-27: 21 authored cards on 1707×960 made the saver's family bind take 2.7 s on the GUI thread; each Arrange draft rebuild pays the same). Normal layouts cost a few ms. Profile shows `_free_edge_candidates` dominating; reduce the search or memoize by inputs, with the same placements.
 - [ ] **Decide one scale pivot for Runtime Edit and Arrange.** Both editors always show what the saver shows, but they keep different points fixed when scaling: Edit's wheel keeps the top-centre, Edit's corner drag the opposite corner, Arrange's scale the placement anchor. Scaling up in one and back down in the other returns the size exactly but moves the card 9–22 px (measured 2026-09-27, 20 widgets, 10 cycles). Operator decision pending.
 
 ## Known failing tests and anomalies (tracked until resolved)
