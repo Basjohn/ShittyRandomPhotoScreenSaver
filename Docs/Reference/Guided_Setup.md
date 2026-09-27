@@ -87,6 +87,10 @@ run by onboarding.
   `tools/onboarding_sheet_previews.py` replaces every widget preview except Clocks with cut-outs of the real cards
   (card rectangles are data in that tool; re-measure them if the sheet is replaced).
 - Every widget preview is transparent around its card with a free-hanging SE shadow, so it sits on any theme.
+- Visualizer mode previews (`visualizer_<mode>.png`) are cut from the operator's unshipped
+  `tools/onboarding_sources/Visualizers.png`; Voxel Sphere has no card there, so it keeps its background inside a
+  drawn frame. Without the sheet, a rebuild keeps the committed previews. The page shows a narrow mode list (sized
+  to its longest name, never truncated) with the selected mode's preview beside it.
 - Widget previews render at 2x device pixels (the sheet is a 2x screenshot and is cut at native size). Settings
   shows them at no more than one source pixel per physical pixel (`ImagePanel(..., upscale=False)`), so small cards
   stay sharp at their true size instead of being stretched.

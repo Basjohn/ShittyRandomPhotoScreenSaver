@@ -1386,6 +1386,17 @@ def _manifest_payload(output: Path) -> dict[str, object]:
                 "frame_size": list(TRANSITION_FRAME_SIZE),
                 "progress": samples,
             })
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+    visualizer_modes = []
+    for mode in iter_visualizer_mode_descriptors():
+        name = f"visualizer_{mode.mode_id}.png"
+        path = output / name
+        if not path.is_file():
+            raise RuntimeError(f"onboarding preview is missing {name}")
+        with Image.open(path) as image:
+            if image.format != "PNG":
+                raise RuntimeError(f"onboarding preview is not a valid PNG: {name}")
+            visualizer_modes.append({"mode_id": mode.mode_id, "path": name, "size": [image.width, image.height]})
     total = sum(path.stat().st_size for path in _generated_assets(output))
     if total > _ASSET_BUDGET_BYTES:
         raise RuntimeError(f"onboarding preview assets exceed {_ASSET_BUDGET_BYTES // (1024 * 1024)} MB ({total} bytes)")
@@ -1394,6 +1405,7 @@ def _manifest_payload(output: Path) -> dict[str, object]:
         "version": 2,
         "widgets": widgets,
         "transitions": transitions,
+        "visualizer_modes": visualizer_modes,
         "generation": {
             "widgets": "hidden Windows-QPA QQuickRenderControl worker",
             "gl": "hidden Windows-QPA QOffscreenSurface worker",
@@ -1403,7 +1415,7 @@ def _manifest_payload(output: Path) -> dict[str, object]:
 
 
 def _generated_assets(output: Path) -> list[Path]:
-    return sorted(path for pattern in ("widget_*.png", "transition_*.png") for path in output.glob(pattern))
+    return sorted(path for pattern in ("widget_*.png", "transition_*.png", "visualizer_*.png") for path in output.glob(pattern))
 
 
 def _write_manifest(output: Path) -> dict[str, object]:
@@ -1435,7 +1447,7 @@ def build(output: Path) -> dict[str, object]:
         output.mkdir(parents=True, exist_ok=True)
         staged_names = {staged.name for staged in staging.iterdir() if staged.is_file()}
         # Retire generated files the new set no longer contains (e.g. a format change).
-        for stale in (*output.glob("widget_*"), *output.glob("transition_*")):
+        for stale in (*output.glob("widget_*"), *output.glob("transition_*"), *output.glob("visualizer_*")):
             if stale.is_file() and stale.name not in staged_names:
                 stale.unlink()
         for name in staged_names:
@@ -1454,6 +1466,12 @@ def _apply_operator_sheet(staging: Path) -> None:
 
     if onboarding_sheet_previews.DEFAULT_SHEET.is_file():
         onboarding_sheet_previews.build(onboarding_sheet_previews.DEFAULT_SHEET, staging)
+    if onboarding_sheet_previews.VISUALIZER_SHEET.is_file():
+        onboarding_sheet_previews.build_visualizers(onboarding_sheet_previews.VISUALIZER_SHEET, staging)
+    else:
+        # Without the operator sheet, keep the committed mode previews.
+        for existing in DEFAULT_OUTPUT.glob("visualizer_*.png"):
+            shutil.copy2(existing, staging / existing.name)
 
 
 def assemble_manifest(output: Path) -> dict[str, object]:

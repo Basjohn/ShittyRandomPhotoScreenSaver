@@ -10,8 +10,6 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 - [ ] **Widget Setup accounts.** Show connected Steam/Gmail states (as full Settings does) instead of empty fields;
       Steam section parity with Settings (two connections, their connected popups). Gmail bucket gains the
       notification sound checkbox, sound choice and Test.
-- [ ] **Visualizers page.** Much narrower mode list; a preview on the right per mode, cropped from the operator sheet
-      `Visualizers.png` (Voxel Sphere: bordered with its background, or an offscreen fake-audio render).
 - [ ] **Ready page.** Controls summary under a separator, focused on the context menu.
 - [ ] **Import Settings.** Welcome page offers "Import Settings?"; a successful import skips and closes the wizard.
       Import (and the Settings tab) lets users choose: All, Display, Widgets, Transitions, Theme Choice, Custom

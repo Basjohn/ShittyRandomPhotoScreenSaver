@@ -177,15 +177,28 @@ class WidgetsPage(Page):
 
 
 class VisualizerPage(Page):
+    """A narrow mode list with the selected mode's real preview beside it."""
+
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("Bring your music to life", heading=True))
-        self.body.addWidget(text_label("Choose which Visualizer modes are available. Detailed tuning and presets remain in full Settings."))
+        self.body.addWidget(text_label("Choose which Visualizer modes are available. Select a mode to see it. Detailed tuning and presets remain in full Settings."))
         self.enabled = _check("Enable Visualizer", False, self._enable)
         self.body.addWidget(self.enabled)
-        self.rows = CheckList(); self.body.addWidget(self.rows, 1)
+        row = QHBoxLayout(); row.setSpacing(20)
+        self.rows = CheckList(); self.rows.setMinimumHeight(290)
+        row.addWidget(self.rows, 0, Qt.AlignmentFlag.AlignTop)
+        preview_column = QVBoxLayout(); preview_column.setContentsMargins(0, 0, 0, 0)
+        self.preview_title = text_label("", heading=True)
+        preview_column.addWidget(self.preview_title)
+        self.preview = None
+        self._preview_holder = preview_column
+        preview_column.addStretch()
+        row.addLayout(preview_column, 1)
+        self.body.addLayout(row, 1)
         self.status = text_label(""); self.body.addWidget(self.status)
         self.rows.itemChanged.connect(self._toggle)
+        self.rows.currentItemChanged.connect(self._show)
         self._offered_modes = None
 
     def refresh(self):
@@ -198,6 +211,7 @@ class VisualizerPage(Page):
         effective = is_widget_family_effective(widgets, "visualizers")
         self.enabled.setEnabled(effective)
         self.status.setText("Choose at least one mode." if effective else "Enable Media and Visualizers in the Widgets step to use the Visualizer.")
+        selected = self.rows.currentRow()
         with QSignalBlocker(self.rows):
             self.rows.clear()
             for mode in self._offered_modes:
@@ -205,7 +219,26 @@ class VisualizerPage(Page):
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(Qt.CheckState.Checked if mode.mode_id in active else Qt.CheckState.Unchecked)
                 self.rows.addItem(item)
-        self.rows.setEnabled(effective)
+                # Previews stay browsable even while the Visualizer family is off.
+                self.rows.itemWidget(item).setEnabled(effective)
+            self.rows.setCurrentRow(max(0, min(selected, self.rows.count() - 1)))
+        # Narrow, but never truncating a mode name: fit the longest row.
+        widest = max((self.rows.itemWidget(self.rows.item(i)).sizeHint().width() for i in range(self.rows.count())), default=200)
+        self.rows.setFixedWidth(min(360, max(220, widest + 2 * self.rows.frameWidth() + 44)))
+        self._show(self.rows.currentItem(), None)
+
+    def _show(self, item, _previous):
+        if item is None:
+            return
+        mode_id = item.data(Qt.ItemDataRole.UserRole)
+        self.preview_title.setText(item.text())
+        path = asset_path(f"onboarding/visualizer_{mode_id}.png")
+        if self.preview is None:
+            self.preview = ImagePanel(path, upscale=False)
+            self.preview.setMinimumHeight(220); self.preview.setMaximumHeight(300)
+            self._preview_holder.insertWidget(1, self.preview)
+        else:
+            self.preview.set_source(path)
 
     def _enable(self, enabled):
         self.settings.set("widgets.spotify_visualizer.enabled", enabled)
