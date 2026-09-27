@@ -41,6 +41,11 @@ def _build_color_picker_wrapper_stylesheet(theme: SettingsThemeSpec) -> str:
     title_text_value = theme.color("color_picker.window_text")
     title_text = _theme_rgba255(theme, "color_picker.window_text")
     border = _theme_rgba255(theme, "chrome.outer_border")
+    input_surface = _theme_rgba255(theme, "control.input.surface")
+    input_text = _theme_rgba255(theme, "control.input.text")
+    input_border = _theme_rgba255(theme, "control.input.border")
+    stepper = _theme_rgba255(theme, "control.stepper.surface")
+    stepper_hover = _theme_rgba255(theme, "control.stepper.hover_surface")
     hover = (
         f"rgba({255 - title_text_value.r}, {255 - title_text_value.g}, "
         f"{255 - title_text_value.b}, 255)"
@@ -88,6 +93,45 @@ def _build_color_picker_wrapper_stylesheet(theme: SettingsThemeSpec) -> str:
         QDialog#subsettingsDialog QLabel#closeButton:hover {{
             color: {hover};
             background: transparent;
+        }}
+        /* Qt's colour-dialog inputs: theme input colours at the dialog's own
+           compact size (opaque border, so no rounded-border seams). */
+        QDialog#subsettingsDialog QColorDialog QSpinBox,
+        QDialog#subsettingsDialog QColorDialog QLineEdit {{
+            background-color: {input_surface};
+            color: {input_text};
+            border: 1.5px solid {input_border};
+            border-radius: 4px;
+            padding: 1px 4px;
+            min-height: 20px;
+        }}
+        QDialog#subsettingsDialog QColorDialog QSpinBox {{
+            padding-right: 16px;
+        }}
+        /* Settings' stepper design (round dots, no arrows), compact. */
+        QDialog#subsettingsDialog QColorDialog QSpinBox::up-button,
+        QDialog#subsettingsDialog QColorDialog QSpinBox::down-button {{
+            subcontrol-origin: border;
+            width: 8px;
+            height: 8px;
+            margin: 2px 5px 2px 0px;
+            border: none;
+            border-radius: 4px;
+            background-color: {stepper};
+        }}
+        QDialog#subsettingsDialog QColorDialog QSpinBox::up-button {{
+            subcontrol-position: top right;
+        }}
+        QDialog#subsettingsDialog QColorDialog QSpinBox::down-button {{
+            subcontrol-position: bottom right;
+        }}
+        QDialog#subsettingsDialog QColorDialog QSpinBox::up-button:hover,
+        QDialog#subsettingsDialog QColorDialog QSpinBox::down-button:hover {{
+            background-color: {stepper_hover};
+        }}
+        QDialog#subsettingsDialog QColorDialog QSpinBox::up-arrow,
+        QDialog#subsettingsDialog QColorDialog QSpinBox::down-arrow {{
+            width: 0px; height: 0px; border: none;
         }}
     """
 

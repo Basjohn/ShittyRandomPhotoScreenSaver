@@ -19,8 +19,6 @@ Each stays here until fixed or explicitly retired; do not treat it as noise in a
 - [ ] **One red present before 2026-09-26's FEEDS work (Windows, whole widgets/settings gate):**
   - `test_qtquick_transition_parameter_defaults.py::test_sparse_crumble_uses_canonical_piece_count_and_complexity`: the canonical Crumble `crack_complexity` default is 11.0 but Settings and the resolver cap it at 2.0. Operator decision: was 1.1 meant?
 
-- [ ] **Colour picker inputs.** Qt's colour dialog spin boxes and HTML field inside the (now themed) picker still use
-      Qt's default white inputs; bind the Settings spin box / line edit styles there.
 
 - [ ] **Tests that show real windows.** 21 test files call `.show()` under pytest's Windows QPA (a real window
       flashes): QWidget ones (`test_default_settings_editor`, `test_transitions_tab_setup`, `test_widgets_tab_setup`,
