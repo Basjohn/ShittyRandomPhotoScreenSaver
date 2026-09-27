@@ -2,7 +2,32 @@
 
 ## Guided Setup / Quick Start (ACTIVE)
 
-Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`.
+Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator review 2026-09-27, open items:
+
+- [ ] **Explicit save.** Every `SettingsManager.set` persists and publishes, so each wizard click saved. Pages edit a
+      draft; only Finish (or a confirmed Skip prompt) commits. A discarded draft restores the live theme. Ready page
+      copy: almost done, press Finish to save. Remove its "Back to Arrange" button (Back already exists).
+- [ ] **Readability on Glass.** 20% black veil inside the wizard's rounded border (no clipping outside it).
+- [ ] **Typography.** One casing rule across pages: buttons/buckets Title Case; longer labels/statements Title Case;
+      short tags ALL CAPS ("OFF"). Never case user data (paths, URLs).
+- [ ] **Buckets.** Large variant: same box, slightly bigger text, smaller arrow. All buckets: seam-free painted border.
+- [ ] **Seams.** Folder/feed/theme/transition lists get a painted continuous frame. Audit other Settings lists after.
+- [ ] **Interaction on MC.** Disabled choice text must grey out. Practice-card image is pixelated (smooth scaling).
+- [ ] **Widget Setup accounts.** Show connected Steam/Gmail states (as full Settings does) instead of empty fields;
+      Steam section parity with Settings (two connections, their connected popups). Gmail bucket gains the
+      notification sound checkbox, sound choice and Test.
+- [ ] **Visualizers page.** Much narrower mode list; a preview on the right per mode, cropped from the operator sheet
+      `Visualizers.png` (Voxel Sphere: bordered with its background, or an offscreen fake-audio render).
+- [ ] **Transitions page.** The page scrolls by itself while the cursor merely hovers.
+- [ ] **Ready page.** Controls summary under a separator, focused on the context menu.
+- [ ] **Import Settings.** Welcome page offers "Import Settings?"; a successful import skips and closes the wizard.
+      Import (and the Settings tab) lets users choose: All, Display, Widgets, Transitions, Theme Choice, Custom
+      Geometry Including Layouts, Misc (everything else). Credentials are never exported or imported.
+- [ ] **Context menu "Save Image".** Always shown. Saves the current image as-is to the Sources "Save Images" folder
+      if the user chose one, else `Pictures/SRPSS Collections`, which joins local sources after the first save. One
+      simple off-UI-thread copy: no timers, polls, prefetch changes, multiple sizes or I/O thrash.
+- [ ] **Steam defaults/text.** Rich as the default privacy setting (operator default); confirm Friend Pulse shrinks
+      "IN GAME: XYZ" instead of truncating.
 
 ## Runtime audit 2026-09-22 | accepted 2026-09-23/24
 
@@ -20,10 +45,9 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`.
 
 Each stays here until fixed or explicitly retired; do not treat it as noise in a gate. Physical validation lives with each feature's own doc, not here.
 
-- [ ] **Three reds present before 2026-09-26's FEEDS work (Windows, whole widgets/settings gate):**
+- [ ] **Two reds present before 2026-09-26's FEEDS work (Windows, whole widgets/settings gate):**
   - `test_qtquick_transition_parameter_defaults.py::test_sparse_crumble_uses_canonical_piece_count_and_complexity`: the canonical Crumble `crack_complexity` default is 11.0 but Settings and the resolver cap it at 2.0. Operator decision: was 1.1 meant?
   - `test_visualizer_settings_body_dormancy.py::test_pill_model_is_setup_plus_enabled_in_canonical_order`: the expected pill order predates the current modes (`sphere`).
-  - `test_widget_theme_link_and_asset_contract.py::test_lazy_theme_pages_refresh_without_polling_or_cross_tab_theme_owner`: rejects the `QTimer` import now in the themes/defaults Settings code.
 - [ ] **Spectrum extreme-viewport smoothness (pre-existing, not an audit regression).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Pre-dates the audit; do not reopen VZ-04 over it. Watch item until investigated separately.
 
 ## Handoff and regression rules
