@@ -35,6 +35,7 @@ The existing user-desktop helper consumes only admitted queue work, waits for th
   shared owner each (`core.sources.readiness`, `sources.rss.curated`). The existing source-less close guard stays active.
 - `ui/onboarding` is a lazy Settings surface, not a runtime. No onboarding import or background hydration starts
   a source, audio consumer, QML scene, polling timer or preview renderer. Quick Start's Arrange bucket is lazy again.
+  An open Arrange page measures widget sizes on detached family QML items (never a window or scene, no service).
 - Account entry/actions require `core.windows.desktop_context.is_interactive_user_desktop()`. Unknown desktop fails
   closed. Shared account controllers validate before encrypted persistence and completions are page-lifetime fenced.
   No secret belongs to generic wizard state, preview fixtures or logs; browser handoff ownership is unchanged.
@@ -42,6 +43,10 @@ The existing user-desktop helper consumes only admitted queue work, waits for th
   Keep Changes commits it, Discard restores the previewed theme. Only in-page save actions (Save to Slot, account
   Save & Test, Import Settings) write straight through.
 - Arrange stages `CustomLayoutSession` and commits through `rendering.custom_layout_commit`, shared with Runtime Edit.
+  Its geometry has no second authority: sizes are each family's QML preferred size, measured through the adapter's
+  own `presentation_model` and card style; uncommitted placement is the presenter's anchor/stacking and
+  `DisplayManager`'s Media docking (`authored_layout_projection`). CUSTOM is global, so Apply after any placement
+  saves the whole canvas; viewing or a slot load commits nothing and Reset keeps a box authored.
   Settings-created CUSTOM entries use content-sized anchored placement; uniform scale is supported. Settings side
   (width/height) resize reuses Runtime Edit's geometry functions and is admitted only when the saved box, floor and
   child state need no live measurement; child geometry and content rotation remain runtime operations. Move-only runtime Save preserves content sizing;

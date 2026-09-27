@@ -77,8 +77,10 @@ Settings owns one no-source decision after show: Guided Setup unless `sources.gu
 existing popup. Manual Quick Start ignores Silence. Both use normal Settings owners and shared source/account/theme
 operations. Guided Setup edits a draft: nothing persists until Finish (or Keep Changes when leaving early).
 Account setup requires the calling thread's interactive Default desktop. Arrange stages the canonical
-CUSTOM session and shared commit, with content-sized anchors for placements whose live content Settings cannot
-measure. It admits no provider, QML or audio runtime. Static previews are release assets, never live render work in
+CUSTOM session and shared commit, with content-sized anchored placements. It draws the saver's own geometry: sizes
+measured through each family's QML on detached items, placement by the saver's anchor, stacking and Media-docking
+functions; once anything is placed, Apply saves the whole canvas because CUSTOM is global. It admits no provider,
+scene or audio runtime. Static previews are release assets, never live render work in
 Settings. Product and ownership details: `Docs/Reference/Guided_Setup.md`.
 
 ## Runtime Widget Themes / semantic visuals

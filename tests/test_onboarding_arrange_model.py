@@ -1,4 +1,8 @@
-"""Draft-only Arrange regression bars; no QML/runtime/provider construction."""
+"""Draft-only Arrange regression bars; no runtime/provider construction.
+
+Sizes are the saver's own, measured through detached family QML, which needs
+the Qt application.
+"""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -9,6 +13,14 @@ from PySide6.QtCore import QRect
 from ui.onboarding.arrange_model import ArrangeDisplay, ArrangeModel
 from core.settings.default_settings import DEFAULT_SETTINGS
 from core.settings.layout_slots import save_layout_slot
+
+pytestmark = pytest.mark.usefixtures("qt_app")
+
+
+def _weather_family_only() -> dict:
+    """TEST INPUT: every family explicit; an absent one would inherit its default."""
+
+    return {family: family == "weather" for family in DEFAULT_SETTINGS["widgets"]["family_activation"]}
 
 
 def _display() -> ArrangeDisplay:
@@ -21,7 +33,7 @@ def _two_displays() -> tuple[ArrangeDisplay, ArrangeDisplay]:
 
 def _widgets() -> dict:
     return {
-        "family_activation": {"weather": True},
+        "family_activation": _weather_family_only(),
         "weather": {"enabled": True, "position": "Top Right", "monitor": "1", "margin": 24},
     }
 
@@ -437,18 +449,21 @@ def test_repeated_saved_clock_scaling_uses_absolute_scale_without_payload_loss()
     assert result_payload["clock_text"] == "keep"
 
 
-def test_slot_load_refreshes_authored_estimates_from_loaded_layout_fields() -> None:
+def test_slot_load_remeasures_authored_boxes_from_loaded_layout_fields() -> None:
     widgets = _widgets()
     widgets["weather"]["font_size"] = 18
     assert save_layout_slot(widgets, "1") is True
     widgets["weather"]["font_size"] = 44
     model = ArrangeModel(widgets, (_display(),))
-    before_width = model._estimates["weather"].estimated_width
+    before = model.session.items()[0].current_global_rect.size()
 
     assert model.load_slot("1") is True
 
+    after = model.session.items()[0].current_global_rect.size()
     assert model.widgets["weather"]["font_size"] == 18
-    assert model._estimates["weather"].estimated_width < before_width
+    assert after != before
+    width, height = model._meter.measure("weather", model.widgets)
+    assert (after.width(), after.height()) == (round(width), round(height))
 
 
 def test_arrange_page_refreshes_selected_list_route_after_drag_finishes(qt_app) -> None:

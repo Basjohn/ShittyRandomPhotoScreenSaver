@@ -1,20 +1,32 @@
 """Draft-only CUSTOM layout model used by Guided Setup and Quick Start.
 
-The model has no Settings widgets, providers, QML roots, or persistence owner.
-It stages the existing ``CustomLayoutSession`` and delegates the one canonical
+The model has no Settings widgets, providers, runtime or persistence owner. It
+stages the existing ``CustomLayoutSession`` and delegates the one canonical
 write to :mod:`rendering.custom_layout_commit`.
+
+Geometry is the saver's own: preferred sizes are measured through each family's
+QML (``OrdinaryPreferredSizeMeter``, detached items that never enter a window)
+and uncommitted widgets are placed by ``project_authored_display_layout``, the
+runtime's anchor/stacking/Media-docking functions. Apply after any placement
+saves the whole canvas, as Runtime Edit's Save does, because CUSTOM is a
+global layout mode.
 """
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
+from types import SimpleNamespace
 from typing import Any, Mapping
 
 from PySide6.QtCore import QPoint, QRect
 
-from core.settings.default_contract import require_canonical_default
+from core.logging.logger import get_logger
 from core.settings.capability_activation import is_widget_family_effective
+from core.settings.visualizer_mode_registry import (
+    get_default_visualizer_mode_id,
+    get_visualizer_presentation_policy,
+)
 from core.settings.layout_slots import apply_layout_slot, get_layout_slot_payload, save_layout_slot
 from core.settings.widget_family_catalog import get_family_id_for_widget, get_widget_member_label
 from rendering.custom_layout_commit import commit_custom_session
@@ -47,6 +59,8 @@ from rendering.custom_layout_session import (
 )
 from rendering.quick.custom_layout_size import (
     CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
+    CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY,
+    capture_quick_size_payload,
     content_extent_resize_payload,
     edge_resize_rect,
     quick_custom_content_extent_minimum_size,
@@ -62,9 +76,40 @@ from rendering.widget_descriptors import (
     get_custom_persistence_monitor_settings_key_for_widget,
     get_custom_persistence_position_settings_key_for_widget,
 )
-from ui.widget_stack_predictor import build_widget_estimates, estimate_media_size, estimate_spotify_vis_size
-from rendering.visualizer_media_adjacency import resolve_visualizer_media_origin
-from rendering.widget_stacking import DisplayStackObstacle, DisplayStackParticipant, build_display_stack_plan
+from rendering.quick.widgets.authored_layout_projection import (
+    ProjectedPlacement,
+    project_authored_display_layout,
+)
+from rendering.quick.widgets.preferred_size_measurement import (
+    OrdinaryPreferredSizeMeter,
+    ordinary_instance_order,
+)
+from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+
+logger = get_logger(__name__)
+
+_CLOCK_IDS = frozenset({"clock", "clock2", "clock3"})
+
+
+def _visualizer_outer_size(display: "ArrangeDisplay") -> tuple[float, float]:
+    """The saver's authored Visualizer outer box on ``display`` (its own resolver).
+
+    Authored mode uses the canonical viewport at scale 1, reduced uniformly to
+    fit the display; the mode policy and card style shape the inside only, so
+    neutral values stand in for them here.
+    """
+
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy(get_default_visualizer_mode_id()),
+        display_size=(display.geometry.width(), display.geometry.height()),
+        border_width=0.0, corner_radius=0.0, content_inset=0.0,
+        background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0),
+        shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
+        shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0),
+    )
+    return float(presentation.outer_rect[2]), float(presentation.outer_rect[3])
+# The saver's provisional size until a family reports its own (display presenter).
+_PROVISIONAL_SIZE = (100.0, 100.0)
 
 
 @dataclass(frozen=True)
@@ -92,7 +137,13 @@ class _ArrangeScreen:
 class ArrangeModel:
     """One discardable layout draft with only neutral CUSTOM operations."""
 
-    def __init__(self, widgets: Mapping[str, Any], displays: tuple[ArrangeDisplay, ...]) -> None:
+    def __init__(
+        self,
+        widgets: Mapping[str, Any],
+        displays: tuple[ArrangeDisplay, ...],
+        *,
+        meter: OrdinaryPreferredSizeMeter | None = None,
+    ) -> None:
         self._committed = deepcopy(dict(widgets))
         self.widgets = deepcopy(dict(widgets))
         self.displays = tuple(displays)
@@ -104,31 +155,42 @@ class ArrangeModel:
         self._authored_keys: set[CustomLayoutKey] = set()
         self._entry_keys: set[CustomLayoutKey] = set()
         self._reset_keys: set[CustomLayoutKey] = set()
+        # Every item the operator returned to its anchor in this draft (with or
+        # without a saved entry); Apply leaves exactly these uncommitted.
+        self._anchored_keys: set[CustomLayoutKey] = set()
+        # True once the operator placed anything; Apply then saves the canvas.
+        self._arranged = False
         self._loaded_slot: str | None = None
         self._dirty = False
-        self._estimates: dict[str, Any] = {}
+        self._meter = meter if meter is not None else OrdinaryPreferredSizeMeter()
+        self._projections: dict[str, dict[str, ProjectedPlacement]] = {}
+        self._admitted: frozenset[str] | None = None
         # (display identity, vertical guides, horizontal guides) of the last move.
         self.last_snap: tuple[str, tuple, tuple] | None = None
         self._build_session()
 
-    def _refresh_estimates(self) -> None:
-        """Rebuild authored estimates from the current draft Settings map."""
+    def _refresh_projections(self) -> None:
+        """Forget placements derived from the draft map (sizes stay memoized)."""
 
-        self._estimates = {
-            str(estimate.widget_type.value): estimate
-            for estimate in build_widget_estimates(
-                self.widgets, defaults=require_canonical_default("widgets")
-            )
-        }
+        self._projections.clear()
+        self._admitted = None
 
     @property
     def pending(self) -> bool:
         return self._dirty
 
     def _effective(self, descriptor: WidgetRuntimeDescriptor) -> bool:
-        section = self._section_for(descriptor)
-        if not isinstance(section, Mapping) or not bool(section.get("enabled", False)):
-            return False
+        if self._meter.presents(descriptor.widget_id):
+            # An ordinary card presents only when its family admits it (a Feed
+            # needs a source, Friend Pulse needs Steam), as the display binder does.
+            if self._admitted is None:
+                self._admitted = frozenset(ordinary_instance_order(self.widgets, self._meter.adapters))
+            if descriptor.widget_id not in self._admitted:
+                return False
+        else:
+            section = self._section_for(descriptor)
+            if not isinstance(section, Mapping) or not bool(section.get("enabled", False)):
+                return False
         family = get_family_id_for_widget(descriptor.widget_id)
         return family is None or is_widget_family_effective(self.widgets, family)
 
@@ -158,63 +220,32 @@ class ArrangeModel:
             return self.displays
         return tuple(display for display in self.displays if display.monitor_route == route)
 
-    def _authored_route(self, descriptor: WidgetRuntimeDescriptor) -> tuple[str, int]:
-        """The authored anchor and margin; a CUSTOM route reads its saved restore anchor."""
+    def _content_identity(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> str | None:
+        """The display key a per-display Clock face override is saved under."""
 
-        section = self._route_section_for(descriptor)
-        if not isinstance(section, Mapping):
-            raise ValueError(f"Arrange has no widget settings section for {descriptor.widget_id!r}")
-        position = str(section.get("position", "") or "")
-        if position.strip().casefold() == "custom":
-            restore = get_custom_layout_restore_entry(
-                load_custom_layout_restore_map(self.widgets), descriptor.widget_id,
-            )
-            if restore is not None:
-                position = str(restore["position"])
-        return position, int(section.get("margin", 0) or 0)
+        if descriptor.widget_id not in _CLOCK_IDS:
+            return None
+        overrides = self._section_for(descriptor).get("display_mode_overrides", {})
+        if not isinstance(overrides, Mapping):
+            return None
+        return next((alias for alias in display.signature_aliases if overrides.get(alias)), None)
 
-    @staticmethod
-    def _anchored(position: str, margin: int, width: int, height: int, display: ArrangeDisplay) -> QRect:
-        width, height = min(width, display.geometry.width()), min(height, display.geometry.height())
-        anchor = position.casefold()
-        x = margin if "left" in anchor else (display.geometry.width() - width - margin if "right" in anchor else (display.geometry.width() - width) // 2)
-        y = margin if "top" in anchor else (display.geometry.height() - height - margin if "bottom" in anchor else (display.geometry.height() - height) // 2)
-        return QRect(display.geometry.x() + x, display.geometry.y() + y, width, height)
+    def _measured_size(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> tuple[float, float]:
+        """The saver's own outer size for this widget on ``display``."""
 
-    def _estimated_size(self, descriptor: WidgetRuntimeDescriptor) -> tuple[int, int]:
-        estimate = self._estimates.get(descriptor.widget_id)
-        if estimate is not None:
-            return int(estimate.estimated_width), int(estimate.estimated_height)
-        section = self._section_for(descriptor)
         if descriptor.widget_id == "spotify_visualizer":
-            # The stack predictor omits the Visualizer when Media is off; size
-            # it from the same estimators the predictor uses.
-            defaults = require_canonical_default("widgets")
-            media = {**defaults["media"], **(self.widgets.get("media") or {})}
-            media_width, _ = estimate_media_size(int(media["font_size"]), int(media["artwork_size"]))
-            return estimate_spotify_vis_size(section, media_width=media_width)
-        # The predictor also omits the transient System Audio OSD; its
-        # presentation owns an exact configured preferred box.
+            return _visualizer_outer_size(display)
         try:
-            width, height = int(section.get("preferred_width")), int(section.get("preferred_height"))
-        except (TypeError, ValueError):
-            width = height = 0
-        if width > 0 and height > 0:
-            return width, height
-        # A CUSTOM-routed widget (e.g. still customised on another display) is
-        # omitted by the predictor; estimate it on its saved authored route.
-        projected = deepcopy(self.widgets)
-        restore = get_custom_layout_restore_entry(
-            load_custom_layout_restore_map(projected), descriptor.widget_id,
-        )
-        route = projected.get(get_effective_position_settings_key_for_widget(descriptor.widget_id, projected))
-        if isinstance(route, dict) and restore is not None:
-            route["position"] = restore["position"]; route["monitor"] = restore["monitor"]
-            estimate = next((entry for entry in build_widget_estimates(projected, defaults=require_canonical_default("widgets"))
-                             if str(entry.widget_type.value) == descriptor.widget_id), None)
-            if estimate is not None:
-                return int(estimate.estimated_width), int(estimate.estimated_height)
-        raise ValueError(f"Arrange has no size estimate for authored {descriptor.widget_id!r}")
+            return self._meter.measure(
+                descriptor.widget_id, self.widgets,
+                display_identity=self._content_identity(descriptor, display),
+            )
+        except Exception:
+            logger.exception(
+                "[ARRANGE] Could not measure %s; showing the saver's provisional size",
+                descriptor.widget_id,
+            )
+            return _PROVISIONAL_SIZE
 
     def _ordinary_on(self, widget_id: str, display: ArrangeDisplay) -> bool:
         """Effective, routed to ``display`` and not a CUSTOM entry there."""
@@ -224,79 +255,50 @@ class ArrangeModel:
             return False
         return self._existing_entry(descriptor, display, self._variants_for(descriptor, display)[0]) is None
 
-    def _docked_pair(self, display: ArrangeDisplay) -> tuple[QRect | None, QRect | None]:
-        """Media (unstacked) and the Visualizer docked to it, as the saver places them."""
+    def _display_projection(self, display: ArrangeDisplay) -> dict[str, ProjectedPlacement]:
+        """Where the saver places every uncommitted widget on ``display``."""
 
-        if not self._ordinary_on("spotify_visualizer", display):
-            return None, None
-        visualizer = self.descriptors["spotify_visualizer"]
-        vis_width, vis_height = self._estimated_size(visualizer)
-        position, margin = self._authored_route(visualizer)
-        if not self._ordinary_on("media", display):
-            # Media disabled: the Visualizer takes Media's authored anchor.
-            return None, self._anchored(position, margin, vis_width, vis_height, display)
-        media = self.descriptors["media"]
-        media_width, media_height = self._estimated_size(media)
-        media_rect = self._anchored(*self._authored_route(media), media_width, media_height, display)
-        local_media = media_rect.translated(-display.geometry.x(), -display.geometry.y())
-        width = min(vis_width, display.geometry.width()); height = min(vis_height, display.geometry.height())
-        x, y, _overfull = resolve_visualizer_media_origin(
-            (local_media.x(), local_media.y(), local_media.width(), local_media.height()),
-            (width, height), (display.geometry.width(), display.geometry.height()),
+        projection = self._projections.get(display.identity)
+        if projection is None:
+            ordinary = [
+                (widget_id, self._measured_size(self.descriptors[widget_id], display))
+                for widget_id in ordinary_instance_order(self.widgets, self._meter.adapters)
+                if widget_id in self.descriptors and self._ordinary_on(widget_id, display)
+            ]
+            visualizer = None
+            if self._ordinary_on("spotify_visualizer", display):
+                visualizer = self._measured_size(self.descriptors["spotify_visualizer"], display)
+            projection = project_authored_display_layout(
+                self.widgets,
+                display_size=(display.geometry.width(), display.geometry.height()),
+                ordinary=ordinary,
+                visualizer_size=visualizer,
+            )
+            self._projections[display.identity] = projection
+        return projection
+
+    def _authored_placement(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> tuple[QRect, float]:
+        """The saver's rectangle (global) and automatic whole-card scale."""
+
+        placement = self._display_projection(display).get(descriptor.widget_id)
+        if placement is None:
+            # Not presented here by the map being projected (a reset can restore
+            # another monitor route): show it on its plain anchor on this display.
+            size = self._measured_size(descriptor, display)
+            visualizer = descriptor.widget_id == "spotify_visualizer"
+            placement = project_authored_display_layout(
+                self.widgets,
+                display_size=(display.geometry.width(), display.geometry.height()),
+                ordinary=() if visualizer else ((descriptor.widget_id, size),),
+                visualizer_size=size if visualizer else None,
+            )[descriptor.widget_id]
+        rect = QRect(
+            display.geometry.x() + round(placement.x),
+            display.geometry.y() + round(placement.y),
+            max(1, round(placement.width)),
+            max(1, round(placement.height)),
         )
-        return media_rect, QRect(display.geometry.x() + round(x), display.geometry.y() + round(y), width, height)
-
-    def _authored_rect(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay, *, include_stack: bool = True) -> QRect:
-        if descriptor.widget_id in ("media", "spotify_visualizer"):
-            media_rect, visualizer_rect = self._docked_pair(display)
-            docked = visualizer_rect if descriptor.widget_id == "spotify_visualizer" else media_rect
-            if docked is not None:
-                # The saver pins this pair (Media fixed, Visualizer docked);
-                # other cards stack around them.
-                return docked
-        width, height = self._estimated_size(descriptor)
-        base = self._anchored(*self._authored_route(descriptor), width, height, display)
-        if not include_stack or not bool(self.widgets.get("global", {}).get("stacking_enabled", require_canonical_default("widgets.global.stacking_enabled"))):
-            return base
-        offset = self._stack_offset(descriptor, display)
-        return base.translated(offset.x(), offset.y())
-
-    def _stack_offset(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> QPoint:
-        """Project the runtime's authored stacking plan into the draft canvas."""
-
-        media_rect, visualizer_rect = self._docked_pair(display)
-        pinned = {"spotify_visualizer"} | ({"media"} if media_rect is not None else set())
-        obstacles = [
-            DisplayStackObstacle(key=key, x=rect.x() - display.geometry.x(), y=rect.y() - display.geometry.y(),
-                                 width=rect.width(), height=rect.height())
-            for key, rect in (("media", media_rect), ("spotify_visualizer", visualizer_rect)) if rect is not None
-        ]
-        participants: list[DisplayStackParticipant] = []
-        for order, candidate in enumerate(self.descriptors.values()):
-            if candidate.widget_id in pinned or not candidate.supports_custom_position_slot:
-                continue
-            if not self._ordinary_on(candidate.widget_id, display):
-                continue
-            position, margin = self._authored_route(candidate)
-            if position.strip().casefold() == "custom":
-                continue
-            rect = self._authored_rect(candidate, display, include_stack=False)
-            participants.append(DisplayStackParticipant(
-                key=candidate.widget_id,
-                position_key=position or "Top Right",
-                base_x=rect.x() - display.geometry.x(),
-                base_y=rect.y() - display.geometry.y(),
-                width=rect.width(), height=rect.height(), order=order,
-                margin=margin,
-            ))
-        plan = build_display_stack_plan(
-            participants,
-            obstacles=obstacles,
-            container_width=display.geometry.width(),
-            container_height=display.geometry.height(),
-        )
-        placement = plan.placements.get(descriptor.widget_id)
-        return QPoint(placement.offset_x, placement.offset_y) if placement is not None else QPoint()
+        return rect, float(placement.scale)
 
     def _existing_entry(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay, variant: str):
         custom = load_custom_layout_map(self.widgets)
@@ -310,7 +312,9 @@ class ArrangeModel:
         return deserialize_custom_layout_entry(descriptor.widget_id, variant, payload)
 
     def _build_session(self) -> None:
-        self._refresh_estimates()
+        self._refresh_projections()
+        self._anchored_keys.clear()
+        self._arranged = False
         self.session = CustomLayoutSession()
         self._descriptors_by_key.clear()
         self._authored_keys.clear()
@@ -323,8 +327,8 @@ class ArrangeModel:
                     key = CustomLayoutKey(descriptor.widget_id, display.identity, variant)
                     entry = self._existing_entry(descriptor, display, variant)
                     if entry is None:
-                        rect = self._authored_rect(descriptor, display)
-                        payload = self._authored_payload(descriptor, rect)
+                        rect, auto_scale = self._authored_placement(descriptor, display)
+                        payload = self._authored_payload(descriptor, rect, auto_scale)
                         content_sized = False
                         self._authored_keys.add(key)
                     else:
@@ -380,13 +384,17 @@ class ArrangeModel:
                     self._descriptors_by_key[key] = descriptor
         self.session.refresh_duplicate_state()
 
-    def _authored_payload(self, descriptor: WidgetRuntimeDescriptor, rect: QRect) -> dict[str, Any]:
-        section = self._section_for(descriptor)
+    def _authored_payload(self, descriptor: WidgetRuntimeDescriptor, rect: QRect, auto_scale: float = 1.0) -> dict[str, Any]:
+        """Runtime Edit's authored payload, from the family's own resolved config."""
+
+        family = None
         if descriptor.custom_layout_resize_mode == "clock_font":
-            return {"font_size": int(section["font_size"])}
-        if descriptor.custom_layout_resize_mode == "visualizer_rect":
-            return {"width": rect.width(), "height": rect.height()}
-        return {}
+            family = SimpleNamespace(model=SimpleNamespace(config=self._meter.presentation_config(descriptor.widget_id, self.widgets)))
+        payload = capture_quick_size_payload(descriptor, family, rect)
+        if auto_scale != 1.0:
+            # An overfull display shrinks whole cards; keep that scale as admitted.
+            payload[CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY] = auto_scale
+        return payload
 
     def is_authored(self, key: CustomLayoutKey) -> bool:
         """True while the widget still follows its authored anchor (no CUSTOM entry)."""
@@ -395,6 +403,10 @@ class ArrangeModel:
     def _touch(self, key: CustomLayoutKey) -> None:
         """A new placement supersedes a pending reset of the same entry."""
         self._reset_keys.discard(key)
+        self._arranged = True
+        if key in self._anchored_keys:
+            self._anchored_keys.discard(key)
+            self._refresh_anchored_items()
 
     def item(self, key: CustomLayoutKey) -> CustomLayoutSessionItem:
         return self.session.item(key)
@@ -653,40 +665,53 @@ class ArrangeModel:
     def reset(self, key: CustomLayoutKey) -> None:
         """Return the widget to its authored anchor now; Apply removes its CUSTOM entry.
 
-        The box stays on the canvas at the authored estimate (dashed, following
-        its anchor) instead of vanishing until Apply.  Moving it again makes a
-        new placement that supersedes the pending reset.
+        The box stays on the canvas where the saver will put it (dashed)
+        instead of vanishing until Apply. Moving it again makes a new placement
+        that supersedes the pending reset.
         """
 
         item = self.item(key)
-        descriptor = self._descriptors_by_key[key]
         home = self._display_map[key.display_identity]
         if key in self._entry_keys:
             self._reset_keys.add(key)
+        self._anchored_keys.add(key)
         self._authored_keys.add(key)
-        # Estimate as if the entry were already gone (its display drops out of
-        # stacking exclusions only after Apply, so project on a reset draft).
-        rect = self._reset_rect(descriptor, home)
         item.set_current_display(home.identity, monitor_route=item.source_monitor_route)
-        # The session's authored-size restore also drops any saved logical box, so
-        # a later move cannot write an old content extent back beside authored size.
-        item.restore_authored_size(rect, size_payload=self._authored_payload(descriptor, rect), resize_scale=1.0)
         item.placement_anchor = None
         item.removed = False
         self._dirty = True
+        self._refresh_anchored_items()
         self.session.refresh_duplicate_state(); self.session.notify_item_changed(item)
 
-    def _reset_rect(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> QRect:
+    def _refresh_anchored_items(self) -> None:
+        """Show every anchored item where the saver puts it after Apply.
+
+        The rest of the canvas is committed by Apply, which makes CUSTOM global,
+        so the saver keeps an anchored widget on its plain anchor. With nothing
+        else committed it stays authored and stacked. Either way this is the
+        saver's own projection of the exact map Apply would write.
+        """
+
+        anchored = [item for item in self.session.items() if item.source_key in self._anchored_keys]
+        if not anchored:
+            return
         saved = self.widgets
-        projected = deepcopy(self.widgets)
-        self._apply_resets(projected, keys=(CustomLayoutKey(descriptor.widget_id, display.identity, self._variants_for(descriptor, display)[0]),))
+        projected = self._session_projection(saved)
+        self._apply_resets(projected)
         try:
             self.widgets = projected
-            self._refresh_estimates()
-            return self._authored_rect(descriptor, display)
+            self._refresh_projections()
+            for item in anchored:
+                descriptor = self._descriptors_by_key[item.source_key]
+                rect, auto_scale = self._authored_placement(descriptor, self._display_map[item.source_key.display_identity])
+                # The session's authored-size restore also drops any saved logical
+                # box, so a later move cannot write an old content extent back.
+                item.restore_authored_size(rect, size_payload=self._authored_payload(descriptor, rect, auto_scale), resize_scale=auto_scale)
+                item.baseline_resize_scale = auto_scale
+                self.session.notify_item_changed(item)
         finally:
             self.widgets = saved
-            self._refresh_estimates()
+            self._refresh_projections()
 
     def _promote_routed_duplicates(self, item: CustomLayoutSessionItem) -> None:
         """An ALL route needs a committed content-sized peer on every display."""
@@ -754,18 +779,38 @@ class ArrangeModel:
     def _session_projection(self, source: Mapping[str, Any] | None = None) -> dict[str, Any]:
         candidate = deepcopy(dict(source)) if source is not None else deepcopy(self.widgets)
         displays = {identity: display.commit_value() for identity, display in self._display_map.items()}
-        # Viewing an authored item must not promote it.  Commit only existing
-        # CUSTOM entries and authored entries the operator actually touched.
+        # CUSTOM is global: one saved placement stops the saver stacking and
+        # docking every other widget. So once the operator places anything,
+        # Apply saves each untouched box where the canvas shows it (Runtime
+        # Edit's Save does the same), as a content-sized placement at its
+        # nearest anchor. Viewing or a slot load alone promotes nothing, and a
+        # box the operator returned to its anchor stays authored.
         changed_session = CustomLayoutSession()
         changed_descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         for item in self.session.items():
-            if item.source_key in self._authored_keys or item.source_key in self._reset_keys:
+            if item.source_key in self._anchored_keys or item.source_key in self._reset_keys:
                 continue
+            if item.source_key in self._authored_keys:
+                if not self._arranged:
+                    continue
+                item = self._content_sized_copy(item)
             changed_session.add_item(item)
             changed_descriptors[item.source_key] = self._descriptors_by_key[item.source_key]
         if changed_descriptors:
             commit_custom_session(candidate, changed_session, changed_descriptors, displays)
         return candidate
+
+    def _content_sized_copy(self, item: CustomLayoutSessionItem) -> CustomLayoutSessionItem:
+        """An untouched authored box as a content-sized placement where it is shown."""
+
+        display = self._display_map[item.current_display_identity]
+        local = item.current_global_rect.translated(-display.geometry.x(), -display.geometry.y())
+        return replace(
+            item,
+            content_sized=True,
+            baseline_content_sized=True,
+            placement_anchor=choose_content_placement_anchor(local, display.geometry.size()),
+        )
 
     def _apply_resets(self, widgets: dict[str, Any], *, keys=None) -> None:
         """Remove only the selected parent/display entry; never erase other screens' children."""

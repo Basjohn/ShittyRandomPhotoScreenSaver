@@ -72,17 +72,34 @@ coordinates. Merely opening, selecting or dragging does not persist. In Guided S
 arrangement to the wizard draft, which Finish saves; Discard drops it. Quick Start reuses the same editor (created only
 when its bucket opens), where Apply saves directly.
 
-Settings cannot measure live QML content. New free placements therefore persist an anchor and uniform scale in the
-existing CUSTOM payload, with `_size_from_content: true` and `_placement_anchor`. Their displayed bounds are estimates;
-runtime resolves the actual content size at that anchor. Explicit saved entries retain explicit sizing. Runtime Edit
-preserves content sizing for move-only saves and converts to explicit geometry when a measured resize, extent or child
-edit requires it. Child geometry and content rotation remain Runtime Edit operations.
+The canvas uses the saver's own geometry, so boxes land where they are drawn:
+
+- **Sizes.** `rendering/quick/widgets/preferred_size_measurement.py` measures each widget's preferred size through
+  its family's own QML: the family adapter's `presentation_model` (the same construction `build` uses) and card style,
+  the registered component, `preferredContentWidth/Height`, then the item is deleted. Items never enter a window or
+  scene and no service is attached, so fonts, DPR and text metrics are this machine's. One meter lives with the Arrange
+  page, created when it opens; results are memoized per size-relevant draft fingerprint (placement fields, CUSTOM
+  entries and slots excluded), so moves and resets reuse them and a real setting change re-measures once. The
+  Visualizer is sized by its own `resolve_visualizer_presentation` (authored viewport fitted to the display).
+- **Placement.** Uncommitted boxes are placed by `rendering/quick/widgets/authored_layout_projection.py`, which
+  composes the display presenter's anchor policy, display-wide stacking/shrink and `DisplayManager`'s Media+Visualizer
+  docking with the saver's inputs and build order. Under global CUSTOM they sit on plain anchors and an uncommitted
+  Visualizer on Media's slot, exactly as the saver shows them.
+- **Apply.** CUSTOM is global, so once the operator places anything Apply saves every box where the canvas shows it,
+  as content-sized placements at their nearest anchor (Runtime Edit's Save also keeps the visible layout). Viewing or
+  loading a slot alone commits nothing, and a box returned to its anchor with Reset stays authored; it is drawn where
+  the saver will put it after Apply.
+
+Placements persist an anchor and uniform scale in the existing CUSTOM payload, with `_size_from_content: true` and
+`_placement_anchor`; runtime resolves the live content size at that anchor. Explicit saved entries retain explicit
+sizing. Runtime Edit preserves content sizing for move-only saves and converts to explicit geometry when a measured
+resize, extent or child edit requires it. Child geometry and content rotation remain Runtime Edit operations.
 
 Width-only and height-only resize (side handles) use the same math as Runtime Edit
 (`rendering/quick/custom_layout_size.py`: `edge_resize_rect`, `content_extent_resize_payload`, snapped by
 `resolve_resize_edge_snap`). Settings offers them only when every input is already persisted
-(`settings_content_extent_edges`): a logical box saved by Runtime Edit (a content-sized estimate would bake the
-untouched axis from a guess), a floor declared by the family descriptor (Achievement Pulse and Abandonment Issues use
+(`settings_content_extent_edges`): a logical box saved by Runtime Edit (a preferred size is not the live content box
+a side drag reflows), a floor declared by the family descriptor (Achievement Pulse and Abandonment Issues use
 a live authored-size floor) and no customized children (their room is reported only by the live family). Otherwise the
 selection line says to resize once in the saver's Edit mode. Reset uses the session's authored-size restore, which
 drops a saved box.
@@ -98,7 +115,8 @@ to save. Slots include layout fields such as fonts, monitors and Clock face choi
 ## Dormancy and preview maintenance
 
 Quick Start is excluded from background Settings hydration. Closed onboarding has no timer, worker, provider, QML
-root, audio consumer or preview cache. Static PNGs decode only on the visited page; artwork rescales only on geometry
+root, audio consumer or preview cache; Arrange's size meter and its private QML engine exist only while an Arrange page
+does. Static PNGs decode only on the visited page; artwork rescales only on geometry
 or DPR changes using the same helper as About. Arrange never starts a screensaver runtime or data provider.
 
 `python tools/onboarding_preview_foundry.py` authors the bundled `images/onboarding` PNGs. It is never imported or
@@ -147,6 +165,9 @@ Implementation and automated coverage are complete; one operator pass on the rea
 - one Steam/Gmail/Weather/Reddit/FEEDS setup path, including the D1 message when started by Windows as the screensaver;
 - transition and Visualizer mode previews (sharp at your DPR; the transition list does not scroll on hover);
 - saver right-click → Images → Save Image (first save adds Pictures/SRPSS Collections to sources);
+- Arrange geometry: after a full settings delete and the wizard, the boxes match the saver's cards on each display
+  and DPR (sizes, Visualizer docked to Media, stacked cards apart); move one, Apply, and every widget lands where it
+  was drawn;
 - Arrange: free-place and scale a never-moved widget (it keeps its real size on the saver); move, scale and
   reassign the display of an already-customised widget; tick and untick Free placement; load a layout slot (Apply and
   Cancel); save to a slot, then load it on the saver with its number key;

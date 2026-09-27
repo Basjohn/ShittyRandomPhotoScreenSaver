@@ -12,6 +12,14 @@ from rendering.visualizer_media_adjacency import resolve_visualizer_media_origin
 from ui.onboarding.arrange import _ArrangeCanvas
 from ui.onboarding.arrange_model import ArrangeDisplay, ArrangeModel
 
+pytestmark = pytest.mark.usefixtures("qt_app")
+
+
+def _weather_family_only() -> dict:
+    """TEST INPUT: every family explicit; an absent one would inherit its default."""
+
+    return {family: family == "weather" for family in DEFAULT_SETTINGS["widgets"]["family_activation"]}
+
 
 def _displays():
     return (ArrangeDisplay("screen:a", ("screen:a",), QRect(0, 0, 1000, 700), "1"),
@@ -19,7 +27,7 @@ def _displays():
 
 
 def _weather_only() -> dict:
-    return {"family_activation": {"weather": True},
+    return {"family_activation": _weather_family_only(),
             "weather": {"enabled": True, "position": "Top Right", "monitor": "1", "margin": 24}}
 
 
