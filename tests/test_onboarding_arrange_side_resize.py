@@ -1,16 +1,28 @@
 """Settings Arrange width-only / height-only resize: admission and shared runtime math.
 
-Draft-only (no QML/runtime). Settings cannot measure live content, so side
-handles are admitted only when every input Runtime Edit would use is persisted.
+Draft-only (no runtime). Settings measures a family's preferred size, not a
+live content box, so side handles are admitted only when every input Runtime
+Edit would use is persisted.
 """
 from __future__ import annotations
 
 from copy import deepcopy
 
+import pytest
+
 from PySide6.QtCore import QPoint, QRect
 
+from core.settings.default_settings import DEFAULT_SETTINGS
 from rendering.widget_descriptors import get_widget_runtime_descriptor
 from ui.onboarding.arrange_model import ArrangeDisplay, ArrangeModel
+
+pytestmark = pytest.mark.usefixtures("qt_app")
+
+
+def _weather_family_only() -> dict:
+    """TEST INPUT: every family explicit; an absent one would inherit its default."""
+
+    return {family: family == "weather" for family in DEFAULT_SETTINGS["widgets"]["family_activation"]}
 
 
 def _display() -> ArrangeDisplay:
@@ -25,7 +37,7 @@ def _weather(**payload_edits) -> dict:
     """A weather entry saved by Runtime Edit: explicit size with a logical box."""
 
     seed = ArrangeModel({
-        "family_activation": {"weather": True},
+        "family_activation": _weather_family_only(),
         "weather": {"enabled": True, "position": "Top Right", "monitor": "1", "margin": 24},
     }, (_display(),))
     seed.move(seed.session.items()[0].source_key, QRect(300, 60, 520, 310))
@@ -40,7 +52,7 @@ def _weather(**payload_edits) -> dict:
 
 def test_content_sized_placement_has_no_side_handles_and_says_why() -> None:
     model = ArrangeModel({
-        "family_activation": {"weather": True},
+        "family_activation": _weather_family_only(),
         "weather": {"enabled": True, "position": "Top Right", "monitor": "1", "margin": 24},
     }, (_display(),))
     key = model.session.items()[0].source_key

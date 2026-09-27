@@ -99,7 +99,7 @@ without the safe path below.
 - **Content-sized CUSTOM placement.** The current v2 entry's existing `size_payload` may carry
   `_size_from_content: true` and `_placement_anchor` alongside `_custom_resize_scale`. Settings Arrange uses these
   to retain the actual runtime content size while specifying an exact anchored position. Builds without this
-  interpretation read the same entry as an explicit rectangle at the stored estimate; downgrade can therefore
+  interpretation read the same entry as an explicit rectangle at the stored size; downgrade can therefore
   change apparent widget size. There is no second schema or duplicate placement flag. Runtime Edit preserves
   these tokens for move-only Save and removes content sizing for measured resize/extent/child edits.
 
