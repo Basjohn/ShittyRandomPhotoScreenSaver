@@ -204,7 +204,7 @@ Performance rules:
 Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Slide Perspective Push, Ink Bloom and Melt Drip are implemented through the canonical Quick path. They are no longer dormant implementation ideas. Tendril Reveal was rejected and retired completely; it is not dormant future work. The remaining expansion capabilities start deactivated; operator visual quality and representative heavy-load/mixed-display acceptance remain open.
 
 - Current appearance, controls and resource contracts: `Docs/Reference/Transitions.md`.
-- Remaining actionable acceptance: `Current_Plan.md` and `Docs/Future_Work/Transition_Expansion.md`.
+- Remaining physical acceptance: the end of `Docs/Reference/Transitions.md`.
 - Do not reimplement these effects from old backlog proposals or broaden this activation to the Visualizer ideas below.
 
 ---

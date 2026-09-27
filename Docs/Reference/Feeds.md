@@ -1,6 +1,6 @@
 # Feeds | Durable architecture contract
 
-This is the current architectural contract for the shared Feed foundation. Product/runtime surfaces not yet implemented remain in `Docs/Future_Work/Feeds.md` and must not be inferred as already shipped.
+This is the current architectural contract for the shared Feed foundation. Physical acceptance still open is listed at the end of this file.
 
 ## Identity and authority
 
@@ -102,6 +102,8 @@ The Feeds cache is explicit under the canonical application cache root (`cache/f
 
 Technical health describes reachability and parser viability only; SRPSS does not score political slant, editorial quality or story importance. Third-party RSS recreation services, API-key sources and page scrapers are outside the durable baseline. CBS publishes only 60×60 item thumbnails and NPR only full-size originals above the 2 MB artwork bound (rejected at the Content-Length header, before any body is read), so both publishers' stories are text-only; SRPSS never rewrites a publisher's image URLs to get another size. `tools/feed_probe.py --catalog [--category X]` probes the shipped endpoints through the production seam; a failing publisher is replaced in the catalog under a new ID, or its URL is updated under the same ID when the publisher moved it.
 
+Publisher choice rules: no API keys, sign-in, third-party RSS reconstruction, scraping or browser automation; at least twelve independent publishers per category; technical health only, never editorial scoring. A publisher that dies is replaced in `core/feeds/news.py` (same ID when the publisher moved its feed, a new ID otherwise), never by changing the card's identity.
+
 ## Runtime ownership
 
 The runtime uses one `_FeedFamilyOwner` per active runtime generation (or helper-manager fallback in isolated tests). Retained cards hold lightweight leases. The whole family refreshes on one cadence, `widgets.feeds.refresh_minutes` (5 to 1440, default 15), rather than a period per card. The owner keeps one earliest-due deadline across active sources; when it fires, every active source due within a quarter of its interval is refreshed with it, so sources whose timing drifted apart (a new card, a slow endpoint, a cache-first start) rejoin one burst of conditional fetches per interval instead of each waking the family. A source in persisted failure backoff is never taken early. Fetches run on the shared IO lane at LOW priority. The owner deduplicates CUSTOM acquisition by endpoint fingerprint, so the same feed used on multiple displays or future CUSTOM slots shares last-good state and network cadence while each card keeps independent presentation settings.
@@ -115,3 +117,46 @@ Each source state also has a job-scoped cancellation event. When its last **acti
 Worker callbacks are tagged/fenced to the runtime generation and presentation consumers are weakly attached. Presentation retirement stops its lease and detaches the callback; the runtime-service manager remains final lifetime authority. QML owns no timer, network operation or remote image source.
 
 The runtime admits all four CUSTOM slots with event-driven optional local artwork. Source-specific in-flight cancellation/pruning is part of the shared family owner: the last active lease cancels that endpoint without disturbing unrelated active endpoints, identical endpoints share one source, and artwork eviction protection covers every published source (`tests/test_feed_runtime.py`, `tests/test_feed_artwork_multisource.py`, `tests/test_feed_custom_slots.py`). NEWS cards are the same leases, one per publisher (`tests/test_feed_news.py`).
+
+## Invariants
+
+These rules apply to every FEEDS change:
+
+- Preserve endpoint-isolated, non-expiring last-good state. Transport/parser/empty-result/provider failure must not erase an accepted snapshot.
+- Preserve strict CUSTOM endpoint identity. Reconfiguring a slot from endpoint A to endpoint B may never display A while B warms or fails.
+- Feed validity remains image-independent. Artwork is optional and locally admitted; no remote QML image URLs and no article-page scraping merely to decorate cards.
+- No per-widget poller, QML timer, second downloader, second Edit owner or Settings I/O on refresh/resize/hover/render cadence.
+- Same-endpoint active consumers share source/cache/due work where privacy/cache identity permits it. Retiring one lease must recompute cadence rather than leave a permanently faster source.
+- Identical normalized/presentation revisions do not republish retained models.
+- External actions stay capability-specific. HTTP/S is the only currently admitted FEEDS foreground action; magnet and managed `.torrent` actions remain separate future capabilities.
+- Feed URLs may contain private query tokens. Diagnostics/logs redact query and fragment data.
+- Cache maintenance deletes cache/artwork only, never CUSTOM names/URLs or credential/configuration state.
+
+Before multiplying sources or identities, re-check **durability, content adaptability and performance neutrality**. A red pillar blocks expansion.
+
+## Formats not built (with reopen conditions)
+
+Implemented (see `Docs/Reference/Feeds.md`): RSS, Atom, JSON Feed 1.x, JF2 and IndieWeb h-feed. Evaluated on 2026-09-24 and deliberately not built, each with the condition that would reopen it:
+
+- ActivityStreams 2.0 / ActivityPub outboxes: Mastodon, Lemmy, PeerTube and Pixelfed all publish RSS that discovery already finds; outboxes need paging and often signed fetches. Reopen if a fediverse platform drops RSS.
+- AT Protocol (Bluesky): profiles publish RSS. Reopen if that stops.
+- Nostr: not HTTP; out of scope for a bounded HTTP feed source.
+- OPML: a list of feeds, not a feed. A possible later "import subscriptions" convenience, not a format.
+- WebSub: push notification, not a format; the pull cadence does not need it.
+- Microformats1 hAtom: see the Reference note on why it is not read.
+
+## Physical acceptance (open)
+
+- two or more Custom slots live on the saver at once (different endpoints, then the same endpoint in two slots);
+  Settings round-trip of every slot;
+- two or three NEWS cards (one Anime) with images on, List and Grid: stories interleave by time with the publisher on
+  every row; the subtitle lists the publishers; TEST SOURCES reports failures only; unticking a publisher removes its
+  stories on the next runtime; an offline restart keeps last-good stories;
+- the Feeds page reads News then Custom with every bucket closed; opening a sibling closes only that sibling; the one
+  Refresh row applies to every card;
+- magnets: in MC a magnet row opens the torrent client; on the saver (after rebuilding the helper) the client opens
+  after the saver exits;
+- wallpaper feeds: the session pass logs `[RSS_COORD] Pass:` then `+1 WxH` lines only at or above the displays' size;
+  a stale pool retires a third after replacements land; nothing under the displays' size is shown;
+- heavy transition + active Visualizer + FEEDS refresh: no meaningful regression to freshness, Settings entry or
+  teardown against the accepted baseline.

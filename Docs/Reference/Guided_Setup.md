@@ -1,6 +1,7 @@
 # Guided Setup and Quick Start
 
-Guided Setup is a lazy, Settings-owned dialog. With no folders or wallpaper feeds, Settings makes one deferred
+Guided Setup is a lazy panel shown inside the Settings window (it replaces the sidebar and tabs while it runs, so it
+shares Settings' theme and backdrop). With no folders or wallpaper feeds, Settings makes one deferred
 decision after its shell is shown: open Guided Setup, or show the existing No Image Sources popup when
 `sources.guided_setup_silenced` is true. Sources present means no automatic prompt. The Settings close guard still
 requires an image source. QUICK START always allows a manual rerun, regardless of Silence; there is no completion flag.
@@ -8,12 +9,17 @@ requires an image source. QUICK START always allows a manual rerun, regardless o
 ## Owners and choices
 
 `ui/onboarding/wizard.py` owns page navigation. Pages are built on first visit and edit the ordinary Settings keys
-through `ui/onboarding/draft.py:SettingsDraft`, never the store itself: saving is explicit. Finish commits the draft;
-Skip (or closing Settings) asks Keep Changes / Discard Changes / Stay In Setup when anything is pending; a discard also restores the live theme the
-Theme page previewed. Explicit save buttons inside pages (Save to Slot, account Save & Test) write straight through.
+through `ui/onboarding/draft.py:SettingsDraft`, never the store itself: saving is explicit. Finish commits the draft
+(and any unapplied Arrange edits). Skip sits in the header on every page (there is no separate Close); with anything
+unsaved, Skip or closing Settings asks Keep Changes / Discard Changes / Stay In Setup, and dismissing that prompt
+means Stay. A discard also restores the live theme the Theme page previewed. Explicit save buttons inside pages
+(Save to Slot, account Save & Test, Import Settings) write straight through.
 `core/sources/readiness.py` is the shared source-readiness rule; `sources/rss/curated.py` is the one Just Make It Work
-operation used by Sources, the close popup and Guided Setup. Skip sits in the Guided Setup header (there is no
-separate Close); it leaves at any step, offers an unapplied Arrange draft first and changes no other settings.
+operation used by Sources, the close popup and Guided Setup.
+
+Copy follows one casing rule (`ui/onboarding/common.py:title_case`): Title Case with short joining words and
+prepositions lowercase, short tags in ALL CAPS, user data (paths, URLs, addresses) never re-cased. The panel paints a
+20% veil inside its border (black behind light text, white behind dark) so Glass stays readable on bright desktops.
 
 - Welcome offers **Import Settings?** (`ui/settings_import.py`, shared with Settings → About): choose ALL SETTINGS or
   Display, Widget, Transition, Theme Choice, Custom Geometry Including Layouts and Misc. A partial import merges only
@@ -35,7 +41,8 @@ Interaction writes `input.interaction_mode`; the practice card has no network or
 Widget families and dependency admission come from the canonical family catalog and capability normalizer.
 Member controls write their original settings sections, including Media-owned volume/mute controls. Setup sections
 exist only for selected dependencies. Weather lookups begin only after typing, subreddit validation is local, and
-FEEDS News selection preserves existing publishers. Custom feed authoring stays in full Settings.
+FEEDS News selection preserves existing publishers. FEEDS Custom 1–4 card authoring stays in full Settings (custom
+wallpaper feed addresses are added on the Sources page).
 
 Visualizer mode choices use the mode registry and retain at least one mode. Sphere is offered only if already
 admitted. Transition choices edit activation and pool through the existing normalizer, preserving Random behavior.
@@ -47,8 +54,11 @@ Advanced widget, mode and transition controls remain in their full Settings page
 browser actions are admitted only on the interactive Default desktop; unknown/noninteractive desktop is denied.
 The secure URL handoff remains the browser authority. Accounts are optional and missing setup never blocks Finish.
 
-`core/account_setup/controllers.py` is shared by Guided Setup and the full account pages. Steam validates before
-encrypted replacement; Gmail tests IMAP before the GUI thread commits through the existing backend/storage owner.
+`core/account_setup/controllers.py` is shared by Guided Setup and the full account pages. Guided Setup's Steam section
+reuses the Settings Steam connection flow and popups (`ui/tabs/widgets_tab_steam.py`) on a small host object, so a
+saved connection shows as Connected; closed Steam/Gmail buckets read "· CONNECTED" from non-secret storage status.
+Steam validates before encrypted replacement; Gmail tests IMAP before the GUI thread commits through the existing
+backend/storage owner. The Gmail bucket also offers the new-mail sound (play, file, Test, volume).
 No account secret is a wizard setting, preview fixture or log field. Settings summaries inspect only non-secret
 saved-connection metadata. Account workers start only on explicit actions and completion is fenced by page lifetime.
 Leaving the conditional Setup page clears password inputs, closes its OpenID callback and retires its geocoder and
@@ -58,8 +68,9 @@ any locally owned helper manager.
 
 `ui/onboarding/arrange_model.py` stages a `CustomLayoutSession`; `rendering/custom_layout_commit.py` is the shared
 commit owner for Settings Arrange and Runtime Edit. The canvas is a projection of selected screens in Qt logical
-coordinates. Merely opening, selecting or dragging does not persist. Apply/Next commits; Discard or closing the
-wizard drops the draft. Quick Start reuses the same editor, created only when its bucket opens.
+coordinates. Merely opening, selecting or dragging does not persist. In Guided Setup, Apply/Next applies the
+arrangement to the wizard draft, which Finish saves; Discard drops it. Quick Start reuses the same editor (created only
+when its bucket opens), where Apply saves directly.
 
 Settings cannot measure live QML content. New free placements therefore persist an anchor and uniform scale in the
 existing CUSTOM payload, with `_size_from_content: true` and `_placement_anchor`. Their displayed bounds are estimates;
@@ -106,5 +117,33 @@ run by onboarding.
   removes generated files the new set no longer contains.
 
 The build asset check requires the preview directory and operator-provided `images/SRPSSWitch.png`. See
-`Docs/Future_Work/Guided_Setup.md` for remaining acceptance and `Docs/Architecture/Persisted_Input_Compatibility.md`
-for content-sized CUSTOM downgrade behavior.
+`Docs/Architecture/Persisted_Input_Compatibility.md` for content-sized CUSTOM downgrade behavior. The mechanisms behind
+the 2026-09-27 review's defects are recorded in `Docs/Historical_Bugs/R-101_Guided_Setup_Settings_Review_2026-09-27.md`.
+
+## Physical acceptance (open)
+
+Implementation and automated coverage are complete; one operator pass on the real saver remains:
+
+- fresh/no-source automatic Guided Setup; Witch artwork and exact welcome copy;
+- source requirement;
+- Just Make It Work → exact lazy prompt → both choices;
+- Skip from the header with unsaved changes: Keep Changes, Discard Changes (theme reverts), Stay In Setup;
+- nothing is saved before Finish (close Settings mid-way and reopen);
+- Welcome → Import Settings? by category (an import finishes the wizard);
+- Sources buckets, a custom feed address, clicking displays in the diagram, Interaction greyed on MC;
+- Widget Setup: Clocks face/timezones, Steam shows a saved connection, Gmail notification sound + Test;
+- Silence → old no-source popup;
+- live Theme switch; monitor selection; Interaction demo;
+- widget previews and selections;
+- one Steam/Gmail/Weather/Reddit/FEEDS setup path, including the D1 message when started by Windows as the screensaver;
+- transition and Visualizer mode previews (sharp at your DPR; the transition list does not scroll on hover);
+- saver right-click → Images → Save Image (first save adds Pictures/SRPSS Collections to sources);
+- Arrange: free-place and scale a never-moved widget (it keeps its real size on the saver); move, scale and
+  reassign the display of an already-customised widget; tick and untick Free placement; load a layout slot (Apply and
+  Cancel); save to a slot, then load it on the saver with its number key;
+- Runtime Edit sees Quick Start changes, and Quick Start sees a later Runtime Edit change;
+- child edits survive parent manipulation;
+- final runtime start;
+- Settings → QUICK START lazy reopen;
+- no network or provider work while Quick Start and Arrange are closed.
+
