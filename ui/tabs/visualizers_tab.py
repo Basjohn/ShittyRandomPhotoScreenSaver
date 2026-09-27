@@ -492,10 +492,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         if scroll is None:
             return
 
-        def _apply() -> None:
-            scroll.verticalScrollBar().setValue(0)
-
-        self._schedule_owned_single_shot(0, _apply)
+        # 0 survives the later layout pass: no deferred second reset needed.
+        scroll.verticalScrollBar().setValue(0)
 
     def get_view_state(self) -> Dict[str, Any]:
         """Persist the selected Visualizer builder, never a pixel scroll offset."""
@@ -737,10 +735,10 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     # Persistence
     # ------------------------------------------------------------------
 
-    def _schedule_owned_single_shot(self, delay_ms: int, callback) -> None:
+    def _schedule_owned_single_shot(self, delay_ms: int, callback):
         callback._srpss_timer_owner = self
         callback._srpss_runtime_generation = self._runtime_generation
-        ThreadManager.single_shot(delay_ms, callback)
+        return ThreadManager.single_shot(delay_ms, callback)
 
     def _save_settings(self) -> None:
         if self._loading or self._writing_settings:
@@ -753,9 +751,17 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         def _save() -> None:
             self._save_settings_now(token)
 
-        self._schedule_owned_single_shot(self._SAVE_COALESCE_MS, _save)
+        # One live coalescing timer: replace (cancel) the previous one.
+        previous = getattr(self, "_save_coalesce_handle", None)
+        if previous is not None:
+            previous.cancel()
+        self._save_coalesce_handle = self._schedule_owned_single_shot(self._SAVE_COALESCE_MS, _save)
 
     def _flush_pending_visualizer_save(self) -> None:
+        handle = getattr(self, "_save_coalesce_handle", None)
+        if handle is not None:
+            handle.cancel()
+            self._save_coalesce_handle = None
         if not self._save_coalesce_pending or self._loading:
             return
         self._save_coalesce_token += 1

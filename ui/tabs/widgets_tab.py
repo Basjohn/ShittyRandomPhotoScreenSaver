@@ -1571,9 +1571,11 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
     def _save_settings(self) -> None:
         """Debounced save — coalesces rapid slider/checkbox changes.
 
-        Each call resets a 200ms single-shot timer so only ONE actual
-        write occurs after user input settles.  This reduces JSON writes
-        from 10+/sec during slider drags to 1-2.
+        Each call replaces the one pending 200 ms single-shot (the previous
+        one is cancelled), so only ONE write occurs after input settles; a
+        slider drag keeps one live timer, not one per tick.  Settings' close
+        path calls :meth:`flush_pending_changes`, so a change made just
+        before closing is never lost.
         """
         if getattr(self, "_loading", False):
             return
@@ -1585,7 +1587,19 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         def _save() -> None:
             self._save_settings_now(token)
 
-        self._schedule_owned_single_shot(self._SAVE_COALESCE_MS, _save)
+        previous = getattr(self, "_save_coalesce_handle", None)
+        if previous is not None:
+            previous.cancel()
+        self._save_coalesce_handle = self._schedule_owned_single_shot(self._SAVE_COALESCE_MS, _save)
+
+    def flush_pending_changes(self) -> None:
+        """Commit a coalesced edit now (Settings close/durability boundary)."""
+        handle = getattr(self, "_save_coalesce_handle", None)
+        if handle is not None:
+            handle.cancel()
+            self._save_coalesce_handle = None
+        if getattr(self, "_save_coalesce_pending", False) and not getattr(self, "_loading", False):
+            self._save_settings_now()
 
     def _save_settings_now(self, token: int | None = None) -> None:
         """Perform the actual settings save (called by coalesce timer)."""
@@ -1772,11 +1786,11 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         return config
 
 
-    def _schedule_owned_single_shot(self, delay_ms: int, callback) -> None:
+    def _schedule_owned_single_shot(self, delay_ms: int, callback):
         callback._srpss_timer_owner = self
         callback._srpss_runtime_generation = getattr(
             self,
             "_runtime_generation",
             None,
         )
-        ThreadManager.single_shot(delay_ms, callback)
+        return ThreadManager.single_shot(delay_ms, callback)

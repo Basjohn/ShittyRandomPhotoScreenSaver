@@ -445,13 +445,40 @@ class VisualizerSettingsContextMixin:
         if isinstance(positions, dict) and mode in positions:
             try:
                 pos = int(positions[mode])
-
-                def _restore() -> None:
-                    vbar.setValue(pos)
-
-                self._schedule_owned_single_shot(0, _restore)
+                self._restore_scroll_when_reachable(vbar, pos)
             except Exception:
                 pass
+
+    def _restore_scroll_when_reachable(self, vbar, pos: int) -> None:
+        """Event-driven restore: apply now, or on the first range that reaches ``pos``.
+
+        A freshly built mode body is laid out after this call, so the range may
+        still be too small; ``rangeChanged`` reports the real range without a
+        timer.  Only the latest request stays connected.
+        """
+        previous = getattr(self, "_pending_scroll_restore", None)
+        if previous is not None:
+            try:
+                previous[0].rangeChanged.disconnect(previous[1])
+            except (RuntimeError, TypeError):
+                pass
+            self._pending_scroll_restore = None
+        if vbar.maximum() >= pos:
+            vbar.setValue(pos)
+            return
+
+        def _on_range(_minimum: int, maximum: int) -> None:
+            if maximum < pos:
+                return
+            try:
+                vbar.rangeChanged.disconnect(_on_range)
+            except (RuntimeError, TypeError):
+                pass
+            self._pending_scroll_restore = None
+            vbar.setValue(pos)
+
+        vbar.rangeChanged.connect(_on_range)
+        self._pending_scroll_restore = (vbar, _on_range)
 
     def _snapshot_custom_visualizer_mode(self, mode_key: str, spotify_vis_config: dict) -> None:
         live_config = self._build_current_spotify_visualizer_config(spotify_vis_config)
