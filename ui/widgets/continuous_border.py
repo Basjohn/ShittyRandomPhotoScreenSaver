@@ -112,3 +112,29 @@ class OutlinedStackedWidget(QStackedWidget):
     def paintEvent(self, event) -> None:  # type: ignore[override]
         super().paintEvent(event)
         paint_content_frame(self)
+
+
+class PopupSurface(QWidget):
+    """The shared popup body: Settings panel semantics, seam-free.
+
+    Fill is the theme's ``popup.container.surface`` (popups float over the
+    desktop, so they keep an opaque-enough body) and the outline is the same
+    ``panel.border`` stroke the Settings content area paints.
+    """
+
+    RADIUS = 10.0
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+    def paintEvent(self, _event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        inset = CONTENT_BORDER_WIDTH / 2.0
+        rect = QRectF(self.rect()).adjusted(inset, inset, -inset, -inset)
+        path = QPainterPath()
+        path.addRoundedRect(rect, self.RADIUS - inset, self.RADIUS - inset)
+        painter.fillPath(path, theme_color("popup.container.surface"))
+        stroke_rounded_border(self, theme_color("panel.border"), CONTENT_BORDER_WIDTH, self.RADIUS, painter)
+        painter.end()

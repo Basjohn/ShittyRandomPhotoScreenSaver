@@ -191,7 +191,9 @@ def test_tray_menu_structure_is_narrow_and_semantic() -> None:
 def test_color_picker_wrapper_owns_legacy_subsettings_chrome_semantically() -> None:
     text = _source("ui/styled_popup.py")
     assert "def _build_color_picker_wrapper_stylesheet" in text
-    assert "self.setStyleSheet(_build_color_picker_wrapper_stylesheet(picker_theme))" in text
+    # Semantic Settings-root styles (never legacy dark.qss), then the wrapper chrome.
+    assert "_build_settings_root_stylesheet(picker_theme)" in text
+    assert "+ _build_color_picker_wrapper_stylesheet(picker_theme)" in text
     assert '"window.titlebar.surface"' in text
     assert '"color_picker.window_text"' in text
     assert '"chrome.outer_border"' in text
