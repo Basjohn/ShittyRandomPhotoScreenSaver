@@ -30,10 +30,8 @@ def _load_bubble_module():
     package.__path__ = [str(ROOT / "widgets" / "spotify_visualizer")]
     sys.modules["widgets.spotify_visualizer"] = package
 
-    registry = types.ModuleType("core.settings.visualizer_mode_registry")
-    registry.VisualizerClipPolicy = type("VisualizerClipPolicy", (), {})
-    registry.VisualizerShellPolicy = type("VisualizerShellPolicy", (), {})
-    sys.modules["core.settings.visualizer_mode_registry"] = registry
+    # The real mode registry is presentation-neutral (standard library only), so
+    # it is imported as is; a hand-written stub drifted from it and broke loading.
 
     _load_module(
         "widgets.spotify_visualizer.render_state",
@@ -56,8 +54,8 @@ class BubbleViewportScalingTests(unittest.TestCase):
     # suites) get the stub and fail with "cannot import ... (unknown location)".
     _STUBBED_MODULES = (
         "widgets.spotify_visualizer",
-        "core.settings.visualizer_mode_registry",
         "widgets.spotify_visualizer.render_state",
+        "widgets.spotify_visualizer.presentation_orientation",
         "widgets.spotify_visualizer.signal_contract",
         "widgets.spotify_visualizer.bubble_simulation",
     )
@@ -67,7 +65,10 @@ class BubbleViewportScalingTests(unittest.TestCase):
         cls._saved_modules = {
             name: sys.modules.get(name) for name in cls._STUBBED_MODULES
         }
+        qt_before = {name for name in sys.modules if name.startswith("PySide6")}
         cls.bubble = _load_bubble_module()
+        # The point of the package stub: Bubble math loads without pulling in Qt.
+        assert {name for name in sys.modules if name.startswith("PySide6")} == qt_before
 
     @classmethod
     def tearDownClass(cls):

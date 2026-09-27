@@ -221,8 +221,8 @@ warning, error and success popups show a glyph beside the title; a plain questio
 Bucket headers (`BucketToggle`, every collapsible bucket in Settings and the wizard) lay out their label exactly as
 Qt's tool-button label does (arrow box `iconSize.width + 4` by the content height, title after it) except that the
 title sits 1 px (normal) or 2 px (large) further from the arrow, because the windows11 down arrow fills its box. The
-size hint grows by the same amount, so a title never clips at any scale. The header padding is defined once in
-`ui/widgets/continuous_border.py` and read by the theme QSS.
+size hint grows by the same amount, so a title never clips at any scale. The header padding is renderer geometry defined once in
+`ui/settings_theme.py` (its QSS and `BucketToggle` both read it; the renderer never imports widgets).
 
 ## `dark.qss` status
 

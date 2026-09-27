@@ -88,7 +88,9 @@ def test_random_direction_is_resolved_once_into_the_batch_value() -> None:
     ("choice", "pool", "activation", "hw_accel"),
     [
         (None, {"Slide": True}, {}, False),
-        ("Slide", {"Wipe": True}, {}, False),
+        # TEST INPUT, NOT A DEFAULT GOLDEN: out of the pool explicitly (an absent key
+        # inherits the canonical pool default, which the operator may change).
+        ("Slide", {"Wipe": True, "Slide": False}, {}, False),
         ("Slide", {"Slide": True}, {"Slide": False}, False),
         ("Ripple", {"Ripple": True}, {}, False),
     ],

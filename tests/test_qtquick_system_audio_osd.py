@@ -74,10 +74,12 @@ def _model(lease=None, **config):
     return model
 
 
-def test_osd_default_is_dormant_and_uses_one_shared_source_spec():
-    assert require_canonical_default("widgets.system_audio_osd.enabled") is False
+def test_osd_is_opt_in_per_settings_and_uses_one_shared_source_spec():
+    # The shipped default is operator policy, not a golden; only the gating is pinned.
     adapter = SystemAudioOSDFamilyAdapter()
-    assert adapter.enabled_instance_ids({}) == ()
+    # No saved section: the canonical default decides (derived, never pinned).
+    shipped_on = bool(require_canonical_default("widgets.system_audio_osd.enabled"))
+    assert adapter.enabled_instance_ids({}) == (("system_audio_osd",) if shipped_on else ())
     assert adapter.enabled_instance_ids({"system_audio_osd": {"enabled": False}}) == ()
     assert adapter.enabled_instance_ids({"system_audio_osd": {"enabled": True}}) == ("system_audio_osd",)
     assert get_widget_family_descriptor("system_audio_osd").required_family_ids == ()
