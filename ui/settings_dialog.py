@@ -569,7 +569,7 @@ class ResetDefaultsDialog(QWidget):
         card_layout.setSpacing(0)
 
         title_bar = CustomTitleBar(card)
-        title_bar.title_label.setText("Reset To Defaults")
+        title_bar.title_label.setText("Reset to Defaults")
         title_bar.minimize_btn.hide()
         title_bar.maximize_btn.hide()
         title_bar.close_clicked.connect(self.reject)
@@ -582,7 +582,7 @@ class ResetDefaultsDialog(QWidget):
 
         # Simple confirmation text shown after settings have already been
         # reverted to their canonical defaults.
-        message = QLabel("Settings reverted to defaults!")
+        message = QLabel("Settings Reverted to Defaults!")
         message.setWordWrap(True)
         message.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         body_layout.addWidget(message)
@@ -1823,7 +1823,7 @@ class SettingsDialog(QDialog):
             try:
                 notice = getattr(self, "reset_notice_label", None)
                 if notice is not None:
-                    notice.setText("Settings reverted to defaults!")
+                    notice.setText("Settings Reverted to Defaults!")
                     notice.setVisible(True)
 
                     def _hide_notice() -> None:

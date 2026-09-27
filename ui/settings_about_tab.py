@@ -352,7 +352,7 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
 
     # Reset / Import / Export buttons (bottom row)
     button_row = QHBoxLayout()
-    dialog.reset_defaults_btn = QPushButton("Reset To Defaults")
+    dialog.reset_defaults_btn = QPushButton("Reset to Defaults")
     dialog.reset_defaults_btn.setObjectName("resetDefaultsButton")
     dialog.reset_defaults_btn.setFixedHeight(24)
     dialog.reset_defaults_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
@@ -396,7 +396,7 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     button_row.addWidget(dialog.more_options_btn)
     layout.addLayout(button_row)
 
-    dialog.reset_notice_label = QLabel("Settings reverted to defaults!")
+    dialog.reset_notice_label = QLabel("Settings Reverted to Defaults!")
     dialog.reset_notice_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
     dialog.reset_notice_label.setStyleSheet(_about_notice_style())
     dialog.reset_notice_label.setVisible(False)

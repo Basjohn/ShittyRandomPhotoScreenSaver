@@ -171,7 +171,7 @@ class AccessibilityTab(QWidget):
     
     def _create_pixel_shift_group(self) -> QGroupBox:
         """Create the Widget Pixel Shift settings group."""
-        group = QGroupBox("Widget Pixel Shift (Burn-in Prevention)")
+        group = QGroupBox("Widget Pixel Shift (Burn-In Prevention)")
         style_group_box(group)
         layout = QVBoxLayout(group)
         layout.setSpacing(12)
@@ -187,7 +187,7 @@ class AccessibilityTab(QWidget):
         layout.addWidget(self.pixel_shift_enabled)
         
         # Shifts per minute slider row
-        shift_row = self._aligned_row(layout, "Shifts Per Minute:")
+        shift_row = self._aligned_row(layout, "Shifts per Minute:")
 
         self.pixel_shift_rate_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.pixel_shift_rate_slider.setRange(1, 5)

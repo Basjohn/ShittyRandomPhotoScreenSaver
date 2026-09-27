@@ -94,7 +94,7 @@ def get_cache_family_descriptors(
         ),
         CacheFamilyDescriptor(
             "steam",
-            "Steam Data And Artwork",
+            "Steam Data and Artwork",
             "Account-scoped API responses, followed-game news/name metadata, game art "
             "and inline article images. Credentials and pinned friends are retained.",
             (CacheTarget(app_root / "steam" / "cache", recursive=True),),

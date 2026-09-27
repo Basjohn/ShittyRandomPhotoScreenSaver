@@ -527,7 +527,7 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
         notice.setText(
             "<span style='color: rgba(255, 176, 82, 235);'>"
             "<a href='disable-custom' style='color: rgba(255, 176, 82, 255); text-decoration: underline;'>"
-            "Disable Custom</a> To Adjust!</span>"
+            "Disable Custom</a> to Adjust!</span>"
         )
         notice.linkActivated.connect(lambda _link, sid=section_id: self._on_custom_resize_lock_link_activated(sid))
         insert_index = parent_layout.indexOf(row_widget)
@@ -1216,12 +1216,10 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             except Exception:
                 pass
 
-        # Semantic section restoration always starts at the section top.
+        # Semantic section restoration always starts at the section top. 0
+        # survives the later layout pass, so no deferred second reset.
         if sa is not None:
-            def _restore() -> None:
-                sa.verticalScrollBar().setValue(0)
-
-            self._schedule_owned_single_shot(0, _restore)
+            sa.verticalScrollBar().setValue(0)
 
     def _perf_log(self, label: str, start_time: float) -> None:
         if not is_perf_metrics_enabled():

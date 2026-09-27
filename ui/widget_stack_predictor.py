@@ -732,7 +732,7 @@ def predict_stacking_status(
     Returns:
         Tuple of (can_stack: bool, message: str, conflicting_widgets: List[WidgetType])
         - (True, "", []) if no conflict (widget alone at position)
-        - (True, "Will stack with X!", [X]) if stacking is possible
+        - (True, "Will Stack with X!", [X]) if stacking is possible
         - (False, "Conflicts with X!", [X]) if cannot stack
     """
     target_pos_key = target_position.lower().replace(" ", "_")
@@ -834,7 +834,7 @@ def predict_stacking_status(
     conflict_names = [_get_widget_display_name(est.widget_type) for est in conflicting]
     conflict_str = ", ".join(conflict_names)
     if plan.lane_fit.get(target_lane, True):
-        return (True, f"Will stack with {conflict_str}!", conflicting_types)
+        return (True, f"Will Stack with {conflict_str}!", conflicting_types)
     return (False, f"Conflicts with {conflict_str}!", conflicting_types)
 
 

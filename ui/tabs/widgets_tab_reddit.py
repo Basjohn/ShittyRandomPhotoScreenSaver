@@ -299,7 +299,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.reddit_show_background)
 
-    tab.reddit_show_separators = QCheckBox("Show Separator Lines Between Posts")
+    tab.reddit_show_separators = QCheckBox("Show Separator Lines between Posts")
     tab.reddit_show_separators.setProperty("circleIndicator", True)
     tab.reddit_show_separators.setChecked(tab._default_bool('reddit', 'show_separators'))
     tab.reddit_show_separators.stateChanged.connect(tab._save_settings)
@@ -368,7 +368,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_border_opacity_row.addWidget(tab.reddit_border_opacity_label)
 
     # Reddit 2
-    reddit2_label = QLabel("Reddit 2 inherits typography and appearance from Reddit 1.")
+    reddit2_label = QLabel("Reddit 2 Inherits Typography and Appearance from Reddit 1.")
     shared_styles.bind_shared_styles(
         reddit2_label,
         "TEXT_SECONDARY_COLOR_STYLE",

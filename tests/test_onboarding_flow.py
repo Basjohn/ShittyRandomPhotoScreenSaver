@@ -486,7 +486,7 @@ def test_widget_setup_gmail_bucket_offers_the_notification_sound(qapp, settings,
     page = module.SetupPage(settings)
     try:
         page.findChildren(QToolButton)[0].setChecked(True)
-        play = next(box for box in page.findChildren(QCheckBox) if box.text() == "Play Sound On New Mail")
+        play = next(box for box in page.findChildren(QCheckBox) if box.text() == "Play Sound on New Mail")
         play.setChecked(True)
         page.gmail_sound_volume.setValue(40)
         assert settings.get("widgets.gmail.play_sound_on_new_mail") is True

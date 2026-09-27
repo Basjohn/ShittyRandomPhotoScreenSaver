@@ -40,18 +40,38 @@ def _capitalise(segment: str) -> str:
     return segment
 
 
+# Short joining words stay lowercase inside Title Case, as established Settings
+# copy does ("Widget Glow on Hover", "Reset All Colours to Theme").
+_SMALL_WORDS = frozenset({
+    "a", "an", "the", "and", "but", "or", "nor", "for",
+    "as", "at", "by", "in", "of", "on", "to", "via", "per", "vs",
+    # Prepositions stay lowercase too ("Share Style with Main Clock").
+    "with", "from", "into", "onto", "over", "under", "about", "after", "before",
+    "between", "through", "without", "within", "than",
+})
+
+
 def title_case(text: str) -> str:
-    """SRPSS copy casing: capitalise every word, leaving data and units alone.
+    """SRPSS copy casing: Title Case, leaving data and units alone.
 
     Only a word's first letter changes, so acronyms (RSS, OSD) and mixed-case
-    names keep their inner capitals.  Hyphen and slash compounds capitalise
-    each part ("Right-Click", "Previous/Next").  Paths, URLs and e-mail
-    addresses pass through untouched.
+    names keep their inner capitals.  Short joining words stay lowercase except
+    at the start of a sentence.  Hyphen and slash compounds capitalise each
+    part ("Right-Click", "Previous/Next").  Paths, URLs and e-mail addresses
+    pass through untouched.
     """
+    sentence_start = [True]
+
     def word(match):
         token = match.group(0)
-        if token.lower().strip("().,;:!?") in _KEEP_CASE or _DATA_TOKEN.search(token):
+        starts = sentence_start[0]
+        sentence_start[0] = token.endswith((".", "!", "?", ":"))
+        bare = token.lower().strip("().,;:!?\"'")
+        if bare in _KEEP_CASE or _DATA_TOKEN.search(token):
             return token
+        ends = token.endswith((".", "!", "?", ":", ")", ",")) or match.end() >= len(str(text).rstrip())
+        if bare in _SMALL_WORDS and not starts and not ends and not token.startswith("("):
+            return token[0].lower() + token[1:] if token[:1].isupper() and token[1:].islower() else token
         return re.sub(r"[^/-]+", lambda part: _capitalise(part.group(0)), token)
     return re.sub(r"\S+", word, str(text))
 

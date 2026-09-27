@@ -56,7 +56,7 @@ class SteamConnectionController:
         storage = self._storage_status_reader()
         if storage.storage_available and storage.has_credentials:
             status = SteamConnectionStatus(
-                "Saved Steam identity and API key are available.", "connected", True, True,
+                "Saved Steam Identity and API Key Are Available.", "connected", True, True,
                 "Connected Successfully" if explicit else None, explicit,
             )
         elif pending_profile_identifier:

@@ -96,7 +96,7 @@ def build_system_stats_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
         ),
         defer_initial_visibility=True,
     )
-    metrics_controls.addWidget(QLabel("Choose which metrics appear on the card."))
+    metrics_controls.addWidget(QLabel("Choose Which Metrics Appear on the Card."))
     tab.system_stats_show_cpu = QCheckBox("CPU Load")
     tab.system_stats_show_memory = QCheckBox("Memory")
     tab.system_stats_show_uptime = QCheckBox("Uptime")

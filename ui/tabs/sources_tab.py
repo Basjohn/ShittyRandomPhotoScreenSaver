@@ -329,7 +329,7 @@ class SourcesTab(QWidget):
         rss_layout.addLayout(rss_buttons)
         
         # RSS save to disk option
-        self.rss_save_to_disk = QCheckBox("Save Feed Images To Disk")
+        self.rss_save_to_disk = QCheckBox("Save Feed Images to Disk")
         self.rss_save_to_disk.setProperty("circleIndicator", True)
         shared_styles.bind_shared_styles(
             self.rss_save_to_disk,

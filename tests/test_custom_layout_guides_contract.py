@@ -639,7 +639,7 @@ def test_custom_settings_lock_scopes_steam_cards_independently() -> None:
     assert '"abandonment_issues_artwork_size"' in descriptors
     assert 'restore_widget_family_to_authored_layout(widgets_cfg, widget_id)' in settings
     assert 'restore_all_custom_layouts_to_authored_layout(widgets_cfg)' not in settings
-    assert 'Disable Custom</a> To Adjust!' in settings
+    assert 'Disable Custom</a> to Adjust!' in settings
 
 
 def test_child_edit_selection_owns_transient_retirement_without_stale_row_cleanup() -> None:

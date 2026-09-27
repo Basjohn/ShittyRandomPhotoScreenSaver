@@ -361,9 +361,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         row.setSpacing(6)
         row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        self.rainbow_enabled = QCheckBox("Taste The Rainbow")
+        self.rainbow_enabled = QCheckBox("Taste the Rainbow")
         self.rainbow_enabled.setProperty("circleIndicator", True)
-        self.rainbow_enabled.setAccessibleName("Taste The Rainbow")
+        self.rainbow_enabled.setAccessibleName("Taste the Rainbow")
         self.rainbow_enabled.setToolTip(
             "Slowly shift the hue of visualiser colours through the spectrum. "
             "Saved independently per visualizer mode."

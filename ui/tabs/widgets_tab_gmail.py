@@ -1017,7 +1017,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_max_sender_words.setValue(tab._default_int('gmail', 'max_sender_words'))
     tab.gmail_max_sender_words.setAccelerated(True)
     tab.gmail_max_sender_words.valueChanged.connect(tab._save_settings)
-    text_limit_grid.addWidget(create_inline_label("Sender words"), 0, 0)
+    text_limit_grid.addWidget(create_inline_label("Sender Words"), 0, 0)
     text_limit_grid.addWidget(tab.gmail_max_sender_words, 0, 1)
 
     tab.gmail_max_subject_words = QSpinBox()
@@ -1026,7 +1026,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_max_subject_words.setValue(tab._default_int('gmail', 'max_subject_words'))
     tab.gmail_max_subject_words.setAccelerated(True)
     tab.gmail_max_subject_words.valueChanged.connect(tab._save_settings)
-    text_limit_grid.addWidget(create_inline_label("Subject words"), 0, 2)
+    text_limit_grid.addWidget(create_inline_label("Subject Words"), 0, 2)
     text_limit_grid.addWidget(tab.gmail_max_subject_words, 0, 3)
     text_limit_grid.setColumnStretch(4, 1)
     text_limit_row.addLayout(text_limit_grid)

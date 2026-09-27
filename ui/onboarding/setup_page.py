@@ -319,7 +319,7 @@ class SetupPage(Page):
         from PySide6.QtWidgets import QHBoxLayout, QSlider
         from ui.tabs import widgets_tab_gmail as gmail
         from ui.tabs.widgets_tab import NoWheelSlider
-        play = checkbox("Play Sound On New Mail")
+        play = checkbox("Play Sound on New Mail")
         play.setChecked(bool(self.settings.get("widgets.gmail.play_sound_on_new_mail")))
         play.toggled.connect(lambda checked: self.settings.set("widgets.gmail.play_sound_on_new_mail", checked))
         layout.addWidget(play)

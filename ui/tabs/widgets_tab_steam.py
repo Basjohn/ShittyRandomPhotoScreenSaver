@@ -92,11 +92,11 @@ _ACHIEVEMENT_SELECTION_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Custom App ID", "custom"),
 )
 _ACHIEVEMENT_FIELD_OPTIONS: tuple[tuple[str, str], ...] = (
-    ("total", "Show completion"),
-    ("playtime", "Show playtime"),
-    ("previous", "Show previous game"),
-    ("source", "Show source"),
-    ("selected", "Show selection"),
+    ("total", "Show Completion"),
+    ("playtime", "Show Playtime"),
+    ("previous", "Show Previous Game"),
+    ("source", "Show Source"),
+    ("selected", "Show Selection"),
 )
 _ACHIEVEMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
     ("Wide", "wide"),
@@ -116,14 +116,14 @@ _FRIEND_PULSE_VIEW_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Activity Rows", "rows"),
 )
 _ABANDONMENT_FIELD_OPTIONS: tuple[tuple[str, str, str], ...] = (
-    ("playtime", "Show total playtime", "Total owned-library playtime for the selected game."),
-    ("achievements", "Show achievements", "Unlocked and total achievements from a cached successful snapshot."),
-    ("last_unlock", "Show last unlock", "Time since the latest cached achievement unlock, or No Unlocks when proven."),
-    ("last_played", "Show last played date", "Exact UTC date from Steam's verified last-played timestamp."),
-    ("archive_class", "Show backlog class", "A non-judgmental engagement-depth label derived from playtime and cached achievements."),
-    ("queue", "Show shelf position", "Selection position within the current eligible backlog."),
-    ("source", "Show source", "Whether the displayed library snapshot came from cache or Steam."),
-    ("pinned", "Show selection mode", "Whether this game is pinned or selected by Smart Rotation."),
+    ("playtime", "Show Total Playtime", "Total owned-library playtime for the selected game."),
+    ("achievements", "Show Achievements", "Unlocked and total achievements from a cached successful snapshot."),
+    ("last_unlock", "Show Last Unlock", "Time since the latest cached achievement unlock, or No Unlocks when proven."),
+    ("last_played", "Show Last Played Date", "Exact UTC date from Steam's verified last-played timestamp."),
+    ("archive_class", "Show Backlog Class", "A non-judgmental engagement-depth label derived from playtime and cached achievements."),
+    ("queue", "Show Shelf Position", "Selection position within the current eligible backlog."),
+    ("source", "Show Source", "Whether the displayed library snapshot came from cache or Steam."),
+    ("pinned", "Show Selection Mode", "Whether this game is pinned or selected by Smart Rotation."),
 )
 
 
@@ -207,7 +207,7 @@ def _set_connection_status(tab: "WidgetsTab", message: str, *, state: str = "pen
     access = getattr(tab, "steam_access_status", None)
     if access is not None:
         ready = state == "connected"
-        access.setText("Steam account access is ready." if ready else "Please Connect Both For Access")
+        access.setText("Steam Account Access Is Ready." if ready else "Please Connect Both For Access")
         access.setStyleSheet(f"{STATUS_LABEL_STYLE} color: {'#72d696' if ready else '#efad5a'};")
 
 
@@ -1403,7 +1403,7 @@ def _build_card_group(
         preferred_playtime_row.addWidget(preferred_playtime)
         preferred_playtime_row.addStretch()
 
-        preferred_unlocks_row = _aligned_row(content_layout, "Prefer At Most:")
+        preferred_unlocks_row = _aligned_row(content_layout, "Prefer at Most:")
         preferred_unlocks = QSpinBox()
         preferred_unlocks.setRange(0, 100)
         preferred_unlocks.setSuffix(" cached unlocks")
@@ -1563,7 +1563,7 @@ def _build_card_group(
         accent_row.addStretch()
 
         guilt_row = _aligned_row(appearance_layout, "Guilt Desaturater:")
-        guilt = QCheckBox("Desaturate older artwork")
+        guilt = QCheckBox("Desaturate Older Artwork")
         guilt.setProperty("circleIndicator", True)
         guilt.setChecked(tab._default_bool(key, "guilt_desaturater"))
         guilt.setToolTip(
@@ -1698,7 +1698,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     refresh_row.addWidget(tab.steam_refresh_minutes)
     refresh_row.addStretch()
 
-    tab.steam_show_connection_info_icon = QCheckBox("Show stale connection info icon")
+    tab.steam_show_connection_info_icon = QCheckBox("Show Stale Connection Info Icon")
     tab.steam_show_connection_info_icon.setProperty("circleIndicator", True)
     tab.steam_show_connection_info_icon.setToolTip(
         "Show a small orange info icon when cached Steam data is at least one day stale and the connection needs attention."

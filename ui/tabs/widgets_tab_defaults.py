@@ -949,7 +949,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     cache_button_row = QHBoxLayout()
     cache_button_row.setContentsMargins(0, 6, 0, 0)
     cache_button_row.setSpacing(12)
-    tab.cache_clear_status_label = QLabel("Choose one or more cache families.")
+    tab.cache_clear_status_label = QLabel("Choose One or More Cache Families.")
     tab.cache_clear_status_label.setWordWrap(True)
     shared_styles.apply_shared_label_style(tab.cache_clear_status_label, "INFO_LABEL_STYLE")
     cache_button_row.addWidget(tab.cache_clear_status_label, 1)

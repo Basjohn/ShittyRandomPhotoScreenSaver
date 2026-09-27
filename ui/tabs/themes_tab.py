@@ -287,7 +287,7 @@ class ThemesTab(QWidget):
                 messages.append(f"{count} invalid theme file{' was' if count==1 else 's were'} ignored.")
                 self.theme_status.setToolTip("\n".join(f"{i.source_path.name}: {i.error}" for i in self._catalog.issues))
             else: self.theme_status.setToolTip("")
-            if not messages: messages.append("Default Dark is always available as a built-in fallback.")
+            if not messages: messages.append("Default Dark Is Always Available as a Built-In Fallback.")
             self.theme_status.setText(" ".join(messages))
         finally:
             self._loading_selection=False
