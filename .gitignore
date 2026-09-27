@@ -232,3 +232,6 @@ output/
 /deleteme/
 *.godzip
 
+
+# Operator-owned onboarding preview source sheets (unshipped, never committed)
+tools/onboarding_sources/
