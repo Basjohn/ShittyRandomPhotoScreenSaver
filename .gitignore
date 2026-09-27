@@ -151,6 +151,8 @@ MyReuseableUtilityModules/
 /temp_*.md
 /temp_search.txt
 AGENTS.md
+/.artifacts/
+/images/SRPSSWitch.png
 
 # Repo-local agent / assistant metadata should stay private, including local skills.
 /.agents/
