@@ -44,7 +44,11 @@ def _entries(
 def test_context_menu_builder_preserves_admitted_product_structure() -> None:
     entries = _entries()
     labels = [entry.label for entry in entries]
-    assert labels[:2] == ["◂  Previous Image", "▸  Next Image"]
+    images = entries[0]  # one Images submenu holds every image action
+    assert images.kind == "submenu"
+    assert [(child.action_id, child.kind) for child in images.children] == [
+        ("previous", "action"), ("next", "action"), ("save_image", "action")]
+    assert not {"previous", "next", "save_image"} & {entry.action_id for entry in entries}
     assert "⚙  Settings" in labels
     assert "✥  Edit Widget Layout" in labels
     assert "✓  Save Widget Layout" not in labels
@@ -404,3 +408,31 @@ def test_quick_context_menu_has_no_settings_or_qwidget_authority() -> None:
     assert "requestAction(" in qml
     assert "MouseArea" in qml
     assert "Window {" not in qml
+
+
+def test_images_submenu_actions_use_the_same_admission_and_click_through_guard(qt_app, monkeypatch) -> None:
+    """Nested Previous/Next/Save Image go model -> admitted action -> guarded manager route."""
+    from types import SimpleNamespace
+    import rendering.runtime_input as runtime_input
+    from engine.display_manager import DisplayManager
+
+    guards = []
+    monkeypatch.setattr(runtime_input, "suppress_runtime_pointer_input",
+                        lambda ms, reason: guards.append((ms, reason)))
+    emitted = []
+    manager = SimpleNamespace(
+        previous_requested=SimpleNamespace(emit=lambda: emitted.append("previous")),
+        next_requested=SimpleNamespace(emit=lambda: emitted.append("next")),
+        save_image_requested=SimpleNamespace(emit=lambda index: emitted.append(("save_image", index))),
+    )
+    unit = SimpleNamespace(screen_index=1)
+    owner = QObject()
+    model = QuickContextMenuModel(screen_index=1, runtime_generation=1, parent=owner)
+    model.replace_entries(_entries())
+    model.set_action_handler(lambda action, payload: DisplayManager._handle_quick_context_action(manager, unit, action, payload))
+    for action in ("save_image", "previous", "next"):
+        assert model.open_at(10.0, 10.0) is True
+        assert model.requestAction(action, "", True) is True
+        assert not model.menuVisible  # dismissed like any row
+    assert emitted == [("save_image", 1), "previous", "next"]
+    assert [reason for _ms, reason in guards] == ["context_menu_action"] * 3

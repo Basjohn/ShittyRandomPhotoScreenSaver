@@ -348,6 +348,8 @@ Item {
                                         radius: 9.0
                                         x: 6.0
                                         anchors.verticalCenter: parent.verticalCenter
+                                        // Plain actions (Images) have no state to show.
+                                        visible: submenuRow.modelData.kind !== "action"
                                         color: "transparent"
                                         border.width: 2.0
                                         border.color: menuRoot.submenuIndicatorBorderColor

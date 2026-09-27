@@ -56,7 +56,8 @@ def test_save_image_is_always_in_the_context_menu():
             transition_names=(), current_transition="", random_enabled=True, random_selectable=True,
             visualizer_modes=(), current_visualizer="", visualizer_available=False, dimming_enabled=False,
             interaction_mode_enabled=False, interaction_mode_locked=False, edit_mode_active=edit_mode)
-        assert "save_image" in [entry.action_id for entry in entries]
+        actions = [child.action_id for entry in entries for child in (entry, *entry.children)]
+        assert "save_image" in actions
 
 
 def test_engine_saves_the_displayed_file_and_registers_the_collection_without_rebuild(tmp_path, monkeypatch):
