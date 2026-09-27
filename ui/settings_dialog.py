@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMenu, QScrollArea, QStyle, QStyleOptionButton,
     QStylePainter,
 )
-from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer, QEvent, QPointF
+from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QEvent, QPointF
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPainterPath, QDesktopServices
 
 from core.logging.logger import get_log_dir, get_logger, is_perf_metrics_enabled
@@ -551,105 +551,6 @@ class CornerSizeGrip(QSizeGrip):
             y2 = h - margin - offset
             if x1 >= 0 and y2 >= 0:
                 painter.drawLine(x1, y1, x2, y2)
-
-
-class ResetDefaultsDialog(QWidget):
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
-        outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
-        outer_layout.setSpacing(0)
-
-        card = QWidget(self)
-        card.setObjectName("resetDefaultsDialogCard")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
-
-        title_bar = CustomTitleBar(card)
-        title_bar.title_label.setText("Reset to Defaults")
-        title_bar.minimize_btn.hide()
-        title_bar.maximize_btn.hide()
-        title_bar.close_clicked.connect(self.reject)
-        card_layout.addWidget(title_bar)
-
-        body = QWidget(card)
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(24, 20, 24, 20)
-        body_layout.setSpacing(16)
-
-        # Simple confirmation text shown after settings have already been
-        # reverted to their canonical defaults.
-        message = QLabel("Settings Reverted to Defaults!")
-        message.setWordWrap(True)
-        message.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        body_layout.addWidget(message)
-
-        buttons_row = QHBoxLayout()
-        buttons_row.addStretch()
-        ok_btn = QPushButton("OK")
-        ok_btn.clicked.connect(self.accept)
-        buttons_row.addWidget(ok_btn)
-        body_layout.addLayout(buttons_row)
-
-        card_layout.addWidget(body)
-
-        theme = get_active_settings_theme()
-        popup_shadow = theme.shadow("popup.dialog")
-        shadow = QGraphicsDropShadowEffect(card)
-        shadow.setBlurRadius(popup_shadow.blur_radius)
-        shadow.setOffset(popup_shadow.offset_x, popup_shadow.offset_y)
-        shadow.setColor(QColor(*popup_shadow.color.as_tuple()))
-        card.setGraphicsEffect(shadow)
-
-        popup_surface = theme.color("popup.container.surface")
-        popup_border = theme.color("popup.container.border")
-        card.setStyleSheet(
-            "QWidget#resetDefaultsDialogCard {"
-            f"background-color: rgba({popup_surface.r}, {popup_surface.g}, "
-            f"{popup_surface.b}, {popup_surface.a});"
-            f"border: 1px solid rgba({popup_border.r}, {popup_border.g}, "
-            f"{popup_border.b}, {popup_border.a});"
-            "border-radius: 10px;"
-            "}"
-        )
-
-        outer_layout.addWidget(card)
-        self.adjustSize()
-
-        # Own the auto-dismiss timer so an early close cannot leave a late
-        # callback targeting an already-closing toast.
-        self._auto_close_timer = QTimer(self)
-        self._auto_close_timer.setSingleShot(True)
-        self._auto_close_timer.timeout.connect(self.accept)
-        self._auto_close_timer.start(2000)
-
-    def showEvent(self, event) -> None:  # type: ignore[override]
-        super().showEvent(event)
-        parent = self.parentWidget()
-        if parent is not None:
-            try:
-                # Center the toast within the parent dialog's client rect so
-                # it always appears above the content without creating a
-                # separate native window.
-                geom = parent.rect()
-                self.move(geom.center() - self.rect().center())
-                self.raise_()
-            except Exception as e:
-                logger.debug("[SETTINGS] Exception suppressed: %s", e)
-
-    def accept(self) -> None:
-        """Close the toast when acknowledged or after timeout."""
-        timer = getattr(self, "_auto_close_timer", None)
-        if timer is not None and timer.isActive():
-            timer.stop()
-        self.close()
-
-    def reject(self) -> None:
-        """Treat rejection the same as acceptance for this toast."""
-        self.accept()
 
 
 class SettingsDialog(QDialog):
