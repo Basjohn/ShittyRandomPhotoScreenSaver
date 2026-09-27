@@ -1664,8 +1664,11 @@ class SettingsDialog(QDialog):
             self._show_no_sources_popup()
             return
         if self._guided_setup_panel is not None:
-            # Offers any unapplied Arrange draft, then retires account inputs/workers.
-            self._guided_setup_panel.request_close()
+            # Keep/discard the wizard's unsaved changes; "Stay In Setup" cancels the close.
+            if not self._guided_setup_panel.request_close():
+                self._closing = False
+                event.ignore()
+                return
         
         try:
             current_index = self.content_stack.currentIndex()
