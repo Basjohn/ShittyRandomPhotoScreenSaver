@@ -26,11 +26,12 @@ friends fill remaining visible space, and every accepted friend remains scroll-r
 cardinality to own ordinary card height. Authored/non-CUSTOM grid width respects configured visible capacity; a CUSTOM
 horizontal `content_extent` deliberately decouples columns from that baseline capacity and lets readable width admit more
 columns up to the project-wide 24-friend ceiling. The final incomplete row remains centred. Grid names are optional,
-Title-Case/bold/two-line fit, centred beneath avatars and independently size-adjustable. Tiles/rows show privacy-permitted
+ALL-CAPS/bold/two-line fit, centred beneath avatars and independently size-adjustable. Tiles/rows show privacy-permitted
 identity, ALL-CAPS presence/game chrome, offline-avatar desaturation and hard clipping. The redundant lower-right avatar
 presence dot is retired. Strict mode groups anonymously and exposes neither names, avatars nor per-friend actions.
-Names and the ALL-CAPS presence/game line shrink to fit their boxes (`Text.Fit`; a word breaks inside itself only when
-it is wider than the line) and elide only below the 6 pt floor. Grid names keep the two-line fit; the grid presence
+ALL-CAPS names and the ALL-CAPS presence/game line shrink to fit their boxes (`Text.Fit`; a word breaks inside itself only when
+it is wider than the line) and elide only below their floor (6 pt; 5.5 pt for the one-line-tall grid name box, where
+realistic 21-letter ALL-CAPS tags need it). Grid names keep the two-line fit; the grid presence
 line is limited only by its box, because a two-line cap truncated game names that fit on three lines
 (`tests/test_qtquick_friend_pulse_presentation.py::test_long_game_and_friend_names_shrink_to_fit_instead_of_truncating`).
 

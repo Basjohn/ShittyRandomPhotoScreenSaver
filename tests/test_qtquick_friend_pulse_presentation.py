@@ -255,7 +255,7 @@ def test_model_keeps_one_row_model_and_never_exposes_remote_avatar() -> None:
         role for role, name in row_model.roleNames().items() if name == b"isOnline"
     )
     assert row_model.data(row_model.index(0, 0), avatar_role) == ""
-    assert row_model.data(row_model.index(0, 0), primary_role) == "Ada Lovelace"
+    assert row_model.data(row_model.index(0, 0), primary_role) == "ADA LOVELACE"  # ALL-CAPS names
     assert row_model.data(row_model.index(0, 0), presence_role) == "Online"
     assert row_model.data(row_model.index(0, 0), online_role) is True
 

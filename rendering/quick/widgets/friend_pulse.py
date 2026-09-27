@@ -8,7 +8,6 @@ local image sources only.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -72,29 +71,10 @@ if not isinstance(_STEAM_DEFAULTS, Mapping) or not isinstance(
 
 _GRID_TILE_HEIGHT = 132
 _GRID_GAP = 10
-_FRIEND_NAME_WORD_RE = re.compile(r"[^\W_]+(?:['’][^\W_]+)*", re.UNICODE)
-_FRIEND_NAME_CONTRACTION_SUFFIXES = frozenset({"d", "ll", "m", "re", "s", "t", "ve"})
+def _friend_display_name(value: object) -> str:
+    """Presentation-only ALL-CAPS roster name, matching the ALL-CAPS presence line."""
 
-
-def _title_case_friend_name(value: object) -> str:
-    """Presentation-only title case for roster names, preserving punctuation."""
-
-    text = str(value or "").strip()
-    if not text:
-        return ""
-
-    def _normalize_word(match: re.Match[str]) -> str:
-        word = match.group(0).lower()
-        pieces = re.split(r"(['’])", word)
-        if pieces and pieces[0]:
-            pieces[0] = pieces[0][0].upper() + pieces[0][1:]
-        for index in range(2, len(pieces), 2):
-            segment = pieces[index]
-            if segment and segment not in _FRIEND_NAME_CONTRACTION_SUFFIXES:
-                pieces[index] = segment[0].upper() + segment[1:]
-        return "".join(pieces)
-
-    return _FRIEND_NAME_WORD_RE.sub(_normalize_word, text)
+    return str(value or "").strip().upper()
 
 
 def _grid_columns_for(
@@ -425,7 +405,7 @@ class FriendPulseRowListModel(QAbstractListModel):
         avatar_source = str(getattr(row, "avatar_url", "") or "")
         if avatar_source and not avatar_source.lower().startswith("file:"):
             avatar_source = ""
-        primary = _title_case_friend_name(row.primary)
+        primary = _friend_display_name(row.primary)
         return {
             self.PrimaryRole: primary,
             self.SecondaryRole: row.secondary,
