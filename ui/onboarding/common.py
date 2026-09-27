@@ -94,9 +94,12 @@ def text_label(text: str, *, heading=False) -> QLabel:
     return label
 
 
-def action(text: str, callback, *, secondary=False) -> QPushButton:
+def action(text: str, callback) -> QPushButton:
+    # Settings' ordinary button semantics: theme surface at rest, hover surface
+    # on hover. No wizard button is permanently emphasized (a filled accent pill
+    # reads as a stuck hover).
     from ui.widgets.outlined_button import OutlinedButton
-    button = OutlinedButton(title_case(text), role="secondary" if secondary else "primary")
+    button = OutlinedButton(title_case(text), role="secondary")
     button.setMinimumHeight(36)
     button.clicked.connect(lambda _checked=False: callback())
     return button

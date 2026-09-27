@@ -25,6 +25,7 @@ from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from core.sources.folder_paths import contains_folder, display_folder_path, without_folder
 from ui.styled_popup import StyledPopup
 
 logger = get_logger(__name__)
@@ -380,7 +381,7 @@ class SourcesTab(QWidget):
         folders = self._settings.get('sources.folders')
         self.folder_list.clear()
         for folder in folders:
-            self.folder_list.addItem(folder)
+            self.folder_list.addItem(display_folder_path(folder))
         
         # Load RSS feeds using dot notation
         rss_feeds = self._settings.get('sources.rss_feeds')
@@ -446,7 +447,8 @@ class SourcesTab(QWidget):
             # Get current folders using dot notation
             folders = self._settings.get('sources.folders')
             
-            if folder not in folders:
+            if not contains_folder(folders, folder):
+                folder = display_folder_path(folder)
                 folders.append(folder)
                 self._settings.set('sources.folders', folders)
                 self._settings.save()
@@ -475,8 +477,7 @@ class SourcesTab(QWidget):
             if not isinstance(folders, list):
                 folders = list(folders) if folders else []
 
-            if folder in folders:
-                folders.remove(folder)
+            folders = without_folder(folders, folder)
             self._settings.set('sources.folders', folders)
             self._settings.save()
         except Exception as e:
