@@ -42,6 +42,11 @@ class TestThreadingPolicyCompliance:
         # non-daemon generation-owned thread, wakeable and synchronously joined on
         # stop. ThreadManager task semantics cannot represent that cadence loop.
         "widgets/spotify_visualizer/logical_runtime.py",
+        # The sanctioned bounded resolver (Contracts § Network transports): an
+        # uninterruptible getaddrinfo runs on persistent, reused, capped (8)
+        # resolver threads so IO-lane callers keep their deadline and exit fence;
+        # daemon so a stalled lookup never holds exit; no per-request thread (R-97).
+        "core/network/bounded_dns.py",
         # External library wrappers and pre-policy implementations
         "core/process/supervisor.py",
         "rendering/adaptive_timer.py",
