@@ -24,7 +24,7 @@ Keep only the small routing authorities at `Docs/` root plus generated evidence 
 
 `Docs/Historical_Bugs/` is the repository's intentional historical documentation home. It has repeatedly prevented regressions because it records mechanisms, falsifiers and forbidden repairs. Preserve it.
 
-Do **not** create or route new live authority through parallel `Fossils`, `audits`, retired decompositions, dated handoffs or closed investigation reports. Existing legacy Fossils are historical material only and are not current guidance. When such a document closes:
+Do **not** create or route new live authority through parallel `Fossils`, `audits`, retired decompositions, dated handoffs or closed investigation reports. The legacy `Docs/Fossils/` folder (outdated architecture) was retired on 2026-09-27; source control keeps it. When such a document closes:
 
 1. move any durable current invariant into the relevant Spec/Architecture/Guardrail/Guide/Reference document;
 2. move any important failed-method/root-cause lesson into an existing/new Historical Bug record;
