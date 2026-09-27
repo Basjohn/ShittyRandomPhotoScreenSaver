@@ -1528,6 +1528,52 @@ def widget_route_admits_screen(
     )
 
 
+def route_widgets_to_single_monitor(
+    widgets_config: Dict[str, Any],
+    monitor: int | str,
+) -> tuple[str, ...]:
+    """Route every widget the saver could not show onto the one shown display.
+
+    With a single display selected, a widget routed to another monitor would be
+    invisible in the saver and in Arrange. Each widget's effective monitor
+    setting (Media's for a following Visualizer) moves to ``monitor`` unless it
+    already admits it (``ALL`` stays ``ALL``); an authored restore route gets the
+    same treatment so Reset Widget Layouts cannot send it back. Returns the
+    changed settings keys.
+    """
+
+    target = str(int(str(monitor).strip()))
+    screen_index = int(target) - 1
+    changed: list[str] = []
+    for descriptor in get_widget_runtime_descriptors():
+        widget_id = descriptor.widget_id
+        try:
+            current = get_effective_monitor_value_for_widget(widget_id, widgets_config)
+        except (KeyError, ValueError):
+            continue  # no monitor route (not a routed widget)
+        settings_key = get_effective_monitor_settings_key_for_widget(widget_id, widgets_config)
+        if settings_key in changed or monitor_route_admits_screen(current, screen_index):
+            continue
+        section = widgets_config.get(settings_key)
+        if not isinstance(section, dict):
+            section = {}
+            widgets_config[settings_key] = section
+        section["monitor"] = target
+        changed.append(settings_key)
+
+    restore_map = load_custom_layout_restore_map(widgets_config)
+    restore_changed = False
+    for widget_id in tuple(restore_map.get("widgets", {})):
+        entry = get_custom_layout_restore_entry(restore_map, widget_id)
+        if entry is None or monitor_route_admits_screen(entry["monitor"], screen_index):
+            continue
+        set_custom_layout_restore_entry(restore_map, widget_id, position=entry["position"], monitor=target)
+        restore_changed = True
+    if restore_changed:
+        write_custom_layout_restore_map(widgets_config, restore_map)
+    return tuple(changed)
+
+
 def get_custom_persistence_position_settings_key_for_widget(widget_id: str) -> str:
     descriptor = get_widget_runtime_descriptor(widget_id)
     if descriptor is None:

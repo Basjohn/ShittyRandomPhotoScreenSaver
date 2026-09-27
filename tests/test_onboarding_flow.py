@@ -162,8 +162,8 @@ def test_interaction_changes_only_interaction_setting(qapp, settings):
 def test_display_selection_keeps_one_connected_screen_and_hydration_is_read_only(qapp, settings, monkeypatch):
     from PySide6.QtCore import QRect
     from ui.onboarding import basic_pages
-    screens = [SimpleNamespace(name=lambda: "Left", geometry=lambda: QRect(0, 0, 1920, 1080)),
-               SimpleNamespace(name=lambda: "Right", geometry=lambda: QRect(1920, 0, 1280, 1024))]
+    screens = [SimpleNamespace(name=lambda: "Left", geometry=lambda: QRect(0, 0, 1920, 1080), devicePixelRatio=lambda: 1.0),
+               SimpleNamespace(name=lambda: "Right", geometry=lambda: QRect(1920, 0, 1280, 1024), devicePixelRatio=lambda: 1.0)]
     monkeypatch.setattr(basic_pages.QGuiApplication, "screens", staticmethod(lambda: screens))
     settings.set("display.show_on_monitors", [3])
     settings.writes.clear()
@@ -186,8 +186,8 @@ def test_display_selection_keeps_one_connected_screen_and_hydration_is_read_only
 def test_display_diagram_click_toggles_a_display(qapp, settings, monkeypatch):
     from PySide6.QtCore import QRect
     from ui.onboarding import basic_pages
-    screens = [SimpleNamespace(name=lambda: "Left", geometry=lambda: QRect(0, 0, 1920, 1080)),
-               SimpleNamespace(name=lambda: "Right", geometry=lambda: QRect(1920, 0, 1920, 1080))]
+    screens = [SimpleNamespace(name=lambda: "Left", geometry=lambda: QRect(0, 0, 1920, 1080), devicePixelRatio=lambda: 1.0),
+               SimpleNamespace(name=lambda: "Right", geometry=lambda: QRect(1920, 0, 1920, 1080), devicePixelRatio=lambda: 1.0)]
     monkeypatch.setattr(basic_pages.QGuiApplication, "screens", staticmethod(lambda: screens))
     settings.set("display.show_on_monitors", "ALL")
     page = DisplaysPage(settings)

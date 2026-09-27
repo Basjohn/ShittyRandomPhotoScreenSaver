@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any
 
 from core.settings.capability_activation import is_widget_family_effective
@@ -31,6 +32,29 @@ def _member_enabled(widgets: Mapping[str, Any], widget_id: str) -> bool:
         )
     section = widgets.get(widget_id)
     return bool(isinstance(section, Mapping) and section.get("enabled", False))
+
+
+def route_widgets_to_single_display(settings) -> bool:
+    """With exactly one display selected, keep every widget on it.
+
+    The saver shows no other display, so a widget routed elsewhere would be
+    invisible in the saver and in Arrange. Writes the draft only on a change.
+    """
+
+    from rendering.widget_descriptors import route_widgets_to_single_monitor
+
+    selected = settings.get("display.show_on_monitors")
+    if not isinstance(selected, (list, tuple)) or len(selected) != 1:
+        return False
+    widgets = settings.get("widgets", {})
+    if not isinstance(widgets, Mapping):
+        return False
+    routed = deepcopy(dict(widgets))
+    route_widgets_to_single_monitor(routed, selected[0])
+    if routed == widgets:
+        return False
+    settings.set("widgets", routed)
+    return True
 
 
 def is_media_center_profile(settings) -> bool:
