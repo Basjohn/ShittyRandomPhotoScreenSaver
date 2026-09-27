@@ -69,7 +69,7 @@ Automated image differences are not aesthetic acceptance. One operator pass rema
 - appearance and timing with actual photos at authored durations, including optics/depth controls;
 - Glass Shards Collide / Shards Break Again, and Crumble Slabs Collide (default and low Collapse Depth), judged in
   motion;
-- Crumble crack complexity at its default (1.1 since 2026-09-27) and debris;
+- Crumble crack complexity at its default and debris;
 - both displays with active music and representative heavy load: Visualizer freshness, frame-spacing tails and
   transition first use;
 - the installed/frozen build: activation and Settings round-trip, repeated switch/interrupt/retire.

@@ -202,6 +202,16 @@ The forged Settings outer edge/corner remains renderer-owned in `ui/settings_dia
 
 Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies their semantic visual parameters. Runtime screensaver widget shadow authority is separate.
 
+Rounded borders on buttons, buckets, lists, the content area and popups are painted as one `QPainterPath` stroke
+(`ui/widgets/outlined_button.py`, `ui/widgets/continuous_border.py`); their QSS border stays transparent. Qt style
+sheets draw a rounded border as separate edge and corner pieces whose antialiased ends overlap, and a translucent
+theme border colour then shows seams (R-101). New outlined controls reuse these painters rather than a QSS border.
+
+Popups are separate top-level windows and inherit nothing. `ui/styled_popup.py` applies the Settings root stylesheet
+and paints `PopupSurface`, so every popup, including the colour picker and account dialogs, takes the active theme's
+text, controls and border. A new dialog builds on `StyledPopup` (or those two pieces), never on a bare `QDialog` or
+`QMessageBox`. File and folder pickers stay native OS dialogs.
+
 ## `dark.qss` status
 
 `themes/dark.qss` is **retired and physically deleted**. The 2026-09-14 operator-accepted retirement removed both runtime loaders after caller-proofing the surviving structure: `ui/settings_theme.py` owns the narrow Settings-root typography/checkbox structural base, `ui/settings_menu_style.py` owns tray-menu structure using ThemeSpec context-menu roles, and the color-picker wrapper owns its residual subsettings chrome. No legacy palette was copied into a replacement monolith.

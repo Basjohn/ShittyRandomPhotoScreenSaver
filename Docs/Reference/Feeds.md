@@ -92,7 +92,7 @@ The Feeds cache is explicit under the canonical application cache root (`cache/f
 
 ## NEWS
 
-`core/feeds/news.py` is the product catalog: official publisher RSS feeds that need no account, 16 to 22 independent publishers per category (111 endpoints from 80 publishers on 2026-09-26), so a category outlives many publishers withdrawing or moving their feeds. It is plain data: `_PUBLISHERS` names each publisher once (display name, homepage, feed directory when it has one) and `_CATALOG` lists each category's rows as `(provider ID, publisher key, feed URL)` in Settings order; `NEWS_PROVIDERS` is derived from them. Adding a publisher is one `_PUBLISHERS` entry plus a row per category; withdrawing an endpoint is deleting its row, and dropping it from the category's canonical `providers` default if it was one (`tests/test_feed_news.py` keeps both tables and the defaults consistent). Provider IDs are never renamed or reused. A card's `providers` setting lists the selected IDs (default: about five majors per category); a withdrawn ID is ignored and an empty selection leaves the card unconfigured and dormant. The card name is the category label, not a setting.
+`core/feeds/news.py` is the product catalog: official publisher RSS feeds that need no account, 16 to 22 independent publishers per category, so a category outlives many publishers withdrawing or moving their feeds. It is plain data: `_PUBLISHERS` names each publisher once (display name, homepage, feed directory when it has one) and `_CATALOG` lists each category's rows as `(provider ID, publisher key, feed URL)` in Settings order; `NEWS_PROVIDERS` is derived from them. Adding a publisher is one `_PUBLISHERS` entry plus a row per category; withdrawing an endpoint is deleting its row, and dropping it from the category's canonical `providers` default if it was one (`tests/test_feed_news.py` keeps both tables and the defaults consistent). Provider IDs are never renamed or reused. A card's `providers` setting lists the selected IDs (default: about five majors per category); a withdrawn ID is ignored and an empty selection leaves the card unconfigured and dormant. The card name is the category label, not a setting.
 
 - **Acquisition.** `widgets.feed_runtime.NewsRuntimeService` gives the card one ordinary `FeedRuntimeLease` per selected publisher on the shared family owner, so cadence, cache-first admission, conditional fetches, persisted backoff, artwork and retirement are exactly CUSTOM's. There is no NEWS scheduler, poller or downloader. The service keeps each publisher's latest accepted result and publishes their merge to the one presentation; it keeps a card loading, not failed, until every publisher has answered, and reports it unavailable only when none has a story. After each merge it gives every publisher's lease its share of the card's rows (`FeedRuntimeLease.limit_artwork_rows`: that publisher's stories among the leading item-limit rows, counted in its own feed order), and the family owner warms art only for that share, so a card fetches art only for stories it can show however many publishers it merges. No art is warmed until every publisher has answered; a share that grows is warmed at once as an event (`artwork_rows_changed`), and one that shrinks evicts nothing already published. The merge is published before the shares change, so a warm that completes at once can never be overtaken by an older merge.
 - **Identity.** A provider's cache key (`news_<id>`) and source ID (`news:<id>`) never contain the URL, and its spec sets `allow_endpoint_migration`: when a publisher moves its feed, the catalog URL changes under the same ID, the last-good snapshot stays visible while the new address validates, and the old ETag/Last-Modified are never sent to it.
@@ -136,14 +136,14 @@ Before multiplying sources or identities, re-check **durability, content adaptab
 
 ## Formats not built (with reopen conditions)
 
-Implemented (see `Docs/Reference/Feeds.md`): RSS, Atom, JSON Feed 1.x, JF2 and IndieWeb h-feed. Evaluated on 2026-09-24 and deliberately not built, each with the condition that would reopen it:
+Supported formats are listed above. Evaluated on 2026-09-24 and deliberately not built, each with the condition that would reopen it:
 
 - ActivityStreams 2.0 / ActivityPub outboxes: Mastodon, Lemmy, PeerTube and Pixelfed all publish RSS that discovery already finds; outboxes need paging and often signed fetches. Reopen if a fediverse platform drops RSS.
 - AT Protocol (Bluesky): profiles publish RSS. Reopen if that stops.
 - Nostr: not HTTP; out of scope for a bounded HTTP feed source.
 - OPML: a list of feeds, not a feed. A possible later "import subscriptions" convenience, not a format.
 - WebSub: push notification, not a format; the pull cadence does not need it.
-- Microformats1 hAtom: see the Reference note on why it is not read.
+- Microformats1 hAtom: common theme markup rather than a feed on sites that advertise RSS anyway (see supported formats above).
 
 ## Physical acceptance (open)
 

@@ -38,6 +38,9 @@ The existing user-desktop helper consumes only admitted queue work, waits for th
 - Account entry/actions require `core.windows.desktop_context.is_interactive_user_desktop()`. Unknown desktop fails
   closed. Shared account controllers validate before encrypted persistence and completions are page-lifetime fenced.
   No secret belongs to generic wizard state, preview fixtures or logs; browser handoff ownership is unchanged.
+- Saving is explicit. Wizard pages write only `ui/onboarding/draft.py:SettingsDraft`, never the store; Finish or
+  Keep Changes commits it, Discard restores the previewed theme. Only in-page save actions (Save to Slot, account
+  Save & Test, Import Settings) write straight through.
 - Arrange stages `CustomLayoutSession` and commits through `rendering.custom_layout_commit`, shared with Runtime Edit.
   Settings-created CUSTOM entries use content-sized anchored placement; uniform scale is supported, while X/Y reflow,
   child geometry and content rotation remain runtime operations. Move-only runtime Save preserves content sizing;
