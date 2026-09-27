@@ -20,10 +20,9 @@ def test_lifetime_assertions_drain_only_the_qobject_they_retired() -> None:
         source = (ROOT / "tests" / name).read_text(encoding="utf-8")
         assert retirement in source, name
         assert "sendPostedEvents(None, QEvent.Type.DeferredDelete)" not in source, name
-        assert (
-            f"QCoreApplication.sendPostedEvents({owner}, QEvent.Type.DeferredDelete)"
-            in source
-        ), name
+        # Drains one specific retired object (any variable name), never None (everything).
+        import re
+        assert re.search(r"QCoreApplication\.sendPostedEvents\((?!None)\w+, QEvent\.Type\.DeferredDelete\)", source), name
 
 
 def test_glow_subscription_baseline_does_not_retire_foreign_qobjects() -> None:

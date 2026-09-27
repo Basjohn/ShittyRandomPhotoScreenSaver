@@ -29,7 +29,7 @@ exact current source
 | `Docs/Future_Work/` | genuinely pending or operator-activated implementation plans |
 | `Docs/Historical_Bugs/` | permanent regression/root-cause/failed-method evidence |
 
-Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite. The `.sst` files are generated/default evidence rather than prose documentation.
+Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite.
 
 `.godzip/CHECKPOINT_HANDOFF.md` and `.godzip/CHECKPOINT_LIVE_CHECKLIST.md` are untracked checkpoint orientation and open acceptance evidence, **not** competing architecture, product, persistence, or test authorities. Reconcile them against the current source, `Current_Plan.md`, `Docs/Contracts.md` and `Docs/TestSuite.md`.
 

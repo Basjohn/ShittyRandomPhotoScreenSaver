@@ -1,13 +1,15 @@
 """Fail-fast headless audit for SRPSS canonical defaults ownership.
 
-``audit_defaults_authority`` is the single guard. It reports both shadow/
-fragmented defaults (a second value authority) AND derived-artifact drift --
-the checked-in ``defaults_snapshot.json`` and both ``.sst`` defaults documents
-must be exactly what the one builder emits from canonical ``DEFAULT_SETTINGS``.
-Running it here fails the build loudly instead of letting stale artifacts ship
-and surface later (foundry warning / test run) -- the "randomly pops up when I
-adjust a setting" failure mode. Regenerate with
-``python -m core.settings.defaults_snapshot_builder --write-all``.
+Two guards, run by the build (``tools/build_layout.ps1``) and after every
+Defaults Foundry save (in a fresh interpreter, so the just-written
+``default_settings.py`` is what gets imported):
+
+- ``audit_defaults_authority`` reports shadow/fragmented defaults (a second
+  value authority) and any revived checked-in copy of the defaults;
+- every profile's projection of the canonical defaults must carry no
+  private/credential fields.
+
+Nothing is generated: the canonical defaults are the only defaults artifact.
 """
 from __future__ import annotations
 
@@ -21,12 +23,28 @@ if str(ROOT) not in sys.path:
 from core.settings.defaults_authority_audit import audit_defaults_authority
 
 
+def private_field_issues() -> list[str]:
+    """Credential-shaped keys in any profile's canonical defaults projection."""
+
+    from core.settings.default_contract import MC_PROFILE, NORMAL_PROFILE
+    from core.settings.defaults_snapshot_builder import build_sst_defaults_snapshot
+    from tools.defaults_foundry_core import validate_no_private_fields
+
+    issues = []
+    for profile in (NORMAL_PROFILE, MC_PROFILE):
+        try:
+            validate_no_private_fields(build_sst_defaults_snapshot(profile), label=f"{profile} canonical defaults")
+        except ValueError as exc:
+            issues.append(str(exc))
+    return issues
+
+
 def main() -> int:
-    issues = audit_defaults_authority(ROOT)
+    issues = [issue.render() for issue in audit_defaults_authority(ROOT)] + private_field_issues()
     if issues:
         print(f"defaults authority audit FAILED: {len(issues)} issue(s)")
         for issue in issues:
-            print(f" - {issue.render()}")
+            print(f" - {issue}")
         return 1
     print("defaults authority audit OK")
     return 0

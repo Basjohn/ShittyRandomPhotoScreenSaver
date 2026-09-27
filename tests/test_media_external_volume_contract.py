@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 import json
 from pathlib import Path
 
@@ -86,7 +88,7 @@ def test_media_settings_expose_collapsed_header_seek_and_volume_buckets() -> Non
 
 
 def test_media_new_visual_role_defaults_are_persisted() -> None:
-    payload = json.loads(_text("core/settings/defaults_snapshot.json"))
+    payload = build_defaults_snapshot()
     media = payload["widgets"]["media"]
     assert media["spotify_volume_track_color"] == [35, 35, 35, 255]
     assert media["spotify_volume_fill_color"] == [79, 79, 79, 150]

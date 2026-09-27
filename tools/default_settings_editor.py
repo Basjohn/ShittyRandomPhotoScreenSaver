@@ -2,9 +2,9 @@
 
 The tree is generated recursively from the canonical base literal, so new
 settings appear automatically. Normal saves become the authoritative base;
-only MC differences remain in the compact profile overlay. Regeneration runs
-in fresh Python processes so generated JSON and both SST snapshots see the new
-sources immediately.
+only MC differences remain in the compact profile overlay. After a save the
+defaults authority check runs in a fresh Python process, so it validates the
+sources just written; a failure restores them. Nothing else is generated.
 """
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ from tools.godzip_foundry_theme import render_foundry_stylesheet  # noqa: E402
 
 DEFAULT_SETTINGS_PATH = REPO_ROOT / "core" / "settings" / "default_settings.py"
 PROFILE_OVERRIDES_PATH = REPO_ROOT / "core" / "settings" / "default_profile_overrides.py"
-UNIFIED_REGEN_SCRIPT = REPO_ROOT / "tools" / "regenerate_defaults_artifacts.py"
+DEFAULTS_CHECK_SCRIPT = REPO_ROOT / "tools" / "check_defaults_authority.py"
 PROFILE_LABELS = {
     NORMAL_PROFILE: "Normal / Screensaver",
     MC_PROFILE: "Media Center / MC",
@@ -95,7 +95,7 @@ _PROFILE_MODULE_HEADER = '''"""Profile-specific canonical default overrides.
 This small data module is written by ``tools/default_settings_editor.py``.
 Normal defaults live directly in ``default_settings.py``. Only MC differences
 apply on top for the ``Screensaver_MC`` profile. Stable profile names keep
-generated SST artifacts and runtime reset behavior on the same source.
+exports and runtime reset behavior on the same source.
 """
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ _DEFAULT_SETTINGS_MODULE_HEADER = '''"""Canonical Normal-profile defaults.
 
 This literal is the authoritative fresh-install and Reset to Defaults source.
 It may be edited directly or through ``tools/default_settings_editor.py``.
-Generated defaults artifacts must follow this source rather than override it.
+Nothing is generated from it; every reader uses it directly.
 """
 from __future__ import annotations
 
@@ -693,15 +693,15 @@ def read_undo_record(path: Path | None = None) -> str | None:
     return sources[1] if sources is not None else None
 
 
-def regenerate_default_artifacts(*, check_only: bool = False, dry_run: bool = False) -> str:
-    """Validate/regenerate all derived defaults through one transactional owner."""
-    command = [sys.executable, str(UNIFIED_REGEN_SCRIPT)]
-    if check_only:
-        command.append("--check")
-    elif dry_run:
-        command.append("--dry-run")
+def validate_saved_defaults() -> str:
+    """Run the defaults authority check in a fresh interpreter.
+
+    A fresh process imports the sources exactly as just written; the check
+    covers second default authorities, revived derived copies and
+    credential-shaped keys in every profile.
+    """
     result = subprocess.run(
-        command,
+        [sys.executable, str(DEFAULTS_CHECK_SCRIPT)],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
@@ -710,7 +710,7 @@ def regenerate_default_artifacts(*, check_only: bool = False, dry_run: bool = Fa
     )
     combined = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
     if result.returncode != 0:
-        raise RuntimeError(combined or f"{UNIFIED_REGEN_SCRIPT.name} exited with {result.returncode}")
+        raise RuntimeError(combined or f"{DEFAULTS_CHECK_SCRIPT.name} exited with {result.returncode}")
     return combined
 
 
@@ -895,13 +895,13 @@ class DefaultSettingsEditor(QMainWindow):
         base_path: Path = DEFAULT_SETTINGS_PATH,
         overrides_path: Path = PROFILE_OVERRIDES_PATH,
         undo_path: Path | None = None,
-        regenerate: Callable[[], str] = regenerate_default_artifacts,
+        validate: Callable[[], str] = validate_saved_defaults,
     ) -> None:
         super().__init__()
         self._base_path = Path(base_path)
         self._overrides_path = Path(overrides_path)
         self._undo_path = undo_path or default_undo_path()
-        self._regenerate = regenerate
+        self._validate = validate
         self._source_settings: dict[str, Any] = {}
         self._base: dict[str, Any] = {}
         self._overrides: dict[str, dict[str, Any]] = {}
@@ -1007,19 +1007,19 @@ class DefaultSettingsEditor(QMainWindow):
         actions.addWidget(self.status_label, stretch=1)
         self.validate_button = QPushButton("Validate / Dry Run")
         self.validate_button.setToolTip(
-            "Validate current edits and build every derived artifact in memory without writing files."
+            "Validate current edits (schema, privacy) and the checked-in defaults without writing files."
         )
         self.validate_button.clicked.connect(self._validate_dry_run)
         actions.addWidget(self.validate_button)
         self.discard_button = QPushButton("Discard Unsaved")
         self.discard_button.clicked.connect(self._discard_unsaved)
         actions.addWidget(self.discard_button)
-        self.undo_button = QPushButton("Undo Most Recent and Regenerate")
-        self.undo_button.clicked.connect(self._undo_and_regenerate)
+        self.undo_button = QPushButton("Undo Most Recent Save")
+        self.undo_button.clicked.connect(self._undo_and_validate)
         actions.addWidget(self.undo_button)
-        self.save_button = QPushButton("Save and Regenerate Defaults")
+        self.save_button = QPushButton("Save Defaults")
         self.save_button.setObjectName("defaultsFoundryPrimary")
-        self.save_button.clicked.connect(self._save_and_regenerate)
+        self.save_button.clicked.connect(self._save_and_validate)
         actions.addWidget(self.save_button)
         layout.addLayout(actions)
 
@@ -1233,7 +1233,7 @@ class DefaultSettingsEditor(QMainWindow):
         self._set_status(
             f"Imported {imported_count} settings into {PROFILE_LABELS[self._profile]} "
             f"({imported.removed_secret_fields} secret and {skipped_count} private/profile/schema fields excluded). "
-            "Review, then Save and Regenerate Defaults."
+            "Review, then Save Defaults."
         )
 
     def _preflight_models(self) -> None:
@@ -1265,17 +1265,16 @@ class DefaultSettingsEditor(QMainWindow):
     def _validate_dry_run(self) -> None:
         try:
             self._preflight_models()
-            # Artifact dry-run validates the currently checked-in source.  It is
-            # intentionally read-only; candidate source is validated above and
-            # the post-source transaction performs the authoritative generator pass.
-            output = regenerate_default_artifacts(dry_run=True)
+            # Read-only: candidate edits are validated above; this checks the
+            # checked-in sources (the save validates the written sources).
+            output = validate_saved_defaults()
         except Exception as exc:
             QMessageBox.critical(self, "Defaults Validation Failed", str(exc))
             self._set_status("Validation failed; nothing was written.")
             return
         self._set_status(output.splitlines()[-1] if output else "Validation GREEN; writes=0.")
 
-    def _save_and_regenerate(self) -> None:
+    def _save_and_validate(self) -> None:
         try:
             self._preflight_models()
         except Exception as exc:
@@ -1312,7 +1311,7 @@ class DefaultSettingsEditor(QMainWindow):
                 self._base_path: base_source_after.encode("utf-8"),
                 self._overrides_path: overrides_source_after.encode("utf-8"),
             })
-            output = self._regenerate()
+            output = self._validate()
         except Exception as exc:
             atomic_write_many({
                 self._base_path: base_source_before.encode("utf-8"),
@@ -1320,7 +1319,7 @@ class DefaultSettingsEditor(QMainWindow):
             })
             rollback_error: Exception | None = None
             try:
-                self._regenerate()
+                self._validate()
             except Exception as rollback_exc:
                 rollback_error = rollback_exc
             if undo_before is None:
@@ -1329,12 +1328,12 @@ class DefaultSettingsEditor(QMainWindow):
                 atomic_write_text(self._undo_path, undo_before)
             message = str(exc)
             if rollback_error is not None:
-                message += f"\n\nArtifact rollback also failed: {rollback_error}"
+                message += f"\n\nThe restored sources also fail validation: {rollback_error}"
             QMessageBox.critical(self, "Defaults Not Saved", message)
             self._set_status(
-                "Save failed; canonical base, MC overrides, artifacts, and undo were restored."
+                "Save failed; canonical base, MC overrides, and undo were restored."
                 if rollback_error is None
-                else "Save failed; source files were restored, but generated artifacts need regeneration."
+                else "Save failed; source files were restored, but they also fail validation."
             )
         else:
             self._reload_sources_from_disk()
@@ -1342,14 +1341,14 @@ class DefaultSettingsEditor(QMainWindow):
             self._set_status(
                 output.splitlines()[-1]
                 if output
-                else "Canonical Normal defaults, MC differences, and artifacts saved."
+                else "Canonical Normal defaults and MC differences saved and validated."
             )
         finally:
             QApplication.restoreOverrideCursor()
             self._set_actions_enabled(True)
             self._update_undo_state()
 
-    def _undo_and_regenerate(self) -> None:
+    def _undo_and_validate(self) -> None:
         restored_sources = read_undo_sources(self._undo_path)
         if restored_sources is None:
             self._update_undo_state()
@@ -1365,7 +1364,7 @@ class DefaultSettingsEditor(QMainWindow):
             if restored_base_source is not None:
                 restore_payloads[self._base_path] = restored_base_source.encode("utf-8")
             atomic_write_many(restore_payloads)
-            output = self._regenerate()
+            output = self._validate()
         except Exception as exc:
             atomic_write_many({
                 self._base_path: current_base_source.encode("utf-8"),
@@ -1373,17 +1372,17 @@ class DefaultSettingsEditor(QMainWindow):
             })
             rollback_error: Exception | None = None
             try:
-                self._regenerate()
+                self._validate()
             except Exception as rollback_exc:
                 rollback_error = rollback_exc
             message = str(exc)
             if rollback_error is not None:
-                message += f"\n\nArtifact rollback also failed: {rollback_error}"
+                message += f"\n\nThe restored sources also fail validation: {rollback_error}"
             QMessageBox.critical(self, "Undo Failed", message)
             self._set_status(
-                "Undo failed; current canonical base, MC overrides, and artifacts were restored."
+                "Undo failed; current canonical base and MC overrides were restored."
                 if rollback_error is None
-                else "Undo failed; current sources were restored, but generated artifacts need regeneration."
+                else "Undo failed; current sources were restored, but they also fail validation."
             )
         else:
             self._undo_path.unlink(missing_ok=True)
@@ -1392,7 +1391,7 @@ class DefaultSettingsEditor(QMainWindow):
             self._set_status(
                 output.splitlines()[-1]
                 if output
-                else "Most recent defaults save undone and artifacts regenerated."
+                else "Most recent defaults save undone and validated."
             )
         finally:
             QApplication.restoreOverrideCursor()
@@ -1413,7 +1412,7 @@ class DefaultSettingsEditor(QMainWindow):
 
 
 def main(argv: Iterable[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Edit and regenerate SRPSS defaults")
+    parser = argparse.ArgumentParser(description="Edit SRPSS canonical defaults")
     parser.add_argument(
         "--smoke-test",
         action="store_true",

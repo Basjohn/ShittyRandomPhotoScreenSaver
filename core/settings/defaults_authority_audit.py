@@ -1,9 +1,9 @@
 """Headless repository audit for SRPSS defaults authority.
 
 This module guards the architectural rules behind the Settings/defaults sweep.
-It intentionally performs static checks in addition to snapshot parity so future
-features cannot quietly reintroduce a second product-default table in runtime or
-Settings presentation code.
+It performs static checks so future features cannot quietly reintroduce a second
+product-default table in runtime or Settings presentation code, nor revive the
+retired checked-in copies of the defaults.
 
 It is safe to import without Qt.  ``tools/check_defaults_authority.py`` exposes
 it as a repository tool and the focused defaults test suite exercises the same
@@ -17,10 +17,6 @@ from pathlib import Path
 from typing import Iterable
 
 from core.settings.default_contract import MISSING_DEFAULT, get_canonical_default
-from core.settings.defaults_snapshot_builder import (
-    defaults_snapshot_matches,
-    sst_defaults_documents_match,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +48,13 @@ _DIRECT_DEFAULT_AUTHORITY_IMPORT_ALLOWLIST = frozenset({
 _DEAD_DEFAULT_MIRRORS = (
     "core/settings/defaults_generated.py",
     "core/settings/defaults_snapshot.py",
+)
+# Checked-in copies of the defaults, retired 2026-09-27: readers use the
+# canonical defaults (or defaults_snapshot_builder in memory) instead.
+_RETIRED_DERIVED_DEFAULT_ARTIFACTS = (
+    "core/settings/defaults_snapshot.json",
+    "Docs/SRPSS_Settings_Screensaver.sst",
+    "Docs/SRPSS_Settings_Screensaver_MC.sst",
 )
 _SENSITIVE_MAPPER_PREFIXES = ("save", "_save", "collect")
 _SENSITIVE_MAPPING_OWNER_TOKENS = (
@@ -362,29 +365,15 @@ def audit_defaults_authority(root: str | Path | None = None) -> list[DefaultsAut
     )
     issues: list[DefaultsAuthorityIssue] = []
 
-    snapshot = repo_root / "core" / "settings" / "defaults_snapshot.json"
-    if not defaults_snapshot_matches(snapshot):
-        issues.append(
-            DefaultsAuthorityIssue(
-                snapshot.relative_to(repo_root).as_posix(),
-                0,
-                "derived defaults snapshot is stale",
+    for relative in _RETIRED_DERIVED_DEFAULT_ARTIFACTS:
+        if (repo_root / relative).exists():
+            issues.append(
+                DefaultsAuthorityIssue(
+                    relative,
+                    0,
+                    "retired derived defaults copy exists; read the canonical defaults instead",
+                )
             )
-        )
-
-    # Both checked-in .sst defaults documents are derived artifacts too; guard
-    # their byte-sync here so the single authority audit (and every consumer of
-    # it -- the Build Foundry preflight and the build scripts' preflight tool)
-    # blocks on .sst drift, not only the JSON snapshot.
-    if not sst_defaults_documents_match(repo_root / "Docs"):
-        issues.append(
-            DefaultsAuthorityIssue(
-                "Docs",
-                0,
-                "derived SST defaults documents are stale "
-                "(run: python -m core.settings.defaults_snapshot_builder --write-all)",
-            )
-        )
 
     for relative in _DEAD_DEFAULT_MIRRORS:
         if (repo_root / relative).exists():

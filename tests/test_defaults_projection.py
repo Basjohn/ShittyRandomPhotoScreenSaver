@@ -1,3 +1,4 @@
+"""The canonical defaults projected in memory (no generated defaults files exist)."""
 from __future__ import annotations
 
 import json
@@ -11,7 +12,6 @@ from core.settings.defaults_snapshot_builder import (
     build_sst_defaults_document,
     build_sst_defaults_snapshot,
 )
-from tools import regenerate_defaults_artifacts as module
 from tools.defaults_foundry_core import walk_private_paths
 
 
@@ -45,39 +45,22 @@ def _normalize_sparse_runtime_bucket_state(snapshot: Mapping[str, Any]) -> dict[
     return normalized
 
 
-def _load_outputs(root: Path) -> dict[str, dict[str, Any]]:
-    module.regenerate_defaults_artifacts(
-        docs_dir=root,
-        include_json=False,
-        include_sst=True,
-    )
-    outputs = tuple(root / filename for _application, filename in module.EXPORT_TARGETS)
-    assert all(path.parent == root and path.exists() for path in outputs)
-    return {
-        app_name: json.loads(path.read_text(encoding="utf-8"))
-        for (app_name, _filename), path in zip(module.EXPORT_TARGETS, outputs)
-    }
+_PROFILES = (NORMAL_PROFILE, MC_PROFILE)
 
 
-def test_sst_regeneration_is_byte_reproducible_and_profile_canonical(tmp_path) -> None:
-    first_root = tmp_path / "first"
-    second_root = tmp_path / "second"
+def _load_outputs() -> dict[str, dict[str, Any]]:
+    """Every profile's SST defaults document, built from the canonical source."""
+    return {profile: build_sst_defaults_document(profile) for profile in _PROFILES}
 
-    first = _load_outputs(first_root)
-    second = _load_outputs(second_root)
 
-    for application, filename in module.EXPORT_TARGETS:
-        first_bytes = (first_root / filename).read_bytes()
-        second_bytes = (second_root / filename).read_bytes()
-        assert first_bytes == second_bytes
-
+def test_sst_projection_is_deterministic_and_profile_canonical() -> None:
+    first = _load_outputs()
+    second = _load_outputs()
+    for application in _PROFILES:
+        assert json.dumps(first[application], sort_keys=True) == json.dumps(second[application], sort_keys=True)
         payload = first[application]
-        assert payload == second[application]
         assert payload["application"] == application
         assert payload["profile"] == application
-        # Single source of truth: the whole SST document (metadata included) is
-        # exactly what the canonical builder emits -- no second metadata constant.
-        assert payload == build_sst_defaults_document(application)
         assert "migrated_at" not in payload["metadata"]
         assert "last_migration_completed" not in payload["metadata"]
         assert payload["snapshot"] == build_sst_defaults_snapshot(application)
@@ -86,8 +69,8 @@ def test_sst_regeneration_is_byte_reproducible_and_profile_canonical(tmp_path) -
         assert not walk_private_paths(payload["snapshot"])
 
 
-def test_mc_sst_delta_is_exactly_the_canonical_profile_override(tmp_path) -> None:
-    generated = _load_outputs(tmp_path / "docs")
+def test_mc_sst_delta_is_exactly_the_canonical_profile_override() -> None:
+    generated = _load_outputs()
     normal = _flatten_leaves(generated[NORMAL_PROFILE]["snapshot"])
     mc = _flatten_leaves(generated[MC_PROFILE]["snapshot"])
     actual_delta = {
@@ -100,7 +83,7 @@ def test_mc_sst_delta_is_exactly_the_canonical_profile_override(tmp_path) -> Non
     assert actual_delta == override_delta
 
 
-def test_sst_regeneration_never_opens_or_rewrites_installed_settings(
+def test_sst_projection_never_opens_or_rewrites_installed_settings(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -115,13 +98,13 @@ def test_sst_regeneration_never_opens_or_rewrites_installed_settings(
         raise AssertionError("canonical SST generation must not construct SettingsManager")
 
     monkeypatch.setattr(SettingsManager, "__init__", _forbid_manager_construction)
-    _load_outputs(tmp_path / "docs")
+    _load_outputs()
 
     assert installed_settings.read_bytes() == sentinel
 
 
 @pytest.mark.parametrize("application", [NORMAL_PROFILE, MC_PROFILE])
-def test_generated_sst_import_matches_fresh_profile_reset(
+def test_sst_projection_import_matches_fresh_profile_reset(
     application: str,
     tmp_path,
     monkeypatch,
@@ -133,7 +116,7 @@ def test_generated_sst_import_matches_fresh_profile_reset(
         "_run_initial_migration",
         lambda *_args, **_kwargs: None,
     )
-    generated = _load_outputs(tmp_path / "docs")[application]
+    generated = _load_outputs()[application]
     generated_path = tmp_path / f"{application}.sst"
     generated_path.write_text(
         json.dumps(generated, indent=2, sort_keys=True) + "\n",
@@ -177,10 +160,10 @@ def test_generated_sst_import_matches_fresh_profile_reset(
     )
 
 
-def test_sst_generation_rejects_private_credential_fields(monkeypatch) -> None:
-    # Patch the single builder authority that _build_sst_payload resolves, so an
-    # injected secret is caught by the shared privacy validation.
+def test_defaults_check_rejects_private_credential_fields(monkeypatch) -> None:
+    """The build/editor check fails if a credential-shaped key enters the defaults."""
     from core.settings import defaults_snapshot_builder as builder
+    from tools import check_defaults_authority
 
     original_builder = builder.build_sst_defaults_snapshot
 
@@ -189,7 +172,16 @@ def test_sst_generation_rejects_private_credential_fields(monkeypatch) -> None:
         snapshot["widgets"]["steam"]["api_key"] = "must-not-export"
         return snapshot
 
+    assert check_defaults_authority.private_field_issues() == []
     monkeypatch.setattr(builder, "build_sst_defaults_snapshot", _defaults_with_secret)
+    issues = check_defaults_authority.private_field_issues()
+    assert len(issues) == 2 and all("private/credential fields" in issue for issue in issues)
 
-    with pytest.raises(ValueError, match="private/credential fields"):
-        module._build_sst_payload(NORMAL_PROFILE)
+
+def test_retired_derived_defaults_copies_stay_retired() -> None:
+    """Nothing regenerates checked-in copies; the audit rejects any that reappear."""
+    from core.settings.defaults_authority_audit import _RETIRED_DERIVED_DEFAULT_ARTIFACTS, audit_defaults_authority
+    root = Path(__file__).resolve().parents[1]
+    for relative in _RETIRED_DERIVED_DEFAULT_ARTIFACTS:
+        assert not (root / relative).exists(), relative
+    assert not [issue for issue in audit_defaults_authority(root) if "retired derived" in issue.render()]

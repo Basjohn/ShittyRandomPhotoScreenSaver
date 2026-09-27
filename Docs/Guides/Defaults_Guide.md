@@ -28,7 +28,8 @@ Forbidden patterns include:
 - copied widget/transition default tables in descriptors, preview helpers or runtime owners;
 - treating a Settings-session capture, runtime history, recovery metadata or user `Custom` snapshot as a
   fresh-install product default;
-- hand-editing `defaults_snapshot.json` or checked-in SST defaults;
+- reintroducing checked-in copies of the defaults (`defaults_snapshot.json`, SST defaults documents; retired
+  2026-09-27 and rejected by the authority audit);
 - allowing tooling/root entrypoints to escape the same authority audit as production packages.
 
 Use `require_canonical_default(...)`, `get_default_settings(...)`, typed-model default projection, or the
@@ -182,18 +183,19 @@ Modern defaults/exports do not emit retired schema as current authority:
 
 ## Safe default change
 
-Update canonical source -> profile override only for genuine profile differences -> typed models/normalizers -> UI load/save -> regenerate derived artifacts -> parity tests -> compatibility/import coverage when installed settings are affected -> current docs when the contract changes. Tests guard contract; they are not second authority.
+Update canonical source -> profile override only for genuine profile differences -> typed models/normalizers -> UI load/save -> parity tests -> compatibility/import coverage when installed settings are affected -> current docs when the contract changes. Tests guard contract; they are not second authority.
 
-The deterministic in-repo regeneration/check path is:
+Nothing is generated from the canonical defaults. Readers (runtime, Settings, tools, tests) use
+`get_default_settings()` / `require_canonical_default()` directly, or `core.settings.defaults_snapshot_builder`
+for an in-memory projection (sanitised defaults, SST transport shape). The check path is:
 
 ```powershell
-python -m core.settings.defaults_snapshot_builder --write-all
-python -m core.settings.defaults_snapshot_builder --check-all
-pytest tests/test_defaults_schema_authority.py -q --tb=short
 python tools/check_defaults_authority.py
+pytest tests/test_defaults_schema_authority.py tests/test_defaults_projection.py -q --tb=short
 ```
 
-`--write-all` owns `core/settings/defaults_snapshot.json` plus the checked-in Normal/MC SST defaults documents. Curated Visualizer presets and user Custom snapshots are deliberately outside this regeneration path.
+`check_defaults_authority.py` runs the authority audit (no second default table, no revived derived copies) and
+rejects credential-shaped keys in every profile's projection. The build and the Defaults Foundry run it.
 
 ## Runtime application / no-op safety
 
@@ -204,7 +206,7 @@ Family deactivation and ordinary enabled=False remain distinct.
 
 ## Defaults Foundry
 
-A Defaults Foundry/editor may edit canonical defaults/profile differences, but it is an authoring surface rather than authority. The supplied tree does not require an in-repo editor to regenerate artifacts: `core.settings.defaults_snapshot_builder --write-all` is the deterministic derivative path. Any external/optional Foundry must remain import-safe, must not carry its own product-default literals, must strip private/machine-local state on import, and must never mutate installed user settings merely because defaults are being edited. Generated snapshot/SST artifacts must remain exact projections of canonical source.
+A Defaults Foundry/editor may edit canonical defaults/profile differences, but it is an authoring surface rather than authority. After a save, `tools/default_settings_editor.py` runs `tools/check_defaults_authority.py` in a fresh interpreter (so the written sources are what gets imported) and restores the previous sources if it fails; it generates nothing. Any Foundry must remain import-safe, must not carry its own product-default literals, must strip private/machine-local state on import, and must never mutate installed user settings merely because defaults are being edited.
 
 ## Visualizer / CUSTOM defaults
 

@@ -1,6 +1,8 @@
 """Static guardrails for shared Widget Theme style authority and explicit colour reset."""
 from __future__ import annotations
 
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 import json
 from pathlib import Path
 
@@ -108,7 +110,7 @@ def test_reset_scope_covers_every_ordinary_theme_family_but_not_visualizer() -> 
     assert 'normalized.endswith("_color")' in source
     assert 'frozenset({"bg_opacity", "border_opacity"})' in source
 
-    defaults = json.loads(_text("core/settings/defaults_snapshot.json"))["widgets"]
+    defaults = build_defaults_snapshot()["widgets"]
     # All current ordinary-family colour keys are representable by the reset rule.
     for section in (
         "clock",

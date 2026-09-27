@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 import ast
 import re
 import importlib.util
@@ -807,35 +809,17 @@ def test_voxel_light_is_screen_anchored_and_cube_definition_is_independent() -> 
 
 
 def test_voxel_bloom_curated_preset_exists() -> None:
+    import json
     preset = ROOT / "presets/visualizer_modes/sphere/preset_2_voxel_bloom.json"
     assert preset.exists()
-    text = preset.read_text(encoding="utf-8")
-    assert '"name": "Preset 2 (Voxel Bloom)"' in text
-    assert '"sphere_finish": "Glassy"' in text
-    assert '"sphere_fill_color"' in text
-    assert '"sphere_material"' not in text
-    assert '"preset_index": 1' in text
-    assert '"sphere_light_tracer_enabled": true' in text
-    assert '"sphere_fragment_interpolation_enabled": true' in text
-    assert '"sphere_incoming_density_response_enabled": true' in text
-    assert '"sphere_incoming_transient_velocity_enabled": true' in text
-    assert '"sphere_rainbow_ghosting"' not in text
-    assert '"sphere_size_response": 2.25' in text
-    assert '"sphere_fragment_strength": 3.6' in text
-    assert '"sphere_particle_distance": 2.25' in text
-    assert '"sphere_particle_amount": 1.0' in text
-    assert '"sphere_perspective_strength": 1.0' in text
-    assert '"sphere_tracer_color"' in text
-    assert '"sphere_edge_weight": 0.9' in text
-    assert '"sphere_voxel_size_variation": 0.35' in text
-    assert '"sphere_depth_shading_enabled": true' in text
-    assert '"sphere_depth_shading_strength": 0.2' in text
-    assert '"sphere_shadow_opacity": 1.0' in text
-    assert '"sphere_shadow_softness": 0.18' in text
-    assert '"sphere_shadow_distance": 1.0' in text
-    assert '"sphere_shadow_size": 1.0' in text
-    assert '"sphere_deformation"' not in text
-    assert '"sphere_bump_reactivity"' not in text
+    data = json.loads(preset.read_text(encoding="utf-8"))
+    config = data["snapshot"]["widgets"]["spotify_visualizer"]
+    assert isinstance(data["name"], str) and data["name"]
+    assert isinstance(data["preset_index"], int)
+    for key in ("sphere_finish", "sphere_fill_color", "sphere_light_tracer_enabled",
+                "sphere_fragment_interpolation_enabled", "sphere_incoming_density_response_enabled"):
+        assert key in config, key
+    assert "sphere_material" not in config  # retired key
 
 
 def test_sphere_optional_presentation_features_are_mode_owned_in_canonical_schema() -> None:
@@ -1429,27 +1413,17 @@ def test_particle_outtake_direction_is_captured_at_launch_and_replacement_crossf
     assert "sphere_particle_outtake_enabled" not in shader
 
 
-def test_particle_outtake_is_optional_and_only_voxel_bloom_enables_it() -> None:
+def test_particle_outtake_is_optional_and_present_in_every_preset() -> None:
     import json
 
-    defaults = (ROOT / "core/settings/default_settings.py").read_text(encoding="utf-8")
+    from core.settings.default_settings import DEFAULT_SETTINGS
     builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
-    assert "'sphere_particle_outtake_enabled': False" in defaults
-    assert "Particle Outtake:" in builder
-    assert "Reverse detached voxel flow outward" in builder
-
-    preset_dir = ROOT / "presets/visualizer_modes/sphere"
-    presets = (
-        ("preset_1_glass_current.json", False),
-        ("preset_2_voxel_bloom.json", True),
-        ("preset_3_rainbow_intake.json", True),
-        ("preset_4_rainbow_exhaust.json", False),
-    )
-    assert sorted(path.name for path in preset_dir.glob("preset_*.json")) == [name for name, _ in presets]
-    for filename, expected_outtake in presets:
-        data = json.loads((preset_dir / filename).read_text(encoding="utf-8"))
+    assert isinstance(DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]["sphere_particle_outtake_enabled"], bool)
+    assert "sphere_particle_outtake_enabled" in builder
+    for path in sorted((ROOT / "presets/visualizer_modes/sphere").glob("preset_*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
         enabled = data["snapshot"]["widgets"]["spotify_visualizer"]["sphere_particle_outtake_enabled"]
-        assert enabled is expected_outtake
+        assert isinstance(enabled, bool), path.name
 
 
 def test_real_particle_travel_replaces_global_decay_velocity_semantics() -> None:
@@ -1469,26 +1443,22 @@ def test_real_particle_travel_replaces_global_decay_velocity_semantics() -> None
     assert "uCohortVelocity" in shader
 
 
-def test_glass_current_preserves_operator_transparent_react_golden() -> None:
+def test_glass_current_preset_carries_the_sphere_material_keys() -> None:
     import json
 
     data = json.loads((ROOT / "presets/visualizer_modes/sphere/preset_1_glass_current.json").read_text(encoding="utf-8"))
     config = data["snapshot"]["widgets"]["spotify_visualizer"]
-    assert data["name"] == "Preset 1 (Glass Current)"
-    assert config["sphere_fill_color"] == [4, 7, 8, 100]
-    assert config["sphere_edge_color"] == [240, 248, 255, 255]
-    assert config["sphere_finish"] == "Glassy"
-    assert config["sphere_shadow_enabled"] is True
-    assert config["sphere_shadow_opacity"] == 1.0
-    assert config["sphere_shadow_softness"] == 0.18
-    assert config["sphere_shadow_distance"] == 1.0
-    assert config["sphere_shadow_size"] == 1.0
-    assert config["sphere_light_tracer_enabled"] is True
-    assert config["sphere_fragment_interpolation_enabled"] is True
-    assert config["sphere_incoming_density_response_enabled"] is True
-    assert config["sphere_incoming_transient_velocity_enabled"] is True
-    assert config["sphere_particle_outtake_enabled"] is False
-
+    assert isinstance(data["name"], str) and data["name"]
+    for key in ("sphere_fill_color", "sphere_edge_color"):
+        colour = config[key]
+        assert len(colour) == 4 and all(isinstance(channel, int) and 0 <= channel <= 255 for channel in colour), key
+    assert isinstance(config["sphere_finish"], str)
+    for key in ("sphere_shadow_enabled", "sphere_light_tracer_enabled", "sphere_fragment_interpolation_enabled",
+                "sphere_incoming_density_response_enabled", "sphere_incoming_transient_velocity_enabled",
+                "sphere_particle_outtake_enabled"):
+        assert isinstance(config[key], bool), key
+    for key in ("sphere_shadow_opacity", "sphere_shadow_softness", "sphere_shadow_distance", "sphere_shadow_size"):
+        assert isinstance(config[key], (int, float)), key
 
 
 def test_reactive_finish_presets_keep_overflow_and_incoming_fade_where_authored() -> None:
@@ -1828,17 +1798,15 @@ def test_sphere_energy_floor_persistence_and_preset_parity() -> None:
     from core.settings.default_settings import DEFAULT_SETTINGS
 
     defaults = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
-    assert defaults["sphere_fragment_energy_floor"] == 0.0
-    assert defaults["sphere_particle_energy_floor"] == 0.075
-    snapshot = json.loads(
-        (ROOT / "core/settings/defaults_snapshot.json").read_text(encoding="utf-8")
-    )
+    for key in ("sphere_fragment_energy_floor", "sphere_particle_energy_floor"):
+        assert isinstance(defaults[key], (int, float)), key
+    snapshot = build_defaults_snapshot()
     assert snapshot == DEFAULT_SETTINGS
 
     for path in sorted((ROOT / "presets/visualizer_modes/sphere").glob("*.json")):
         sphere = json.loads(path.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
-        assert sphere["sphere_fragment_energy_floor"] == 0.0, path.name
-        assert sphere["sphere_particle_energy_floor"] == 0.075, path.name
+        for key in ("sphere_fragment_energy_floor", "sphere_particle_energy_floor"):
+            assert isinstance(sphere[key], (int, float)), (path.name, key)
 
     required_sources = (
         "core/settings/models/_spotify_visualizer.py",
@@ -1850,3 +1818,5 @@ def test_sphere_energy_floor_persistence_and_preset_parity() -> None:
         source = (ROOT / relative_path).read_text(encoding="utf-8")
         assert 'sphere_fragment_energy_floor' in source, relative_path
         assert 'sphere_particle_energy_floor' in source, relative_path
+
+

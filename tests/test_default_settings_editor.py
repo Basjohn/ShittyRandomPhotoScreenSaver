@@ -103,7 +103,7 @@ def test_editor_transactional_save_and_single_level_undo(qt_app, tmp_path) -> No
         base_path=base_path,
         overrides_path=overrides_path,
         undo_path=undo_path,
-        regenerate=lambda: regenerations.append(True) or "Regenerated test artifacts",
+        validate=lambda: regenerations.append(True) or "Regenerated test artifacts",
     )
     try:
         leaves, tooltips = editor.smoke_check()
@@ -113,7 +113,7 @@ def test_editor_transactional_save_and_single_level_undo(qt_app, tmp_path) -> No
         path = ("widgets", "achievement_pulse", "square_artwork_size")
         set_path(editor._models[NORMAL_PROFILE], path, 155)
         set_path(editor._models[MC_PROFILE], path, 155)
-        editor._save_and_regenerate()
+        editor._save_and_validate()
 
         saved = load_profile_overrides(overrides_path)
         canonical = editable_base_settings(load_default_settings_source(base_path))
@@ -123,7 +123,7 @@ def test_editor_transactional_save_and_single_level_undo(qt_app, tmp_path) -> No
         assert read_undo_record(undo_path) == original_source
         assert read_undo_sources(undo_path) == (original_base_source, original_source)
 
-        editor._undo_and_regenerate()
+        editor._undo_and_validate()
 
         assert base_path.read_text(encoding="utf-8") == original_base_source
         assert overrides_path.read_text(encoding="utf-8") == original_source
@@ -157,13 +157,13 @@ def test_failed_save_restores_previous_undo_source_and_artifacts(qt_app, tmp_pat
         base_path=base_path,
         overrides_path=overrides_path,
         undo_path=undo_path,
-        regenerate=_regenerate,
+        validate=_regenerate,
     )
     try:
         path = ("widgets", "achievement_pulse", "square_artwork_size")
         set_path(editor._models[NORMAL_PROFILE], path, 155)
         set_path(editor._models[MC_PROFILE], path, 155)
-        editor._save_and_regenerate()
+        editor._save_and_validate()
 
         assert base_path.read_text(encoding="utf-8") == base_source_before
         assert overrides_path.read_text(encoding="utf-8") == source_before
@@ -205,10 +205,10 @@ def test_failed_undo_restores_current_source_and_artifacts(qt_app, tmp_path, mon
         base_path=base_path,
         overrides_path=overrides_path,
         undo_path=undo_path,
-        regenerate=_regenerate,
+        validate=_regenerate,
     )
     try:
-        editor._undo_and_regenerate()
+        editor._undo_and_validate()
 
         assert base_path.read_text(encoding="utf-8") == current_base_source
         assert overrides_path.read_text(encoding="utf-8") == current_source
@@ -339,7 +339,7 @@ def test_editor_uses_alpha_swatch_and_font_delegate_editors(qt_app, tmp_path) ->
         base_path=base_path,
         overrides_path=overrides_path,
         undo_path=tmp_path / "undo.json",
-        regenerate=lambda: "",
+        validate=lambda: "",
     )
     try:
         delegate = editor.tree.itemDelegateForColumn(1)
@@ -377,7 +377,7 @@ def test_editor_color_swatch_survives_modal_picker_and_persists(qt_app, tmp_path
         base_path=base_path,
         overrides_path=overrides_path,
         undo_path=tmp_path / "undo.json",
-        regenerate=lambda: regenerated.append(True) or "",
+        validate=lambda: regenerated.append(True) or "",
     )
     try:
         path = ("widgets", "abandonment_issues", "accent_color")
@@ -423,7 +423,7 @@ def test_editor_color_swatch_survives_modal_picker_and_persists(qt_app, tmp_path
         ] == [12, 34, 56, 78]
         assert swatch.color().getRgb() == (12, 34, 56, 78)
 
-        editor._save_and_regenerate()
+        editor._save_and_validate()
 
         assert regenerated == [True]
         assert load_default_settings_source(base_path)["widgets"]["abandonment_issues"][
