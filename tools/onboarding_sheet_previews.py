@@ -24,6 +24,8 @@ ROOT: Final = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 DEFAULT_SHEET: Final = ROOT / "tools" / "onboarding_sources" / "MEGASHEET.png"
+# Operator screenshot of every Visualizer mode (unshipped, like MEGASHEET).
+VISUALIZER_SHEET: Final = ROOT / "tools" / "onboarding_sources" / "Visualizers.png"
 DEFAULT_OUTPUT: Final = ROOT / "images" / "onboarding"
 
 # Card frame lines located in the sheet (x0, y0, x1, y1, sheet pixels).  The
@@ -251,6 +253,55 @@ def build(sheet_path: Path, output: Path) -> list[str]:
     return written
 
 
+# Visualizer mode -> frame-line box in VISUALIZER_SHEET (cards with a white frame).
+VISUALIZER_CARDS: Final = {
+    "devcurve": (218, 10, 902, 428),
+    "spectrum": (957, 17, 1641, 434),
+    "oscilloscope": (26, 480, 710, 897),
+    "sine_wave": (834, 510, 1518, 927),
+    "bubble": (1569, 587, 2253, 1004),
+}
+# Voxel Sphere has no card in the screenshot: keep its own background and give
+# it a frame drawn in the other cards' frame colour and thickness.
+VISUALIZER_UNFRAMED: Final = {"sphere": (1752, 92, 2069, 364)}
+_DRAWN_FRAME: Final = 6
+_DRAWN_RADIUS: Final = 16.0
+
+
+def _framed(region: Image.Image, colour: tuple[int, int, int]) -> Image.Image:
+    """A screenshot region inside a drawn rounded frame (for unframed modes)."""
+
+    pad = _DRAWN_FRAME
+    size = (region.width + 2 * pad, region.height + 2 * pad)
+    card = Image.new("RGBA", size, (*colour, 255))
+    inner = region.convert("RGBA").copy()
+    inner.putalpha(_rounded_mask(inner.size, _DRAWN_RADIUS - pad))
+    card.alpha_composite(inner, (pad, pad))
+    card.putalpha(_rounded_mask(size, _DRAWN_RADIUS))
+    return card
+
+
+def build_visualizers(sheet_path: Path, output: Path) -> list[str]:
+    """``visualizer_<mode>.png`` for every Visualizer mode in the operator sheet."""
+
+    sheet = Image.open(sheet_path).convert("RGB")
+    pixels = numpy.asarray(sheet).astype(int)
+    written = []
+    colour = (255, 255, 255)
+    for mode, box in VISUALIZER_CARDS.items():
+        edges = _outer_edges(pixels, box)
+        card = _apply_mask(sheet.crop(edges).convert("RGBA"), _outer_radius(pixels, edges))
+        colour = _frame_colour(card)
+        name = f"visualizer_{mode}.png"
+        _with_shadow(card).save(output / name, "PNG", optimize=True)
+        written.append(name)
+    for mode, box in VISUALIZER_UNFRAMED.items():
+        name = f"visualizer_{mode}.png"
+        _with_shadow(_framed(sheet.crop(box), colour)).save(output / name, "PNG", optimize=True)
+        written.append(name)
+    return written
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sheet", type=Path, default=DEFAULT_SHEET)
@@ -258,6 +309,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-manifest", action="store_true")
     args = parser.parse_args(argv)
     written = build(args.sheet.resolve(), args.output.resolve())
+    if VISUALIZER_SHEET.is_file():
+        written += build_visualizers(VISUALIZER_SHEET, args.output.resolve())
     print("\n".join(written))
     if not args.no_manifest:
         from tools.onboarding_preview_foundry import assemble_manifest

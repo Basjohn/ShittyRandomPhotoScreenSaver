@@ -374,9 +374,59 @@
       ]
     }
   ],
+  "visualizer_modes": [
+    {
+      "mode_id": "spectrum",
+      "path": "visualizer_spectrum.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "oscilloscope",
+      "path": "visualizer_oscilloscope.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "sine_wave",
+      "path": "visualizer_sine_wave.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "bubble",
+      "path": "visualizer_bubble.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "devcurve",
+      "path": "visualizer_devcurve.png",
+      "size": [
+        778,
+        511
+      ]
+    },
+    {
+      "mode_id": "sphere",
+      "path": "visualizer_sphere.png",
+      "size": [
+        417,
+        372
+      ]
+    }
+  ],
   "generation": {
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 16347313
+  "total_bytes": 17355333
 }

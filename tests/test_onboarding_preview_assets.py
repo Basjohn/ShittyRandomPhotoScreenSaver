@@ -24,6 +24,10 @@ def test_onboarding_preview_manifest_covers_visible_catalogues() -> None:
     assert {row["transition_id"] for row in manifest["transitions"]} == {
         item.transition_id for item in iter_quick_transition_implementations()
     }
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+    assert {row["mode_id"] for row in manifest["visualizer_modes"]} == {
+        mode.mode_id for mode in iter_visualizer_mode_descriptors()
+    }
     assert manifest["generation"] == {
         "widgets": "hidden Windows-QPA QQuickRenderControl worker",
         "gl": "hidden Windows-QPA QOffscreenSurface worker",
@@ -34,7 +38,8 @@ def test_onboarding_preview_assets_match_declared_formats_and_dimensions() -> No
     from PIL import Image
 
     manifest = json.loads((ASSETS / "manifest.json").read_text(encoding="utf-8"))
-    for rows, expected in ((manifest["widgets"], "PNG"), (manifest["transitions"], "PNG")):
+    for rows, expected in ((manifest["widgets"], "PNG"), (manifest["transitions"], "PNG"),
+                           (manifest["visualizer_modes"], "PNG")):
         for row in rows:
             path = ASSETS / row["path"]
             assert path.is_file() and path.stat().st_size > 0
@@ -45,7 +50,7 @@ def test_onboarding_preview_assets_match_declared_formats_and_dimensions() -> No
         # Strips are unlabelled frames side by side; Settings paints the labels.
         frame_width, frame_height = row["frame_size"]
         assert row["size"] == [frame_width * len(row["progress"]), frame_height]
-    generated = [*ASSETS.glob("widget_*.png"), *ASSETS.glob("transition_*.png")]
+    generated = [*ASSETS.glob("widget_*.png"), *ASSETS.glob("transition_*.png"), *ASSETS.glob("visualizer_*.png")]
     total = sum(path.stat().st_size for path in generated)
     assert total <= 24 * 1024 * 1024
     assert manifest["total_bytes"] == total

@@ -206,3 +206,22 @@ def test_widget_previews_never_upscale_past_native_pixels(qapp) -> None:
         assert shown.width() <= source.width() and shown.height() <= source.height()
     finally:
         panel.deleteLater()
+
+
+def test_visualizer_page_is_a_narrow_list_with_the_selected_modes_preview(qapp, settings) -> None:
+    page = VisualizerPage(settings)
+    try:
+        page.refresh()
+        assert page.rows.maximumWidth() <= 360
+        for row in range(page.rows.count()):  # narrow, yet no mode name is cut off
+            check = page.rows.itemWidget(page.rows.item(row))
+            assert check.sizeHint().width() <= page.rows.maximumWidth() - 2 * page.rows.frameWidth()
+        assert page.preview is not None
+        for row in range(page.rows.count()):
+            page.rows.setCurrentRow(row)
+            mode_id = page.rows.item(row).data(Qt.ItemDataRole.UserRole)
+            assert page.preview_title.text() == page.rows.item(row).text()
+            assert not page.preview._source.isNull(), mode_id
+        assert settings.writes == []
+    finally:
+        page.deleteLater()
