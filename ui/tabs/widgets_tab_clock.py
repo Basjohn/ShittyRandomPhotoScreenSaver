@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Mapping
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QSpinBox, QGroupBox, QCheckBox, QPushButton,
+    QSpinBox, QGroupBox, QCheckBox,
     QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
@@ -30,6 +30,7 @@ from ui.tabs.shared_styles import (
     finalize_bucket_body as _finalize_bucket_body,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
+from ui.widgets.outlined_button import OutlinedButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -258,7 +259,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_timezone.currentTextChanged.connect(tab._save_settings)
     tz_row.addWidget(tab.clock_timezone)
 
-    tab.tz_auto_btn = QPushButton("Auto-Detect")
+    tab.tz_auto_btn = OutlinedButton("Auto-Detect", role="standard")
     tab.tz_auto_btn.clicked.connect(tab._auto_detect_timezone)
     tz_row.addWidget(tab.tz_auto_btn)
     tz_row.addStretch()

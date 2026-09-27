@@ -249,7 +249,7 @@ QML does not persist settings or directly invoke providers/backends.
 
 Context menu **Images → Save Image** (alongside Previous/Next Image) is always offered (checking each image's source per open would be extra work). The engine
 copies the file it already has for the display that was right-clicked, byte for byte, with one I/O-worker `copy2`
-(`core/sources/image_collection.py`): into the Sources "Save Feed Images" folder when the user ever chose one, else
+(`core/sources/image_collection.py`): into the Sources "Save All RSS Images To Disk" folder when the user ever chose one, else
 `Pictures/SRPSS Collections`. The first save there adds that folder to `sources.folders`; the engine marks this one
 write as its own so the running sources and prefetch are not rebuilt (the image is already in rotation). No timer,
 poll, extra size or cache change is involved.

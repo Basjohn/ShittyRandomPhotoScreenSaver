@@ -33,7 +33,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -62,6 +61,7 @@ from ui.tabs.shared_styles import (
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
+from ui.widgets.outlined_button import OutlinedButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -319,7 +319,7 @@ def _test_news_sources(tab: "WidgetsTab", widget_id: str) -> None:
 def _test_row(tab: "WidgetsTab", layout: QVBoxLayout, put, label: str, on_click, *, indent: int) -> None:
     row = QHBoxLayout()
     row.setContentsMargins(indent, 0, 0, 0)
-    test_button = put("test_button", QPushButton(label))
+    test_button = put("test_button", OutlinedButton(label, role="standard"))
     test_button.clicked.connect(on_click)
     row.addWidget(test_button)
     row.addStretch()
