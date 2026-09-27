@@ -995,9 +995,9 @@ OverlayWidget {
                         ? "white" : friendRoot.friendPulseModel.textColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.nameFontSize * friendRoot.friendPulseModel.customUsernameHeightScale; font.bold: true
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                    // The one-line-tall name box admits the documented two-line fit
-                    // only below ~6.5 pt, so the floor matches the presence line (6 pt).
-                    wrap: true; breakLongWords: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 6.0; elide: Text.ElideRight
+                    // ALL-CAPS names are wide and the name box is one line tall, so a
+                    // long tag shrinks on one line; 5.5 pt fits realistic 21-letter tags.
+                    wrap: true; breakLongWords: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 5.5; elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                 }
                 ShadowedText {
