@@ -102,6 +102,10 @@ class CheckList(OutlinedListWidget):
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
         super().addItem(item)
         check = checkbox(item.text(), self)
+        # Row checkboxes never take focus: inside Settings a focusable row was
+        # focused by merely hovering it, which made it current and scrolled the
+        # list under the cursor. The list keeps focus; Space toggles the row.
+        check.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         check.setToolTip(item.toolTip())
         check.setChecked(item.checkState() == Qt.CheckState.Checked)
         item.setSizeHint(QSize(0, max(46, check.sizeHint().height())))
