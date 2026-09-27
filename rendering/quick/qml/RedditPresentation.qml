@@ -273,7 +273,7 @@ OverlayWidget {
                     anchors.fill: parent
                     horizontalAlignment: Text.AlignHCenter
                     text: redditRoot.redditModel.refreshing ? "◌" : "↻"
-                    opacity: 0.7
+                    opacity: refreshHover.hovered && refreshTarget.canActivate ? 1.0 : 0.7
                     color: refreshHover.hovered && refreshTarget.canActivate
                         ? "white" : redditRoot.redditModel.textColor
                     font.family: redditRoot.redditModel.fontFamily

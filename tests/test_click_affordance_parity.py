@@ -134,3 +134,21 @@ def test_media_seek_and_transport_use_pointer_and_gesture_feedback_without_hover
     assert 'objectName: "mediaAppVolumeInputArea"' in media
     assert media.count("cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor") >= 2
     assert "Timer {" not in media
+
+
+def test_refresh_glyphs_share_one_hover_across_families():
+    """Header refresh accessories: white frame + full-opacity white glyph, no row wash."""
+    blocks = {
+        "reddit": _text("RedditPresentation.qml").split('objectName: "redditRefreshTarget"', 1)[1].split("TapHandler", 1)[0],
+        "gmail": _text("GmailPresentation.qml").split('objectName: "gmailRefreshTarget"', 1)[1].split("TapHandler", 1)[0],
+        "feeds": _text("FeedPresentation.qml").split('objectName: "feedRefreshTarget"', 1)[1].split("TapHandler", 1)[0],
+        "followed": _text("GamesYouFollowPresentation.qml").split('objectName: "followedRefreshTarget"', 1)[1].split("TapHandler", 1)[0],
+    }
+    for family, block in blocks.items():
+        assert "scaleAwareChildStrokeWidth(1.5" in block, family  # the same white frame stroke
+        assert block.count('? "white"') >= 2, family  # frame border and glyph
+        assert "Qt.rgba(1.0, 1.0, 1.0" not in block, family  # no dense-row wash on an accessory
+        assert "cursorShape: Qt.PointingHandCursor" in block, family
+        assert "Timer {" not in block, family
+    for family in ("reddit", "gmail", "feeds"):
+        assert "? 1.0 : 0.7" in blocks[family], family  # dim at rest, full white when hovered

@@ -352,7 +352,7 @@ OverlayWidget {
                     objectName: "gmailRefreshGlyph"
                     anchors.fill: parent
                     text: gmailRoot.gmailModel.refreshing ? "◌" : "↻"
-                    opacity: 0.7
+                    opacity: refreshHover.hovered && refreshTarget.canActivate ? 1.0 : 0.7
                     color: refreshHover.hovered && refreshTarget.canActivate
                         ? "white" : gmailRoot.gmailModel.textColor
                     font.family: gmailRoot.gmailModel.fontFamily
