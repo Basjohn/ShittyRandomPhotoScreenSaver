@@ -4,6 +4,7 @@ A source test cannot catch 'Cannot assign to non-existent property wrapMode';
 load the real file through the same QQmlComponent path as QuickSceneFactory.
 """
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from pathlib import Path
 
@@ -87,6 +88,7 @@ def test_f3_feed_grid_uses_local_artwork_and_geometry_visible_admission(qt_app, 
     window = QQuickWindow()
     window.resize(400, 178)
     root.setParentItem(window.contentItem())
+    keep_off_screen(window)
     window.show()
     try:
         root.setWidth(400.0)

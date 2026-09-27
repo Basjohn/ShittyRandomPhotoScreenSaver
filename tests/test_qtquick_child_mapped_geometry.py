@@ -5,6 +5,7 @@ Qt-mapped corners, rather than mirroring the QML helper's implementation. No
 production probes, render-loop timing, Settings writes, or provider data.
 """
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 import pytest
 from PySide6.QtCore import QObject, QPoint, QRect
@@ -140,6 +141,7 @@ def test_live_window_reflow_with_cancelling_axes_keeps_selected_proxy_on_paint(q
             display_origin=QPoint(0, 0),
             presentation_item_resolver=lambda _item: presentation.item,
         )
+        keep_off_screen(window)
         window.show()
         assert overlay.model.selectItem(0)
         qt_app.processEvents()
@@ -528,6 +530,7 @@ def test_selected_mapper_tracks_nested_qml_scale_translate_clips_and_role_readin
             display_origin=QPoint(0, 0),
             presentation_item_resolver=lambda _item: presentation.item,
         )
+        keep_off_screen(window)
         window.show()
         assert overlay.model.selectItem(0)
         qt_app.processEvents()
@@ -768,6 +771,7 @@ def test_selected_roles_retain_identity_when_live_normalization_baselines_change
             display_origin=QPoint(0, 0),
             presentation_item_resolver=lambda _item: presentation.item,
         )
+        keep_off_screen(window)
         window.show()
         assert overlay.model.selectItem(0)
         qt_app.processEvents()

@@ -85,6 +85,10 @@ def request_when_rendering():
         print("REQUESTED", request_application_quit("probe"), flush=True)
 
 
+from PySide6.QtCore import Qt as _InvisibleQt
+window.setOpacity(0.0)  # real but never on screen (tests/_invisible_windows.py)
+window.setFlag(_InvisibleQt.WindowType.WindowTransparentForInput, True)
+window.setFlag(_InvisibleQt.WindowType.Tool, True)
 window.show()
 QTimer.singleShot(20, request_when_rendering)
 app.exec()

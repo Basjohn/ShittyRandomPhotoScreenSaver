@@ -1,6 +1,7 @@
 """F1 production-shaped gates for the retained Quick Clock family."""
 
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -1115,6 +1116,7 @@ def test_clock_selected_edit_proxies_follow_actual_applied_transforms_in_both_fa
             display_origin=QPoint(0, 0),
             presentation_item_resolver=lambda _item: presentation.item,
         )
+        keep_off_screen(window)
         window.show()
         assert overlay.model.selectItem(0)
         qt_app.processEvents()

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 import pytest
 from PySide6.QtCore import QObject
@@ -158,6 +159,7 @@ def test_advanced_toggle_hides_only_advanced(
         container = QWidget()
         layout = QVBoxLayout(container)
         builder(tab, layout)
+        keep_off_screen(container)
         container.show()
         qt_app.processEvents()
         # V6a: the normal/advanced mode-body controls are only presented in the

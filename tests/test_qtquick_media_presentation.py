@@ -1,6 +1,7 @@
 """F3/F4 production-shaped gates for the retained Quick Media family."""
 
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from dataclasses import replace
 from pathlib import Path
@@ -1736,6 +1737,7 @@ def test_media_volume_opposite_axis_reflow_updates_live_edit_proxy(qt_app) -> No
         # Match the already-working retained scene fixture: install the model
         # before native exposure, so the Repeater's first component completion
         # receives its role model. Do not instantiate a second Edit owner.
+        keep_off_screen(window)
         window.show()
         qt_app.processEvents()
         assert overlay.model.selectItem(0)

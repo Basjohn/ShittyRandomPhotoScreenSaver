@@ -1,6 +1,7 @@
 """Phase G7 gates for the retained Quick context menu."""
 
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from pathlib import Path
 
@@ -348,6 +349,7 @@ def test_retained_context_menu_draws_real_quick_pixels_and_clamps(qt_app) -> Non
     assert menu is not None
     assert surface is not None
     try:
+        keep_off_screen(window)
         window.show()
         assert model.open_at(635.0, 555.0) is True
         settle = QEventLoop()

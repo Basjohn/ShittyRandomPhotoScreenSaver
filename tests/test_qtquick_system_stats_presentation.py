@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -721,6 +722,7 @@ def test_system_stats_selected_edit_exposes_one_live_metric_stack_and_no_ghost_r
             display_origin=QPoint(0, 0),
             presentation_item_resolver=lambda _item: presentation.item,
         )
+        keep_off_screen(window)
         window.show()
         assert overlay.model.selectItem(0)
         qt_app.processEvents()

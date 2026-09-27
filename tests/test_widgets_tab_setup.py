@@ -5,6 +5,7 @@ Proves the SETUP page lists families, toggles application-level *activation*
 settings pill live, and preserves stored configuration across deactivation.
 """
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 import pytest
 
@@ -34,6 +35,7 @@ def test_setup_module_grid_is_responsive(qt_app, settings_manager):
     tab = _make_tab(settings_manager)
     try:
         tab.resize(1000, 700)
+        keep_off_screen(tab)
         tab.show()
         qt_app.processEvents()
         cbs = list(tab._family_activation_checkboxes.values())
