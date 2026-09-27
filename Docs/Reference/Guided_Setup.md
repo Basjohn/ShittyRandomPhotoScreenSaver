@@ -7,7 +7,10 @@ requires an image source. QUICK START always allows a manual rerun, regardless o
 
 ## Owners and choices
 
-`ui/onboarding/wizard.py` owns page navigation. Pages are built on first visit and edit the ordinary Settings keys.
+`ui/onboarding/wizard.py` owns page navigation. Pages are built on first visit and edit the ordinary Settings keys
+through `ui/onboarding/draft.py:SettingsDraft`, never the store itself: saving is explicit. Finish commits the draft;
+Skip (or closing Settings) asks Save/Discard when anything is pending; a discard also restores the live theme the
+Theme page previewed. Explicit save buttons inside pages (Save to Slot, account Save & Test) write straight through.
 `core/sources/readiness.py` is the shared source-readiness rule; `sources/rss/curated.py` is the one Just Make It Work
 operation used by Sources, the close popup and Guided Setup. Skip sits in the Guided Setup header (there is no
 separate Close); it leaves at any step, offers an unapplied Arrange draft first and changes no other settings.

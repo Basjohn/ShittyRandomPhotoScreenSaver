@@ -1,5 +1,8 @@
 """Lazy Guided Setup panel. Settings remains the sole persistence authority.
 
+Saving is explicit: pages edit a :class:`SettingsDraft`, and only Finish (or a
+"Save" answer when leaving early) commits it to the user's settings.
+
 The panel is hosted inside the Settings window (it replaces the sidebar and
 tab area while it runs), so it shares Settings' native backdrop, theme,
 title bar and window lifetime instead of owning a second top-level surface.
@@ -26,7 +29,8 @@ class GuidedSetupPanel(QWidget):
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
-        self.settings = settings
+        from ui.onboarding.draft import SettingsDraft
+        self.settings = SettingsDraft(settings)
         self._closed = False
         # Styled exactly like the Settings tab area it replaces (theme QSS and
         # shell shadow both key on this object name).
@@ -74,8 +78,6 @@ class GuidedSetupPanel(QWidget):
             page.readinessChanged.connect(self._refresh_navigation)
         if key == "sources":
             page.finishRequested.connect(self.finish)
-        if key == "ready":
-            page.arrangeRequested.connect(lambda: self.show_page("arrange"))
         scroll = QScrollArea(self.stack)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
@@ -129,18 +131,32 @@ class GuidedSetupPanel(QWidget):
         keys = self.step_keys()
         self.show_page(keys[keys.index(self.current_key)+1])
 
+    def _arrange_pending(self):
+        arrange = self.pages.get("arrange", (None,))[0]
+        return arrange if arrange is not None and arrange.model is not None and arrange.model.pending else None
+
+    def has_unsaved_changes(self) -> bool:
+        return self.settings.pending or self._arrange_pending() is not None
+
+    def _save(self) -> None:
+        arrange = self._arrange_pending()
+        if arrange is not None:
+            arrange.apply()
+        self.settings.commit()
+
     def finish(self):
+        """Finish is the explicit save."""
         if has_image_sources(self.settings):
+            self._save()
             self.close_setup(True)
 
     def request_close(self) -> None:
-        """Skip from the header; an unapplied Arrange draft is offered first."""
-        arrange = self.pages.get("arrange", (None,))[0]
-        if arrange is not None and arrange.model is not None and arrange.model.pending:
+        """Skip (or closing Settings): ask before saving anything chosen so far."""
+        if self.has_unsaved_changes():
             from ui.styled_popup import StyledPopup
-            if StyledPopup.question(self, "Arrange changes", "Apply your Arrange changes before closing?",
-                                    yes_text="Apply", no_text="Discard", default_to_yes=True):
-                arrange.apply()
+            if StyledPopup.question(self, "Guided Setup", "Save The Changes You Made In Guided Setup?",
+                                    yes_text="Save", no_text="Discard", default_to_yes=False):
+                self._save()
         self.close_setup(False)
 
     def close_setup(self, completed: bool) -> None:
@@ -152,4 +168,6 @@ class GuidedSetupPanel(QWidget):
             self.pages["setup"][0].retire()
         if "arrange" in self.pages:
             self.pages["arrange"][0].discard()
+        # Anything not committed by now was declined: drop it and the live theme preview.
+        self.settings.discard()
         self.finished.emit(bool(completed))
