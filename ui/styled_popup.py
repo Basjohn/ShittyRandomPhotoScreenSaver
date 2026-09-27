@@ -148,18 +148,15 @@ class StyledPopup(QDialog):
 
         theme = get_active_settings_theme()
 
-        # Main container with styling
-        container = QWidget(self)
+        # A popup is its own top-level window, so it does not inherit the
+        # Settings stylesheet: take the active theme's Settings root styles so
+        # every control inside (checkboxes, labels, inputs) follows the theme.
+        from ui.settings_theme import _build_settings_root_stylesheet
+        self.setStyleSheet(_build_settings_root_stylesheet(theme))
+        # The shared popup body: Settings panel semantics, seam-free border.
+        from ui.widgets.continuous_border import PopupSurface
+        container = PopupSurface(self)
         container.setObjectName("popupContainer")
-        container.setStyleSheet(
-            f"""
-            #popupContainer {{
-                background-color: {_theme_rgba255(theme, 'popup.container.surface')};
-                border: 1px solid {_theme_rgba255(theme, 'popup.container.border')};
-                border-radius: 10px;
-            }}
-        """
-        )
 
         # Existing popup-specific renderer; visual values are ThemeSpec-owned.
         popup_shadow = theme.shadow("popup.dialog")
@@ -208,7 +205,7 @@ class StyledPopup(QDialog):
         title_label = QLabel(self._title)
         title_label.setStyleSheet(
             f"""
-            font-size: 13px;
+            font-size: 14px;
             font-weight: bold;
             color: {_theme_rgba255(theme, 'popup.title.text')};
         """
@@ -225,7 +222,7 @@ class StyledPopup(QDialog):
             msg_label.setWordWrap(True)
             msg_label.setStyleSheet(
                 f"""
-                font-size: 12px;
+                font-size: 13px;
                 color: {_theme_rgba255(theme, 'popup.message.text')};
                 padding: 4px 0;
             """
@@ -234,35 +231,23 @@ class StyledPopup(QDialog):
 
         if self._content is not None:
             container_layout.addWidget(self._content)
+            # Same control shadows as inside Settings (they carry light-theme contrast).
+            from ui.widgets.control_shadow import apply_shadows_to_inputs
+            apply_shadows_to_inputs(self._content)
 
         # OK button
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
+        # Settings' own buttons: the default is the primary pill, others compact.
+        from ui.widgets.outlined_button import OutlinedButton
         for index, (label, value) in enumerate(self._buttons):
-            button = QPushButton(label)
-            button.setFixedHeight(28)
-            button.setMinimumWidth(90)
-            button.setStyleSheet(
-                f"""
-                QPushButton {{
-                    background-color: {_theme_rgba255(theme, 'popup.button.surface')};
-                    border: 1px solid {_theme_rgba255(theme, 'popup.button.border')};
-                    border-radius: 4px;
-                    color: {_theme_rgba255(theme, 'popup.button.text')};
-                    font-size: 12px;
-                    padding: 4px 16px;
-                }}
-                QPushButton:hover {{
-                    background-color: {_theme_rgba255(theme, 'popup.button.hover_surface')};
-                }}
-                QPushButton:pressed {{
-                    background-color: {_theme_rgba255(theme, 'popup.button.pressed_surface')};
-                }}
-            """
-            )
+            primary = index == self._default_button_index
+            button = OutlinedButton(label, role="primary" if primary else "secondary")
+            button.setMinimumHeight(32)
+            button.setMinimumWidth(96)
             button.clicked.connect(lambda _=False, val=value: self._on_button(val))
-            if index == self._default_button_index:
+            if primary:
                 button.setDefault(True)
             btn_layout.addWidget(button)
         
@@ -407,7 +392,13 @@ class _ColorPickerDialog(QDialog):
         self._drag_pos = QPoint()
 
         picker_theme = get_active_settings_theme()
-        self.setStyleSheet(_build_color_picker_wrapper_stylesheet(picker_theme))
+        # Settings root styles first (labels, buttons, inputs inside Qt's colour
+        # dialog follow the theme), then the picker's own wrapper chrome.
+        from ui.settings_theme import _build_settings_root_stylesheet
+        self.setStyleSheet(
+            _build_settings_root_stylesheet(picker_theme)
+            + _build_color_picker_wrapper_stylesheet(picker_theme)
+        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

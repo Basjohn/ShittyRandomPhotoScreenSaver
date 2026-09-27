@@ -88,3 +88,24 @@ def test_title_case_rule_leaves_data_and_units_alone() -> None:
     assert title_case("RSS feeds, 10 px") == "RSS Feeds, 10 px"
     assert title_case("right-click, play/pause, e.g. r/cats") == "Right-Click, Play/Pause, e.g. r/cats"
     assert title_case("(shift for more)") == "(Shift For More)"
+
+
+def test_popups_carry_settings_theme_semantics(qapp) -> None:
+    """A popup is its own window: it must bring the Settings theme with it."""
+    from PySide6.QtWidgets import QCheckBox
+    from ui.styled_popup import StyledPopup
+    from ui.widgets.continuous_border import PopupSurface
+    from ui.widgets.outlined_button import OutlinedButton
+
+    check = QCheckBox("Display Settings")
+    popup = StyledPopup(None, "Import Settings", "Choose.", buttons=[("Import", "import"), ("Cancel", "cancel")],
+                        content=check)
+    try:
+        assert popup.styleSheet() == _build_settings_root_stylesheet(get_active_settings_theme())
+        assert isinstance(popup.findChild(PopupSurface), PopupSurface)  # seam-free panel body
+        buttons = popup.findChildren(OutlinedButton)
+        assert [b.text() for b in buttons] == ["Import", "Cancel"]
+        assert buttons[0]._role == "primary" and buttons[1]._role == "secondary"
+        assert check.isVisibleTo(popup) or check.parent() is not None
+    finally:
+        popup.deleteLater()

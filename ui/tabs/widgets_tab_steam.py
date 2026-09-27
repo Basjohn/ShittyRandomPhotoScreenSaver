@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QFrame,
     QGraphicsDropShadowEffect,
     QGroupBox,
     QHBoxLayout,
@@ -383,11 +382,6 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
 
     dialog.setStyleSheet(
         f"""
-        #steamApiKeyDialogSurface {{
-            background-color: {rgba('popup.container.surface')};
-            border: 1px solid {rgba('popup.container.border')};
-            border-radius: 10px;
-        }}
         #steamApiKeyDialogSurface QLabel {{
             color: {rgba('popup.message.text')};
         }}
@@ -401,26 +395,14 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
         #steamApiKeyDialogSurface QLineEdit#steamApiKeyInput:focus {{
             border-color: {rgba('popup.input.focus_border')};
         }}
-        #steamApiKeyDialogSurface QPushButton {{
-            background-color: {rgba('popup.button.surface')};
-            border: 1px solid {rgba('popup.button.border')};
-            border-radius: 6px;
-            color: {rgba('popup.button.text')};
-            min-height: 30px;
-            padding: 3px 12px;
-        }}
-        #steamApiKeyDialogSurface QPushButton:hover {{
-            background-color: {rgba('popup.button.hover_surface')};
-        }}
-        #steamApiKeyDialogSurface QPushButton:pressed {{
-            background-color: {rgba('popup.button.pressed_surface')};
-        }}
         """
     )
     dialog_layout = QVBoxLayout(dialog)
     dialog_layout.setContentsMargins(0, 0, 0, 0)
 
-    surface = QFrame(dialog)
+    # The shared popup body (Settings panel semantics, seam-free border).
+    from ui.widgets.continuous_border import PopupSurface
+    surface = PopupSurface(dialog)
     surface.setObjectName("steamApiKeyDialogSurface")
     popup_shadow = theme.shadow("popup.dialog")
     shadow = QGraphicsDropShadowEffect(dialog)
@@ -463,9 +445,12 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
     layout.addWidget(key_field)
 
     button_row = QHBoxLayout()
-    paste_button = QPushButton("Paste Key")
-    save_button = QPushButton("Save && Test")
-    cancel_button = QPushButton("Cancel")
+    from ui.widgets.outlined_button import OutlinedButton
+    paste_button = OutlinedButton("Paste Key", role="secondary")
+    save_button = OutlinedButton("Save && Test", role="primary")
+    cancel_button = OutlinedButton("Cancel", role="secondary")
+    for button in (paste_button, save_button, cancel_button):
+        button.setMinimumHeight(32)
     button_row.addWidget(paste_button)
     button_row.addStretch()
     button_row.addWidget(save_button)
