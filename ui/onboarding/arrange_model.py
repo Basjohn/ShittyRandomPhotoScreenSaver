@@ -29,6 +29,7 @@ from rendering.custom_layout_contract import (
     load_custom_layout_restore_map,
     parse_content_placement_anchor,
     get_custom_layout_restore_entry,
+    resolve_resize_edge_snap,
     remove_screen_layout_entry,
     should_transfer_rect_to_screen,
     resolve_snap_local_rect_for_edit,
@@ -46,9 +47,13 @@ from rendering.custom_layout_session import (
 )
 from rendering.quick.custom_layout_size import (
     CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
+    content_extent_resize_payload,
+    edge_resize_rect,
+    quick_custom_content_extent_minimum_size,
     quick_custom_minimum_size,
     quick_custom_payload_minimum_scale,
     scale_quick_size_payload,
+    settings_content_extent_edges,
 )
 from rendering.widget_descriptors import (
     WidgetRuntimeDescriptor,
@@ -599,6 +604,52 @@ class ArrangeModel:
         self._dirty = True
         self._authored_keys.discard(key); self.session.notify_item_changed(item)
 
+    def side_edges(self, key: CustomLayoutKey) -> tuple[str, ...]:
+        """Side handles (width-only / height-only) Settings can offer for this item."""
+
+        return settings_content_extent_edges(self.item(key), self._descriptors_by_key[key])
+
+    def side_edges_note(self, key: CustomLayoutKey) -> str:
+        """Why a width/height-capable widget has no side handles here, or ""."""
+
+        item = self.item(key)
+        if not item.content_extent_axes or item.viewport_resize_capable or self.side_edges(key):
+            return ""
+        descriptor = self._descriptors_by_key[key]
+        if descriptor.content_extent_floor_at_authored_size or item.current_child_sizes:
+            return "width/height: in the saver's Edit mode"
+        return "width/height: resize it once in the saver's Edit mode first"
+
+    def resize_edge(self, key: CustomLayoutKey, edge: str, origin_rect: QRect, delta: QPoint) -> None:
+        """Change one content axis at constant scale, as Runtime Edit's side handle does."""
+
+        if edge not in self.side_edges(key):
+            return
+        item = self.item(key)
+        self._touch(key)
+        display = self._display_map[item.current_display_identity]
+        minimum = quick_custom_content_extent_minimum_size(item)
+        horizontal = edge if edge in {"left", "right"} else None
+        vertical = edge if edge in {"top", "bottom"} else None
+        rect = edge_resize_rect(origin_rect, display.geometry, minimum, delta.x(), delta.y(),
+                                horizontal_edge=horizontal, vertical_edge=vertical)
+        local = QRect(rect.x() - display.geometry.x(), rect.y() - display.geometry.y(), rect.width(), rect.height())
+        peers = [QRect(peer.current_global_rect.x() - display.geometry.x(), peer.current_global_rect.y() - display.geometry.y(),
+                       peer.current_global_rect.width(), peer.current_global_rect.height())
+                 for peer in self.session.active_items() if peer is not item and peer.current_display_identity == display.identity]
+        resolution = resolve_resize_edge_snap(local, display.geometry.size(), horizontal_edge=horizontal,
+                                              vertical_edge=vertical, peer_rects=peers, min_size=minimum)
+        self.last_snap = (display.identity, resolution.vertical_guides, resolution.horizontal_guides)
+        snapped = resolution.rect
+        rect = QRect(display.geometry.x() + snapped.x(), display.geometry.y() + snapped.y(), snapped.width(), snapped.height())
+        payload, box = content_extent_resize_payload(item, item.resize_scale, rect,
+                                                     change_width=horizontal is not None, change_height=vertical is not None)
+        if rect == item.current_global_rect and item.current_content_extent == box:
+            return
+        item.set_geometry(rect, size_payload=payload, content_extent=box)
+        self._dirty = True
+        self.session.notify_item_changed(item)
+
     def reset(self, key: CustomLayoutKey) -> None:
         """Return the widget to its authored anchor now; Apply removes its CUSTOM entry.
 
@@ -617,8 +668,9 @@ class ArrangeModel:
         # stacking exclusions only after Apply, so project on a reset draft).
         rect = self._reset_rect(descriptor, home)
         item.set_current_display(home.identity, monitor_route=item.source_monitor_route)
-        item.set_geometry(rect, size_payload=self._authored_payload(descriptor, rect), resize_scale=1.0)
-        item.content_sized = False
+        # The session's authored-size restore also drops any saved logical box, so
+        # a later move cannot write an old content extent back beside authored size.
+        item.restore_authored_size(rect, size_payload=self._authored_payload(descriptor, rect), resize_scale=1.0)
         item.placement_anchor = None
         item.removed = False
         self._dirty = True

@@ -25,7 +25,8 @@ class _ArrangeCanvas(QWidget):
     """A scaled, event-owned projection; it never represents persisted coordinates.
 
     Drag a box to move it (across displays too), drag a corner handle to scale
-    it uniformly, Ctrl+wheel scales, arrow keys nudge (Shift for 10 px),
+    it uniformly, drag a side handle (when the model admits one) to change
+    only width or height, Ctrl+wheel scales, arrow keys nudge (Shift for 10 px),
     Delete resets, Escape clears the selection.  Dashed boxes still follow
     their authored anchor; solid boxes are placed.
     """
@@ -55,6 +56,7 @@ class _ArrangeCanvas(QWidget):
         self._original_rect: QRect | None = None
         self._scale_origin: float | None = None
         self._scale_applied = 1.0
+        self._side_edge: str | None = None
         self._dragging = False
 
     # ---- geometry -----------------------------------------------------------
@@ -117,6 +119,25 @@ class _ArrangeCanvas(QWidget):
         half = self._HANDLE / 2
         return [QRectF(corner.x() - half, corner.y() - half, self._HANDLE, self._HANDLE)
                 for corner in (rect.topLeft(), rect.topRight(), rect.bottomLeft(), rect.bottomRight())]
+
+    def _side_handles(self, item) -> dict[str, QRectF]:
+        rect = QRectF(self._project(item.current_global_rect))
+        long, short = self._HANDLE * 2, self._HANDLE * 0.75
+        centres = {"left": QPointF(rect.left(), rect.center().y()), "right": QPointF(rect.right(), rect.center().y()),
+                   "top": QPointF(rect.center().x(), rect.top()), "bottom": QPointF(rect.center().x(), rect.bottom())}
+        handles = {}
+        for edge in self.model.side_edges(item.source_key):
+            width, height = (short, long) if edge in {"left", "right"} else (long, short)
+            centre = centres[edge]
+            handles[edge] = QRectF(centre.x() - width / 2, centre.y() - height / 2, width, height)
+        return handles
+
+    def _side_at(self, point: QPoint) -> str | None:
+        item = self._selected
+        if item is None:
+            return None
+        return next((edge for edge, handle in self._side_handles(item).items()
+                     if handle.adjusted(-3, -3, 3, 3).contains(QPointF(point))), None)
 
     def _on_handle(self, point: QPoint) -> bool:
         item = self._selected
@@ -204,6 +225,8 @@ class _ArrangeCanvas(QWidget):
             painter.setBrush(accent)
             for handle in self._handles(item):
                 painter.drawRoundedRect(handle, 2.0, 2.0)
+            for handle in self._side_handles(item).values():
+                painter.drawRoundedRect(handle, 2.0, 2.0)
 
     def _paint_guides(self, painter, accent) -> None:
         snap = self.model.last_snap
@@ -236,6 +259,12 @@ class _ArrangeCanvas(QWidget):
             return
         self.setFocus(Qt.FocusReason.MouseFocusReason)
         point = event.position().toPoint()
+        edge = self._side_at(point)
+        if edge is not None:
+            self._side_edge = edge
+            self._drag_origin = point; self._original_rect = QRect(self._selected.current_global_rect)
+            self._dragging = False
+            return
         if self._on_handle(point):
             centre = QPointF(self._project(self._selected.current_global_rect).center())
             self._scale_origin = max(4.0, (QPointF(point) - centre).manhattanLength())
@@ -256,6 +285,12 @@ class _ArrangeCanvas(QWidget):
             self._scale_by(wanted / self._scale_applied)
             self._scale_applied = wanted
             return
+        if self._side_edge is not None and self._selected is not None and self._original_rect is not None:
+            self._dragging = True
+            delta = self._unproject_delta(point - self._drag_origin)
+            self.model.resize_edge(self._selected.source_key, self._side_edge, self._original_rect, delta)
+            self.changed.emit(); self.update()
+            return
         if self._selected is not None and self._drag_origin is not None and self._original_rect is not None:
             if not self._dragging and (point - self._drag_origin).manhattanLength() < 3:
                 return
@@ -270,7 +305,10 @@ class _ArrangeCanvas(QWidget):
             self._hovered = hovered
             self.setToolTip(self._describe(hovered) if hovered is not None else "")
             self.update()
-        if self._on_handle(point):
+        edge = self._side_at(point)
+        if edge is not None:
+            self.setCursor(Qt.CursorShape.SizeHorCursor if edge in {"left", "right"} else Qt.CursorShape.SizeVerCursor)
+        elif self._on_handle(point):
             self.setCursor(Qt.CursorShape.SizeFDiagCursor)
         elif hovered is not None:
             self.setCursor(Qt.CursorShape.OpenHandCursor)
@@ -280,7 +318,7 @@ class _ArrangeCanvas(QWidget):
     def mouseReleaseEvent(self, _event) -> None:
         was_editing = self._dragging or self._scale_origin is not None
         self._drag_origin = None; self._original_rect = None
-        self._scale_origin = None; self._dragging = False
+        self._scale_origin = None; self._side_edge = None; self._dragging = False
         self.model.last_snap = None
         self.unsetCursor()
         self.update()
@@ -339,7 +377,7 @@ class ArrangePage(Page):
         self.model: ArrangeModel | None = None
         self.body.addWidget(text_label("Arrange widgets freely. Changes stay in this draft until you apply them.", heading=True))
         self.canvas_holder = QVBoxLayout(); self.body.addLayout(self.canvas_holder)
-        self.body.addWidget(text_label("Drag a box to move it, including onto another display. Drag a corner, or Ctrl+scroll, to scale. Arrow keys nudge (Shift for 10 px), Delete resets. Dashed boxes still follow their original anchor."))
+        self.body.addWidget(text_label("Drag a box to move it, including onto another display. Drag a corner, or Ctrl+scroll, to scale; drag a side handle to change only width or height. Arrow keys nudge (Shift for 10 px), Delete resets. Dashed boxes still follow their original anchor."))
         chooser = QHBoxLayout()
         self.item_list = OutlinedListWidget()
         self.item_list.setMaximumHeight(118)
@@ -474,7 +512,10 @@ class ArrangePage(Page):
             self.selection_hint.setText("Select a widget to arrange it.")
             self.scale_label.setText("Uniform scale: 100%")
         else:
-            policy = "size follows content; X/Y reflows with content" if item.content_sized else "explicit size"
+            policy = "size follows content" if item.content_sized else "explicit size"
+            note = self.model.side_edges_note(item.source_key)
+            if note:
+                policy += f" · {note}"
             self.selection_hint.setText(f"{self.model.item_label(item.source_key)} on display {self.model.display_route(item.source_key)} · {policy}")
             self.scale_label.setText(f"Uniform scale: {percent}%")
 

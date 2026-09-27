@@ -135,3 +135,31 @@ def test_adjacency_prefers_the_roomier_vertical_side() -> None:
     x, y, overfull = resolve_visualizer_media_origin((30, 30, 400, 1000), (400, 900), (1920, 1080))
     assert (x, overfull) == (450, False)  # horizontal fallback
     assert resolve_visualizer_media_origin((0, 0, 1920, 1000), (1900, 900), (1920, 1080))[2] is True
+
+
+def test_side_handle_appears_only_for_a_saved_box_and_drags_width_only(qt_app) -> None:
+    seed = ArrangeModel(_weather_only(), _displays())
+    seed.move(seed.session.items()[0].source_key, QRect(300, 60, 520, 310))
+    widgets = seed.apply()
+    payload = widgets["custom_layout"]["displays"]["screen:a"]["weather"]["default"]["size_payload"]
+    assert seed.side_edges(seed.session.items()[0].source_key) == ()  # content-sized estimate
+    payload.pop("_size_from_content"); payload.pop("_placement_anchor")
+    payload["content_extent"] = [520.0, 310.0]  # as Runtime Edit saves it
+
+    widget = _ArrangeCanvas(ArrangeModel(widgets, _displays()))
+    widget.resize(820, widget.heightForWidth(820))
+    try:
+        item = next(iter(widget.model.session.active_items()))
+        QTest.mouseClick(widget, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _centre(widget, item))
+        handle = widget._side_handles(item)["right"].center().toPoint()
+        before = QRect(item.current_global_rect)
+        QTest.mousePress(widget, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, handle)
+        QTest.mouseMove(widget, handle + QPoint(12, 30))
+        QTest.mouseRelease(widget, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, handle + QPoint(12, 30))
+        assert item.current_global_rect.width() > before.width()
+        assert item.current_global_rect.height() == before.height()
+        assert item.current_global_rect.topLeft() == before.topLeft()
+        assert item.current_content_extent[1] == 310.0
+        assert widget.model.last_snap is None
+    finally:
+        widget.deleteLater()
