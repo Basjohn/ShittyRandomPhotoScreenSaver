@@ -266,7 +266,9 @@ def test_account_sections_fail_closed_without_importing_backends(qapp, settings,
     page = module.SetupPage(settings)
     from PySide6.QtWidgets import QToolButton
     for toggle in page.findChildren(QToolButton): toggle.setChecked(True)
-    assert page.findChildren(QLineEdit) == []
+    # No account inputs on a non-interactive desktop (the Gmail sound path is not one).
+    assert not [field for field in page.findChildren(QLineEdit)
+                if field.echoMode() == QLineEdit.EchoMode.Password or "@" in field.placeholderText()]
     assert page._manager is None
     page.retire(); page.deleteLater()
 
@@ -434,3 +436,56 @@ def test_hovering_transition_rows_inside_settings_does_not_scroll(tmp_path):
     assert line is not None, completed.stderr[-3000:]
     before, after = line.split(" ", 1)[1].split(") (")
     assert before + ")" == "(" + after, line
+
+
+def test_widget_setup_shows_saved_steam_connection_through_the_settings_flow(qapp, settings, monkeypatch):
+    """Parity with Settings → Steam: same controller, same connected checks, no secrets read."""
+    import ui.onboarding.setup_page as module
+    import ui.onboarding.state as state
+    import ui.tabs.widgets_tab_steam as steam
+    from PySide6.QtWidgets import QLineEdit, QToolButton
+    from core.steam.credentials import SteamCredentialStorageStatus
+    monkeypatch.setattr(state, "selected_setup_dependencies", lambda _settings: ("steam",))
+    monkeypatch.setattr(state, "saved_account_states", lambda _settings: {"steam": True, "gmail": False})
+    monkeypatch.setattr(module, "is_interactive_user_desktop", lambda: True)
+    monkeypatch.setattr(steam, "get_storage_status", lambda: SteamCredentialStorageStatus(True, True, "Saved."))
+    page = module.SetupPage(settings)
+    try:
+        toggle = page.findChildren(QToolButton)[0]
+        assert toggle.text() == "Steam  ·  CONNECTED"
+        toggle.setChecked(True)
+        host = page._steam_host
+        assert host.steam_identity_check.text() == "Connected"
+        assert host.steam_api_key_check.text() == "Connected"
+        assert "access is ready" in host.steam_access_status.text().lower()
+        assert not page.findChildren(QLineEdit)  # keys are pasted in Steam's own popup, never here
+        assert settings.writes == []
+    finally:
+        page.retire(); page.deleteLater()
+    assert host.steam_identity_check is None  # retired: late completions find nothing to touch
+
+
+def test_widget_setup_gmail_bucket_offers_the_notification_sound(qapp, settings, monkeypatch):
+    import ui.onboarding.setup_page as module
+    import ui.onboarding.state as state
+    from PySide6.QtWidgets import QCheckBox, QPushButton, QToolButton
+    monkeypatch.setattr(state, "selected_setup_dependencies", lambda _settings: ("gmail",))
+    monkeypatch.setattr(state, "saved_account_states", lambda _settings: {"steam": False, "gmail": False})
+    monkeypatch.setattr(module, "is_interactive_user_desktop", lambda: False)  # sound needs no account
+    played = []
+    import core.audio.notification_sound as sound
+    monkeypatch.setattr(sound.NotificationSoundPlayer, "instance", classmethod(lambda _cls: type("P", (), {
+        "set_file_path": lambda self, path: played.append(path), "set_volume": lambda self, v: played.append(v),
+        "play": lambda self: played.append("play")})()))
+    page = module.SetupPage(settings)
+    try:
+        page.findChildren(QToolButton)[0].setChecked(True)
+        play = next(box for box in page.findChildren(QCheckBox) if box.text() == "Play Sound On New Mail")
+        play.setChecked(True)
+        page.gmail_sound_volume.setValue(40)
+        assert settings.get("widgets.gmail.play_sound_on_new_mail") is True
+        assert settings.get("widgets.gmail.sound_volume_percent") == 40
+        next(b for b in page.findChildren(QPushButton) if b.text() == "Test").click()
+        assert played[-1] == "play" and 40 in played
+    finally:
+        page.retire(); page.deleteLater()

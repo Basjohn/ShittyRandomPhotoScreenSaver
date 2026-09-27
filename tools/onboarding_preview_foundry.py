@@ -1423,6 +1423,7 @@ def _write_manifest(output: Path) -> dict[str, object]:
     (output / "manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     return manifest
 
