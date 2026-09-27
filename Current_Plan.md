@@ -18,9 +18,7 @@ Each stays here until fixed or explicitly retired; do not treat it as noise in a
 
 - [ ] **One red present before 2026-09-26's FEEDS work (Windows, whole widgets/settings gate):**
   - `test_qtquick_transition_parameter_defaults.py::test_sparse_crumble_uses_canonical_piece_count_and_complexity`: the canonical Crumble `crack_complexity` default is 11.0 but Settings and the resolver cap it at 2.0. Operator decision: was 1.1 meant?
-- [ ] **Light-theme circle checkboxes.** The circle indicators are fixed white SVGs (`ui/assets/circle_checkbox_*.svg`,
-      thin black under-stroke only). On Brushed Nickel, Linen Sage, Pearl Blush and Polished Chrome they are low
-      contrast everywhere (Settings, wizard, popups). Make them theme-aware (e.g. theme-coloured indicators).
+
 - [ ] **Colour picker inputs.** Qt's colour dialog spin boxes and HTML field inside the (now themed) picker still use
       Qt's default white inputs; bind the Settings spin box / line edit styles there.
 
