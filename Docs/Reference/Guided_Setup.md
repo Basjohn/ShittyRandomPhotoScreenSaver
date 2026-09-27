@@ -76,7 +76,16 @@ Settings cannot measure live QML content. New free placements therefore persist 
 existing CUSTOM payload, with `_size_from_content: true` and `_placement_anchor`. Their displayed bounds are estimates;
 runtime resolves the actual content size at that anchor. Explicit saved entries retain explicit sizing. Runtime Edit
 preserves content sizing for move-only saves and converts to explicit geometry when a measured resize, extent or child
-edit requires it. Width/height reflow, child geometry and content rotation remain Runtime Edit operations.
+edit requires it. Child geometry and content rotation remain Runtime Edit operations.
+
+Width-only and height-only resize (side handles) use the same math as Runtime Edit
+(`rendering/quick/custom_layout_size.py`: `edge_resize_rect`, `content_extent_resize_payload`, snapped by
+`resolve_resize_edge_snap`). Settings offers them only when every input is already persisted
+(`settings_content_extent_edges`): a logical box saved by Runtime Edit (a content-sized estimate would bake the
+untouched axis from a guess), a floor declared by the family descriptor (Achievement Pulse and Abandonment Issues use
+a live authored-size floor) and no customized children (their room is reported only by the live family). Otherwise the
+selection line says to resize once in the saver's Edit mode. Reset uses the session's authored-size restore, which
+drops a saved box.
 
 The Free placement checkbox derives from CUSTOM state. Reset removes the selected parent placement and restores
 authored position/monitor routing; other displays' child customizations remain intact. The global Reset Widget Layouts

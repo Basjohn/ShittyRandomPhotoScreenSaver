@@ -86,6 +86,8 @@ from rendering.quick.custom_layout_size import (
     CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
     CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY,
     capture_quick_size_payload,
+    content_extent_resize_payload,
+    edge_resize_rect,
     is_uniform_transform_resize_mode,
     quick_custom_content_extent_minimum_size,
     quick_custom_minimum_size,
@@ -2470,48 +2472,15 @@ class QuickCustomLayoutOwner:
         opposite-corner anchor for the new two-axis Visualizer corner gesture.
         """
 
-        rect = QRect(origin.rect)
-        dx = int(cursor.x() - origin.cursor.x())
-        dy = int(cursor.y() - origin.cursor.y())
-        bounds = binding.geometry
-        min_width = max(1, int(minimum.width()))
-        min_height = max(1, int(minimum.height()))
-
-        if horizontal_edge == "left":
-            fixed_right = origin.rect.x() + origin.rect.width()
-            left = max(
-                bounds.x(),
-                min(origin.rect.x() + dx, fixed_right - min_width),
-            )
-            rect.setX(left)
-            rect.setWidth(fixed_right - left)
-        elif horizontal_edge == "right":
-            fixed_left = origin.rect.x()
-            right = min(
-                bounds.x() + bounds.width(),
-                max(fixed_left + min_width, fixed_left + origin.rect.width() + dx),
-            )
-            rect.setX(fixed_left)
-            rect.setWidth(right - fixed_left)
-
-        if vertical_edge == "top":
-            fixed_bottom = origin.rect.y() + origin.rect.height()
-            top = max(
-                bounds.y(),
-                min(origin.rect.y() + dy, fixed_bottom - min_height),
-            )
-            rect.setY(top)
-            rect.setHeight(fixed_bottom - top)
-        elif vertical_edge == "bottom":
-            fixed_top = origin.rect.y()
-            bottom = min(
-                bounds.y() + bounds.height(),
-                max(fixed_top + min_height, fixed_top + origin.rect.height() + dy),
-            )
-            rect.setY(fixed_top)
-            rect.setHeight(bottom - fixed_top)
-
-        return rect
+        return edge_resize_rect(
+            origin.rect,
+            binding.geometry,
+            minimum,
+            int(cursor.x() - origin.cursor.x()),
+            int(cursor.y() - origin.cursor.y()),
+            horizontal_edge=horizontal_edge,
+            vertical_edge=vertical_edge,
+        )
 
     def _commit_viewport_resize_geometry(
         self,
@@ -2644,19 +2613,12 @@ class QuickCustomLayoutOwner:
     ) -> bool:
         """Commit an ordinary logical content-box resize at constant scale."""
 
-        scale = max(1.0e-6, float(origin.scale))
-        box = item.current_content_extent
-        if box is None:
-            box = (float(rect.width()) / scale, float(rect.height()) / scale)
-        next_box = (
-            float(rect.width()) / scale if change_width else float(box[0]),
-            float(rect.height()) / scale if change_height else float(box[1]),
-        )
-        payload = dict(item.current_size_payload)
-        payload.update(
-            width=rect.width(),
-            height=rect.height(),
-            content_extent=[next_box[0], next_box[1]],
+        payload, next_box = content_extent_resize_payload(
+            item,
+            origin.scale,
+            rect,
+            change_width=change_width,
+            change_height=change_height,
         )
         # Once the moving edge reaches its physical bound, repeated cursor
         # samples must not republish the same outer rect and content payload.
