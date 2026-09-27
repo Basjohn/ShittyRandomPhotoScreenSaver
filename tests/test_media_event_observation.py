@@ -22,8 +22,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from core.media.media_controller import WindowsGlobalMediaController
 
 
@@ -259,20 +257,3 @@ def test_unavailable_controller_reports_no_observation_support() -> None:
     controller._available = False
     assert controller.supports_event_observation() is False
     assert controller.start_event_observation(lambda _reason: None) is False
-
-
-@pytest.mark.skip(reason="environment-dependent: exercises real installed WinRT projection")
-def test_real_winrt_projection_subscribe_unsubscribe_round_trip() -> None:
-    import asyncio
-
-    from winrt.windows.media.control import (  # type: ignore[import]
-        GlobalSystemMediaTransportControlsSessionManager as Manager,
-    )
-
-    async def _run() -> None:
-        mgr = await Manager.request_async()
-        assert mgr is not None
-        token = mgr.add_current_session_changed(lambda _s, _a: None)
-        mgr.remove_current_session_changed(token)
-
-    asyncio.run(_run())
