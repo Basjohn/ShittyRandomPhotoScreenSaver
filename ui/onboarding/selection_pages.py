@@ -16,7 +16,7 @@ from core.settings.capability_activation import (
     set_transition_activated, set_widget_family_activated,
 )
 from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors, resolve_admissible_enabled_modes
-from core.settings.widget_family_catalog import get_widget_family_descriptors
+from core.settings.widget_family_catalog import get_widget_family_descriptors, get_widget_member_label
 from rendering.transition_registry import iter_transition_descriptors
 from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, CheckList, text_label
 from ui.onboarding.state import current_setup_summary, saved_account_states
@@ -42,17 +42,7 @@ def _member_setting(widget_id):
 def _member_label(member, family):
     if len(family.member_widget_ids) == 1:
         return family.label
-    if family.family_id == "clocks":
-        return "Clock " + (member.removeprefix("clock") or "1")
-    if family.family_id == "feeds":
-        from core.feeds.news import NEWS_CATEGORIES
-        for category in NEWS_CATEGORIES:
-            if member == category.widget_id:
-                return category.label
-        return "Custom feed " + member.rsplit("_", 1)[-1]
-    if member == "steam_progress":
-        return "Games You Follow"
-    return member.replace("_", " ").title()
+    return get_widget_member_label(member)
 
 
 class ThemePage(Page):

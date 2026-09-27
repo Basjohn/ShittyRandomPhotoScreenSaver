@@ -170,6 +170,47 @@ WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (
 )
 
 
+# Settings-facing names for members of multi-member families. Single-member
+# families use their family label; NEWS categories use ``core.feeds.news``.
+# ``steam_progress`` is the retired persistence key Games You Follow still uses.
+_MEMBER_LABELS: dict[str, str] = {
+    "clock": "Clock",
+    "clock2": "Clock 2",
+    "clock3": "Clock 3",
+    "media": "Media",
+    "spotify_volume": "Volume",
+    "mute_button": "Mute Button",
+    "spotify_visualizer": "Spotify Visualizer",
+    "reddit": "Reddit 1",
+    "reddit2": "Reddit 2",
+    "feeds_custom_1": "Custom 1",
+    "feeds_custom_2": "Custom 2",
+    "feeds_custom_3": "Custom 3",
+    "feeds_custom_4": "Custom 4",
+    "steam_progress": "Games You Follow",
+    "achievement_pulse": "Achievement Pulse",
+    "abandonment_issues": "Abandonment Issues",
+    "friend_pulse": "Friend Pulse",
+}
+
+
+def get_widget_member_label(widget_id: str) -> str:
+    """Return the one Settings-facing display name for a runtime widget id."""
+
+    label = _MEMBER_LABELS.get(widget_id)
+    if label is not None:
+        return label
+    from core.feeds.news import NEWS_CATEGORIES
+
+    for category in NEWS_CATEGORIES:
+        if category.widget_id == widget_id:
+            return category.label
+    for family in WIDGET_FAMILY_DESCRIPTORS:
+        if family.member_widget_ids == (widget_id,):
+            return family.label
+    return widget_id.replace("_", " ").title()
+
+
 def get_widget_family_catalog() -> tuple[WidgetFamilyDescriptor, ...]:
     """Return the full static family catalog, ignoring environment gating."""
 

@@ -16,7 +16,7 @@ from PySide6.QtCore import QPoint, QRect
 from core.settings.default_contract import require_canonical_default
 from core.settings.capability_activation import is_widget_family_effective
 from core.settings.layout_slots import apply_layout_slot, get_layout_slot_payload, save_layout_slot
-from core.settings.widget_family_catalog import get_family_id_for_widget
+from core.settings.widget_family_catalog import get_family_id_for_widget, get_widget_member_label
 from rendering.custom_layout_commit import commit_custom_session
 from rendering.custom_layout_contract import (
     choose_best_screen_for_global_rect,
@@ -402,15 +402,7 @@ class ArrangeModel:
     def item_label(self, key: CustomLayoutKey) -> str:
         """Return the Settings-facing name for a canonical widget identity."""
 
-        names = {
-            "clock": "Clock", "clock2": "Clock 2", "clock3": "Clock 3",
-            "spotify_visualizer": "Spotify Visualizer", "system_audio_osd": "System Audio OSD",
-            "system_stats": "System Stats", "reddit": "Reddit 1", "reddit2": "Reddit 2",
-            "feeds_custom_1": "Custom Feed 1", "feeds_custom_2": "Custom Feed 2",
-            "feeds_custom_3": "Custom Feed 3", "feeds_custom_4": "Custom Feed 4",
-        }
-        identity = self.item(key).model_identity
-        return names.get(identity, identity.replace("_", " ").title())
+        return get_widget_member_label(self.item(key).model_identity)
 
     def slot_is_occupied(self, slot_id: object) -> bool:
         """Expose committed slot state without leaking the draft persistence map."""

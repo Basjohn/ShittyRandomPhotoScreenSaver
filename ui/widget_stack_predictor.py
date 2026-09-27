@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Mapping, Tuple
 
 from core.logging.logger import get_logger
 from core.settings.widget_capacity_policy import clamp_list_capacity
+from core.settings.widget_family_catalog import get_widget_member_label
 from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO,
 )
@@ -684,33 +685,7 @@ def build_widget_estimates(
 
 def _get_widget_display_name(widget_type: WidgetType) -> str:
     """Get human-readable display name for a widget type."""
-    names = {
-        WidgetType.CLOCK: "Clock",
-        WidgetType.CLOCK2: "Clock 2",
-        WidgetType.CLOCK3: "Clock 3",
-        WidgetType.WEATHER: "Weather",
-        WidgetType.MEDIA: "Media",
-        WidgetType.REDDIT: "Reddit",
-        WidgetType.REDDIT2: "Reddit 2",
-        WidgetType.GMAIL: "Gmail",
-        WidgetType.SPOTIFY_VIS: "Spotify Visualizer",
-        WidgetType.STEAM_PROGRESS: "Games You Follow",
-        WidgetType.ACHIEVEMENT_PULSE: "Achievement Pulse",
-        WidgetType.ABANDONMENT_ISSUES: "Abandonment Issues",
-        WidgetType.FRIEND_PULSE: "Friend Pulse",
-        WidgetType.SYSTEM_STATS: "System Stats",
-        WidgetType.FEEDS_CUSTOM_1: "Custom 1",
-        WidgetType.FEEDS_CUSTOM_2: "Custom 2",
-        WidgetType.FEEDS_CUSTOM_3: "Custom 3",
-        WidgetType.FEEDS_CUSTOM_4: "Custom 4",
-        WidgetType.FEEDS_NEWS_WORLD: "World News",
-        WidgetType.FEEDS_NEWS_US: "US News",
-        WidgetType.FEEDS_NEWS_POLITICS: "Politics",
-        WidgetType.FEEDS_NEWS_GAMING: "Gaming News",
-        WidgetType.FEEDS_NEWS_TECH: "Tech News",
-        WidgetType.FEEDS_NEWS_ANIME: "Anime News",
-    }
-    return names.get(widget_type, widget_type.value)
+    return get_widget_member_label(widget_type.value)
 
 
 def predict_stacking_status(
