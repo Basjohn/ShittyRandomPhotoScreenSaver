@@ -447,12 +447,65 @@ class TransitionsPage(Page):
         self.refresh()
 
 
+# The saver's right-click menu (rendering/quick/context_menu.py) and its keys
+# (rendering/runtime_input.py), in the order people reach for them.
+CONTEXT_MENU_SUMMARY = (
+    ("Previous / Next Image", "Step back to a picture you liked, or skip ahead."),
+    ("Change Transition", "Pick one effect or Random."),
+    ("Change Visualizer", "Switch the music Visualizer mode."),
+    ("Edit Widget Layout", "Drag widgets anywhere, then Save Widget Layout."),
+    ("Background Dimming", "Darken the picture behind your widgets."),
+    ("Interaction Mode", "Keep widgets clickable without holding Ctrl."),
+    ("Settings / Exit Screensaver", "Everything else, or leave."),
+)
+KEY_SUMMARY = (
+    ("Z / X", "Previous / next image"),
+    ("C", "Cycle transition"),
+    ("S", "Open Settings"),
+    ("Space  ·  ← / →", "Play/pause  ·  previous/next track"),
+    ("↑ / ↓  ·  PgUp / PgDn", "Media volume  ·  system volume"),
+    ("1–9, 0  ·  Shift + number", "Load / save a layout slot"),
+    ("Esc / Q", "Exit"),
+)
+
+
+def _controls_summary() -> QWidget:
+    from PySide6.QtWidgets import QFrame, QGridLayout
+    box = QWidget()
+    layout = QVBoxLayout(box); layout.setContentsMargins(0, 8, 0, 0); layout.setSpacing(10)
+    line = QFrame(); line.setObjectName("controlsSeparator"); line.setFixedHeight(2)
+    from ui.settings_theme_runtime import get_active_settings_theme
+    red, green, blue, alpha = get_active_settings_theme().color("panel.border").as_tuple()
+    line.setStyleSheet(f"QFrame#controlsSeparator {{ background: rgba({red}, {green}, {blue}, {alpha}); border: none; }}")
+    layout.addWidget(line)
+    layout.addWidget(text_label("Controls", heading=True))
+    layout.addWidget(text_label("Right-click the screensaver for its menu (hold Ctrl first when Interaction is off). It is the quickest way to change anything while it runs."))
+    columns = QHBoxLayout(); columns.setSpacing(28)
+    for title, rows in (("RIGHT-CLICK MENU", CONTEXT_MENU_SUMMARY), ("KEYS", KEY_SUMMARY)):
+        column = QVBoxLayout(); column.setSpacing(6)
+        column.addWidget(text_label(title))
+        grid = QGridLayout(); grid.setHorizontalSpacing(14); grid.setVerticalSpacing(4)
+        for row, (name, detail) in enumerate(rows):
+            name_label = text_label(name)
+            name_label.setWordWrap(False)  # shortcut names stay on one line
+            font = name_label.font(); font.setBold(True); name_label.setFont(font)
+            grid.addWidget(name_label, row, 0, Qt.AlignmentFlag.AlignTop)
+            grid.addWidget(text_label(detail), row, 1, Qt.AlignmentFlag.AlignTop)
+        grid.setColumnStretch(1, 1)
+        column.addLayout(grid); column.addStretch()
+        columns.addLayout(column, 1)
+    layout.addLayout(columns)
+    return box
+
+
 class ReadyPage(Page):
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("You're almost done", heading=True))
         self.body.addWidget(text_label("Nothing is saved yet. Press Finish to save your settings. Optional accounts can be connected later in Settings."))
         self.summary = text_label(""); self.body.addWidget(self.summary)
+        self.controls = _controls_summary()
+        self.body.addWidget(self.controls)
         self.body.addStretch()
 
     def refresh(self):
@@ -470,4 +523,4 @@ class ReadyPage(Page):
                  "Gmail: " + ("Saved connection" if accounts['gmail'] else "Needs setup"),
                  "Visualizer: " + (modes or "Off"),
                  f"Transitions: {state['transitions']}"]
-        self.summary.setText("\n\n".join(lines))
+        self.summary.setText("\n".join(lines))

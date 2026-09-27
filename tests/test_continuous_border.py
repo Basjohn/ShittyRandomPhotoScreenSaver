@@ -86,4 +86,5 @@ def test_title_case_rule_leaves_data_and_units_alone() -> None:
     assert title_case("Added https://example.org/feed.rss") == "Added https://example.org/feed.rss"
     assert title_case("C:/Pictures and you@gmail.com") == "C:/Pictures And you@gmail.com"
     assert title_case("RSS feeds, 10 px") == "RSS Feeds, 10 px"
+    assert title_case("right-click, play/pause, e.g. r/cats") == "Right-Click, Play/Pause, e.g. r/cats"
     assert title_case("(shift for more)") == "(Shift For More)"

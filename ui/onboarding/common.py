@@ -22,28 +22,37 @@ def asset_path(name: str) -> Path:
 
 
 # Units and abbreviations that stay as written inside Title Case copy.
-_KEEP_CASE = {"px", "ms", "e.g.", "i.e.", "vs"}
-# Tokens that are user data or addresses: never re-cased.
-_DATA_TOKEN = re.compile(r"[/\\@]|://|\.\w+\.|^www\.|\.(?:com|org|net|rss|xml|png|jpg)\b", re.IGNORECASE)
+_KEEP_CASE = {"px", "ms", "e.g", "i.e", "vs"}
+# User data and addresses are never re-cased: URLs, drive/UNC/absolute paths,
+# e-mail addresses and bare domains.
+_DATA_TOKEN = re.compile(
+    r"^r/|://|^[A-Za-z]:[/\\]|\\|@|^/|^www\.|\.(?:com|org|net|io|rss|xml|png|jpg|ogg|wav|mp3)\b",
+    re.IGNORECASE,
+)
+
+
+def _capitalise(segment: str) -> str:
+    for index, char in enumerate(segment):
+        if char.isalpha():
+            return segment[:index] + char.upper() + segment[index + 1:]
+        if char.isdigit():
+            return segment
+    return segment
 
 
 def title_case(text: str) -> str:
     """SRPSS copy casing: capitalise every word, leaving data and units alone.
 
     Only a word's first letter changes, so acronyms (RSS, OSD) and mixed-case
-    names keep their inner capitals.  Paths, URLs and e-mail addresses pass
-    through untouched.
+    names keep their inner capitals.  Hyphen and slash compounds capitalise
+    each part ("Right-Click", "Previous/Next").  Paths, URLs and e-mail
+    addresses pass through untouched.
     """
     def word(match):
         token = match.group(0)
         if token.lower().strip("().,;:!?") in _KEEP_CASE or _DATA_TOKEN.search(token):
             return token
-        for index, char in enumerate(token):
-            if char.isalpha():
-                return token[:index] + char.upper() + token[index + 1:]
-            if char.isdigit():
-                return token
-        return token
+        return re.sub(r"[^/-]+", lambda part: _capitalise(part.group(0)), token)
     return re.sub(r"\S+", word, str(text))
 
 

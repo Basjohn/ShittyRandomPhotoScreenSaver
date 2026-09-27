@@ -7,7 +7,6 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 - [ ] **Seams, remaining audit.** Buckets, every Settings `QListWidget`, the content area and action buttons are now
       painted. Still QSS-drawn and to be zoom-checked: sidebar/group-box frames (`panel_border` rules in
       `ui/settings_theme.py`), StyledComboBox and its popup (2px, 14-18px radius), line edits, the generic QPushButton.
-- [ ] **Ready page.** Controls summary under a separator, focused on the context menu.
 - [ ] **Import Settings.** Welcome page offers "Import Settings?"; a successful import skips and closes the wizard.
       Import (and the Settings tab) lets users choose: All, Display, Widgets, Transitions, Theme Choice, Custom
       Geometry Including Layouts, Misc (everything else). Credentials are never exported or imported.
