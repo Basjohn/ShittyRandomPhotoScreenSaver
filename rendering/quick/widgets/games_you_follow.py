@@ -268,6 +268,12 @@ class GamesYouFollowPresentationModel(QObject):
         self._snapshot = FollowedNewsSnapshot("unavailable")
         self._article_action: Callable[[str, str], bool] | None = None
 
+    @property
+    def card_style(self):
+        """The projected card shell style this card presents with."""
+
+        return self._visual_style.card_style
+
     @Property(QObject, constant=True)
     def storyRows(self) -> FollowedStoryRows:
         return self._rows

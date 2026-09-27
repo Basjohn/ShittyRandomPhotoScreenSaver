@@ -1,6 +1,7 @@
 """Core application settings models: Display, Transition, Input, Cache, Source, Shadow, Clock."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
@@ -255,12 +256,24 @@ class ShadowSettings:
     def from_settings(cls, settings: "SettingsManager") -> "ShadowSettings":
         """Project persisted shadow state with canonical repair at one boundary."""
 
+        return cls._project(lambda name: settings.get(f"widgets.shadows.{name}"))
+
+    @classmethod
+    def from_widgets_map(cls, widgets: Any) -> "ShadowSettings":
+        """Project a plain widgets map (a Settings draft) with the same repair."""
+
+        section = widgets.get("shadows") if isinstance(widgets, Mapping) else None
+        values = section if isinstance(section, Mapping) else {}
+        return cls._project(values.get)
+
+    @classmethod
+    def _project(cls, lookup: Any) -> "ShadowSettings":
         def canonical(name: str) -> Any:
             return require_canonical_default(f"widgets.shadows.{name}")
 
         def read(name: str) -> Any:
             try:
-                value = settings.get(f"widgets.shadows.{name}")
+                value = lookup(name)
             except Exception:
                 return canonical(name)
             return canonical(name) if value is None else value

@@ -104,6 +104,26 @@ _CARD_STYLE_BINDINGS: tuple[tuple[str, str], ...] = (
 )
 
 
+def apply_overlay_card_style(item: QQuickItem, style: OverlayCardStyle) -> None:
+    """Project one card style record onto an ``OverlayWidget`` root.
+
+    The one style-to-QML mapping: retained widgets use it, and so does Settings'
+    preferred-size measurement, because card padding is part of every card's
+    preferred size.
+    """
+
+    for property_name, attribute in _CARD_STYLE_BINDINGS:
+        value = getattr(style, attribute)
+        # Do not cache an old style record: a QML-owned reset or display
+        # transfer must reconcile against the actual retained destination.
+        if item.property(property_name) == value:
+            continue
+        if not item.setProperty(property_name, value):
+            raise RuntimeError(
+                f"OverlayWidget.qml rejected card style property {property_name}"
+            )
+
+
 class RetainedOverlayWidget:
     """One retained ``OverlayWidget`` root with explicit presentation setters."""
 
@@ -202,17 +222,7 @@ class RetainedOverlayWidget:
     def set_card_style(self, style: OverlayCardStyle) -> None:
         """Apply one immutable card style record to the shared shell."""
 
-        item = self.item
-        for property_name, attribute in _CARD_STYLE_BINDINGS:
-            value = getattr(style, attribute)
-            # Do not cache an old style record: a QML-owned reset or display
-            # transfer must reconcile against the actual retained destination.
-            if item.property(property_name) == value:
-                continue
-            if not item.setProperty(property_name, value):
-                raise RuntimeError(
-                    f"OverlayWidget.qml rejected card style property {property_name}"
-                )
+        apply_overlay_card_style(self.item, style)
 
     def set_custom_layout_size_payload_handler(
         self,
