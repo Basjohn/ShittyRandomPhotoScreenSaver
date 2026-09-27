@@ -246,6 +246,13 @@ QML semantic action
 
 QML does not persist settings or directly invoke providers/backends.
 
+Context menu **Save Image** is always offered (checking each image's source per open would be extra work). The engine
+copies the file it already has for the display that was right-clicked, byte for byte, with one I/O-worker `copy2`
+(`core/sources/image_collection.py`): into the Sources "Save Feed Images" folder when the user ever chose one, else
+`Pictures/SRPSS Collections`. The first save there adds that folder to `sources.folders`; the engine marks this one
+write as its own so the running sources and prefetch are not rebuilt (the image is already in rotation). No timer,
+poll, extra size or cache change is involved.
+
 Retained Windows GSMTC event observation has a stricter ownership rule than ordinary burst IO. The manager, selected session and their subscription/remove tokens are created, rebound, detached and released only on one lazy ThreadManager-owned **affinity lane**. The general IO pool is not an apartment authority and the Qt UI thread must never clear retained WinRT wrappers. Native manager callbacks capture only a coarse edge and queue any session rebind back to that lane; session dirty callbacks remain presentation-neutral. Teardown fences the observation generation first, then synchronously executes detach/release on the affinity owner. This lane is Condition-driven and owns no polling cadence.
 
 Media refresh queries (the Visualizer's play/pause truth) and transport commands run on a separate lane owned by the shared Media runtime owner: a ThreadManager-owned dedicated `media` worker (`create_affinity_lane(worker="media")`), created on first use, generation-tagged and stopped when the owner retires. They never run on the FIFO IO pool, where network work (unbounded DNS/connect stalls) could starve them, and never on the observation worker, whose teardown waits a bounded 2 s on that thread. The owner injects the lane into its controller (`set_work_executor`); one-in-flight/one-pending refresh, command de-duplication and event authority are unchanged, and there is no polling fallback.

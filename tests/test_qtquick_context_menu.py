@@ -322,7 +322,7 @@ def test_retained_context_menu_draws_real_quick_pixels_and_clamps(qt_app) -> Non
     owner = QObject()
     factory = QuickSceneFactory(owner)
     window = QQuickWindow()
-    window.resize(640, 480)
+    window.resize(640, 560)  # a small display that still fits the full menu
     context, root = factory.create_display_root(
         owner=owner,
         screen_index=0,
@@ -331,7 +331,7 @@ def test_retained_context_menu_draws_real_quick_pixels_and_clamps(qt_app) -> Non
     root.setParent(window.contentItem())
     root.setParentItem(window.contentItem())
     root.setWidth(640.0)
-    root.setHeight(480.0)
+    root.setHeight(560.0)
     model = QuickContextMenuModel(
         screen_index=0,
         runtime_generation=1,
@@ -345,14 +345,14 @@ def test_retained_context_menu_draws_real_quick_pixels_and_clamps(qt_app) -> Non
     assert surface is not None
     try:
         window.show()
-        assert model.open_at(635.0, 475.0) is True
+        assert model.open_at(635.0, 555.0) is True
         settle = QEventLoop()
         QTimer.singleShot(250, settle.quit)
         settle.exec()
         assert surface.x() >= 4.0
         assert surface.y() >= 4.0
         assert surface.x() + surface.width() <= 636.0
-        assert surface.y() + surface.height() <= 476.0
+        assert surface.y() + surface.height() <= 556.0
 
         result = surface.grabToImage(
             QSize(int(surface.width()), int(surface.height()))
