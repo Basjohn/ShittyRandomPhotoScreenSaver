@@ -838,7 +838,8 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     toggle_row = QHBoxLayout()
     toggle_row.setContentsMargins(0, 0, 0, 0)
     toggle_row.setSpacing(8)
-    toggle = QToolButton()
+    from ui.widgets.continuous_border import BucketToggle
+    toggle = BucketToggle()
     toggle.setText("Technical")
     toggle.setCheckable(True)
     default_expanded = bool(tab.get_visualizer_tech_state(mode_key))

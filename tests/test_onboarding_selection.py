@@ -166,8 +166,8 @@ def test_ready_page_accounts_are_optional_and_do_not_block(qapp, settings, monke
     try:
         page.refresh()
         assert page.can_continue() is True
-        assert "Steam: Needs setup" in page.summary.text()
-        assert "Gmail: Needs setup" in page.summary.text()
+        assert "Steam: Needs Setup" in page.summary.text()
+        assert "Gmail: Needs Setup" in page.summary.text()
     finally:
         page.deleteLater()
 

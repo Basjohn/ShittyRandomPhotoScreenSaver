@@ -1,4 +1,5 @@
 """Small Settings controls shared by Guided Setup and Quick Start."""
+import re
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt
@@ -7,6 +8,7 @@ from PySide6.QtWidgets import (QLabel, QPushButton, QCheckBox, QListWidget,
     QScrollArea, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QSizePolicy, QVBoxLayout, QWidget)
 
 from ui.tabs import shared_styles
+from ui.widgets.continuous_border import OutlinedListWidget
 from ui.widgets.dpr_pixmap import scale_pixmap_for_dpr
 
 SILENCE_TEXT = (
@@ -19,8 +21,45 @@ def asset_path(name: str) -> Path:
     return Path(__file__).resolve().parents[2] / "images" / name
 
 
+# Units and abbreviations that stay as written inside Title Case copy.
+_KEEP_CASE = {"px", "ms", "e.g.", "i.e.", "vs"}
+# Tokens that are user data or addresses: never re-cased.
+_DATA_TOKEN = re.compile(r"[/\\@]|://|\.\w+\.|^www\.|\.(?:com|org|net|rss|xml|png|jpg)\b", re.IGNORECASE)
+
+
+def title_case(text: str) -> str:
+    """SRPSS copy casing: capitalise every word, leaving data and units alone.
+
+    Only a word's first letter changes, so acronyms (RSS, OSD) and mixed-case
+    names keep their inner capitals.  Paths, URLs and e-mail addresses pass
+    through untouched.
+    """
+    def word(match):
+        token = match.group(0)
+        if token.lower().strip("().,;:!?") in _KEEP_CASE or _DATA_TOKEN.search(token):
+            return token
+        for index, char in enumerate(token):
+            if char.isalpha():
+                return token[:index] + char.upper() + token[index + 1:]
+            if char.isdigit():
+                return token
+        return token
+    return re.sub(r"\S+", word, str(text))
+
+
+class CopyLabel(QLabel):
+    """A wrapped Settings label whose text always follows the Title Case rule."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(parent)
+        self.setText(text)
+
+    def setText(self, text):  # type: ignore[override]
+        super().setText(title_case(text))
+
+
 def text_label(text: str, *, heading=False) -> QLabel:
-    label = QLabel(text)
+    label = CopyLabel(text)
     label.setWordWrap(True)
     shared_styles.apply_shared_label_style(label, "PAGE_TITLE_STYLE" if heading else "INFO_LABEL_STYLE")
     return label
@@ -28,14 +67,14 @@ def text_label(text: str, *, heading=False) -> QLabel:
 
 def action(text: str, callback, *, secondary=False) -> QPushButton:
     from ui.widgets.outlined_button import OutlinedButton
-    button = OutlinedButton(text, role="secondary" if secondary else "primary")
+    button = OutlinedButton(title_case(text), role="secondary" if secondary else "primary")
     button.setMinimumHeight(36)
     button.clicked.connect(lambda _checked=False: callback())
     return button
 
 
 def checkbox(text: str, parent=None) -> QCheckBox:
-    check = QCheckBox(text, parent)
+    check = QCheckBox(title_case(text), parent)
     check.setProperty("circleIndicator", True)
     shared_styles.bind_shared_styles(check, "CIRCLE_CHECKBOX_STYLE")
     return check
@@ -52,7 +91,7 @@ class _CheckRowDelegate(QStyledItemDelegate):
         option.widget.style().drawControl(QStyle.ControlElement.CE_ItemViewItem, style_option, painter, option.widget)
 
 
-class CheckList(QListWidget):
+class CheckList(OutlinedListWidget):
     """Selectable preview rows using Settings' actual circular checkboxes."""
     def __init__(self, parent=None):
         super().__init__(parent)

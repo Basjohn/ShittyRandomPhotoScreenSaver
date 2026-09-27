@@ -9,6 +9,7 @@ from PySide6.QtCore import QRectF, QSignalBlocker, QSize, QSizeF, Signal, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QListWidget, QListWidgetItem, QSizePolicy, QVBoxLayout, QWidget
 
+from ui.widgets.continuous_border import OutlinedListWidget
 from core.settings.capability_activation import (
     is_transition_activated, is_widget_family_effective,
     normalize_transition_capability_state, normalize_widget_capability_state,
@@ -59,7 +60,7 @@ class ThemePage(Page):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("Make yourself at home", heading=True))
         self.body.addWidget(text_label("Choose a Settings theme to apply it immediately. Widget colours follow only when Keep Synced is on."))
-        self.list = QListWidget(); self.list.setMinimumHeight(250)
+        self.list = OutlinedListWidget(); self.list.setMinimumHeight(250)
         self.body.addWidget(self.list, 1)
         self.status = text_label(""); self.body.addWidget(self.status)
         self.list.currentItemChanged.connect(self._select)

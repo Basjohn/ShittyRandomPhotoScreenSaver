@@ -208,10 +208,13 @@ def test_pill_model_is_setup_plus_enabled_in_canonical_order():
     assert [pid for pid, _label in pills[1:]] == ["spectrum", "bubble"]
     assert dict(pills)["spectrum"] == "Spectrum"
     assert dict(pills)["bubble"] == "Bubble"
-    # Absent persisted map resolves through canonical current defaults.
-    assert [pid for pid, _ in visualizer_pill_model(None)[1:]] == [
-        "spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve", "sphere",
-    ]
+    # Absent persisted map resolves through canonical current defaults (which
+    # are operator-owned, so derive the expectation instead of hard-coding it).
+    from core.settings.default_contract import require_canonical_default
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+    defaults = require_canonical_default("widgets.spotify_visualizer.mode_activation")
+    expected = [d.mode_id for d in iter_visualizer_mode_descriptors() if defaults.get(d.mode_id)]
+    assert expected and [pid for pid, _ in visualizer_pill_model(None)[1:]] == expected
 
 
 def test_importing_registry_imports_no_mode_settings_builder():

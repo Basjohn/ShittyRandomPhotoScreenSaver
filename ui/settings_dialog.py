@@ -1101,7 +1101,8 @@ class SettingsDialog(QDialog):
         sidebar_layout.addWidget(self.quick_start_tab_btn)
         
         # Right content area with stacked widget
-        self.content_stack = QStackedWidget()
+        from ui.widgets.continuous_border import OutlinedStackedWidget
+        self.content_stack = OutlinedStackedWidget()
         self.content_stack.setObjectName("contentArea")
         
         # Create actual tabs lazily

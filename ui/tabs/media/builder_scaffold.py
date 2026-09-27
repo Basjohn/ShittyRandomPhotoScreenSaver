@@ -11,6 +11,7 @@ from core.settings.visualizer_mode_registry import get_visualizer_mode_descripto
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import add_swatch_label
+from ui.widgets.continuous_border import BucketToggle
 
 if TYPE_CHECKING:
     from ui.tabs.visualizer_settings_context import VisualizerSettingsContextMixin
@@ -111,7 +112,7 @@ def _build_collapsible_bucket_core(
     toggle_row.setContentsMargins(0, 0, 0, 0)
     toggle_row.setSpacing(8)
 
-    toggle = QToolButton()
+    toggle = BucketToggle()
     toggle.setText(title)
     toggle.setCheckable(True)
     toggle.setChecked(expanded)
@@ -269,7 +270,7 @@ def build_mode_scaffold(
     toggle_row = QHBoxLayout()
     toggle_row.setContentsMargins(0, 0, 0, 0)
     toggle_row.setSpacing(8)
-    toggle = QToolButton()
+    toggle = BucketToggle()
     toggle.setText("Advanced")
     toggle.setCheckable(True)
     default_expanded = bool(tab.get_visualizer_adv_state(mode_key))

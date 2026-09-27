@@ -4,12 +4,9 @@
 
 Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator review 2026-09-27, open items:
 
-- [ ] **Readability on Glass.** 20% black veil inside the wizard's rounded border (no clipping outside it).
-- [ ] **Typography.** One casing rule across pages: buttons/buckets Title Case; longer labels/statements Title Case;
-      short tags ALL CAPS ("OFF"). Never case user data (paths, URLs).
-- [ ] **Buckets.** Large variant: same box, slightly bigger text, smaller arrow. All buckets: seam-free painted border.
-- [ ] **Seams.** Folder/feed/theme/transition lists get a painted continuous frame. Audit other Settings lists after.
-- [ ] **Interaction on MC.** Disabled choice text must grey out. Practice-card image is pixelated (smooth scaling).
+- [ ] **Seams, remaining audit.** Buckets, every Settings `QListWidget`, the content area and action buttons are now
+      painted. Still QSS-drawn and to be zoom-checked: sidebar/group-box frames (`panel_border` rules in
+      `ui/settings_theme.py`), StyledComboBox and its popup (2px, 14-18px radius), line edits, the generic QPushButton.
 - [ ] **Widget Setup accounts.** Show connected Steam/Gmail states (as full Settings does) instead of empty fields;
       Steam section parity with Settings (two connections, their connected popups). Gmail bucket gains the
       notification sound checkbox, sound choice and Test.
@@ -42,9 +39,8 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 
 Each stays here until fixed or explicitly retired; do not treat it as noise in a gate. Physical validation lives with each feature's own doc, not here.
 
-- [ ] **Two reds present before 2026-09-26's FEEDS work (Windows, whole widgets/settings gate):**
+- [ ] **One red present before 2026-09-26's FEEDS work (Windows, whole widgets/settings gate):**
   - `test_qtquick_transition_parameter_defaults.py::test_sparse_crumble_uses_canonical_piece_count_and_complexity`: the canonical Crumble `crack_complexity` default is 11.0 but Settings and the resolver cap it at 2.0. Operator decision: was 1.1 meant?
-  - `test_visualizer_settings_body_dormancy.py::test_pill_model_is_setup_plus_enabled_in_canonical_order`: the expected pill order predates the current modes (`sphere`).
 - [ ] **Spectrum extreme-viewport smoothness (pre-existing, not an audit regression).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Pre-dates the audit; do not reopen VZ-04 over it. Watch item until investigated separately.
 
 ## Handoff and regression rules

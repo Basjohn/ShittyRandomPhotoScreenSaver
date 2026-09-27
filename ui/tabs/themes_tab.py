@@ -15,6 +15,7 @@ from PySide6.QtCore import QLineF, QSignalBlocker, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QLabel, QListWidget,
     QListWidgetItem, QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
+from ui.widgets.continuous_border import OutlinedListWidget
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
 from ui.flow_layout import FlowContainer
@@ -214,7 +215,7 @@ class ThemesTab(QWidget):
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
         self.settings_keep_synced=self._make_link_button()
         group_layout.addWidget(self.settings_keep_synced,0,Qt.AlignmentFlag.AlignLeft)
-        self.theme_list=QListWidget(); self.theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.theme_list=OutlinedListWidget(); self.theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         # Root Settings QSS still owns semantic list colours; only typography
         # is enlarged here for catalogue readability.
         self.theme_list.setStyleSheet("QListWidget { font-size: 12pt; }")
@@ -235,7 +236,7 @@ class ThemesTab(QWidget):
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
         self.widget_keep_synced=self._make_link_button()
         group_layout.addWidget(self.widget_keep_synced,0,Qt.AlignmentFlag.AlignLeft)
-        self.widget_theme_list=QListWidget(); self.widget_theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.widget_theme_list=OutlinedListWidget(); self.widget_theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.widget_theme_list.setStyleSheet("QListWidget { font-size: 12pt; }")
         self.widget_theme_list.setMinimumHeight(240); group_layout.addWidget(self.widget_theme_list)
         self.widget_theme_status=QLabel(""); self.widget_theme_status.setWordWrap(True)
