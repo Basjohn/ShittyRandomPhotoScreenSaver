@@ -7,9 +7,6 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 - [ ] **Seams, remaining audit.** Buckets, every Settings `QListWidget`, the content area and action buttons are now
       painted. Still QSS-drawn and to be zoom-checked: sidebar/group-box frames (`panel_border` rules in
       `ui/settings_theme.py`), StyledComboBox and its popup (2px, 14-18px radius), line edits, the generic QPushButton.
-- [ ] **Widget Setup accounts.** Show connected Steam/Gmail states (as full Settings does) instead of empty fields;
-      Steam section parity with Settings (two connections, their connected popups). Gmail bucket gains the
-      notification sound checkbox, sound choice and Test.
 - [ ] **Ready page.** Controls summary under a separator, focused on the context menu.
 - [ ] **Import Settings.** Welcome page offers "Import Settings?"; a successful import skips and closes the wizard.
       Import (and the Settings tab) lets users choose: All, Display, Widgets, Transitions, Theme Choice, Custom
@@ -17,8 +14,6 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 - [ ] **Context menu "Save Image".** Always shown. Saves the current image as-is to the Sources "Save Images" folder
       if the user chose one, else `Pictures/SRPSS Collections`, which joins local sources after the first save. One
       simple off-UI-thread copy: no timers, polls, prefetch changes, multiple sizes or I/O thrash.
-- [ ] **Steam defaults/text.** Rich as the default privacy setting (operator default); confirm Friend Pulse shrinks
-      "IN GAME: XYZ" instead of truncating.
 
 ## Runtime audit 2026-09-22 | accepted 2026-09-23/24
 

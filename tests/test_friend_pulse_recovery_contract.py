@@ -120,3 +120,17 @@ def test_friend_pulse_custom_width_can_exceed_baseline_visible_capacity() -> Non
     assert helper(4, 560) == 4
     assert helper(4, 900, custom_horizontal_extent=True) > 4
     assert helper(4, 900, custom_horizontal_extent=True) == 7
+
+
+def test_in_game_status_line_shrinks_before_it_would_truncate() -> None:
+    """Row "IN GAME: ..." status fits by shrinking; elide only below the minimum size."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    qml = (root / "rendering" / "quick" / "qml" / "FriendPulsePresentation.qml").read_text(encoding="utf-8")
+    anchor = qml.index("presenceText).toUpperCase()")
+    status = qml[anchor: anchor + 900]
+    assert "fontSizeMode: Text.HorizontalFit" in status
+    assert "minimumPointSize: 6.0" in status
+    shadowed = (root / "rendering" / "quick" / "qml" / "ShadowedText.qml").read_text(encoding="utf-8")
+    # Both the glyph and its shadow copy must fit identically.
+    assert shadowed.count("fontSizeMode: shadowedText.fontSizeMode") == 2

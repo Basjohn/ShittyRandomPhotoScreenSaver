@@ -33,6 +33,12 @@ class SetupPage(Page):
         self.body.addWidget(text_label("Open a section to configure the widgets you chose. Accounts are optional; you can finish them later in Settings."))
         self.dependencies = selected_setup_dependencies(settings)
         titles = {"reddit": "Reddit", "reddit2": "Reddit 2", "feeds": "Feeds"}
+        if {"steam", "gmail"} & set(self.dependencies):
+            # Non-secret storage presence only (never decrypts or connects).
+            from ui.onboarding.state import saved_account_states
+            for account, saved in saved_account_states(settings).items():
+                if saved:
+                    titles[account] = f"{account.title()}  ·  CONNECTED"
         for dependency in self.dependencies:
             toggle, container, layout = build_bucket_toggle(self.body, titles.get(dependency, dependency.title()), expanded=False, large=True)
             built = [False]
@@ -71,6 +77,17 @@ class SetupPage(Page):
         if self._steam_session is not None:
             self._steam_session.close()
             self._steam_session = None
+        steam = getattr(self, "_steam_host", None)
+        if steam is not None:
+            # The shared Steam flow drops completions from older generations and
+            # skips labels it cannot find, so late results never touch this page.
+            steam._steam_connection_generation = int(getattr(steam, "_steam_connection_generation", 0)) + 1
+            session = getattr(steam, "_steam_openid_session", None)
+            if session is not None:
+                session.close()
+            for name in ("steam_identity_check", "steam_api_key_check", "steam_saved_connection_feedback",
+                         "steam_access_status", "steam_connection_status"):
+                setattr(steam, name, None)
         if self._completer is not None:
             self._completer.retire()
             self._completer.deleteLater()
@@ -184,82 +201,95 @@ class SetupPage(Page):
             layout.addWidget(check)
 
     def _build_steam(self, layout):
-        layout.addWidget(text_label("SRPSS sends you to Steam's own sign-in and API-key pages. Your Steam password never enters SRPSS. Your Steam identity and API key are stored encrypted for your Windows account."))
+        """The same two connections, popups and saved-state checks as Settings → Steam."""
+        from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+        from ui.tabs import widgets_tab_steam as steam
+        from ui.widgets.styled_combo_box import StyledComboBox
+        layout.addWidget(text_label("SRPSS sends you to Steam's own sign-in and API-key pages. Your Steam password never enters SRPSS. Both connections are stored encrypted for your Windows account."))
         if not self._account_admitted(layout):
             return
-        from core.account_setup.controllers import SteamConnectionController
-        from core.windows.secure_url_launcher import open_url
-        status = text_label("")
-        controller = SteamConnectionController(lambda result: status.setText(result.message))
-        controller.inspect_saved_connection(self._identity)
-        key = QLineEdit(); key.setEchoMode(QLineEdit.EchoMode.Password); key.setPlaceholderText("Paste Steam Web API key")
-        self._password_inputs.append(key)
-        def connect_identity():
-            if not is_interactive_user_desktop():
-                status.setText(ACCOUNT_DESKTOP_MESSAGE); return
-            if self._steam_session is not None:
-                self._steam_session.close()
-            try:
-                session, url = controller.begin_identity_link()
-            except (OSError, RuntimeError):
-                status.setText("Could not start the local Steam sign-in callback. Please try again."); return
-            self._steam_session = session
-            if not open_url(url, prefer_direct=True, source="steam_settings"):
-                session.close(); status.setText("Could not open Steam's sign-in page."); return
-            status.setText("Complete Steam sign-in in your browser.")
-            def finished(result):
-                if self._steam_session is not session:
-                    return
-                self._steam_session = None
-                answer = result.result if result.success else None
-                if answer is not None and answer.success:
-                    self._identity = answer.steam_id64
-                    status.setText("Steam ID linked. Paste your API key, then Save & Test.")
-                else:
-                    status.setText("Steam sign-in did not complete. Please try again.")
-            self._worker(session.wait_for_result, finished)
-        layout.addWidget(action("Connect Steam ID", connect_identity))
-        layout.addWidget(action("Open Steam API-key page", lambda: open_url("https://steamcommunity.com/dev/apikey", prefer_direct=True, source="steam_settings") if is_interactive_user_desktop() else status.setText(ACCOUNT_DESKTOP_MESSAGE), secondary=True))
-        layout.addWidget(key)
-        def save_key():
-            if not is_interactive_user_desktop():
-                status.setText(ACCOUNT_DESKTOP_MESSAGE); return
-            entered, valid = controller.validate_input(key.text(), self._identity)
-            if not valid.can_test:
-                status.setText(valid.message); return
-            identity = self._identity
-            save.setEnabled(False); status.setText("Testing the connection before encrypted storage…")
-            def done(result):
-                save.setEnabled(True)
-                if result.success:
-                    status.setText(result.result.message)
-                    if result.result.state == "connected": key.clear()
-                else:
-                    status.setText("Steam verification or encrypted storage failed. Please try again.")
-            retired = self._retired
-            self._worker(lambda: SteamConnectionController().test_and_save_credentials(entered, identity, is_current=lambda: not retired.is_set()), done)
-        save = action("Save && Test", save_key)
-        layout.addWidget(save); layout.addWidget(status)
+        host = QWidget()
+        self._steam_host = host
+        body = QVBoxLayout(host); body.setContentsMargins(0, 0, 0, 0); body.setSpacing(10)
+
+        def connection_row(title, button_text, handler, check_name):
+            row = QHBoxLayout()
+            label = text_label(title); label.setMinimumWidth(140)
+            row.addWidget(label)
+            row.addWidget(action(button_text, lambda: handler(host)))
+            check = text_label("Not connected")
+            setattr(host, check_name, check)
+            row.addWidget(check); row.addStretch()
+            body.addLayout(row)
+
+        connection_row("Steam Identity", "Connect ID", steam._on_steam_connect_id, "steam_identity_check")
+        connection_row("Steam API Key", "Connect API Key", steam._on_steam_connect_api_key, "steam_api_key_check")
+        actions = QHBoxLayout()
+        actions.addWidget(action("Check Saved Connection", lambda: steam._on_steam_check_saved_connection(host), secondary=True))
+        actions.addWidget(action("Disconnect", lambda: steam._on_steam_disconnect(host), secondary=True))
+        host.steam_saved_connection_feedback = text_label("")
+        host.steam_saved_connection_feedback.hide()
+        actions.addWidget(host.steam_saved_connection_feedback); actions.addStretch()
+        body.addLayout(actions)
+        privacy = QHBoxLayout()
+        label = text_label("Privacy Mode"); label.setMinimumWidth(140)
+        privacy.addWidget(label)
+        mode = StyledComboBox(); mode.addItems(["Strict", "Balanced", "Rich"]); mode.setMinimumWidth(150)
+        mode.setCurrentText(str(self.settings.get("widgets.steam.privacy_mode") or "Rich"))
+        mode.currentTextChanged.connect(lambda text: self.settings.set("widgets.steam.privacy_mode", text))
+        privacy.addWidget(mode); privacy.addStretch()
+        body.addLayout(privacy)
+        host.steam_access_status = text_label("")
+        host.steam_connection_status = text_label("")
+        body.addWidget(host.steam_access_status); body.addWidget(host.steam_connection_status)
+        layout.addWidget(host)
+        # Reads only the encrypted-storage status: never decrypts or contacts Steam.
+        steam._hydrate_saved_connection_status(host)
 
     def _build_gmail(self, layout):
         layout.addWidget(text_label("Use a Google App Password, not your normal Google password. SRPSS tests the connection directly with Gmail and stores the credential encrypted for your Windows account."))
-        if not self._account_admitted(layout):
-            return
+        if self._account_admitted(layout):
+            self._build_gmail_account(layout)
+        self._build_gmail_sound(layout)
+
+    def _build_gmail_account(self, layout):
         from core.windows.secure_url_launcher import open_url
+        from core.gmail.gmail_backend import GmailBackend
+        backend = GmailBackend.instance()
+        connection = text_label("Checking your saved Gmail connection…")
+        layout.addWidget(connection)
         layout.addWidget(action("Create a Google App Password", lambda: open_url("https://myaccount.google.com/apppasswords", prefer_direct=True, source="gmail_settings") if is_interactive_user_desktop() else None, secondary=True))
         email = QLineEdit(); email.setPlaceholderText("you@gmail.com")
         password = QLineEdit(); password.setPlaceholderText("App Password"); password.setEchoMode(QLineEdit.EchoMode.Password)
         self._password_inputs.append(password)
         layout.addWidget(email); layout.addWidget(password)
         status = text_label("OAuth remains available in full Settings.")
+
+        def show_saved_state():
+            # Status text and address only: the stored password is never read back.
+            if self._retired.is_set() or not isValid(connection):
+                return
+            if backend.is_authenticated:
+                connection.setText("CONNECTED  ·  " + backend.status_text)
+                saved_email = getattr(backend, "_imap_email", None)
+                if saved_email and not email.text():
+                    email.setText(saved_email)
+                password.setPlaceholderText("Saved (hidden). Paste a new App Password only to replace it.")
+            else:
+                connection.setText("NOT CONNECTED  ·  " + backend.status_text)
+
+        if getattr(backend, "is_initialized", True):
+            show_saved_state()
+        else:
+            backend.ensure_initialized(backend.get_bootstrap_thread_manager(), lambda _ok: show_saved_state())
+
         def save_credentials():
             if not is_interactive_user_desktop():
                 status.setText(ACCOUNT_DESKTOP_MESSAGE); return
             if not email.text().strip() or not password.text().strip():
                 status.setText("Enter both your Gmail address and App Password."); return
             from core.account_setup.controllers import GmailConnectionController
-            from core.gmail.gmail_backend import GmailBackend, GmailBackendMode
-            backend = GmailBackend.instance()
+            from core.gmail.gmail_backend import GmailBackendMode
             save.setEnabled(False); status.setText("Preparing encrypted storage…")
             def initialized(success):
                 if self._retired.is_set() or not isValid(self): return
@@ -278,7 +308,39 @@ class SetupPage(Page):
                     except RuntimeError:
                         status.setText("Encrypted Gmail storage failed. Please try again."); return
                     password.clear(); status.setText(operation.message)
+                    show_saved_state()
                 self._worker(lambda: GmailConnectionController().test_imap(backend, entered_email, entered_password), done)
             backend.ensure_initialized(backend.get_bootstrap_thread_manager(), initialized)
         save = action("Save && Test", save_credentials)
         layout.addWidget(save); layout.addWidget(status)
+
+    def _build_gmail_sound(self, layout):
+        """New-mail sound: most users would never find it in full Settings."""
+        from PySide6.QtWidgets import QHBoxLayout, QSlider
+        from ui.tabs import widgets_tab_gmail as gmail
+        from ui.tabs.widgets_tab import NoWheelSlider
+        play = checkbox("Play Sound On New Mail")
+        play.setChecked(bool(self.settings.get("widgets.gmail.play_sound_on_new_mail")))
+        play.toggled.connect(lambda checked: self.settings.set("widgets.gmail.play_sound_on_new_mail", checked))
+        layout.addWidget(play)
+        # The Settings helpers read these two attribute names from their owner.
+        self.gmail_sound_file = QLineEdit(str(self.settings.get("widgets.gmail.sound_file_path") or ""))
+        self.gmail_sound_file.setPlaceholderText("Path to .ogg/.wav/.mp3")
+        self.gmail_sound_file.textChanged.connect(lambda text: self.settings.set("widgets.gmail.sound_file_path", text))
+        row = QHBoxLayout()
+        row.addWidget(self.gmail_sound_file, 1)
+        row.addWidget(action("Browse…", lambda: gmail._on_gmail_browse_sound(self), secondary=True))
+        row.addWidget(action("Test", lambda: gmail._on_gmail_test_sound(self), secondary=True))
+        layout.addLayout(row)
+        volume_row = QHBoxLayout()
+        label = text_label("Sound Volume"); label.setMinimumWidth(140)
+        volume_row.addWidget(label)
+        self.gmail_sound_volume = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.gmail_sound_volume.setRange(0, 100)
+        self.gmail_sound_volume.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.gmail_sound_volume.setTickInterval(10)
+        self.gmail_sound_volume.setValue(int(self.settings.get("widgets.gmail.sound_volume_percent") or 0))
+        value = text_label(f"{self.gmail_sound_volume.value()}%")
+        self.gmail_sound_volume.valueChanged.connect(lambda v: (value.setText(f"{v}%"), self.settings.set("widgets.gmail.sound_volume_percent", int(v))))
+        volume_row.addWidget(self.gmail_sound_volume, 1); volume_row.addWidget(value)
+        layout.addLayout(volume_row)
