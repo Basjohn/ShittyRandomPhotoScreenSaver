@@ -5,6 +5,7 @@ presentations, session owner, committed writer/reader, and generation teardown
 are exercised.  The Reddit equivalent is already accepted separately.
 """
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from copy import deepcopy
 
@@ -404,6 +405,7 @@ def test_other_family_real_owner_save_live_promotion_fresh_generation_and_reedit
         )
         owners.append(third_owner)
         assert third_owner.start()
+        keep_off_screen(third_unit.runtime.window)
         third_unit.runtime.window.show()
         qt_app.processEvents()
         painted = _target(third_presentation.item, spec["paint_role"])

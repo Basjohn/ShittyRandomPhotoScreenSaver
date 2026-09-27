@@ -1,6 +1,7 @@
 """RUN-session application lifetime regressions."""
 
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from pathlib import Path
 
@@ -66,6 +67,7 @@ def test_run_lifetime_survives_zero_window_dialog_destruction_barrier(qt_app, qt
     try:
         dialog = QWidget()
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        keep_off_screen(dialog)
         dialog.show()
 
         engine = _Engine()

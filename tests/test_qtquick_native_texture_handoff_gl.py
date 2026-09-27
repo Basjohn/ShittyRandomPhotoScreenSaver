@@ -231,6 +231,10 @@ timer = QTimer()
 timer.timeout.connect(step)
 timer.start(60)
 QTimer.singleShot(20000, app.quit)
+from PySide6.QtCore import Qt as _InvisibleQt
+window.setOpacity(0.0)  # real but never on screen (tests/_invisible_windows.py)
+window.setFlag(_InvisibleQt.WindowType.WindowTransparentForInput, True)
+window.setFlag(_InvisibleQt.WindowType.Tool, True)
 window.show()
 app.exec()
 '''

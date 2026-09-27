@@ -12,13 +12,6 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 
 Each stays here until fixed or explicitly retired; do not treat it as noise in a gate. Physical validation lives with each feature's own doc, not here.
 
-- [ ] **Tests that show real windows.** 21 test files call `.show()` under pytest's Windows QPA (a real window
-      flashes): QWidget ones (`test_default_settings_editor`, `test_transitions_tab_setup`, `test_widgets_tab_setup`,
-      `test_visualizer_alignment`, `test_main_run_lifetime`, `test_spectrum_shaping_current`) can use
-      `WA_DontShowOnScreen`; the QtQuick pixel tests (`test_qtquick_*`, `test_quit_request_render_thread_gil`) need GL,
-      so move them to the hidden QQuickRenderControl pattern (`tools/onboarding_preview_foundry.py:_HiddenQuickScene`)
-      or an offscreen subprocess.
-
 - [ ] **Spectrum extreme-viewport smoothness (pre-existing, not an audit regression).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Pre-dates the audit; do not reopen VZ-04 over it. Watch item until investigated separately.
 
 ## Handoff and regression rules

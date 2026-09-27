@@ -9,6 +9,7 @@ Covers:
 6. UI save path emits correct keys
 """
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 import json
 from dataclasses import asdict
@@ -139,6 +140,7 @@ class TestSpectrumShapeEditorNotches:
         editor = _canonical_spectrum_editor(mirrored=True)
         try:
             editor.resize(320, 180)
+            keep_off_screen(editor)
             editor.show()
 
             original = editor.get_notch_positions()

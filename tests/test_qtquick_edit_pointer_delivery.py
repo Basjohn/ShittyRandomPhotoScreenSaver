@@ -5,6 +5,7 @@ session and flip callback, not an inert childAt() or a source string. No timers,
 settings, production instrumentation, or screenshots are needed.
 """
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, QRect, Qt
@@ -100,6 +101,7 @@ def test_edit_header_and_empty_top_rail_select_and_flip_without_moving(qt_app) -
             presentation_item_resolver=lambda _item: presentation.item,
             child_alignment_flip_handler=lambda _item, role: flips.append(role) or True,
         )
+        keep_off_screen(window)
         window.show()
         qt_app.processEvents()
         assert edit_root.isVisible()

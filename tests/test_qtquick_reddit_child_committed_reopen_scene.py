@@ -6,6 +6,7 @@ records after retirement and reconstruction.  This is NOT a synthetic target
 standing in for the family, a GPU-pixel test, or a full settings/app restart.
 """
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from copy import deepcopy
 from types import SimpleNamespace
@@ -168,6 +169,7 @@ def test_committed_child_header_and_refresh_reopen_in_real_retained_family_and_e
         )
         reopened = _presentation(host, family, local)
         reopened._retained.apply_custom_layout_size_payload(restored_payload)
+        keep_off_screen(window)
         window.show()
         qt_app.processEvents()
         assert reopened.item is not original_root

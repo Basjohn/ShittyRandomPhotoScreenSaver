@@ -1,4 +1,5 @@
 """Transitions SETUP subtab + E2.6 type="Random" normalization (Phase E2)."""
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 import uuid
 
 import pytest
@@ -39,6 +40,7 @@ def _make(qapp, settings_manager, qtbot):
 def test_setup_module_grid_and_pills_are_responsive(qapp, settings_manager, qtbot):
     tab = _make(qapp, settings_manager, qtbot)
     tab.resize(1000, 700)
+    keep_off_screen(tab)
     tab.show()
     qapp.processEvents()
     # Activation modules lay out as a responsive grid (>=2 columns when wide).

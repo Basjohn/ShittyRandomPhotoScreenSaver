@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from copy import deepcopy
 import json
@@ -387,6 +388,7 @@ def test_editor_color_swatch_survives_modal_picker_and_persists(qt_app, tmp_path
         while parent is not None:
             parent.setExpanded(True)
             parent = parent.parent()
+        keep_off_screen(editor)
         editor.show()
         editor.tree.setCurrentItem(item, 1)
         editor.tree.scrollToItem(item)

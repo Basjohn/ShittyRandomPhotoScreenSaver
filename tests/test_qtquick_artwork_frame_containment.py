@@ -8,6 +8,7 @@ the outline's stroke band (the artwork-frame contract: image inset by the
 stroke on a concentric mask, outline on top).
 """
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 import math
 from pathlib import Path
@@ -68,6 +69,7 @@ class _Scene:
         self.root.setParentItem(self.window.contentItem())
         self.root.setWidth(width)
         self.root.setHeight(height)
+        keep_off_screen(self.window)
         self.window.show()
 
     def grab(self) -> QImage:

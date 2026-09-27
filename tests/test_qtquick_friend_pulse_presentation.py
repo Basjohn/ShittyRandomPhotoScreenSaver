@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests._invisible_windows import keep_off_screen  # real but never on screen
 
 from dataclasses import replace
 from pathlib import Path
@@ -118,6 +119,7 @@ def _show_item(item: QQuickItem, model, qt_app) -> QQuickWindow:
     item.setParentItem(window.contentItem())
     item.setWidth(model.authoredWidth)
     item.setHeight(model.authoredHeight)
+    keep_off_screen(window)
     window.show()
     qt_app.processEvents()
     return window
