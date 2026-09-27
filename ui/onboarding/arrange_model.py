@@ -76,6 +76,7 @@ from rendering.widget_descriptors import (
     get_custom_persistence_monitor_settings_key_for_widget,
     get_custom_persistence_position_settings_key_for_widget,
 )
+from rendering.quick.custom_layout_hydration import clock_geometry_variant
 from rendering.quick.widgets.authored_layout_projection import (
     ProjectedPlacement,
     project_authored_display_layout,
@@ -116,8 +117,20 @@ _PROVISIONAL_SIZE = (100.0, 100.0)
 class ArrangeDisplay:
     identity: str
     signature_aliases: tuple[str, ...]
+    # Qt logical geometry: the saver lays widgets out in these units too.
     geometry: QRect
     monitor_route: str
+    # Only for text shown to people: the monitor's device resolution and scale.
+    device_pixel_ratio: float = 1.0
+    device_size: tuple[int, int] | None = None
+
+    def resolution(self) -> tuple[int, int]:
+        """The display's resolution in device pixels (Windows' own figure when known)."""
+
+        if self.device_size is not None:
+            return self.device_size
+        return (round(self.geometry.width() * self.device_pixel_ratio),
+                round(self.geometry.height() * self.device_pixel_ratio))
 
     def commit_value(self) -> tuple[tuple[str, ...], QRect, str]:
         return self.signature_aliases, QRect(self.geometry), self.monitor_route
@@ -204,14 +217,10 @@ class ArrangeModel:
         return section if isinstance(section, Mapping) else {}
 
     def _variants_for(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> tuple[str, ...]:
-        if descriptor.widget_id not in {"clock", "clock2", "clock3"}:
+        if descriptor.widget_id not in _CLOCK_IDS:
             return ("default",)
-        section = self._section_for(descriptor)
-        if not isinstance(section, Mapping):
-            return ("digital",)
-        overrides = section.get("display_mode_overrides", {})
-        mode = next((overrides.get(alias) for alias in display.signature_aliases if isinstance(overrides, Mapping) and overrides.get(alias)), section.get("display_mode", "digital"))
-        return (str(mode or "digital").lower().replace("analogue", "analog"),)
+        # The saver's own face resolution (base-Clock inheritance, per-display override).
+        return (clock_geometry_variant(self.widgets, descriptor.widget_id, display.identity),)
 
     def _routed_displays(self, descriptor: WidgetRuntimeDescriptor) -> tuple[ArrangeDisplay, ...]:
         section = self._route_section_for(descriptor)
@@ -221,14 +230,9 @@ class ArrangeModel:
         return tuple(display for display in self.displays if display.monitor_route == route)
 
     def _content_identity(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> str | None:
-        """The display key a per-display Clock face override is saved under."""
+        """The display signature a Clock's per-display face is resolved with (as the saver does)."""
 
-        if descriptor.widget_id not in _CLOCK_IDS:
-            return None
-        overrides = self._section_for(descriptor).get("display_mode_overrides", {})
-        if not isinstance(overrides, Mapping):
-            return None
-        return next((alias for alias in display.signature_aliases if overrides.get(alias)), None)
+        return display.identity if descriptor.widget_id in _CLOCK_IDS else None
 
     def _measured_size(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> tuple[float, float]:
         """The saver's own outer size for this widget on ``display``."""
@@ -410,6 +414,14 @@ class ArrangeModel:
 
     def item(self, key: CustomLayoutKey) -> CustomLayoutSessionItem:
         return self.session.item(key)
+
+    def device_size(self, key: CustomLayoutKey) -> tuple[int, int]:
+        """The box's size in its display's device pixels (the units of its resolution)."""
+
+        item = self.item(key)
+        ratio = self._display_map[item.current_display_identity].device_pixel_ratio
+        return (round(item.current_global_rect.width() * ratio),
+                round(item.current_global_rect.height() * ratio))
 
     def display_route(self, key: CustomLayoutKey) -> str:
         """Return the display label for a public editor selection key."""

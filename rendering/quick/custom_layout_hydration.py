@@ -22,29 +22,40 @@ from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.widget_descriptors import is_custom_position_selected_for_widget
 
 
-def _clock_variant_from_widgets(
+def clock_geometry_variant(
     widgets: Mapping[str, Any],
     widget_id: str,
-    *,
-    screen: Any | None = None,
+    display_signature: str | None,
 ) -> str:
-    """Resolve the same Clock mode variant the retained presentation will use.
+    """The Clock face variant the retained presentation uses on one display.
 
-    Per-display mode toggles persist in ``display_mode_overrides``.  Pre-bind
-    committed geometry must consume that exact same identity-aware projection;
-    using only the shared ``display_mode`` baseline makes a correctly persisted
-    analogue/digital presentation rehydrate the *other* geometry variant.
+    Secondary clocks inherit the base Clock's face, and per-display toggles
+    persist in ``display_mode_overrides`` under the display signature. Pre-bind
+    committed geometry and Settings Arrange must both consume this exact
+    projection; using only a section's own ``display_mode`` makes a correctly
+    persisted analogue/digital presentation read the *other* geometry variant.
     """
 
     from rendering.quick.widgets.clock import ClockPresentationConfig
 
-    display_signature = get_screen_signature(screen) if screen is not None else None
     config = ClockPresentationConfig.from_widgets_mapping(
         widget_id,
         widgets,
         display_signature=display_signature,
     )
     return normalize_geometry_variant(config.display_mode)
+
+
+def _clock_variant_from_widgets(
+    widgets: Mapping[str, Any],
+    widget_id: str,
+    *,
+    screen: Any | None = None,
+) -> str:
+    """Resolve the same Clock mode variant the retained presentation will use."""
+
+    display_signature = get_screen_signature(screen) if screen is not None else None
+    return clock_geometry_variant(widgets, widget_id, display_signature)
 
 
 def geometry_variant_for_presentation(
@@ -84,6 +95,26 @@ def resolve_quick_custom_entry(
     )
     return deserialize_custom_layout_entry(widget_id, geometry_variant, payload)
 
+
+
+def resolve_quick_committed_entry(
+    widgets: Mapping[str, Any],
+    screen: Any,
+    widget_id: str,
+) -> CustomLayoutEntry | None:
+    """The committed entry one live screen presents, in the variant it presents.
+
+    A Clock keeps analogue/digital entries apart; its entry is the one for the
+    face this screen shows. Resolving the ``default`` variant for a Clock finds
+    nothing, which dropped content-sized Clock placements at generation start.
+    """
+
+    variant = (
+        _clock_variant_from_widgets(widgets, widget_id, screen=screen)
+        if widget_id in {"clock", "clock2", "clock3"}
+        else "default"
+    )
+    return resolve_quick_custom_entry(widgets, screen, widget_id, geometry_variant=variant)
 
 
 def resolve_quick_committed_variant_state(
@@ -238,7 +269,9 @@ def apply_quick_committed_payloads(
 
 __all__ = [
     "apply_quick_committed_payloads",
+    "clock_geometry_variant",
     "geometry_variant_for_presentation",
+    "resolve_quick_committed_entry",
     "resolve_quick_committed_geometry",
     "resolve_quick_committed_variant_state",
     "resolve_quick_custom_entry",
