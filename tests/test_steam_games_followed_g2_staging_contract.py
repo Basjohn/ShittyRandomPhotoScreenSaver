@@ -17,7 +17,11 @@ def test_live_family_admission_uses_one_shared_steam_lease_without_qml_provider(
     assert 'family_id="steam_progress"' in registry
     assert 'qml_filename="GamesYouFollowPresentation.qml"' in registry
     assert 'class GamesYouFollowFamilyAdapter' in binder
-    assert '_enabled_from_candidates(widgets_config, ("steam_progress",))' in binder
+    from rendering.quick.widgets.family_binder import GamesYouFollowFamilyAdapter
+
+    adapter = GamesYouFollowFamilyAdapter()
+    assert adapter.enabled_instance_ids({"steam_progress": {"enabled": True}}) == ("steam_progress",)
+    assert adapter.enabled_instance_ids({"steam_progress": {"enabled": False}}) == ()
     assert '"steam_progress": _FOLLOWED_SERVICE_SPEC' in services
     assert 'def _build_followed_service(' in services
     assert 'model.activate(thread_manager)' in (ROOT / "rendering/quick/widgets/games_you_follow.py").read_text("utf-8")

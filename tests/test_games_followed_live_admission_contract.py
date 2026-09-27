@@ -19,7 +19,11 @@ def test_one_canonical_live_family_reuses_the_existing_retained_scene_and_lease(
     assert registry.count('family_id="steam_progress"') == 1
     assert registry.count('qml_filename="GamesYouFollowPresentation.qml"') == 1
     assert binder.count('GamesYouFollowFamilyAdapter(on_steam_action_requested=steam_open_requested)') == 1
-    assert '_enabled_from_candidates(widgets_config, ("steam_progress",))' in binder
+    from rendering.quick.widgets.family_binder import GamesYouFollowFamilyAdapter
+
+    adapter = GamesYouFollowFamilyAdapter()
+    assert adapter.enabled_instance_ids({"steam_progress": {"enabled": True}}) == ("steam_progress",)
+    assert adapter.enabled_instance_ids({"steam_progress": {"enabled": False}}) == ()
     assert '_attach_runtime_service(runtime_manager, widget_id, model, widgets_config)' in binder
     assert '"steam_progress": _FOLLOWED_SERVICE_SPEC' in services
     assert 'host.create_family_widget(\n            "steam_progress"' in model

@@ -110,6 +110,10 @@ class OrdinaryFamilyAdapter(Protocol):
     An adapter owns only the knowledge of how to enumerate a family's enabled
     instances and how to construct that family's existing ``Retained*Presentation``
     from already-resolved settings. It holds no runtime lifetime itself.
+
+    ``presentation_model`` is the single model construction ``build`` uses. It
+    is also the seam Settings Arrange measures preferred sizes through
+    (``preferred_size_measurement``), so both read one size authority.
     """
 
     @property
@@ -118,6 +122,26 @@ class OrdinaryFamilyAdapter(Protocol):
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]: ...
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        """Registered QML component id presenting ``widget_id``, or None if foreign."""
+        ...
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        """Build the family's detached presentation model (no service, no item)."""
+        ...
+
+    def presentation_card_style(self, model: Any) -> Any:
+        """The ``OverlayCardStyle`` the family's retained card presents ``model`` with."""
+        ...
 
     def build(
         self,
@@ -383,12 +407,41 @@ class ClockFamilyAdapter:
     def family_id(self) -> str:
         return "clocks"
 
+    INSTANCE_IDS = ("clock", "clock2", "clock3")
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        return _enabled_from_candidates(
-            widgets_config, ("clock", "clock2", "clock3")
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "clocks" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .clock import (
+            ClockPresentationConfig,
+            ClockPresentationModel,
+            ClockPresentationStyle,
         )
+
+        config = ClockPresentationConfig.from_widgets_mapping(
+            widget_id,
+            widgets_config,
+            display_signature=display_identity,
+        )
+        style = ClockPresentationStyle.project(config, shadow_values)
+        return ClockPresentationModel(config, style)
 
     def build(
         self,
@@ -403,20 +456,14 @@ class ClockFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .clock import (
-            ClockPresentationConfig,
-            ClockPresentationModel,
-            ClockPresentationStyle,
-            RetainedClockPresentation,
-        )
+        from .clock import RetainedClockPresentation
 
-        config = ClockPresentationConfig.from_widgets_mapping(
-            widget_id,
-            widgets_config,
-            display_signature=display_identity,
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
+            display_identity=display_identity,
         )
-        style = ClockPresentationStyle.project(config, shadow_values)
-        model = ClockPresentationModel(config, style)
         mode_callback = None
         if self._on_mode_toggle is not None:
             mode_callback = (
@@ -457,10 +504,37 @@ class WeatherFamilyAdapter:
     def family_id(self) -> str:
         return "weather"
 
+    INSTANCE_IDS = ("weather",)
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        return _enabled_from_candidates(widgets_config, ("weather",))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "weather" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .weather import (
+            WeatherPresentationConfig,
+            WeatherPresentationModel,
+            WeatherPresentationStyle,
+        )
+
+        config = WeatherPresentationConfig.from_widgets_mapping(widgets_config)
+        style = WeatherPresentationStyle.project(config, shadow_values)
+        return WeatherPresentationModel(config, style)
 
     def build(
         self,
@@ -475,16 +549,13 @@ class WeatherFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .weather import (
-            RetainedWeatherPresentation,
-            WeatherPresentationConfig,
-            WeatherPresentationModel,
-            WeatherPresentationStyle,
-        )
+        from .weather import RetainedWeatherPresentation
 
-        config = WeatherPresentationConfig.from_widgets_mapping(widgets_config)
-        style = WeatherPresentationStyle.project(config, shadow_values)
-        model = WeatherPresentationModel(config, style)
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
+        )
         if not _attach_runtime_service(
             runtime_manager, widget_id, model, widgets_config
         ):
@@ -511,10 +582,39 @@ class RedditFamilyAdapter:
     def family_id(self) -> str:
         return "reddit"
 
+    INSTANCE_IDS = ("reddit", "reddit2")
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        return _enabled_from_candidates(widgets_config, ("reddit", "reddit2"))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "reddit" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .reddit import (
+            RedditPresentationConfig,
+            RedditPresentationModel,
+            RedditPresentationStyle,
+        )
+
+        config = RedditPresentationConfig.from_widgets_mapping(
+            widgets_config, widget_id=widget_id
+        )
+        style = RedditPresentationStyle.project(config, shadow_values)
+        return RedditPresentationModel(config, style)
 
     def build(
         self,
@@ -529,18 +629,13 @@ class RedditFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .reddit import (
-            RedditPresentationConfig,
-            RedditPresentationModel,
-            RedditPresentationStyle,
-            RetainedRedditPresentation,
-        )
+        from .reddit import RetainedRedditPresentation
 
-        config = RedditPresentationConfig.from_widgets_mapping(
-            widgets_config, widget_id=widget_id
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
         )
-        style = RedditPresentationStyle.project(config, shadow_values)
-        model = RedditPresentationModel(config, style)
         if not _attach_runtime_service(
             runtime_manager, widget_id, model, widgets_config
         ):
@@ -579,6 +674,37 @@ class FeedFamilyAdapter:
     def family_id(self) -> str:
         return "feeds"
 
+    def presentation_component(self, widget_id: str) -> str | None:
+        from core.feeds.config import FEED_WIDGET_IDS
+
+        return "feeds" if widget_id in FEED_WIDGET_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .feeds import (
+            FeedPresentationConfig,
+            FeedPresentationModel,
+            FeedPresentationStyle,
+        )
+
+        config = FeedPresentationConfig.from_widgets_mapping(
+            widgets_config, widget_id=widget_id
+        )
+        style = FeedPresentationStyle.project(config, shadow_values)
+        return FeedPresentationModel(
+            config, style, runtime_generation=runtime_generation
+        )
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
@@ -609,19 +735,13 @@ class FeedFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .feeds import (
-            FeedPresentationConfig,
-            FeedPresentationModel,
-            FeedPresentationStyle,
-            RetainedFeedPresentation,
-        )
+        from .feeds import RetainedFeedPresentation
 
-        config = FeedPresentationConfig.from_widgets_mapping(
-            widgets_config, widget_id=widget_id
-        )
-        style = FeedPresentationStyle.project(config, shadow_values)
-        model = FeedPresentationModel(
-            config, style, runtime_generation=runtime_generation
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
+            runtime_generation=runtime_generation,
         )
         if not _attach_runtime_service(
             runtime_manager, widget_id, model, widgets_config
@@ -660,10 +780,39 @@ class GmailFamilyAdapter:
     def family_id(self) -> str:
         return "gmail"
 
+    INSTANCE_IDS = ("gmail",)
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        return _enabled_from_candidates(widgets_config, ("gmail",))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "gmail" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .gmail import (
+            GmailPresentationConfig,
+            GmailPresentationModel,
+            GmailPresentationStyle,
+        )
+
+        config = GmailPresentationConfig.from_widgets_mapping(widgets_config)
+        style = GmailPresentationStyle.project(config, shadow_values)
+        return GmailPresentationModel(
+            config, style, runtime_generation=runtime_generation
+        )
 
     def build(
         self,
@@ -678,17 +827,13 @@ class GmailFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .gmail import (
-            GmailPresentationConfig,
-            GmailPresentationModel,
-            GmailPresentationStyle,
-            RetainedGmailPresentation,
-        )
+        from .gmail import RetainedGmailPresentation
 
-        config = GmailPresentationConfig.from_widgets_mapping(widgets_config)
-        style = GmailPresentationStyle.project(config, shadow_values)
-        model = GmailPresentationModel(
-            config, style, runtime_generation=runtime_generation
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
+            runtime_generation=runtime_generation,
         )
         if not _attach_runtime_service(
             runtime_manager, widget_id, model, widgets_config
@@ -718,10 +863,39 @@ class AchievementPulseFamilyAdapter:
     def family_id(self) -> str:
         return "steam"
 
+    INSTANCE_IDS = ("achievement_pulse",)
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        return _enabled_from_candidates(widgets_config, ("achievement_pulse",))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "achievement_pulse" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .achievement_pulse import (
+            AchievementPulsePresentationConfig,
+            AchievementPulsePresentationModel,
+            AchievementPulsePresentationStyle,
+        )
+
+        config = AchievementPulsePresentationConfig.from_widgets_mapping(
+            widgets_config
+        )
+        style = AchievementPulsePresentationStyle.project(config, shadow_values)
+        return AchievementPulsePresentationModel(config, style)
 
     def build(
         self,
@@ -736,18 +910,13 @@ class AchievementPulseFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .achievement_pulse import (
-            AchievementPulsePresentationConfig,
-            AchievementPulsePresentationModel,
-            AchievementPulsePresentationStyle,
-            RetainedAchievementPulsePresentation,
-        )
+        from .achievement_pulse import RetainedAchievementPulsePresentation
 
-        config = AchievementPulsePresentationConfig.from_widgets_mapping(
-            widgets_config
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
         )
-        style = AchievementPulsePresentationStyle.project(config, shadow_values)
-        model = AchievementPulsePresentationModel(config, style)
         if not _attach_runtime_service(
             runtime_manager, widget_id, model, widgets_config
         ):
@@ -775,10 +944,40 @@ class GamesYouFollowFamilyAdapter:
     def family_id(self) -> str:
         return "steam"
 
+    INSTANCE_IDS = ("steam_progress",)
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        return _enabled_from_candidates(widgets_config, ("steam_progress",))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "steam_progress" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .games_you_follow import (
+            FollowedPresentationConfig,
+            GamesYouFollowPresentationModel,
+            followed_visual_style,
+        )
+
+        return GamesYouFollowPresentationModel(
+            FollowedPresentationConfig.from_widgets_mapping(widgets_config),
+            runtime_generation=runtime_generation,
+            visual_style=followed_visual_style(widgets_config, shadow_values),
+            widgets=widgets_config,
+        )
 
     def build(
         self, *, widget_id: str, widgets_config: Mapping[str, object],
@@ -787,16 +986,11 @@ class GamesYouFollowFamilyAdapter:
         shadow_values: Mapping[str, object], runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .games_you_follow import (
-            FollowedPresentationConfig, GamesYouFollowPresentationModel,
-            RetainedGamesYouFollowPresentation, followed_visual_style,
-        )
+        from .games_you_follow import RetainedGamesYouFollowPresentation
 
-        visual_style = followed_visual_style(widgets_config, shadow_values)
-        model = GamesYouFollowPresentationModel(
-            FollowedPresentationConfig.from_widgets_mapping(widgets_config),
-            runtime_generation=runtime_generation, visual_style=visual_style,
-            widgets=widgets_config,
+        model = self.presentation_model(
+            widget_id=widget_id, widgets_config=widgets_config,
+            shadow_values=shadow_values, runtime_generation=runtime_generation,
         )
         if not _attach_runtime_service(runtime_manager, widget_id, model, widgets_config):
             model.retire()
@@ -804,7 +998,7 @@ class GamesYouFollowFamilyAdapter:
         try:
             return RetainedGamesYouFollowPresentation(
                 host=host, model=model, geometry=geometry,
-                card_style=visual_style.card_style,
+                card_style=self.presentation_card_style(model),
                 on_steam_action_requested=(
                     (lambda kind, target, wid=widget_id: bool(
                         self._on_steam_action_requested(wid, kind, target)
@@ -831,10 +1025,39 @@ class AbandonmentIssuesFamilyAdapter:
     def family_id(self) -> str:
         return "steam"
 
+    INSTANCE_IDS = ("abandonment_issues",)
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        return _enabled_from_candidates(widgets_config, ("abandonment_issues",))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "abandonment_issues" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .abandonment_issues import (
+            AbandonmentIssuesPresentationConfig,
+            AbandonmentIssuesPresentationModel,
+            AbandonmentIssuesPresentationStyle,
+        )
+
+        config = AbandonmentIssuesPresentationConfig.from_widgets_mapping(
+            widgets_config
+        )
+        style = AbandonmentIssuesPresentationStyle.project(config, shadow_values)
+        return AbandonmentIssuesPresentationModel(config, style)
 
     def build(
         self,
@@ -849,18 +1072,13 @@ class AbandonmentIssuesFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .abandonment_issues import (
-            AbandonmentIssuesPresentationConfig,
-            AbandonmentIssuesPresentationModel,
-            AbandonmentIssuesPresentationStyle,
-            RetainedAbandonmentIssuesPresentation,
-        )
+        from .abandonment_issues import RetainedAbandonmentIssuesPresentation
 
-        config = AbandonmentIssuesPresentationConfig.from_widgets_mapping(
-            widgets_config
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
         )
-        style = AbandonmentIssuesPresentationStyle.project(config, shadow_values)
-        model = AbandonmentIssuesPresentationModel(config, style)
         if not _attach_runtime_service(
             runtime_manager, widget_id, model, widgets_config
         ):
@@ -892,6 +1110,8 @@ class FriendPulseFamilyAdapter:
     def family_id(self) -> str:
         return "steam"
 
+    INSTANCE_IDS = ("friend_pulse",)
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
@@ -901,7 +1121,36 @@ class FriendPulseFamilyAdapter:
         default_enabled = bool(require_canonical_default("widgets.steam.enabled"))
         if not _enabled_flag(shared.get("enabled", default_enabled), default_enabled):
             return ()
-        return _enabled_from_candidates(widgets_config, ("friend_pulse",))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "friend_pulse" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .friend_pulse import (
+            FriendPulsePresentationConfig,
+            FriendPulsePresentationModel,
+            FriendPulsePresentationStyle,
+        )
+
+        config = FriendPulsePresentationConfig.from_widgets_mapping(widgets_config)
+        style = FriendPulsePresentationStyle.project(config, shadow_values)
+        return FriendPulsePresentationModel(
+            config,
+            style,
+            runtime_generation=runtime_generation,
+        )
 
     def build(
         self,
@@ -916,18 +1165,12 @@ class FriendPulseFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .friend_pulse import (
-            FriendPulsePresentationConfig,
-            FriendPulsePresentationModel,
-            FriendPulsePresentationStyle,
-            RetainedFriendPulsePresentation,
-        )
+        from .friend_pulse import RetainedFriendPulsePresentation
 
-        config = FriendPulsePresentationConfig.from_widgets_mapping(widgets_config)
-        style = FriendPulsePresentationStyle.project(config, shadow_values)
-        model = FriendPulsePresentationModel(
-            config,
-            style,
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
             runtime_generation=runtime_generation,
         )
         if not _attach_runtime_service(
@@ -958,10 +1201,41 @@ class SystemStatsFamilyAdapter:
     def family_id(self) -> str:
         return "system_stats"
 
+    INSTANCE_IDS = ("system_stats",)
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        return _enabled_from_candidates(widgets_config, ("system_stats",))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "system_stats" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .system_stats import (
+            SystemStatsPresentationConfig,
+            SystemStatsPresentationModel,
+            SystemStatsPresentationStyle,
+        )
+
+        config = SystemStatsPresentationConfig.from_widgets_mapping(widgets_config)
+        style = SystemStatsPresentationStyle.project(config, shadow_values)
+        return SystemStatsPresentationModel(
+            config,
+            style,
+            runtime_generation=runtime_generation,
+        )
 
     def build(
         self,
@@ -976,18 +1250,12 @@ class SystemStatsFamilyAdapter:
         runtime_manager: Any,
         runtime_generation: int | None = None,
     ) -> BoundFamilyPresentation | None:
-        from .system_stats import (
-            RetainedSystemStatsPresentation,
-            SystemStatsPresentationConfig,
-            SystemStatsPresentationModel,
-            SystemStatsPresentationStyle,
-        )
+        from .system_stats import RetainedSystemStatsPresentation
 
-        config = SystemStatsPresentationConfig.from_widgets_mapping(widgets_config)
-        style = SystemStatsPresentationStyle.project(config, shadow_values)
-        model = SystemStatsPresentationModel(
-            config,
-            style,
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
             runtime_generation=runtime_generation,
         )
         if not _attach_runtime_service(
@@ -1012,19 +1280,42 @@ class SystemAudioOSDFamilyAdapter:
     def family_id(self) -> str:
         return "system_audio_osd"
 
+    INSTANCE_IDS = ("system_audio_osd",)
+
     def enabled_instance_ids(self, widgets_config: Mapping[str, object]) -> tuple[str, ...]:
-        return _enabled_from_candidates(widgets_config, ("system_audio_osd",))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "system_audio_osd" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.config.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+    ) -> Any:
+        from .system_audio_osd import SystemAudioOSDConfig, SystemAudioOSDPresentationModel
+
+        return SystemAudioOSDPresentationModel(
+            SystemAudioOSDConfig.from_widgets_mapping(widgets_config),
+            runtime_generation=runtime_generation,
+        )
 
     def build(self, *, widget_id: str, widgets_config: Mapping[str, object],
               host: OrdinaryWidgetPresentationHost, geometry: OverlayWidgetGeometry,
               display_bounds: OverlayWidgetGeometry, display_identity: str,
               shadow_values: Mapping[str, object], runtime_manager: Any,
               runtime_generation: int | None = None) -> BoundFamilyPresentation | None:
-        from .system_audio_osd import (SystemAudioOSDConfig,
-            SystemAudioOSDPresentationModel, RetainedSystemAudioOSDPresentation)
-        model = SystemAudioOSDPresentationModel(
-            SystemAudioOSDConfig.from_widgets_mapping(widgets_config),
-            runtime_generation=runtime_generation,
+        from .system_audio_osd import RetainedSystemAudioOSDPresentation
+        model = self.presentation_model(
+            widget_id=widget_id, widgets_config=widgets_config,
+            shadow_values=shadow_values, runtime_generation=runtime_generation,
         )
         if not _attach_runtime_service(runtime_manager, widget_id, model, widgets_config):
             model.retire()
@@ -1051,10 +1342,45 @@ class MediaFamilyAdapter:
     def family_id(self) -> str:
         return "media"
 
+    INSTANCE_IDS = ("media",)
+
     def enabled_instance_ids(
         self, widgets_config: Mapping[str, object]
     ) -> tuple[str, ...]:
-        return _enabled_from_candidates(widgets_config, ("media",))
+        return _enabled_from_candidates(widgets_config, self.INSTANCE_IDS)
+
+    def presentation_component(self, widget_id: str) -> str | None:
+        return "media" if widget_id in self.INSTANCE_IDS else None
+
+    def presentation_card_style(self, model: Any) -> Any:
+        return model.style.card_style
+
+    def presentation_model(
+        self,
+        *,
+        widget_id: str,
+        widgets_config: Mapping[str, object],
+        shadow_values: Mapping[str, object],
+        display_identity: str | None = None,
+        runtime_generation: int | None = None,
+        artwork_provider: Any = None,
+    ) -> Any:
+        """Artwork only resolves pixels; a detached model may measure without one."""
+
+        from .media import (
+            MediaPresentationConfig,
+            MediaPresentationModel,
+            MediaPresentationStyle,
+        )
+
+        config = MediaPresentationConfig.from_widgets_mapping(widgets_config)
+        style = MediaPresentationStyle.project(config, shadow_values)
+        return MediaPresentationModel(
+            config,
+            style,
+            artwork_provider,
+            runtime_generation=runtime_generation,
+        )
 
     def build(
         self,
@@ -1072,12 +1398,7 @@ class MediaFamilyAdapter:
         from core.media.media_native_trace import trace_media_native_stage
         from rendering.quick.media_artwork import MediaArtworkImageProvider
 
-        from .media import (
-            MediaPresentationConfig,
-            MediaPresentationModel,
-            MediaPresentationStyle,
-            RetainedMediaPresentation,
-        )
+        from .media import RetainedMediaPresentation
 
         # H1 diagnostic: bracket the screen's Media-family construction so the
         # replacement-generation native termination has a precise last-stage
@@ -1104,13 +1425,12 @@ class MediaFamilyAdapter:
                 "unavailable; failing Media card closed",
             )
             return None
-        config = MediaPresentationConfig.from_widgets_mapping(widgets_config)
-        style = MediaPresentationStyle.project(config, shadow_values)
-        model = MediaPresentationModel(
-            config,
-            style,
-            artwork_provider,
+        model = self.presentation_model(
+            widget_id=widget_id,
+            widgets_config=widgets_config,
+            shadow_values=shadow_values,
             runtime_generation=runtime_generation,
+            artwork_provider=artwork_provider,
         )
         trace_media_native_stage(
             component="media_family",
