@@ -439,7 +439,7 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
     button_row = QHBoxLayout()
     from ui.widgets.outlined_button import OutlinedButton
     paste_button = OutlinedButton("Paste Key", role="secondary")
-    save_button = OutlinedButton("Save && Test", role="primary")
+    save_button = OutlinedButton("Save && Test", role="secondary")
     cancel_button = OutlinedButton("Cancel", role="secondary")
     for button in (paste_button, save_button, cancel_button):
         button.setMinimumHeight(32)
