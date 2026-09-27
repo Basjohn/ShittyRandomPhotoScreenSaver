@@ -716,16 +716,19 @@ def test_import_settings_reload_all_tabs_after_success(
     snapshot.write_text(json.dumps({"snapshot": {"ui": {"theme": "dark"}}}), encoding="utf-8")
     reloaded = []
 
-    monkeypatch.setattr(
-        settings_dialog_module.QFileDialog,
-        "getOpenFileName",
-        lambda *args, **kwargs: (str(snapshot), ""),
-    )
+    import ui.settings_import as importing
+
+    # File choice and the category chooser live in ui.settings_import (tested
+    # there); the dialog's job is to reload every tab after a successful import.
+    monkeypatch.setattr(importing, "run_settings_import",
+                        lambda parent, settings: settings.import_from_sst(str(snapshot), merge=True))
     monkeypatch.setattr(dialog, "_reload_all_tab_settings", lambda: reloaded.append(True))
-    monkeypatch.setattr(settings_dialog_module.StyledPopup, "show_success", lambda *args, **kwargs: None)
 
     dialog._on_import_settings_clicked()
+    assert reloaded == [True]
 
+    monkeypatch.setattr(importing, "run_settings_import", lambda parent, settings: False)
+    dialog._on_import_settings_clicked()  # cancelled or failed: no reload
     assert reloaded == [True]
 
 

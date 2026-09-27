@@ -15,6 +15,10 @@ Theme page previewed. Explicit save buttons inside pages (Save to Slot, account 
 operation used by Sources, the close popup and Guided Setup. Skip sits in the Guided Setup header (there is no
 separate Close); it leaves at any step, offers an unapplied Arrange draft first and changes no other settings.
 
+- Welcome offers **Import Settings?** (`ui/settings_import.py`, shared with Settings → About): choose ALL SETTINGS or
+  Display, Widget, Transition, Theme Choice, Custom Geometry Including Layouts and Misc. A partial import merges only
+  those parts (`core/settings/sst_io.py:filter_snapshot_categories`); credentials never travel. Import writes the
+  store directly (explicit), and success drops the wizard draft and finishes Guided Setup.
 - Sources is two large buckets, Folders and Online Wallpaper Feeds (feeds need internet). Custom feed addresses are
   added there through the same autocorrect as the Sources tab (`ui/tabs/sources_tab.py:autocorrect_feed_url`).
 - Displays: clicking a display in the diagram switches it on or off (filled when on); one display always stays on.

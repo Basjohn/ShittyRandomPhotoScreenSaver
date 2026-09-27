@@ -2140,63 +2140,21 @@ class SettingsDialog(QDialog):
             )
 
     def _on_import_settings_clicked(self) -> None:
-        """Import settings from an SST snapshot and refresh all tabs."""
+        """Import all of a snapshot or chosen categories, then refresh every tab."""
 
+        from ui.settings_import import run_settings_import
         try:
-            try:
-                base_dir = Path.home() / "Documents"
-            except Exception as e:
-                logger.debug("[SETTINGS] Exception suppressed: %s", e)
-                base_dir = Path.cwd()
-
-            if not base_dir.exists():
-                base_dir = Path.cwd()
-
-            file_path, _ = QFileDialog.getOpenFileName(
-                self,
-                "Import Settings Snapshot",
-                str(base_dir),
-                "Settings Snapshot (*.sst *.json);;All Files (*)",
-            )
-
-            if not file_path:
+            if not run_settings_import(self, self._settings):
                 return
-
-            ok = False
-            try:
-                ok = bool(self._settings.import_from_sst(file_path, merge=True))
-            except Exception:
-                logger.exception("Import from SST failed")
-                ok = False
-
-            if not ok:
-                StyledPopup.show_error(
-                    self,
-                    "Import Failed",
-                    "Failed to import settings snapshot.\nSee log for details.",
-                )
-                return
-
-            # Reload all tabs so the UI reflects the imported configuration
-            # immediately.
-            try:
-                self._reload_all_tab_settings()
-            except Exception:
-                logger.debug("Failed to reload settings tabs after SST import", exc_info=True)
-
-            StyledPopup.show_success(
-                self,
-                "Import Complete",
-                f"Settings imported from:\n{Path(file_path).name}",
-            )
         except Exception as exc:
             logger.exception("Unexpected error during settings import: %s", exc)
-            StyledPopup.show_error(
-                self,
-                "Import Failed",
-                "Failed to import settings snapshot.\nSee log for details.",
-            )
-    
+            StyledPopup.show_error(self, "Import Failed", "Failed to import settings snapshot.\nSee log for details.")
+            return
+        try:
+            self._reload_all_tab_settings()
+        except Exception:
+            logger.debug("Failed to reload settings tabs after SST import", exc_info=True)
+
     def _toggle_maximize(self) -> None:
         """Toggle window maximize state manually."""
         if self._is_maximized:

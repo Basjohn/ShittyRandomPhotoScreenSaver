@@ -43,6 +43,93 @@ _SST_NON_IMPORTABLE_KEYS = frozenset({
 }) | RETIRED_SETTING_KEYS
 
 
+# Import categories offered to users ("ALL SETTINGS" is every category).
+IMPORT_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ("display", "Display Settings"),
+    ("widgets", "Widget Settings"),
+    ("transitions", "Transition Settings"),
+    ("theme", "Theme Choice"),
+    ("geometry", "Custom Geometry Including Layouts"),
+    ("misc", "Misc Settings"),
+)
+_DISPLAY_ROOTS = frozenset({"display", "input", "accessibility", "timing"})
+_THEME_UI_KEYS = frozenset({"settings_theme_selection"})
+# Where widgets sit, not how they look or behave: per-widget placement fields,
+# per-display clock faces, CUSTOM layouts and the numbered layout slots.
+_GEOMETRY_WIDGET_SECTIONS = frozenset({"custom_layout", "custom_layout_restore", "layout_slots"})
+_GEOMETRY_WIDGET_FIELDS = frozenset({"position", "monitor", "margin", "width", "height", "display_mode_overrides"})
+
+
+def _split_by_category(root: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Partition a normalised snapshot into the user-facing import categories.
+
+    Every value lands in exactly one category; anything not claimed by the
+    named ones is Misc, so choosing every category equals a full import.
+    """
+
+    parts: Dict[str, Dict[str, Any]] = {key: {} for key, _label in IMPORT_CATEGORIES}
+    for section, value in root.items():
+        section = str(section)
+        if section in _DISPLAY_ROOTS:
+            parts["display"][section] = deepcopy(value)
+        elif section == "transitions":
+            parts["transitions"][section] = deepcopy(value)
+        elif section == "widget_theme":
+            parts["theme"][section] = deepcopy(value)
+        elif section == "visualizer_custom_presets":
+            parts["widgets"][section] = deepcopy(value)
+        elif section == "ui" and isinstance(value, Mapping):
+            for key, leaf in value.items():
+                target = "theme" if key in _THEME_UI_KEYS else "misc"
+                parts[target].setdefault("ui", {})[key] = deepcopy(leaf)
+        elif section == "widgets" and isinstance(value, Mapping):
+            for widget_id, widget_value in value.items():
+                if widget_id in _GEOMETRY_WIDGET_SECTIONS or not isinstance(widget_value, Mapping):
+                    target = "geometry" if widget_id in _GEOMETRY_WIDGET_SECTIONS else "widgets"
+                    parts[target].setdefault("widgets", {})[widget_id] = deepcopy(widget_value)
+                    continue
+                for key, leaf in widget_value.items():
+                    target = "geometry" if key in _GEOMETRY_WIDGET_FIELDS else "widgets"
+                    parts[target].setdefault("widgets", {}).setdefault(widget_id, {})[key] = deepcopy(leaf)
+        else:
+            parts["misc"][section] = deepcopy(value)
+    return parts
+
+
+def filter_snapshot_categories(root: Mapping[str, Any], categories) -> Dict[str, Any]:
+    """Only the chosen categories of a normalised snapshot, recombined."""
+
+    chosen = set(categories)
+    unknown = chosen - {key for key, _label in IMPORT_CATEGORIES}
+    if unknown:
+        raise ValueError(f"unknown settings import categories: {sorted(unknown)}")
+    combined: Dict[str, Any] = {}
+    for category, part in _split_by_category(root).items():
+        if category in chosen:
+            combined = _deep_overlay_mapping(combined, part)
+    return combined
+
+
+def available_snapshot_categories(path: str) -> tuple[str, ...]:
+    """Categories a snapshot file actually contains (for the import chooser)."""
+
+    root = _read_snapshot_root(path)
+    if root is None:
+        return ()
+    parts = _split_by_category(normalize_sst_snapshot(_strip_steam_secrets_from_snapshot(root)))
+    return tuple(key for key, _label in IMPORT_CATEGORIES if parts[key])
+
+
+def _read_snapshot_root(path: str) -> Mapping[str, Any] | None:
+    try:
+        loaded = json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        logger.exception("Failed to read settings snapshot from %s", path)
+        return None
+    root = loaded.get("snapshot", {}) if isinstance(loaded, Mapping) and "snapshot" in loaded else loaded
+    return root if isinstance(root, Mapping) else None
+
+
 def _deep_overlay_mapping(base: Mapping[str, Any], overlay: Mapping[str, Any]) -> Dict[str, Any]:
     """Recursively overlay mappings without discarding untouched nested siblings."""
 
@@ -274,11 +361,14 @@ def export_to_sst(mgr: "SettingsManager", path: str) -> bool:
         return False
 
 
-def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bool:
+def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True, categories=None) -> bool:
     """Import settings from an SST snapshot at *path*.
 
     When *merge* is True (default), existing sections are overlaid with
     values from the snapshot instead of clearing the store first.
+    ``categories`` (keys of :data:`IMPORT_CATEGORIES`) imports only those parts
+    and always merges, so everything not chosen stays exactly as it is.
+    Credentials are never part of a snapshot in either direction.
     """
     try:
         raw = Path(path).read_text(encoding='utf-8')
@@ -326,6 +416,9 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
 
     stripped_root = _strip_steam_secrets_from_snapshot(root)
     normalized_root = normalize_sst_snapshot(stripped_root)
+    if categories is not None:
+        normalized_root = filter_snapshot_categories(normalized_root, categories)
+        merge = True
 
     try:
         with mgr._lock:

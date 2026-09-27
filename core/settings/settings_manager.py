@@ -1762,10 +1762,10 @@ class SettingsManager(QObject):
         from core.settings.sst_io import export_to_sst
         return export_to_sst(self, path)
 
-    def import_from_sst(self, path: str, merge: bool = True) -> bool:
-        """Delegates to core.settings.sst_io."""
+    def import_from_sst(self, path: str, merge: bool = True, categories=None) -> bool:
+        """Delegates to core.settings.sst_io (``categories``: a partial, merged import)."""
         from core.settings.sst_io import import_from_sst
-        return import_from_sst(self, path, merge)
+        return import_from_sst(self, path, merge, categories)
 
     def preview_import_from_sst(self, path: str, merge: bool = True) -> Dict[str, Any]:
         """Delegates to core.settings.sst_io."""
