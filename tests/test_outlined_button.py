@@ -8,8 +8,7 @@ from ui.settings_theme_runtime import get_active_settings_theme
 from ui.widgets.outlined_button import BORDER_WIDTH, OutlinedButton
 
 
-@pytest.mark.parametrize("role,token", [("primary", "control.ghost_action.border"),
-                                        ("secondary", "control.button.border")])
+@pytest.mark.parametrize("role,token", [("secondary", "control.button.border")])
 def test_border_is_painted_as_one_continuous_stroke(qt_app, role, token) -> None:
     button = OutlinedButton("Apply", role=role)
     button.resize(160, 36)

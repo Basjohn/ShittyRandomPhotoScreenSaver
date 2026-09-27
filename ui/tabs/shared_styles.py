@@ -1299,33 +1299,6 @@ def _build_rss_input_style() -> str:
 RSS_INPUT_STYLE = _build_rss_input_style()
 
 
-def _build_ghost_action_button_style() -> str:
-    return (
-        "QPushButton {"
-        f" background-color: {_theme_rgba255('control.ghost_action.surface')};"
-        f" color: {_theme_qss_color('control.ghost_action.text')};"
-        f" border: 1px solid {_theme_rgba255('control.ghost_action.border')};"
-        " border-radius: 16px; padding: 0 16px;"
-        " font-size: 12px; font-weight: 600;"
-        " }"
-        "QPushButton:hover {"
-        f" background-color: {_theme_rgba255('control.ghost_action.hover_surface')};"
-        f" border-color: {_theme_rgba255('control.ghost_action.hover_border')};"
-        " }"
-        "QPushButton:pressed {"
-        f" background-color: {_theme_rgba255('control.ghost_action.pressed_surface')};"
-        " }"
-        "QPushButton:disabled {"
-        f" color: {_theme_rgba255('control.ghost_action.disabled_text')};"
-        f" background-color: {_theme_rgba255('control.ghost_action.disabled_surface')};"
-        f" border-color: {_theme_rgba255('control.ghost_action.disabled_border')};"
-        " }"
-    )
-
-
-GHOST_ACTION_BUTTON_STYLE = _build_ghost_action_button_style()
-
-
 def _build_shadow_direction_cell_style() -> str:
     return (
         "QPushButton {"
@@ -1610,7 +1583,6 @@ _THEME_STYLE_BUILDERS = {
     "SOURCE_RATIO_ACTIVE_STYLE": _build_source_ratio_active_style,
     "SOURCE_RATIO_DISABLED_STYLE": _build_source_ratio_disabled_style,
     "RSS_INPUT_STYLE": _build_rss_input_style,
-    "GHOST_ACTION_BUTTON_STYLE": _build_ghost_action_button_style,
     "SHADOW_DIRECTION_CELL_STYLE": _build_shadow_direction_cell_style,
     "MODE_TOGGLE_BUTTON_STYLE": _build_mode_toggle_button_style,
     "TEXT_SECONDARY_COLOR_STYLE": _build_text_secondary_color_style,

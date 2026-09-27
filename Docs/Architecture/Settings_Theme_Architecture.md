@@ -210,9 +210,11 @@ theme border colour then shows seams (R-101). New outlined controls reuse these 
 Popups are separate top-level windows and inherit nothing. `ui/styled_popup.py` applies the Settings root stylesheet
 and paints `PopupSurface`, so every popup, including the colour picker and account dialogs, takes the active theme's
 text, controls and border. A new dialog builds on `StyledPopup` (or those two pieces), never on a bare `QDialog` or
-`QMessageBox`. File and folder pickers stay native OS dialogs. Popup buttons, like every Guided Setup / Quick Start
-button, use the ordinary Settings button semantics (`control.button.surface` at rest, `hover_surface` on hover): the
-default button answers Enter but is never painted as a permanently filled pill, which reads as a stuck hover. Only
+`QMessageBox`. File and folder pickers stay native OS dialogs. Every Settings action button (tabs, popups, Guided
+Setup / Quick Start) uses the ordinary Settings button semantics (`control.button.surface` at rest, `hover_surface` on
+hover); there is no emphasis-pill style. A default button answers Enter but is never painted as a permanently filled
+pill, which reads as a stuck hover in themes that fill it. Navigation pills, mode toggles and the setup
+Enable/Disable All actions keep their own theme roles. Only
 warning, error and success popups show a glyph beside the title; a plain question or notice shows its title alone.
 
 Bucket headers (`BucketToggle`, every collapsible bucket in Settings and the wizard) lay out their label exactly as

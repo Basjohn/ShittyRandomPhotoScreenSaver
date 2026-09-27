@@ -16,13 +16,10 @@ from PySide6.QtWidgets import QPushButton
 from ui.settings_theme_runtime import get_active_settings_theme
 from ui.tabs import shared_styles
 
-# role -> (shared style, radius, border tokens: normal, hover, pressed, disabled)
+# role -> (shared style, radius, border tokens: normal, hover, pressed, disabled).
+# Settings has one action-button look: no button is painted as a permanently
+# filled emphasis pill (it reads as a stuck hover in themes that fill it).
 _ROLES = {
-    # 15 px, not the style's 16: a stylesheet radius above half the height (30 px
-    # buttons) renders its own corner artefacts.
-    "primary": ("GHOST_ACTION_BUTTON_STYLE", 15.0, (
-        "control.ghost_action.border", "control.ghost_action.hover_border",
-        "control.ghost_action.hover_border", "control.ghost_action.disabled_border")),
     "secondary": ("COMPACT_ACTION_BUTTON_STYLE", 7.0, (
         "control.button.border", "control.button.border",
         "control.button.pressed_border", "control.ghost_action.disabled_border")),
@@ -34,7 +31,7 @@ BORDER_WIDTH = 2.0
 class OutlinedButton(QPushButton):
     """A shared-style Settings button with a seam-free painted border."""
 
-    def __init__(self, text: str = "", parent=None, *, role: str = "primary") -> None:
+    def __init__(self, text: str = "", parent=None, *, role: str = "secondary") -> None:
         super().__init__(text, parent)
         if role not in _ROLES:
             raise ValueError(f"unknown OutlinedButton role: {role!r}")
