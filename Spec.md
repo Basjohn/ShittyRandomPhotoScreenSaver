@@ -246,7 +246,7 @@ QML semantic action
 
 QML does not persist settings or directly invoke providers/backends.
 
-Context menu **Save Image** is always offered (checking each image's source per open would be extra work). The engine
+Context menu **Images → Save Image** (alongside Previous/Next Image) is always offered (checking each image's source per open would be extra work). The engine
 copies the file it already has for the display that was right-clicked, byte for byte, with one I/O-worker `copy2`
 (`core/sources/image_collection.py`): into the Sources "Save Feed Images" folder when the user ever chose one, else
 `Pictures/SRPSS Collections`. The first save there adds that folder to `sources.folders`; the engine marks this one

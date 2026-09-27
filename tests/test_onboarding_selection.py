@@ -236,7 +236,7 @@ def test_ready_page_summarises_the_real_context_menu(qapp, settings, monkeypatch
         random_selectable=True, visualizer_modes=(("bubble", "Bubble"),), current_visualizer="bubble",
         visualizer_available=True, dimming_enabled=False, interaction_mode_enabled=False,
         interaction_mode_locked=False, edit_mode_active=False)
-    menu = " ".join(entry.label for entry in entries)
+    menu = " ".join(child.label for entry in entries for child in (entry, *entry.children))
     for name, _detail in CONTEXT_MENU_SUMMARY:
         for part in name.split(" / "):
             assert part.split()[0] in menu, part  # every summarised entry exists in the menu

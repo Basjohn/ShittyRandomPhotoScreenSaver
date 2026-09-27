@@ -26,8 +26,9 @@ Each stays here until fixed or explicitly retired; do not treat it as noise in a
       `WA_DontShowOnScreen`; the QtQuick pixel tests (`test_qtquick_*`, `test_quit_request_render_thread_gil`) need GL,
       so move them to the hidden QQuickRenderControl pattern (`tools/onboarding_preview_foundry.py:_HiddenQuickScene`)
       or an offscreen subprocess.
-- [ ] **Context menu on very short displays.** The menu (now 9 rows plus Save Image) is ~500 logical px tall; it clamps
-      position but not size, so a display under ~510 logical px (e.g. 1024x768 at 150%) would overflow.
+- [ ] **Context menu on very short displays.** The menu clamps its position but not its size. Since the Images
+      submenu (2026-09-27) it is two rows shorter (about 430 logical px); a display shorter than that would still
+      overflow.
 - [ ] **Spectrum extreme-viewport smoothness (pre-existing, not an audit regression).** The 2026-09-23 16:53–17:06 acceptance run saw significantly reduced visual smoothness for Spectrum at extreme viewport shapes. Pre-dates the audit; do not reopen VZ-04 over it. Watch item until investigated separately.
 
 ## Handoff and regression rules

@@ -268,11 +268,16 @@ def build_quick_context_menu_entries(
             if edit_mode_active
             else (QuickContextMenuEntry("edit_layout", "✥  Edit Widget Layout"),)
         )
-    entries = [
+    # Image actions share one submenu; its rows route through the same
+    # requestAction -> admitted action path (and click-through guard) as any row.
+    images = (
         QuickContextMenuEntry("previous", "◂  Previous Image"),
         QuickContextMenuEntry("next", "▸  Next Image"),
         # Always offered: checking the image's source per open would add work.
         QuickContextMenuEntry("save_image", "⤓  Save Image"),
+    )
+    entries = [
+        QuickContextMenuEntry("", "▣  Images", kind="submenu", children=images),
         QuickContextMenuEntry("", "", kind="separator"),
         QuickContextMenuEntry(
             "",
