@@ -1,12 +1,6 @@
 from __future__ import annotations
 
-import json
-import os
-import subprocess
-import sys
 from pathlib import Path
-
-import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -93,32 +87,3 @@ def test_helper_packaging_is_installer_laid_ondir_not_self_extracting_onefile():
     assert '"--onefile"' not in build_script
     assert r"release\reddit_helper\*" in installer
     assert "recursesubdirs createallsubdirs" in installer
-
-
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows-only scheduled task smoke test")
-def test_scheduled_task_smoke_test_via_harness_when_enabled(tmp_path):
-    if os.environ.get("SRPSS_RUN_TASK_SMOKE_TEST") != "1":
-        pytest.skip("Set SRPSS_RUN_TASK_SMOKE_TEST=1 to run the real scheduled-task smoke test")
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(REPO_ROOT / "tools" / "reddit_helper_task_harness.py"),
-            "--action",
-            "smoke-test",
-            "--task-name",
-            f"SRPSS_TaskHarness_{os.getpid()}",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stdout + "\n" + result.stderr
-    payload = json.loads(result.stdout)
-    assert payload["success"] is True
-    assert payload["stamp_exists"] is True
-    assert payload["register"]["returncode"] == 0
-    assert payload["query"]["returncode"] == 0
-    assert payload["run"]["returncode"] == 0

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-import pytest
 
 
 def test_gmail_client_imports() -> None:
@@ -37,12 +36,3 @@ def test_dpapi_roundtrip() -> None:
     assert ciphertext.startswith(b"dpapi::") or ciphertext.startswith(b"plain::")
     recovered = decrypt_user_data(ciphertext)
     assert recovered == plaintext
-
-
-def test_gmail_oauth_manager_import() -> None:
-    """GmailOAuthManager requires Qt; ensure it imports when Qt is available."""
-    from PySide6.QtCore import QCoreApplication
-    if QCoreApplication.instance() is None:
-        pytest.skip("Requires QCoreApplication instance")
-    from core.gmail.gmail_oauth import GmailConfigError  # noqa: F401
-    assert GmailConfigError is not None

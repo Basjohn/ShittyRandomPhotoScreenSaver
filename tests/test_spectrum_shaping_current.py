@@ -256,15 +256,15 @@ class TestPresetShapingKeys:
         for key in settings:
             assert key in filtered, f"Key {key} was filtered out for spectrum mode"
 
-    def test_preset_1_json_has_shaping_keys(self):
-        preset_path = ROOT / "presets" / "visualizer_modes" / "spectrum" / "preset_1_rainbow.json"
-        if not preset_path.exists():
-            pytest.skip("Preset 1 JSON not found")
-        payload = json.loads(preset_path.read_text(encoding="utf-8"))
-        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
-        assert "spectrum_lane_strengths_linear" in sv
-        assert "spectrum_wave_amplitude" in sv
-        assert "spectrum_bar_profile" not in sv
+    def test_no_spectrum_preset_carries_the_retired_bar_profile(self):
+        # Preset files and values are operator-authored (names and contents change);
+        # only the schema invariant is pinned: the retired key never returns.
+        presets = sorted((ROOT / "presets" / "visualizer_modes" / "spectrum").glob("*.json"))
+        assert presets
+        for preset_path in presets:
+            payload = json.loads(preset_path.read_text(encoding="utf-8"))
+            sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+            assert "spectrum_bar_profile" not in sv, preset_path.name
 
 
 # ---------------------------------------------------------------------------
