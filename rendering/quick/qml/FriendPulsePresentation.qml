@@ -672,11 +672,15 @@ OverlayWidget {
                         * friendRoot.friendPulseModel.customUsernameHeightScale
                     font.bold: true
                     verticalAlignment: Text.AlignVCenter
+                    // Documented two-line fit: shrink within two lines, breaking a
+                    // word only when it is wider than the line; elide only below
+                    // the minimum size (never a silent clip).
                     wrap: true
+                    breakLongWords: true
                     maximumLineCount: 2
                     fontSizeMode: Text.Fit
                     minimumPointSize: 7.0
-                    elide: Text.ElideNone
+                    elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
                     shadowColor: friendRoot.friendPulseModel.textShadowColor
                     shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
@@ -991,7 +995,9 @@ OverlayWidget {
                         ? "white" : friendRoot.friendPulseModel.textColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.nameFontSize * friendRoot.friendPulseModel.customUsernameHeightScale; font.bold: true
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                    wrap: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 7.0; elide: Text.ElideNone
+                    // The one-line-tall name box admits the documented two-line fit
+                    // only below ~6.5 pt, so the floor matches the presence line (6 pt).
+                    wrap: true; breakLongWords: true; maximumLineCount: 2; fontSizeMode: Text.Fit; minimumPointSize: 6.0; elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                 }
                 ShadowedText {
@@ -1006,9 +1012,10 @@ OverlayWidget {
                         : presenceText).toUpperCase()
                     color: gridGameHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor
                     font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.68
-                    // Long game names shrink to fit the tile's two lines; elision
-                    // is only the last resort below the minimum size.
-                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; maximumLineCount: 2; wrap: true; fontSizeMode: Text.Fit; minimumPointSize: 6.0; elide: Text.ElideRight
+                    // Long game names shrink to fit the tile's box. No line cap:
+                    // a two-line cap truncated what Fit could still fit on three.
+                    // Elision is only the last resort below the minimum size.
+                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; wrap: true; breakLongWords: true; fontSizeMode: Text.Fit; minimumPointSize: 6.0; elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
                     HoverHandler { id: gridGameHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled && gameActionAvailable; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.gameActionRequested(index) }

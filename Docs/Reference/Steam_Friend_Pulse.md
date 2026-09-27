@@ -29,6 +29,10 @@ columns up to the project-wide 24-friend ceiling. The final incomplete row remai
 Title-Case/bold/two-line fit, centred beneath avatars and independently size-adjustable. Tiles/rows show privacy-permitted
 identity, ALL-CAPS presence/game chrome, offline-avatar desaturation and hard clipping. The redundant lower-right avatar
 presence dot is retired. Strict mode groups anonymously and exposes neither names, avatars nor per-friend actions.
+Names and the ALL-CAPS presence/game line shrink to fit their boxes (`Text.Fit`; a word breaks inside itself only when
+it is wider than the line) and elide only below the 6 pt floor. Grid names keep the two-line fit; the grid presence
+line is limited only by its box, because a two-line cap truncated game names that fit on three lines
+(`tests/test_qtquick_friend_pulse_presentation.py::test_long_game_and_friend_names_shrink_to_fit_instead_of_truncating`).
 
 The semantic Edit roles are stable while the authored card baseline, roster, names or viewport changes; the selected Edit delegate reads `baseAuthoredWidth`/`baseAuthoredHeight` on the retained root instead of publishing a new role list. Repeated row/grid targets represent the first actual painted item rather than independently persisting every row.
 
