@@ -23,6 +23,7 @@ from ui.settings_theme_runtime import (
 from ui.settings_theme_spec import SettingsThemeSpec
 from core.about_art_theme import themed_about_rgba
 from ui.settings_theme_qss import render_qss_color, render_qss_rgba255
+from ui.widgets.outlined_button import OutlinedButton
 
 if TYPE_CHECKING:
     from ui.settings_dialog import SettingsDialog
@@ -352,44 +353,36 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
 
     # Reset / Import / Export buttons (bottom row)
     button_row = QHBoxLayout()
-    dialog.reset_defaults_btn = QPushButton("Reset to Defaults")
+    dialog.reset_defaults_btn = OutlinedButton("Reset to Defaults", role="secondary")
     dialog.reset_defaults_btn.setObjectName("resetDefaultsButton")
-    dialog.reset_defaults_btn.setFixedHeight(24)
-    dialog.reset_defaults_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
     dialog.reset_defaults_btn.clicked.connect(dialog._on_reset_to_defaults_clicked)
     button_row.addWidget(dialog.reset_defaults_btn)
 
-    dialog.export_visualizers_btn = QPushButton("Export Visualizers")
+    dialog.export_visualizers_btn = OutlinedButton("Export Visualizers", role="secondary")
     dialog.export_visualizers_btn.setObjectName("exportVisualizersButton")
-    dialog.export_visualizers_btn.setFixedHeight(24)
-    dialog.export_visualizers_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
     dialog.export_visualizers_btn.clicked.connect(dialog._on_export_visualizers_clicked)
     button_row.addWidget(dialog.export_visualizers_btn)
 
-    dialog.import_visualizers_btn = QPushButton("Import Visualizers")
+    dialog.import_visualizers_btn = OutlinedButton("Import Visualizers", role="secondary")
     dialog.import_visualizers_btn.setObjectName("importVisualizersButton")
-    dialog.import_visualizers_btn.setFixedHeight(24)
-    dialog.import_visualizers_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
     dialog.import_visualizers_btn.clicked.connect(dialog._show_import_visualizers_menu)
     button_row.addWidget(dialog.import_visualizers_btn)
 
     button_row.addStretch()
 
-    dialog.import_settings_btn = QPushButton("Import Settings…")
-    dialog.import_settings_btn.setFixedHeight(24)
-    dialog.import_settings_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
+    dialog.import_settings_btn = OutlinedButton("Import Settings…", role="secondary")
     dialog.import_settings_btn.clicked.connect(dialog._on_import_settings_clicked)
     button_row.addWidget(dialog.import_settings_btn)
 
-    dialog.export_settings_btn = QPushButton("Export Settings…")
-    dialog.export_settings_btn.setFixedHeight(24)
-    dialog.export_settings_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
+    dialog.export_settings_btn = OutlinedButton("Export Settings…", role="secondary")
     dialog.export_settings_btn.clicked.connect(dialog._on_export_settings_clicked)
     button_row.addWidget(dialog.export_settings_btn)
 
     # More options button (context menu)
     dialog.more_options_btn = QPushButton("⋮")
-    dialog.more_options_btn.setFixedSize(24, 24)
+    # Square, as tall as the row's buttons.
+    side = dialog.export_settings_btn.sizeHint().height()
+    dialog.more_options_btn.setFixedSize(side, side)
     dialog.more_options_btn.setStyleSheet(_about_more_style())
     dialog.more_options_btn.setToolTip("More options")
     dialog.more_options_btn.clicked.connect(dialog._show_more_options_menu)

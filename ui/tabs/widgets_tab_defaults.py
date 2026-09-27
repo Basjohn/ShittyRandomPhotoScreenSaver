@@ -871,8 +871,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reset_colors_row.setContentsMargins(0, 4, 0, 2)
     reset_colors_row.setSpacing(12)
     reset_colors_row.addStretch()
-    tab.reset_widget_colors_to_theme_btn = OutlinedButton("Reset All Colours to Theme", role="primary")
-    tab.reset_widget_colors_to_theme_btn.setFixedHeight(30)
+    tab.reset_widget_colors_to_theme_btn = OutlinedButton("Reset All Colours to Theme", role="secondary")
     tab.reset_widget_colors_to_theme_btn.setToolTip(
         "One-shot profile cleanup: normalize all ordinary per-widget colour overrides "
         "back to canonical inherit values. The selected Widget Theme/Custom palette is unchanged."
@@ -912,8 +911,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     button_row.setSpacing(12)
     button_row.addStretch()
 
-    tab.reset_widget_positions_btn = OutlinedButton("Reset Widget Positions", role="primary")
-    tab.reset_widget_positions_btn.setFixedHeight(32)
+    tab.reset_widget_positions_btn = OutlinedButton("Reset Widget Positions", role="secondary")
     tab.reset_widget_positions_btn.setToolTip(
         "Restore all widget positions and monitor routes to the application defaults for this profile."
     )
@@ -953,8 +951,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.cache_clear_status_label.setWordWrap(True)
     shared_styles.apply_shared_label_style(tab.cache_clear_status_label, "INFO_LABEL_STYLE")
     cache_button_row.addWidget(tab.cache_clear_status_label, 1)
-    tab.clear_selected_caches_btn = OutlinedButton("Clear Selected Caches", role="primary")
-    tab.clear_selected_caches_btn.setFixedHeight(32)
+    tab.clear_selected_caches_btn = OutlinedButton("Clear Selected Caches", role="secondary")
     tab.clear_selected_caches_btn.clicked.connect(lambda: _on_clear_selected_caches(tab))
     cache_button_row.addWidget(tab.clear_selected_caches_btn)
     cache_layout.addLayout(cache_button_row)
