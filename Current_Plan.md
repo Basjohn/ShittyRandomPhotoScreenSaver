@@ -31,8 +31,7 @@ Each stays here until fixed or explicitly retired; do not treat it as noise in a
       contrast everywhere (Settings, wizard, popups). Make them theme-aware (e.g. theme-coloured indicators).
 - [ ] **Colour picker inputs.** Qt's colour dialog spin boxes and HTML field inside the (now themed) picker still use
       Qt's default white inputs; bind the Settings spin box / line edit styles there.
-- [ ] **Settings resize debounce timer.** `SettingsDialog.resizeEvent` restarts a QTimer to save geometry while
-      `closeEvent` already saves it; decide whether the debounce is redundant under the timer policy.
+
 - [ ] **Tests that show real windows.** `tests/test_qtquick_context_menu.py::test_retained_context_menu_draws_real_quick_pixels_and_clamps`
       calls `QQuickWindow.show()` under pytest's Windows QPA, flashing a real window. Move such pixel tests to an
       offscreen subprocess (pattern: `tests/test_onboarding_flow.py::test_hovering_transition_rows_inside_settings_does_not_scroll`)
