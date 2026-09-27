@@ -779,7 +779,15 @@ class ThreadManager:
                     execution_time=execution_time,
                     task_id=task.task_id
                 )
-                logger.error(f"Task {task.task_id} failed: {e}")
+                logger.error(
+                    "Task %s failed: %r (pool=%s category=%s func=%s)",
+                    task.task_id,
+                    e,
+                    pool_type.value,
+                    task.category,
+                    _callable_debug_name(task.func),
+                    exc_info=True,
+                )
                 outcome = "failed"
             finally:
                 self._unregister_active_task(task.task_id, outcome=outcome)
