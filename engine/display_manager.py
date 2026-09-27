@@ -42,6 +42,7 @@ from rendering.quick.custom_layout_hydration import (
     apply_quick_committed_payloads,
     resolve_quick_committed_geometry,
     resolve_quick_committed_variant_state,
+    resolve_quick_committed_entry,
     resolve_quick_custom_entry,
 )
 from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
@@ -3567,7 +3568,7 @@ class DisplayManager(QObject):
                     )
                 ),
                 committed_entry_resolver=lambda widget_id, live_screen=screen: (
-                    resolve_quick_custom_entry(
+                    resolve_quick_committed_entry(
                         self._widgets_config_snapshot,
                         live_screen,
                         widget_id,

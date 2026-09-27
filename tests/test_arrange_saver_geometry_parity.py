@@ -12,7 +12,7 @@ from dataclasses import asdict
 import re
 
 import pytest
-from PySide6.QtCore import QRect, QSize
+from PySide6.QtCore import QPoint, QRect, QSize
 from PySide6.QtGui import QGuiApplication
 
 from core.settings.default_settings import DEFAULT_SETTINGS
@@ -333,3 +333,254 @@ def test_a_reset_widget_stays_authored_and_shows_where_the_saver_puts_it() -> No
     assert "reddit" not in bucket
     assert {"media", "spotify_visualizer", "reddit2"} <= set(bucket)
     assert committed["reddit"]["position"] == "Bottom Right"
+
+
+def _clock_face_widgets() -> dict:
+    """TEST INPUT: the base Clock's analogue face, a secondary clock that inherits it."""
+
+    widgets = deepcopy(DEFAULT_SETTINGS["widgets"])
+    widgets["family_activation"] = _families("clocks")
+    widgets["clock"].update(enabled=True, display_mode="analog", position="Top Right", monitor="ALL")
+    widgets["clock2"].update(enabled=True, display_mode="digital", position="Bottom Right", monitor="ALL")
+    widgets["clock3"]["enabled"] = False
+    return widgets
+
+
+def test_arrange_uses_the_savers_clock_face_including_inheritance() -> None:
+    from rendering.quick.custom_layout_hydration import clock_geometry_variant
+
+    widgets = _clock_face_widgets()
+    display = ArrangeDisplay("screen:clock", ("screen:clock",), QRect(0, 0, 1707, 960), "1")
+    model = ArrangeModel(widgets, (display,))
+    variants = {item.model_identity: item.source_key.geometry_variant for item in model.session.items()}
+    # A secondary clock presents the base Clock's face, whatever its own field says.
+    assert variants == {
+        "clock": clock_geometry_variant(widgets, "clock", display.identity),
+        "clock2": clock_geometry_variant(widgets, "clock2", display.identity),
+    }
+    assert variants["clock2"] == "analog"
+
+
+class _NoServiceRuntime:
+    """Presentation-only build: no provider/service lifetime is created."""
+
+    def __init__(self, runtime):
+        self._runtime = runtime
+
+        class _Manager:
+            def __init__(self, real):
+                self._real = real
+
+            def has_runtime_service(self, _widget_id):
+                return False
+
+            def retire_widget_service(self, _widget_id):
+                return None
+
+            def __getattr__(self, name):
+                return getattr(self._real, name)
+
+        self.widget_runtime_manager = _Manager(runtime.widget_runtime_manager)
+
+    def __getattr__(self, name):
+        return getattr(self._runtime, name)
+
+
+@pytest.mark.qt
+def test_a_moved_content_sized_clock_survives_a_saver_restart(qt_app) -> None:
+    """Generation start must resolve a Clock entry in the face it presents.
+
+    Resolving the ``default`` variant found nothing for a Clock, so a moved
+    content-sized Clock (Arrange, or an Edit move-only Save) snapped back to its
+    authored corner on the next start.
+    """
+
+    from rendering.quick.custom_layout_hydration import (
+        resolve_quick_committed_entry,
+        resolve_quick_committed_geometry,
+        resolve_quick_custom_entry,
+    )
+
+    screen = qt_app.primaryScreen()
+    from rendering.custom_layout_contract import get_screen_signature, get_screen_signature_aliases
+
+    display = ArrangeDisplay(get_screen_signature(screen), get_screen_signature_aliases(screen),
+                             QRect(screen.geometry()), "1")
+    model = ArrangeModel(_clock_face_widgets(), (display,))
+    clock2 = next(item for item in model.session.items() if item.model_identity == "clock2")
+    moved = clock2.current_global_rect.translated(-400, -200)
+    model.move(clock2.source_key, moved, snap=False)
+    shown = QRect(clock2.current_global_rect)
+    widgets = model.apply()
+
+    assert resolve_quick_custom_entry(widgets, screen, "clock2") is None  # the old lookup
+    assert resolve_quick_committed_entry(widgets, screen, "clock2") is not None
+
+    runtime, factory = _make_runtime(qt_app, 303)
+    presenter = QuickDisplayPresenter(_NoServiceRuntime(runtime), adapters=(ClockFamilyAdapter(),))
+    geo = screen.geometry()
+    try:
+        presenter.bind_families(
+            widgets_config=widgets,
+            display_bounds=OverlayWidgetGeometry(0.0, 0.0, float(geo.width()), float(geo.height())),
+            shadow_values=asdict(ShadowSettings.from_widgets_map(widgets)),
+            committed_rect_resolver=lambda wid: resolve_quick_committed_geometry(widgets, screen, wid),
+            committed_entry_resolver=lambda wid: resolve_quick_committed_entry(widgets, screen, wid),
+        )
+        saver = presenter.geometry_for("clock2")
+        local = shown.translated(-geo.x(), -geo.y())
+        assert (round(saver.x), round(saver.y)) == (local.x(), local.y())
+        assert (round(saver.width), round(saver.height)) == (local.width(), local.height())
+    finally:
+        presenter.retire()
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+def _edit_unit(qt_app, widgets, generation, factory):
+    """A display unit bound exactly as DisplayManager binds one (never shown)."""
+
+    from core.settings.default_contract import require_canonical_default
+    from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
+    from rendering.quick.custom_layout_hydration import (
+        apply_quick_committed_payloads,
+        resolve_quick_committed_entry,
+        resolve_quick_committed_geometry,
+        resolve_quick_committed_variant_state,
+    )
+    from rendering.quick.display_unit import create_quick_display_unit
+
+    screen = qt_app.primaryScreen()
+    unit = create_quick_display_unit(
+        screen=screen, screen_index=0, runtime_generation=generation, scene_factory=factory,
+        window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+        ctrl_coordinator=SharedCtrlCoordinator(),
+        adapters=(ClockFamilyAdapter(), WeatherFamilyAdapter(), SystemStatsFamilyAdapter()),
+    )
+    unit.bind_families(
+        widgets_config=widgets,
+        shadow_values=require_canonical_default("widgets.shadows"),
+        committed_rect_resolver=lambda wid: resolve_quick_committed_geometry(widgets, screen, wid),
+        committed_entry_resolver=lambda wid: resolve_quick_committed_entry(widgets, screen, wid),
+        committed_variant_state_resolver=lambda wid, variant: (
+            resolve_quick_committed_variant_state(widgets, screen, wid, geometry_variant=variant)
+            if wid in {"clock", "clock2", "clock3"} else None),
+    )
+    apply_quick_committed_payloads(unit, widgets)
+    return unit
+
+
+def _unit_rects(unit, screen) -> dict:
+    geo = screen.geometry()
+    rects = {}
+    for wid in unit.presenter.bound_widget_ids:
+        g = unit.presenter.geometry_for(wid)
+        rects[wid] = QRect(round(g.x + geo.x()), round(g.y + geo.y()), round(g.width), round(g.height))
+    return rects
+
+
+def _assert_same(a: dict, b: dict) -> None:
+    assert set(a) == set(b)
+    for wid in a:
+        ra, rb = a[wid], b[wid]
+        assert max(abs(ra.x() - rb.x()), abs(ra.y() - rb.y()), abs(ra.width() - rb.width()),
+                   abs(ra.height() - rb.height())) <= 1, (wid, ra.getRect(), rb.getRect())
+
+
+@pytest.mark.qt
+def test_runtime_edit_and_arrange_agree_back_and_forth(qt_app, monkeypatch) -> None:
+    import rendering.quick.widgets.family_binder as binder
+    from rendering.custom_layout_contract import get_screen_signature, get_screen_signature_aliases
+    from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
+
+    monkeypatch.setattr(binder, "_attach_runtime_service", lambda *_args, **_kwargs: True)  # no services
+    widgets = _clock_face_widgets()
+    widgets["family_activation"] = _families("clocks", "weather", "system_stats")
+    widgets["weather"].update(enabled=True, position="Bottom Left", monitor="ALL")
+    widgets["system_stats"].update(enabled=True, position="Middle Left", monitor="ALL")
+    screen = qt_app.primaryScreen()
+    display = ArrangeDisplay(get_screen_signature(screen), get_screen_signature_aliases(screen),
+                             QRect(screen.geometry()), "1")
+    factory = QuickSceneFactory()
+    meter = OrdinaryPreferredSizeMeter()
+
+    def arranged(config) -> dict:
+        return {i.model_identity: QRect(i.current_global_rect) for i in ArrangeModel(config, (display,), meter=meter).session.items()}
+
+    class _Settings:
+        def __init__(self, values):
+            self.widgets = deepcopy(values)
+
+        def get_widgets_map(self):
+            return deepcopy(self.widgets)
+
+        def set_widgets_map(self, values, *, emit_change=True):
+            self.widgets = deepcopy(values)
+
+        def save(self):
+            return None
+
+        def get(self, key, default=None):
+            return default
+
+    # Arrange commits the whole canvas; the saver presents exactly that.
+    model = ArrangeModel(widgets, (display,), meter=meter)
+    first = model.session.items()[0]
+    model.move(first.source_key, first.current_global_rect.translated(-60, 40), snap=False)
+    widgets = model.apply()
+    unit = _edit_unit(qt_app, widgets, 610, factory)
+    owner = None
+    try:
+        start = _unit_rects(unit, qt_app.primaryScreen())
+        _assert_same(arranged(widgets), start)
+
+        # Runtime Edit: wheel, side drag and a move through the owner's own seams.
+        settings = _Settings(widgets)
+        owner = QuickCustomLayoutOwner(settings_manager=settings, participants_provider=lambda: (unit,),
+                                       visualizer_provider=lambda: (None, None), reload_request=lambda _k: None,
+                                       live_config_commit=lambda _w: None)
+        assert owner.start() is True
+        items = {i.model_identity: i for i in owner.session.items()}
+        owner.resize_wheel(items["weather"], 120)
+        stats = items["system_stats"]
+        cursor = QPoint(stats.current_global_rect.right(), stats.current_global_rect.center().y())
+        width_before = stats.current_global_rect.width()
+        assert owner.begin_resize(stats, "right", cursor)
+        owner.update_resize(stats, "right", cursor + QPoint(30, 0), True)
+        widened = stats.current_global_rect.width() - width_before
+        clock2 = items["clock2"]
+        proposed = clock2.current_global_rect.translated(-50, -30)
+        clock2.set_geometry(owner.resolve_move(clock2, proposed, proposed.center()))
+        owner.session.notify_item_changed(clock2)
+        assert owner.save() is True
+        owner.retire()
+        owner = None
+        widgets = deepcopy(settings.widgets)
+        edited = _unit_rects(unit, qt_app.primaryScreen())
+        _assert_same(arranged(widgets), edited)  # Arrange opens on exactly what Edit saved
+
+        # Arrange takes the changes back with its own operations.
+        model = ArrangeModel(widgets, (display,), meter=meter)
+        keys = {i.model_identity: i.source_key for i in model.session.items()}
+        model.move(keys["clock2"], QRect(start["clock2"].topLeft(), start["clock2"].size()), snap=False)
+        model.scale(keys["weather"], start["weather"].width() / edited["weather"].width())
+        if widened and "right" in model.side_edges(keys["system_stats"]):
+            rect = QRect(model.item(keys["system_stats"]).current_global_rect)
+            model.resize_edge(keys["system_stats"], "right", rect, QPoint(-widened, 0))
+        shown = {i.model_identity: QRect(i.current_global_rect) for i in model.session.items()}
+        widgets = model.apply()
+        unit.retire()
+        qt_app.processEvents()
+        unit = _edit_unit(qt_app, widgets, 611, factory)  # a fresh saver generation
+        rebuilt = _unit_rects(unit, qt_app.primaryScreen())
+        _assert_same(shown, rebuilt)
+        assert rebuilt["clock2"] == start["clock2"]  # a move returns exactly
+        assert rebuilt["weather"].size() == start["weather"].size()
+    finally:
+        if owner is not None:
+            owner.retire()
+        unit.retire()
+        factory.deleteLater()
+        meter.close()
+        qt_app.processEvents()
