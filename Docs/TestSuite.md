@@ -121,10 +121,10 @@ A whole-tree run is useful for discovering stale tests, optional-dependency gaps
 ### 3.3 Defaults authority
 
 ```powershell
-python -m core.settings.defaults_snapshot_builder --check-all
+python tools/check_defaults_authority.py
 ```
 
-Run this whenever canonical defaults, generated snapshots/SSTs, Settings normalization or Defaults-Foundry-facing keys change. Regeneration is owned by `--write-all`; checked-in generated artifacts must remain exact projections of canonical source.
+Run this whenever canonical defaults, Settings normalization or Defaults-Foundry-facing keys change. Nothing is generated from the defaults: readers use the canonical source (or an in-memory projection).
 
 ### 3.4 Focused tests first
 

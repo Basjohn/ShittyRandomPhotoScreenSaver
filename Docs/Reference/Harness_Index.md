@@ -317,7 +317,7 @@ never contacts Steam or starts the product sampler.
 python -m pytest tests/test_steam_friend_pulse.py tests/test_friend_pulse_runtime.py tests/test_qtquick_friend_pulse_presentation.py tests/test_friend_pulse_stack_predictor.py tests/test_system_stats_source.py tests/test_system_stats_runtime.py tests/test_qtquick_system_stats_presentation.py tests/test_system_stats_settings.py -q
 python -m pytest tests/test_steam_links.py tests/test_secure_url_launcher.py tests/test_qtquick_family_product_actions.py -q
 python tools/qtquick_friend_system_stats_smoke.py --output-dir <capture-directory>
-python -m core.settings.defaults_snapshot_builder --check-all
+python tools/check_defaults_authority.py
 ```
 
 The preserved bounded System Stats source admission harness remains:

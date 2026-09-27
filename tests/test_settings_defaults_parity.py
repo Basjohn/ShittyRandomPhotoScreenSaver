@@ -17,13 +17,6 @@ from core.settings.defaults import (
 from core.settings.defaults_snapshot_builder import build_defaults_snapshot
 from tools import visualizer_preset_repair as repair
 
-SNAPSHOT_JSON_PATH = Path(__file__).resolve().parents[1] / "core" / "settings" / "defaults_snapshot.json"
-
-
-def _load_snapshot_json() -> dict:
-    return json.loads(SNAPSHOT_JSON_PATH.read_text(encoding="utf-8"))
-
-
 def _build_snapshot() -> dict:
     return build_defaults_snapshot()
 
@@ -109,14 +102,6 @@ class TestDefaultsArtifactParity:
     # collapsed the dual defaults authority to a single canonical source, so a
     # generated-vs-canonical parity check no longer has two authorities to compare.
     # The snapshot-vs-builder tests below are the current single-authority parity.
-
-    # test_snapshot_module_matches_builder_output was removed: the settings
-    # sanitation deleted the core.settings.defaults_snapshot Python module, leaving
-    # the derived snapshot as JSON + build_defaults_snapshot() only. The JSON-vs-
-    # builder test below is the surviving single-authority snapshot parity.
-
-    def test_snapshot_json_matches_builder_output(self):
-        assert _load_snapshot_json() == _build_snapshot()
 
     @pytest.mark.parametrize("application", [NORMAL_PROFILE, MC_PROFILE])
     def test_profile_snapshot_builder_uses_selected_canonical_defaults(self, application: str):

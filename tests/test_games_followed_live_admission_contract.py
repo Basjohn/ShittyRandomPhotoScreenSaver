@@ -1,3 +1,4 @@
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
 """Import-free real-admission guard: one ordinary family, one source, no hidden work."""
 from pathlib import Path
 import ast
@@ -32,7 +33,7 @@ def test_one_canonical_live_family_reuses_the_existing_retained_scene_and_lease(
 def test_existing_steam_progress_settings_identity_is_only_defaults_authority():
     settings = _text("ui/tabs/widgets_tab_steam.py")
     defaults = _text("core/settings/default_settings.py")
-    snapshot = json.loads(_text("core/settings/defaults_snapshot.json"))
+    snapshot = build_defaults_snapshot()
     model = _text("rendering/quick/widgets/games_you_follow.py")
     assert '("steam_progress", "Games You Follow", "Top Right")' in settings
     assert 'is_steam_enabled()' not in settings

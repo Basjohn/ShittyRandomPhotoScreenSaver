@@ -3,7 +3,7 @@
 This small data module is written by ``tools/default_settings_editor.py``.
 Normal defaults live directly in ``default_settings.py``. Only MC differences
 apply on top for the ``Screensaver_MC`` profile. Stable profile names keep
-generated SST artifacts and runtime reset behavior on the same source.
+exports and runtime reset behavior on the same source.
 """
 from __future__ import annotations
 

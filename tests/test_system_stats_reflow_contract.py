@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 import json
 from pathlib import Path
 
@@ -11,7 +13,7 @@ def _text(path: str) -> str:
 
 
 def test_system_stats_defaults_and_settings_expose_metric_selection() -> None:
-    defaults = json.loads(_text("core/settings/defaults_snapshot.json"))["widgets"]["system_stats"]
+    defaults = build_defaults_snapshot()["widgets"]["system_stats"]
     assert {
         "show_cpu": True,
         "show_memory": True,

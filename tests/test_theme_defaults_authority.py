@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 import ast
 import json
 from pathlib import Path
@@ -35,7 +37,7 @@ def test_settings_theme_selection_is_canonical_and_snapshotted() -> None:
     assert isinstance(theme_id, str)
     assert theme_id.strip()
 
-    snapshot = json.loads(_text("core/settings/defaults_snapshot.json"))
+    snapshot = build_defaults_snapshot()
     assert snapshot["ui"]["settings_theme_selection"] == theme_id
 
 

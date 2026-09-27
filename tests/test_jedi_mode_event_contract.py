@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 import ast
 import json
 from pathlib import Path
@@ -12,7 +14,7 @@ def _text(relative: str) -> str:
 
 
 def test_jedi_mode_defaults_off_and_settings_ui_is_glow_scoped() -> None:
-    defaults = json.loads(_text("core/settings/defaults_snapshot.json"))
+    defaults = build_defaults_snapshot()
     # EXACT-VALUE INVARIANT: Jedi Mode is an opt-in easter egg that plays audio
     # from ordinary hover/click edges. It must never become enabled for fresh
     # users merely because mutable visual defaults are retuned. Change this only

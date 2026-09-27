@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,7 +92,7 @@ def test_friend_pulse_wide_grid_and_online_count_contract() -> None:
     model = _text("rendering/quick/widgets/friend_pulse.py")
     qml = _text("rendering/quick/qml/FriendPulsePresentation.qml")
     settings = _text("ui/tabs/widgets_tab_steam.py")
-    defaults = _text("core/settings/defaults_snapshot.json")
+    defaults = json.dumps(build_defaults_snapshot(), indent=2, sort_keys=True)
 
     assert 'min(normalized_capacity, 6, fitted)' not in model
     assert 'column_limit = 24 if custom_horizontal_extent else normalized_capacity' in model

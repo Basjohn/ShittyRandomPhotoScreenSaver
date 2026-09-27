@@ -2,7 +2,7 @@
 
 This literal is the authoritative fresh-install and Reset to Defaults source.
 It may be edited directly or through ``tools/default_settings_editor.py``.
-Generated defaults artifacts must follow this source rather than override it.
+Nothing is generated from it; every reader uses it directly.
 """
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                           'smoke_density': 0.8,
                           'smoke_enabled': True},
                  'crumble': {'collisions': False,
-                             'crack_complexity': 11.0,
+                             'crack_complexity': 1.1,
                              'debris': 0.85,
                              'depth': 0.45,
                              'piece_count': 45,

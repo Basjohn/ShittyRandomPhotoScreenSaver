@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 import re
 from pathlib import Path
 
@@ -317,7 +321,7 @@ def test_media_artist_child_is_one_role_with_two_crossfade_projections() -> None
 
 def test_media_landscape_permission_is_retired_and_custom_artwork_frame_is_freeform() -> None:
     defaults = _text("core/settings/default_settings.py")
-    snapshot = _text("core/settings/defaults_snapshot.json")
+    snapshot = json.dumps(build_defaults_snapshot(), indent=2, sort_keys=True)
     model = _text("core/settings/models/_widget_settings.py")
     quick = _text("rendering/quick/widgets/media.py")
     settings_ui = _text("ui/tabs/widgets_tab_media.py")

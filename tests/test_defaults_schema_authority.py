@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 import ast
 import json
 from pathlib import Path
@@ -168,7 +170,7 @@ def test_fresh_profile_widget_sections_are_well_formed_and_architecture_safe() -
 
 def test_derived_snapshot_tracks_clean_normal_defaults() -> None:
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
-    snapshot = json.loads(_text("core/settings/defaults_snapshot.json"))
+    snapshot = build_defaults_snapshot()
 
     for root in ("accessibility", "cache", "queue", "ui", "workers", "widget_theme"):
         assert snapshot[root] == defaults[root]
@@ -249,7 +251,7 @@ def test_json_store_persists_explicit_null_as_distinct_from_missing() -> None:
 
 def test_visualizer_literal_and_derived_snapshot_have_identical_schema() -> None:
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
-    snapshot = json.loads(_text("core/settings/defaults_snapshot.json"))
+    snapshot = build_defaults_snapshot()
     literal_vis = defaults["widgets"]["spotify_visualizer"]
     snapshot_vis = snapshot["widgets"]["spotify_visualizer"]
 
@@ -346,7 +348,7 @@ def test_display_and_transition_tabs_do_not_invent_product_fallbacks() -> None:
 
 def test_custom_visualizer_state_is_not_a_product_default_and_reset_preserves_it() -> None:
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
-    snapshot = json.loads(_text("core/settings/defaults_snapshot.json"))
+    snapshot = build_defaults_snapshot()
     defaults_module = _text("core/settings/defaults.py")
     manager = _text("core/settings/settings_manager.py")
     sst = _text("core/settings/sst_io.py")
@@ -361,7 +363,7 @@ def test_custom_visualizer_state_is_not_a_product_default_and_reset_preserves_it
 
 def test_retired_visualizer_growth_is_invalidated_once_not_preserved_as_schema() -> None:
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
-    snapshot = json.loads(_text("core/settings/defaults_snapshot.json"))
+    snapshot = build_defaults_snapshot()
     visualizer = defaults["widgets"]["spotify_visualizer"]
     snapshot_visualizer = snapshot["widgets"]["spotify_visualizer"]
     model = _text("core/settings/models/_spotify_visualizer.py")
@@ -410,11 +412,11 @@ def test_dead_transition_precompute_worker_is_removed() -> None:
     assert not (ROOT / "core/process/workers/transition_worker.py").exists()
 
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
-    snapshot = json.loads(_text("core/settings/defaults_snapshot.json"))
+    snapshot = build_defaults_snapshot()
     assert "transition" not in defaults["workers"]
     assert "transition" not in snapshot["workers"]
-    assert "workers.transition.enabled" not in _text("Docs/SRPSS_Settings_Screensaver.sst")
-    assert "workers.transition.enabled" not in _text("Docs/SRPSS_Settings_Screensaver_MC.sst")
+    assert "workers.transition.enabled" not in json.dumps(build_sst_defaults_document("Screensaver"))
+    assert "workers.transition.enabled" not in json.dumps(build_sst_defaults_document("Screensaver_MC"))
     # NOTE: the caller-dead widgets/spotify_visualizer/renderers island (and
     # rendering/image_processor.py) are proven to have no production importer, but
     # both are still entangled in mixed test files that also cover live behaviour.
@@ -543,13 +545,13 @@ def test_resolved_runtime_consumers_do_not_rebuild_product_defaults() -> None:
     assert 'sound_volume_percent: int = 50' not in gmail_runtime
 
 
-def test_defaults_snapshot_tooling_is_headless_and_exact() -> None:
-    """Derived-default tooling must not require Qt or become a second authority."""
+def test_defaults_tooling_is_headless_and_generates_nothing() -> None:
+    """Defaults tooling reads the canonical source directly: no Qt, no derived files."""
     import subprocess
     import sys
 
     result = subprocess.run(
-        [sys.executable, "-m", "core.settings.defaults_snapshot_builder", "--check-all"],
+        [sys.executable, "tools/check_defaults_authority.py"],
         cwd=ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -557,8 +559,7 @@ def test_defaults_snapshot_tooling_is_headless_and_exact() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "defaults snapshot OK" in result.stdout
-    assert "SST defaults documents OK" in result.stdout
+    assert "defaults authority audit OK" in result.stdout
 
     package_init = _text("core/settings/__init__.py")
     assert "def __getattr__(name: str)" in package_init
@@ -567,11 +568,10 @@ def test_defaults_snapshot_tooling_is_headless_and_exact() -> None:
     # not execute the Qt-backed SettingsManager import.
 
     builder = _text("core/settings/defaults_snapshot_builder.py")
-    assert "return json.dumps(build_defaults_snapshot(), indent=2, sort_keys=True)" in builder
-    assert "def defaults_snapshot_matches" in builder
-    assert "def write_defaults_snapshot" in builder
-    assert "def sst_defaults_documents_match" in builder
-    assert "def write_sst_defaults_documents" in builder
+    for retired in ("write_text", "def write_", "def defaults_snapshot_matches",
+                    "def sst_defaults_documents_match", "argparse"):
+        assert retired not in builder, retired  # projections only, never files
+    assert not (ROOT / "tools" / "regenerate_defaults_artifacts.py").exists()
 
 
 def test_widget_preview_and_custom_position_repair_use_canonical_sections() -> None:
@@ -807,12 +807,9 @@ def test_repository_has_no_defaults_authority_violations() -> None:
     was attempted. Running the real audit here catches those source violations in
     the normal test loop instead.
 
-    NOTE: "Regen Defaults" only fixes the *derived* subset (the JSON snapshot and
-    the two .sst documents). Source-level violations reported below are NOT
-    regenerable -- they must be fixed at the owning source (route product state
-    through the canonical authority / a resolved projection). Snapshot/SST
-    staleness is additionally covered by
-    ``test_defaults_snapshot_tooling_is_headless_and_exact``.
+    Violations must be fixed at the owning source (route product state through
+    the canonical authority / a resolved projection). There are no derived
+    defaults files to regenerate; the audit also rejects any that reappear.
     """
     from core.settings.defaults_authority_audit import audit_defaults_authority
 

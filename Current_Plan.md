@@ -17,15 +17,7 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 
 Each stays here until fixed or explicitly retired; do not treat it as noise in a gate. Physical validation lives with each feature's own doc, not here.
 
-- [ ] **One red present before 2026-09-26's FEEDS work (Windows, whole widgets/settings gate):**
-  - `test_qtquick_transition_parameter_defaults.py::test_sparse_crumble_uses_canonical_piece_count_and_complexity`: the canonical Crumble `crack_complexity` default is 11.0 but Settings and the resolver cap it at 2.0. Operator decision: was 1.1 meant?
 
-
-- [ ] **Derived defaults artifacts (operator decision).** Audit 2026-09-27: `core/settings/defaults_snapshot.json`
-      and `Docs/SRPSS_Settings_Screensaver{,_MC}.sst` are byte-for-byte derivations of `default_settings.py` +
-      `default_profile_overrides.py`. No runtime code, build or installer reads them; only 10 tests (which could
-      ask `defaults_snapshot_builder` directly), the staleness preflight and the regenerate button/editor step.
-      Recommendation: retire all three and the staleness gate; keep the builder for on-demand exports.
 - [ ] **Widgets tab save coalescing timer.** `WidgetsTab` debounces saves with `_SAVE_COALESCE_MS` single-shots.
       Check whether edge events (slider release, editing finished, toggles) can replace it under the timer policy.
 - [ ] **Tests that show real windows.** 21 test files call `.show()` under pytest's Windows QPA (a real window

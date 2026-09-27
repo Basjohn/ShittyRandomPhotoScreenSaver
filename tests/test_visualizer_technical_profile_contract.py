@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.settings.defaults_snapshot_builder import build_defaults_snapshot, build_sst_defaults_document  # canonical defaults, in memory
+
 import importlib.util
 import pytest
 from pathlib import Path
@@ -57,8 +59,7 @@ def test_rejected_smooth_sphere_settings_are_not_canonical_defaults() -> None:
     import json
     from core.settings.default_settings import DEFAULT_SETTINGS
 
-    snapshot_path = Path(__file__).resolve().parents[1] / "core/settings/defaults_snapshot.json"
-    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    snapshot = build_defaults_snapshot()
     assert DEFAULT_SETTINGS == snapshot
     sphere_defaults = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
     assert type(sphere_defaults["sphere_shadow_enabled"]) is bool

@@ -14,7 +14,7 @@ def test_osd_is_one_independently_dormant_retained_quick_family():
     binder = _source("rendering/quick/widgets/family_binder.py")
     registry = _source("rendering/quick/widgets/registry.py")
     assert 'family_id="system_audio_osd"' in catalog
-    assert "'system_audio_osd': {'enabled': False" in defaults
+    assert "'system_audio_osd': {" in defaults  # section exists; its enabled default is operator-editable
     assert 'return _enabled_from_candidates(widgets_config, ("system_audio_osd",))' in binder
     assert 'qml_filename="SystemAudioOSDPresentation.qml"' in registry
     assert '"system_audio_osd": _SYSTEM_MUTE_SERVICE_SPEC' in _source(

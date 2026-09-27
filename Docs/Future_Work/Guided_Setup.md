@@ -22,7 +22,7 @@ the architecture and this plan answer. All design decisions below are settled (�
      `ui/tabs/shared_styles.py` (`build_bucket_toggle`, accordion contract), Contracts § Settings collapsible-bucket
      contract, § Lazy Settings-section lifetime, § Runtime -> Settings round-trip.
    - Defaults: `core/settings/default_settings.py` (it is exact `pprint.pformat(width=100, sort_dicts=True)` output),
-     `tools/regenerate_defaults_artifacts.py`, `tools/check_defaults_authority.py`,
+     `tools/check_defaults_authority.py`,
      `Docs/Architecture/Persisted_Input_Compatibility.md`.
    - Widgets: `core/settings/widget_family_catalog.py`, `core/settings/capability_activation.py`
      (`is_widget_family_effective`), `rendering/widget_descriptors.py` (settings sections, runtime descriptors:
