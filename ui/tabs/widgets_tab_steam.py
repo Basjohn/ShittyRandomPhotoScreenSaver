@@ -385,16 +385,6 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
         #steamApiKeyDialogSurface QLabel {{
             color: {rgba('popup.message.text')};
         }}
-        #steamApiKeyDialogSurface QLineEdit#steamApiKeyInput {{
-            background-color: {rgba('popup.input.surface')};
-            border: 1px solid {rgba('popup.input.border')};
-            border-radius: 6px;
-            color: {rgba('popup.input.text')};
-            padding: 8px 10px;
-        }}
-        #steamApiKeyDialogSurface QLineEdit#steamApiKeyInput:focus {{
-            border-color: {rgba('popup.input.focus_border')};
-        }}
         """
     )
     dialog_layout = QVBoxLayout(dialog)
@@ -439,6 +429,8 @@ def _show_api_key_dialog(tab: "WidgetsTab") -> None:
 
     key_field = QLineEdit()
     key_field.setObjectName("steamApiKeyInput")
+    # Settings' own input semantics (opaque border: no translucent QSS seams).
+    shared_styles.bind_shared_styles(key_field, "SPINBOX_STYLE")
     key_field.setEchoMode(QLineEdit.EchoMode.Normal)
     key_field.setPlaceholderText("Steam Web API key")
     key_field.setMinimumWidth(340)
