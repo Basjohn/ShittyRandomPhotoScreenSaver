@@ -108,6 +108,9 @@ class GuidedSetupPanel(QWidget):
         self.current_key = key
         page, scroll = self.pages.get(key) or self._build_page(key)
         page.refresh()
+        # A scrollbar people notice, in the current theme (Theme may have changed).
+        from ui.onboarding.selection_pages import _prominent_scrollbar_style
+        scroll.verticalScrollBar().setStyleSheet(_prominent_scrollbar_style())
         self.stack.setCurrentWidget(scroll)
         scroll.verticalScrollBar().setValue(0)
         self._refresh_navigation()

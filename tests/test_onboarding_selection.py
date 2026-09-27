@@ -225,3 +225,24 @@ def test_visualizer_page_is_a_narrow_list_with_the_selected_modes_preview(qapp, 
         assert settings.writes == []
     finally:
         page.deleteLater()
+
+
+def test_ready_page_summarises_the_real_context_menu(qapp, settings, monkeypatch) -> None:
+    from rendering.quick.context_menu import build_quick_context_menu_entries
+    from ui.onboarding.selection_pages import CONTEXT_MENU_SUMMARY
+    monkeypatch.setattr(state, "saved_account_states", lambda _settings: {"steam": False, "gmail": False})
+    entries = build_quick_context_menu_entries(
+        transition_names=("Crossfade",), current_transition="Crossfade", random_enabled=False,
+        random_selectable=True, visualizer_modes=(("bubble", "Bubble"),), current_visualizer="bubble",
+        visualizer_available=True, dimming_enabled=False, interaction_mode_enabled=False,
+        interaction_mode_locked=False, edit_mode_active=False)
+    menu = " ".join(entry.label for entry in entries)
+    for name, _detail in CONTEXT_MENU_SUMMARY:
+        for part in name.split(" / "):
+            assert part.split()[0] in menu, part  # every summarised entry exists in the menu
+    page = ReadyPage(settings)
+    try:
+        page.refresh()
+        assert "Press Finish To Save" in page.findChildren(type(page.summary))[1].text()
+    finally:
+        page.deleteLater()
