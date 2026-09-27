@@ -118,13 +118,19 @@ class AccessibilityTab(QWidget):
 
         shared_styles.bind_shared_styles(self, "CIRCLE_CHECKBOX_STYLE")
     
-    def _create_dimming_group(self) -> QGroupBox:
-        """Create the Background Dimming settings group."""
-        group = QGroupBox("Background Dimming")
+    @staticmethod
+    def _section_layout(group: QGroupBox) -> QVBoxLayout:
+        """One layout for every Accessibility section so their rows line up."""
         style_group_box(group)
         layout = QVBoxLayout(group)
         layout.setContentsMargins(0, 12, 0, 0)
         layout.setSpacing(12)
+        return layout
+
+    def _create_dimming_group(self) -> QGroupBox:
+        """Create the Background Dimming settings group."""
+        group = QGroupBox("Background Dimming")
+        layout = self._section_layout(group)
         
         # Enable checkbox
         self.dimming_enabled = QCheckBox("Enable Background Dimming")
@@ -172,9 +178,7 @@ class AccessibilityTab(QWidget):
     def _create_pixel_shift_group(self) -> QGroupBox:
         """Create the Widget Pixel Shift settings group."""
         group = QGroupBox("Widget Pixel Shift (Burn-In Prevention)")
-        style_group_box(group)
-        layout = QVBoxLayout(group)
-        layout.setSpacing(12)
+        layout = self._section_layout(group)
         
         # Enable checkbox
         self.pixel_shift_enabled = QCheckBox("Enable Widget Pixel Shift")
