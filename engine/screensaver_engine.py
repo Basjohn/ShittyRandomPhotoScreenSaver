@@ -33,6 +33,7 @@ from core.events import EventSystem
 from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.settings import SettingsManager
+from core.sources.folder_paths import contains_folder, display_folder_path
 from core.settings.default_contract import require_canonical_default
 from core.logging.logger import get_logger
 from core.process.types import WorkerType
@@ -1883,11 +1884,11 @@ class ScreensaverEngine(QObject):
         the next source load like any other folder.
         """
         folders = list(self.settings_manager.get("sources.folders") or [])
-        if any(Path(folder) == directory for folder in folders):
+        if contains_folder(folders, directory):
             return
         self._own_sources_write = "sources.folders"
         try:
-            self.settings_manager.set("sources.folders", [*folders, str(directory)])
+            self.settings_manager.set("sources.folders", [*folders, display_folder_path(directory)])
             self.settings_manager.save()
         finally:
             self._own_sources_write = None

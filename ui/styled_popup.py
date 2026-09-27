@@ -222,29 +222,21 @@ class StyledPopup(QDialog):
         title_bar = QHBoxLayout()
         title_bar.setSpacing(8)
         
-        # Icon based on type
+        # Only popups whose kind carries meaning get a glyph; a plain question or
+        # notice reads better as its title alone than with a "?" or "i" beside it.
         icon_map = {
-            "info": "ℹ",
-            "warning": "⚠",
-            "error": "✕",
-            "success": "✓",
-            "question": "?",
+            "warning": ("⚠", "popup.icon.warning"),
+            "error": ("✕", "popup.icon.error"),
+            "success": ("✓", "popup.icon.success"),
         }
-        icon_tokens = {
-            "info": "popup.icon.info",
-            "warning": "popup.icon.warning",
-            "error": "popup.icon.error",
-            "success": "popup.icon.success",
-            "question": "popup.icon.question",
-        }
-        icon_token = icon_tokens.get(self._icon_type, "popup.icon.info")
-        
-        icon_label = QLabel(icon_map.get(self._icon_type, "ℹ"))
-        icon_label.setStyleSheet(f"""
-            font-size: 16px;
-            color: {_theme_rgba255(theme, icon_token)};
-        """)
-        title_bar.addWidget(icon_label)
+        if self._icon_type in icon_map:
+            glyph, icon_token = icon_map[self._icon_type]
+            icon_label = QLabel(glyph)
+            icon_label.setStyleSheet(f"""
+                font-size: 16px;
+                color: {_theme_rgba255(theme, icon_token)};
+            """)
+            title_bar.addWidget(icon_label)
         
         title_label = QLabel(self._title)
         title_label.setStyleSheet(
@@ -283,11 +275,12 @@ class StyledPopup(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
-        # Settings' own buttons: the default is the primary pill, others compact.
+        # Settings' ordinary buttons: theme surface at rest, hover surface on
+        # hover. The default answers Enter but is not painted as a stuck hover.
         from ui.widgets.outlined_button import OutlinedButton
         for index, (label, value) in enumerate(self._buttons):
             primary = index == self._default_button_index
-            button = OutlinedButton(label, role="primary" if primary else "secondary")
+            button = OutlinedButton(label, role="secondary")
             button.setMinimumHeight(32)
             button.setMinimumWidth(96)
             button.clicked.connect(lambda _=False, val=value: self._on_button(val))

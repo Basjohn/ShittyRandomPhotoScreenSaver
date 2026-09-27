@@ -243,7 +243,7 @@ def test_wizard_lazy_rerun_and_manual_launch_ignores_silence(qapp, settings):
     assert set(wizard.pages) == {"welcome"}
     wizard.go_next()
     sources = wizard.pages["sources"][0]
-    assert sources.folders.item(0).text() == "C:/Current"
+    assert sources.folders.item(0).text() == r"C:\Current"  # shown with Windows separators, stored as-is
     assert settings.writes == []
     wizard.close_setup(False); wizard.deleteLater()
 

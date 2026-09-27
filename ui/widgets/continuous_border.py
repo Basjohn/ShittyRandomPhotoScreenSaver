@@ -9,9 +9,11 @@ continuous ``QPainterPath``.  See also ``ui/widgets/outlined_button.py``.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QListWidget, QStackedWidget, QToolButton, QWidget
+from PySide6.QtCore import QEvent, QRect, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import (
+    QListWidget, QStackedWidget, QStyle, QStyleOptionToolButton, QStylePainter, QToolButton, QWidget,
+)
 
 from ui.settings_theme_runtime import get_active_settings_theme
 
@@ -39,11 +41,26 @@ def stroke_rounded_border(widget: QWidget, color: QColor, width: float, radius: 
         painter.end()
 
 
+# Bucket header padding (vertical, horizontal); the theme QSS reads these too.
+BUCKET_PADDING = (3, 8)
+BUCKET_LARGE_PADDING = (4, 12)
+# Extra room between the arrow and the title, beyond Qt's native layout. The
+# windows11 down arrow fills its box, so natively it sat almost against the text.
+_BUCKET_TITLE_SHIFT = 1
+_BUCKET_LARGE_TITLE_SHIFT = 2
+
+
 class BucketToggle(QToolButton):
     """The shared collapsible-bucket header with a painted, seam-free border.
 
-    Geometry, fill and text stay in the theme QSS (``QToolButton[autoRaise]``),
+    Fill, font and colours stay in the theme QSS (``QToolButton[autoRaise]``),
     whose border is transparent; the state colours are the same bucket tokens.
+    The contents follow Qt's own tool-button label layout exactly (the arrow in a
+    box ``iconSize.width + 4`` wide by the full content height, the title right
+    after it, both shifted when pressed), except that the title sits 1 px
+    (normal) or 2 px (large) further from the arrow; the size hint grows by the
+    same amount, so nothing clips. ``arrowType`` stays the public state other
+    owners read.
     """
 
     BORDER_WIDTH = 1.5
@@ -52,8 +69,20 @@ class BucketToggle(QToolButton):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
+    def _large(self) -> bool:
+        return self.property("bucketSize") == "large"
+
     def _radius(self) -> float:
-        return 4.0 if self.property("bucketSize") == "large" else 3.0
+        return 4.0 if self._large() else 3.0
+
+    def _title_shift(self) -> int:
+        return _BUCKET_LARGE_TITLE_SHIFT if self._large() else _BUCKET_TITLE_SHIFT
+
+    def sizeHint(self) -> QSize:  # type: ignore[override]
+        return super().sizeHint() + QSize(self._title_shift(), 0)
+
+    def minimumSizeHint(self) -> QSize:  # type: ignore[override]
+        return self.sizeHint()  # never elide or clip the title
 
     def _border_token(self) -> str:
         if self.isChecked():
@@ -61,7 +90,42 @@ class BucketToggle(QToolButton):
         return "bucket.closed.hover_border" if self.underMouse() else "bucket.closed.border"
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
-        super().paintEvent(event)
+        option = QStyleOptionToolButton()
+        self.initStyleOption(option)
+        arrow = option.arrowType
+        text = option.text
+        # Panel only (surface, hover, pressed); the label is laid out below.
+        option.arrowType = Qt.ArrowType.NoArrow
+        option.features &= ~QStyleOptionToolButton.ToolButtonFeature.Arrow
+        option.text = ""
+        option.icon = QIcon()
+        painter = QStylePainter(self)
+        painter.drawComplexControl(QStyle.ComplexControl.CC_ToolButton, option)
+
+        # The stylesheet's content rect: integer border (Qt rounds 1.5 to 2) and padding.
+        vertical, horizontal = BUCKET_LARGE_PADDING if self._large() else BUCKET_PADDING
+        border = int(self.BORDER_WIDTH + 0.5)
+        content = self.rect().adjusted(border + horizontal, border + vertical,
+                                       -(border + horizontal), -(border + vertical))
+        if option.state & (QStyle.StateFlag.State_Sunken | QStyle.StateFlag.State_On):
+            content.translate(self.style().pixelMetric(QStyle.PixelMetric.PM_ButtonShiftHorizontal, option, self),
+                              self.style().pixelMetric(QStyle.PixelMetric.PM_ButtonShiftVertical, option, self))
+        arrow_box = QRect(content.left(), content.top(), self.iconSize().width() + 4, content.height())
+        primitive = {
+            Qt.ArrowType.DownArrow: QStyle.PrimitiveElement.PE_IndicatorArrowDown,
+            Qt.ArrowType.RightArrow: QStyle.PrimitiveElement.PE_IndicatorArrowRight,
+            Qt.ArrowType.UpArrow: QStyle.PrimitiveElement.PE_IndicatorArrowUp,
+            Qt.ArrowType.LeftArrow: QStyle.PrimitiveElement.PE_IndicatorArrowLeft,
+        }.get(arrow)
+        if primitive is not None:
+            arrow_option = QStyleOptionToolButton(option)
+            arrow_option.rect = arrow_box
+            painter.drawPrimitive(primitive, arrow_option)
+        title = content.adjusted(arrow_box.width() + self._title_shift(), 0, 0, 0)
+        painter.drawItemText(title, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                                        | Qt.TextFlag.TextShowMnemonic),
+                             self.palette(), self.isEnabled(), text, self.foregroundRole())
+        painter.end()
         stroke_rounded_border(self, theme_color(self._border_token()), self.BORDER_WIDTH, self._radius())
 
 

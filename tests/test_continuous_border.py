@@ -105,7 +105,10 @@ def test_popups_carry_settings_theme_semantics(qapp) -> None:
         assert isinstance(popup.findChild(PopupSurface), PopupSurface)  # seam-free panel body
         buttons = popup.findChildren(OutlinedButton)
         assert [b.text() for b in buttons] == ["Import", "Cancel"]
-        assert buttons[0]._role == "primary" and buttons[1]._role == "secondary"
+        # Ordinary Settings button semantics throughout; the default answers Enter
+        # but is never painted as a permanently emphasized (stuck-hover) pill.
+        assert {b._role for b in buttons} == {"secondary"}
+        assert buttons[0].isDefault() and not buttons[1].isDefault()
         assert check.isVisibleTo(popup) or check.parent() is not None
     finally:
         popup.deleteLater()

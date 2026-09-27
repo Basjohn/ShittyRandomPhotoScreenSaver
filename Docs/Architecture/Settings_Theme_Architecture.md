@@ -210,7 +210,16 @@ theme border colour then shows seams (R-101). New outlined controls reuse these 
 Popups are separate top-level windows and inherit nothing. `ui/styled_popup.py` applies the Settings root stylesheet
 and paints `PopupSurface`, so every popup, including the colour picker and account dialogs, takes the active theme's
 text, controls and border. A new dialog builds on `StyledPopup` (or those two pieces), never on a bare `QDialog` or
-`QMessageBox`. File and folder pickers stay native OS dialogs.
+`QMessageBox`. File and folder pickers stay native OS dialogs. Popup buttons, like every Guided Setup / Quick Start
+button, use the ordinary Settings button semantics (`control.button.surface` at rest, `hover_surface` on hover): the
+default button answers Enter but is never painted as a permanently filled pill, which reads as a stuck hover. Only
+warning, error and success popups show a glyph beside the title; a plain question or notice shows its title alone.
+
+Bucket headers (`BucketToggle`, every collapsible bucket in Settings and the wizard) lay out their label exactly as
+Qt's tool-button label does (arrow box `iconSize.width + 4` by the content height, title after it) except that the
+title sits 1 px (normal) or 2 px (large) further from the arrow, because the windows11 down arrow fills its box. The
+size hint grows by the same amount, so a title never clips at any scale. The header padding is defined once in
+`ui/widgets/continuous_border.py` and read by the theme QSS.
 
 ## `dark.qss` status
 

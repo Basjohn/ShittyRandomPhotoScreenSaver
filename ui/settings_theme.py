@@ -21,6 +21,7 @@ from ui.settings_theme_runtime import (
 )
 from ui.settings_theme_spec import SettingsThemeSpec
 from ui.settings_theme_qss import render_qss_color, render_qss_rgba255
+from ui.widgets.continuous_border import BUCKET_LARGE_PADDING, BUCKET_PADDING
 
 logger = get_logger(__name__)
 
@@ -297,14 +298,14 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     color: %(bucket_closed_text)s;
                     border: 1.5px solid transparent;
                     border-radius: 3px;
-                    padding: 3px 8px;
+                    padding: %(bucket_padding)s;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
                     font-size: 11px;
                     font-weight: 500;
                 }
                 /* Guided Setup feature buckets: a quarter larger than the norm. */
                 QToolButton[autoRaise="true"][bucketSize="large"] {
-                    padding: 4px 12px;
+                    padding: %(bucket_large_padding)s;
                     font-size: 15px;
                     border-radius: 4px;
                 }
@@ -446,6 +447,9 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
             theme,
             "control.checkbox.checked.bottom_shadow_border",
         ),
+        # Geometry shared with BucketToggle's own content layout.
+        "bucket_padding": "%dpx %dpx" % BUCKET_PADDING,
+        "bucket_large_padding": "%dpx %dpx" % BUCKET_LARGE_PADDING,
         "bucket_closed_surface": _theme_rgba(theme, "bucket.closed.surface"),
         "bucket_closed_text": _theme_rgba(theme, "bucket.closed.text"),
         "bucket_closed_border": _theme_rgba(theme, "bucket.closed.border"),

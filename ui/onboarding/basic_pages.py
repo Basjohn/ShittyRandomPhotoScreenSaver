@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.widgets.continuous_border import OutlinedListWidget
+from core.sources.folder_paths import contains_folder, display_folder_path, without_folder
 from core.sources.readiness import has_image_sources
 from ui.onboarding.state import is_media_center_profile
 from sources.rss.curated import apply_curated_wallpaper_feeds
@@ -36,7 +37,7 @@ class WelcomePage(Page):
             "The Wizard can help pick the right settings for you while you squirm inside without consent."
         ))
         importing = QHBoxLayout()
-        self.import_button = action("Import Settings?", self.import_settings, secondary=True)
+        self.import_button = action("Import Settings?", self.import_settings)
         self.import_button.setToolTip("Bring your settings from an SRPSS settings file. A successful import finishes Guided Setup.")
         importing.addWidget(self.import_button); importing.addStretch()
         copy.addSpacing(8)
@@ -80,7 +81,7 @@ class SourcesPage(Page):
         folder_layout.addWidget(self.folders)
         row = QHBoxLayout()
         row.addWidget(action("Add folder…", self.add_folder))
-        row.addWidget(action("Remove selected", self.remove_folder, secondary=True))
+        row.addWidget(action("Remove selected", self.remove_folder))
         row.addStretch()
         folder_layout.addLayout(row)
         self.feeds_toggle, _, feed_layout = build_bucket_toggle(self.body, "Online Wallpaper Feeds", expanded=feeds_open, large=True)
@@ -107,7 +108,7 @@ class SourcesPage(Page):
         self.reason = text_label("")
         self.body.addWidget(self.reason)
         shortcuts = QHBoxLayout()
-        shortcuts.addWidget(action("Just Make It Work", self.make_it_work, secondary=True))
+        shortcuts.addWidget(action("Just Make It Work", self.make_it_work))
         shortcuts.addStretch()
         self.body.addLayout(shortcuts)
         self.body.addStretch()
@@ -117,7 +118,7 @@ class SourcesPage(Page):
         from sources.rss.constants import DEFAULT_RSS_FEEDS
         from PySide6.QtWidgets import QListWidgetItem
         self.folders.clear()
-        self.folders.addItems(list(self.settings.get("sources.folders") or []))
+        self.folders.addItems([display_folder_path(folder) for folder in self.settings.get("sources.folders") or []])
         current = list(self.settings.get("sources.rss_feeds") or [])
         for url in current:
             if url not in DEFAULT_RSS_FEEDS.values() and url not in self._custom_feeds:
@@ -148,14 +149,14 @@ class SourcesPage(Page):
         folder = QFileDialog.getExistingDirectory(self, "Choose wallpaper folder")
         if folder:
             folders = list(self.settings.get("sources.folders") or [])
-            if folder not in folders:
-                self.settings.set("sources.folders", [*folders, folder])
+            if not contains_folder(folders, folder):
+                self.settings.set("sources.folders", [*folders, display_folder_path(folder)])
             self.refresh()
 
     def remove_folder(self):
         selected = self.folders.currentItem()
         if selected:
-            self.settings.set("sources.folders", [x for x in self.settings.get("sources.folders") if x != selected.text()])
+            self.settings.set("sources.folders", without_folder(self.settings.get("sources.folders") or [], selected.text()))
             self.refresh()
 
     def toggle_feeds(self, enabled):
