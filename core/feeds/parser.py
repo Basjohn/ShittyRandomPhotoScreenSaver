@@ -100,6 +100,44 @@ def html_image_urls(markup: object, *, base_url: str = "", limit: int = 8) -> li
     return collector.urls[: max(0, int(limit))]
 
 
+class _ShareImageCollector(HTMLParser):
+    """Open Graph / Twitter card / ``image_src`` declarations in a page head."""
+
+    _META = {"og:image:secure_url": 0, "og:image:url": 1, "og:image": 1, "twitter:image": 2, "twitter:image:src": 2}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.found: dict[int, str] = {}
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        kind = tag.casefold()
+        mapping = {str(k).casefold(): v for k, v in attrs}
+        if kind == "meta":
+            name = str(mapping.get("property") or mapping.get("name") or "").strip().casefold()
+            rank = self._META.get(name)
+            if rank is not None and mapping.get("content"):
+                self.found.setdefault(rank, str(mapping["content"]))
+        elif kind == "link" and "image_src" in str(mapping.get("rel") or "").casefold().split():
+            if mapping.get("href"):
+                self.found.setdefault(3, str(mapping["href"]))
+
+
+def article_share_image_url(markup: object, *, base_url: str = "") -> str:
+    """The image a publisher declares for sharing an article, from its page head."""
+    collector = _ShareImageCollector()
+    text = markup.decode("utf-8", "replace") if isinstance(markup, (bytes, bytearray)) else str(markup or "")
+    end = text.casefold().find("</head>")
+    try:
+        collector.feed(text[: end if end >= 0 else 262144])
+    except (ValueError, AssertionError):
+        return ""
+    for rank in sorted(collector.found):
+        url = normalized_media_url(collector.found[rank], base_url=base_url)
+        if url:
+            return url
+    return ""
+
+
 _UTF8_BOM = bytes((0xEF, 0xBB, 0xBF))
 
 

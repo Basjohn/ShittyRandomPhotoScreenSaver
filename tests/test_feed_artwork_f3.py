@@ -276,3 +276,25 @@ def test_artwork_batch_diagnostics_are_explicitly_opt_in(tmp_path, monkeypatch):
     assert len(calls) == 1
     assert "[FEEDS][ARTWORK]" in str(calls[0][0][0])
     assert calls[0][1]["extra"]["srpss_log_families"] == ("feeds",)
+
+
+def test_full_size_publisher_header_above_the_cache_bound_is_admitted(tmp_path):
+    # Crunchyroll ships 1920x1080 headers up to ~3 MB; only the normalized
+    # <=640 px PNG is stored, so the original may exceed the cache-file bound.
+    import os
+    from io import BytesIO
+
+    from PIL import Image
+
+    from core.feeds import artwork
+
+    noise = Image.frombytes("RGB", (1920, 1080), os.urandom(1920 * 1080 * 3))
+    buffer = BytesIO()
+    noise.save(buffer, format="JPEG", quality=95)
+    original = buffer.getvalue()
+    assert artwork.MAX_STORED_BYTES < len(original) <= artwork.MAX_DOWNLOAD_BYTES
+
+    stored = artwork.FeedArtworkCache._normalize_image(original)
+    assert len(stored) <= artwork.MAX_STORED_BYTES
+    with Image.open(BytesIO(stored)) as image:
+        assert image.format == "PNG" and max(image.size) <= artwork.MAX_STORED_EDGE

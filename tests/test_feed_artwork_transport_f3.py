@@ -174,3 +174,35 @@ def test_existing_worker_warmer_can_use_vetted_fetch_without_own_schedule(networ
         AssertionError("cache hit must not construct a transport")), still_needed=alive)
     assert again.attempts == again.newly_cached == 0
     assert again.local_by_item == batch.local_by_item
+
+
+def test_article_head_read_stops_at_head_even_for_a_large_page(network):
+    resolve, _ = network
+    head = b'<html><head><meta property="og:image" content="https://cdn.example.test/a.jpg"></head>'
+    body = head + b"<body>" + b"x" * (2 * transport.ARTICLE_HEAD_MAX_BYTES) + b"</body>"
+    _Connection.responses = [_Response(body=body, headers={"Content-Length": str(len(body))})]
+    page = transport.fetch_article_head("https://news.example.test/story", still_needed=lambda: True,
+                                        resolve=resolve)
+    assert page.startswith(head) and len(page) < 64 * 1024
+    assert _Connection.requests[-1][4]["Accept"].startswith("text/html")
+    assert _Connection.closes == 1
+
+
+def test_article_head_read_never_exceeds_its_prefix_bound(network):
+    resolve, _ = network
+    body = b"<html><head>" + b"y" * (2 * transport.ARTICLE_HEAD_MAX_BYTES)
+    _Connection.responses = [_Response(body=body, headers={"Content-Length": str(len(body))})]
+    page = transport.fetch_article_head("https://news.example.test/story", still_needed=lambda: True,
+                                        resolve=resolve)
+    assert len(page) == transport.ARTICLE_HEAD_MAX_BYTES
+
+
+def test_status_failures_carry_how_long_to_leave_the_url_alone(network):
+    resolve, _ = network
+    for code, expected in ((404, transport.DEFINITE_RETRY_SECONDS), (503, transport.TRANSIENT_RETRY_SECONDS),
+                           (429, transport.TRANSIENT_RETRY_SECONDS)):
+        _Connection.responses = [_Response(code=code)]
+        with pytest.raises(transport.ArtworkFetchError) as caught:
+            transport.fetch_artwork_bytes("https://cdn.example.test/a.png", still_needed=lambda: True,
+                                          resolve=resolve)
+        assert caught.value.retry_seconds == expected

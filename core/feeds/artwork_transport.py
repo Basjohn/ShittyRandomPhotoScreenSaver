@@ -16,7 +16,13 @@ import time
 from typing import Callable, Iterator
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
-from .artwork import ArtworkCancelled, MAX_DOWNLOAD_BYTES, safe_artwork_url
+from .artwork import (
+    DEFINITE_RETRY_SECONDS,
+    MAX_DOWNLOAD_BYTES,
+    TRANSIENT_RETRY_SECONDS,
+    ArtworkCancelled,
+    safe_artwork_url,
+)
 from core.network.bounded_dns import resolve_bounded
 from core.network.tls import verified_client_context
 
@@ -26,8 +32,19 @@ READ_TIMEOUT_SECONDS = 5.0
 MAX_TOTAL_SECONDS = 18.0
 
 
+ARTICLE_HEAD_MAX_BYTES = 256 * 1024
+
+
 class ArtworkFetchError(ValueError):
-    """An optional feed image failed validation, transport or byte bounds."""
+    """An optional feed image failed validation, transport or byte bounds.
+
+    ``retry_seconds`` is how long the caller should leave this URL alone;
+    ``None`` means the request never started, so there is nothing to remember.
+    """
+
+    def __init__(self, message: str, *, retry_seconds: float | None = DEFINITE_RETRY_SECONDS) -> None:
+        super().__init__(message)
+        self.retry_seconds = retry_seconds
 
 
 def _target(url: str) -> tuple[str, str, int, str]:
@@ -48,7 +65,7 @@ def _public_address(host: str, port: int, *, resolve: Callable[..., object]) -> 
     try:
         answers = resolve(host, port, type=socket.SOCK_STREAM)
     except OSError as exc:
-        raise ArtworkFetchError("artwork DNS lookup failed") from exc
+        raise ArtworkFetchError("artwork DNS lookup failed", retry_seconds=TRANSIENT_RETRY_SECONDS) from exc
     addresses = []
     for answer in answers:
         try:
@@ -61,7 +78,7 @@ def _public_address(host: str, port: int, *, resolve: Callable[..., object]) -> 
             raise ArtworkFetchError("nonpublic artwork DNS address")
         addresses.append(str(address))
     if not addresses:
-        raise ArtworkFetchError("artwork host has no usable addresses")
+        raise ArtworkFetchError("artwork host has no usable addresses", retry_seconds=TRANSIENT_RETRY_SECONDS)
     return addresses[0]
 
 
@@ -76,6 +93,7 @@ def iter_public_image(
     user_agent: str = "SRPSS/FeedArtwork",
     accept: str = "image/png,image/jpeg,image/webp,image/gif;q=0.8,*/*;q=0.1",
     chunk_size: int = 16 * 1024,
+    prefix_only: bool = False,
 ) -> Iterator[bytes]:
     """Stream one public image's bytes: the one vetted image path for every family.
 
@@ -86,6 +104,8 @@ def iter_public_image(
     between reads. Chunks are yielded as they arrive; closing the generator
     early (a caller that has seen enough) closes the connection. A declared
     length must be met exactly, so a truncated body never completes.
+    ``prefix_only`` reads at most ``max_bytes`` of a longer document and stops
+    there instead of rejecting it (an article page's ``<head>``).
     """
     budget = max(1, int(max_bytes))
     deadline = time.monotonic() + max(0.1, float(max_seconds))
@@ -94,7 +114,7 @@ def iter_public_image(
         if not still_needed():
             raise ArtworkCancelled()
         if time.monotonic() >= deadline:
-            raise ArtworkFetchError("artwork time budget exhausted")
+            raise ArtworkFetchError("artwork time budget exhausted", retry_seconds=TRANSIENT_RETRY_SECONDS)
         scheme, host, port, request_target = _target(current)
         hop_resolve = resolve
         if hop_resolve is None:
@@ -145,7 +165,10 @@ def iter_public_image(
                 _target(current)
                 continue
             if response.status != 200:
-                raise ArtworkFetchError("artwork HTTP status is not successful")
+                transient = response.status in {408, 425, 429} or response.status >= 500
+                raise ArtworkFetchError(
+                    f"artwork HTTP status {response.status}",
+                    retry_seconds=TRANSIENT_RETRY_SECONDS if transient else DEFINITE_RETRY_SECONDS)
             if response.getheader("Content-Encoding", "identity").lower() != "identity":
                 raise ArtworkFetchError("compressed artwork response rejected")
             declared = response.getheader("Content-Length")
@@ -157,7 +180,7 @@ def iter_public_image(
                     raise ArtworkFetchError("invalid artwork content length") from exc
                 if declared_bytes < 0:
                     raise ArtworkFetchError("invalid artwork content length")
-                if declared_bytes > budget:
+                if declared_bytes > budget and not prefix_only:
                     raise ArtworkFetchError("artwork content length exceeds bound")
             received = 0
             while True:
@@ -165,18 +188,22 @@ def iter_public_image(
                     raise ArtworkCancelled()
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise ArtworkFetchError("artwork time budget exhausted")
+                    raise ArtworkFetchError("artwork time budget exhausted", retry_seconds=TRANSIENT_RETRY_SECONDS)
                 if connection.sock is not None:
                     connection.sock.settimeout(min(max(0.1, read_timeout), remaining))
+                if prefix_only and received >= budget:
+                    return
                 chunk = response.read(min(max(1, int(chunk_size)), budget + 1 - received))
                 if not chunk:
                     break
+                if prefix_only:
+                    chunk = chunk[:budget - received]
                 received += len(chunk)
                 if received > budget:
                     raise ArtworkFetchError("artwork payload exceeds bound")
                 yield chunk
-            if declared_bytes is not None and received != declared_bytes:
-                raise ArtworkFetchError("truncated artwork response")
+            if declared_bytes is not None and received != declared_bytes and not prefix_only:
+                raise ArtworkFetchError("truncated artwork response", retry_seconds=TRANSIENT_RETRY_SECONDS)
             if not received:
                 raise ArtworkFetchError("empty artwork response")
             if not still_needed():
@@ -185,7 +212,7 @@ def iter_public_image(
         except (OSError, http.client.HTTPException, ssl.SSLError) as exc:
             if not still_needed():
                 raise ArtworkCancelled() from exc
-            raise ArtworkFetchError("artwork connection failed") from exc
+            raise ArtworkFetchError("artwork connection failed", retry_seconds=TRANSIENT_RETRY_SECONDS) from exc
         finally:
             connection.close()
     raise ArtworkFetchError("artwork redirect limit")
@@ -216,3 +243,35 @@ def fetch_artwork_bytes(
         connect_timeout=connect_timeout,
         read_timeout=read_timeout,
     ))
+
+
+def fetch_article_head(
+    url: str, *,
+    still_needed: Callable[[], bool],
+    resolve: Callable[..., object] | None = None,
+    max_seconds: float = MAX_TOTAL_SECONDS,
+) -> bytes:
+    """Read an article page only up to ``</head>`` (at most 256 KB).
+
+    The last-resort source of a story image when its feed advertises none that
+    works. Same vetted transport, redirects and time budget as an image fetch;
+    the connection closes as soon as the head has been read.
+    """
+    received = bytearray()
+    stream = iter_public_image(
+        url,
+        still_needed=still_needed,
+        max_bytes=ARTICLE_HEAD_MAX_BYTES,
+        max_seconds=min(MAX_TOTAL_SECONDS, max(0.1, float(max_seconds))),
+        resolve=resolve,
+        accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
+        prefix_only=True,
+    )
+    try:
+        for chunk in stream:
+            received.extend(chunk)
+            if b"</head>" in received[-(len(chunk) + 8):].lower():
+                break
+    finally:
+        stream.close()
+    return bytes(received)
