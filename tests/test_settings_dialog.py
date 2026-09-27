@@ -883,3 +883,23 @@ def test_tab_switch_opens_scrolled_tab_at_top_without_a_timer(
     assert scrollbar.value() == 0
     dialog._closing = True
     dialog.deleteLater()
+
+
+def test_widgets_subtab_switch_opens_at_top_without_a_timer(qapp, settings_manager, animation_manager, monkeypatch):
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    dialog.resize(900, 520)
+    try:
+        dialog._switch_tab(dialog._tab_index_for_key("widgets"), animate=False)
+        for _ in range(5):
+            qapp.processEvents()
+        tab = dialog.widgets_tab
+        scrollbar = tab._scroll_area.verticalScrollBar()
+        scheduled = []
+        monkeypatch.setattr(tab, "_schedule_owned_single_shot", lambda *args: scheduled.append(args))
+        scrollbar.setValue(max(1, scrollbar.maximum()))
+        tab._on_subtab_changed(tab._current_subtab)
+        assert scrollbar.value() == 0
+        assert scheduled == []
+    finally:
+        dialog._closing = True
+        dialog.deleteLater()

@@ -477,8 +477,8 @@ def test_saved_connection_status_hydrates_green_on_every_settings_open(
             try:
                 assert tab.steam_identity_check.text() == "Connected"
                 assert tab.steam_api_key_check.text() == "Connected"
-                assert tab.steam_access_status.text() == "Steam account access is ready."
-                assert tab.steam_connection_status.text() == "Saved Steam identity and API key are available."
+                assert tab.steam_access_status.text() == "Steam Account Access Is Ready."
+                assert tab.steam_connection_status.text() == "Saved Steam Identity and API Key Are Available."
                 assert tab.steam_saved_connection_feedback.isHidden() is True
             finally:
                 tab.deleteLater()

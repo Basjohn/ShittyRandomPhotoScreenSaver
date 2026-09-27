@@ -365,7 +365,7 @@ class TransitionsTab(QWidget):
         duration_layout = QVBoxLayout(duration_group)
         duration_layout.setContentsMargins(0, 12, 0, 0)
         duration_layout.setSpacing(12)
-        duration_row = _aligned_row(duration_layout, "Duration (short → long):")
+        duration_row = _aligned_row(duration_layout, "Duration (Short → Long):")
         self.duration_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.duration_slider.setRange(100, 15000)  # store milliseconds directly (15s max)
         self.duration_slider.setSingleStep(100)

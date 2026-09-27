@@ -219,7 +219,7 @@ class DisplayTab(QWidget):
 
         show_row, _ = add_aligned_row(
             layout,
-            "Show screensaver on:",
+            "Show Screensaver On:",
             label_width=self._LABEL_WIDTH,
         )
         self.show_all_check = QCheckBox("All")
@@ -279,7 +279,7 @@ class DisplayTab(QWidget):
 
         interval_row, _ = add_aligned_row(
             layout,
-            "Change image every:",
+            "Change Image Every:",
             label_width=self._LABEL_WIDTH,
         )
         self.interval_spin = QSpinBox()
@@ -291,7 +291,7 @@ class DisplayTab(QWidget):
         self.interval_spin.valueChanged.connect(self._save_settings)
         self.interval_spin.setFixedWidth(140)
         interval_row.addWidget(self.interval_spin)
-        interval_row.addWidget(create_inline_label("seconds"))
+        interval_row.addWidget(create_inline_label("Seconds"))
         interval_row.addStretch()
 
         shuffle_row, _ = add_aligned_row(

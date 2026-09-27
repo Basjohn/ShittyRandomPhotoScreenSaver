@@ -338,7 +338,7 @@ def build_spectrum_ui(tab: "VisualizerSettingsContextMixin", parent_layout: QVBo
         tab._default_bool('spotify_visualizer', 'spectrum_unique_colors')
     )
     tab.spectrum_rainbow_per_bar.setToolTip(
-        "When 'Taste The Rainbow' is enabled: each bar gets its own unique colour "
+        "When 'Taste the Rainbow' is enabled: each bar gets its own unique colour "
         "spread across the rainbow. Off = all bars share one shifting colour."
     )
     bind_setting_signal(tab, tab.spectrum_rainbow_per_bar.stateChanged)
