@@ -278,19 +278,25 @@ OverlayWidget {
                 (headerFrame.height * headerFrame.scale - height) * 0.5
                     + feedRoot.childOffsetY("refresh")
             ))
-            opacity: feedRoot.feedModel.interactionEnabled ? 0.9 : 0.45
+            opacity: feedRoot.feedModel.interactionEnabled ? 1.0 : 0.45
             readonly property bool canActivate: visible
                 && feedRoot.feedModel.interactionEnabled
                 && !feedRoot.feedModel.refreshing
                 && !feedRoot.customLayoutInputBlocked
 
+            // Header accessory hover, identical across Reddit, Gmail, Games You
+            // Follow and FEEDS: a white frame and a full-opacity white glyph.
             Rectangle {
                 objectName: "feedRefreshHoverFrame"
                 anchors.fill: parent
                 radius: 6.0
-                color: refreshHover.hovered && refreshTarget.canActivate
-                    ? Qt.rgba(1.0, 1.0, 1.0, 0.11)
-                    : "transparent"
+                color: "transparent"
+                border.color: refreshHover.hovered && refreshTarget.canActivate
+                    ? "white" : "transparent"
+                border.width: refreshHover.hovered && refreshTarget.canActivate
+                    ? feedRoot.scaleAwareChildStrokeWidth(1.5, Math.min(
+                        feedRoot.childWidthScale("refresh"),
+                        feedRoot.childHeightScale("refresh"))) : 0.0
             }
             HoverHandler {
                 id: refreshHover
@@ -308,7 +314,7 @@ OverlayWidget {
                 font.pixelSize: Math.min(parent.width, parent.height) * 0.72
                 color: refreshHover.hovered && refreshTarget.canActivate
                     ? "white" : feedRoot.feedModel.headerTextColor
-                opacity: refreshHover.hovered && refreshTarget.canActivate ? 1.0 : 0.78
+                opacity: refreshHover.hovered && refreshTarget.canActivate ? 1.0 : 0.7
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 shadowEnabled: feedRoot.feedModel.textShadowEnabled
