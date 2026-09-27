@@ -7,9 +7,6 @@ Execution plan and live checklist: `Docs/Future_Work/Guided_Setup.md`. Operator 
 - [ ] **Seams, remaining audit.** Buckets, every Settings `QListWidget`, the content area and action buttons are now
       painted. Still QSS-drawn and to be zoom-checked: sidebar/group-box frames (`panel_border` rules in
       `ui/settings_theme.py`), StyledComboBox and its popup (2px, 14-18px radius), line edits, the generic QPushButton.
-- [ ] **Import Settings.** Welcome page offers "Import Settings?"; a successful import skips and closes the wizard.
-      Import (and the Settings tab) lets users choose: All, Display, Widgets, Transitions, Theme Choice, Custom
-      Geometry Including Layouts, Misc (everything else). Credentials are never exported or imported.
 
 ## Runtime audit 2026-09-22 | accepted 2026-09-23/24
 
@@ -29,6 +26,10 @@ Each stays here until fixed or explicitly retired; do not treat it as noise in a
 
 - [ ] **One red present before 2026-09-26's FEEDS work (Windows, whole widgets/settings gate):**
   - `test_qtquick_transition_parameter_defaults.py::test_sparse_crumble_uses_canonical_piece_count_and_complexity`: the canonical Crumble `crack_complexity` default is 11.0 but Settings and the resolver cap it at 2.0. Operator decision: was 1.1 meant?
+- [ ] **Popups: theme semantics and seams.** Operator 2026-09-27: popups do not seem to inherit theme semantics.
+      Audit every popup/dialog surface (StyledPopup, Steam API key dialog, colour picker, file/other dialogs).
+- [ ] **Settings resize debounce timer.** `SettingsDialog.resizeEvent` restarts a QTimer to save geometry while
+      `closeEvent` already saves it; decide whether the debounce is redundant under the timer policy.
 - [ ] **Tests that show real windows.** `tests/test_qtquick_context_menu.py::test_retained_context_menu_draws_real_quick_pixels_and_clamps`
       calls `QQuickWindow.show()` under pytest's Windows QPA, flashing a real window. Move such pixel tests to an
       offscreen subprocess (pattern: `tests/test_onboarding_flow.py::test_hovering_transition_rows_inside_settings_does_not_scroll`)

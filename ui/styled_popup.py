@@ -114,8 +114,10 @@ class StyledPopup(QDialog):
         auto_close_ms: int = 0,  # 0 = no auto-close
         buttons: Optional[Sequence[ButtonDef]] = None,
         default_button_index: int = 0,
+        content: Optional[QWidget] = None,  # extra controls between message and buttons
     ):
         super().__init__(parent)
+        self._content = content
         
         self._title = title
         self._message = message
@@ -229,7 +231,10 @@ class StyledPopup(QDialog):
             """
             )
             container_layout.addWidget(msg_label)
-        
+
+        if self._content is not None:
+            container_layout.addWidget(self._content)
+
         # OK button
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()

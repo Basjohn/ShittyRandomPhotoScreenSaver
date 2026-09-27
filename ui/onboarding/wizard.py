@@ -84,6 +84,8 @@ class GuidedSetupPanel(QWidget):
             page.readinessChanged.connect(self._refresh_navigation)
         if key == "sources":
             page.finishRequested.connect(self.finish)
+        if key == "welcome":
+            page.importCompleted.connect(self._imported)
         scroll = QScrollArea(self.stack)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
@@ -152,6 +154,11 @@ class GuidedSetupPanel(QWidget):
         if arrange is not None:
             arrange.apply()
         self.settings.commit()
+
+    def _imported(self):
+        """A successful import replaces the setup: drop the draft and finish."""
+        self.settings.discard()
+        self.close_setup(True)
 
     def finish(self):
         """Finish is the explicit save."""

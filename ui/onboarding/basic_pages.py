@@ -19,6 +19,8 @@ MC_INTERACTION_TOOLTIP = "Media Center builds keep Interaction Mode always enabl
 
 
 class WelcomePage(Page):
+    importCompleted = Signal()
+
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         row = QHBoxLayout()
@@ -33,11 +35,28 @@ class WelcomePage(Page):
             "Your first time inside someone is special and confusing.\n"
             "The Wizard can help pick the right settings for you while you squirm inside without consent."
         ))
+        importing = QHBoxLayout()
+        self.import_button = action("Import Settings?", self.import_settings, secondary=True)
+        self.import_button.setToolTip("Bring your settings from an SRPSS settings file. A successful import finishes Guided Setup.")
+        importing.addWidget(self.import_button); importing.addStretch()
+        copy.addSpacing(8)
+        copy.addLayout(importing)
         copy.addStretch()
         row.addLayout(copy, 3)
         self.body.addLayout(row, 1)
         self.body.addWidget(silence_check(settings))
         self.body.addWidget(text_label(SILENCE_TEXT))
+
+    def import_settings(self):
+        """Import is an explicit save; success finishes Guided Setup."""
+        from ui.settings_import import run_settings_import
+        if run_settings_import(self, _real_settings(self.settings)):
+            self.importCompleted.emit()
+
+
+def _real_settings(settings):
+    """Import is an explicit save: it writes the store itself, never the draft."""
+    return getattr(settings, "real", settings)
 
 
 class SourcesPage(Page):
