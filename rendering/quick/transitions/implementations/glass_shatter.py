@@ -6,7 +6,8 @@ from OpenGL import GL as gl
 from rendering.gl_programs.glass_shatter_program import (
     GLASS_FRAGMENT, GLASS_VERTEX,
 )
-from ..mesh_support import MeshResources, bind_frame, direction_vector
+from rendering.quick.scene3d.resources import MeshResources, bind_frame
+from ..directions import direction_vector
 from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import (
     GLASS_ATTRIBUTES,

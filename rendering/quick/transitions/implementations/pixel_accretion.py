@@ -11,7 +11,8 @@ from rendering.gl_programs.pixel_accretion_program import (
     pixel_accretion_grid,
     pixel_accretion_parameters,
 )
-from ..mesh_support import MeshResources, bind_frame, direction_vector
+from rendering.quick.scene3d.resources import MeshResources, bind_frame
+from ..directions import direction_vector
 from ..render_contract import QuickTransitionRenderFrame
 
 

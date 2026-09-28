@@ -9,7 +9,7 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.melt_drip_program import MELT_FRAGMENT_SOURCE
-from ..mesh_support import MeshResources, bind_frame
+from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from ..render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
 
 # Resolved melt origins: (screen origin with y down, mode 0 = spread from the

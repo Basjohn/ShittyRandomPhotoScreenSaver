@@ -10,7 +10,7 @@ from rendering.gl_programs.ink_bloom_program import (
     INK_BLOOM_VERTEX_SOURCE,
     ink_surface_vertices,
 )
-from ..mesh_support import MeshResources, bind_frame
+from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from ..render_contract import QuickTransitionRenderFrame
 
 

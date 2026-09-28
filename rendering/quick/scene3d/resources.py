@@ -1,7 +1,8 @@
-"""Small lazy GL resource primitives shared by the admitted mesh transitions.
+"""Small lazy GL resource primitives for 3D scenes: programs, meshes, underlay, depth.
 
-This owns neither transition state nor a clock. The existing transition host
-fences inherited GL state; every handle stays with its context-local renderer.
+Shared by the mesh transitions and available to Visualizer modes. This owns
+neither state nor a clock; the consumer's host fences inherited GL state and
+every handle stays with its context-local renderer.
 """
 from __future__ import annotations
 
@@ -11,8 +12,7 @@ import ctypes
 from OpenGL import GL as gl
 
 from rendering.quick.render.gl_resources import compile_program
-from .directions import direction_vector  # noqa: F401  (re-exported for renderers)
-from .render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
+from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame
 
 
 _IMAGE_FRAGMENT = """#version 410 core
@@ -35,17 +35,19 @@ def pack_floats(values) -> bytes:
     return array("f", values).tobytes()
 
 
-def bind_frame(program: int, uniforms: dict[str, int], frame: QuickTransitionRenderFrame) -> None:
+def bind_frame(program: int, uniforms: dict[str, int], frame: SceneFrame) -> None:
+    """Use the program with the frame's matrix and item size; a transition frame's
+    source/destination textures bind to units 0/1 when the program declares them."""
     gl.glUseProgram(program)
     gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
     gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-    for unit, name, texture in (
-        (0, "uOldTex", frame.source_texture_id),
-        (1, "uNewTex", frame.destination_texture_id),
+    for unit, name, attribute in (
+        (0, "uOldTex", "source_texture_id"),
+        (1, "uNewTex", "destination_texture_id"),
     ):
         if name in uniforms:
             gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, getattr(frame, attribute))
             gl.glUniform1i(uniforms[name], unit)
 
 
@@ -124,8 +126,8 @@ class MeshResources:
             gl.glDeleteVertexArrays(1, [vao])
         del self._meshes[key]
 
-    def draw_image(self, frame: QuickTransitionRenderFrame, texture_id: int) -> None:
-        program = self.program("underlay", QUICK_TRANSITION_VERTEX_SOURCE, _IMAGE_FRAGMENT)
+    def draw_image(self, frame: SceneFrame, texture_id: int) -> None:
+        program = self.program("underlay", ITEM_QUAD_VERTEX_SOURCE, _IMAGE_FRAGMENT)
         uniforms = self.uniforms("underlay", ("uMatrix", "uItemSize", "uImage"))
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
@@ -137,7 +139,7 @@ class MeshResources:
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     @staticmethod
-    def begin_depth(frame: QuickTransitionRenderFrame) -> None:
+    def begin_depth(frame: SceneFrame) -> None:
         """Clear only the admitted viewport intersected with Quick's clip."""
         enabled = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
         inherited = tuple(int(v) for v in gl.glGetIntegerv(gl.GL_SCISSOR_BOX))

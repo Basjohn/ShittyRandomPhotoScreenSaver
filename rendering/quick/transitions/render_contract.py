@@ -5,24 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+
 from .state import TransitionRun, TransitionSample
 
 
-QUICK_TRANSITION_VERTEX_SOURCE = """#version 410 core
-layout(location = 0) in vec2 aPosition;
-
-uniform mat4 uMatrix;
-uniform vec2 uItemSize;
-
-out vec2 vUv;
-
-void main() {
-    // Existing transition fragments flip Y. Feed their original bottom-up UV
-    // convention while positioning the quad in Qt Quick item coordinates.
-    vUv = vec2(aPosition.x, 1.0 - aPosition.y);
-    gl_Position = uMatrix * vec4(aPosition * uItemSize, 0.0, 1.0);
-}
-"""
+# The shared item quad (rendering.quick.scene3d.frame owns the source).
+QUICK_TRANSITION_VERTEX_SOURCE = ITEM_QUAD_VERTEX_SOURCE
 
 
 @dataclass(frozen=True, slots=True)

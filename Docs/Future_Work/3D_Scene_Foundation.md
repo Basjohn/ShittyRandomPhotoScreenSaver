@@ -17,8 +17,8 @@ Detail tiers; effects keep their own authored motion, look and state.
 | Piece | Where | Consumers | Tests |
 | --- | --- | --- | --- |
 | GLSL library + CPU mirrors (hash, camera, impulse, departure solver, lighting, ember, planar shadows, streaks, tier table) | `rendering/gl_programs/scene3d.py` | Exploding Tiles | `tests/test_scene3d_foundation.py` |
-| Blend scopes, multisampled `SceneTarget` | `rendering/quick/transitions/scene3d_support.py` | Exploding Tiles | same |
-| Programs/meshes/underlay/depth clear (`MeshResources`) | `rendering/quick/transitions/mesh_support.py` | Glass, Crumble, Tiles, Accretion, Ink, Melt | transition GL suites |
+| Blend scopes, multisampled `SceneTarget` | `rendering/quick/scene3d/` (was `transitions/scene3d_support.py`) | Exploding Tiles | same |
+| Programs/meshes/underlay/depth clear (`MeshResources`) | `rendering/quick/scene3d/resources.py` (was `transitions/mesh_support.py`) | Glass, Crumble, Tiles, Accretion, Ink, Melt | transition GL suites |
 | Park after every run; fence restores framebuffer + blend | `rendering/quick/transitions/render_host.py`, `render/background_node.py` | all transitions | `test_qtquick_transition_state_fence.py`, foundation tests |
 | 3D Detail setting | `transitions.detail_3d`, Transitions → SETUP | Exploding Tiles | parameter-resolution and tab tests |
 
@@ -62,14 +62,16 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   point light, ember, soft rect, clip depth and streaks, against mirrors in `scene3d.py`; hash uniformity; drifted
   mirror caught).
 
-### S2 — Shared home and the Visualizer option (sharability, done early)
-- [ ] Move the GL helpers (`MeshResources`, `SceneTarget`, blend scopes) into a neutral package
+### S2 — Shared home and the Visualizer option (sharability, done early) — LANDED
+- [x] Move the GL helpers (`MeshResources`, `SceneTarget`, blend scopes) into a neutral package
   `rendering/quick/scene3d/`; update the transition importers; no compatibility shim.
-- [ ] `SceneTarget` covers any pixel rect of the render target (offset viewport inside the target, composite by
+- [x] `SceneTarget` covers any pixel rect of the render target (offset viewport inside the target, composite by
   `gl_FragCoord - rect`), with size buckets (round up to 64 px) so a CUSTOM resize drag does not reallocate per frame;
   the inherited scissor is suspended inside the target and restored for the composite.
-- [ ] Visualizer fence restores draw/read framebuffer bindings (it already restores blend).
-- [ ] Document the Visualizer opt-in: include `SCENE3D_GLSL`, logical time only, target sized to the card rect and
+- [x] ~~Visualizer fence restores draw/read framebuffer bindings~~ Superseded on inspection: that fence runs on every
+  Visualizer frame (CHK26-protected); `SceneTarget.scope` restores framebuffers, viewport and scissor itself, even
+  on exceptions, so modes that do not use a target pay nothing.
+- [x] Document the Visualizer opt-in: include `SCENE3D_GLSL`, logical time only, target sized to the card rect and
   composited inside the clip host's begin/end, target released on mode retirement, tier setting with the first
   consumer. No Visualizer mode changes.
 - **Reward:** the foundation stays one owner as it grows; Visualizers can adopt it without a second copy.
@@ -78,8 +80,11 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 - **Hazards:** reallocation thrash during resize (bucketed); a target sized to the whole window for a small card
   (rect-sized now); a card composite outside the clip (composite inside the clip host's begin/end).
 - **Bars:** sub-rect target equals a direct draw (single-sample flat scene, exact pixels); shrinking inside a bucket
-  does not reallocate; Visualizer fence restores framebuffers (fake-GL fence test with a negative control); all
-  transition suites green.
+  does not reallocate; state handed back after a mid-scene failure; all transition suites green.
+- **Landed:** `rendering/quick/scene3d/` (`frame.py` item quad + `SceneFrame` + `item_pixel_rect`, `resources.py`,
+  `target.py`, `passes.py`); `mesh_support.py` and `scene3d_support.py` removed, importers updated;
+  `tests/test_scene3d_target.py` (offset card equals a direct draw at 1 and 4 samples, inherited scissor honoured,
+  bucket reuse, state handed back after a mid-scene failure); Visualizer reference §16.
 
 ### S3 — Per-frame uniform blocks
 - [ ] One std140 uniform block per effect frame, laid out from a single Python field list (shared packing helper),
@@ -191,5 +196,5 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 
 ## Landed / remaining
 
-- Landed: S1.
-- Remaining: S2–S11 in order.
+- Landed: S1, S2.
+- Remaining: S3–S11 in order.

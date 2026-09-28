@@ -409,3 +409,26 @@ Use:
 - installed manual review.
 
 A test name does not prove it exercises the real output path.
+
+## 16. 3D scene foundation (optional for modes)
+
+A mode may build on the shared 3D foundation the transitions use; none does today, and Voxel Sphere stays isolated
+(its promotion gate stands). Plan and hazards: `Docs/Future_Work/3D_Scene_Foundation.md`.
+
+- **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,
+  planar shadows, streaks, integer hash, impulse and departure helpers). Every function has a CPU mirror in the same
+  module, checked on the GPU by `tests/test_scene3d_glsl_mirrors.py`.
+- **GL helpers:** `rendering/quick/scene3d/`: `MeshResources` (programs, meshes, depth clear), `SceneTarget`
+  (multisampled target sized to the card's pixel rect) and `blend_scope`. Draw inside
+  `with target.scope(frame, samples, resources): ...` in the mode's `render`; the clip host already wraps that call,
+  so the composite stays inside the card clip.
+- **Time:** only the snapshot's logical time. Never real seconds and never a new clock (one authored clock, R-69,
+  Bubble Temporal Fidelity).
+- **Resources:** owned by the mode renderer, reused while the card fits its 64 px allocation bucket (a CUSTOM resize
+  drag does not reallocate per frame), released in the renderer's `release_resources` when the mode retires or is
+  disabled. Nothing is allocated per frame.
+- **Cost:** a Visualizer detail tier arrives with the first consumer, separate from `transitions.detail_3d` because a
+  mode draws continuously. Per-frame Python GL calls are the main CPU hazard (plan slice S3, uniform blocks).
+- **Fence:** the Visualizer fence is unchanged (CHK26-protected hot path; modes that do not use a target pay nothing);
+  `SceneTarget.scope` itself restores framebuffers, viewport and scissor, including when the scene raises.
+

@@ -6,7 +6,7 @@ import math
 import pytest
 
 from rendering.quick.transitions.fracture_geometry import fracture_cells, fracture_vertices
-from rendering.quick.transitions import mesh_support
+from rendering.quick.scene3d import resources as mesh_support
 
 
 def _area(polygon):

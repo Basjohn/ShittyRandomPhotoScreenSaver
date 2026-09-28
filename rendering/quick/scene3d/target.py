@@ -1,19 +1,19 @@
-"""3D Detail tiers, blend scopes and the optional multisampled scene target.
+"""The multisampled scene target: smooth 3D edges for any pixel rect of Quick's target.
 
-A 3D transition resolves its tier once, into the immutable request, from the
-canonical ``transitions.detail_3d`` setting; renderers read it from there and
-never touch Settings. The tier trades fidelity for cost in one place:
+``begin`` redirects drawing into a colour+depth multisampled framebuffer that
+covers ``rect`` (by default the item's pixel bounds) and offsets the viewport,
+so the frame's own matrix draws exactly as it would directly. ``end`` resolves
+and composites it back through the item quad; Quick's scissor, stencil (the
+Visualizer card clip) and item bounds then apply as for a direct draw.
 
-* **High** -- the scene renders into a 4x multisampled target (smooth tile and
-  shard silhouettes), with soft shadows and the full particle budget;
-* **Balanced** -- straight into Quick's target, soft shadows, 60% particles;
-* **Performance** -- straight into Quick's target, no shadow pass, 30% particles.
+``scope`` restores Quick's framebuffers, viewport and scissor even when the
+scene raises, so a consumer needs no fence change of its own (the Visualizer
+fence stays as it is: modes that do not use a target pay nothing).
 
-The tier table itself is pure data in ``rendering.gl_programs.scene3d``.
-
-The scene target is context-local and allocated on first use; the transition
-host's ``park`` (after every run) drops it, so its memory is held only while a
-3D run is on screen. Programs stay warm in the owning ``MeshResources``.
+Allocation rounds up to 64 px and is reused while the rect fits, so a CUSTOM
+resize drag does not reallocate per frame. The owner releases the target: a
+transition at the host's ``park()`` after each run, a Visualizer mode when it
+retires. Failed deletions keep their handles for retry.
 """
 from __future__ import annotations
 
@@ -22,35 +22,21 @@ from typing import Iterator
 
 from OpenGL import GL as gl
 
-from rendering.gl_programs.scene3d import (  # noqa: F401  (re-exported for renderers)
-    SCENE3D_DETAIL_NAMES,
-    SCENE3D_DETAIL_TIERS,
-    Scene3DDetail,
-    scene3d_detail,
-)
+from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame, item_pixel_rect
 
-from .render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
-
-
-@contextmanager
-def blend_scope(equation: int, source: int = gl.GL_ONE, destination: int = gl.GL_ONE) -> Iterator[None]:
-    """Blend one pass; alpha is left untouched. The host fence restores the rest."""
-    gl.glEnable(gl.GL_BLEND)
-    gl.glBlendEquationSeparate(equation, gl.GL_FUNC_ADD)
-    gl.glBlendFuncSeparate(source, destination, gl.GL_ZERO, gl.GL_ONE)
-    try:
-        yield
-    finally:
-        gl.glBlendEquationSeparate(gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
-        gl.glBlendFuncSeparate(gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE, gl.GL_ZERO)
-        gl.glDisable(gl.GL_BLEND)
-
+SCENE_TARGET_BUCKET = 64
 
 _COMPOSITE_FRAGMENT = """#version 410 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uScene;
-void main() { FragColor = texelFetch(uScene, ivec2(gl_FragCoord.xy), 0); }
+uniform ivec2 uOrigin;
+uniform ivec2 uExtent;
+void main() {
+    ivec2 texel = ivec2(gl_FragCoord.xy) - uOrigin;
+    if (any(lessThan(texel, ivec2(0))) || any(greaterThanEqual(texel, uExtent))) discard;
+    FragColor = texelFetch(uScene, texel, 0);
+}
 """
 
 
@@ -62,35 +48,55 @@ def _binding(name: int) -> int:
         return int(value[0])
 
 
+def _bucket(size: int) -> int:
+    return max(SCENE_TARGET_BUCKET, -(-int(size) // SCENE_TARGET_BUCKET) * SCENE_TARGET_BUCKET)
+
+
 class SceneTarget:
-    """Multisampled colour+depth target the size of Quick's render target.
-
-    ``begin`` redirects drawing into it; ``end`` resolves it and composites the
-    result through the item quad, so Quick's scissor and item bounds apply
-    exactly as for a direct draw. Failed deletions keep their handles for retry.
-    """
-
     def __init__(self, label: str) -> None:
         self.label = label
-        self._key: tuple[int, int, int] | None = None
+        self._key: tuple[int, int, int] | None = None  # allocated width, height, samples
         self._names = {"fbo": 0, "colour": 0, "depth": 0, "resolve_fbo": 0, "resolve_texture": 0}
         self._inherited = (0, 0)
+        self._scissor = False
+        self._rect = (0, 0, 0, 0)
 
     @property
     def has_resources(self) -> bool:
         return any(self._names.values())
 
-    def begin(self, frame: QuickTransitionRenderFrame, samples: int) -> None:
-        width, height = int(frame.viewport[2]), int(frame.viewport[3])
+    @property
+    def allocation(self) -> tuple[int, int, int] | None:
+        """(width, height, samples) currently allocated, if any."""
+        return self._key
+
+    @contextmanager
+    def scope(self, frame: SceneFrame, samples: int, resources,
+              rect: tuple[int, int, int, int] | None = None) -> Iterator[None]:
+        """Draw the enclosed passes through the target; Quick's bindings come back either way."""
+        self.begin(frame, samples, rect)
+        try:
+            yield
+        except BaseException:
+            self._restore_inherited(frame)
+            raise
+        self.end(frame, resources)
+
+    def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None) -> None:
+        x, y, width, height = tuple(int(v) for v in (rect if rect is not None else item_pixel_rect(frame)))
+        if width <= 0 or height <= 0:
+            raise ValueError(f"{self.label} scene target needs a positive rect, got {(x, y, width, height)}")
         samples = max(1, min(int(samples), _binding(gl.GL_MAX_SAMPLES)))
         self._inherited = (_binding(gl.GL_DRAW_FRAMEBUFFER_BINDING), _binding(gl.GL_READ_FRAMEBUFFER_BINDING))
-        if self._key != (width, height, samples):
+        self._scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
+        key = self._key
+        if key is None or key[2] != samples or width > key[0] or height > key[1]:
             self.release()
-            self._allocate(width, height, samples)
+            self._allocate(_bucket(width), _bucket(height), samples)
+        self._rect = (x, y, width, height)
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["fbo"])
-        clear = tuple(float(value) for value in gl.glGetFloatv(gl.GL_COLOR_CLEAR_VALUE))
-        scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
         gl.glDisable(gl.GL_SCISSOR_TEST)
+        clear = tuple(float(value) for value in gl.glGetFloatv(gl.GL_COLOR_CLEAR_VALUE))
         try:
             gl.glClearColor(0.0, 0.0, 0.0, 1.0)
             gl.glClearDepth(1.0)
@@ -98,35 +104,38 @@ class SceneTarget:
             gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         finally:
             gl.glClearColor(*clear)
-            if scissor:
-                gl.glEnable(gl.GL_SCISSOR_TEST)
+        vx, vy, vw, vh = frame.viewport
+        gl.glViewport(vx - x, vy - y, vw, vh)
 
-    def end(self, frame: QuickTransitionRenderFrame, resources) -> None:
-        width, height = self._key[0], self._key[1]
-        draw, read = self._inherited
-        scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
-        gl.glDisable(gl.GL_SCISSOR_TEST)
-        try:
-            gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._names["fbo"])
-            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._names["resolve_fbo"])
-            gl.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, gl.GL_COLOR_BUFFER_BIT, gl.GL_NEAREST)
-        finally:
-            if scissor:
-                gl.glEnable(gl.GL_SCISSOR_TEST)
-            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, draw)
-            gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, read)
-        program = resources.program("scene_composite", QUICK_TRANSITION_VERTEX_SOURCE, _COMPOSITE_FRAGMENT)
-        uniforms = resources.uniforms("scene_composite", ("uMatrix", "uItemSize", "uScene"))
+    def end(self, frame: SceneFrame, resources) -> None:
+        x, y, width, height = self._rect
+        gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._names["fbo"])
+        gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._names["resolve_fbo"])
+        gl.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, gl.GL_COLOR_BUFFER_BIT, gl.GL_NEAREST)
+        self._restore_inherited(frame)
+        program = resources.program("scene_composite", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_FRAGMENT)
+        uniforms = resources.uniforms("scene_composite", ("uMatrix", "uItemSize", "uScene", "uOrigin", "uExtent"))
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         gl.glUseProgram(program)
         gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
         gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
+        gl.glUniform2i(uniforms["uOrigin"], x, y)
+        gl.glUniform2i(uniforms["uExtent"], width, height)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self._names["resolve_texture"])
         gl.glUniform1i(uniforms["uScene"], 0)
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+
+    def _restore_inherited(self, frame: SceneFrame) -> None:
+        gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._inherited[0])
+        gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._inherited[1])
+        gl.glViewport(*frame.viewport)
+        if self._scissor:
+            gl.glEnable(gl.GL_SCISSOR_TEST)
+        else:
+            gl.glDisable(gl.GL_SCISSOR_TEST)
 
     def _allocate(self, width: int, height: int, samples: int) -> None:
         renderbuffer = _binding(gl.GL_RENDERBUFFER_BINDING)

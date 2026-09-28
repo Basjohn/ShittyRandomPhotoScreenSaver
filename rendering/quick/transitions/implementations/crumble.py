@@ -11,7 +11,7 @@ from rendering.gl_programs.crumble_program import (
     DEBRIS_VERTEX,
 )
 from ..crumble_dynamics import MOTION_FRAMES
-from ..mesh_support import MeshResources, bind_frame
+from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import (
     CRUMBLE_CHUNK_ATTRIBUTES,

@@ -26,9 +26,12 @@ from rendering.gl_programs.exploding_tiles_program import (
     exploding_tiles_parameters,
     exploding_tiles_sparks_live,
 )
-from ..mesh_support import MeshResources, bind_frame, direction_vector
+from rendering.gl_programs.scene3d import scene3d_detail
+from rendering.quick.scene3d.passes import blend_scope
+from rendering.quick.scene3d.resources import MeshResources, bind_frame
+from rendering.quick.scene3d.target import SceneTarget
+from ..directions import direction_vector
 from ..render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
-from ..scene3d_support import SceneTarget, blend_scope, scene3d_detail
 
 _MOTION_UNIFORMS = (
     "uMatrix", "uItemSize", "uGrid", "uProgress", "uSeed",
@@ -73,20 +76,24 @@ class QuickExplodingTilesRenderer:
             seconds = frame.run.request.duration_ms / 1000.0
             motion = (grid, progress, seed, depth, thickness, force, center_out, epicentre, seconds)
             if detail.samples:
-                self._target.begin(frame, detail.samples)
-            self._draw_backdrop(frame, epicentre, blast)
-            if detail.shadows:
-                self._draw_shadows(frame, motion, blast)
-            self._resources.begin_depth(frame)
-            self._draw_tiles(frame, motion, blast)
-            sparks = round(EXPLODING_TILES_SPARKS * detail.particles)
-            if sparks and exploding_tiles_sparks_live(progress, force, center_out):
-                self._draw_sparks(frame, motion, sparks)
-            if detail.samples:
-                self._target.end(frame, self._resources)
+                with self._target.scope(frame, detail.samples, self._resources):
+                    self._draw_scene(frame, motion, blast, detail)
+            else:
+                self._draw_scene(frame, motion, blast, detail)
         except Exception:
             self.release_resources()
             raise
+
+    def _draw_scene(self, frame, motion, blast, detail) -> None:
+        _grid, progress, _seed, _depth, _thickness, force, center_out, epicentre, _seconds = motion
+        self._draw_backdrop(frame, epicentre, blast)
+        if detail.shadows:
+            self._draw_shadows(frame, motion, blast)
+        self._resources.begin_depth(frame)
+        self._draw_tiles(frame, motion, blast)
+        sparks = round(EXPLODING_TILES_SPARKS * detail.particles)
+        if sparks and exploding_tiles_sparks_live(progress, force, center_out):
+            self._draw_sparks(frame, motion, sparks)
 
     def _program(self, key: str, vertex: str, fragment: str, names: tuple[str, ...]):
         program = self._resources.program(key, vertex, fragment)

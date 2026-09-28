@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from rendering.quick.transitions.fracture_geometry import crumble_cells, fracture_cells, fracture_vertices
-from rendering.quick.transitions.mesh_support import pack_floats
+from rendering.quick.scene3d.resources import pack_floats
 from rendering.quick.transitions.run_geometry import (
     PREPARED_GEOMETRY,
     PreparedGeometryCache,

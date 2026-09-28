@@ -60,7 +60,7 @@ class TransitionCapture:
         import numpy as np
         from OpenGL import GL as gl
         from PySide6.QtGui import QGuiApplication, QOffscreenSurface, QOpenGLContext, QSurfaceFormat
-        from rendering.quick.transitions.mesh_support import MeshResources
+        from rendering.quick.scene3d.resources import MeshResources
         from rendering.quick.transitions.render_host import QuickTransitionRenderHost
 
         self.width, self.height = width, height
