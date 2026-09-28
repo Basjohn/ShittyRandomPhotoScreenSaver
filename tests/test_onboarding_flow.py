@@ -234,6 +234,23 @@ def test_widget_setup_clocks_section_sets_face_and_timezones(qapp, settings, mon
         page.retire(); page.deleteLater()
 
 
+def test_widget_setup_weather_section_offers_the_five_day_forecast(qapp, settings, monkeypatch):
+    import ui.onboarding.state as state
+    from PySide6.QtWidgets import QCheckBox, QToolButton
+    from ui.onboarding.setup_page import SetupPage
+    monkeypatch.setattr(state, "selected_setup_dependencies", lambda _settings: ("weather",))
+    initial = bool(settings.get("widgets.weather.show_five_day_forecast"))
+    page = SetupPage(settings)
+    try:
+        page.findChildren(QToolButton)[0].setChecked(True)
+        five_day = next(box for box in page.findChildren(QCheckBox) if box.text() == "Show 5-Day Forecast")
+        assert five_day.isChecked() == initial  # shows the current setting
+        five_day.setChecked(not initial)
+        assert settings.get("widgets.weather.show_five_day_forecast") is (not initial)
+    finally:
+        page.retire(); page.deleteLater()
+
+
 def test_wizard_lazy_rerun_and_manual_launch_ignores_silence(qapp, settings):
     from ui.onboarding.wizard import GuidedSetupPanel
     settings.set("sources.guided_setup_silenced", True)
