@@ -49,6 +49,14 @@ class QuickStartPage(Page):
         if checked:
             self.arrange.refresh()
 
+    def resolve_pending_arrange(self) -> bool:
+        """Leaving Quick Start (tab, Guided Setup, closing Settings): settle an Arrange draft.
+
+        False means the operator chose to stay in Arrange.
+        """
+
+        return self.arrange is None or self.arrange.resolve_pending()
+
     def _pending_changed(self, pending):
         self.save_slot_button.setEnabled(not pending)
         self.slot_status.setText("Apply or discard your Arrange draft before saving a slot." if pending else "")
