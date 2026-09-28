@@ -530,6 +530,5 @@ Current source must be reasoned about from present owners/contracts rather than 
 - focused docs/guardrails: durable subsystem contracts;
 - `Docs/TestSuite.md`: live test inventory/status ledger;
 - `Docs/Architecture/Persisted_Input_Compatibility.md`: persisted-input compatibility-bridge guard (user-data protection, horizon-gated);
-- `Future_Work.md`: deferred features;
-- `FWPlan.md`: operator-activated Future Work implementation and validation checklists;
+- `Future_Work.md`: deferred features, their admission rules and dormant order;
 - `Docs/Historical_Bugs/`: durable regression/failed-method history; ordinary chronology remains in source control.

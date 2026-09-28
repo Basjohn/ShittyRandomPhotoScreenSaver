@@ -25,7 +25,7 @@ The Qt Quick runtime is operator-accepted and is the sole production presentatio
 
 - Active product/bug work lives only in `Current_Plan.md`.
 - Persisted-input compatibility/schema-migration bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated). Caller-dead residue is deleted outright, not parked in a register.
-- Deferred product experiments live in `Future_Work.md` and `FWPlan.md`.
+- Deferred product experiments live in `Future_Work.md`.
 - Durable failed-method and regression history lives in `Docs/Historical_Bugs/`.
 - Superseded implementation decompositions are source-control history, not live documentation.
 

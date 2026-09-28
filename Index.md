@@ -15,7 +15,7 @@ exact current source
 ## Current product and regression references
 
 - `Current_Plan.md` contains only active work; closed Games You Follow and OSD work is not an implementation queue.
-- `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md` describe the current product contracts. `FWPlan.md` routes deferred feature ideas, not completed products.
+- `Docs/Reference/Steam_Games_You_Follow.md` and `Docs/Reference/System_Volume_OSD.md` describe the current product contracts. `Future_Work.md` routes deferred feature ideas, not completed products.
 - `Docs/Historical_Bugs/R-88_QtQuick_Custom_Edit_Paint_Role_Churn_And_False_Test_Oracles.md` records durable Edit paint/role and test-oracle failures; use the live source and targeted tests for any new defect.
 
 ## Directory roles
@@ -26,7 +26,7 @@ exact current source
 | `Docs/Guardrails/` | binding invariants and preflight contracts |
 | `Docs/Guides/` | maintained authoring/change procedures |
 | `Docs/Reference/` | current lookup/reference material and harness routing |
-| `Docs/Future_Work/` | genuinely pending or operator-activated implementation plans (currently none; implemented plans are historicalised) |
+| `Docs/Future_Work/` | a focused decomposition for promoted, architecturally large work, created only when needed (currently none; implemented plans are historicalised) |
 | `Docs/Historical_Bugs/` | permanent regression/root-cause/failed-method evidence |
 
 Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite.
@@ -67,8 +67,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Sphere current experimental contract | `Docs/Reference/Sphere_Visualizer.md` |
 | historical bug / rejected-method routing | `Docs/Historical_Bugs.md` then `Docs/Historical_Bugs/README.md` |
 | compatibility / schema-migration bridges | `Docs/Architecture/Persisted_Input_Compatibility.md` |
-| broad deferred features | `Future_Work.md` |
-| dormant future ordering | `FWPlan.md` |
+| deferred features, 3D transition/Visualizer ideas and their admission rules | `Future_Work.md` |
 | Games You Follow product/source/CUSTOM | `Docs/Reference/Steam_Games_You_Follow.md` |
 | system master-volume OSD | `Docs/Reference/System_Volume_OSD.md` |
 
