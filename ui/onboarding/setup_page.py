@@ -167,6 +167,12 @@ class SetupPage(Page):
         field.editingFinished.connect(lambda: self.settings.set("widgets.weather.location", field.text().strip()))
         self._completer = GeocodeCompleter(field)
         layout.addWidget(field)
+        # The Weather tab's own option, on the same setting.
+        five_day = checkbox("Show 5-Day Forecast")
+        five_day.setToolTip("Show five daily icons and short weekday labels when the card has vertical room")
+        five_day.setChecked(bool(self.settings.get("widgets.weather.show_five_day_forecast")))
+        five_day.toggled.connect(lambda checked: self.settings.set("widgets.weather.show_five_day_forecast", checked))
+        layout.addWidget(five_day)
 
     def _build_reddit(self, layout):
         self._build_subreddit(layout, "reddit")
