@@ -663,7 +663,7 @@ class ArrangePage(Page):
             return True
         popup = StyledPopup(
             self.window(), "Unsaved Arrange Changes",
-            "You changed widgets in Arrange without applying them. Apply them to the saver, or discard them?",
+            "You changed widgets in Arrange without applying them. Apply or discard your changes?",
             icon_type="question",
             buttons=[("Apply Changes", "apply"), ("Discard Changes", "discard"), ("Stay In Arrange", "stay")],
             default_button_index=0)
@@ -678,3 +678,4 @@ class ArrangePage(Page):
 
     def can_continue(self) -> bool: return True
     def leave(self) -> bool: return self.apply()
+    def resolve_leave(self) -> bool: return self.resolve_pending()

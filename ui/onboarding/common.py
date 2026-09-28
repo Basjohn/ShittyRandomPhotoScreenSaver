@@ -167,7 +167,7 @@ class CheckList(OutlinedListWidget):
 
 
 def silence_check(settings) -> QCheckBox:
-    check = checkbox("Silence!")
+    check = checkbox("Hide This From Now On")
     check.setToolTip(SILENCE_TEXT)
     check.setChecked(bool(settings.get("sources.guided_setup_silenced")))
     check.toggled.connect(lambda checked: settings.set("sources.guided_setup_silenced", checked))
@@ -256,4 +256,8 @@ class Page(QWidget):
         return True
 
     def leave(self):
+        return True
+
+    def resolve_leave(self):
+        """Before navigating away (Back or Next): False keeps this page in view."""
         return True
