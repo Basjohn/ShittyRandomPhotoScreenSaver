@@ -481,6 +481,25 @@ def _unit_rects(unit, screen) -> dict:
     return rects
 
 
+class _EditSettings:
+    """The settings surface the Runtime Edit owner reads and saves through."""
+
+    def __init__(self, values):
+        self.widgets = deepcopy(values)
+
+    def get_widgets_map(self):
+        return deepcopy(self.widgets)
+
+    def set_widgets_map(self, values, *, emit_change=True):
+        self.widgets = deepcopy(values)
+
+    def save(self):
+        return None
+
+    def get(self, key, default=None):
+        return default
+
+
 def _assert_same(a: dict, b: dict) -> None:
     assert set(a) == set(b)
     for wid in a:
@@ -509,22 +528,6 @@ def test_runtime_edit_and_arrange_agree_back_and_forth(qt_app, monkeypatch) -> N
     def arranged(config) -> dict:
         return {i.model_identity: QRect(i.current_global_rect) for i in ArrangeModel(config, (display,), meter=meter).session.items()}
 
-    class _Settings:
-        def __init__(self, values):
-            self.widgets = deepcopy(values)
-
-        def get_widgets_map(self):
-            return deepcopy(self.widgets)
-
-        def set_widgets_map(self, values, *, emit_change=True):
-            self.widgets = deepcopy(values)
-
-        def save(self):
-            return None
-
-        def get(self, key, default=None):
-            return default
-
     # Arrange commits the whole canvas; the saver presents exactly that.
     model = ArrangeModel(widgets, (display,), meter=meter)
     first = model.session.items()[0]
@@ -537,7 +540,7 @@ def test_runtime_edit_and_arrange_agree_back_and_forth(qt_app, monkeypatch) -> N
         _assert_same(arranged(widgets), start)
 
         # Runtime Edit: wheel, side drag and a move through the owner's own seams.
-        settings = _Settings(widgets)
+        settings = _EditSettings(widgets)
         owner = QuickCustomLayoutOwner(settings_manager=settings, participants_provider=lambda: (unit,),
                                        visualizer_provider=lambda: (None, None), reload_request=lambda _k: None,
                                        live_config_commit=lambda _w: None)
@@ -565,7 +568,7 @@ def test_runtime_edit_and_arrange_agree_back_and_forth(qt_app, monkeypatch) -> N
         model = ArrangeModel(widgets, (display,), meter=meter)
         keys = {i.model_identity: i.source_key for i in model.session.items()}
         model.move(keys["clock2"], QRect(start["clock2"].topLeft(), start["clock2"].size()), snap=False)
-        model.scale(keys["weather"], start["weather"].width() / edited["weather"].width())
+        model.wheel_scale(keys["weather"], -120)  # Edit's +1 notch, undone by Arrange's -1
         if widened and "right" in model.side_edges(keys["system_stats"]):
             rect = QRect(model.item(keys["system_stats"]).current_global_rect)
             model.resize_edge(keys["system_stats"], "right", rect, QPoint(-widened, 0))
@@ -577,10 +580,96 @@ def test_runtime_edit_and_arrange_agree_back_and_forth(qt_app, monkeypatch) -> N
         rebuilt = _unit_rects(unit, qt_app.primaryScreen())
         _assert_same(shown, rebuilt)
         assert rebuilt["clock2"] == start["clock2"]  # a move returns exactly
-        assert rebuilt["weather"].size() == start["weather"].size()
+        # Both editors keep the top-centre when scaling, so the card comes back
+        # to where it was, not just to its size (rounding: 1 px).
+        _assert_same({"weather": rebuilt["weather"]}, {"weather": start["weather"]})
     finally:
         if owner is not None:
             owner.retire()
+        unit.retire()
+        factory.deleteLater()
+        meter.close()
+        qt_app.processEvents()
+
+
+def _edit_gesture(owner, item, kind, arg, delta) -> None:
+    if kind == "wheel":
+        owner.resize_wheel(item, arg)
+        return
+    cursor = item.current_global_rect.center()
+    assert owner.begin_resize(item, arg, cursor)
+    owner.update_resize(item, arg, cursor + QPoint(*delta), True)
+
+
+def _arrange_gesture(model, key, kind, arg, delta) -> None:
+    if kind == "wheel":
+        model.wheel_scale(key, arg)
+    elif kind == "corner":
+        model.corner_resize(key, arg, model.resize_origin(key), QPoint(*delta))
+    else:
+        model.resize_edge(key, arg, QRect(model.item(key).current_global_rect), QPoint(*delta))
+
+
+@pytest.mark.qt
+def test_the_same_size_gesture_saves_the_same_layout_in_runtime_edit_and_arrange(qt_app, monkeypatch) -> None:
+    """Arrange sizes exactly as Runtime Edit: pivot, limits, payload and explicit box.
+
+    Each gesture runs once through the Edit owner's own seams (committed with
+    its Save's commit owner) and once through Arrange, from one saved layout.
+    The saver reads nothing else, so identical maps mean identical cards.
+    """
+
+    import rendering.quick.widgets.family_binder as binder
+    from rendering.custom_layout_commit import commit_custom_session
+    from rendering.custom_layout_contract import get_screen_signature, get_screen_signature_aliases
+    from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
+
+    monkeypatch.setattr(binder, "_attach_runtime_service", lambda *_args, **_kwargs: True)  # no services
+    widgets = _clock_face_widgets()
+    widgets["family_activation"] = _families("clocks", "weather", "system_stats")
+    widgets["weather"].update(enabled=True, position="Bottom Left", monitor="ALL")
+    widgets["system_stats"].update(enabled=True, position="Middle Left", monitor="ALL")
+    screen = qt_app.primaryScreen()
+    display = ArrangeDisplay(get_screen_signature(screen), get_screen_signature_aliases(screen),
+                             QRect(screen.geometry()), "1")
+    factory = QuickSceneFactory()
+    meter = OrdinaryPreferredSizeMeter()
+    model = ArrangeModel(widgets, (display,), meter=meter)
+    first = model.session.items()[0]
+    model.move(first.source_key, first.current_global_rect.translated(-60, 40), snap=False)
+    saved = model.apply()
+    unit = _edit_unit(qt_app, saved, 620, factory)
+    gestures = {
+        "wheel up": ("weather", [("wheel", 120, None)]),
+        "wheel down": ("clock", [("wheel", -240, None)]),
+        "corner": ("weather", [("corner", "bottom_right", (40, 25))]),
+        "opposite corner": ("system_stats", [("corner", "top_left", (-30, -10))]),
+        "width": ("system_stats", [("side", "right", (47, 0))]),
+        "height": ("weather", [("side", "bottom", (0, -35))]),
+        "width, then scale": ("system_stats", [("side", "right", (50, 0)), ("wheel", 120, None),
+                                                ("corner", "top_right", (-20, 30))]),
+    }
+    try:
+        for label, (widget_id, steps) in gestures.items():
+            owner = QuickCustomLayoutOwner(settings_manager=_EditSettings(saved), participants_provider=lambda: (unit,),
+                                           visualizer_provider=lambda: (None, None), reload_request=lambda _k: None,
+                                           live_config_commit=lambda _w: None)
+            assert owner.start() is True
+            try:
+                item = next(i for i in owner.session.items() if i.model_identity == widget_id)
+                for kind, arg, delta in steps:
+                    _edit_gesture(owner, item, kind, arg, delta)
+                edited = deepcopy(saved)
+                commit_custom_session(edited, owner.session, owner._descriptors, owner._bindings)
+            finally:
+                owner.cancel()
+            arrange = ArrangeModel(saved, (display,), meter=meter)
+            key = next(i.source_key for i in arrange.session.items() if i.model_identity == widget_id)
+            for kind, arg, delta in steps:
+                _arrange_gesture(arrange, key, kind, arg, delta)
+            arranged = arrange.apply()
+            assert load_custom_layout_map(arranged) == load_custom_layout_map(edited), label
+    finally:
         unit.retire()
         factory.deleteLater()
         meter.close()

@@ -8,8 +8,9 @@ from __future__ import annotations
 from copy import deepcopy
 import pytest
 
-from PySide6.QtCore import QRect
+from PySide6.QtCore import QPoint, QRect
 
+from rendering.custom_layout_contract import denormalize_local_rect, deserialize_custom_layout_entry
 from ui.onboarding.arrange_model import ArrangeDisplay, ArrangeModel
 from core.settings.default_settings import DEFAULT_SETTINGS
 from core.settings.layout_slots import save_layout_slot
@@ -79,15 +80,16 @@ def test_first_authored_move_becomes_content_sized_custom_and_apply_is_explicit(
     assert committed["weather"]["position"] == "Custom"
 
 
-def test_settings_scale_keeps_promoted_content_sized_entry_and_discard_is_lossless() -> None:
+def test_settings_scale_saves_an_explicit_box_like_runtime_edit_and_discard_is_lossless() -> None:
     model = ArrangeModel(_widgets(), (_display(),))
     item = model.session.items()[0]
     model.move(item.source_key, QRect(650, 42, 300, 150))
     model.scale(item.source_key, 1.25)
     committed = model.apply()
     payload = committed["custom_layout"]["displays"]["screen:test"]["weather"]["default"]["size_payload"]
-    assert payload["_size_from_content"] is True
-    assert payload["_custom_resize_scale"] == 1.25
+    # A real resize makes the entry explicit in both editors.
+    assert "_size_from_content" not in payload and "_placement_anchor" not in payload
+    assert payload["_custom_resize_scale"] == pytest.approx(1.25)
 
     clean = ArrangeModel(committed, (_display(),))
     before = deepcopy(clean.widgets)
@@ -176,7 +178,7 @@ def test_arrange_page_opens_from_an_isolated_settings_manager_default_map(qt_app
 
 
 @pytest.mark.parametrize("widget_id,payload_key", [("clock", "font_size"), ("weather", "_custom_resize_scale"), ("spotify_visualizer", "width")])
-def test_settings_scale_promotes_each_resize_mode_to_content_sized(widget_id, payload_key) -> None:
+def test_settings_scale_saves_each_resize_mode_explicitly(widget_id, payload_key) -> None:
     widgets = deepcopy(DEFAULT_SETTINGS["widgets"])
     for family in widgets["family_activation"]: widgets["family_activation"][family] = False
     if widget_id == "clock":
@@ -190,7 +192,7 @@ def test_settings_scale_promotes_each_resize_mode_to_content_sized(widget_id, pa
     model.scale(item.source_key, 1.2)
     result = model.apply()
     payload = result["custom_layout"]["displays"]["screen:test"][widget_id][item.source_key.geometry_variant]["size_payload"]
-    assert payload["_size_from_content"] is True
+    assert "_size_from_content" not in payload
     assert payload_key in payload
 
 
@@ -256,9 +258,8 @@ def test_arrange_page_list_selects_small_or_overlapping_item_and_scales_content(
         assert item is not None
         assert "display 1" in page.item_list.currentItem().text()
         page.scale_slider.setValue(125)
-        assert item.content_sized is True
+        assert item.content_sized is False  # scaled: an explicit box, as in Runtime Edit
         assert item.resize_scale == pytest.approx(1.25)
-        assert "size follows content" in page.selection_hint.text().lower()
     finally:
         page.deleteLater()
 
@@ -292,18 +293,23 @@ def test_arrange_page_refuses_pending_slot_load_until_confirmed(qt_app, monkeypa
         page.deleteLater()
 
 
-def test_settings_scale_keeps_the_selected_content_anchor_exact() -> None:
+def test_settings_scale_keeps_the_top_centre_like_runtime_edit() -> None:
     model = ArrangeModel(_widgets(), (_display(),))
     item = model.session.items()[0]
-    model.move(item.source_key, QRect(650, 42, 300, 150))
+    size = item.current_global_rect.size()
+    # Room to grow on every side; the top-right quadrant picks the anchor.
+    model.move(item.source_key, QRect(QPoint(980 - round(1.25 * size.width()) // 2 - size.width() // 2 - 10, 42), size), snap=False)
     before = QRect(model.item(item.source_key).current_global_rect)
     model.scale(item.source_key, 1.25)
     scaled = model.item(item.source_key).current_global_rect
-    # Top-right remains the authority while Settings changes the estimate.
-    assert scaled.x() + scaled.width() == before.x() + before.width()
+    assert scaled.width() > before.width()
+    # Runtime Edit's pivot: the top edge and the horizontal centre stay put.
     assert scaled.y() == before.y()
-    payload = model.apply()["custom_layout"]["displays"]["screen:test"]["weather"]["default"]["size_payload"]
-    assert payload["_placement_anchor"] == "right,top"
+    assert abs((2 * scaled.x() + scaled.width()) - (2 * before.x() + before.width())) <= 1
+    local = denormalize_local_rect(deserialize_custom_layout_entry(
+        "weather", "default", model.apply()["custom_layout"]["displays"]["screen:test"]["weather"]["default"]).rect,
+        _display().geometry.size())
+    assert local == scaled  # saved exactly as drawn
 
 
 def test_cross_display_drag_transfers_with_runtime_threshold_and_commits_route() -> None:
@@ -320,7 +326,7 @@ def test_cross_display_drag_transfers_with_runtime_threshold_and_commits_route()
     assert "weather" in result["custom_layout"]["displays"]["screen:two"]
 
 
-def test_settings_scale_promotes_all_route_peers_to_content_sized_entries() -> None:
+def test_settings_scale_promotes_all_route_peers_and_saves_the_scaled_box_explicitly() -> None:
     widgets = _widgets()
     widgets["weather"]["monitor"] = "ALL"
     model = ArrangeModel(widgets, _two_displays())
@@ -329,7 +335,10 @@ def test_settings_scale_promotes_all_route_peers_to_content_sized_entries() -> N
     result = model.apply()
     for screen in ("screen:test", "screen:two"):
         payload = result["custom_layout"]["displays"][screen]["weather"]["default"]["size_payload"]
-        assert payload["_size_from_content"] is True
+        if screen == item.source_key.display_identity:
+            assert "_size_from_content" not in payload
+        else:
+            assert payload["_size_from_content"] is True  # the untouched copy keeps following content
 
 
 def test_authored_same_anchor_items_use_the_runtime_stack_projection() -> None:
@@ -418,8 +427,9 @@ def test_visualizer_viewport_rotation_and_future_payload_survive_move_and_scale(
 
     for key, value in preserved.items():
         assert result_payload[key] == value
-    assert result_payload["width"] == 462
-    assert result_payload["height"] == 308
+    # Runtime Edit's rule scales the saved world as a whole, at its own aspect.
+    assert result_payload["width"] == round(420 * 1.1)
+    assert abs(result_payload["width"] / result_payload["height"] - 610.0 / 333.0) < 0.01
 
 
 def test_repeated_saved_clock_scaling_uses_absolute_scale_without_payload_loss() -> None:

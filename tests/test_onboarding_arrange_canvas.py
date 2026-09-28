@@ -64,14 +64,19 @@ def test_drag_moves_places_and_reports_snap_guides(canvas) -> None:
 def test_corner_handle_scales_uniformly_and_keyboard_nudges(canvas) -> None:
     item = next(iter(canvas.model.session.active_items()))
     QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _centre(canvas, item))
-    handle = canvas._handles(item)[3].center().toPoint()
-    ratio = item.current_global_rect.width() / item.current_global_rect.height()
+    handle = canvas._handles(item)["bottom_right"].center().toPoint()
+    before = QRect(item.current_global_rect)
+    ratio = before.width() / before.height()
     scale_before = item.resize_scale
     QTest.mousePress(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, handle)
     QTest.mouseMove(canvas, handle - QPoint(25, 25))
     QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, handle - QPoint(25, 25))
+    after = item.current_global_rect
     assert item.resize_scale < scale_before
-    assert abs(item.current_global_rect.width() / item.current_global_rect.height() - ratio) < 0.05
+    assert abs(after.width() / after.height() - ratio) < 0.05
+    # Runtime Edit's corner pivot: the top edge and horizontal centre stay put.
+    assert after.y() == before.y()
+    assert abs((2 * after.x() + after.width()) - (2 * before.x() + before.width())) <= 1
 
     start = QRect(item.current_global_rect)
     QTest.keyClick(canvas, Qt.Key.Key_Left)

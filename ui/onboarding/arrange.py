@@ -30,7 +30,9 @@ class _ArrangeCanvas(QWidget):
     it uniformly, drag a side handle (when the model admits one) to change
     only width or height, Ctrl+wheel scales, arrow keys nudge (Shift for 10 px),
     Delete resets, Escape clears the selection.  Dashed boxes still follow
-    their authored anchor; solid boxes are placed.
+    their authored anchor; solid boxes are placed.  Every size gesture is
+    Runtime Edit's own: scaling keeps the top-centre, and the Visualizer's
+    corners change its width and height together.
     """
 
     changed = Signal()
@@ -56,8 +58,8 @@ class _ArrangeCanvas(QWidget):
         self._hovered = None
         self._drag_origin: QPoint | None = None
         self._original_rect: QRect | None = None
-        self._scale_origin: float | None = None
-        self._scale_applied = 1.0
+        self._corner: str | None = None
+        self._resize_origin = None
         self._side_edge: str | None = None
         self._dragging = False
 
@@ -116,11 +118,13 @@ class _ArrangeCanvas(QWidget):
         items.sort(key=lambda item: item is self._selected)  # selected paints (and hits) last
         return items
 
-    def _handles(self, item) -> list[QRectF]:
+    def _handles(self, item) -> dict[str, QRectF]:
         rect = QRectF(self._project(item.current_global_rect))
         half = self._HANDLE / 2
-        return [QRectF(corner.x() - half, corner.y() - half, self._HANDLE, self._HANDLE)
-                for corner in (rect.topLeft(), rect.topRight(), rect.bottomLeft(), rect.bottomRight())]
+        corners = {"top_left": rect.topLeft(), "top_right": rect.topRight(),
+                   "bottom_left": rect.bottomLeft(), "bottom_right": rect.bottomRight()}
+        return {name: QRectF(corner.x() - half, corner.y() - half, self._HANDLE, self._HANDLE)
+                for name, corner in corners.items()}
 
     def _side_handles(self, item) -> dict[str, QRectF]:
         rect = QRectF(self._project(item.current_global_rect))
@@ -141,10 +145,12 @@ class _ArrangeCanvas(QWidget):
         return next((edge for edge, handle in self._side_handles(item).items()
                      if handle.adjusted(-3, -3, 3, 3).contains(QPointF(point))), None)
 
-    def _on_handle(self, point: QPoint) -> bool:
+    def _corner_at(self, point: QPoint) -> str | None:
         item = self._selected
-        return bool(item is not None and item.resize_capable
-                    and any(handle.adjusted(-3, -3, 3, 3).contains(QPointF(point)) for handle in self._handles(item)))
+        if item is None or not item.resize_capable:
+            return None
+        return next((name for name, handle in self._handles(item).items()
+                     if handle.adjusted(-3, -3, 3, 3).contains(QPointF(point))), None)
 
     def _display_under(self, item):
         centre = item.current_global_rect.center()
@@ -226,7 +232,7 @@ class _ArrangeCanvas(QWidget):
         if selected and item.resize_capable:
             painter.setPen(QPen(color("panel.group.surface"), 1.5))
             painter.setBrush(accent)
-            for handle in self._handles(item):
+            for handle in self._handles(item).values():
                 painter.drawRoundedRect(handle, 2.0, 2.0)
             for handle in self._side_handles(item).values():
                 painter.drawRoundedRect(handle, 2.0, 2.0)
@@ -268,10 +274,12 @@ class _ArrangeCanvas(QWidget):
             self._drag_origin = point; self._original_rect = QRect(self._selected.current_global_rect)
             self._dragging = False
             return
-        if self._on_handle(point):
-            centre = QPointF(self._project(self._selected.current_global_rect).center())
-            self._scale_origin = max(4.0, (QPointF(point) - centre).manhattanLength())
-            self._scale_applied = 1.0
+        corner = self._corner_at(point)
+        if corner is not None:
+            # Runtime Edit's corner gesture, measured from its start.
+            self._corner = corner
+            self._resize_origin = self.model.resize_origin(self._selected.source_key)
+            self._drag_origin = point
             self._dragging = False
             return
         item = self._item_at(point)
@@ -282,11 +290,11 @@ class _ArrangeCanvas(QWidget):
 
     def mouseMoveEvent(self, event) -> None:
         point = event.position().toPoint()
-        if self._scale_origin is not None and self._selected is not None:
-            centre = QPointF(self._project(self._selected.current_global_rect).center())
-            wanted = max(0.05, (QPointF(point) - centre).manhattanLength() / self._scale_origin)
-            self._scale_by(wanted / self._scale_applied)
-            self._scale_applied = wanted
+        if self._corner is not None and self._selected is not None and self._resize_origin is not None:
+            self._dragging = True
+            delta = self._unproject_delta(point - self._drag_origin)
+            self.model.corner_resize(self._selected.source_key, self._corner, self._resize_origin, delta)
+            self.changed.emit(); self.update()
             return
         if self._side_edge is not None and self._selected is not None and self._original_rect is not None:
             self._dragging = True
@@ -311,17 +319,18 @@ class _ArrangeCanvas(QWidget):
         edge = self._side_at(point)
         if edge is not None:
             self.setCursor(Qt.CursorShape.SizeHorCursor if edge in {"left", "right"} else Qt.CursorShape.SizeVerCursor)
-        elif self._on_handle(point):
-            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif (corner := self._corner_at(point)) is not None:
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor if corner in {"top_left", "bottom_right"}
+                           else Qt.CursorShape.SizeBDiagCursor)
         elif hovered is not None:
             self.setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             self.unsetCursor()
 
     def mouseReleaseEvent(self, _event) -> None:
-        was_editing = self._dragging or self._scale_origin is not None
+        was_editing = self._dragging
         self._drag_origin = None; self._original_rect = None
-        self._scale_origin = None; self._side_edge = None; self._dragging = False
+        self._corner = None; self._resize_origin = None; self._side_edge = None; self._dragging = False
         self.model.last_snap = None
         self.unsetCursor()
         self.update()
@@ -333,17 +342,14 @@ class _ArrangeCanvas(QWidget):
         if self._hovered is not None:
             self._hovered = None; self.update()
 
-    def _scale_by(self, factor: float) -> None:
-        item = self._selected
-        if item is None or not item.resize_capable or abs(factor - 1.0) < 1e-4:
-            return
-        self.model.scale(item.source_key, factor)
-        self.changed.emit(); self.update()
-
     def wheelEvent(self, event) -> None:
-        if self._selected is not None and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            self._scale_by(1.05 if event.angleDelta().y() > 0 else 1 / 1.05)
-            self.dragFinished.emit()
+        item = self._selected
+        if item is not None and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if item.resize_capable and event.angleDelta().y():
+                # Runtime Edit's wheel: 5% of scale per notch, top-centre fixed.
+                self.model.wheel_scale(item.source_key, event.angleDelta().y())
+                self.changed.emit(); self.update()
+                self.dragFinished.emit()
             event.accept()
             return
         super().wheelEvent(event)
@@ -404,7 +410,7 @@ class ArrangePage(Page):
         self.destroyed.connect(_disconnect)
         self.body.addWidget(text_label("Arrange widgets freely. Changes stay in this draft until you apply them.", heading=True))
         self.canvas_holder = QVBoxLayout(); self.body.addLayout(self.canvas_holder)
-        self.body.addWidget(text_label("Drag a box to move it, including onto another display. Drag a corner, or Ctrl+scroll, to scale; drag a side handle to change only width or height. Arrow keys nudge (Shift for 10 px), Delete resets. Dashed boxes show where the saver places them now; once you move anything, Apply keeps every box where you see it."))
+        self.body.addWidget(text_label("Drag a box to move it, including onto another display. Drag a corner, or Ctrl+scroll, to scale (the Visualizer's corners change width and height together); drag a side handle to change only width or height. Sizing works exactly as in the saver's Edit mode. Arrow keys nudge (Shift for 10 px), Delete resets. Dashed boxes show where the saver places them now; once you move anything, Apply keeps every box where you see it."))
         chooser = QHBoxLayout()
         self.item_list = OutlinedListWidget()
         self.item_list.setMaximumHeight(118)
