@@ -60,6 +60,9 @@ Item {
         // event-loop cycle after open (Qt.callLater below), so the opening press is
         // swallowed here without immediately self-dismissing the menu.
         property bool armed: false
+        // Hover too: without it the cursor over (or beside) the open menu still
+        // lit the widget behind it. Menu rows sit above and keep their hover.
+        hoverEnabled: true
         onPressed: {
             if (dismissScrim.armed)
                 menuRoot.contextMenuModel.dismiss()
