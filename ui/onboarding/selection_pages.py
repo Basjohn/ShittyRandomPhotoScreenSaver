@@ -488,12 +488,38 @@ def _controls_summary() -> QWidget:
     return box
 
 
+# A capture of the saver's own right-click menu (images/onboarding), shown at its
+# true logical size: 2x source pixels, so it stays sharp at any display scale.
+_EDIT_MENU_CAPTURE = "onboarding/context_menu_edit.png"
+_EDIT_MENU_SIZE = QSize(344, 108)
+
+
+def _edit_layout_hint() -> QWidget:
+    """The menu rows around Edit Widget Layout, highlighted as hovering shows it."""
+    box = QWidget()
+    layout = QVBoxLayout(box); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(4)
+    menu = ImagePanel(asset_path(_EDIT_MENU_CAPTURE))
+    menu.setFixedSize(_EDIT_MENU_SIZE)
+    menu.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    menu.setToolTip("Right-click the screensaver, then Edit Widget Layout.")
+    layout.addWidget(menu)
+    caption = text_label("Move and resize widgets right on the screensaver.")
+    caption.setFixedWidth(_EDIT_MENU_SIZE.width())
+    caption.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    layout.addWidget(caption)
+    return box
+
+
 class ReadyPage(Page):
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("You're almost done", heading=True))
         self.body.addWidget(text_label("Nothing is saved yet. Press Finish to save your settings. Optional accounts can be connected later in Settings."))
-        self.summary = text_label(""); self.body.addWidget(self.summary)
+        self.summary = text_label("")
+        summary_row = QHBoxLayout(); summary_row.setSpacing(24)
+        summary_row.addWidget(self.summary, 1, Qt.AlignmentFlag.AlignTop)
+        summary_row.addWidget(_edit_layout_hint(), 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        self.body.addLayout(summary_row)
         self.controls = _controls_summary()
         self.body.addWidget(self.controls)
         self.body.addStretch()
