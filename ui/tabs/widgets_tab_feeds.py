@@ -68,7 +68,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 _LABEL_WIDTH = 150
-_VIEW_TO_LABEL = {"list": "List", "grid": "Grid", "compact": "Compact Headlines"}
+_VIEW_TO_LABEL = {"grid": "Grid", "list": "List", "compact": "Compact Headlines"}  # Grid is the default
 _LABEL_TO_VIEW = {label: value for value, label in _VIEW_TO_LABEL.items()}
 FEED_SLOT_NUMBERS: tuple[int, ...] = tuple(range(1, len(CUSTOM_FEED_WIDGET_IDS) + 1))
 _PUBLISHER_COLUMNS = 2
