@@ -67,16 +67,25 @@ from rendering.quick.custom_layout_size import (
     quick_custom_minimum_size,
     quick_custom_payload_minimum_scale,
     scale_quick_size_payload,
-    settings_content_extent_edges,
+    settings_side_edges,
+    viewport_extent_resize_payload,
 )
 from rendering.widget_descriptors import (
     WidgetRuntimeDescriptor,
     get_widget_runtime_descriptors,
+    get_effective_monitor_value_for_widget,
     get_effective_position_settings_key_for_widget,
     get_custom_persistence_monitor_settings_key_for_widget,
     get_custom_persistence_position_settings_key_for_widget,
 )
-from rendering.quick.custom_layout_hydration import clock_geometry_variant
+from rendering.quick.custom_layout_hydration import clock_geometry_variant, resolve_committed_visualizer_rect
+from rendering.quick.widgets.geometry_resolver import resolve_overlay_geometry_policy
+from rendering.quick.widgets.host import OverlayWidgetGeometry
+from widgets.spotify_visualizer.render_state import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+from rendering.quick.visualizer_admission import (
+    requested_visualizer_screen_index,
+    resolve_quick_visualizer_owner_unit,
+)
 from rendering.quick.widgets.authored_layout_projection import (
     ProjectedPlacement,
     project_authored_display_layout,
@@ -223,6 +232,18 @@ class ArrangeModel:
         return (clock_geometry_variant(self.widgets, descriptor.widget_id, display.identity),)
 
     def _routed_displays(self, descriptor: WidgetRuntimeDescriptor) -> tuple[ArrangeDisplay, ...]:
+        if descriptor.widget_id == "spotify_visualizer":
+            # The saver runs exactly one Visualizer: on its requested display when
+            # shown, otherwise (and for ALL) the first shown display. Never one per display.
+            requested = requested_visualizer_screen_index(
+                get_effective_monitor_value_for_widget(descriptor.widget_id, self.widgets)
+            )
+            participants = [
+                SimpleNamespace(screen_index=int(display.monitor_route) - 1, participating=True, display=display)
+                for display in self.displays if str(display.monitor_route).isdigit()
+            ]
+            chosen = resolve_quick_visualizer_owner_unit(requested, participants)
+            return (chosen.display,) if chosen is not None else ()
         section = self._route_section_for(descriptor)
         route = str(section.get("monitor", "ALL")) if isinstance(section, Mapping) else "ALL"
         if route.upper() == "ALL":
@@ -234,8 +255,10 @@ class ArrangeModel:
 
         return display.identity if descriptor.widget_id in _CLOCK_IDS else None
 
-    def _measured_size(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> tuple[float, float]:
-        """The saver's own outer size for this widget on ``display``."""
+    def _measured_size(
+        self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay, *, size_payload: Mapping[str, Any] | None = None,
+    ) -> tuple[float, float]:
+        """The saver's own outer size for this widget on ``display`` (optionally as a committed payload presents it)."""
 
         if descriptor.widget_id == "spotify_visualizer":
             return _visualizer_outer_size(display)
@@ -243,6 +266,7 @@ class ArrangeModel:
             return self._meter.measure(
                 descriptor.widget_id, self.widgets,
                 display_identity=self._content_identity(descriptor, display),
+                size_payload=size_payload,
             )
         except Exception:
             logger.exception(
@@ -337,10 +361,9 @@ class ArrangeModel:
                         self._authored_keys.add(key)
                     else:
                         self._entry_keys.add(key)
-                        local = clamp_local_rect_to_bounds(denormalize_local_rect(entry.rect, display.geometry.size()), display.geometry.size())
-                        rect = QRect(display.geometry.x() + local.x(), display.geometry.y() + local.y(), local.width(), local.height())
                         payload = dict(entry.size_payload)
                         content_sized = bool(payload.get("_size_from_content", False))
+                        rect = self._committed_rect(descriptor, display, entry, content_sized)
                     scale = float(payload.get("_custom_resize_scale", 1.0) or 1.0)
                     if not math.isfinite(scale) or scale <= 0.0:
                         scale = 1.0
@@ -374,7 +397,7 @@ class ArrangeModel:
                         baseline_viewport_extent=viewport_extent,
                         current_viewport_extent=viewport_extent,
                         content_extent_axes=frozenset(descriptor.content_extent_axes),
-                        content_extent_minimum_size=descriptor.content_extent_minimum_size,
+                        content_extent_minimum_size=self._content_extent_floor(descriptor, display),
                         baseline_content_extent=content_extent,
                         current_content_extent=content_extent,
                         custom_child_roles=descriptor.custom_child_roles,
@@ -387,6 +410,33 @@ class ArrangeModel:
                     self.session.add_item(item)
                     self._descriptors_by_key[key] = descriptor
         self.session.refresh_duplicate_state()
+
+    def _committed_rect(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay, entry: Any, content_sized: bool) -> QRect:
+        """Where the saver shows a committed entry: content-sized ones at their anchor, at today's size."""
+
+        size = display.geometry.size()
+        if descriptor.widget_id == "spotify_visualizer":
+            local = resolve_committed_visualizer_rect(entry, size)
+        elif content_sized:
+            measured = self._measured_size(descriptor, display, size_payload=entry.size_payload)
+            bounds = OverlayWidgetGeometry(0.0, 0.0, float(size.width()), float(size.height()))
+            geometry = resolve_overlay_geometry_policy(
+                descriptor.widget_id, self.widgets, committed_entry=entry,
+            ).resolve(measured, bounds)
+            local = QRect(round(geometry.x), round(geometry.y), round(geometry.width), round(geometry.height))
+        else:
+            local = clamp_local_rect_to_bounds(denormalize_local_rect(entry.rect, size), size)
+        return QRect(display.geometry.x() + local.x(), display.geometry.y() + local.y(), local.width(), local.height())
+
+    def _content_extent_floor(self, descriptor: WidgetRuntimeDescriptor, display: ArrangeDisplay) -> tuple[int, int] | None:
+        """Runtime Edit's width/height floor: declared, or the family's own natural size when it floors there."""
+
+        configured = descriptor.content_extent_minimum_size
+        if not descriptor.content_extent_floor_at_authored_size:
+            return configured
+        width, height = self._measured_size(descriptor, display)
+        configured_width, configured_height = configured or (1, 1)
+        return (max(int(configured_width), round(width)), max(int(configured_height), round(height)))
 
     def _authored_payload(self, descriptor: WidgetRuntimeDescriptor, rect: QRect, auto_scale: float = 1.0) -> dict[str, Any]:
         """Runtime Edit's authored payload, from the family's own resolved config."""
@@ -629,30 +679,31 @@ class ArrangeModel:
         self._authored_keys.discard(key); self.session.notify_item_changed(item)
 
     def side_edges(self, key: CustomLayoutKey) -> tuple[str, ...]:
-        """Side handles (width-only / height-only) Settings can offer for this item."""
+        """Side handles (width-only / height-only) for this item: every axis it has."""
 
-        return settings_content_extent_edges(self.item(key), self._descriptors_by_key[key])
+        return settings_side_edges(self.item(key))
 
     def side_edges_note(self, key: CustomLayoutKey) -> str:
-        """Why a width/height-capable widget has no side handles here, or ""."""
+        """Why a widget has no width/height handles, or ""."""
 
-        item = self.item(key)
-        if not item.content_extent_axes or item.viewport_resize_capable or self.side_edges(key):
-            return ""
-        descriptor = self._descriptors_by_key[key]
-        if descriptor.content_extent_floor_at_authored_size or item.current_child_sizes:
-            return "width/height: in the saver's Edit mode"
-        return "width/height: resize it once in the saver's Edit mode first"
+        return "" if self.side_edges(key) else "scales uniformly"
 
     def resize_edge(self, key: CustomLayoutKey, edge: str, origin_rect: QRect, delta: QPoint) -> None:
-        """Change one content axis at constant scale, as Runtime Edit's side handle does."""
+        """Change one axis at constant scale, exactly as Runtime Edit's side handle does.
+
+        Ordinary widgets change their logical content box; the Visualizer its
+        viewport world. Children are never shown or edited here: their saved
+        payload is carried unchanged, and any room they report counts in the
+        shared minimum.
+        """
 
         if edge not in self.side_edges(key):
             return
         item = self.item(key)
         self._touch(key)
         display = self._display_map[item.current_display_identity]
-        minimum = quick_custom_content_extent_minimum_size(item)
+        minimum = (quick_custom_minimum_size(item) if item.viewport_resize_capable
+                   else quick_custom_content_extent_minimum_size(item))
         horizontal = edge if edge in {"left", "right"} else None
         vertical = edge if edge in {"top", "bottom"} else None
         rect = edge_resize_rect(origin_rect, display.geometry, minimum, delta.x(), delta.y(),
@@ -666,11 +717,26 @@ class ArrangeModel:
         self.last_snap = (display.identity, resolution.vertical_guides, resolution.horizontal_guides)
         snapped = resolution.rect
         rect = QRect(display.geometry.x() + snapped.x(), display.geometry.y() + snapped.y(), snapped.width(), snapped.height())
-        payload, box = content_extent_resize_payload(item, item.resize_scale, rect,
-                                                     change_width=horizontal is not None, change_height=vertical is not None)
-        if rect == item.current_global_rect and item.current_content_extent == box:
-            return
-        item.set_geometry(rect, size_payload=payload, content_extent=box)
+        if item.viewport_resize_capable:
+            # Pixels per world unit from the axis the gesture leaves untouched: it
+            # stays exact for the whole drag (the live presentation's own scale).
+            extent = item.current_viewport_extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+            current = item.current_global_rect
+            pixels_per_world = (current.height() / float(extent[1]) if horizontal is not None
+                                else current.width() / float(extent[0]))
+            payload, world = viewport_extent_resize_payload(
+                item, pixels_per_world, rect,
+                change_width=horizontal is not None, change_height=vertical is not None,
+            )
+            if rect == item.current_global_rect and item.current_viewport_extent == world:
+                return
+            item.set_geometry(rect, size_payload=payload, viewport_extent=world)
+        else:
+            payload, box = content_extent_resize_payload(item, item.resize_scale, rect,
+                                                         change_width=horizontal is not None, change_height=vertical is not None)
+            if rect == item.current_global_rect and item.current_content_extent == box:
+                return
+            item.set_geometry(rect, size_payload=payload, content_extent=box)
         self._dirty = True
         self.session.notify_item_changed(item)
 
@@ -740,6 +806,28 @@ class ArrangeModel:
             peer.baseline_content_sized = True
             peer.placement_anchor = choose_content_placement_anchor(local, display.geometry.size())
             self._authored_keys.remove(peer.source_key)
+
+    def replace_displays(self, displays: tuple[ArrangeDisplay, ...]) -> bool:
+        """Show a changed display set (selection or hardware), keeping any pending draft.
+
+        Pending edits are carried as the draft map they would apply (the
+        committed baseline is untouched, so Discard still restores it); pending
+        resets stay pending for the displays that remain.
+        """
+
+        displays = tuple(displays)
+        if displays == self.displays:
+            return False
+        if self._dirty:
+            draft = self._session_projection(self.widgets)
+            self._apply_resets(draft)
+            self.widgets = draft
+        self.displays = displays
+        self._display_map = {display.identity: display for display in self.displays}
+        self._screen_map = {display.identity: _ArrangeScreen(display) for display in self.displays}
+        self._reset_keys = {key for key in self._reset_keys if key.display_identity in self._display_map}
+        self._build_session()
+        return True
 
     def discard(self) -> None:
         self.widgets = deepcopy(self._committed)

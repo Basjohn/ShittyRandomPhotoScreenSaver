@@ -97,6 +97,30 @@ def resolve_quick_custom_entry(
 
 
 
+def resolve_committed_visualizer_rect(entry: CustomLayoutEntry, screen_size: Any) -> Any:
+    """Display-local rect of a committed Visualizer entry (QSize ``screen_size``).
+
+    A content-sized entry resolves its saved width/height at its placement
+    anchor; an explicit entry is its stored rectangle kept on the display.
+    """
+
+    from rendering.custom_layout_contract import (
+        CONTENT_SIZED_PAYLOAD_KEY,
+        PLACEMENT_ANCHOR_PAYLOAD_KEY,
+        resolve_content_sized_rect,
+    )
+
+    payload = entry.size_payload
+    if payload.get(CONTENT_SIZED_PAYLOAD_KEY) is True:
+        return resolve_content_sized_rect(
+            entry.rect,
+            payload.get(PLACEMENT_ANCHOR_PAYLOAD_KEY),
+            (float(payload.get("width", 100)), float(payload.get("height", 80))),
+            screen_size,
+        )
+    return clamp_local_rect_to_bounds(denormalize_local_rect(entry.rect, screen_size), screen_size)
+
+
 def resolve_quick_committed_entry(
     widgets: Mapping[str, Any],
     screen: Any,
@@ -270,6 +294,7 @@ def apply_quick_committed_payloads(
 __all__ = [
     "apply_quick_committed_payloads",
     "clock_geometry_variant",
+    "resolve_committed_visualizer_rect",
     "geometry_variant_for_presentation",
     "resolve_quick_committed_entry",
     "resolve_quick_committed_geometry",

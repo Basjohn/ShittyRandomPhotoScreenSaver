@@ -143,10 +143,11 @@ def test_meter_reads_the_saver_cards_preferred_size_for_every_family(qt_app) -> 
     assert measured == sum(1 for d in get_widget_runtime_descriptors() if d.widget_id != "spotify_visualizer")
 
 
-def test_meter_is_windowless_and_remeasures_only_on_a_size_change(monkeypatch) -> None:
+def test_meter_never_shows_a_window_and_remeasures_only_on_a_size_change(monkeypatch) -> None:
     widgets = deepcopy(DEFAULT_SETTINGS["widgets"])
     meter = OrdinaryPreferredSizeMeter()
-    windows = len(QGuiApplication.topLevelWindows())
+    visible = lambda: sum(1 for window in QGuiApplication.topLevelWindows() if window.isVisible())  # noqa: E731
+    windows = visible()
     calls: list[str] = []
     measure = meter._measure
     monkeypatch.setattr(meter, "_measure", lambda *args: calls.append(args[0]) or measure(*args))
@@ -162,7 +163,7 @@ def test_meter_is_windowless_and_remeasures_only_on_a_size_change(monkeypatch) -
     larger["weather"]["font_size"] = int(widgets["weather"]["font_size"]) + 12
     assert meter.measure("weather", larger) != first
     assert calls == ["weather", "weather"]
-    assert len(QGuiApplication.topLevelWindows()) == windows
+    assert visible() == windows  # its layout window is bound to a render control, never shown
     meter.close()
 
 
@@ -584,3 +585,129 @@ def test_runtime_edit_and_arrange_agree_back_and_forth(qt_app, monkeypatch) -> N
         factory.deleteLater()
         meter.close()
         qt_app.processEvents()
+
+
+_POLISH_TRUTH = r'''
+import json, os, sys
+from copy import deepcopy
+from dataclasses import asdict
+os.environ["QT_QPA_PLATFORM"] = "offscreen"          # a shown window is never visible here
+os.environ["QT_QPA_FONTDIR"] = "C:/Windows/Fonts"
+os.environ["QT_QUICK_BACKEND"] = "software"
+sys.path.insert(0, sys.argv[1])
+from PySide6.QtCore import QUrl
+from PySide6.QtQml import QQmlComponent, QQmlEngine
+from PySide6.QtQuick import QQuickWindow
+from PySide6.QtWidgets import QApplication
+app = QApplication([])
+from ui.font_registration import ensure_custom_fonts
+ensure_custom_fonts()
+from core.settings.default_settings import DEFAULT_SETTINGS
+from core.settings.models import ShadowSettings
+from rendering.quick.bootstrap import quick_qml_root
+from rendering.quick.widgets.host import apply_overlay_card_style
+from rendering.quick.widgets.preferred_size_measurement import OrdinaryPreferredSizeMeter
+from rendering.quick.widgets.registry import ordinary_widget_family_component
+meter = OrdinaryPreferredSizeMeter()
+engine = QQmlEngine(); engine.addImportPath(str(quick_qml_root()))
+window = QQuickWindow(); window.resize(3840, 2160); window.show()
+components = {}
+def shown(widget_id, widgets):
+    adapter = next(a for a in meter.adapters if a.presentation_component(widget_id))
+    descriptor = ordinary_widget_family_component(adapter.presentation_component(widget_id))
+    model = adapter.presentation_model(widget_id=widget_id, widgets_config=widgets,
+                                       shadow_values=asdict(ShadowSettings.from_widgets_map(widgets)))
+    prepare = getattr(adapter, "prepare_measurement", None)
+    if callable(prepare):
+        prepare(model)
+    component = components.setdefault(descriptor.family_id, QQmlComponent(
+        engine, QUrl.fromLocalFile(str(quick_qml_root() / descriptor.qml_filename))))
+    item = component.createWithInitialProperties({descriptor.model_property: model})
+    item.setParent(engine); model.setParent(item)
+    apply_overlay_card_style(item, adapter.presentation_card_style(model))
+    item.setParentItem(window.contentItem())
+    for _ in range(6):
+        item.setWidth(item.property("preferredContentWidth")); item.setHeight(item.property("preferredContentHeight"))
+        app.processEvents()
+    return [round(item.property("preferredContentWidth"), 1), round(item.property("preferredContentHeight"), 1)]
+base = deepcopy(DEFAULT_SETTINGS["widgets"])
+base["weather"]["location"] = "TEST INPUT"
+cases = {"weather": deepcopy(base), "reddit": deepcopy(base)}
+cases["weather_5day"] = deepcopy(base); cases["weather_5day"]["weather"]["show_five_day_forecast"] = True
+cases["clock_digital"] = deepcopy(base); cases["clock_digital"]["clock"].update(display_mode="digital", show_date=True)
+out = {}
+for name, widgets in cases.items():
+    widget_id = name.split("_")[0]
+    out[name] = {"meter": [round(v, 1) for v in meter.measure(widget_id, widgets)], "shown": shown(widget_id, widgets)}
+print(json.dumps(out)); sys.stdout.flush(); os._exit(0)
+'''
+
+
+def test_meter_matches_a_polished_shown_card_including_data_driven_sizes(tmp_path) -> None:
+    """Positioners size themselves only when polished; the truth is a card in a shown window.
+
+    Runs on the offscreen platform, where a shown window is never visible.
+    Weather's rows (and its 5-day band) are laid out by a Column: unpolished,
+    the card reads 119 px tall instead of the 250/374 px the saver shows.
+    """
+
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = tmp_path / "polish_truth.py"
+    script.write_text(_POLISH_TRUTH, encoding="utf-8")
+    root = str(Path(__file__).resolve().parents[1])
+    result = subprocess.run([sys.executable, str(script), root], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=300)
+    line = next(l for l in reversed(result.stdout.strip().splitlines()) if l.startswith("{"))
+    measured = json.loads(line)
+    for name, pair in measured.items():
+        assert pair["meter"] == pytest.approx(pair["shown"], abs=0.5), (name, pair)
+    # The case the unpolished meter got wrong: data-driven Weather rows.
+    assert measured["weather"]["shown"][1] > 119.0
+    assert measured["weather_5day"]["shown"][1] > measured["weather"]["shown"][1]
+
+
+def test_arrange_shows_the_single_visualizer_where_the_saver_admits_it() -> None:
+    widgets = deepcopy(DEFAULT_SETTINGS["widgets"])
+    widgets["family_activation"] = _families("media", "visualizers")
+    widgets["media"].update(enabled=True, position="Top Left", monitor="ALL")
+    widgets["spotify_visualizer"]["enabled"] = True
+    first = ArrangeDisplay("screen:one", ("screen:one",), QRect(0, 0, 1707, 960), "1")
+    second = ArrangeDisplay("screen:two", ("screen:two",), QRect(2560, 0, 2560, 1440), "2")
+
+    # ALL: one Visualizer, on the first shown display (the saver's first participant).
+    model = ArrangeModel(widgets, (first, second))
+    visualizers = [i for i in model.session.items() if i.model_identity == "spotify_visualizer"]
+    assert [v.source_key.display_identity for v in visualizers] == ["screen:one"]
+    # A specific route: that display. Adjusting it saves that route for the saver.
+    widgets["media"]["monitor"] = "2"
+    model = ArrangeModel(widgets, (first, second))
+    (visualizer,) = [i for i in model.session.items() if i.model_identity == "spotify_visualizer"]
+    assert visualizer.source_key.display_identity == "screen:two"
+    model.move(visualizer.source_key, visualizer.current_global_rect.translated(300, 200), snap=False)
+    saved = model.apply()
+    assert saved["spotify_visualizer"]["position"] == "Custom"
+    assert saved["spotify_visualizer"]["monitor"] == "2"
+
+
+def test_a_display_added_while_arranging_keeps_the_pending_draft() -> None:
+    widgets, one = _reported_layout()
+    two = ArrangeDisplay("screen:two", ("screen:two",), QRect(2560, 0, 1707, 960), "2")
+    for widget_id in ("media", "reddit", "reddit2"):
+        widgets[widget_id]["monitor"] = "ALL"
+    model = ArrangeModel(widgets, (one,))
+    reddit = next(i for i in model.session.items() if i.model_identity == "reddit")
+    moved = reddit.current_global_rect.translated(-120, -60)
+    model.move(reddit.source_key, moved, snap=False)
+
+    assert model.replace_displays((one, two)) is True
+    assert model.pending
+    on_one = {i.model_identity: i for i in model.session.items() if i.source_key.display_identity == one.identity}
+    on_two = {i.model_identity for i in model.session.items() if i.source_key.display_identity == two.identity}
+    assert on_one["reddit"].current_global_rect == moved  # the draft survived
+    assert {"media", "reddit", "reddit2"} <= on_two  # the new display shows its widgets
+    model.discard()
+    assert model.widgets == ArrangeModel(widgets, (one, two)).widgets  # Discard still restores Settings

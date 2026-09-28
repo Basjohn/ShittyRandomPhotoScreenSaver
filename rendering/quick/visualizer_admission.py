@@ -123,6 +123,19 @@ def resolve_quick_visualizer_admission(
     )
 
 
+def requested_visualizer_screen_index(monitor: object) -> int:
+    """Resolve a 1-based persisted monitor route; ``ALL`` (or invalid) means first live (-1)."""
+
+    normalized = str(monitor or "ALL").strip().upper()
+    if normalized == "ALL":
+        return -1
+    try:
+        monitor_number = int(normalized)
+    except (TypeError, ValueError):
+        return -1
+    return monitor_number - 1 if monitor_number >= 1 else -1
+
+
 def resolve_quick_visualizer_owner_unit(
     requested_screen_index: int,
     participants: Sequence[Any],
@@ -137,5 +150,6 @@ def resolve_quick_visualizer_owner_unit(
 __all__ = [
     "QuickVisualizerAdmission",
     "resolve_quick_visualizer_admission",
+    "requested_visualizer_screen_index",
     "resolve_quick_visualizer_owner_unit",
 ]

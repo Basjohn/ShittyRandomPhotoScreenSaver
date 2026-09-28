@@ -80,15 +80,26 @@ The canvas uses the saver's own geometry, so boxes land where they are drawn:
 
 - **Sizes.** `rendering/quick/widgets/preferred_size_measurement.py` measures each widget's preferred size through
   its family's own QML: the family adapter's `presentation_model` (the same construction `build` uses) and card style,
-  the registered component, `preferredContentWidth/Height`, then the item is deleted. Items never enter a window or
-  scene and no service is attached, so fonts, DPR and text metrics are this machine's. One meter lives with the Arrange
-  page, created when it opens; results are memoized per size-relevant draft fingerprint (placement fields, CUSTOM
-  entries and slots excluded), so moves and resets reuse them and a real setting change re-measures once. The
-  Visualizer is sized by its own `resolve_visualizer_presentation` (authored viewport fitted to the display).
+  the registered component, then Qt's own layout (polish) pass through a `QQuickRenderControl` window that is never
+  shown, until `preferredContentWidth/Height` settle; then the item is deleted. The polish pass is required: Column/Row
+  positioners size themselves only when polished (unpolished, Weather read 119 px against the saver's 250/374 px). A
+  family whose size follows its data measures the state data brings (Weather's `present_measurement_sample`, only
+  with a location). A content-sized entry measures as its payload presents it (Clock's saved font). No service is
+  attached, so fonts, DPR and text metrics are this machine's. One meter lives with the Arrange page, created when it
+  opens; results are memoized per size-relevant draft fingerprint (placement fields, CUSTOM entries and slots
+  excluded). The Visualizer is sized by its own `resolve_visualizer_presentation` (authored viewport fitted to the
+  display).
 - **Units.** Layout is Qt logical pixels in both the saver and Arrange (`QScreen.geometry()`); only text shown to
   people (display captions, box sizes) is device pixels, from each display's own resolution and scale.
 - **Clock faces.** A Clock's geometry variant is the face the saver presents (`clock_geometry_variant`: Clock 2/3
   inherit the main Clock's face, per-display overrides by display signature).
+- **Committed boxes.** Explicit entries are their stored rectangle; content-sized entries are drawn where the saver
+  resolves them, at their anchor with today's measured size (`resolve_overlay_geometry_policy`; the Visualizer through
+  `resolve_committed_visualizer_rect`, the same rule `DisplayManager` uses).
+- **One Visualizer.** The saver runs exactly one, on its requested display when shown, otherwise the first shown
+  display (`resolve_quick_visualizer_owner_unit`). Arrange shows it only there, never once per display.
+- **Displays.** The canvas follows the shown displays whenever the page is shown and when a screen is added or
+  removed; a pending draft is carried onto the new display set (Discard still restores Settings).
 - **Placement.** Uncommitted boxes are placed by `rendering/quick/widgets/authored_layout_projection.py`, which
   composes the display presenter's anchor policy, display-wide stacking/shrink and `DisplayManager`'s Media+Visualizer
   docking with the saver's inputs and build order. Under global CUSTOM they sit on plain anchors and an uncommitted
@@ -103,14 +114,16 @@ Placements persist an anchor and uniform scale in the existing CUSTOM payload, w
 sizing. Runtime Edit preserves content sizing for move-only saves and converts to explicit geometry when a measured
 resize, extent or child edit requires it. Child geometry and content rotation remain Runtime Edit operations.
 
-Width-only and height-only resize (side handles) use the same math as Runtime Edit
-(`rendering/quick/custom_layout_size.py`: `edge_resize_rect`, `content_extent_resize_payload`, snapped by
-`resolve_resize_edge_snap`). Settings offers them only when every input is already persisted
-(`settings_content_extent_edges`): a logical box saved by Runtime Edit (a preferred size is not the live content box
-a side drag reflows), a floor declared by the family descriptor (Achievement Pulse and Abandonment Issues use
-a live authored-size floor) and no customized children (their room is reported only by the live family). Otherwise the
-selection line says to resize once in the saver's Edit mode. Reset uses the session's authored-size restore, which
-drops a saved box.
+Width-only and height-only resize (side handles) exist for every axis a widget has (`settings_side_edges`): each
+declared content-extent axis, and both axes of the Visualizer's viewport world. They use Runtime Edit's own math
+(`rendering/quick/custom_layout_size.py`: `edge_resize_rect`, `resolve_resize_edge_snap`, `content_extent_resize_payload`
+and, for the Visualizer, `viewport_extent_resize_payload`, which Runtime Edit calls too). A box with no saved extent
+starts from its measured size, exactly as Runtime Edit's first side drag starts from the live one. Minimums are the
+shared ones: the family's declared floor, raised to the measured natural size where a family floors there
+(Achievement Pulse, Abandonment Issues), plus any room customized children report. Arrange is an outer-widget editor:
+children are never shown or edited here, and their saved payload is carried unchanged through moves and resizes.
+Clocks scale uniformly only, in both editors. A real resize makes the entry explicit, as in Runtime Edit. Reset uses
+the session's authored-size restore, which drops a saved box.
 
 The Free placement checkbox derives from CUSTOM state. Reset removes the selected parent placement and restores
 authored position/monitor routing; other displays' child customizations remain intact. The global Reset Widget Layouts
@@ -166,7 +179,8 @@ Implementation and automated coverage are complete; one operator pass on the rea
 - nothing is saved before Finish (close Settings mid-way and reopen);
 - Welcome → Import Settings? by category (an import finishes the wizard);
 - Sources buckets, a custom feed address, clicking displays in the diagram, Interaction greyed on MC;
-- Widget Setup: Clocks face/timezones, Steam shows a saved connection, Gmail notification sound + Test;
+- Widget Setup: Clocks face/timezones, Weather location and Show 5-Day Forecast, Steam shows a saved connection,
+  Gmail notification sound + Test;
 - Silence → old no-source popup;
 - live Theme switch; monitor selection; Interaction demo;
 - widget previews and selections;
@@ -174,8 +188,9 @@ Implementation and automated coverage are complete; one operator pass on the rea
 - transition and Visualizer mode previews (sharp at your DPR; the transition list does not scroll on hover);
 - saver right-click → Images → Save Image (first save adds Pictures/SRPSS Collections to sources);
 - Arrange geometry: after a full settings delete and the wizard, the boxes match the saver's cards on each display
-  and DPR (sizes, Visualizer docked to Media, stacked cards apart); move one, Apply, and every widget lands where it
-  was drawn;
+  and DPR (sizes, Visualizer docked to Media, stacked cards apart, Weather at its with-data height); move one, Apply,
+  and every widget lands where it was drawn; width-only/height-only on a card and on the Visualizer land exactly;
+  with two displays and Media on ALL there is one Visualizer; turning a display on while Arrange is open shows it;
 - Arrange: free-place and scale a never-moved widget (it keeps its real size on the saver); move, scale and
   reassign the display of an already-customised widget; tick and untick Free placement; load a layout slot (Apply and
   Cancel); save to a slot, then load it on the saver with its number key;

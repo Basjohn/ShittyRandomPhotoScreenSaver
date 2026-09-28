@@ -227,29 +227,57 @@ def content_extent_resize_payload(
     return payload, next_box
 
 
-def settings_content_extent_edges(
+def viewport_extent_resize_payload(
     item: CustomLayoutSessionItem,
-    descriptor: WidgetRuntimeDescriptor,
-) -> tuple[str, ...]:
-    """Return the side handles Settings may offer without live QML measurement.
+    pixels_per_world: float,
+    rect: QRect,
+    *,
+    change_width: bool,
+    change_height: bool,
+) -> tuple[dict[str, Any], tuple[float, float]]:
+    """Return the size payload and viewport extent for a Visualizer side/corner resize.
 
-    Settings cannot measure retained content, so a side resize there is admitted
-    only when every input Runtime Edit would use is already persisted: a saved
-    logical box that a Runtime Edit established (never a content-sized estimate,
-    whose untouched axis would be baked in from a guess), a floor fully declared
-    by the family descriptor (not the live authored-size floor) and no customized
-    children (their room requirement is reported only by the live family).
+    The world extent on a changed axis is ``outer / pixels_per_world``; an
+    untouched axis keeps its logical extent exactly, so integer rect rounding
+    never nudges it. ``None`` extent means the canonical baseline world.
     """
 
-    if (
-        not item.resize_capable
-        or item.viewport_resize_capable
-        or item.content_sized
-        or item.current_content_extent is None
-        or descriptor.content_extent_floor_at_authored_size
-        or item.current_child_sizes
-    ):
+    from widgets.spotify_visualizer.render_state import (
+        CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+    )
+
+    scale = max(1.0e-6, float(pixels_per_world))
+    extent = item.current_viewport_extent or (
+        float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0]),
+        float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1]),
+    )
+    next_extent = (
+        float(rect.width()) / scale if change_width else float(extent[0]),
+        float(rect.height()) / scale if change_height else float(extent[1]),
+    )
+    payload = dict(item.current_size_payload)
+    payload.update(
+        width=rect.width(),
+        height=rect.height(),
+        viewport_extent=[next_extent[0], next_extent[1]],
+    )
+    return payload, next_extent
+
+
+def settings_side_edges(item: CustomLayoutSessionItem) -> tuple[str, ...]:
+    """The width-only / height-only handles an outer-widget editor offers.
+
+    Every axis the item really has: a Visualizer's viewport world (both axes)
+    and each declared content-extent axis. Sizes are measured through the
+    family's own QML, so a box with no saved extent starts from its real
+    preferred size exactly as Runtime Edit's first side drag does. Children are
+    never edited here; their saved payload is carried unchanged.
+    """
+
+    if not item.resize_capable:
         return ()
+    if item.viewport_resize_capable:
+        return ("left", "right", "top", "bottom")
     edges: list[str] = []
     if "horizontal" in item.content_extent_axes:
         edges.extend(("left", "right"))
@@ -270,5 +298,6 @@ __all__ = [
     "quick_custom_minimum_size",
     "quick_custom_payload_minimum_scale",
     "scale_quick_size_payload",
-    "settings_content_extent_edges",
+    "settings_side_edges",
+    "viewport_extent_resize_payload",
 ]
