@@ -137,7 +137,7 @@ def test_news_config_without_publishers_is_unconfigured_and_malformed_input_repa
     )
     assert [p.provider_id for p in repaired.providers] == require_canonical_default(
         "widgets.feeds_news_us.providers")
-    assert repaired.view_mode == "list"
+    assert repaired.view_mode == require_canonical_default("widgets.feeds_news_us.view_mode")  # invalid falls back
     assert repaired.item_limit == 40
     with pytest.raises(ValueError):
         NewsFeedConfig.from_mapping("feeds_custom_1", {})
