@@ -1908,6 +1908,8 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
         content_extent_axes=("horizontal", "vertical"),
+        # The smallest box the card reflows into (its model clamps there too).
+        content_extent_minimum_size=(300, 80),
         custom_child_roles=REDDIT_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
@@ -1933,6 +1935,8 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
         content_extent_axes=("horizontal", "vertical"),
+        # The smallest box the card reflows into (its model clamps there too).
+        content_extent_minimum_size=(300, 80),
         custom_child_roles=REDDIT_CUSTOM_CHILD_ROLES,
     ),
     *(_feed_runtime_descriptor(widget_id) for widget_id in FEED_WIDGET_IDS),
@@ -1961,6 +1965,8 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="gmail_font",
         content_extent_axes=("horizontal", "vertical"),
+        # The smallest box the card reflows into (its model clamps there too).
+        content_extent_minimum_size=(300, 80),
         custom_child_roles=GMAIL_CUSTOM_CHILD_ROLES,
     ),
     WidgetRuntimeDescriptor(
@@ -2169,6 +2175,8 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="ordinary_uniform",
         content_extent_axes=("horizontal", "vertical"),
+        # The smallest box the card reflows into (its model clamps there too).
+        content_extent_minimum_size=(420, 120),
         custom_child_roles=(
             # Friend Pulse repeats the same visual grammar for every roster item.
             # Persist one shared geometry record per repeated role, never one per
