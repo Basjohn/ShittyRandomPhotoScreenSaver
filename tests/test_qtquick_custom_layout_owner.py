@@ -1353,7 +1353,12 @@ def test_routed_ordinary_custom_transfer_moves_same_item_cancel_and_save(qt_app)
         saved = units[1].presenter.geometry_for("clock")
         binding = units[1].presenter._geometry_bindings[0][1]
         binding.update_content_size((700., 300.))
-        assert units[1].presenter.geometry_for("clock") == saved
+        # A never-placed card that was only moved keeps following its content
+        # from its saved anchor (as Settings Arrange saves it).
+        grown = units[1].presenter.geometry_for("clock")
+        assert (grown.width, grown.height) == (700., 300.)
+        assert grown.x in (saved.x, saved.x + saved.width - grown.width)
+        assert grown.y in (saved.y, saved.y + saved.height - grown.height)
         assert owner.start() is True
         target_model = units[1].runtime.scene_controller.custom_layout_overlay.model
         assert target_model.rowCount() == 1
