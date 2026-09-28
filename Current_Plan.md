@@ -9,7 +9,6 @@ audits are historicalised (`Docs/Historical_Bugs/R-100_...`, `R-101_...`).
 Detail, rewards, risks and performance hazards per slice: `Docs/Future_Work/3D_Scene_Foundation.md`. Work in this
 order; commit and push each slice; tests and measurements before looks change.
 
-- [ ] **S1** GLSL self-test harness (GPU results vs CPU mirrors).
 - [ ] **S2** Shared home `rendering/quick/scene3d/`, rect-aware bucketed `SceneTarget`, Visualizer fence restores
       framebuffers, documented Visualizer opt-in (no mode changes).
 - [ ] **S3** Per-frame uniform blocks (Exploding Tiles first; identical pixels, fewer GL calls).

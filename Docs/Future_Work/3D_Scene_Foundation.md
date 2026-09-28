@@ -50,14 +50,17 @@ High target ~133 MB per display during a run.
 
 Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit and push per slice.
 
-### S1 — GLSL self-test harness (regression net first)
-- [ ] Test-only helper that runs library functions on the GPU for a table of inputs (float render target, readback)
+### S1 — GLSL self-test harness (regression net first) — LANDED
+- [x] Test-only helper that runs library functions on the GPU for a table of inputs (float render target, readback)
   and compares them with the CPU mirrors: impulse, departure travel, projection, cast-on-plane, rotation, hash
   determinism and uniformity. Never imported by production.
 - **Reward:** the library can grow (S3–S9) without mirrors and shaders drifting apart; catches GPU precision faults.
 - **Risks:** float32 vs Python doubles need explicit tolerances; RGBA32F targets are required (GL 4.1 has them).
 - **Hazards:** none in production.
 - **Bars:** every function within tolerance; a deliberately perturbed mirror fails (negative control).
+- **Landed:** `tests/test_scene3d_glsl_mirrors.py` (every library function, including hash, rotation, shading,
+  point light, ember, soft rect, clip depth and streaks, against mirrors in `scene3d.py`; hash uniformity; drifted
+  mirror caught).
 
 ### S2 — Shared home and the Visualizer option (sharability, done early)
 - [ ] Move the GL helpers (`MeshResources`, `SceneTarget`, blend scopes) into a neutral package
@@ -188,5 +191,5 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 
 ## Landed / remaining
 
-- Landed: nothing yet (rollback HEAD above).
-- Remaining: S1–S11 in order.
+- Landed: S1.
+- Remaining: S2–S11 in order.
