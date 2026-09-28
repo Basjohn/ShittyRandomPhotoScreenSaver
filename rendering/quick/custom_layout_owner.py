@@ -83,7 +83,6 @@ from rendering.quick.custom_layout_hydration import (
 from rendering.quick.custom_layout_scene import QuickCustomLayoutSceneCoordinator
 from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.quick.custom_layout_size import (
-    CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
     CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY,
     capture_quick_size_payload,
     content_extent_resize_payload,
@@ -91,8 +90,11 @@ from rendering.quick.custom_layout_size import (
     is_uniform_transform_resize_mode,
     quick_custom_content_extent_minimum_size,
     quick_custom_minimum_size,
-    quick_custom_payload_minimum_scale,
+    pixels_per_world_from_geometry,
     scale_quick_size_payload,
+    uniform_corner_drag_scale,
+    uniform_scale_geometry,
+    uniform_wheel_scale,
     viewport_extent_resize_payload,
 )
 from rendering.widget_descriptors import (
@@ -1592,15 +1594,9 @@ class QuickCustomLayoutOwner:
         if not item.resize_capable:
             return False
         before_undo = self._capture_undo(item)
-        steps = int(angle_delta_y / 120) if angle_delta_y else 0
-        if steps == 0:
-            steps = 1 if angle_delta_y > 0 else -1
         changed = self._apply_uniform_scale(
             item,
-            max(
-                CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
-                float(item.resize_scale) + 0.05 * steps,
-            ),
+            uniform_wheel_scale(item.resize_scale, angle_delta_y),
             QRect(item.current_global_rect),
         )
         self._commit_discrete_undo(before_undo)
@@ -2211,94 +2207,27 @@ class QuickCustomLayoutOwner:
                 item, requested_scale, anchor_rect, binding
             )
         descriptor = self._descriptors[item.source_key]
-        baseline = item.baseline_global_rect
         admitted_scale = max(1.0e-6, float(item.baseline_resize_scale))
-        reference_width = max(1.0, float(baseline.width()) / admitted_scale)
-        reference_height = max(1.0, float(baseline.height()) / admitted_scale)
-        max_scale = min(
-            float(binding.geometry.width()) / reference_width,
-            float(binding.geometry.height()) / reference_height,
-        )
-        minimum = quick_custom_minimum_size(item)
-        minimum_scale = max(
-            float(minimum.width()) / reference_width,
-            float(minimum.height()) / reference_height,
-        )
-        legacy_payload_floor = (
-            admitted_scale
-            * quick_custom_payload_minimum_scale(
-                descriptor, item.baseline_size_payload
-            )
-        )
-        floor_scale = max(
-            CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
-            minimum_scale,
-            legacy_payload_floor,
-        )
         viewport_extent = item.current_viewport_extent
         visualizer_world = item.viewport_resize_capable and viewport_extent is not None
-        visualizer_pixels_per_world = None
-        if visualizer_world:
-            visualizer_pixels_per_world = self._visualizer_pixels_per_world.get(
-                item.source_key
-            )
-            if (
-                visualizer_pixels_per_world is None
-                or not math.isfinite(float(visualizer_pixels_per_world))
-                or float(visualizer_pixels_per_world) <= 0.0
-            ):
-                raise RuntimeError(
-                    "CUSTOM visualizer wheel has no stable pixels-per-world authority"
-                )
-            visualizer_pixels_per_world = float(visualizer_pixels_per_world)
-            current_width = max(
-                1.0, float(viewport_extent[0]) * visualizer_pixels_per_world
-            )
-            current_height = max(
-                1.0, float(viewport_extent[1]) * visualizer_pixels_per_world
-            )
-            current_resize_scale = max(1.0e-6, float(item.resize_scale))
-            max_scale = current_resize_scale * min(
-                float(binding.geometry.width()) / current_width,
-                float(binding.geometry.height()) / current_height,
-            )
-            minimum = quick_custom_minimum_size(item)
-            floor_scale = max(
-                floor_scale,
-                current_resize_scale * max(
-                    float(minimum.width()) / current_width,
-                    float(minimum.height()) / current_height,
-                ),
-            )
-        scale = min(max_scale, max(floor_scale, float(requested_scale)))
-        if abs(scale - item.resize_scale) < 1e-6:
+        # Size, limits, top-centre pivot and clamp are the one rule Settings
+        # Arrange uses too (``uniform_scale_geometry``); the payload stays here.
+        resolved = uniform_scale_geometry(
+            item,
+            descriptor,
+            requested_scale,
+            anchor_rect,
+            binding.geometry,
+            pixels_per_world=(
+                self._visualizer_pixels_per_world.get(item.source_key)
+                if visualizer_world
+                else None
+            ),
+        )
+        if resolved is None:
             return False
-        relative_to_current = scale / max(1.0e-6, float(item.resize_scale))
-        if visualizer_world:
-            assert viewport_extent is not None
-            assert visualizer_pixels_per_world is not None
-            next_pixels_per_world = visualizer_pixels_per_world * relative_to_current
-            width = max(
-                1, int(round(float(viewport_extent[0]) * next_pixels_per_world))
-            )
-            height = max(
-                1, int(round(float(viewport_extent[1]) * next_pixels_per_world))
-            )
-        else:
-            width = max(1, int(round(reference_width * scale)))
-            height = max(1, int(round(reference_height * scale)))
-        center_x = float(anchor_rect.x()) + float(anchor_rect.width()) / 2.0
-        local = QRect(
-            int(round(center_x - width / 2.0)) - binding.geometry.x(),
-            anchor_rect.y() - binding.geometry.y(),
-            width,
-            height,
-        )
-        local = clamp_local_rect_to_bounds(
-            local,
-            binding.geometry.size(),
-            min_size=minimum,
-        )
+        scale = resolved.scale
+        geometry = QRect(resolved.rect)
         # Legacy payload-based families scale from their admitted payload by
         # the *delta* from the persisted absolute scale. Uniform-transform
         # families carry no authored size payload, but use the same arithmetic.
@@ -2330,16 +2259,10 @@ class QuickCustomLayoutOwner:
             )
         if visualizer_world:
             payload.update(
-                width=local.width(),
-                height=local.height(),
+                width=geometry.width(),
+                height=geometry.height(),
                 viewport_extent=[viewport_extent[0], viewport_extent[1]],
             )
-        geometry = QRect(
-            binding.geometry.x() + local.x(),
-            binding.geometry.y() + local.y(),
-            local.width(),
-            local.height(),
-        )
         if visualizer_world:
             item.set_geometry(
                 geometry,
@@ -2365,18 +2288,15 @@ class QuickCustomLayoutOwner:
         handle: str,
         cursor: QPoint,
     ) -> bool:
-        horizontal = -1.0 if str(handle).endswith("left") else 1.0
-        vertical = -1.0 if str(handle).startswith("top_") else 1.0
-        half_width = max(1.0, origin.rect.width() / 2.0)
-        height = max(1.0, float(origin.rect.height()))
-        base = max(1.0, math.hypot(half_width, height))
-        target = math.hypot(
-            max(1.0, half_width + (cursor.x() - origin.cursor.x()) * horizontal),
-            max(1.0, height + (cursor.y() - origin.cursor.y()) * vertical),
-        )
         changed = self._apply_uniform_scale(
             item,
-            origin.scale * target / base,
+            uniform_corner_drag_scale(
+                origin.rect,
+                origin.scale,
+                handle,
+                cursor.x() - origin.cursor.x(),
+                cursor.y() - origin.cursor.y(),
+            ),
             origin.rect,
         )
         # Aspect-locked corners/drag stay "enlarge/shrink"; snapping only chooses
@@ -2426,34 +2346,7 @@ class QuickCustomLayoutOwner:
         )
         return changed
 
-    @staticmethod
-    def _pixels_per_world_from_geometry(
-        rect: QRect,
-        viewport_extent: tuple[float, float] | None,
-    ) -> float:
-        if viewport_extent is None:
-            raise RuntimeError("CUSTOM visualizer geometry has no viewport extent")
-        extent_width = float(viewport_extent[0])
-        extent_height = float(viewport_extent[1])
-        width = float(rect.width())
-        height = float(rect.height())
-        if min(extent_width, extent_height, width, height) <= 0.0:
-            raise RuntimeError("CUSTOM visualizer geometry must be positive")
-        horizontal = (
-            max(0.0, (width - 0.5) / extent_width),
-            (width + 0.5) / extent_width,
-        )
-        vertical = (
-            max(0.0, (height - 0.5) / extent_height),
-            (height + 0.5) / extent_height,
-        )
-        lower = max(horizontal[0], vertical[0])
-        upper = min(horizontal[1], vertical[1])
-        if lower > upper:
-            raise RuntimeError(
-                "CUSTOM visualizer geometry does not encode one pixels-per-world scale"
-            )
-        return max(1.0e-6, (lower + upper) * 0.5)
+    _pixels_per_world_from_geometry = staticmethod(pixels_per_world_from_geometry)
 
     @staticmethod
     def _viewport_resize_rect(
@@ -2724,51 +2617,28 @@ class QuickCustomLayoutOwner:
 
         box = item.current_content_extent
         assert box is not None
-        reference_width = max(1.0, float(box[0]))
-        reference_height = max(1.0, float(box[1]))
-        minimum = quick_custom_minimum_size(item)
-        max_scale = min(
-            float(binding.geometry.width()) / reference_width,
-            float(binding.geometry.height()) / reference_height,
+        # The shared rule scales this box as a whole against the generic floor:
+        # a uniform scale never changes the box itself.
+        resolved = uniform_scale_geometry(
+            item,
+            self._descriptors.get(item.source_key),
+            requested_scale,
+            anchor_rect,
+            binding.geometry,
         )
-        floor_scale = max(
-            CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
-            float(minimum.width()) / reference_width,
-            float(minimum.height()) / reference_height,
-        )
-        scale = min(max_scale, max(floor_scale, float(requested_scale)))
-        if abs(scale - float(item.resize_scale)) < 1e-6:
+        if resolved is None:
             return False
-        width = max(1, int(round(reference_width * scale)))
-        height = max(1, int(round(reference_height * scale)))
-        center_x = float(anchor_rect.x()) + float(anchor_rect.width()) / 2.0
-        local = QRect(
-            int(round(center_x - width / 2.0)) - binding.geometry.x(),
-            anchor_rect.y() - binding.geometry.y(),
-            width,
-            height,
-        )
-        local = clamp_local_rect_to_bounds(
-            local,
-            binding.geometry.size(),
-            min_size=minimum,
-        )
-        geometry = QRect(
-            binding.geometry.x() + local.x(),
-            binding.geometry.y() + local.y(),
-            local.width(),
-            local.height(),
-        )
+        geometry = QRect(resolved.rect)
         payload = dict(item.current_size_payload)
         payload.update(
-            width=local.width(),
-            height=local.height(),
+            width=geometry.width(),
+            height=geometry.height(),
             content_extent=[box[0], box[1]],
         )
         item.set_geometry(
             geometry,
             size_payload=payload,
-            resize_scale=scale,
+            resize_scale=resolved.scale,
             content_extent=box,
         )
         return True

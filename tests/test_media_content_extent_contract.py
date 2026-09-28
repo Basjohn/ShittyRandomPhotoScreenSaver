@@ -43,10 +43,15 @@ def test_media_direct_axis_floor_does_not_replace_uniform_resize_floor() -> None
         "def _apply_content_extent_uniform_scale", 1
     )[0]
     assert "quick_custom_content_extent_minimum_size(item)" in edge
-    uniform = owner.split("def _apply_content_extent_uniform_scale", 1)[1].split(
+    # Corner/wheel scale of a content box (both editors) floors at the generic
+    # minimum: it scales the box as a whole and never changes the box itself.
+    owner_uniform = owner.split("def _apply_content_extent_uniform_scale", 1)[1].split(
         "def _peer_local_rects", 1
     )[0]
-    assert "quick_custom_minimum_size(item)" in uniform
+    assert "uniform_scale_geometry(" in owner_uniform
+    shared_uniform = size.split("def uniform_scale_geometry", 1)[1].split("def settings_side_edges", 1)[0]
+    assert "minimum = quick_custom_minimum_size(item)" in shared_uniform
+    assert "quick_custom_content_extent_minimum_size" not in shared_uniform
 
 
 def test_media_model_consumes_custom_extent_without_mutating_settings() -> None:

@@ -141,6 +141,28 @@ def test_visualizer_width_only_keeps_its_height_world_and_scale() -> None:
     assert (saved["width"], saved["height"]) == (vis.current_global_rect.width(), vis.current_global_rect.height())
 
 
+def test_visualizer_corner_changes_both_axes_with_the_opposite_corner_fixed() -> None:
+    """Runtime Edit's Visualizer corner: a two-axis world resize, not a uniform scale."""
+
+    widgets = deepcopy(DEFAULT_SETTINGS["widgets"])
+    widgets["family_activation"] = {family: family in {"media", "visualizers"} for family in widgets["family_activation"]}
+    widgets["media"].update(enabled=True, position="Top Left", monitor="1")
+    widgets["spotify_visualizer"]["enabled"] = True
+    model = ArrangeModel(widgets, (_display(),))
+    vis = next(i for i in model.session.items() if i.model_identity == "spotify_visualizer")
+    origin = model.resize_origin(vis.source_key)
+    before_scale = vis.resize_scale
+
+    model.corner_resize(vis.source_key, "bottom_right", origin, QPoint(70, 45))
+
+    rect = vis.current_global_rect
+    assert rect.topLeft() == origin.rect.topLeft()  # the opposite corner stays put
+    assert (rect.width(), rect.height()) != (origin.rect.width(), origin.rect.height())
+    assert vis.resize_scale == before_scale  # pixels per world unit unchanged: the world grows
+    assert vis.current_viewport_extent[0] == pytest.approx(rect.width() / origin.pixels_per_world)
+    assert vis.current_viewport_extent[1] == pytest.approx(rect.height() / origin.pixels_per_world)
+
+
 def test_width_only_drag_changes_one_logical_axis_and_keeps_the_rest_exact() -> None:
     widgets = _weather(future_payload={"nested": [True, "keep", 9]})
     before = deepcopy(_payload(widgets))

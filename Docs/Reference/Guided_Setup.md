@@ -104,15 +104,23 @@ The canvas uses the saver's own geometry, so boxes land where they are drawn:
   composes the display presenter's anchor policy, display-wide stacking/shrink and `DisplayManager`'s Media+Visualizer
   docking with the saver's inputs and build order. Under global CUSTOM they sit on plain anchors and an uncommitted
   Visualizer on Media's slot, exactly as the saver shows them.
-- **Apply.** CUSTOM is global, so once the operator places anything Apply saves every box where the canvas shows it,
-  as content-sized placements at their nearest anchor (Runtime Edit's Save also keeps the visible layout). Viewing or
+- **Apply.** CUSTOM is global, so once the operator places anything Apply saves every box where the canvas shows it:
+  moved or untouched boxes as content-sized placements at their nearest anchor, resized ones as explicit boxes, exactly
+  as Runtime Edit's Save does. Viewing or
   loading a slot alone commits nothing, and a box returned to its anchor with Reset stays authored; it is drawn where
   the saver will put it after Apply.
 
-Placements persist an anchor and uniform scale in the existing CUSTOM payload, with `_size_from_content: true` and
+Content-sized placements persist an anchor in the existing CUSTOM payload, with `_size_from_content: true` and
 `_placement_anchor`; runtime resolves the live content size at that anchor. Explicit saved entries retain explicit
-sizing. Runtime Edit preserves content sizing for move-only saves and converts to explicit geometry when a measured
-resize, extent or child edit requires it. Child geometry and content rotation remain Runtime Edit operations.
+sizing. Both editors preserve content sizing for moves and convert to explicit geometry on any resize (uniform scale,
+width/height) and, in Runtime Edit, on child edits. Child geometry and content rotation remain Runtime Edit operations.
+
+Sizing is Runtime Edit's own, so the same gesture in either editor saves the same entry. Uniform scale (corner drag,
+Ctrl+wheel, slider) uses `uniform_scale_geometry` in `rendering/quick/custom_layout_size.py`, which Runtime Edit calls
+too: the top edge and horizontal centre stay put, limits and payload are Edit's, and a Visualizer with its own world
+scales that world. A corner drag measures `uniform_corner_drag_scale` from its start and snaps one edge to a nearby
+peer line; Ctrl+wheel steps 5% of scale (`uniform_wheel_scale`); the slider scales about the same point. The
+Visualizer's corners change its width and height together with the opposite corner fixed, as Runtime Edit's do.
 
 Width-only and height-only resize (side handles) exist for every axis a widget has (`settings_side_edges`): each
 declared content-extent axis, and both axes of the Visualizer's viewport world. They use Runtime Edit's own math
@@ -120,7 +128,9 @@ declared content-extent axis, and both axes of the Visualizer's viewport world. 
 and, for the Visualizer, `viewport_extent_resize_payload`, which Runtime Edit calls too). A box with no saved extent
 starts from its measured size, exactly as Runtime Edit's first side drag starts from the live one. Minimums are the
 shared ones: the family's declared floor, raised to the measured natural size where a family floors there
-(Achievement Pulse, Abandonment Issues), plus any room customized children report. Arrange is an outer-widget editor:
+(Achievement Pulse, Abandonment Issues), plus any room customized children report. Every declared floor is the box
+the card really reflows into (`tests/test_content_extent_minimum_contract.py`), so a handle never leaves a card shrunk
+inside empty space. Arrange is an outer-widget editor:
 children are never shown or edited here, and their saved payload is carried unchanged through moves and resizes.
 Clocks scale uniformly only, in both editors. A real resize makes the entry explicit, as in Runtime Edit. Reset uses
 the session's authored-size restore, which drops a saved box.
@@ -194,6 +204,10 @@ Implementation and automated coverage are complete; one operator pass on the rea
 - Arrange: free-place and scale a never-moved widget (it keeps its real size on the saver); move, scale and
   reassign the display of an already-customised widget; tick and untick Free placement; load a layout slot (Apply and
   Cancel); save to a slot, then load it on the saver with its number key;
+- Arrange sizing matches Runtime Edit: scale a card up with Ctrl+wheel in Edit mode, Save, then one Ctrl+wheel notch
+  down in Arrange returns it to the same place (top edge and centre fixed); a corner drag scales about the same point;
+  the Visualizer's corner changes width and height together; width/height on Reddit, Gmail or Friend Pulse stops where
+  the card still fills its box;
 - Runtime Edit sees Quick Start changes, and Quick Start sees a later Runtime Edit change;
 - child edits survive parent manipulation;
 - final runtime start;

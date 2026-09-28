@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from PySide6.QtCore import QRect, QSize
 
-from rendering.custom_layout_contract import CUSTOM_LAYOUT_MIN_WIDGET_SIZE
+from rendering.custom_layout_contract import (
+    CUSTOM_LAYOUT_MIN_WIDGET_SIZE,
+    clamp_local_rect_to_bounds,
+)
 from rendering.custom_layout_session import CustomLayoutSessionItem
 from rendering.widget_descriptors import WidgetRuntimeDescriptor
 from rendering.widget_stacking import ORDINARY_WIDGET_MIN_RESIZE_SCALE
@@ -264,6 +269,185 @@ def viewport_extent_resize_payload(
     return payload, next_extent
 
 
+@dataclass(frozen=True)
+class UniformScaleGeometry:
+    """One admitted whole-widget scale: the card's new global rect and absolute scale."""
+
+    rect: QRect
+    scale: float
+
+
+def uniform_wheel_scale(current_scale: float, angle_delta_y: int) -> float:
+    """The absolute scale one wheel event asks for: 5% per notch of the current scale."""
+
+    steps = int(angle_delta_y / 120) if angle_delta_y else 0
+    if steps == 0:
+        steps = 1 if angle_delta_y > 0 else -1
+    return max(CUSTOM_LAYOUT_MIN_RESIZE_SCALE, float(current_scale) + 0.05 * steps)
+
+
+def uniform_corner_drag_scale(
+    origin_rect: QRect,
+    origin_scale: float,
+    corner: str,
+    dx: float,
+    dy: float,
+) -> float:
+    """The absolute scale a square-corner drag asks for, from its gesture-start state.
+
+    The card grows about its top-centre, so the dragged corner's distance from
+    that point sets the scale; ``dx``/``dy`` are measured from gesture start.
+    """
+
+    horizontal = -1.0 if str(corner).endswith("left") else 1.0
+    vertical = -1.0 if str(corner).startswith("top_") else 1.0
+    half_width = max(1.0, origin_rect.width() / 2.0)
+    height = max(1.0, float(origin_rect.height()))
+    base = max(1.0, math.hypot(half_width, height))
+    target = math.hypot(
+        max(1.0, half_width + float(dx) * horizontal),
+        max(1.0, height + float(dy) * vertical),
+    )
+    return float(origin_scale) * target / base
+
+
+def pixels_per_world_from_geometry(
+    rect: QRect,
+    viewport_extent: tuple[float, float] | None,
+) -> float:
+    """The one Visualizer pixels-per-world scale an integer outer rect encodes."""
+
+    if viewport_extent is None:
+        raise RuntimeError("CUSTOM visualizer geometry has no viewport extent")
+    extent_width = float(viewport_extent[0])
+    extent_height = float(viewport_extent[1])
+    width = float(rect.width())
+    height = float(rect.height())
+    if min(extent_width, extent_height, width, height) <= 0.0:
+        raise RuntimeError("CUSTOM visualizer geometry must be positive")
+    horizontal = (
+        max(0.0, (width - 0.5) / extent_width),
+        (width + 0.5) / extent_width,
+    )
+    vertical = (
+        max(0.0, (height - 0.5) / extent_height),
+        (height + 0.5) / extent_height,
+    )
+    lower = max(horizontal[0], vertical[0])
+    upper = min(horizontal[1], vertical[1])
+    if lower > upper:
+        raise RuntimeError(
+            "CUSTOM visualizer geometry does not encode one pixels-per-world scale"
+        )
+    return max(1.0e-6, (lower + upper) * 0.5)
+
+
+def uniform_scale_geometry(
+    item: CustomLayoutSessionItem,
+    descriptor: WidgetRuntimeDescriptor | None,
+    requested_scale: float,
+    anchor_rect: QRect,
+    display_geometry: QRect,
+    *,
+    pixels_per_world: float | None = None,
+) -> UniformScaleGeometry | None:
+    """Whole-widget uniform scale (wheel, square corner, slider) for both editors.
+
+    Runtime Edit and Settings Arrange share this one rule. The scale is
+    absolute: against the current logical content box when a side resize made
+    one, against the Visualizer's current world (``pixels_per_world``, required
+    when it has a viewport extent), otherwise against the admitted reference
+    (baseline rect / baseline scale; ``descriptor`` adds a legacy per-value
+    payload floor there). The card keeps ``anchor_rect``'s
+    top-centre and is clamped into the display. Returns ``None`` when the
+    admitted scale does not change.
+    """
+
+    display_size = display_geometry.size()
+    minimum = quick_custom_minimum_size(item)
+    box = item.current_content_extent
+    world = item.current_viewport_extent if item.viewport_resize_capable else None
+    current_scale = max(1.0e-6, float(item.resize_scale))
+    if item.content_extent_capable and not item.viewport_resize_capable and box is not None:
+        # Scale the user's logical content box as a whole (a side drag may have
+        # given it a non-authored aspect); the box itself is unchanged.
+        reference_width = max(1.0, float(box[0]))
+        reference_height = max(1.0, float(box[1]))
+        floor_scale = max(
+            CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
+            float(minimum.width()) / reference_width,
+            float(minimum.height()) / reference_height,
+        )
+        world = None
+    else:
+        admitted_scale = max(1.0e-6, float(item.baseline_resize_scale))
+        reference_width = max(1.0, float(item.baseline_global_rect.width()) / admitted_scale)
+        reference_height = max(1.0, float(item.baseline_global_rect.height()) / admitted_scale)
+        floor_scale = max(
+            CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
+            float(minimum.width()) / reference_width,
+            float(minimum.height()) / reference_height,
+            (admitted_scale * quick_custom_payload_minimum_scale(descriptor, item.baseline_size_payload)
+             if descriptor is not None else 0.0),
+        )
+    max_scale = min(
+        float(display_size.width()) / reference_width,
+        float(display_size.height()) / reference_height,
+    )
+    if world is not None:
+        if (
+            pixels_per_world is None
+            or not math.isfinite(float(pixels_per_world))
+            or float(pixels_per_world) <= 0.0
+        ):
+            raise RuntimeError(
+                "CUSTOM visualizer uniform scale has no stable pixels-per-world authority"
+            )
+        current_width = max(1.0, float(world[0]) * float(pixels_per_world))
+        current_height = max(1.0, float(world[1]) * float(pixels_per_world))
+        max_scale = current_scale * min(
+            float(display_size.width()) / current_width,
+            float(display_size.height()) / current_height,
+        )
+        floor_scale = max(
+            floor_scale,
+            current_scale * max(
+                float(minimum.width()) / current_width,
+                float(minimum.height()) / current_height,
+            ),
+        )
+    scale = min(max_scale, max(floor_scale, float(requested_scale)))
+    if abs(scale - float(item.resize_scale)) < 1.0e-6:
+        return None
+    if world is not None:
+        next_pixels_per_world = float(pixels_per_world) * scale / current_scale
+        width = max(1, int(round(float(world[0]) * next_pixels_per_world)))
+        height = max(1, int(round(float(world[1]) * next_pixels_per_world)))
+    else:
+        width = max(1, int(round(reference_width * scale)))
+        height = max(1, int(round(reference_height * scale)))
+    center_x = float(anchor_rect.x()) + float(anchor_rect.width()) / 2.0
+    local = clamp_local_rect_to_bounds(
+        QRect(
+            int(round(center_x - width / 2.0)) - display_geometry.x(),
+            anchor_rect.y() - display_geometry.y(),
+            width,
+            height,
+        ),
+        display_size,
+        min_size=minimum,
+    )
+    return UniformScaleGeometry(
+        rect=QRect(
+            display_geometry.x() + local.x(),
+            display_geometry.y() + local.y(),
+            local.width(),
+            local.height(),
+        ),
+        scale=scale,
+    )
+
+
 def settings_side_edges(item: CustomLayoutSessionItem) -> tuple[str, ...]:
     """The width-only / height-only handles an outer-widget editor offers.
 
@@ -290,14 +474,19 @@ __all__ = [
     "CUSTOM_LAYOUT_MIN_RESIZE_SCALE",
     "CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY",
     "UNIFORM_TRANSFORM_RESIZE_MODES",
+    "UniformScaleGeometry",
     "capture_quick_size_payload",
     "content_extent_resize_payload",
     "edge_resize_rect",
     "is_uniform_transform_resize_mode",
+    "pixels_per_world_from_geometry",
     "quick_custom_content_extent_minimum_size",
     "quick_custom_minimum_size",
     "quick_custom_payload_minimum_scale",
     "scale_quick_size_payload",
     "settings_side_edges",
+    "uniform_corner_drag_scale",
+    "uniform_scale_geometry",
+    "uniform_wheel_scale",
     "viewport_extent_resize_payload",
 ]

@@ -39,9 +39,9 @@ from rendering.custom_layout_contract import (
     get_widget_layout_variant_payload,
     load_custom_layout_map,
     load_custom_layout_restore_map,
-    parse_content_placement_anchor,
     get_custom_layout_restore_entry,
     resolve_resize_edge_snap,
+    resolve_uniform_scale_snap,
     remove_screen_layout_entry,
     should_transfer_rect_to_screen,
     resolve_snap_local_rect_for_edit,
@@ -58,16 +58,18 @@ from rendering.custom_layout_session import (
     normalize_viewport_extent,
 )
 from rendering.quick.custom_layout_size import (
-    CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
     CUSTOM_LAYOUT_RESIZE_SCALE_PAYLOAD_KEY,
     capture_quick_size_payload,
     content_extent_resize_payload,
     edge_resize_rect,
     quick_custom_content_extent_minimum_size,
+    pixels_per_world_from_geometry,
     quick_custom_minimum_size,
-    quick_custom_payload_minimum_scale,
     scale_quick_size_payload,
     settings_side_edges,
+    uniform_corner_drag_scale,
+    uniform_scale_geometry,
+    uniform_wheel_scale,
     viewport_extent_resize_payload,
 )
 from rendering.widget_descriptors import (
@@ -120,6 +122,15 @@ def _visualizer_outer_size(display: "ArrangeDisplay") -> tuple[float, float]:
     return float(presentation.outer_rect[2]), float(presentation.outer_rect[3])
 # The saver's provisional size until a family reports its own (display presenter).
 _PROVISIONAL_SIZE = (100.0, 100.0)
+
+
+@dataclass(frozen=True)
+class ArrangeResizeOrigin:
+    """A corner gesture's start: box, scale and (Visualizer) pixels per world unit."""
+
+    rect: QRect
+    scale: float
+    pixels_per_world: float | None = None
 
 
 @dataclass(frozen=True)
@@ -566,117 +577,121 @@ class ArrangeModel:
         self.session.refresh_duplicate_state(); self.session.notify_item_changed(item)
 
     def scale(self, key: CustomLayoutKey, factor: float) -> None:
+        """Scale by ``factor`` of the current scale (the slider), keeping the top-centre."""
+
+        item = self.item(key)
+        self.scale_to(key, float(item.resize_scale) * float(factor))
+
+    def wheel_scale(self, key: CustomLayoutKey, angle_delta_y: int) -> None:
+        """One wheel event: Runtime Edit's 5% step, keeping the top-centre."""
+
+        item = self.item(key)
+        self.scale_to(key, uniform_wheel_scale(item.resize_scale, angle_delta_y))
+
+    def resize_origin(self, key: CustomLayoutKey) -> ArrangeResizeOrigin:
+        """Gesture-start state for a corner drag (Runtime Edit's resize origin)."""
+
+        item = self.item(key)
+        return ArrangeResizeOrigin(QRect(item.current_global_rect), float(item.resize_scale), self._pixels_per_world(item))
+
+    def corner_resize(self, key: CustomLayoutKey, corner: str, origin: ArrangeResizeOrigin, delta: QPoint) -> None:
+        """A corner drag exactly as Runtime Edit's square corner handle does it.
+
+        Ordinary widgets scale uniformly about the gesture-start top-centre and
+        snap one edge onto a nearby peer line. The Visualizer's corners change
+        both viewport axes with the opposite corner fixed. ``delta`` is measured
+        from gesture start.
+        """
+
+        item = self.item(key)
+        if not item.resize_capable:
+            return
+        if item.viewport_resize_capable:
+            self._resize_edges(
+                key, origin.rect, delta,
+                horizontal="left" if corner.endswith("left") else "right",
+                vertical="top" if corner.startswith("top_") else "bottom",
+                pixels_per_world=origin.pixels_per_world,
+            )
+            return
+        self.scale_to(key, uniform_corner_drag_scale(origin.rect, origin.scale, corner, delta.x(), delta.y()), anchor_rect=origin.rect)
+        display = self._display_map[item.current_display_identity]
+        free = item.current_global_rect
+        snap = resolve_uniform_scale_snap(
+            float(item.resize_scale),
+            center_x=origin.rect.x() + origin.rect.width() / 2.0 - display.geometry.x(),
+            top=float(origin.rect.y() - display.geometry.y()),
+            free_width=float(free.width()), free_height=float(free.height()),
+            display_size=display.geometry.size(), peer_rects=self._peer_local_rects(item, display),
+        )
+        if abs(float(snap.scale) - float(item.resize_scale)) > 1.0e-6:
+            self.scale_to(key, float(snap.scale), anchor_rect=origin.rect)
+        self.last_snap = (display.identity, snap.vertical_guides, snap.horizontal_guides)
+
+    def scale_to(self, key: CustomLayoutKey, requested_scale: float, *, anchor_rect: QRect | None = None) -> None:
+        """Whole-widget scale with Runtime Edit's own rule (``uniform_scale_geometry``).
+
+        The top-centre of ``anchor_rect`` (default: the box now) stays put, and
+        the limits and saved payload are Edit's; a saved width/height box scales
+        as a whole.
+        """
+
         item = self.item(key); descriptor = self._descriptors_by_key[key]
         if not item.resize_capable:
+            return
+        display = self._display_map[item.current_display_identity]
+        resolved = uniform_scale_geometry(
+            item, descriptor, requested_scale, QRect(anchor_rect if anchor_rect is not None else item.current_global_rect),
+            display.geometry, pixels_per_world=self._pixels_per_world(item),
+        )
+        if resolved is None:
             return
         self._touch(key)
         if key in self._authored_keys:
             self._promote_routed_duplicates(item)
-        display = self._display_map[item.current_display_identity]
-        requested_scale = item.resize_scale * float(factor)
-        minimum = quick_custom_minimum_size(item)
-        if (
-            item.content_extent_capable
-            and not item.viewport_resize_capable
-            and item.current_content_extent is not None
-        ):
-            reference_width = max(1.0, float(item.current_content_extent[0]))
-            reference_height = max(1.0, float(item.current_content_extent[1]))
-            floor_scale = max(
-                CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
-                float(minimum.width()) / reference_width,
-                float(minimum.height()) / reference_height,
-            )
-        else:
-            admitted_scale = max(1.0e-6, float(item.baseline_resize_scale))
-            reference_width = max(
-                1.0, float(item.baseline_global_rect.width()) / admitted_scale
-            )
-            reference_height = max(
-                1.0, float(item.baseline_global_rect.height()) / admitted_scale
-            )
-            floor_scale = max(
-                CUSTOM_LAYOUT_MIN_RESIZE_SCALE,
-                float(minimum.width()) / reference_width,
-                float(minimum.height()) / reference_height,
-                admitted_scale
-                * quick_custom_payload_minimum_scale(
-                    descriptor, item.baseline_size_payload
-                ),
-            )
-        max_scale = min(
-            float(display.geometry.width()) / reference_width,
-            float(display.geometry.height()) / reference_height,
-        )
-        scale = min(max_scale, max(floor_scale, requested_scale))
-        if abs(scale - item.resize_scale) < 1.0e-6:
-            return
-        rect = item.current_global_rect
-        width = max(1, int(round(reference_width * scale)))
-        height = max(1, int(round(reference_height * scale)))
-        local = QRect(rect.x() - display.geometry.x(), rect.y() - display.geometry.y(), rect.width(), rect.height())
-        horizontal, vertical = parse_content_placement_anchor(item.placement_anchor) or parse_content_placement_anchor(choose_content_placement_anchor(local, display.geometry.size()))
-        def anchored_start(start: int, span: int, scaled: int, anchor: str, low: str, middle: str) -> int:
-            if anchor == low:
-                return start
-            if anchor == middle:
-                return round(start + span / 2 - scaled / 2)
-            return start + span - scaled
-        resized_local = clamp_local_rect_to_bounds(QRect(
-            anchored_start(local.x(), local.width(), width, horizontal, "left", "center"),
-            anchored_start(local.y(), local.height(), height, vertical, "top", "center"),
-            width,
-            height,
-        ), display.geometry.size(), min_size=minimum)
-        resized = QRect(
-            display.geometry.x() + resized_local.x(),
-            display.geometry.y() + resized_local.y(),
-            resized_local.width(),
-            resized_local.height(),
-        )
+        scale, resized = resolved.scale, resolved.rect
         payload = dict(item.current_size_payload)
-        if item.content_extent_capable and item.current_content_extent is not None:
-            payload.update(
-                width=resized_local.width(),
-                height=resized_local.height(),
-                content_extent=list(item.current_content_extent),
-            )
+        viewport_extent = item.current_viewport_extent
+        if item.content_extent_capable and not item.viewport_resize_capable and item.current_content_extent is not None:
+            payload.update(width=resized.width(), height=resized.height(), content_extent=list(item.current_content_extent))
+        elif item.viewport_resize_capable and viewport_extent is not None:
+            payload.update(width=resized.width(), height=resized.height(), viewport_extent=[viewport_extent[0], viewport_extent[1]])
         else:
-            payload_scale = scale / max(
-                1.0e-6, float(item.baseline_resize_scale)
-            )
+            payload_scale = scale / max(1.0e-6, float(item.baseline_resize_scale))
             if descriptor.custom_layout_resize_mode == "clock_font":
-                projected = scale_quick_size_payload(
-                    descriptor,
-                    {"font_size": item.baseline_size_payload["font_size"]},
-                    payload_scale,
-                )
+                projected = scale_quick_size_payload(descriptor, {"font_size": item.baseline_size_payload["font_size"]}, payload_scale)
                 payload["font_size"] = projected["font_size"]
             elif descriptor.custom_layout_resize_mode == "visualizer_rect":
-                projected = scale_quick_size_payload(
-                    descriptor,
-                    {
-                        "width": item.baseline_size_payload.get(
-                            "width", item.baseline_global_rect.width()
-                        ),
-                        "height": item.baseline_size_payload.get(
-                            "height", item.baseline_global_rect.height()
-                        ),
-                    },
-                    payload_scale,
-                )
+                projected = scale_quick_size_payload(descriptor, {
+                    "width": item.baseline_size_payload.get("width", item.baseline_global_rect.width()),
+                    "height": item.baseline_size_payload.get("height", item.baseline_global_rect.height()),
+                }, payload_scale)
                 payload.update(width=projected["width"], height=projected["height"])
-        preserve_content_size = item.content_sized
+        # As in Runtime Edit, a real resize makes the entry explicit: the box stays
+        # exactly as drawn instead of following later content changes.
         item.set_geometry(resized, size_payload=payload, resize_scale=scale)
-        # Runtime Edit's set_geometry deliberately clears this on a real resize.
-        # Settings uniform scaling is D3's distinct content-size operation.
-        item.content_sized = preserve_content_size
-        if item.content_sized and item.placement_anchor is None:
-            display = self._display_map[item.current_display_identity]
-            local = QRect(resized.x() - display.geometry.x(), resized.y() - display.geometry.y(), resized.width(), resized.height())
-            item.placement_anchor = choose_content_placement_anchor(local, display.geometry.size())
         self._dirty = True
         self._authored_keys.discard(key); self.session.notify_item_changed(item)
+
+    @staticmethod
+    def _pixels_per_world(item: CustomLayoutSessionItem) -> float | None:
+        """The Visualizer's pixels per world unit, from its box (Runtime Edit caches the same value)."""
+
+        if not item.viewport_resize_capable:
+            return None
+        extent = item.current_viewport_extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        rect = item.current_global_rect
+        try:
+            return pixels_per_world_from_geometry(rect, (float(extent[0]), float(extent[1])))
+        except RuntimeError:
+            # A box saved by an older build may not encode one scale exactly.
+            return min(rect.width() / float(extent[0]), rect.height() / float(extent[1]))
+
+    def _peer_local_rects(self, item: CustomLayoutSessionItem, display: ArrangeDisplay) -> list[QRect]:
+        origin = display.geometry.topLeft()
+        return [peer.current_global_rect.translated(-origin.x(), -origin.y())
+                for peer in self.session.active_items()
+                if peer is not item and peer.current_display_identity == display.identity]
 
     def side_edges(self, key: CustomLayoutKey) -> tuple[str, ...]:
         """Side handles (width-only / height-only) for this item: every axis it has."""
@@ -699,31 +714,36 @@ class ArrangeModel:
 
         if edge not in self.side_edges(key):
             return
+        self._resize_edges(key, origin_rect, delta,
+                           horizontal=edge if edge in {"left", "right"} else None,
+                           vertical=edge if edge in {"top", "bottom"} else None)
+
+    def _resize_edges(self, key: CustomLayoutKey, origin_rect: QRect, delta: QPoint, *,
+                      horizontal: str | None, vertical: str | None, pixels_per_world: float | None = None) -> None:
+        """Move the named edges from gesture start, opposite edges fixed (Runtime Edit's edge rule)."""
+
         item = self.item(key)
         self._touch(key)
         display = self._display_map[item.current_display_identity]
         minimum = (quick_custom_minimum_size(item) if item.viewport_resize_capable
                    else quick_custom_content_extent_minimum_size(item))
-        horizontal = edge if edge in {"left", "right"} else None
-        vertical = edge if edge in {"top", "bottom"} else None
         rect = edge_resize_rect(origin_rect, display.geometry, minimum, delta.x(), delta.y(),
                                 horizontal_edge=horizontal, vertical_edge=vertical)
         local = QRect(rect.x() - display.geometry.x(), rect.y() - display.geometry.y(), rect.width(), rect.height())
-        peers = [QRect(peer.current_global_rect.x() - display.geometry.x(), peer.current_global_rect.y() - display.geometry.y(),
-                       peer.current_global_rect.width(), peer.current_global_rect.height())
-                 for peer in self.session.active_items() if peer is not item and peer.current_display_identity == display.identity]
         resolution = resolve_resize_edge_snap(local, display.geometry.size(), horizontal_edge=horizontal,
-                                              vertical_edge=vertical, peer_rects=peers, min_size=minimum)
+                                              vertical_edge=vertical, peer_rects=self._peer_local_rects(item, display),
+                                              min_size=minimum)
         self.last_snap = (display.identity, resolution.vertical_guides, resolution.horizontal_guides)
         snapped = resolution.rect
         rect = QRect(display.geometry.x() + snapped.x(), display.geometry.y() + snapped.y(), snapped.width(), snapped.height())
         if item.viewport_resize_capable:
-            # Pixels per world unit from the axis the gesture leaves untouched: it
-            # stays exact for the whole drag (the live presentation's own scale).
-            extent = item.current_viewport_extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-            current = item.current_global_rect
-            pixels_per_world = (current.height() / float(extent[1]) if horizontal is not None
-                                else current.width() / float(extent[0]))
+            if pixels_per_world is None:
+                # One axis: pixels per world unit from the axis the gesture leaves
+                # untouched, which stays exact for the whole drag (Edit's cached value).
+                extent = item.current_viewport_extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+                current = item.current_global_rect
+                pixels_per_world = (current.height() / float(extent[1]) if horizontal is not None
+                                    else current.width() / float(extent[0]))
             payload, world = viewport_extent_resize_payload(
                 item, pixels_per_world, rect,
                 change_width=horizontal is not None, change_height=vertical is not None,
