@@ -9,8 +9,6 @@ audits are historicalised (`Docs/Historical_Bugs/R-100_...`, `R-101_...`).
 Detail, rewards, risks and performance hazards per slice: `Docs/Future_Work/3D_Scene_Foundation.md`. Work in this
 order; commit and push each slice; tests and measurements before looks change.
 
-- [ ] **S2** Shared home `rendering/quick/scene3d/`, rect-aware bucketed `SceneTarget`, Visualizer fence restores
-      framebuffers, documented Visualizer opt-in (no mode changes).
 - [ ] **S3** Per-frame uniform blocks (Exploding Tiles first; identical pixels, fewer GL calls).
 - [ ] **S4** Camera in the library (per-effect distance, offset/tilt/shake; exact at rest; no exposed edges).
 - [ ] **S5** Glass Shatter, Pixel Accretion, Crumble and 3D Block Spins onto the library and 3D Detail (looks kept).

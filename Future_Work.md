@@ -88,11 +88,11 @@ Build the requested vertical feature first; extract only reuse the real implemen
 transitions:** build and grow a shared 3D foundation when it raises fidelity at low, adjustable cost. It exists now:
 `rendering/gl_programs/scene3d.py` (GLSL library + CPU mirrors: hash, camera with near-plane clipping, impulse flight,
 departure solver, lighting, ember colour, planar soft shadows, streaks, and the 3D Detail tier table) and
-`rendering/quick/transitions/scene3d_support.py` (blend scopes and the multisampled `SceneTarget`), with the host's
+`rendering/quick/scene3d/` (resources, blend scopes and the multisampled `SceneTarget`), with the host's
 `park()` after every run and a fence that restores framebuffer and blend state. Contract and measurements:
 `Docs/Reference/Transitions.md`. New 3D transitions start from it; a capability two effects would repeat belongs in it.
 
-Other 3D consumers: 3D Block Spins, Glass Shatter, Crumble and Directional Pixel Accretion (`mesh_support.py`), and the
+Other 3D consumers: 3D Block Spins, Glass Shatter, Crumble and Directional Pixel Accretion (`scene3d/resources.py`), and the
 isolated experimental Voxel Sphere (Visualizer). Proven seams there: `gl_InstanceID` instancing, per-run CPU geometry
 prepared on COMPUTE (`run_geometry.py`), per-run tables read by vertex texture fetch (Crumble's motion table).
 
