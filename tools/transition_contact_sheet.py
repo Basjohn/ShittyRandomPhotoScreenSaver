@@ -103,7 +103,8 @@ class TransitionCapture:
         if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
             raise RuntimeError("transition diagnostic framebuffer incomplete")
 
-    def run(self, effect: str, *, seed: int = 713, direction=None, parameters=None):
+    def run(self, effect: str, *, seed: int = 713, direction=None, parameters=None, duration_ms: int = 1000):
+        """Resolve one run. Effects with real-time motion (Exploding Tiles' rumble) need the authored duration."""
         from rendering.quick.image_state import PresentationImage
         from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
         from rendering.quick.transitions.state import TransitionRequest, TransitionRun
@@ -117,14 +118,15 @@ class TransitionCapture:
         images = [PresentationImage(str(index), "diagnostic", (self.width, self.height), 1.,
                                     (self.width, self.height), self.width*4, image.tobytes())
                   for index, image in enumerate(self.images)]
-        request = TransitionRequest(0, effect, effect, False, 1000, direction or resolved_direction,
+        request = TransitionRequest(0, effect, effect, False, int(duration_ms), direction or resolved_direction,
                                     resolved_params, *images)
         return TransitionRun.start(run_id=1, request=request, start_ns=0)
 
     def frame(self, run, progress: float):
         from rendering.quick.transitions.render_contract import QuickTransitionRenderFrame
         w, h = self.width, self.height
-        return QuickTransitionRenderFrame(run, run.sample(round(progress*1e9)), (0, 0, w, h), (w, h),
+        sample = run.sample(run.start_ns + round(progress * (run.end_ns - run.start_ns)))
+        return QuickTransitionRenderFrame(run, sample, (0, 0, w, h), (w, h),
                                           (2/w, 0, 0, 0, 0, -2/h, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
                                           self.vao, self.textures[0], self.textures[1])
 

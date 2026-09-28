@@ -138,6 +138,30 @@ def test_the_blast_opens_the_picture_at_the_detonation(qt_app):
 
 
 @pytest.mark.qt
+def test_the_far_wall_rumbles_late_and_slowly_at_an_authored_duration(qt_app):
+    # The rumble runs in real time, so it is measured at an 8000 ms run: the same
+    # progress rendered one 60 fps frame later in real time isolates it (every other
+    # part of the effect follows progress). Negative control, the rejected 8-15 Hz
+    # rumble from cracking: 1.9 at p=0.085 and up to 3.5 grey levels per frame.
+    capture = TransitionCapture(640, 360)
+    try:
+        corner = (slice(0, 72), slice(0, 128))
+
+        def rumble(progress: float) -> float:
+            runs = [capture.run("exploding_tiles", direction="center_out", duration_ms=duration)
+                    for duration in (8000, 8000 + round(1000 / (60 * progress)))]
+            first, second = (np.asarray(capture.render(run, progress)[0], dtype=np.int16) for run in runs)
+            return float(np.abs(first - second)[corner].mean())
+
+        assert rumble(0.085) < 0.1  # still until well after the detonation
+        motion = [rumble(progress) for progress in (0.12, 0.14, 0.16)]
+        assert max(motion) > 0.1  # it does shudder before the shock front arrives
+        assert max(motion) < 2.0
+    finally:
+        capture.close()
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize("size", ((160, 480), (720, 180)))
 def test_weak_force_geometry_clears_portrait_and_wide_viewports_before_retirement(
     qt_app, size

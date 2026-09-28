@@ -367,15 +367,19 @@ Tile tileAt(uint id) {{
     // The front face stays on the photograph; thickness grows in behind it once cracked.
     t.slabFull = min(t.size.x, t.size.y) * (0.10 + 0.90 * uThickness);
     t.slab = t.slabFull * t.crack;
-    // Rumble: once its cracks open, every tile shudders until it breaks free, hardest
-    // near the blast and building to the detonation. The rate is real time (8-15 Hz),
-    // whatever the run's duration; the flight takes over smoothly at release.
-    float shake = t.crack * (1.0 - t.released) * (0.35 + 0.65 * t.near)
-                * (0.4 + 0.6 * smoothstep(cracked, DETONATE, uProgress)) * sqrt(uForce);
+    // Rumble: a low shudder through the cracked wall over the last part of each tile's
+    // wait for the shock front (from 40% of the way between cracking and release),
+    // hardest near the blast and building to the release, where the flight takes over
+    // smoothly. The rate is real time (about 2.7-5 Hz) whatever the run's duration, and
+    // neighbouring tiles move nearly together, so the wall shakes rather than jitters.
+    float rumbleStart = mix(cracked, release, 0.4);
+    float shake = smoothstep(rumbleStart, rumbleStart + 0.03, uProgress) * (1.0 - t.released)
+                * (0.2 + 0.8 * t.near) * (0.5 + 0.5 * smoothstep(rumbleStart, release, uProgress)) * sqrt(uForce);
     float seconds = uProgress * uSeconds;
+    float phase = dot(home, vec2(2.1, 1.7)) + r6 * 1.2;
     vec2 rumble = 0.0022 * shake * vec2(
-        sin(seconds * 51.0 + r6 * 6.2832) + 0.6 * sin(seconds * 83.0 + r7 * 6.2832),
-        sin(seconds * 57.0 + r2 * 6.2832) + 0.6 * sin(seconds * 91.0 + r5 * 6.2832));
+        sin(seconds * 17.0 + phase) + 0.5 * sin(seconds * 27.0 + phase * 1.3 + r7 * 2.0),
+        sin(seconds * 19.0 + phase * 0.9 + 1.7) + 0.5 * sin(seconds * 31.0 + phase * 1.1 + r5 * 2.0));
     float radius = 0.5 * length(vec3(t.size, t.slab)) + 0.02;
 
     // Heading: away from the blast, loosened by a seeded scatter that grows at its heart.
@@ -406,7 +410,7 @@ Tile tileAt(uint id) {{
     t.centre = vec3(home + rumble + heading * speed * travel + fall * tau * tau,
                     -0.5 * t.slab + bulge + lift * travel);
     t.tiltAxis = vec3(-radial.y, radial.x, 0.0);
-    t.tilt = 0.09 * dome + 0.035 * shake * sin(seconds * 64.0 + r1 * 6.2832);
+    t.tilt = 0.09 * dome + 0.03 * shake * sin(seconds * 21.0 + phase + r1 * 2.0);
     t.spinAxis = normalize(vec3(-heading.y, heading.x, 0.0) * 1.2 + (vec3(r6, r7, r2) - 0.5) * 1.2);
     t.spin = uForce * (1.8 + 2.8 * r3) * (0.6 + 0.8 * t.near) * sceneImpulse(tau, 8.0, 0.35);
     // A brief white-hot flash on pieces near the blast, cooled to nothing within ~0.04 of the run.
