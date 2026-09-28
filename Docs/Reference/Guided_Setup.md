@@ -112,8 +112,14 @@ The canvas uses the saver's own geometry, so boxes land where they are drawn:
 
 Content-sized placements persist an anchor in the existing CUSTOM payload, with `_size_from_content: true` and
 `_placement_anchor`; runtime resolves the live content size at that anchor. Explicit saved entries retain explicit
-sizing. Both editors preserve content sizing for moves and convert to explicit geometry on any resize (uniform scale,
-width/height) and, in Runtime Edit, on child edits. Child geometry and content rotation remain Runtime Edit operations.
+sizing. Both editors save a never-placed card as content-sized (a card still loading, such as Weather before its first
+data, is never frozen at its loading size), preserve content sizing for moves and convert to explicit geometry on any
+resize (uniform scale, width/height) and, in Runtime Edit, on child edits.
+
+**Unapplied Arrange changes.** Arrange under Settings → Quick Start applies nothing until Apply. Closing Settings (close
+button, Enter or Escape), switching to another Settings tab, or starting Guided Setup with a pending draft asks once,
+in the shared styled popup: Apply Changes, Discard Changes or Stay In Arrange (closing the popup stays). Inside Guided
+Setup the draft belongs to the wizard's own Keep/Discard/Stay prompt. Child geometry and content rotation remain Runtime Edit operations.
 
 Sizing is Runtime Edit's own, so the same gesture in either editor saves the same entry. Uniform scale (corner drag,
 Ctrl+wheel, slider) uses `uniform_scale_geometry` in `rendering/quick/custom_layout_size.py`, which Runtime Edit calls
@@ -204,6 +210,17 @@ Implementation and automated coverage are complete; one operator pass on the rea
 - Arrange: free-place and scale a never-moved widget (it keeps its real size on the saver); move, scale and
   reassign the display of an already-customised widget; tick and untick Free placement; load a layout slot (Apply and
   Cancel); save to a slot, then load it on the saver with its number key;
+- Arrange: move a widget and, without Apply, close Settings (and separately: switch tab, press Escape, start Guided
+  Setup) — the Apply/Discard/Stay popup appears each time; Stay keeps the draft and Quick Start in view; Apply shows the
+  move on the saver; Discard drops it;
+- Runtime Edit on first run or offline (Weather still loading): Save without touching Weather; once data arrives,
+  Weather grows to its full card instead of shrinking inside a short box;
+- Ready step: the Settings / Edit Widget Layout menu capture sits beside the summary, sharp at your DPR, with no
+  scrollbar and the Controls block unmoved;
+- Widget Setup → Gmail: labelled rows with Steam's spacing, green "Connected" when a connection is saved, the volume
+  slider in the Settings style;
+- Reddit narrower than its header plus refresh glyph (a long subreddit name, ~340 px): the ↻ glyph hides instead of
+  overlapping, and comes back when widened;
 - Arrange sizing matches Runtime Edit: scale a card up with Ctrl+wheel in Edit mode, Save, then one Ctrl+wheel notch
   down in Arrange returns it to the same place (top edge and centre fixed); a corner drag scales about the same point;
   the Visualizer's corner changes width and height together; width/height on Reddit, Gmail or Friend Pulse stops where
