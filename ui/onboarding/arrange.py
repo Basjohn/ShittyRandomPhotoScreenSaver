@@ -382,6 +382,26 @@ class ArrangePage(Page):
         # memoized measurements, and nothing is measured before Arrange opens.
         self._size_meter = OrdinaryPreferredSizeMeter()
         self.destroyed.connect(lambda _obj=None, meter=self._size_meter: meter.close())
+        # Hardware display changes arrive as events; nothing polls.
+        app = QGuiApplication.instance()
+        page_ref = weakref.ref(self)
+
+        def _screens_changed(*_args):
+            page = page_ref()
+            if page is not None:
+                page._sync_displays()
+
+        app.screenAdded.connect(_screens_changed)
+        app.screenRemoved.connect(_screens_changed)
+
+        def _disconnect(_obj=None, handler=_screens_changed, application=app):
+            for signal in (application.screenAdded, application.screenRemoved):
+                try:
+                    signal.disconnect(handler)
+                except (RuntimeError, TypeError):
+                    pass
+
+        self.destroyed.connect(_disconnect)
         self.body.addWidget(text_label("Arrange widgets freely. Changes stay in this draft until you apply them.", heading=True))
         self.canvas_holder = QVBoxLayout(); self.body.addLayout(self.canvas_holder)
         self.body.addWidget(text_label("Drag a box to move it, including onto another display. Drag a corner, or Ctrl+scroll, to scale; drag a side handle to change only width or height. Arrow keys nudge (Shift for 10 px), Delete resets. Dashed boxes show where the saver places them now; once you move anything, Apply keeps every box where you see it."))
@@ -447,11 +467,29 @@ class ArrangePage(Page):
         )
 
     def refresh(self):
-        if self.model is not None and self.model.pending: return
+        displays = self._live_displays()
+        if self.model is not None and self.model.pending:
+            # Keep the draft; only follow a changed display set.
+            if self.model.replace_displays(displays):
+                self._rebuild_canvas()
+            return
         widgets = self.settings.get("widgets", {})
         self.model = ArrangeModel(
-            widgets if isinstance(widgets, dict) else {}, self._live_displays(), meter=self._size_meter
+            widgets if isinstance(widgets, dict) else {}, displays, meter=self._size_meter
         )
+        self._rebuild_canvas()
+
+    def _sync_displays(self, *_args) -> None:
+        """Follow display changes made while Settings is open (selection or hardware)."""
+
+        if self.model is not None and self._live_displays() != self.model.displays:
+            self.refresh()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._sync_displays()
+
+    def _rebuild_canvas(self) -> None:
         while self.canvas_holder.count():
             item = self.canvas_holder.takeAt(0); widget = item.widget()
             if widget is not None:

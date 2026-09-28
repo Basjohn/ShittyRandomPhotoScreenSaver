@@ -1901,24 +1901,18 @@ class DisplayManager(QObject):
     def _requested_visualizer_screen_index(monitor: object) -> int:
         """Resolve the 1-based persisted monitor route; ALL means first live."""
 
+        from rendering.quick.visualizer_admission import (
+            requested_visualizer_screen_index,
+        )
+
+        requested = requested_visualizer_screen_index(monitor)
         normalized = str(monitor or "ALL").strip().upper()
-        if normalized == "ALL":
-            return -1
-        try:
-            monitor_number = int(normalized)
-        except (TypeError, ValueError):
+        if requested < 0 and normalized != "ALL":
             logger.warning(
                 "[SPOTIFY_VIS] Invalid Quick monitor route %r; using first participant",
                 monitor,
             )
-            return -1
-        if monitor_number < 1:
-            logger.warning(
-                "[SPOTIFY_VIS] Invalid Quick monitor route %r; using first participant",
-                monitor,
-            )
-            return -1
-        return monitor_number - 1
+        return requested
 
     @classmethod
     def _resolve_visualizer_requested_screen_index(cls, widgets: object) -> int:
@@ -2569,30 +2563,15 @@ class DisplayManager(QObject):
                 "spotify_visualizer",
             )
             if custom_entry is not None:
-                from rendering.custom_layout_contract import (
-                    CONTENT_SIZED_PAYLOAD_KEY,
-                    clamp_local_rect_to_bounds,
-                    denormalize_local_rect,
-                    resolve_content_sized_rect,
-                )
                 from rendering.custom_layout_session import normalize_viewport_extent
+                from rendering.quick.custom_layout_hydration import (
+                    resolve_committed_visualizer_rect,
+                )
 
-                screen_size = chosen.runtime.window.screen().geometry().size()
-                if custom_entry.size_payload.get(CONTENT_SIZED_PAYLOAD_KEY) is True:
-                    local_rect = resolve_content_sized_rect(
-                        custom_entry.rect,
-                        custom_entry.size_payload.get("_placement_anchor"),
-                        (
-                            float(custom_entry.size_payload.get("width", 100)),
-                            float(custom_entry.size_payload.get("height", 80)),
-                        ),
-                        screen_size,
-                    )
-                else:
-                    local_rect = clamp_local_rect_to_bounds(
-                        denormalize_local_rect(custom_entry.rect, screen_size),
-                        screen_size,
-                    )
+                local_rect = resolve_committed_visualizer_rect(
+                    custom_entry,
+                    chosen.runtime.window.screen().geometry().size(),
+                )
                 from widgets.spotify_visualizer.presentation_orientation import (
                     CONTENT_ROTATION_BY_MODE_PAYLOAD_KEY,
                     CONTENT_ROTATION_QUARTERS_PAYLOAD_KEY,

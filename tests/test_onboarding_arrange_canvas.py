@@ -145,12 +145,12 @@ def test_adjacency_prefers_the_roomier_vertical_side() -> None:
     assert resolve_visualizer_media_origin((0, 0, 1920, 1000), (1900, 900), (1920, 1080))[2] is True
 
 
-def test_side_handle_appears_only_for_a_saved_box_and_drags_width_only(qt_app) -> None:
+def test_side_handle_drags_width_only_on_a_saved_box(qt_app) -> None:
     seed = ArrangeModel(_weather_only(), _displays())
     seed.move(seed.session.items()[0].source_key, QRect(300, 60, 520, 310))
     widgets = seed.apply()
     payload = widgets["custom_layout"]["displays"]["screen:a"]["weather"]["default"]["size_payload"]
-    assert seed.side_edges(seed.session.items()[0].source_key) == ()  # content-sized estimate
+    assert seed.side_edges(seed.session.items()[0].source_key)  # every axis the widget has
     payload.pop("_size_from_content"); payload.pop("_placement_anchor")
     payload["content_extent"] = [520.0, 310.0]  # as Runtime Edit saves it
 

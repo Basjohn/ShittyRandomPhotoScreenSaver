@@ -93,6 +93,7 @@ from rendering.quick.custom_layout_size import (
     quick_custom_minimum_size,
     quick_custom_payload_minimum_scale,
     scale_quick_size_payload,
+    viewport_extent_resize_payload,
 )
 from rendering.widget_descriptors import (
     WidgetRuntimeDescriptor,
@@ -2494,26 +2495,14 @@ class QuickCustomLayoutOwner:
         if origin.visualizer_uniform_scale is None:
             raise RuntimeError("CUSTOM visualizer viewport resize has no retained scale")
         pixels_per_world = max(1.0e-6, float(origin.visualizer_uniform_scale))
-        extent = item.current_viewport_extent
-        if extent is None:
-            extent = (
-                float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[0]),
-                float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1]),
-            )
-        # Side handles are semantically one-axis operations. Preserve the untouched
-        # logical extent exactly instead of letting integer QRect rounding nudge it
-        # by a fraction on every orthogonal gesture. Corners opt into both axes.
-        next_extent = (
-            float(rect.width()) / pixels_per_world
-            if change_width else float(extent[0]),
-            float(rect.height()) / pixels_per_world
-            if change_height else float(extent[1]),
-        )
-        payload = dict(item.current_size_payload)
-        payload.update(
-            width=rect.width(),
-            height=rect.height(),
-            viewport_extent=[next_extent[0], next_extent[1]],
+        # Side handles are semantically one-axis operations: the shared payload
+        # keeps the untouched logical extent exactly. Corners opt into both axes.
+        payload, next_extent = viewport_extent_resize_payload(
+            item,
+            pixels_per_world,
+            rect,
+            change_width=change_width,
+            change_height=change_height,
         )
         # A saturated edge can generate indefinitely many pointer samples with
         # exactly the same admitted rect and viewport. Compare the complete
