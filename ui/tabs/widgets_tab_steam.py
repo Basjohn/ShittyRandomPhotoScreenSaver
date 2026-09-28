@@ -49,7 +49,9 @@ from ui.styled_popup import ColorSwatchButton, StyledPopup
 from ui.settings_theme_runtime import get_active_settings_theme
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import (
+    STATUS_ATTENTION_COLOR,
     STATUS_LABEL_STYLE,
+    STATUS_READY_COLOR,
     add_aligned_row,
     build_bucket_toggle,
     finalize_bucket_body as _finalize_bucket_body,
@@ -195,8 +197,8 @@ class _DraggableSteamApiKeyDialog(QDialog):
 def _set_connection_status(tab: "WidgetsTab", message: str, *, state: str = "pending") -> None:
     """Update only in-memory UI status; normal settings never hold credentials."""
     colors = {
-        "connected": "#72d696",
-        "warning": "#efad5a",
+        "connected": STATUS_READY_COLOR,
+        "warning": STATUS_ATTENTION_COLOR,
         "error": "#ed7777",
         "pending": "#d0d0d0",
     }
@@ -208,7 +210,7 @@ def _set_connection_status(tab: "WidgetsTab", message: str, *, state: str = "pen
     if access is not None:
         ready = state == "connected"
         access.setText("Steam Account Access Is Ready." if ready else "Please Connect Both For Access")
-        access.setStyleSheet(f"{STATUS_LABEL_STYLE} color: {'#72d696' if ready else '#efad5a'};")
+        access.setStyleSheet(f"{STATUS_LABEL_STYLE} color: {STATUS_READY_COLOR if ready else STATUS_ATTENTION_COLOR};")
 
 
 def _set_connection_checks(tab: "WidgetsTab", *, identity_ready: bool, key_ready: bool) -> None:
@@ -219,7 +221,7 @@ def _set_connection_checks(tab: "WidgetsTab", *, identity_ready: bool, key_ready
         label = getattr(tab, attr, None)
         if label is not None:
             label.setText("Connected" if ready else "Not connected")
-            label.setStyleSheet(f"{STATUS_LABEL_STYLE} color: {'#72d696' if ready else '#efad5a'};")
+            label.setStyleSheet(f"{STATUS_LABEL_STYLE} color: {STATUS_READY_COLOR if ready else STATUS_ATTENTION_COLOR};")
 
 
 def _set_saved_connection_feedback(tab: "WidgetsTab", message: str | None, *, success: bool = False) -> None:
@@ -231,7 +233,7 @@ def _set_saved_connection_feedback(tab: "WidgetsTab", message: str | None, *, su
         label.hide()
         return
     label.setText(message)
-    label.setStyleSheet(f"{STATUS_LABEL_STYLE} color: {'#72d696' if success else '#efad5a'};")
+    label.setStyleSheet(f"{STATUS_LABEL_STYLE} color: {STATUS_READY_COLOR if success else STATUS_ATTENTION_COLOR};")
     label.show()
 
 
