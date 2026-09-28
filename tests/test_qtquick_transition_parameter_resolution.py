@@ -47,7 +47,7 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
     ("transition_id", "section", "expected_direction", "expected_keys"),
     [
         ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen", "collisions", "reshatter"}),
-        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force"}),
+        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force", "detail"}),
         ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel"}),
         ("melt_drip", "melt_drip", "center_in", {"seed", "detail", "depth", "gloss"}),
     ],
@@ -77,6 +77,8 @@ def test_future_transition_parameters_are_bounded_and_seeded_once(
         assert params["reshatter"] is bool(require_canonical_default("transitions.glass_shatter.reshatter"))
     elif transition_id == "exploding_tiles":
         assert params["columns"] == 48 and params["depth"] == pytest.approx(1.5)
+        from core.settings.default_contract import require_canonical_default
+        assert params["detail"] == require_canonical_default("transitions.detail_3d")
     elif transition_id == "pixel_accretion":
         assert params["tile_size"] == 32 and params["travel"] == pytest.approx(1.0)
     else:
@@ -274,3 +276,18 @@ def test_melt_random_and_retired_edge_directions_pick_a_real_origin(stored):
         "melt_drip", {"melt_drip": {"direction": stored}}, random_source=rng
     )
     assert resolved.direction == "top_right"
+
+
+@pytest.mark.parametrize("stored", ["High", "Balanced", "Performance", "Ultra", None, 3])
+def test_the_3d_detail_tier_reaches_the_run_and_unknown_values_use_the_default(stored):
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES
+
+    default = require_canonical_default("transitions.detail_3d")
+    assert default in SCENE3D_DETAIL_NAMES
+    rng = _Rng()
+    rng.choice_values = ["left"]
+    rng.randint_values = [77]
+    settings = {} if stored is None else {"detail_3d": stored}
+    params = resolve_parameterized_phase_c_inputs("exploding_tiles", settings, random_source=rng).parameter_dict()
+    assert params["detail"] == (stored if stored in SCENE3D_DETAIL_NAMES else default)

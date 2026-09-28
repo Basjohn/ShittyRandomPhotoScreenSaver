@@ -15,6 +15,7 @@ import random
 from typing import Protocol
 
 from core.settings.default_contract import require_canonical_default
+from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES
 from .state import TransitionParameters, TransitionValue, freeze_transition_parameters
 
 
@@ -601,6 +602,15 @@ def _resolve_detail(
     return max(0.5, min(2.0, _number(_value(cfg, defaults, "detail"), default_detail)))
 
 
+def _scene_detail(settings: Mapping[str, object]) -> str:
+    """The run's 3D Detail tier; an unknown persisted value uses the canonical default."""
+
+    value = settings.get("detail_3d")
+    if isinstance(value, str) and value in SCENE3D_DETAIL_NAMES:
+        return value
+    return str(require_canonical_default("transitions.detail_3d"))
+
+
 def _surface_values(cfg: Mapping[str, object], defaults: Mapping[str, object],
                     names: tuple[str, ...]) -> dict[str, float]:
     return {name: max(0.0, min(1.0, _number(_value(cfg, defaults, name), float(defaults[name]))))
@@ -649,7 +659,8 @@ def _resolve_exploding_tiles(
         direction,
         {"seed": _seed(rng), "columns": columns, "depth": depth,
          **_surface_values(cfg, defaults, ("thickness",)),
-         "force": max(.5, min(2., _number(_value(cfg, defaults, "force"), float(defaults["force"]))))},
+         "force": max(.5, min(2., _number(_value(cfg, defaults, "force"), float(defaults["force"])))),
+         "detail": _scene_detail(settings)},
     )
 
 

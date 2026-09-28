@@ -337,3 +337,21 @@ def test_glass_collision_and_reshatter_options_load_and_persist(qapp, settings_m
     persisted = settings_manager.get("transitions", {})["glass_shatter"]
     assert persisted["collisions"] is True
     assert persisted["reshatter"] is True
+
+
+def test_3d_detail_round_trips_and_repairs_unknown_values(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    canonical = get_default_settings()["transitions"]["detail_3d"]
+    assert tab._detail_3d_combo.currentText() == canonical
+    choice = next(name for name in SCENE3D_DETAIL_NAMES if name != canonical)
+    tab._detail_3d_combo.setCurrentText(choice)
+    assert settings_manager.get("transitions", {})["detail_3d"] == choice
+
+    external = deepcopy(settings_manager.get("transitions", {}))
+    external["detail_3d"] = "Ultra"
+    settings_manager.set("transitions", external)
+    qapp.processEvents()
+    assert tab._detail_3d_combo.currentText() == canonical

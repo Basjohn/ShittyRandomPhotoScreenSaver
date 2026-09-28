@@ -44,10 +44,11 @@ def test_exploding_tiles_grid_is_aspect_aware_and_bounded() -> None:
     assert effect.exploding_tiles_grid(48, 400, 4000) == (48, 48)
 
 
-def test_exploding_tiles_remain_full_size_and_depart_geometrically() -> None:
+def test_exploding_tiles_hold_still_until_released_then_depart() -> None:
     effect = _load("exploding_tiles_program")
-    assert effect.exploding_tile_state(.04, .10) == 0.0
-    assert effect.exploding_tile_state(.98, .10) == 1.0
+    assert effect.exploding_tile_travel(0.0) == 0.0
+    assert effect.exploding_tile_travel(-0.1) == 0.0
+    assert effect.exploding_tile_travel(0.5) > effect.exploding_tile_travel(0.1) > 0.0
     # Actual departure/retirement is checked against driver pixels across
     # directions/aspects in test_qtquick_future_transition_gl.
 

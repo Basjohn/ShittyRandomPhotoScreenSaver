@@ -25,6 +25,7 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state,
 )
 from core.logging.logger import get_logger
+from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES
 from rendering.transition_registry import (
     canonicalize_transition_name,
     is_transition_available,
@@ -170,6 +171,14 @@ class TransitionsTab(QWidget):
                 cbr.blockSignals(True)
                 cbr.setChecked(use_random)
                 cbr.blockSignals(False)
+            detail = cfg.get("detail_3d")
+            if detail not in SCENE3D_DETAIL_NAMES:
+                detail = str(_transition_default("detail_3d"))
+            detail_combo = getattr(self, "_detail_3d_combo", None)
+            if detail_combo is not None and detail_combo.currentText() != detail:
+                detail_combo.blockSignals(True)
+                detail_combo.setCurrentText(detail)
+                detail_combo.blockSignals(False)
             default_type = str(_transition_default("type"))
             new_type = canonicalize_transition_name(
                 cfg.get("type", default_type), fallback=default_type
@@ -524,6 +533,26 @@ class TransitionsTab(QWidget):
         random_layout.addWidget(pool_grid_host)
 
         page_layout.addWidget(random_group)
+
+        # One fidelity/cost trade for every transition on the shared 3D renderer.
+        detail_group = QGroupBox("3D Rendering")
+        style_group_box(detail_group)
+        detail_layout = QVBoxLayout(detail_group)
+        detail_layout.setContentsMargins(0, 12, 0, 0)
+        detail_layout.setSpacing(8)
+        detail_row = self._aligned_row(detail_layout, "3D Detail:")
+        self._detail_3d_combo = StyledComboBox(size_variant="compact")
+        self._detail_3d_combo.addItems(list(SCENE3D_DETAIL_NAMES))
+        self._detail_3d_combo.setToolTip(
+            "High: smooth edges (multisampling), soft shadows and every spark; the most GPU time "
+            "while a 3D transition runs.\n"
+            "Balanced: soft shadows and fewer sparks, without multisampling.\n"
+            "Performance: no shadows and the fewest sparks."
+        )
+        self._detail_3d_combo.currentTextChanged.connect(self._save_settings)
+        detail_row.addWidget(self._detail_3d_combo)
+        detail_row.addStretch()
+        page_layout.addWidget(detail_group)
         return page
 
     # ---- Lazy per-transition settings pages -------------------------------
@@ -1908,7 +1937,7 @@ class TransitionsTab(QWidget):
         for w in (
             list(getattr(self, '_activation_checkboxes', {}).values())
             + list(getattr(self, '_pool_checkboxes', {}).values())
-            + [getattr(self, '_use_random_checkbox', None)]
+            + [getattr(self, '_use_random_checkbox', None), getattr(self, '_detail_3d_combo', None)]
         ):
             if w is not None and hasattr(w, 'blockSignals'):
                 w.blockSignals(True)
@@ -1949,6 +1978,11 @@ class TransitionsTab(QWidget):
                 )
             if getattr(self, '_use_random_checkbox', None) is not None:
                 self._use_random_checkbox.setChecked(bool(use_random))
+            if getattr(self, '_detail_3d_combo', None) is not None:
+                detail = transitions_config.get('detail_3d')
+                if detail not in SCENE3D_DETAIL_NAMES:
+                    detail = canonical_transitions['detail_3d']
+                self._detail_3d_combo.setCurrentText(str(detail))
 
             # Load per-transition directions (nested)
             slide_cfg = transitions_config.get('slide', canonical_transitions['slide'])
@@ -2373,6 +2407,11 @@ class TransitionsTab(QWidget):
             'pool': dict(self._pool_by_type),
             'activation': dict(self._activation_by_type),
             'random_always': use_random,
+            'detail_3d': (
+                self._detail_3d_combo.currentText()
+                if getattr(self, '_detail_3d_combo', None) is not None
+                else existing.get('detail_3d', _transition_default('detail_3d'))
+            ),
             'slide': (
                 {
                     'direction': self._dir_slide,

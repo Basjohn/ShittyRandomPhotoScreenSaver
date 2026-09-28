@@ -82,20 +82,32 @@ Build the requested vertical feature first; extract only reuse the real implemen
 - The accepted **Voxel Sphere** and the **Bubble** reaction contract are golden and are not modified by a new mode
   (`Docs/Reference/Sphere_Visualizer.md`, `Docs/Guardrails/Bubble_Temporal_Fidelity.md`).
 
-### 2.4 Shared 3D substrate and dormancy
+### 2.4 Shared 3D foundation and dormancy
 
-Current 3D consumers: 3D Block Spins, Glass Shatter, Crumble, Exploding Tiles and Directional Pixel Accretion
-(transitions, via `rendering/quick/transitions/mesh_support.py`), and the isolated experimental Voxel Sphere
-(Visualizer). Proven seams: context-local programs/VAOs/VBOs, a static mesh drawn with `gl_InstanceID`-derived
-instancing, per-run CPU geometry prepared on COMPUTE (`run_geometry.py`), per-run tables read by vertex texture fetch
-(Crumble's motion table), viewport-scoped depth clears, manual perspective in the vertex shader, and GL-state
-restoration by the host fence.
+**Operator direction (2026-09-29), superseding the earlier "extract only what two consumers prove identical" rule for
+transitions:** build and grow a shared 3D foundation when it raises fidelity at low, adjustable cost. It exists now:
+`rendering/gl_programs/scene3d.py` (GLSL library + CPU mirrors: hash, camera with near-plane clipping, impulse flight,
+departure solver, lighting, ember colour, planar soft shadows, streaks, and the 3D Detail tier table) and
+`rendering/quick/transitions/scene3d_support.py` (blend scopes and the multisampled `SceneTarget`), with the host's
+`park()` after every run and a fence that restores framebuffer and blend state. Contract and measurements:
+`Docs/Reference/Transitions.md`. New 3D transitions start from it; a capability two effects would repeat belongs in it.
+
+Other 3D consumers: 3D Block Spins, Glass Shatter, Crumble and Directional Pixel Accretion (`mesh_support.py`), and the
+isolated experimental Voxel Sphere (Visualizer). Proven seams there: `gl_InstanceID` instancing, per-run CPU geometry
+prepared on COMPUTE (`run_geometry.py`), per-run tables read by vertex texture fetch (Crumble's motion table).
 
 - When every consumer of a 3D path is dormant, its meaningful overhead is dormant too: no shader compiles, meshes,
-  buffers, depth work, workers or cadence. Cheap import-safe math, immutable types and catalog metadata may stay eager.
-- Extract only the smallest seam two consumers prove identical. Sphere is an independent consumer to compare against,
-  not a foundation or base class; its Settings, state, materials and shaders stay private.
-- No generic camera tree, material hierarchy, physics engine or always-resident "3D engine".
+  buffers, targets, depth work, workers or cadence. Per-run targets are dropped at `park()`.
+- Every fidelity feature has a cost switch in the 3D Detail tiers; the cheapest tier stays close to a plain draw.
+- Sphere is an independent consumer, not a foundation or base class; its Settings, state, materials and shaders stay
+  private. A 3D Visualizer mode may use `scene3d.py`'s GLSL, never Sphere internals.
+- No generic scene graph, material hierarchy, physics engine or always-resident "3D engine"; per-effect state stays
+  analytic and local.
+
+**Foundation next (dormant until requested):** move Glass Shatter, Crumble, 3D Block Spins and Pixel Accretion onto
+3D Detail (the High target smooths their silhouettes; their looks must not change otherwise); a bloom/glow post pass
+on the High target for sparks, embers and highlights; soft shadows for Glass and Crumble; a cheaper High (2x, or
+multisampling only the tile pass) if physical testing shows the ~1 ms High cost matters.
 - Performance: no Python/QObject object and no draw call per shard/tile/particle; instance repeated geometry; build
   per-run geometry once; reuse source/destination textures; derive per-piece state from compact seeds; bound
   blur/refraction/trail samples; adapt quality to measured cost. `Docs/Guardrails/Performance_Optimization_Contract.md`

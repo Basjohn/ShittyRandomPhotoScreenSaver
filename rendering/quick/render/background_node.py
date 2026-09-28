@@ -319,7 +319,7 @@ class BackgroundRenderNode(QSGRenderNode):
 
         self._transition_run = None
         self._presentation_image = None
-        if not self._image_textures.has_resources:
+        if not (self._image_textures.has_resources or self._transition_renderer.has_resources):
             return
         context = QOpenGLContext.currentContext()
         if context is None:
@@ -328,7 +328,10 @@ class BackgroundRenderNode(QSGRenderNode):
             logger.error("[QUICK] %s", error)
             return
         try:
-            self._image_textures.release(keep_lent=True)
+            if self._image_textures.has_resources:
+                self._image_textures.release(keep_lent=True)
+            # A 3D run's scene target is per-run memory too; programs stay warm.
+            self._transition_renderer.park()
         except Exception as exc:
             self._telemetry.note_error(
                 f"texture release failed: {type(exc).__name__}: {exc}"

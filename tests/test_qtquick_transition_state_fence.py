@@ -57,6 +57,23 @@ class _FakeGLState:
     GL_LESS = 201
     GL_GREATER = 202
     GL_LEQUAL = 203
+    GL_DRAW_FRAMEBUFFER_BINDING = 140
+    GL_READ_FRAMEBUFFER_BINDING = 141
+    GL_DRAW_FRAMEBUFFER = 142
+    GL_READ_FRAMEBUFFER = 143
+    GL_FRAMEBUFFER = 144
+    GL_BLEND_EQUATION_RGB = 150
+    GL_BLEND_EQUATION_ALPHA = 151
+    GL_BLEND_SRC_RGB = 152
+    GL_BLEND_DST_RGB = 153
+    GL_BLEND_SRC_ALPHA = 154
+    GL_BLEND_DST_ALPHA = 155
+    GL_FUNC_ADD = 300
+    GL_MIN = 301
+    GL_ONE = 310
+    GL_ZERO = 311
+    GL_SRC_ALPHA = 312
+    GL_ONE_MINUS_SRC_ALPHA = 313
 
     def __init__(self) -> None:
         self.viewport = (0, 0, 1, 1)
@@ -75,6 +92,9 @@ class _FakeGLState:
         self.depth_write = True
         self.depth_func = self.GL_LESS
         self.depth_clear = 1.0
+        self.framebuffers = {self.GL_DRAW_FRAMEBUFFER: 0, self.GL_READ_FRAMEBUFFER: 0}
+        self.blend_equation = [self.GL_FUNC_ADD, self.GL_FUNC_ADD]
+        self.blend_function = [self.GL_ONE, self.GL_ZERO, self.GL_ONE, self.GL_ZERO]
 
     # --- queries -------------------------------------------------------
     def glGetIntegerv(self, name):
@@ -92,6 +112,16 @@ class _FakeGLState:
             return self.tex[self.active_texture]
         if name == self.GL_DEPTH_FUNC:
             return self.depth_func
+        if name == self.GL_DRAW_FRAMEBUFFER_BINDING:
+            return self.framebuffers[self.GL_DRAW_FRAMEBUFFER]
+        if name == self.GL_READ_FRAMEBUFFER_BINDING:
+            return self.framebuffers[self.GL_READ_FRAMEBUFFER]
+        equations = (self.GL_BLEND_EQUATION_RGB, self.GL_BLEND_EQUATION_ALPHA)
+        if name in equations:
+            return self.blend_equation[equations.index(name)]
+        functions = (self.GL_BLEND_SRC_RGB, self.GL_BLEND_DST_RGB, self.GL_BLEND_SRC_ALPHA, self.GL_BLEND_DST_ALPHA)
+        if name in functions:
+            return self.blend_function[functions.index(name)]
         raise AssertionError(f"unexpected glGetIntegerv({name})")
 
     def glGetBooleanv(self, name):
@@ -137,6 +167,18 @@ class _FakeGLState:
     def glClearDepth(self, value):
         self.depth_clear = float(value)
 
+    def glBindFramebuffer(self, target, framebuffer):
+        targets = ((self.GL_DRAW_FRAMEBUFFER, self.GL_READ_FRAMEBUFFER)
+                   if target == self.GL_FRAMEBUFFER else (target,))
+        for bound in targets:
+            self.framebuffers[bound] = framebuffer
+
+    def glBlendEquationSeparate(self, rgb, alpha):
+        self.blend_equation = [rgb, alpha]
+
+    def glBlendFuncSeparate(self, src_rgb, dst_rgb, src_alpha, dst_alpha):
+        self.blend_function = [src_rgb, dst_rgb, src_alpha, dst_alpha]
+
     def glEnable(self, cap):
         self.enabled[cap] = True
 
@@ -160,6 +202,9 @@ class _FakeGLState:
             "depth_write": self.depth_write,
             "depth_func": self.depth_func,
             "depth_clear": self.depth_clear,
+            "framebuffers": dict(self.framebuffers),
+            "blend_equation": tuple(self.blend_equation),
+            "blend_function": tuple(self.blend_function),
         }
 
 
@@ -179,6 +224,9 @@ def _load_deliberately_non_default(fake: _FakeGLState) -> None:
     fake.depth_write = False
     fake.depth_func = fake.GL_LEQUAL
     fake.depth_clear = 0.25
+    fake.framebuffers = {fake.GL_DRAW_FRAMEBUFFER: 31, fake.GL_READ_FRAMEBUFFER: 32}
+    fake.blend_equation = [fake.GL_FUNC_ADD, fake.GL_FUNC_ADD]
+    fake.blend_function = [fake.GL_SRC_ALPHA, fake.GL_ONE_MINUS_SRC_ALPHA, fake.GL_ONE, fake.GL_ONE_MINUS_SRC_ALPHA]
 
 
 class _MutatingRenderer:
@@ -209,6 +257,10 @@ class _MutatingRenderer:
         g.glDepthMask(g.GL_TRUE)
         g.glDepthFunc(g.GL_GREATER)
         g.glClearDepth(0.75)
+        # A 3D renderer mid-scene: its own multisampled target and a MIN shadow pass.
+        g.glBindFramebuffer(g.GL_FRAMEBUFFER, 404)
+        g.glBlendEquationSeparate(g.GL_MIN, g.GL_FUNC_ADD)
+        g.glBlendFuncSeparate(g.GL_ONE, g.GL_ONE, g.GL_ZERO, g.GL_ONE)
         if self._raises:
             raise RuntimeError("boom during transition render")
 
