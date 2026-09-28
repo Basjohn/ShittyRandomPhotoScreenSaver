@@ -166,8 +166,8 @@ class CheckList(OutlinedListWidget):
             super().keyPressEvent(event)
 
 
-def silence_check(settings) -> QCheckBox:
-    check = checkbox("Hide This From Now On")
+def silence_check(settings, label: str = "Hide This From Now On") -> QCheckBox:
+    check = checkbox(label)
     check.setToolTip(SILENCE_TEXT)
     check.setChecked(bool(settings.get("sources.guided_setup_silenced")))
     check.toggled.connect(lambda checked: settings.set("sources.guided_setup_silenced", checked))
