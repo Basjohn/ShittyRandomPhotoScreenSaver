@@ -652,5 +652,29 @@ class ArrangePage(Page):
     def discard(self):
         if self.model is not None: self.model.discard(); self.canvas._selected = None; self._refresh_item_choices(); self.canvas.update(); self._pending_changed()
 
+    def resolve_pending(self) -> bool:
+        """Before leaving Arrange with an unapplied draft: Apply, Discard or Stay.
+
+        Returns False only when the operator chooses to stay. Closing the popup
+        is not a decision, so it stays too.
+        """
+
+        if self.model is None or not self.model.pending:
+            return True
+        popup = StyledPopup(
+            self.window(), "Unsaved Arrange Changes",
+            "You changed widgets in Arrange without applying them. Apply them to the saver, or discard them?",
+            icon_type="question",
+            buttons=[("Apply Changes", "apply"), ("Discard Changes", "discard"), ("Stay In Arrange", "stay")],
+            default_button_index=0)
+        popup.exec()
+        choice = popup.result_value or "stay"
+        if choice == "apply":
+            return self.apply()
+        if choice == "discard":
+            self.discard()
+            return True
+        return False
+
     def can_continue(self) -> bool: return True
     def leave(self) -> bool: return self.apply()

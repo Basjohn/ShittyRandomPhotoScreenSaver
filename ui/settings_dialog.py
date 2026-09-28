@@ -1085,6 +1085,8 @@ class SettingsDialog(QDialog):
         """Show Guided Setup in place of the sidebar and tabs (never a second window)."""
         if self._guided_setup_panel is not None or self._closing:
             return
+        if not self._resolve_pending_arrange():
+            return
         from ui.onboarding.wizard import GuidedSetupPanel
         host = QWidget()
         layout = QVBoxLayout(host)
@@ -1099,6 +1101,12 @@ class SettingsDialog(QDialog):
         self._shell_stack.setCurrentWidget(host)
         # The watcher variant: wizard pages are built lazily after this call.
         apply_shadows_to_inputs(host)
+
+    def _resolve_pending_arrange(self) -> bool:
+        """Apply/Discard/Stay for an unapplied Quick Start Arrange draft; False = stay."""
+        quick_start = self._tab_widgets.get("quick_start")
+        resolve = getattr(quick_start, "resolve_pending_arrange", None)
+        return resolve() if callable(resolve) else True
 
     def _end_guided_setup(self, _completed: bool = False) -> None:
         host = self._guided_setup_host
@@ -1322,6 +1330,17 @@ class SettingsDialog(QDialog):
         if index < 0 or index >= len(self.tab_buttons):
             return
         if self._admit_top_level_tab_index(index) != index:
+            return
+        quick_start_index = self._tab_index_for_key("quick_start")
+        if (
+            self.content_stack.currentIndex() == quick_start_index
+            and index != quick_start_index
+            and self.isVisible()
+            and not self._resolve_pending_arrange()
+        ):
+            # Stay in Arrange: keep Quick Start's button the checked one.
+            for position, button in enumerate(self.tab_buttons):
+                button.setChecked(position == quick_start_index)
             return
         self._ensure_tab_built(index)
         previous_index = self.content_stack.currentIndex()
@@ -1576,6 +1595,11 @@ class SettingsDialog(QDialog):
                 self._closing = False
                 event.ignore()
                 return
+        if self.isVisible() and not self._resolve_pending_arrange():
+            # An unapplied Arrange draft: "Stay In Arrange" cancels the close.
+            self._closing = False
+            event.ignore()
+            return
         
         try:
             current_index = self.content_stack.currentIndex()
@@ -2245,8 +2269,10 @@ class SettingsDialog(QDialog):
         painter.restore()
 
     def keyPressEvent(self, event):
-        """Intercept Enter/Return so it closes the dialog instead of minimizing."""
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        """Enter/Return/Escape close through closeEvent (never a bare hide or minimize)."""
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape):
+            # Escape too: QDialog's default reject() would hide the dialog without
+            # closeEvent (no unsaved-changes prompts, no close flush).
             self.close()
             return
         super().keyPressEvent(event)
