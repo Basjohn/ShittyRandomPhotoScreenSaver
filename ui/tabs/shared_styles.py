@@ -1394,6 +1394,9 @@ STATUS_LABEL_STYLE = (
     "font-size: 11px;"
     "letter-spacing: 0.3px;"
 )
+# Account/connection status text: ready (connected) and needs-attention.
+STATUS_READY_COLOR = "#72d696"
+STATUS_ATTENTION_COLOR = "#efad5a"
 
 def _build_info_label_style() -> str:
     return (

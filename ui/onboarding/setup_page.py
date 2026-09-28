@@ -253,36 +253,62 @@ class SetupPage(Page):
         steam._hydrate_saved_connection_status(host)
 
     def _build_gmail(self, layout):
+        from PySide6.QtWidgets import QVBoxLayout, QWidget
         layout.addWidget(text_label("Use a Google App Password, not your normal Google password. SRPSS tests the connection directly with Gmail and stores the credential encrypted for your Windows account."))
-        if self._account_admitted(layout):
-            self._build_gmail_account(layout)
-        self._build_gmail_sound(layout)
+        # Same rhythm as the Steam section: one host, labelled rows, 10 px apart.
+        host = QWidget()
+        body = QVBoxLayout(host); body.setContentsMargins(0, 0, 0, 0); body.setSpacing(10)
+        if self._account_admitted(body):
+            self._build_gmail_account(body)
+            body.addSpacing(8)
+        self._build_gmail_sound(body)
+        layout.addWidget(host)
+
+    @staticmethod
+    def _labelled_row(title):
+        from PySide6.QtWidgets import QHBoxLayout
+        row = QHBoxLayout(); row.setSpacing(10)
+        label = text_label(title); label.setMinimumWidth(140)
+        row.addWidget(label)
+        return row
 
     def _build_gmail_account(self, layout):
         from core.windows.secure_url_launcher import open_url
         from core.gmail.gmail_backend import GmailBackend
+        from ui.tabs.shared_styles import STATUS_ATTENTION_COLOR, STATUS_LABEL_STYLE, STATUS_READY_COLOR
         backend = GmailBackend.instance()
-        connection = text_label("Checking your saved Gmail connection…")
-        layout.addWidget(connection)
-        layout.addWidget(action("Create a Google App Password", lambda: open_url("https://myaccount.google.com/apppasswords", prefer_direct=True, source="gmail_settings") if is_interactive_user_desktop() else None))
+        state_row = self._labelled_row("Gmail Account")
+        connection = text_label("Checking…")
+        state_row.addWidget(connection)
+        state_row.addWidget(action("Create a Google App Password", lambda: open_url("https://myaccount.google.com/apppasswords", prefer_direct=True, source="gmail_settings") if is_interactive_user_desktop() else None))
+        state_row.addStretch()
+        layout.addLayout(state_row)
+        detail = text_label("")
+        detail.hide()
+        layout.addWidget(detail)
         email = QLineEdit(); email.setPlaceholderText("you@gmail.com")
         password = QLineEdit(); password.setPlaceholderText("App Password"); password.setEchoMode(QLineEdit.EchoMode.Password)
         self._password_inputs.append(password)
-        layout.addWidget(email); layout.addWidget(password)
+        for title, field in (("Gmail Address", email), ("App Password", password)):
+            row = self._labelled_row(title)
+            row.addWidget(field, 1)
+            layout.addLayout(row)
         status = text_label("OAuth remains available in full Settings.")
 
         def show_saved_state():
             # Status text and address only: the stored password is never read back.
             if self._retired.is_set() or not isValid(connection):
                 return
-            if backend.is_authenticated:
-                connection.setText("CONNECTED  ·  " + backend.status_text)
+            ready = bool(backend.is_authenticated)
+            connection.setText("Connected" if ready else "Not connected")
+            connection.setStyleSheet(f"{STATUS_LABEL_STYLE} color: {STATUS_READY_COLOR if ready else STATUS_ATTENTION_COLOR};")
+            detail.setText(str(backend.status_text or ""))
+            detail.setVisible(bool(detail.text()))
+            if ready:
                 saved_email = getattr(backend, "_imap_email", None)
                 if saved_email and not email.text():
                     email.setText(saved_email)
                 password.setPlaceholderText("Saved (hidden). Paste a new App Password only to replace it.")
-            else:
-                connection.setText("NOT CONNECTED  ·  " + backend.status_text)
 
         if getattr(backend, "is_initialized", True):
             show_saved_state()
@@ -318,13 +344,15 @@ class SetupPage(Page):
                 self._worker(lambda: GmailConnectionController().test_imap(backend, entered_email, entered_password), done)
             backend.ensure_initialized(backend.get_bootstrap_thread_manager(), initialized)
         save = action("Save && Test", save_credentials)
-        layout.addWidget(save); layout.addWidget(status)
+        actions = self._labelled_row("")
+        actions.addWidget(save); actions.addWidget(status, 1)
+        layout.addLayout(actions)
 
     def _build_gmail_sound(self, layout):
         """New-mail sound: most users would never find it in full Settings."""
-        from PySide6.QtWidgets import QHBoxLayout, QSlider
+        from PySide6.QtWidgets import QSlider
         from ui.tabs import widgets_tab_gmail as gmail
-        from ui.tabs.widgets_tab import NoWheelSlider
+        from ui.tabs.shared_styles import NoWheelSlider
         play = checkbox("Play Sound on New Mail")
         play.setChecked(bool(self.settings.get("widgets.gmail.play_sound_on_new_mail")))
         play.toggled.connect(lambda checked: self.settings.set("widgets.gmail.play_sound_on_new_mail", checked))
@@ -333,20 +361,19 @@ class SetupPage(Page):
         self.gmail_sound_file = QLineEdit(str(self.settings.get("widgets.gmail.sound_file_path") or ""))
         self.gmail_sound_file.setPlaceholderText("Path to .ogg/.wav/.mp3")
         self.gmail_sound_file.textChanged.connect(lambda text: self.settings.set("widgets.gmail.sound_file_path", text))
-        row = QHBoxLayout()
+        row = self._labelled_row("Sound File")
         row.addWidget(self.gmail_sound_file, 1)
         row.addWidget(action("Browse…", lambda: gmail._on_gmail_browse_sound(self)))
         row.addWidget(action("Test", lambda: gmail._on_gmail_test_sound(self)))
         layout.addLayout(row)
-        volume_row = QHBoxLayout()
-        label = text_label("Sound Volume"); label.setMinimumWidth(140)
-        volume_row.addWidget(label)
+        volume_row = self._labelled_row("Sound Volume")
         self.gmail_sound_volume = NoWheelSlider(Qt.Orientation.Horizontal)
         self.gmail_sound_volume.setRange(0, 100)
         self.gmail_sound_volume.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.gmail_sound_volume.setTickInterval(10)
         self.gmail_sound_volume.setValue(int(self.settings.get("widgets.gmail.sound_volume_percent") or 0))
         value = text_label(f"{self.gmail_sound_volume.value()}%")
+        value.setMinimumWidth(50)
         self.gmail_sound_volume.valueChanged.connect(lambda v: (value.setText(f"{v}%"), self.settings.set("widgets.gmail.sound_volume_percent", int(v))))
         volume_row.addWidget(self.gmail_sound_volume, 1); volume_row.addWidget(value)
         layout.addLayout(volume_row)

@@ -238,7 +238,7 @@ class Page(QWidget):
         self.body = QVBoxLayout(content)
         self.body.setContentsMargins(16, 12, 16, 12)
         self.body.setSpacing(16)
-        shared_styles.bind_shared_styles(self, "CIRCLE_CHECKBOX_STYLE", "SPINBOX_STYLE", "COMBOBOX_STYLE")
+        shared_styles.bind_shared_styles(self, "CIRCLE_CHECKBOX_STYLE", "SPINBOX_STYLE", "COMBOBOX_STYLE", "SLIDER_STYLE")
         if scrollable:
             scroll = QScrollArea(self)
             scroll.setWidgetResizable(True)
