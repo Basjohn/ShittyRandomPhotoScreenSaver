@@ -443,6 +443,13 @@ class ClockFamilyAdapter:
         style = ClockPresentationStyle.project(config, shadow_values)
         return ClockPresentationModel(config, style)
 
+    def apply_committed_size_payload(self, model: Any, payload: Mapping[str, object]) -> None:
+        """Present ``model`` as a committed CUSTOM payload does (its font size)."""
+
+        from .clock import clock_config_with_size_payload
+
+        model.apply_config(clock_config_with_size_payload(model.config, payload))
+
     def build(
         self,
         *,
@@ -535,6 +542,11 @@ class WeatherFamilyAdapter:
         config = WeatherPresentationConfig.from_widgets_mapping(widgets_config)
         style = WeatherPresentationStyle.project(config, shadow_values)
         return WeatherPresentationModel(config, style)
+
+    def prepare_measurement(self, model: Any) -> None:
+        """Weather's height follows its data: measure the state data brings."""
+
+        model.present_measurement_sample()
 
     def build(
         self,

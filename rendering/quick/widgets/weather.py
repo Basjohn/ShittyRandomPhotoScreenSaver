@@ -364,6 +364,20 @@ class WeatherPresentationSnapshot:
     from_cache: bool
 
 
+# Neutral data shaped like a real fetch: one row of each kind, five daily lines.
+_MEASUREMENT_SAMPLE: Mapping[str, Any] = {
+    "temperature": 20,
+    "condition": "partly cloudy",
+    "weather_code": 2,
+    "is_day": 1,
+    "precipitation_probability": 10,
+    "humidity": 50,
+    "windspeed": 10.0,
+    "forecast": "Tomorrow: 20°C / Partly Cloudy",
+    "forecast_days": [f"{day}: 20°C / Partly Cloudy" for day in ("MON", "TUE", "WED", "THU", "FRI")],
+}
+
+
 def _initial_snapshot(
     config: WeatherPresentationConfig,
     style: WeatherPresentationStyle,
@@ -607,6 +621,19 @@ class WeatherPresentationModel(QObject):
         if not self.is_weather_consumer_alive():
             return
         self._publish_data(data, from_cache=from_cache)
+
+    def present_measurement_sample(self) -> None:
+        """Show the steady state a configured card reaches once data arrives.
+
+        Used only to measure the card's size (Settings Arrange measures through
+        this family's own QML): the ready rows and, when enabled, the 5-day band
+        are laid out from neutral values through the normal data path. A card
+        with no location stays in its "location required" state, as it would.
+        """
+
+        if self._snapshot.view_state == "missing":
+            return
+        self._publish_data(_MEASUREMENT_SAMPLE, from_cache=True)
 
     def apply_weather_data(self, data: Mapping[str, Any]) -> None:
         if not self.is_weather_consumer_alive():

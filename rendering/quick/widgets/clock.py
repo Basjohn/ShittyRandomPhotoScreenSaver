@@ -514,6 +514,21 @@ def _hand_angles(now: datetime) -> tuple[float, float, float]:
     )
 
 
+def clock_config_with_size_payload(
+    config: ClockPresentationConfig,
+    payload: Mapping[str, object] | None,
+) -> ClockPresentationConfig:
+    """A committed CUSTOM size payload's font replaces the Settings font (clock_font)."""
+
+    if not isinstance(payload, Mapping):
+        return config
+    try:
+        font_size = int(payload.get("font_size", config.font_size))
+    except (TypeError, ValueError):
+        return config
+    return replace(config, font_size=max(8, font_size))
+
+
 class ClockPresentationModel(QObject):
     """One stable presentation-oriented model per logical Clock instance.
 
@@ -1070,9 +1085,8 @@ class RetainedClockPresentation:
         self,
         payload: Mapping[str, object],
     ) -> None:
-        font_size = int(payload.get("font_size", self._model.config.font_size))
         if self._model.apply_config(
-            replace(self._model.config, font_size=max(8, font_size))
+            clock_config_with_size_payload(self._model.config, payload)
         ):
             self._geometry_store.remember(
                 self._model.config.widget_id,
