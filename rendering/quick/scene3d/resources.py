@@ -11,6 +11,7 @@ import ctypes
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.scene3d import SCENE3D_GLSL
 from rendering.quick import gl_query as _query
 from rendering.quick.render.gl_resources import compile_program
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame
@@ -22,6 +23,30 @@ out vec4 FragColor;
 uniform sampler2D uImage;
 void main() { FragColor = texture(uImage, vec2(vUv.x, 1.0-vUv.y)); }
 """
+
+# The photograph plane (z = 0) through a moving camera; texture v runs down the item.
+_CAMERA_PLANE_VERTEX = (
+    "#version 410 core\n"
+    "layout(location = 0) in vec2 aPosition;\n"
+    "uniform mat4 uMatrix; uniform vec2 uItemSize; uniform vec4 uCameraA; uniform vec4 uCameraB;\n"
+    "out vec2 vUv;\n"
+    + SCENE3D_GLSL
+    + """
+void main() {
+    float aspect = uItemSize.x / uItemSize.y;
+    vUv = aPosition;
+    gl_Position = sceneProjectCamera(uMatrix, uItemSize, vec3((aPosition.x - 0.5) * aspect, 0.5 - aPosition.y, 0.0),
+                                     uCameraA, uCameraB);
+}
+"""
+)
+_CAMERA_PLANE_FRAGMENT = """#version 410 core
+in vec2 vUv;
+out vec4 FragColor;
+uniform sampler2D uImage;
+void main() { FragColor = texture(uImage, vUv); }
+"""
+
 
 def pack_floats(values) -> bytes:
     """Pack floats as C ``float`` bytes, ready for ``glBufferData``.
@@ -133,6 +158,31 @@ class MeshResources:
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
+        gl.glUniform1i(uniforms["uImage"], 0)
+        gl.glBindVertexArray(frame.quad_vao)
+        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+
+    def draw_camera_plane(
+        self,
+        frame: SceneFrame,
+        texture_id: int,
+        camera_a: tuple[float, float, float, float],
+        camera_b: tuple[float, float, float, float],
+    ) -> None:
+        """The photograph at z = 0 seen through a moving camera (see ``sceneProjectCamera``).
+
+        At rest this draws the same pixels as ``draw_image``; while the camera moves,
+        its zoom must come from ``scene3d_camera_overscan`` so no frame edge shows.
+        """
+        program = self.program("camera_plane", _CAMERA_PLANE_VERTEX, _CAMERA_PLANE_FRAGMENT)
+        uniforms = self.uniforms("camera_plane", ("uMatrix", "uItemSize", "uImage", "uCameraA", "uCameraB"))
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        gl.glDepthMask(gl.GL_FALSE)
+        bind_frame(program, uniforms, frame)
+        gl.glUniform4f(uniforms["uCameraA"], *camera_a)
+        gl.glUniform4f(uniforms["uCameraB"], *camera_b)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
         gl.glUniform1i(uniforms["uImage"], 0)

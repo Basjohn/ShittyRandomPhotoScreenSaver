@@ -155,6 +155,36 @@ def test_projection_depth_and_shadow_casting_match(probe):
     _check(gpu, [lib.scene3d_cast_on_plane(w, plane) for w, plane in casts])
 
 
+def test_cameras_match_and_rest_exactly(probe):
+    rng = random.Random(7)
+    aspect = _ITEM[0] / _ITEM[1]
+    cases = []
+    for _ in range(96):
+        world = (rng.uniform(-1, 1), rng.uniform(-0.6, 0.6), rng.uniform(-0.5, 1.5))
+        a = (rng.uniform(2.5, 4.0), rng.uniform(1.0, 1.3), rng.uniform(-0.05, 0.05), rng.uniform(-0.05, 0.05))
+        b = (rng.uniform(-0.1, 0.1), rng.uniform(-0.1, 0.1), 0.0, 0.0)
+        cases.append((world, a, b))
+    gpu = probe.run(
+        "vec4 clip = sceneProjectCamera(MATRIX, ITEM, arg(0).xyz, arg(1), arg(2));"
+        "vec2 ndc = clip.xy / clip.w; FragColor = vec4((ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5, 0.0, 0.0);",
+        [[w, a, b] for w, a, b in cases])
+    _check(gpu, [lib.scene3d_camera_uv(w, aspect, a, b) for w, a, b in cases])
+
+    distances = [((rng.uniform(-1, 1), rng.uniform(-0.6, 0.6), rng.uniform(-0.5, 1.5)), rng.uniform(2.5, 4.0)) for _ in range(64)]
+    gpu = probe.run(
+        "vec4 a = arg(0); vec4 clip = sceneProjectAt(MATRIX, ITEM, a.xyz, a.w);"
+        "vec2 ndc = clip.xy / clip.w; FragColor = vec4((ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5, 0.0, 0.0);",
+        [[(*w, d)] for w, d in distances])
+    _check(gpu, [lib.scene3d_screen_uv_at(w, aspect, d) for w, d in distances])
+
+    # A camera at rest is exactly the resting projection: same clip coordinates, bit for bit.
+    gpu = probe.run(
+        "vec4 a = arg(0); FragColor = sceneProjectCamera(MATRIX, ITEM, a.xyz, vec4(a.w, 1.0, 0.0, 0.0), vec4(0.0))"
+        " - sceneProjectAt(MATRIX, ITEM, a.xyz, a.w);",
+        [[(*w, d)] for w, d in distances])
+    assert np.count_nonzero(gpu) == 0
+
+
 def test_rotation_hash_and_colour_functions_match(probe):
     rng = random.Random(3)
     rotations = [((rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1)), _unit(rng), rng.uniform(-8, 8)) for _ in range(96)]
