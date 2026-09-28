@@ -1933,13 +1933,16 @@ class QuickCustomLayoutOwner:
                 size_reset_capable=descriptor.requires_size_reset_affordance,
                 authored_reference_size=(authored_width, authored_height),
                 authored_size_payload=authored_payload,
+                # A never-placed card follows its content like a content-sized
+                # entry (as Settings Arrange saves it): Save must not freeze a
+                # still-loading card (Weather before data) as a fixed box.
                 content_sized=bool(
-                    committed_entry is not None
-                    and committed_entry.size_payload.get("_size_from_content") is True
+                    committed_entry is None
+                    or committed_entry.size_payload.get("_size_from_content") is True
                 ),
                 baseline_content_sized=bool(
-                    committed_entry is not None
-                    and committed_entry.size_payload.get("_size_from_content") is True
+                    committed_entry is None
+                    or committed_entry.size_payload.get("_size_from_content") is True
                 ),
                 placement_anchor=(
                     str(committed_entry.size_payload.get("_placement_anchor") or "").strip()

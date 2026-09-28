@@ -676,6 +676,58 @@ def test_the_same_size_gesture_saves_the_same_layout_in_runtime_edit_and_arrange
         qt_app.processEvents()
 
 
+@pytest.mark.qt
+def test_a_never_placed_layout_saves_the_same_in_runtime_edit_and_arrange(qt_app, monkeypatch) -> None:
+    """Untouched cards keep following their content in both editors.
+
+    Edit's Save writes every card; a fixed box taken while a card is still
+    loading (Weather before its first data) would later shrink the card inside
+    it. Both editors save a never-placed card as a content-sized placement.
+    """
+
+    import rendering.quick.widgets.family_binder as binder
+    from rendering.custom_layout_commit import commit_custom_session
+    from rendering.custom_layout_contract import get_screen_signature, get_screen_signature_aliases
+    from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
+
+    monkeypatch.setattr(binder, "_attach_runtime_service", lambda *_args, **_kwargs: True)  # no services
+    widgets = _clock_face_widgets()
+    widgets["family_activation"] = _families("clocks", "weather", "system_stats")
+    widgets["weather"].update(enabled=True, position="Bottom Left", monitor="ALL")
+    widgets["system_stats"].update(enabled=True, position="Middle Left", monitor="ALL")
+    screen = qt_app.primaryScreen()
+    display = ArrangeDisplay(get_screen_signature(screen), get_screen_signature_aliases(screen),
+                             QRect(screen.geometry()), "1")
+    factory = QuickSceneFactory()
+    meter = OrdinaryPreferredSizeMeter()
+    unit = _edit_unit(qt_app, widgets, 630, factory)
+    try:
+        owner = QuickCustomLayoutOwner(settings_manager=_EditSettings(widgets), participants_provider=lambda: (unit,),
+                                       visualizer_provider=lambda: (None, None), reload_request=lambda _k: None,
+                                       live_config_commit=lambda _w: None)
+        assert owner.start() is True
+        try:
+            edited = deepcopy(widgets)
+            commit_custom_session(edited, owner.session, owner._descriptors, owner._bindings)
+        finally:
+            owner.cancel()
+        model = ArrangeModel(widgets, (display,), meter=meter)
+        first = model.session.items()[0]
+        origin = QRect(first.current_global_rect)
+        model.move(first.source_key, origin.translated(1, 0), snap=False)
+        model.move(first.source_key, origin, snap=False)
+        arranged = model.apply()
+        assert load_custom_layout_map(arranged) == load_custom_layout_map(edited)
+        for variants in load_custom_layout_map(edited)["displays"][display.identity].values():
+            for entry in variants.values():
+                assert entry["size_payload"].get("_size_from_content") is True
+    finally:
+        unit.retire()
+        factory.deleteLater()
+        meter.close()
+        qt_app.processEvents()
+
+
 _POLISH_TRUTH = r'''
 import json, os, sys
 from copy import deepcopy
