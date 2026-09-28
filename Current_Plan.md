@@ -4,6 +4,24 @@ Active development work only. Implemented features keep their open physical acce
 (`Docs/Reference/Guided_Setup.md`, `Docs/Reference/Feeds.md`, `Docs/Reference/Transitions.md`); closed plans and
 audits are historicalised (`Docs/Historical_Bugs/R-100_...`, `R-101_...`).
 
+## 3D scene foundation | operator-promoted 2026-09-29
+
+Detail, rewards, risks and performance hazards per slice: `Docs/Future_Work/3D_Scene_Foundation.md`. Work in this
+order; commit and push each slice; tests and measurements before looks change.
+
+- [ ] **S1** GLSL self-test harness (GPU results vs CPU mirrors).
+- [ ] **S2** Shared home `rendering/quick/scene3d/`, rect-aware bucketed `SceneTarget`, Visualizer fence restores
+      framebuffers, documented Visualizer opt-in (no mode changes).
+- [ ] **S3** Per-frame uniform blocks (Exploding Tiles first; identical pixels, fewer GL calls).
+- [ ] **S4** Camera in the library (per-effect distance, offset/tilt/shake; exact at rest; no exposed edges).
+- [ ] **S5** Glass Shatter, Pixel Accretion, Crumble and 3D Block Spins onto the library and 3D Detail (looks kept).
+- [ ] **S6** Bloom on High from emissive content only (HDR only if measurements justify it).
+- [ ] **S7** Analytic motion blur on High.
+- [ ] **S8** Shared particles, planar soft shadows and the bendable grid surface.
+- [ ] **S9** Photo reflections from renderer-owned per-run copies (opt-in per effect).
+- [ ] **S10** Cheaper High, only if physical testing shows the cost matters.
+- [ ] **S11** First-frame program compile, only if the installed build's frame trace shows the hitch.
+
 ## Memory and handles | open development items
 
 - [ ] **ImageWorker lean entry (R-99).** The ImageWorker re-imports the whole app graph on `spawn` (~1,060 modules). A lean worker entry could save ~100 MB resident, but it must be validated under Nuitka multiprocessing first.
