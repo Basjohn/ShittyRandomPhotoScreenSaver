@@ -4,7 +4,7 @@ Guided Setup is a lazy panel shown inside the Settings window (it replaces the s
 shares Settings' theme and backdrop). With no folders or wallpaper feeds, Settings makes one deferred
 decision after its shell is shown: open Guided Setup, or show the existing No Image Sources popup when
 `sources.guided_setup_silenced` is true. Sources present means no automatic prompt. The Settings close guard still
-requires an image source. QUICK START always allows a manual rerun, regardless of Silence; there is no completion flag.
+requires an image source. QUICK START always allows a manual rerun, regardless of Hide This From Now On; there is no completion flag.
 
 ## Owners and choices
 
@@ -118,8 +118,14 @@ resize (uniform scale, width/height) and, in Runtime Edit, on child edits.
 
 **Unapplied Arrange changes.** Arrange under Settings → Quick Start applies nothing until Apply. Closing Settings (close
 button, Enter or Escape), switching to another Settings tab, or starting Guided Setup with a pending draft asks once,
-in the shared styled popup: Apply Changes, Discard Changes or Stay In Arrange (closing the popup stays). Inside Guided
-Setup the draft belongs to the wizard's own Keep/Discard/Stay prompt. Child geometry and content rotation remain Runtime Edit operations.
+in the shared styled popup: Apply Changes, Discard Changes or Stay In Arrange (closing the popup stays). Guided
+Setup's Arrange step asks the same on Back and Next (Apply there applies to the wizard's draft, saved at Finish); Skip
+or closing Settings keeps the wizard's own Keep/Discard/Stay prompt.
+
+**Finish and Finish & Run.** The last step offers both; both save. Finish & Run then closes Settings asking to run
+(`SettingsDialog.request_run_after_close`): a running saver, or a RUN launch waiting on Settings for image sources,
+resumes on close with the saved settings; a Settings-only (CONFIG) launch continues into RUN in the same process
+(`main.run_config_session`), as a RUN launch resumes after source onboarding. Staying at a close prompt cancels it. Child geometry and content rotation remain Runtime Edit operations.
 
 Sizing is Runtime Edit's own, so the same gesture in either editor saves the same entry. Uniform scale (corner drag,
 Ctrl+wheel, slider) uses `uniform_scale_geometry` in `rendering/quick/custom_layout_size.py`, which Runtime Edit calls
@@ -197,7 +203,7 @@ Implementation and automated coverage are complete; one operator pass on the rea
 - Sources buckets, a custom feed address, clicking displays in the diagram, Interaction greyed on MC;
 - Widget Setup: Clocks face/timezones, Weather location and Show 5-Day Forecast, Steam shows a saved connection,
   Gmail notification sound + Test;
-- Silence → old no-source popup;
+- Hide This From Now On → old no-source popup;
 - live Theme switch; monitor selection; Interaction demo;
 - widget previews and selections;
 - one Steam/Gmail/Weather/Reddit/FEEDS setup path, including the D1 message when started by Windows as the screensaver;
@@ -212,7 +218,10 @@ Implementation and automated coverage are complete; one operator pass on the rea
   Cancel); save to a slot, then load it on the saver with its number key;
 - Arrange: move a widget and, without Apply, close Settings (and separately: switch tab, press Escape, start Guided
   Setup) — the Apply/Discard/Stay popup appears each time; Stay keeps the draft and Quick Start in view; Apply shows the
-  move on the saver; Discard drops it;
+  move on the saver; Discard drops it. In Guided Setup's Arrange step the same popup appears on Back and on Next;
+- Finish & Run from standalone Settings (Windows Screen Saver Settings → Settings, or the MC Settings launch), from
+  Settings opened on the running saver, and from a saver launch that opened Settings for missing sources: each saves
+  and starts (or resumes) the saver with the new settings; Finish only saves;
 - Runtime Edit on first run or offline (Weather still loading): Save without touching Weather; once data arrives,
   Weather grows to its full card instead of shrinking inside a short box;
 - Ready step: the Settings / Edit Widget Layout menu capture sits beside the summary, sharp at your DPR, with no
