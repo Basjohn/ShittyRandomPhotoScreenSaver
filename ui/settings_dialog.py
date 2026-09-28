@@ -646,6 +646,8 @@ class SettingsDialog(QDialog):
         self._closing = False
         self._no_sources_decision_pending = True
         self._guided_setup_panel = None
+        # Set by Guided Setup's Finish & Run; a Settings-only launch then starts RUN.
+        self.run_requested = False
         self._guided_setup_host = None
         self._backdrop_applied = False
         # Native backdrop state is dialog-owned. Acrylic and Glass both use one
@@ -1095,6 +1097,7 @@ class SettingsDialog(QDialog):
         panel = GuidedSetupPanel(self._settings, host)
         layout.addWidget(panel)
         panel.finished.connect(self._end_guided_setup)
+        panel.runRequested.connect(self.request_run_after_close)
         self._guided_setup_panel = panel
         self._guided_setup_host = host
         self._shell_stack.addWidget(host)
@@ -1102,9 +1105,21 @@ class SettingsDialog(QDialog):
         # The watcher variant: wizard pages are built lazily after this call.
         apply_shadows_to_inputs(host)
 
+    def request_run_after_close(self) -> None:
+        """Close Settings so the screensaver starts with the saved settings.
+
+        A running saver or a RUN launch waiting on this dialog resumes on close
+        by itself; a Settings-only (CONFIG) launch reads ``run_requested`` and
+        continues into RUN. Staying at a close prompt cancels the request.
+        """
+        self.run_requested = True
+        if not self.close():
+            self.run_requested = False
+
     def _resolve_pending_arrange(self) -> bool:
         """Apply/Discard/Stay for an unapplied Quick Start Arrange draft; False = stay."""
-        quick_start = self._tab_widgets.get("quick_start")
+        # The built tab, never its construction placeholder in _tab_widgets.
+        quick_start = self.__dict__.get("quick_start_tab")
         resolve = getattr(quick_start, "resolve_pending_arrange", None)
         return resolve() if callable(resolve) else True
 
@@ -1118,7 +1133,7 @@ class SettingsDialog(QDialog):
         self._shell_stack.removeWidget(host)
         host.deleteLater()
         self._reload_all_tab_settings()
-        quick_start = self._tab_widgets.get("quick_start")
+        quick_start = self.__dict__.get("quick_start_tab")
         refresh = getattr(quick_start, "refresh", None)
         if callable(refresh):
             refresh()

@@ -26,7 +26,7 @@ from rendering.quick.bootstrap import (
 configure_quick_environment()
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QImageReader, QIcon
 from core.logging.logger import (
     clear_logs_for_fresh_start,
@@ -691,31 +691,25 @@ def run_screensaver(
 
 
 def run_config(app: QApplication) -> int:
-    """
-    Run configuration dialog.
-    
-    Args:
-        app: Qt application instance
-    
-    Returns:
-        Exit code
+    """Run the configuration dialog and return its exit code."""
+    return run_config_session(app)[0]
+
+
+def run_config_session(app: QApplication) -> tuple[int, bool]:
+    """Run the Settings-only session; also report whether it asked to run.
+
+    Guided Setup's Finish & Run saves and closes Settings with
+    ``run_requested``. The caller then continues into RUN in this process, the
+    same way a RUN launch resumes after source onboarding.
     """
     logger.info("Opening configuration dialog")
-    
-    # Create settings manager
     settings = SettingsManager()
-    
-    # Create animation manager
     animations = AnimationManager(owner="settings:config")
-    
-    # Create and show settings dialog
     try:
         dialog = _settings_dialog_class()(settings, animations)
         dialog.show()
-        
         logger.info("Configuration dialog opened - entering event loop")
-        return app.exec()
-        
+        exit_code = app.exec()
     except Exception as e:
         logger.exception(f"Failed to open configuration dialog: {e}")
         _message_box_class().critical(
@@ -723,7 +717,18 @@ def run_config(app: QApplication) -> int:
             "Configuration Error",
             f"Failed to open settings:\n{e}"
         )
-        return 1
+        return 1, False
+    run_requested = bool(getattr(dialog, "run_requested", False))
+    if run_requested:
+        # The runtime must not keep the closed Settings tree alive.
+        try:
+            animations.stop()
+        except Exception:
+            logger.debug("Failed to stop config AnimationManager", exc_info=True)
+        dialog.deleteLater()
+        app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        logger.info("Settings requested Finish & Run; continuing in RUN mode")
+    return exit_code, run_requested
 
 
 def main(*, entrypoint: str = "main"):
@@ -958,6 +963,29 @@ def main(*, entrypoint: str = "main"):
     timer_res_set = False
     
     try:
+        if mode == ScreensaverMode.CONFIG:
+            run_requested = False
+            logger.info("Starting configuration dialog")
+            profile_flag = os.getenv("SRPSS_PROFILE_CPU", "").strip().lower()
+            if profile_flag in ("1", "true", "on", "yes"):
+                import cProfile
+
+                profiler = cProfile.Profile()
+                profiler.enable()
+                exit_code, run_requested = run_config_session(app)
+                profiler.disable()
+                try:
+                    profile_path = get_log_dir() / "screensaver_config.pstats"
+                    profiler.dump_stats(str(profile_path))
+                    logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
+                except Exception:
+                    logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
+            else:
+                exit_code, run_requested = run_config_session(app)
+            if run_requested:
+                # Guided Setup's Finish & Run: start the saver with the new settings.
+                mode = ScreensaverMode.RUN
+
         if mode == ScreensaverMode.RUN:
             logger.info("Starting screensaver in RUN mode")
             # Request 1ms timer resolution for smooth 60fps+ animations
@@ -990,25 +1018,6 @@ def main(*, entrypoint: str = "main"):
                     usage_enabled=usage_mode,
                     handle_attribution_enabled=handle_attribution_mode,
                 )
-            
-        elif mode == ScreensaverMode.CONFIG:
-            logger.info("Starting configuration dialog")
-            profile_flag = os.getenv("SRPSS_PROFILE_CPU", "").strip().lower()
-            if profile_flag in ("1", "true", "on", "yes"):
-                import cProfile
-
-                profiler = cProfile.Profile()
-                profiler.enable()
-                exit_code = run_config(app)
-                profiler.disable()
-                try:
-                    profile_path = get_log_dir() / "screensaver_config.pstats"
-                    profiler.dump_stats(str(profile_path))
-                    logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
-                except Exception:
-                    logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
-            else:
-                exit_code = run_config(app)
             
         elif mode == ScreensaverMode.PREVIEW:
             logger.info(f"Starting preview mode (hwnd={preview_hwnd})")

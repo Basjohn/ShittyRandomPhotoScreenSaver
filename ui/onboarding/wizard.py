@@ -19,6 +19,8 @@ class GuidedSetupPanel(QWidget):
     """Guided Setup steps; emits ``finished(completed)`` when the user leaves."""
 
     finished = Signal(bool)
+    # Finish & Run: after saving, Settings closes and the screensaver starts.
+    runRequested = Signal()
 
     STEPS = (
         ("welcome", "Welcome"), ("sources", "Sources"), ("displays", "Displays"),
@@ -55,7 +57,12 @@ class GuidedSetupPanel(QWidget):
         self.next = action("Next", self.go_next)
         self.next.setMinimumWidth(120)
         self.next.setDefault(True)
-        footer.addWidget(self.back); footer.addStretch(); footer.addWidget(self.next)
+        self.finish_and_run_button = action("Finish && Run", self.finish_and_run)
+        self.finish_and_run_button.setMinimumWidth(120)
+        self.finish_and_run_button.setToolTip("Save, close Settings and start the screensaver with your new settings.")
+        self.finish_and_run_button.hide()
+        footer.addWidget(self.back); footer.addStretch()
+        footer.addWidget(self.finish_and_run_button); footer.addWidget(self.next)
         layout.addLayout(footer)
         shared_styles.bind_shared_styles(self, "CIRCLE_CHECKBOX_STYLE")
         self.show_page("welcome")
@@ -124,17 +131,21 @@ class GuidedSetupPanel(QWidget):
         index = keys.index(self.current_key)
         self.progress.setText(f"STEP {index+1} OF {len(keys)}  ·  {dict(self.STEPS)[self.current_key].upper()}")
         self.back.setEnabled(index > 0)
-        self.next.setText("Finish" if self.current_key == "ready" else "Next")
+        ready = self.current_key == "ready"
+        self.next.setText("Finish" if ready else "Next")
         self.next.setEnabled(self.pages[self.current_key][0].can_continue())
+        self.finish_and_run_button.setVisible(ready)
+        self.finish_and_run_button.setEnabled(self.next.isEnabled())
 
     def go_back(self):
         keys = self.step_keys(); index = keys.index(self.current_key)
-        if index:
+        # Leaving Arrange with an unapplied draft asks first, as in Quick Start.
+        if index and self.pages[self.current_key][0].resolve_leave():
             self.show_page(keys[index-1])
 
     def go_next(self):
         page = self.pages[self.current_key][0]
-        if not page.can_continue() or not page.leave():
+        if not page.can_continue() or not page.resolve_leave() or not page.leave():
             return
         if self.current_key == "ready":
             self.finish()
@@ -169,6 +180,13 @@ class GuidedSetupPanel(QWidget):
         if has_image_sources(self.settings):
             self._save()
             self.close_setup(True)
+
+    def finish_and_run(self):
+        """Finish, then ask Settings to close and start the screensaver."""
+        if not has_image_sources(self.settings):
+            return
+        self.finish()
+        self.runRequested.emit()
 
     def request_close(self) -> bool:
         """Skip (or closing Settings): keep or discard the changes so far.

@@ -514,7 +514,7 @@ class ReadyPage(Page):
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("You're almost done", heading=True))
-        self.body.addWidget(text_label("Nothing is saved yet. Press Finish to save your settings. Optional accounts can be connected later in Settings."))
+        self.body.addWidget(text_label("Nothing is saved yet. Finish saves your settings; Finish & Run also starts the screensaver with them. Optional accounts can be connected later in Settings."))
         self.summary = text_label("")
         summary_row = QHBoxLayout(); summary_row.setSpacing(24)
         summary_row.addWidget(self.summary, 1, Qt.AlignmentFlag.AlignTop)

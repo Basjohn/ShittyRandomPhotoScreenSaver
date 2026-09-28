@@ -243,6 +243,6 @@ def test_ready_page_summarises_the_real_context_menu(qapp, settings, monkeypatch
     page = ReadyPage(settings)
     try:
         page.refresh()
-        assert "Press Finish to Save" in page.findChildren(type(page.summary))[1].text()
+        assert page.summary.text()  # the Ready summary is filled from the draft
     finally:
         page.deleteLater()

@@ -1,14 +1,13 @@
 """Leaving Arrange with an unapplied draft asks Apply / Discard / Stay.
 
-Settings → Quick Start's Arrange applies nothing until Apply. Closing Settings,
-switching tab or starting Guided Setup with a draft asks first; staying keeps
-the draft and Quick Start in view. No window is shown: the popup's exec is
-replaced by the operator's choice.
+Quick Start (a real SettingsDialog: tab switch and close) and Guided Setup
+(Back/Next from its Arrange step) ask the same question. No window is shown:
+the popup's exec is replaced by the operator's choice and the dialog reports
+itself visible so its close checks run.
 """
 from __future__ import annotations
 
 from copy import deepcopy
-from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QRect
@@ -40,31 +39,32 @@ class _Settings:
         self.values[key] = deepcopy(value)
 
 
-def _choose(monkeypatch, choice, asked):
+def _answer(monkeypatch, answers, asked):
+    """Each popup takes the next answer (None = closed without choosing)."""
     def fake_exec(popup):
         asked.append(popup)
-        popup._result_value = choice
+        popup._result_value = answers.pop(0)
         return 1
     monkeypatch.setattr(StyledPopup, "exec", fake_exec)
 
 
-def _page_with_draft():
-    from ui.onboarding.arrange import ArrangePage
-
-    settings = _Settings()
-    page = ArrangePage(settings)
+def _drag_first_box(page) -> None:
     item = page.model.session.items()[0]
     page.model.move(item.source_key, QRect(item.current_global_rect).translated(40, 20), snap=False)
+    page._pending_changed()
     assert page.model.pending
-    return page, settings
 
 
 @pytest.mark.parametrize("choice,leaves,applied", [("apply", True, True), ("discard", True, False),
                                                    ("stay", False, False), (None, False, False)])
 def test_leaving_with_a_draft_applies_discards_or_stays(monkeypatch, choice, leaves, applied) -> None:
-    page, settings = _page_with_draft()
+    from ui.onboarding.arrange import ArrangePage
+
+    settings = _Settings()
+    page = ArrangePage(settings)
+    _drag_first_box(page)
     asked = []
-    _choose(monkeypatch, choice, asked)
+    _answer(monkeypatch, [choice], asked)
     try:
         assert page.resolve_pending() is leaves
         assert len(asked) == 1
@@ -78,7 +78,7 @@ def test_nothing_is_asked_without_a_draft(monkeypatch) -> None:
     from ui.onboarding.arrange import ArrangePage
 
     asked = []
-    _choose(monkeypatch, "stay", asked)
+    _answer(monkeypatch, ["stay"], asked)
     page = ArrangePage(_Settings())
     try:
         assert page.resolve_pending() is True
@@ -87,25 +87,80 @@ def test_nothing_is_asked_without_a_draft(monkeypatch) -> None:
         page.deleteLater()
 
 
-def test_settings_asks_quick_start_and_stays_on_its_tab(monkeypatch) -> None:
+@pytest.fixture
+def dialog(tmp_path):
+    from core.animation.animator import AnimationManager
+    from core.settings.settings_manager import SettingsManager
     from ui.settings_dialog import SettingsDialog
 
-    answers = []
-    quick_start = SimpleNamespace(resolve_pending_arrange=lambda: answers.pop(0))
-    buttons = [SimpleNamespace(checked=False, setChecked=None) for _ in range(3)]
-    for button in buttons:
-        button.setChecked = lambda value, b=button: setattr(b, "checked", value)
-    host = SimpleNamespace(
-        tab_buttons=buttons, _tab_widgets={"quick_start": quick_start},
-        _admit_top_level_tab_index=lambda index: index, _tab_index_for_key=lambda key: 2,
-        content_stack=SimpleNamespace(currentIndex=lambda: 2), isVisible=lambda: True,
-        _ensure_tab_built=lambda index: (_ for _ in ()).throw(AssertionError("switched despite Stay")),
-    )
-    host._resolve_pending_arrange = lambda: SettingsDialog._resolve_pending_arrange(host)
+    settings = SettingsManager(organization="SRPSS_Test", application=f"arrange_prompt_{tmp_path.name}",
+                               storage_base_dir=tmp_path)
+    settings.set("sources.folders", [str(tmp_path)])  # an image source: close reaches the Arrange check
+    animations = AnimationManager()
+    result = SettingsDialog(settings, animations)
+    result.isVisible = lambda: True  # never shown; its close checks apply as if it were
+    yield result
+    result.deleteLater()
+    animations.cleanup()
 
-    answers.append(False)  # Stay In Arrange
-    SettingsDialog._switch_tab(host, 0)
-    assert [b.checked for b in buttons] == [False, False, True]
 
-    # Without a Quick Start page there is nothing to settle.
-    assert SettingsDialog._resolve_pending_arrange(SimpleNamespace(_tab_widgets={})) is True
+def _quick_start_with_draft(dialog):
+    index = dialog._tab_index_for_key("quick_start")
+    dialog._switch_tab(index, animate=False)
+    quick_start = dialog.quick_start_tab
+    quick_start.arrange_toggle.setChecked(True)
+    arrange = quick_start.arrange
+    if not arrange.model.session.items():
+        pytest.skip("default settings enable no arrangeable widget")
+    _drag_first_box(arrange)
+    return index, arrange
+
+
+def test_quick_start_draft_asks_before_another_tab_and_before_closing(dialog, monkeypatch) -> None:
+    index, arrange = _quick_start_with_draft(dialog)
+    asked = []
+
+    _answer(monkeypatch, ["stay"], asked)
+    dialog._switch_tab(0, animate=False)
+    assert len(asked) == 1
+    assert dialog.content_stack.currentIndex() == index  # stayed on Quick Start
+    assert arrange.model.pending
+
+    _answer(monkeypatch, ["stay"], asked)
+    assert dialog.close() is False  # Stay In Arrange cancels the close
+    assert len(asked) == 2 and arrange.model.pending
+
+    _answer(monkeypatch, ["discard"], asked)
+    dialog._switch_tab(0, animate=False)
+    assert len(asked) == 3
+    assert dialog.content_stack.currentIndex() == 0
+    assert not arrange.model.pending
+
+
+def test_guided_setup_arrange_step_asks_on_back_and_next(monkeypatch) -> None:
+    from ui.onboarding.wizard import GuidedSetupPanel
+
+    class _Real(_Settings):
+        def save(self):
+            pass
+
+    panel = GuidedSetupPanel(_Real())
+    try:
+        panel.show_page("arrange")
+        arrange = panel.pages["arrange"][0]
+        _drag_first_box(arrange)
+        asked = []
+        _answer(monkeypatch, ["stay", "stay"], asked)
+        panel.go_back()
+        assert panel.current_key == "arrange"
+        panel.go_next()
+        assert panel.current_key == "arrange" and len(asked) == 2 and arrange.model.pending
+
+        _answer(monkeypatch, ["apply"], asked)
+        panel.go_next()
+        assert len(asked) == 3
+        assert panel.current_key == "ready"
+        assert not arrange.model.pending
+    finally:
+        panel.close_setup(False)
+        panel.deleteLater()
