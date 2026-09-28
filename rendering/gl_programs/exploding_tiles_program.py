@@ -1,9 +1,20 @@
-"""Static beveled-slab mesh and analytic departure contract for Exploding Tiles."""
+"""Exploding Tiles: a beveled-slab mesh blown apart by an analytic blast.
+
+Cracks race out from the blast point and glow; at the detonation a flash and a
+shock front release each tile with an impulse (drag, then drift and gravity),
+tumbling and flying toward the viewer, hot at the edges and lit by the fireball.
+Sparks, soft shadows on the new photograph and multisampling come from the
+shared 3D scene library and the run's 3D Detail tier. Every piece is clear of
+the frame by ``EXPLODING_TILES_SETTLE`` by construction.
+"""
 
 from __future__ import annotations
 
 import math
+import random
 from collections.abc import Mapping
+
+from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES, SCENE3D_GLSL, scene3d_impulse
 
 
 EXPLODING_TILES_VERTEX_STRIDE_FLOATS = 8
@@ -149,10 +160,22 @@ EXPLODING_TILES_VERTEX_COUNT = (
     len(EXPLODING_TILES_BOX_VERTICES) // EXPLODING_TILES_VERTEX_STRIDE_FLOATS
 )
 
+# The run's timeline (fractions of the transition). Cracks race out from the
+# blast until the detonation; its shock front then releases each tile with an
+# impulse, and every piece is clear of the frame by SETTLE.
+EXPLODING_TILES_DETONATION = 0.09
+EXPLODING_TILES_SETTLE = 0.98
+EXPLODING_TILES_DRAG = 20.0
+EXPLODING_TILES_DRIFT = 0.15
+EXPLODING_TILES_SPARKS = 480
+_FRONT_SPAN = {True: 0.10, False: 0.16}
+_SPARK_LIFE_MAX = 0.30
+_BLAST_FADE = (0.60, 0.85)
+
 
 def exploding_tiles_parameters(
     parameters: Mapping[str, object],
-) -> tuple[int, int, float, float, float]:
+) -> tuple[int, int, float, float, float, str]:
     """Validate resolved-only tile controls before GL state changes."""
     seed, columns, depth = (
         parameters.get("seed"),
@@ -160,6 +183,7 @@ def exploding_tiles_parameters(
         parameters.get("depth"),
     )
     thickness, force = parameters.get("thickness"), parameters.get("force")
+    detail = parameters.get("detail")
     if isinstance(seed, bool) or not isinstance(seed, int) or not 1 <= seed <= 65535:
         raise ValueError("Exploding Tiles seed must be an integer between 1 and 65535")
     if (
@@ -189,7 +213,9 @@ def exploding_tiles_parameters(
         or not 0.5 <= float(force) <= 2.0
     ):
         raise ValueError("Exploding Tiles force must be finite and between 0.5 and 2")
-    return seed, columns, float(depth), float(thickness), float(force)
+    if detail not in SCENE3D_DETAIL_NAMES:
+        raise ValueError(f"Exploding Tiles detail must be one of {', '.join(SCENE3D_DETAIL_NAMES)}")
+    return seed, columns, float(depth), float(thickness), float(force), str(detail)
 
 
 def exploding_tiles_grid(columns: int, width: int, height: int) -> tuple[int, int]:
@@ -198,73 +224,409 @@ def exploding_tiles_grid(columns: int, width: int, height: int) -> tuple[int, in
     return int(columns), max(6, min(48, int(round(columns * height / width))))
 
 
-def exploding_tile_state(progress: float, start: float) -> float:
-    """Continuous non-scaling phase, at its exact endpoint by 98%."""
-    raw = max(
-        0.0,
-        min(1.0, (float(progress) - float(start)) / max(0.001, 0.98 - float(start))),
-    )
-    return raw * raw * (3.0 - 2.0 * raw)
+def exploding_tiles_epicentre(
+    vector: tuple[float, float] | None, seed: int, aspect: float
+) -> tuple[float, float, float]:
+    """World position of the blast and its reach (distance to the farthest corner).
+
+    Center Out blasts near the middle. A direction (screen vector, y down) blasts
+    from the frame edge or corner the pieces fly away from, so they travel that way.
+    """
+    rng = random.Random(int(seed) * 7919 + 101)
+    half_x, half_y = aspect * 0.5, 0.5
+    if vector is None:
+        x = (rng.random() - 0.5) * 0.16 * aspect
+        y = (rng.random() - 0.5) * 0.16
+    else:
+        world_x, world_y = float(vector[0]), -float(vector[1])
+        along = rng.random() - 0.5
+        x = -math.copysign(half_x * 1.02, world_x) if abs(world_x) > 0.3 else along * half_x
+        y = -math.copysign(half_y * 1.02, world_y) if abs(world_y) > 0.3 else along * half_y
+    reach = max(math.hypot(cx - x, cy - y) for cx in (-half_x, half_x) for cy in (-half_y, half_y))
+    return x, y, reach
 
 
-EXPLODING_TILES_VERTEX_SOURCE = """#version 410 core
-layout(location=0) in vec3 aPosition;
-layout(location=1) in vec3 aNormal;
-layout(location=2) in vec2 aUv;
-uniform mat4 uMatrix; uniform vec2 uItemSize; uniform vec2 uGrid; uniform vec2 uDirection;
-uniform float uProgress; uniform float uSeed; uniform float uDepth; uniform float uThickness; uniform float uForce;
-uniform int uCenterOut;
-out vec2 vUv; out vec3 vNormal; out float vSurface; out float vMotion;
-float hash1(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))+uSeed)*43758.5453123); }
-vec3 rotateAxis(vec3 p, vec3 axis, float angle) {
-    float c=cos(angle), s=sin(angle); return p*c+cross(axis,p)*s+axis*dot(axis,p)*(1.-c);
+def _smoothstep(edge0: float, edge1: float, value: float) -> float:
+    t = max(0.0, min(1.0, (value - edge0) / (edge1 - edge0)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def exploding_tiles_blast(progress: float) -> tuple[float, float]:
+    """(flash, fire): the detonation's light. Exactly zero before it and by 85%."""
+    p = float(progress)
+    fade = 1.0 - _smoothstep(*_BLAST_FADE, p)
+    if fade <= 0.0 or p < EXPLODING_TILES_DETONATION - 0.004:
+        return 0.0, 0.0
+    age = max(p - EXPLODING_TILES_DETONATION, 0.0)
+    fire = _smoothstep(EXPLODING_TILES_DETONATION - 0.004, EXPLODING_TILES_DETONATION + 0.006, p)
+    flash = math.exp(-age * 70.0) if p >= EXPLODING_TILES_DETONATION else 0.0
+    return flash * fade, fire * math.exp(-age * 7.5) * fade
+
+
+def exploding_tiles_dominant_colour(
+    rgba8: bytes, pixel_size: tuple[int, int], row_stride: int
+) -> tuple[float, float, float]:
+    """The photograph's most used colour, as 0..1 RGB.
+
+    The fullest bin of a coarse (3 bits per channel) histogram over a sparse
+    64 x 36 sample grid, averaged within that bin: cheap enough to run once per
+    run, and a real majority colour rather than a muddy mean.
+    """
+    width, height = int(pixel_size[0]), int(pixel_size[1])
+    data = memoryview(rgba8)
+    bins: dict[int, list[int]] = {}
+    for row in range(36):
+        base = ((2 * row + 1) * height // 72) * row_stride
+        for column in range(64):
+            index = base + 4 * ((2 * column + 1) * width // 128)
+            red, green, blue = data[index], data[index + 1], data[index + 2]
+            entry = bins.setdefault((red >> 5) << 6 | (green >> 5) << 3 | blue >> 5, [0, 0, 0, 0])
+            entry[0] += 1
+            entry[1] += red
+            entry[2] += green
+            entry[3] += blue
+    count, red, green, blue = max(bins.values(), key=lambda entry: entry[0])
+    return red / (255.0 * count), green / (255.0 * count), blue / (255.0 * count)
+
+
+def exploding_tile_release(reach: float, force: float, center_out: bool, jitter: float = 0.0) -> float:
+    """CPU mirror of ``tileRelease``: when the shock front frees a tile."""
+    span = _FRONT_SPAN[bool(center_out)] / math.sqrt(force)
+    return EXPLODING_TILES_DETONATION + span * max(0.0, min(1.0, reach)) ** 0.85 + jitter * 0.012
+
+
+def exploding_tile_travel(tau: float) -> float:
+    """CPU mirror of a tile's flight curve: an impulse, not an ease-in."""
+    return scene3d_impulse(max(0.0, tau), EXPLODING_TILES_DRAG, EXPLODING_TILES_DRIFT)
+
+
+def exploding_tiles_sparks_live(progress: float, force: float, center_out: bool) -> bool:
+    """Whether any spark can be alive; outside this window the pass is skipped."""
+    last = exploding_tile_release(1.0, force, center_out, 1.0) + _SPARK_LIFE_MAX
+    return EXPLODING_TILES_DETONATION <= float(progress) <= last
+
+
+_MOTION_UNIFORMS_GLSL = """
+uniform mat4 uMatrix; uniform vec2 uItemSize; uniform vec2 uGrid; uniform float uProgress; uniform float uSeed;
+uniform float uDepth; uniform float uThickness; uniform float uForce; uniform int uCenterOut; uniform vec3 uEpicentre;
+uniform float uSeconds;
+"""
+
+_TILE_MOTION_GLSL = f"""
+const float DETONATE = {EXPLODING_TILES_DETONATION:.6f};
+const float SETTLE = {EXPLODING_TILES_SETTLE:.6f};
+const float DRAG = {EXPLODING_TILES_DRAG:.6f};
+const float DRIFT = {EXPLODING_TILES_DRIFT:.6f};
+
+struct Tile {{
+    vec2 size; vec2 cellUv; float slab; float slabFull; vec3 centre;
+    vec3 tiltAxis; float tilt; vec3 spinAxis; float spin;
+    float released; float lit; float crack; float glow; float heat; float near;
+}};
+
+float tileRelease(float reach, float jitter) {{
+    return DETONATE + (uCenterOut == 1 ? {_FRONT_SPAN[True]:.6f} : {_FRONT_SPAN[False]:.6f}) / sqrt(uForce)
+        * pow(reach, 0.85) + jitter * 0.012;
+}}
+
+Tile tileAt(uint id) {{
+    Tile t;
+    uint seed = uint(uSeed + 0.5);
+    uint columns = uint(uGrid.x + 0.5);
+    vec2 cell = vec2(float(id % columns), float(id / columns));
+    float aspect = uItemSize.x / uItemSize.y;
+    t.size = vec2(aspect / uGrid.x, 1.0 / uGrid.y);
+    t.cellUv = (cell + 0.5) / uGrid;
+    vec2 home = vec2((t.cellUv.x - 0.5) * aspect, 0.5 - t.cellUv.y);
+    vec2 away = home - uEpicentre.xy;
+    float reach = clamp(length(away) / uEpicentre.z, 0.0, 1.0);
+    t.near = 1.0 - reach;
+    float near2 = t.near * t.near;
+    float r0 = sceneRandom(id, 1u, seed), r1 = sceneRandom(id, 2u, seed), r2 = sceneRandom(id, 3u, seed);
+    float r3 = sceneRandom(id, 4u, seed), r4 = sceneRandom(id, 5u, seed), r5 = sceneRandom(id, 6u, seed);
+    float r6 = sceneRandom(id, 7u, seed), r7 = sceneRandom(id, 8u, seed), r8 = sceneRandom(id, 9u, seed);
+
+    // Cracks race out from the blast, then its shock front releases each tile.
+    float release = tileRelease(reach, r0);
+    float cracked = 0.015 + (DETONATE - 0.025) * pow(reach, 0.7);
+    float p = min(uProgress, SETTLE);
+    float tau = max(p - release, 0.0);
+    float flight = SETTLE - release;
+    float build = smoothstep(cracked, release, uProgress);
+    t.crack = smoothstep(cracked, cracked + 0.02, uProgress);
+    // Cracks glow at the heart of the blast as it builds, then in a ring racing
+    // just ahead of the shock front: each tile heats in the moment before it breaks free.
+    t.glow = max(smoothstep(cracked + 0.01, DETONATE + 0.01, uProgress) * smoothstep(0.6, 0.95, t.near),
+                 smoothstep(release - 0.025, release, uProgress));
+    t.released = smoothstep(0.0, 0.015, tau);
+    // Only the heart of the blast domes and tilts before release; the rest of the
+    // wall stays exactly on the photograph so its seams line up to the pixel.
+    float core = smoothstep(0.55, 0.95, t.near);
+    float dome = core * build * build;
+    t.lit = max(t.released, dome);
+    // The front face stays on the photograph; thickness grows in behind it once cracked.
+    t.slabFull = min(t.size.x, t.size.y) * (0.10 + 0.90 * uThickness);
+    t.slab = t.slabFull * t.crack;
+    // Rumble: once its cracks open, every tile shudders until it breaks free, hardest
+    // near the blast and building to the detonation. The rate is real time (8-15 Hz),
+    // whatever the run's duration; the flight takes over smoothly at release.
+    float shake = t.crack * (1.0 - t.released) * (0.35 + 0.65 * t.near)
+                * (0.4 + 0.6 * smoothstep(cracked, DETONATE, uProgress)) * sqrt(uForce);
+    float seconds = uProgress * uSeconds;
+    vec2 rumble = 0.0022 * shake * vec2(
+        sin(seconds * 51.0 + r6 * 6.2832) + 0.6 * sin(seconds * 83.0 + r7 * 6.2832),
+        sin(seconds * 57.0 + r2 * 6.2832) + 0.6 * sin(seconds * 91.0 + r5 * 6.2832));
+    float radius = 0.5 * length(vec3(t.size, t.slab)) + 0.02;
+
+    // Heading: away from the blast, loosened by a seeded scatter that grows at its heart.
+    float turn = r1 * 6.2831853;
+    vec2 scatter = vec2(cos(turn), sin(turn));
+    vec2 radial = length(away) > 1e-4 ? normalize(away) : scatter;
+    vec2 heading = normalize(radial + scatter * (0.18 + 0.55 * near2));
+    vec2 fall = vec2(0.0, -(0.8 + 0.5 * r2));
+
+    // Speed: the blast's own push, raised only as far as needed for the tile to be
+    // clear of the frame by its exit time, and still clear when the run settles.
+    vec2 halfBox = vec2(aspect * 0.5, 0.5) + radius;
+    float exitTau = min(0.40 + 0.40 * r8, 0.86 - release);
+    float speed = uForce * (0.12 + 0.35 * near2) * (0.7 + 0.6 * r3);
+    speed = max(speed, sceneDepartureTravel(home + fall * exitTau * exitTau, heading, halfBox)
+                       / sceneImpulse(exitTau, DRAG, DRIFT));
+    speed = max(speed, sceneDepartureTravel(home + fall * flight * flight, heading, halfBox)
+                       / sceneImpulse(flight, DRAG, DRIFT));
+
+    // Toward the viewer: strongest at the blast; a few pieces fly past the camera.
+    // Settled pieces sit in front of the photograph, so perspective only pushes them out.
+    float lift = uDepth * (0.05 + 0.45 * near2) * (0.45 + 0.55 * r4);
+    if (r5 < 0.10 * t.near) lift *= 2.6;
+    lift = max(lift, (radius + 0.5 * t.slab) / sceneImpulse(flight, DRAG, DRIFT));
+    float bulge = uDepth * 0.018 * dome;
+
+    float travel = sceneImpulse(tau, DRAG, DRIFT);
+    t.centre = vec3(home + rumble + heading * speed * travel + fall * tau * tau,
+                    -0.5 * t.slab + bulge + lift * travel);
+    t.tiltAxis = vec3(-radial.y, radial.x, 0.0);
+    t.tilt = 0.09 * dome + 0.035 * shake * sin(seconds * 64.0 + r1 * 6.2832);
+    t.spinAxis = normalize(vec3(-heading.y, heading.x, 0.0) * 1.2 + (vec3(r6, r7, r2) - 0.5) * 1.2);
+    t.spin = uForce * (1.8 + 2.8 * r3) * (0.6 + 0.8 * t.near) * sceneImpulse(tau, 8.0, 0.35);
+    // A brief white-hot flash on pieces near the blast, cooled to nothing within ~0.04 of the run.
+    t.heat = t.released * t.near * t.near * exp(-tau * 30.0);
+    return t;
+}}
+
+vec3 tilePoint(Tile t, vec3 unit) {{
+    vec3 local = vec3(unit.x * t.size.x, -unit.y * t.size.y, unit.z * t.slab);
+    return t.centre + sceneRotate(sceneRotate(local, t.tiltAxis, t.tilt), t.spinAxis, t.spin);
+}}
+
+vec3 tileNormal(Tile t, vec3 normal) {{
+    return normalize(sceneRotate(sceneRotate(vec3(normal.x, -normal.y, normal.z), t.tiltAxis, t.tilt),
+                                 t.spinAxis, t.spin));
+}}
+"""
+
+_BACKDROP_GLSL = """
+const vec3 BLAST_FIRE = vec3(1.0, 0.5, 0.18);
+// The new photograph lit by the blast: a warm fireball glow and the flash.
+vec3 blastBackdrop(vec2 uv) {
+    vec3 colour = texture(uNewTex, uv).rgb;
+    vec2 world = vec2((uv.x - 0.5) * uItemSize.x / uItemSize.y, 0.5 - uv.y) - uEpicentre.xy;
+    float d2 = dot(world, world);
+    colour += BLAST_FIRE * uBlast.y * (0.45 * exp(-d2 * 9.0) + 0.10 * exp(-d2 * 1.5)) * (0.4 + colour);
+    return colour + uBlast.x * 0.25 * (colour + 0.15);
 }
-void main() {
-    float id=float(gl_InstanceID), col=mod(id,uGrid.x), row=floor(id/uGrid.x);
-    vec2 cell=vec2(col,row), centre=(cell+vec2(.5))/uGrid;
-    vec2 direction=uCenterOut==1 ? vec2(0.) : normalize(uDirection);
-    float wave=uCenterOut==1 ? length(centre-vec2(.5))*1.41421356 : dot(centre-vec2(.5),direction)+.5;
-    float begin=clamp(.025+wave*.43+(hash1(cell)-.5)*.08,0.,.52);
-    float raw=clamp((uProgress-begin)/max(.001,.98-begin),0.,1.);
-    float local=raw*raw*(3.-2.*raw), randomA=hash1(cell+17.), randomB=hash1(cell+43.);
-    vec3 axis=normalize(vec3(hash1(cell+2.)*2.-1.,hash1(cell+5.)*2.-1.,hash1(cell+9.)*2.-1.));
-    float aspect=uItemSize.x/uItemSize.y;
-    vec2 radial=normalize(centre-vec2(.5)+vec2(.0001));
-    vec2 launch=uCenterOut==1 ? radial : normalize(direction+radial*(.18+.12*randomA));
-    vec2 worldDirection=normalize(vec2(launch.x*aspect,-launch.y));
-    vec2 tile=vec2(aspect/uGrid.x,1./uGrid.y);
-    float slabDepth=min(tile.x,tile.y)*(.10+.90*uThickness)*local;
-    vec3 localPosition=vec3(aPosition.x*tile.x,-aPosition.y*tile.y,aPosition.z*slabDepth);
-    float angle=local*uForce*(4.6+3.6*randomA);
-    localPosition=rotateAxis(localPosition,axis,angle);
-    vec3 normal=normalize(rotateAxis(vec3(aNormal.x,-aNormal.y,aNormal.z),axis,angle));
-    float lift=local*(.08+.36*randomB)*uDepth;
-    float gravity=local*local*(.24+.20*randomA)*uForce;
-    vec3 position=vec3((centre.x-.5)*aspect,.5-centre.y,0.)+localPosition;
-    vec2 expanded=vec2(aspect*.5,.5)+vec2(length(tile)*2.+slabDepth);
-    vec2 edge=(sign(worldDirection)*expanded-vec2((centre.x-.5)*aspect,.5-centre.y))/worldDirection;
-    if(abs(worldDirection.x)<.00001) edge.x=1e5;
-    if(abs(worldDirection.y)<.00001) edge.y=1e5;
-    float exitDistance=min(edge.x,edge.y);
-    position.xy+=worldDirection*(exitDistance+.35+.65*uForce)*local*local;
-    position.y-=gravity; position.z+=lift;
-    float cameraW=max(1.65,3.4-position.z);
-    vec2 uv=vec2(position.x/aspect,-position.y)*3.4/cameraW+.5;
-    vec4 projected=uMatrix*vec4(uv*uItemSize,0.,1.); projected*=cameraW;
-    projected.z=clamp(-position.z/5.,-.9,.9)*projected.w; gl_Position=projected;
-    vUv=(cell+aUv)/uGrid; vNormal=normal; vSurface=aNormal.z; vMotion=local;
-}"""
+"""
 
-EXPLODING_TILES_FRAGMENT_SOURCE = """#version 410 core
-in vec2 vUv; in vec3 vNormal; in float vSurface; in float vMotion;
-out vec4 FragColor; uniform sampler2D uOldTex;
+EXPLODING_TILES_VERTEX_SOURCE = (
+    "#version 410 core\n"
+    "layout(location=0) in vec3 aPosition;\n"
+    "layout(location=1) in vec3 aNormal;\n"
+    "layout(location=2) in vec2 aUv;\n"
+    + _MOTION_UNIFORMS_GLSL
+    + SCENE3D_GLSL
+    + _TILE_MOTION_GLSL
+    + """
+out vec2 vUv; out vec2 vFace; out vec3 vNormal; out vec3 vWorld;
+out float vSurface; out float vLit; out float vCrack; out float vHeat;
+out float vReleased; out vec3 vFront;
 void main() {
-    vec3 normal=normalize(vNormal), light=normalize(vec3(-.38,.57,.73));
-    float diffuse=.22+.78*max(dot(normal,light),0.), bevel=pow(1.-abs(vSurface),1.7);
-    vec3 source=texture(uOldTex,vUv).rgb;
-    vec3 material=mix(vec3(.055,.075,.105),source*.30+vec3(.035,.045,.065),.35+.45*diffuse);
-    vec3 face=source*(.72+.28*diffuse);
-    vec3 litBody=vSurface>.5 ? face : material*(.65+.55*diffuse+.22*bevel);
-    float edgeLight=bevel*(.10+.26*max(dot(normal,normalize(light+vec3(0.,0.,1.))),0.));
-    FragColor=vec4(mix(source,litBody+edgeLight,vMotion),1.);
-}"""
+    Tile t = tileAt(uint(gl_InstanceID));
+    vec3 world = tilePoint(t, aPosition);
+    gl_Position = sceneProject(uMatrix, uItemSize, world);
+    // Every surface shows the photograph at its own position in the tile, so the
+    // thickness carries the edge colours through: a solid chunk of the picture.
+    vFace = aPosition.xy + 0.5;
+    vUv = t.cellUv + aPosition.xy / uGrid;
+    vNormal = tileNormal(t, aNormal);
+    vWorld = world;
+    vSurface = aNormal.z;
+    vLit = t.lit;
+    vCrack = t.crack * (0.35 + 0.65 * t.glow) * (1.0 - t.released);
+    vHeat = t.heat;
+    vReleased = t.released;
+    vFront = tileNormal(t, vec3(0.0, 0.0, 1.0));
+}
+"""
+)
+
+EXPLODING_TILES_FRAGMENT_SOURCE = (
+    "#version 410 core\n"
+    + """
+in vec2 vUv; in vec2 vFace; in vec3 vNormal; in vec3 vWorld;
+in float vSurface; in float vLit; in float vCrack; in float vHeat;
+in float vReleased; in vec3 vFront;
+out vec4 FragColor;
+uniform sampler2D uOldTex; uniform vec2 uItemSize; uniform vec2 uGrid; uniform vec3 uEpicentre; uniform vec2 uBlast;
+uniform vec3 uBody;
+"""
+    + SCENE3D_GLSL
+    + """
+void main() {
+    // Bevels read as flat face until their tile leaves the wall, so the fireball
+    // does not paint a grid across the unbroken picture.
+    vec3 normal = normalize(vSurface > 0.3 ? mix(vFront, vNormal, vReleased) : vNormal);
+    vec3 fire = scenePointLight(normal, vWorld, vec3(uEpicentre.xy, 0.35), vec3(1.0, 0.55, 0.22) * uBlast.y * 1.2, 9.0);
+    vec3 source = texture(uOldTex, vUv).rgb;
+    vec3 colour;
+    if (vSurface > 0.3) {
+        // Photograph face and its bevel: exactly the source until the tile is lit.
+        float bevel = vSurface < 0.9 ? 1.0 : 0.0;
+        vec3 lit = sceneShade(source, normal, vWorld, 0.55, (0.10 + 0.35 * bevel) * vReleased, 36.0, 0.10 * vReleased)
+                 + fire * (0.25 + 0.6 * source);
+        colour = mix(source, lit, vLit);
+        // Cracks along the tile border, glowing hotter toward the detonation.
+        vec2 edge = min(vFace, 1.0 - vFace) * uItemSize / uGrid;
+        float gap = min(edge.x, edge.y);
+        vec3 hot = sceneEmber(vCrack);
+        float line = vCrack * (1.0 - smoothstep(0.0, 0.5 + 0.7 * vCrack, gap));
+        // Dark hairlines, glowing only where the crack has heated.
+        float heat = smoothstep(0.55, 1.0, vCrack);
+        colour = mix(colour, mix(vec3(0.02), hot * 1.3, heat), line);
+        colour += hot * heat * heat * 0.25 * (1.0 - smoothstep(0.0, 2.0 + 4.0 * vCrack, gap));
+        colour += sceneEmber(vHeat) * vHeat * vHeat * bevel * 0.6;
+    } else {
+        // Thickness and back: dark grey stone tinted slightly toward the photograph's
+        // most used colour, glowing where the blast heated it.
+        vec3 body = mix(vec3(0.25), uBody, 0.22) * (vSurface > -0.3 ? 1.0 : 0.8);
+        colour = sceneShade(body, normal, vWorld, 0.5, 0.12, 28.0, 0.05) + fire * 0.12
+               + sceneEmber(vHeat) * vHeat * vHeat * (vSurface > -0.3 ? 0.9 : 0.3);
+    }
+    colour += uBlast.x * 0.3 * (colour + 0.1);
+    FragColor = vec4(colour, 1.0);
+}
+"""
+)
+
+EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE = (
+    "#version 410 core\n"
+    "in vec2 vUv;\nout vec4 FragColor;\n"
+    "uniform sampler2D uNewTex; uniform vec2 uItemSize; uniform vec3 uEpicentre; uniform vec2 uBlast;\n"
+    + _BACKDROP_GLSL
+    + "void main() { FragColor = vec4(blastBackdrop(vec2(vUv.x, 1.0 - vUv.y)), 1.0); }\n"
+)
+
+EXPLODING_TILES_SHADOW_VERTEX_SOURCE = (
+    "#version 410 core\n"
+    "layout(location=0) in vec2 aPosition;\n"
+    + _MOTION_UNIFORMS_GLSL
+    + SCENE3D_GLSL
+    + _TILE_MOTION_GLSL
+    + """
+out vec2 vScreen; out vec2 vLocal; flat out float vFeather; flat out float vStrength;
+void main() {
+    // Each tile's face, grown by its thickness and a height-dependent penumbra,
+    // cast along the key light onto the plane behind the wall.
+    Tile t = tileAt(uint(gl_InstanceID));
+    float plane = -t.slabFull;
+    float extent = min(t.size.x, t.size.y);
+    float height = max(t.centre.z - plane, 0.0);
+    float thick = 1.0 + t.slab / extent;
+    float feather = 0.04 + 0.15 * height / extent;
+    vec2 corner = (aPosition - 0.5) * (thick + 2.0 * feather);
+    vScreen = scenePlaneUv(sceneCastOnPlane(tilePoint(t, vec3(corner, 0.5)), plane), uItemSize.x / uItemSize.y);
+    gl_Position = uMatrix * vec4(vScreen * uItemSize, 0.0, 1.0);
+    vLocal = corner / thick;
+    vFeather = feather / thick;
+    // A shadow leaves with its tile: it fades as the caster's projection clears the view.
+    float aspect = uItemSize.x / uItemSize.y;
+    vec2 seen = scenePlaneUv(t.centre.xy * SCENE_CAMERA / max(SCENE_CAMERA - t.centre.z, SCENE_NEAR), aspect);
+    vec2 outside = max(max(-seen, seen - 1.0), 0.0) * vec2(aspect, 1.0);
+    float onScreen = 1.0 - smoothstep(0.0, 0.12, max(outside.x, outside.y));
+    vStrength = 0.5 * t.crack * onScreen * (1.0 - smoothstep(0.04, 0.5, height))
+              * (1.0 - smoothstep(0.85, 0.97, uProgress));
+}
+"""
+)
+
+EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE = (
+    "#version 410 core\n"
+    "in vec2 vScreen; in vec2 vLocal; flat in float vFeather; flat in float vStrength;\nout vec4 FragColor;\n"
+    "uniform sampler2D uNewTex; uniform vec2 uItemSize; uniform vec3 uEpicentre; uniform vec2 uBlast;\n"
+    + SCENE3D_GLSL
+    + _BACKDROP_GLSL
+    + """
+void main() {
+    // Drawn with MIN blending, so overlapping shadows never darken twice.
+    FragColor = vec4(blastBackdrop(vScreen) * (1.0 - sceneSoftRect(vLocal, vFeather) * vStrength), 1.0);
+}
+"""
+)
+
+EXPLODING_TILES_SPARK_VERTEX_SOURCE = (
+    "#version 410 core\n"
+    "layout(location=0) in vec2 aPosition;\n"
+    "uniform mat4 uMatrix; uniform vec2 uItemSize; uniform float uProgress; uniform float uSeed; uniform float uForce;\n"
+    "uniform int uCenterOut; uniform vec3 uEpicentre;\n"
+    + SCENE3D_GLSL
+    + f"""
+const float DETONATE = {EXPLODING_TILES_DETONATION:.6f};
+out vec2 vQuad; out float vHeat; out float vGlow;
+vec3 sparkAt(vec3 origin, vec3 velocity, float fall, float t) {{
+    return origin + velocity * (1.0 - exp(-11.0 * t)) / 11.0 + vec3(0.0, -fall * t * t, 0.0);
+}}
+void main() {{
+    uint id = uint(gl_InstanceID);
+    uint seed = uint(uSeed + 0.5) ^ 0x5bd1e995u;
+    float r0 = sceneRandom(id, 11u, seed), r1 = sceneRandom(id, 12u, seed), r2 = sceneRandom(id, 13u, seed);
+    float r3 = sceneRandom(id, 14u, seed), r4 = sceneRandom(id, 15u, seed), r5 = sceneRandom(id, 16u, seed);
+    float r6 = sceneRandom(id, 17u, seed), r7 = sceneRandom(id, 18u, seed);
+    // Born where the shock front passes, crowded toward the heart of the blast.
+    float reach = uCenterOut == 1 ? pow(r0, 1.6) : pow(r0, 1.1);
+    float turn = r1 * 6.2831853;
+    vec2 direction = vec2(cos(turn), sin(turn));
+    if (uCenterOut != 1) direction = normalize(normalize(-uEpicentre.xy) + direction * 0.85);
+    vec3 origin = vec3(uEpicentre.xy + direction * reach * uEpicentre.z, 0.02);
+    float birth = DETONATE + (uCenterOut == 1 ? {_FRONT_SPAN[True]:.6f} : {_FRONT_SPAN[False]:.6f}) / sqrt(uForce)
+        * pow(reach, 0.85) + r2 * 0.01;
+    float life = 0.06 + {_SPARK_LIFE_MAX - 0.06:.6f} * r3 * r3;
+    float t = uProgress - birth;
+    vQuad = aPosition;
+    if (t <= 0.0 || t >= life) {{
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        vHeat = 0.0; vGlow = 0.0;
+        return;
+    }}
+    float speed = uForce * (1.5 + 5.5 * r4 * r4) * (1.2 - 0.6 * reach);
+    vec3 velocity = vec3(normalize(direction + (vec2(r5, r6) - 0.5) * 0.6) * speed, (0.2 + 1.4 * r7) * uForce);
+    vec3 head = sparkAt(origin, velocity, 1.4, t);
+    vec3 tail = sparkAt(origin, velocity, 1.4, max(t - 0.006, 0.0));
+    gl_Position = sceneStreak(uMatrix, uItemSize, tail, head, (0.0016 + 0.0028 * r5) * uItemSize.y, aPosition);
+    float age = t / life;
+    vHeat = 1.0 - age;
+    vGlow = (1.0 - age) * (1.0 - age) * (0.55 + 0.45 * r6);
+}}
+"""
+)
+
+EXPLODING_TILES_SPARK_FRAGMENT_SOURCE = (
+    "#version 410 core\n"
+    "in vec2 vQuad; in float vHeat; in float vGlow;\nout vec4 FragColor;\n"
+    + SCENE3D_GLSL
+    + """
+void main() {
+    float across = 1.0 - smoothstep(0.15, 0.5, abs(vQuad.y - 0.5));
+    float along = smoothstep(0.0, 0.45, vQuad.x);
+    FragColor = vec4(sceneEmber(0.2 + 0.8 * vHeat) * vGlow * across * along * 1.8, 1.0);
+}
+"""
+)

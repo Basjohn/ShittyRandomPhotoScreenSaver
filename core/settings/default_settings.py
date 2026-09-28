@@ -78,6 +78,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                              'piece_count': 45,
                              'thickness': 0.15,
                              'weighting': 'Random Choice'},
+                 'detail_3d': 'High',
                  'diffuse': {'block_size': 15, 'shape': 'Membrane'},
                  'direction': 'Random',
                  'duration_ms': 10524,

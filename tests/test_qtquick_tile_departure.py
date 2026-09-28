@@ -1,4 +1,4 @@
-"""Focused geometry and departure regressions for Exploding Tiles."""
+"""Focused geometry, blast and departure regressions for Exploding Tiles."""
 
 from __future__ import annotations
 
@@ -66,21 +66,75 @@ def test_beveled_slab_is_closed_and_encloses_positive_volume():
     assert {position[2] for position in positions} == {-0.5, -0.38, 0.38, 0.5}
 
 
-def test_source_plane_and_normals_remain_continuous_until_release():
+def test_tiles_launch_with_an_impulse_not_an_ease_in():
+    # The rejected "falling tiles" started from rest and accelerated. A blast is
+    # the opposite: fastest at release, then drag settles it into a drift.
     effect = _effect()
-    source = effect.EXPLODING_TILES_VERTEX_SOURCE
-    phases = [
-        effect.exploding_tile_state(progress, 0.17)
-        for progress in (0.17, 0.45, 0.76, 0.98)
-    ]
+    travel = effect.exploding_tile_travel
+    samples = [travel(t / 100.0) for t in range(0, 99)]
+    assert samples[0] == 0.0
+    assert all(later > earlier for earlier, later in zip(samples, samples[1:]))
+    early_speed = travel(0.02) / 0.02
+    late_speed = (travel(0.9) - travel(0.45)) / 0.45
+    assert early_speed > 3.0 * late_speed
 
-    assert phases == sorted(phases)
-    assert phases[0] == 0.0 and phases[-1] == pytest.approx(1.0)
-    assert "aPosition.z*slabDepth" in source
-    assert "vec3(aNormal.x,-aNormal.y,aNormal.z)" in source
-    assert "exitDistance=min(edge.x,edge.y)" in source
-    assert "10.0" not in source
-    assert "shrink" not in source.lower()
+
+def test_the_shock_front_releases_tiles_outward_from_the_blast():
+    effect = _effect()
+    release = effect.exploding_tile_release
+    for center_out in (True, False):
+        times = [release(reach / 10.0, 1.0, center_out) for reach in range(11)]
+        assert times[0] == pytest.approx(effect.EXPLODING_TILES_DETONATION)
+        assert times == sorted(times)
+        assert times[-1] < 0.5 * effect.EXPLODING_TILES_SETTLE
+    assert release(1.0, 2.0, True) < release(1.0, 0.5, True)
+
+
+def test_the_blast_light_is_exactly_zero_outside_the_detonation():
+    effect = _effect()
+    detonation = effect.EXPLODING_TILES_DETONATION
+    for progress in (0.0, 0.0001, detonation - 0.005, 0.85, 0.9, 0.9999, 1.0):
+        assert effect.exploding_tiles_blast(progress) == (0.0, 0.0), progress
+    assert effect.exploding_tiles_blast(detonation)[0] > 0.9  # the flash is instant
+    peak_fire = max(effect.exploding_tiles_blast(detonation + step / 1000)[1] for step in range(11))
+    later_flash, later_fire = effect.exploding_tiles_blast(detonation + 0.1)
+    assert later_flash < 0.01 < later_fire < peak_fire
+
+
+def test_the_blast_sits_where_the_pieces_fly_away_from():
+    effect = _effect()
+    aspect = 16 / 9
+    for seed in (1, 713, 65535):
+        x, y, reach = effect.exploding_tiles_epicentre(None, seed, aspect)
+        assert abs(x) <= 0.08 * aspect and abs(y) <= 0.08
+        corners = [(cx, cy) for cx in (-aspect / 2, aspect / 2) for cy in (-0.5, 0.5)]
+        assert reach == pytest.approx(max(np.hypot(cx - x, cy - y) for cx, cy in corners))
+        # Pieces flying left were blasted from the right edge (world y is up).
+        x, y, _reach = effect.exploding_tiles_epicentre((-1.0, 0.0), seed, aspect)
+        assert x > aspect / 2 and abs(y) <= 0.25
+        x, y, _reach = effect.exploding_tiles_epicentre((0.0, -1.0), seed, aspect)
+        assert y < -0.5
+        x, y, _reach = effect.exploding_tiles_epicentre((0.7071, 0.7071), seed, aspect)
+        assert x < -aspect / 2 and y > 0.5
+
+
+@pytest.mark.qt
+def test_the_blast_opens_the_picture_at_the_detonation(qt_app):
+    # Negative control: the rejected ease-in moved the centre by under 1 grey
+    # level at this point (0.87); the blast has torn it open.
+    capture = TransitionCapture(256, 144)
+    try:
+        effect = _effect()
+        detonation = effect.EXPLODING_TILES_DETONATION
+        run = capture.run("exploding_tiles", direction="center_out")
+        source = np.asarray(capture.images[0], dtype=np.int16)
+        before = np.asarray(capture.render(run, detonation - 0.02)[0], dtype=np.int16)
+        after = np.asarray(capture.render(run, detonation + 0.06)[0], dtype=np.int16)
+        centre = (slice(36, 108), slice(64, 192))
+        assert np.abs(before - source).mean() < 6.0
+        assert np.abs(after - source)[centre].mean() > 10.0
+    finally:
+        capture.close()
 
 
 @pytest.mark.qt

@@ -62,7 +62,11 @@ class _InheritedGlState:
     active_texture: int
     texture_0: int
     texture_1: int
+    draw_framebuffer: int
+    read_framebuffer: int
     blend: bool
+    blend_equation: tuple[int, int]
+    blend_function: tuple[int, int, int, int]
     cull: bool
     depth: bool
     depth_write: bool
@@ -88,7 +92,19 @@ class _InheritedGlState:
             active_texture=active_texture,
             texture_0=texture_0,
             texture_1=texture_1,
+            draw_framebuffer=_int_state(gl.GL_DRAW_FRAMEBUFFER_BINDING),
+            read_framebuffer=_int_state(gl.GL_READ_FRAMEBUFFER_BINDING),
             blend=bool(gl.glIsEnabled(gl.GL_BLEND)),
+            blend_equation=(
+                _int_state(gl.GL_BLEND_EQUATION_RGB),
+                _int_state(gl.GL_BLEND_EQUATION_ALPHA),
+            ),
+            blend_function=(
+                _int_state(gl.GL_BLEND_SRC_RGB),
+                _int_state(gl.GL_BLEND_DST_RGB),
+                _int_state(gl.GL_BLEND_SRC_ALPHA),
+                _int_state(gl.GL_BLEND_DST_ALPHA),
+            ),
             cull=bool(gl.glIsEnabled(gl.GL_CULL_FACE)),
             depth=bool(gl.glIsEnabled(gl.GL_DEPTH_TEST)),
             depth_write=_bool_state(gl.GL_DEPTH_WRITEMASK),
@@ -98,6 +114,9 @@ class _InheritedGlState:
         )
 
     def restore(self) -> None:
+        # A 3D scene target may still be bound after a failure mid-scene.
+        gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self.draw_framebuffer)
+        gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self.read_framebuffer)
         gl.glActiveTexture(gl.GL_TEXTURE1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self.texture_1)
         gl.glActiveTexture(gl.GL_TEXTURE0)
@@ -110,6 +129,8 @@ class _InheritedGlState:
         gl.glDepthMask(gl.GL_TRUE if self.depth_write else gl.GL_FALSE)
         gl.glDepthFunc(self.depth_function)
         gl.glClearDepth(self.depth_clear_value)
+        gl.glBlendEquationSeparate(*self.blend_equation)
+        gl.glBlendFuncSeparate(*self.blend_function)
         _set_enabled(gl.GL_BLEND, self.blend)
         _set_enabled(gl.GL_CULL_FACE, self.cull)
         _set_enabled(gl.GL_DEPTH_TEST, self.depth)
@@ -197,6 +218,23 @@ class QuickTransitionRenderHost:
         finally:
             inherited.restore()
         return transition_id
+
+    def park(self) -> None:
+        """After a run: let renderers drop per-run targets, keeping programs warm."""
+
+        errors: list[str] = []
+        for transition_id, implementation in tuple(self._implementations.items()):
+            park = getattr(implementation, "park", None)
+            if park is None:
+                continue
+            try:
+                park()
+            except Exception as exc:
+                errors.append(f"{transition_id}:{type(exc).__name__}:{exc}")
+        if errors:
+            raise RuntimeError(
+                "Quick transition park incomplete: " + " | ".join(errors)
+            )
 
     def release_resources(self) -> None:
         errors: list[str] = []
