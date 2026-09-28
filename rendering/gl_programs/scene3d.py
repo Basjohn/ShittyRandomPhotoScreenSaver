@@ -220,3 +220,121 @@ def scene3d_cast_on_plane(world: tuple[float, float, float], plane_z: float) -> 
     lift = max(world[2] - plane_z, 0.0)
     return (world[0] - SCENE3D_KEY_LIGHT[0] / SCENE3D_KEY_LIGHT[2] * lift,
             world[1] - SCENE3D_KEY_LIGHT[1] / SCENE3D_KEY_LIGHT[2] * lift)
+
+
+# ---- Remaining CPU mirrors (tests compare them with the GPU; see test_scene3d_glsl_mirrors) ----
+
+_MASK32 = 0xFFFFFFFF
+Vec3 = tuple[float, float, float]
+
+
+def _mix_bits(x: int) -> int:
+    x &= _MASK32
+    x ^= x >> 16
+    x = (x * 0x7FEB352D) & _MASK32
+    x ^= x >> 15
+    x = (x * 0x846CA68B) & _MASK32
+    x ^= x >> 16
+    return x
+
+
+def scene3d_random(key: int, salt: int, seed: int) -> float:
+    """CPU mirror of ``sceneRandom`` (exact 32-bit integer arithmetic)."""
+    inner = _mix_bits((seed * 0x85EBCA6B + salt) & _MASK32)
+    return _mix_bits(((key * 0x9E3779B9) & _MASK32) ^ inner) / 4294967295.0
+
+
+def _dot(a: Vec3, b: Vec3) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _cross(a: Vec3, b: Vec3) -> Vec3:
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _normalize(a: Vec3) -> Vec3:
+    length = math.sqrt(_dot(a, a))
+    return (a[0] / length, a[1] / length, a[2] / length)
+
+
+def _smoothstep(edge0: float, edge1: float, value: float) -> float:
+    t = max(0.0, min(1.0, (value - edge0) / (edge1 - edge0)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _mix(a: Vec3, b: Vec3, t: float) -> Vec3:
+    return tuple(x + (y - x) * t for x, y in zip(a, b))
+
+
+def scene3d_rotate(point: Vec3, axis: Vec3, angle: float) -> Vec3:
+    """CPU mirror of ``sceneRotate`` (axis must be unit length)."""
+    c, s = math.cos(angle), math.sin(angle)
+    across, along = _cross(axis, point), _dot(axis, point) * (1.0 - c)
+    return tuple(p * c + x * s + a * along for p, x, a in zip(point, across, axis))
+
+
+def scene3d_clip_depth(w: float) -> float:
+    """CPU mirror of ``sceneClipDepth``: clip z for a point w in front of the camera."""
+    return ((SCENE3D_FAR + SCENE3D_NEAR) * w - 2.0 * SCENE3D_FAR * SCENE3D_NEAR) / (SCENE3D_FAR - SCENE3D_NEAR)
+
+
+def scene3d_shade(albedo: Vec3, normal: Vec3, world: Vec3, ambient: float, specular: float,
+                  shininess: float, rim: float) -> Vec3:
+    """CPU mirror of ``sceneShade``."""
+    view = _normalize((-world[0], -world[1], SCENE3D_CAMERA - world[2]))
+    diffuse = max(_dot(normal, SCENE3D_KEY_LIGHT), 0.0)
+    halfway = _normalize(tuple(k + v for k, v in zip(SCENE3D_KEY_LIGHT, view)))
+    highlight = max(_dot(normal, halfway), 0.0) ** shininess
+    fresnel = (1.0 - max(_dot(normal, view), 0.0)) ** 5.0
+    extra = specular * highlight + rim * fresnel
+    return tuple(a * (ambient + (1.0 - ambient) * diffuse) + extra for a in albedo)
+
+
+def scene3d_point_light(normal: Vec3, world: Vec3, light: Vec3, colour: Vec3, falloff: float) -> Vec3:
+    """CPU mirror of ``scenePointLight``."""
+    to_light = tuple(l - w for l, w in zip(light, world))
+    distance2 = _dot(to_light, to_light)
+    inverse = 1.0 / math.sqrt(max(distance2, 1e-6))
+    facing = max(_dot(normal, tuple(v * inverse for v in to_light)), 0.0)
+    return tuple(c * facing / (1.0 + distance2 * falloff) for c in colour)
+
+
+def scene3d_ember(t: float) -> Vec3:
+    """CPU mirror of ``sceneEmber``."""
+    t = max(0.0, min(1.0, t))
+    warm = _mix((0.50, 0.05, 0.01), (1.0, 0.42, 0.08), _smoothstep(0.0, 0.55, t))
+    return _mix(warm, (1.0, 0.90, 0.62), _smoothstep(0.55, 1.0, t))
+
+
+def scene3d_soft_rect(local: tuple[float, float], feather: float) -> float:
+    """CPU mirror of ``sceneSoftRect``."""
+    return ((1.0 - _smoothstep(0.5 - feather, 0.5 + feather, abs(local[0])))
+            * (1.0 - _smoothstep(0.5 - feather, 0.5 + feather, abs(local[1]))))
+
+
+def _apply(matrix: tuple[float, ...], vector: tuple[float, float, float, float]) -> list[float]:
+    # Column-major 4x4, as Qt/OpenGL uniforms.
+    return [sum(matrix[column * 4 + row] * vector[column] for column in range(4)) for row in range(4)]
+
+
+def scene3d_streak(matrix: tuple[float, ...], item_size: tuple[float, float], tail: Vec3, head: Vec3,
+                   width: float, corner: tuple[float, float]) -> tuple[float, float, float, float]:
+    """CPU mirror of ``sceneStreak``: clip position of one streak corner."""
+    aspect = item_size[0] / item_size[1]
+    wt, wh = SCENE3D_CAMERA - tail[2], SCENE3D_CAMERA - head[2]
+    if min(wt, wh) <= SCENE3D_NEAR:
+        return (2.0, 2.0, 2.0, 1.0)
+    a = ((tail[0] / aspect * SCENE3D_CAMERA / wt + 0.5) * item_size[0], (-tail[1] * SCENE3D_CAMERA / wt + 0.5) * item_size[1])
+    b = ((head[0] / aspect * SCENE3D_CAMERA / wh + 0.5) * item_size[0], (-head[1] * SCENE3D_CAMERA / wh + 0.5) * item_size[1])
+    axis = (b[0] - a[0], b[1] - a[1])
+    span = math.hypot(*axis)
+    along = (axis[0] / span, axis[1] / span) if span > 1e-3 else (1.0, 0.0)
+    size = width * SCENE3D_CAMERA / wh
+    start = (a[0] - along[0] * size * 0.5, a[1] - along[1] * size * 0.5)
+    end = (b[0] + along[0] * size * 0.5, b[1] + along[1] * size * 0.5)
+    point = (start[0] + (end[0] - start[0]) * corner[0] - along[1] * (corner[1] - 0.5) * size,
+             start[1] + (end[1] - start[1]) * corner[0] + along[0] * (corner[1] - 0.5) * size)
+    clip = _apply(matrix, (point[0], point[1], 0.0, 1.0))
+    w = wt + (wh - wt) * corner[0]
+    clip[2] = scene3d_clip_depth(w) / w * clip[3]
+    return tuple(clip)
