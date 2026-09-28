@@ -338,3 +338,50 @@ def scene3d_streak(matrix: tuple[float, ...], item_size: tuple[float, float], ta
     w = wt + (wh - wt) * corner[0]
     clip[2] = scene3d_clip_depth(w) / w * clip[3]
     return tuple(clip)
+
+
+# ---- std140 uniform blocks (pure layout; the GL buffer is rendering.quick.scene3d.uniforms) ----
+
+# type -> (base alignment, size, struct format), per the std140 rules for these types.
+_STD140 = {
+    "float": (4, 4, "f"), "int": (4, 4, "i"), "uint": (4, 4, "I"),
+    "vec2": (8, 8, "2f"), "ivec2": (8, 8, "2i"),
+    "vec3": (16, 12, "3f"), "vec4": (16, 16, "4f"),
+    "mat4": (16, 64, "16f"),
+}
+
+
+@dataclass(frozen=True)
+class Scene3DBlockLayout:
+    """One per-frame uniform block: its GLSL declaration, std140 offsets and packing
+    all come from one field list, so shader and Python cannot disagree."""
+
+    name: str
+    fields: tuple[tuple[str, str], ...]
+    offsets: tuple[int, ...]
+    size: int
+
+    @classmethod
+    def of(cls, name: str, fields: tuple[tuple[str, str], ...]) -> "Scene3DBlockLayout":
+        offsets, cursor = [], 0
+        for _field, glsl_type in fields:
+            alignment, size, _format = _STD140[glsl_type]
+            cursor = -(-cursor // alignment) * alignment
+            offsets.append(cursor)
+            cursor += size
+        return cls(name, tuple(fields), tuple(offsets), -(-cursor // 16) * 16)
+
+    def glsl(self) -> str:
+        members = "".join(f"    {glsl_type} {field};\n" for field, glsl_type in self.fields)
+        return f"layout(std140) uniform {self.name} {{\n{members}}};\n"
+
+    def pack(self, values) -> bytes:
+        import struct
+
+        data = bytearray(self.size)
+        for (field, glsl_type), offset in zip(self.fields, self.offsets):
+            value = values[field]
+            fmt = _STD140[glsl_type][2]
+            items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
+            struct.pack_into("<" + fmt, data, offset, *items)
+        return bytes(data)

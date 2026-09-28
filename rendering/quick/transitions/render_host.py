@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from OpenGL import GL as gl
 
+from rendering.quick import gl_query as _query
+
 from .implementation_registry import (
     canonical_enabled_transition_ids,
     iter_quick_transition_implementations,
@@ -15,32 +17,22 @@ from .implementation_registry import (
 from .render_contract import QuickTransitionRenderFrame, QuickTransitionRenderer
 
 
+# The fence captures ~20 states every transition frame; ``gl_query``'s raw getters
+# cost ~2.7 us each against ~13 us for PyOpenGL's checked ones.
 def _int_state(name: int) -> int:
-    value = gl.glGetIntegerv(name)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return int(value[0])
+    return _query.get_int(name)
 
 
 def _bool_state(name: int) -> bool:
-    value = gl.glGetBooleanv(name)
-    try:
-        return bool(value[0])
-    except (IndexError, TypeError):
-        return bool(value)
+    return _query.get_bool(name)
 
 
 def _float_state(name: int) -> float:
-    value = gl.glGetFloatv(name)
-    try:
-        return float(value[0])
-    except (IndexError, TypeError):
-        return float(value)
+    return _query.get_float(name)
 
 
 def _viewport_state() -> tuple[int, int, int, int]:
-    values = tuple(int(value) for value in gl.glGetIntegerv(gl.GL_VIEWPORT))
+    values = tuple(int(value) for value in _query.get_ints(gl.GL_VIEWPORT, 4))
     if len(values) != 4:
         raise RuntimeError(f"invalid inherited Quick GL viewport: {values}")
     return values

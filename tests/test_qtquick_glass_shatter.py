@@ -100,6 +100,7 @@ def test_depth_clear_is_bounded_and_restores_scissor_on_failure(monkeypatch, ena
     from types import SimpleNamespace
     fake = _DepthGL(enabled, fail)
     monkeypatch.setattr(mesh_support, "gl", fake)
+    monkeypatch.setattr(mesh_support, "_query", SimpleNamespace(get_ints=lambda _name, _count: fake.box))
     frame = SimpleNamespace(viewport=(5, 5, 70, 60))
     if fail:
         with pytest.raises(RuntimeError, match="injected"):

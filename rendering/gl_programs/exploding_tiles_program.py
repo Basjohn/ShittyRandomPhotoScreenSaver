@@ -14,7 +14,12 @@ import math
 import random
 from collections.abc import Mapping
 
-from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES, SCENE3D_GLSL, scene3d_impulse
+from rendering.gl_programs.scene3d import (
+    SCENE3D_DETAIL_NAMES,
+    SCENE3D_GLSL,
+    Scene3DBlockLayout,
+    scene3d_impulse,
+)
 
 
 EXPLODING_TILES_VERTEX_STRIDE_FLOATS = 8
@@ -306,11 +311,15 @@ def exploding_tiles_sparks_live(progress: float, force: float, center_out: bool)
     return EXPLODING_TILES_DETONATION <= float(progress) <= last
 
 
-_MOTION_UNIFORMS_GLSL = """
-uniform mat4 uMatrix; uniform vec2 uItemSize; uniform vec2 uGrid; uniform float uProgress; uniform float uSeed;
-uniform float uDepth; uniform float uThickness; uniform float uForce; uniform int uCenterOut; uniform vec3 uEpicentre;
-uniform float uSeconds;
-"""
+# Everything the passes share per frame travels in one uniform block (one upload per frame);
+# the matrix, item size and textures stay per pass because the shared item quad uses them.
+EXPLODING_TILES_FRAME_BLOCK = Scene3DBlockLayout.of("ExplodingTilesFrame", (
+    ("uGrid", "vec2"), ("uProgress", "float"), ("uSeed", "float"), ("uDepth", "float"),
+    ("uThickness", "float"), ("uForce", "float"), ("uCenterOut", "int"), ("uEpicentre", "vec3"),
+    ("uSeconds", "float"), ("uBlast", "vec2"), ("uBody", "vec3"),
+))
+_FRAME_GLSL = EXPLODING_TILES_FRAME_BLOCK.glsl()
+_MOTION_UNIFORMS_GLSL = "uniform mat4 uMatrix; uniform vec2 uItemSize;\n" + _FRAME_GLSL
 
 _TILE_MOTION_GLSL = f"""
 const float DETONATE = {EXPLODING_TILES_DETONATION:.6f};
@@ -480,9 +489,9 @@ in vec2 vUv; in vec2 vFace; in vec3 vNormal; in vec3 vWorld;
 in float vSurface; in float vLit; in float vCrack; in float vHeat;
 in float vReleased; in vec3 vFront;
 out vec4 FragColor;
-uniform sampler2D uOldTex; uniform vec2 uItemSize; uniform vec2 uGrid; uniform vec3 uEpicentre; uniform vec2 uBlast;
-uniform vec3 uBody;
+uniform sampler2D uOldTex; uniform vec2 uItemSize;
 """
+    + _FRAME_GLSL
     + SCENE3D_GLSL
     + """
 void main() {
@@ -524,7 +533,8 @@ void main() {
 EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE = (
     "#version 410 core\n"
     "in vec2 vUv;\nout vec4 FragColor;\n"
-    "uniform sampler2D uNewTex; uniform vec2 uItemSize; uniform vec3 uEpicentre; uniform vec2 uBlast;\n"
+    "uniform sampler2D uNewTex; uniform vec2 uItemSize;\n"
+    + _FRAME_GLSL
     + _BACKDROP_GLSL
     + "void main() { FragColor = vec4(blastBackdrop(vec2(vUv.x, 1.0 - vUv.y)), 1.0); }\n"
 )
@@ -565,7 +575,8 @@ void main() {
 EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE = (
     "#version 410 core\n"
     "in vec2 vScreen; in vec2 vLocal; flat in float vFeather; flat in float vStrength;\nout vec4 FragColor;\n"
-    "uniform sampler2D uNewTex; uniform vec2 uItemSize; uniform vec3 uEpicentre; uniform vec2 uBlast;\n"
+    "uniform sampler2D uNewTex; uniform vec2 uItemSize;\n"
+    + _FRAME_GLSL
     + SCENE3D_GLSL
     + _BACKDROP_GLSL
     + """
@@ -579,8 +590,7 @@ void main() {
 EXPLODING_TILES_SPARK_VERTEX_SOURCE = (
     "#version 410 core\n"
     "layout(location=0) in vec2 aPosition;\n"
-    "uniform mat4 uMatrix; uniform vec2 uItemSize; uniform float uProgress; uniform float uSeed; uniform float uForce;\n"
-    "uniform int uCenterOut; uniform vec3 uEpicentre;\n"
+    + _MOTION_UNIFORMS_GLSL
     + SCENE3D_GLSL
     + f"""
 const float DETONATE = {EXPLODING_TILES_DETONATION:.6f};
