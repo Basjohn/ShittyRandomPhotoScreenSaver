@@ -93,7 +93,9 @@ OverlayWidget {
     readonly property real canonicalPreferredWidth: Math.max(
         600.0,
         headerFrame.implicitWidth
-            + (refreshTarget.visible ? refreshTarget.implicitWidth + 10.0 : 0.0)
+            // The setting reserves the glyph's slot; whether it is drawn at a
+            // narrower CUSTOM width must not feed back into this width.
+            + (redditRoot.redditModel.showRefreshSpiral ? refreshTarget.implicitWidth + 10.0 : 0.0)
             + redditRoot.shellInset
     )
     readonly property real canonicalAuthoredHeight: Math.max(
@@ -240,7 +242,15 @@ OverlayWidget {
                 readonly property bool canActivate: visible
                     && redditRoot.redditModel.interactionEnabled
                     && !redditRoot.customLayoutInputBlocked
-                visible: redditRoot.redditModel.showRefreshSpiral
+                // A narrow CUSTOM width can bring the (never elided) header over
+                // the glyph: then the glyph steps aside rather than overlap.
+                readonly property real headerGap: 4.0
+                readonly property bool clearOfHeader:
+                    x + width + headerGap <= headerFrame.x
+                    || x >= headerFrame.x + headerFrame.width * headerFrame.scale + headerGap
+                    || y + height <= headerFrame.y
+                    || y >= headerFrame.y + headerFrame.height * headerFrame.scale
+                visible: redditRoot.redditModel.showRefreshSpiral && clearOfHeader
                 width: implicitWidth * redditRoot.childWidthScale("refresh")
                 height: headerArea.height * redditRoot.childHeightScale("refresh")
                 x: (redditRoot.headerFlipped ? 0.0 : headerArea.width - width)
