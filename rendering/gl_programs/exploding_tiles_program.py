@@ -511,7 +511,7 @@ void main() {
     } else {
         // Thickness and back: dark grey stone tinted slightly toward the photograph's
         // most used colour, glowing where the blast heated it.
-        vec3 body = mix(vec3(0.25), uBody, 0.22) * (vSurface > -0.3 ? 1.0 : 0.8);
+        vec3 body = mix(vec3(0.25), uBody, 0.44) * 0.75 * (vSurface > -0.3 ? 1.0 : 0.8);
         colour = sceneShade(body, normal, vWorld, 0.5, 0.12, 28.0, 0.05) + fire * 0.12
                + sceneEmber(vHeat) * vHeat * vHeat * (vSurface > -0.3 ? 0.9 : 0.3);
     }
