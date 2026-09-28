@@ -1261,7 +1261,7 @@ def _build_source_ratio_active_style() -> str:
     return (
         "#ratioFrame {"
         f" background-color: {_theme_qss_color('sources.ratio.surface')};"
-        f" border: 1px solid {_theme_qss_color('sources.ratio.border')};"
+        f" border: 2px solid {_theme_qss_color('sources.ratio.border')};"
         " border-radius: 6px; padding: 8px;"
         " }"
     )
@@ -1274,7 +1274,7 @@ def _build_source_ratio_disabled_style() -> str:
     return (
         "#ratioFrame {"
         f" background-color: {_theme_qss_color('sources.ratio.disabled_surface')};"
-        f" border: 1px solid {_theme_qss_color('sources.ratio.disabled_border')};"
+        f" border: 2px solid {_theme_qss_color('sources.ratio.disabled_border')};"
         " border-radius: 6px; padding: 8px;"
         " }"
     )

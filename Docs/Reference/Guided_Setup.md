@@ -4,7 +4,7 @@ Guided Setup is a lazy panel shown inside the Settings window (it replaces the s
 shares Settings' theme and backdrop). With no folders or wallpaper feeds, Settings makes one deferred
 decision after its shell is shown: open Guided Setup, or show the existing No Image Sources popup when
 `sources.guided_setup_silenced` is true. Sources present means no automatic prompt. The Settings close guard still
-requires an image source. QUICK START always allows a manual rerun, regardless of Hide This From Now On; there is no completion flag.
+requires an image source. QUICK START always allows a manual rerun, regardless of Hide This From Now On (Quick Start: Hide Guided Setup From Now On); there is no completion flag.
 
 ## Owners and choices
 
@@ -203,7 +203,7 @@ Implementation and automated coverage are complete; one operator pass on the rea
 - Sources buckets, a custom feed address, clicking displays in the diagram, Interaction greyed on MC;
 - Widget Setup: Clocks face/timezones, Weather location and Show 5-Day Forecast, Steam shows a saved connection,
   Gmail notification sound + Test;
-- Hide This From Now On → old no-source popup;
+- Hide This From Now On (wizard) / Hide Guided Setup From Now On (Quick Start) → old no-source popup;
 - live Theme switch; monitor selection; Interaction demo;
 - widget previews and selections;
 - one Steam/Gmail/Weather/Reddit/FEEDS setup path, including the D1 message when started by Windows as the screensaver;

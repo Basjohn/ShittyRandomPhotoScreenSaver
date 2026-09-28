@@ -35,7 +35,8 @@ class QuickStartPage(Page):
         _, _, reset = build_bucket_toggle(self.body, "Reset Widget Layouts")
         reset.addWidget(text_label("Restore authored parent positions and monitor routes and clear CUSTOM placements. Widget content settings, accounts and saved layout slots are kept."))
         reset.addWidget(action("Reset Widget Layouts", self.reset_layouts))
-        self.body.addWidget(silence_check(settings))
+        # Quick Start is not Guided Setup itself, so name what the box hides.
+        self.body.addWidget(silence_check(settings, "Hide Guided Setup From Now On"))
         self.body.addWidget(text_label(SILENCE_TEXT))
         self.body.addStretch()
         self.refresh()
