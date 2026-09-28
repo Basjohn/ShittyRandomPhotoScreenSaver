@@ -2,8 +2,9 @@
 
 Four passes per frame, all analytic from the run's progress: the new photograph
 lit by the blast, soft tile shadows on it (MIN-blended, 3D Detail permitting),
-the beveled slabs (depth-tested), then additive sparks. On High the passes
-render into a multisampled scene target that the host's park drops after the run.
+the beveled slabs (depth-tested), then additive sparks. Their shared per-frame
+values travel in one uniform block. On High the passes render into a
+multisampled scene target that the host's park drops after the run.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from rendering.gl_programs.exploding_tiles_program import (
     EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE,
     EXPLODING_TILES_BOX_VERTICES,
     EXPLODING_TILES_FRAGMENT_SOURCE,
+    EXPLODING_TILES_FRAME_BLOCK,
     EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
     EXPLODING_TILES_SHADOW_VERTEX_SOURCE,
     EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
@@ -30,13 +32,9 @@ from rendering.gl_programs.scene3d import scene3d_detail
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
+from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
 from ..render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
-
-_MOTION_UNIFORMS = (
-    "uMatrix", "uItemSize", "uGrid", "uProgress", "uSeed",
-    "uDepth", "uThickness", "uForce", "uCenterOut", "uEpicentre", "uSeconds",
-)
 
 
 class QuickExplodingTilesRenderer:
@@ -45,12 +43,13 @@ class QuickExplodingTilesRenderer:
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Exploding Tiles")
         self._target = SceneTarget("Quick Exploding Tiles")
+        self._frame_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles")
         self._body_key: tuple[int, str] | None = None
         self._body = (0.15, 0.15, 0.15)
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources or self._target.has_resources
+        return self._resources.has_resources or self._target.has_resources or self._frame_block.has_resources
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
@@ -72,85 +71,67 @@ class QuickExplodingTilesRenderer:
             epicentre = exploding_tiles_epicentre(
                 None if center_out else direction_vector(direction), seed, width / height
             )
-            blast = exploding_tiles_blast(progress)
-            seconds = frame.run.request.duration_ms / 1000.0
-            motion = (grid, progress, seed, depth, thickness, force, center_out, epicentre, seconds)
-            if detail.samples:
-                with self._target.scope(frame, detail.samples, self._resources):
-                    self._draw_scene(frame, motion, blast, detail)
-            else:
-                self._draw_scene(frame, motion, blast, detail)
+            values = {
+                "uGrid": grid, "uProgress": progress, "uSeed": float(seed), "uDepth": depth,
+                "uThickness": thickness, "uForce": force, "uCenterOut": 1 if center_out else 0,
+                "uEpicentre": epicentre, "uSeconds": frame.run.request.duration_ms / 1000.0,
+                "uBlast": exploding_tiles_blast(progress), "uBody": self._body_colour(frame),
+            }
+            with self._frame_block.bound(values):
+                if detail.samples:
+                    with self._target.scope(frame, detail.samples, self._resources):
+                        self._draw_scene(frame, grid, detail, progress, force, center_out)
+                else:
+                    self._draw_scene(frame, grid, detail, progress, force, center_out)
         except Exception:
             self.release_resources()
             raise
 
-    def _draw_scene(self, frame, motion, blast, detail) -> None:
-        _grid, progress, _seed, _depth, _thickness, force, center_out, epicentre, _seconds = motion
-        self._draw_backdrop(frame, epicentre, blast)
+    def _draw_scene(self, frame, grid, detail, progress: float, force: float, center_out: bool) -> None:
+        tiles = grid[0] * grid[1]
+        self._draw_backdrop(frame)
         if detail.shadows:
-            self._draw_shadows(frame, motion, blast)
+            self._draw_shadows(frame, tiles)
         self._resources.begin_depth(frame)
-        self._draw_tiles(frame, motion, blast)
+        self._draw_tiles(frame, tiles)
         sparks = round(EXPLODING_TILES_SPARKS * detail.particles)
         if sparks and exploding_tiles_sparks_live(progress, force, center_out):
-            self._draw_sparks(frame, motion, sparks)
+            self._draw_sparks(frame, sparks)
 
-    def _program(self, key: str, vertex: str, fragment: str, names: tuple[str, ...]):
+    def _use(self, key: str, vertex: str, fragment: str, names: tuple[str, ...], frame) -> None:
         program = self._resources.program(key, vertex, fragment)
-        return program, self._resources.uniforms(key, names)
+        self._frame_block.attach(program)
+        bind_frame(program, self._resources.uniforms(key, names), frame)
 
-    @staticmethod
-    def _set_motion(uniforms: dict[str, int], motion) -> None:
-        grid, progress, seed, depth, thickness, force, center_out, epicentre, seconds = motion
-        gl.glUniform2f(uniforms["uGrid"], *grid)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1f(uniforms["uSeed"], float(seed))
-        gl.glUniform1f(uniforms["uDepth"], depth)
-        gl.glUniform1f(uniforms["uThickness"], thickness)
-        gl.glUniform1f(uniforms["uForce"], force)
-        gl.glUniform1i(uniforms["uCenterOut"], 1 if center_out else 0)
-        gl.glUniform3f(uniforms["uEpicentre"], *epicentre)
-        gl.glUniform1f(uniforms["uSeconds"], seconds)
-
-    def _draw_backdrop(self, frame, epicentre, blast) -> None:
-        program, uniforms = self._program(
-            "backdrop", QUICK_TRANSITION_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE,
-            ("uMatrix", "uItemSize", "uNewTex", "uEpicentre", "uBlast"),
-        )
+    def _draw_backdrop(self, frame) -> None:
+        self._use("backdrop", QUICK_TRANSITION_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE,
+                  ("uMatrix", "uItemSize", "uNewTex"), frame)
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform3f(uniforms["uEpicentre"], *epicentre)
-        gl.glUniform2f(uniforms["uBlast"], *blast)
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
-    def _draw_shadows(self, frame, motion, blast) -> None:
-        program, uniforms = self._program(
-            "shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
-            _MOTION_UNIFORMS + ("uNewTex", "uBlast"),
-        )
-        bind_frame(program, uniforms, frame)
-        self._set_motion(uniforms, motion)
-        gl.glUniform2f(uniforms["uBlast"], *blast)
+    def _draw_shadows(self, frame, tiles: int) -> None:
+        self._use("shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
+                  ("uMatrix", "uItemSize", "uNewTex"), frame)
         gl.glBindVertexArray(frame.quad_vao)
-        grid = motion[0]
         with blend_scope(gl.GL_MIN):
-            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, grid[0] * grid[1])
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, tiles)
 
-    def _draw_tiles(self, frame, motion, blast) -> None:
-        program, uniforms = self._program(
-            "tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
-            _MOTION_UNIFORMS + ("uOldTex", "uBlast", "uBody"),
-        )
-        bind_frame(program, uniforms, frame)
-        self._set_motion(uniforms, motion)
-        gl.glUniform2f(uniforms["uBlast"], *blast)
-        gl.glUniform3f(uniforms["uBody"], *self._body_colour(frame))
+    def _draw_tiles(self, frame, tiles: int) -> None:
+        self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
+                  ("uMatrix", "uItemSize", "uOldTex"), frame)
         vao, count = self._resources.mesh("beveled_slab", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2))
         gl.glBindVertexArray(vao)
-        grid = motion[0]
-        gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, grid[0] * grid[1])
+        gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, tiles)
+
+    def _draw_sparks(self, frame, count: int) -> None:
+        self._use("sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
+                  ("uMatrix", "uItemSize"), frame)
+        gl.glDepthMask(gl.GL_FALSE)
+        gl.glBindVertexArray(frame.quad_vao)
+        with blend_scope(gl.GL_FUNC_ADD):
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, count)
 
     def _body_colour(self, frame) -> tuple[float, float, float]:
         """The source's most used colour, found once per run."""
@@ -161,30 +142,13 @@ class QuickExplodingTilesRenderer:
             self._body_key = key
         return self._body
 
-    def _draw_sparks(self, frame, motion, count: int) -> None:
-        program, uniforms = self._program(
-            "sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
-            ("uMatrix", "uItemSize", "uProgress", "uSeed", "uForce", "uCenterOut", "uEpicentre"),
-        )
-        _grid, progress, seed, _depth, _thickness, force, center_out, epicentre, _seconds = motion
-        bind_frame(program, uniforms, frame)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1f(uniforms["uSeed"], float(seed))
-        gl.glUniform1f(uniforms["uForce"], force)
-        gl.glUniform1i(uniforms["uCenterOut"], 1 if center_out else 0)
-        gl.glUniform3f(uniforms["uEpicentre"], *epicentre)
-        gl.glDepthMask(gl.GL_FALSE)
-        gl.glBindVertexArray(frame.quad_vao)
-        with blend_scope(gl.GL_FUNC_ADD):
-            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, count)
-
     def park(self) -> None:
-        """Drop the per-run scene target; programs and the slab mesh stay warm."""
+        """Drop the per-run scene target; programs, the slab mesh and the block stay warm."""
         self._target.release()
 
     def release_resources(self) -> None:
         errors: list[str] = []
-        for release in (self._target.release, self._resources.release_resources):
+        for release in (self._target.release, self._frame_block.release, self._resources.release_resources):
             try:
                 release()
             except Exception as exc:

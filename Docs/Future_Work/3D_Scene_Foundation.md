@@ -86,8 +86,8 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   `tests/test_scene3d_target.py` (offset card equals a direct draw at 1 and 4 samples, inherited scissor honoured,
   bucket reuse, state handed back after a mid-scene failure); Visualizer reference §16.
 
-### S3 — Per-frame uniform blocks
-- [ ] One std140 uniform block per effect frame, laid out from a single Python field list (shared packing helper),
+### S3 — Per-frame uniform blocks — LANDED
+- [x] One std140 uniform block per effect frame, laid out from a single Python field list (shared packing helper),
   updated with one buffer write per frame and bound for every pass; Exploding Tiles first.
 - **Reward:** ~40 GL calls per frame to a handful; the render-thread CPU cost Visualizers need to afford 3D.
 - **Risks:** std140 alignment (vec3 padding) — verified on the GPU through S1; binding-point collisions with Qt's RHI,
@@ -96,6 +96,18 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   leaking the uniform-buffer binding (the fences capture and restore the indexed binding the foundation uses).
 - **Bars:** identical pixels before/after for Exploding Tiles at every tier; CPU submit measured lower; fence test
   covers the uniform-buffer binding.
+- **Finding (measured):** uniforms were not the main per-frame cost. The block removed 19 of 165 GL calls with no
+  measurable gain; ~40 of the rest were the transition fence's state captures, and PyOpenGL's checked getters cost
+  ~13 us each (they build an output array) against ~2.7 us for the raw entry points into a small ctypes buffer.
+- **Landed:** `Scene3DBlockLayout` (pure std140 layout, GLSL and packing from one field list) in
+  `rendering/gl_programs/scene3d.py`; `rendering/quick/scene3d/uniforms.py` (`UniformBlock`: orphaned upload each
+  frame, binding point 15, `bound()` hands back the previous range and generic binding); `rendering/quick/gl_query.py`
+  (raw state queries) used by the transition fence, the depth clear, `SceneTarget` and `UniformBlock`; Exploding
+  Tiles on one `ExplodingTilesFrame` block. Pixel-identical at every tier. Warm CPU submit per frame (steady
+  min-of-medians, 320x180): High 1.23 -> 0.90 ms, Balanced 1.18 -> 0.86 ms (~27% less). The fence speed-up applies
+  to every transition. The Visualizer fence (CHK26-protected) still uses checked getters; switching it is an
+  operator decision. Tests: `tests/test_scene3d_uniforms.py` (driver-reported offsets equal the layout, values
+  arrive, binding restored).
 
 ### S4 — Camera
 - [ ] `sceneProject` takes a camera (distance per effect, plus offset, tilt and shake) from the frame block; at rest it
@@ -196,5 +208,5 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 
 ## Landed / remaining
 
-- Landed: S1, S2.
-- Remaining: S3–S11 in order.
+- Landed: S1, S2, S3.
+- Remaining: S4–S11 in order.

@@ -22,6 +22,8 @@ from typing import Iterator
 
 from OpenGL import GL as gl
 
+from rendering.quick import gl_query
+
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame, item_pixel_rect
 
 SCENE_TARGET_BUCKET = 64
@@ -38,14 +40,6 @@ void main() {
     FragColor = texelFetch(uScene, texel, 0);
 }
 """
-
-
-def _binding(name: int) -> int:
-    value = gl.glGetIntegerv(name)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return int(value[0])
 
 
 def _bucket(size: int) -> int:
@@ -86,8 +80,9 @@ class SceneTarget:
         x, y, width, height = tuple(int(v) for v in (rect if rect is not None else item_pixel_rect(frame)))
         if width <= 0 or height <= 0:
             raise ValueError(f"{self.label} scene target needs a positive rect, got {(x, y, width, height)}")
-        samples = max(1, min(int(samples), _binding(gl.GL_MAX_SAMPLES)))
-        self._inherited = (_binding(gl.GL_DRAW_FRAMEBUFFER_BINDING), _binding(gl.GL_READ_FRAMEBUFFER_BINDING))
+        samples = max(1, min(int(samples), gl_query.get_int(gl.GL_MAX_SAMPLES)))
+        self._inherited = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING),
+                           gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING))
         self._scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
         key = self._key
         if key is None or key[2] != samples or width > key[0] or height > key[1]:
@@ -96,7 +91,7 @@ class SceneTarget:
         self._rect = (x, y, width, height)
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["fbo"])
         gl.glDisable(gl.GL_SCISSOR_TEST)
-        clear = tuple(float(value) for value in gl.glGetFloatv(gl.GL_COLOR_CLEAR_VALUE))
+        clear = gl_query.get_floats(gl.GL_COLOR_CLEAR_VALUE, 4)
         try:
             gl.glClearColor(0.0, 0.0, 0.0, 1.0)
             gl.glClearDepth(1.0)
@@ -138,7 +133,7 @@ class SceneTarget:
             gl.glDisable(gl.GL_SCISSOR_TEST)
 
     def _allocate(self, width: int, height: int, samples: int) -> None:
-        renderbuffer = _binding(gl.GL_RENDERBUFFER_BINDING)
+        renderbuffer = gl_query.get_int(gl.GL_RENDERBUFFER_BINDING)
         try:
             self._names["fbo"] = int(gl.glGenFramebuffers(1))
             self._names["colour"] = int(gl.glGenRenderbuffers(1))

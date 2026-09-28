@@ -306,6 +306,25 @@ def _frame() -> QuickTransitionRenderFrame:
     )
 
 
+class _FakeQuery:
+    """The fence's raw queries, answered by the same fake state machine."""
+
+    def __init__(self, fake: _FakeGLState) -> None:
+        self._fake = fake
+
+    def get_int(self, name):
+        return int(self._fake.glGetIntegerv(name))
+
+    def get_ints(self, name, _count):
+        return tuple(self._fake.glGetIntegerv(name))
+
+    def get_bool(self, name):
+        return bool(self._fake.glGetBooleanv(name)[0])
+
+    def get_float(self, name):
+        return float(self._fake.glGetFloatv(name)[0])
+
+
 def _host_with(fake: _FakeGLState, renderer) -> QuickTransitionRenderHost:
     host = QuickTransitionRenderHost(enabled_transition_ids={"crossfade"})
     host._implementations["crossfade"] = renderer  # type: ignore[assignment]
@@ -315,6 +334,7 @@ def _host_with(fake: _FakeGLState, renderer) -> QuickTransitionRenderHost:
 def test_state_fence_restores_every_promised_field_after_render(monkeypatch):
     fake = _FakeGLState()
     monkeypatch.setattr(render_host_module, "gl", fake)
+    monkeypatch.setattr(render_host_module, "_query", _FakeQuery(fake))
     _load_deliberately_non_default(fake)
     baseline = fake.snapshot()
     scissor_before = fake.enabled[fake.GL_SCISSOR_TEST]
@@ -333,6 +353,7 @@ def test_state_fence_restores_every_promised_field_after_render(monkeypatch):
 def test_state_fence_restores_every_promised_field_when_render_raises(monkeypatch):
     fake = _FakeGLState()
     monkeypatch.setattr(render_host_module, "gl", fake)
+    monkeypatch.setattr(render_host_module, "_query", _FakeQuery(fake))
     _load_deliberately_non_default(fake)
     baseline = fake.snapshot()
     scissor_before = fake.enabled[fake.GL_SCISSOR_TEST]
@@ -354,6 +375,7 @@ def test_state_fence_actually_applies_transition_setup_before_restore(monkeypatc
     # ran, so the restoration under test is meaningful rather than a no-op.
     fake = _FakeGLState()
     monkeypatch.setattr(render_host_module, "gl", fake)
+    monkeypatch.setattr(render_host_module, "_query", _FakeQuery(fake))
     _load_deliberately_non_default(fake)
 
     observed: dict = {}

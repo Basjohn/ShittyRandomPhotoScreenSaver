@@ -11,6 +11,7 @@ import ctypes
 
 from OpenGL import GL as gl
 
+from rendering.quick import gl_query as _query
 from rendering.quick.render.gl_resources import compile_program
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame
 
@@ -142,7 +143,7 @@ class MeshResources:
     def begin_depth(frame: SceneFrame) -> None:
         """Clear only the admitted viewport intersected with Quick's clip."""
         enabled = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
-        inherited = tuple(int(v) for v in gl.glGetIntegerv(gl.GL_SCISSOR_BOX))
+        inherited = _query.get_ints(gl.GL_SCISSOR_BOX, 4)
         x, y, width, height = frame.viewport
         if enabled:
             sx, sy, sw, sh = inherited
