@@ -104,10 +104,10 @@ prepared on COMPUTE (`run_geometry.py`), per-run tables read by vertex texture f
 - No generic scene graph, material hierarchy, physics engine or always-resident "3D engine"; per-effect state stays
   analytic and local.
 
-**Foundation next (dormant until requested):** move Glass Shatter, Crumble, 3D Block Spins and Pixel Accretion onto
-3D Detail (the High target smooths their silhouettes; their looks must not change otherwise); a bloom/glow post pass
-on the High target for sparks, embers and highlights; soft shadows for Glass and Crumble; a cheaper High (2x, or
-multisampling only the tile pass) if physical testing shows the ~1 ms High cost matters.
+**Foundation next — promoted 2026-09-29.** The foundation plan (self-test harness, shared home and Visualizer option,
+uniform blocks, camera, migration of the other 3D transitions, bloom, motion blur, shared particles/shadows/grid,
+photo reflections, cheaper High, first-frame compile) is active work: order in `Current_Plan.md`, detail in
+`Docs/Future_Work/3D_Scene_Foundation.md`.
 - Performance: no Python/QObject object and no draw call per shard/tile/particle; instance repeated geometry; build
   per-run geometry once; reuse source/destination textures; derive per-piece state from compact seeds; bound
   blur/refraction/trail samples; adapt quality to measured cost. `Docs/Guardrails/Performance_Optimization_Contract.md`

@@ -26,7 +26,7 @@ exact current source
 | `Docs/Guardrails/` | binding invariants and preflight contracts |
 | `Docs/Guides/` | maintained authoring/change procedures |
 | `Docs/Reference/` | current lookup/reference material and harness routing |
-| `Docs/Future_Work/` | a focused decomposition for promoted, architecturally large work, created only when needed (currently none; implemented plans are historicalised) |
+| `Docs/Future_Work/` | a focused decomposition for promoted, architecturally large work, created only when needed (currently `3D_Scene_Foundation.md`; implemented plans are historicalised) |
 | `Docs/Historical_Bugs/` | permanent regression/root-cause/failed-method evidence |
 
 Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite.
@@ -54,6 +54,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | transitions and material surfaces (open physical acceptance at the end of the reference) | `Docs/Reference/Transitions.md` and `Docs/Guides/Transition_Change_Checklist.md` |
+| 3D scene foundation plan (slices, risks, performance hazards) | `Docs/Future_Work/3D_Scene_Foundation.md` |
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Historical_Bugs/R-100_Runtime_Audit_2026-09-22_Outcomes_And_Rejections.md` |
 | current FEEDS architecture, invariants and open physical acceptance | `Docs/Reference/Feeds.md` |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
