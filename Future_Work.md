@@ -1,289 +1,188 @@
 # Future Work
 
-Long-horizon feature / new-implementation backlog.
-
-The operator may promote selected backlog work into `Current_Plan.md`. `FWPlan.md` is the compact live router for deferred and explicitly promoted items; detailed active execution lives in `Current_Plan.md` or a focused decomposition.
-This document retains dormant feature intent, durable architecture rules and relative priority. It must not become an active experiment/status diary.
-
-## Authority / activation rule
-
-`Future_Work.md` is **not active sequencing by default**. Normal work continues to be owned by
-`Current_Plan.md` unless the operator deliberately selects a future item.
-
-An agent may implement work from this file only when **either**:
-
-1. the operator explicitly asks for a named `Future_Work.md` item; **or**
-2. `Current_Plan.md` contains no remaining important active work. A horizon-gated persisted-input
-   compatibility bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`) is dormant
-   user-data protection and does not block unrelated future work merely by existing.
-
-**Operator override:** an explicit request for a named `Future_Work.md` item overrides the normal sequencing above.
-Unfinished `Current_Plan.md` work is not, by itself, permission to refuse or defer that named
-future item. Only a genuine technical prerequisite required to implement the requested item safely may block direct
-implementation. Where practical, satisfy that prerequisite as the opening subphase of the requested work instead of
-deferring the feature wholesale. Preserve unrelated active work and its rollback boundaries while doing so.
-
-Merely encountering, reading, indexing or cross-linking this file is **not** permission to begin one
-of these features.
-
-Normal priority:
-
-```text
-Current_Plan.md active work
-        ↓
-Future_Work.md new features / experiments
-```
-
-This file exists so good ideas survive without expanding current scope. Technical notes are deliberately
-provisional; future implementation must inspect the **current** Qt Quick architecture before coding.
-
-### Decomposition rule for large / architecturally unique work
-
-When a requested implementation is long, sizeable, or architecturally unique, create and commit a detailed
-implementation decomposition **before substantial coding** if a current one does not already exist. The decomposition
-is a continuation artifact, not ceremony: a later agent must be able to resume safely if the original implementer runs
-out of quota or stops mid-slice.
-
-At minimum it must:
-
-1. inventory the current relevant foundation and point to the real source/tests that already own it;
-2. pin a pre-implementation rollback/comparison HEAD;
-3. define state, cadence, Settings, presentation, GPU/resource and retirement ownership;
-4. classify new primitives as **feature-local**, **justified reusable infrastructure**, or **speculative reuse deferred**
-   until another concrete consumer proves the abstraction;
-5. decompose the work into resumable slices that leave the repository coherent whenever practical;
-6. define deterministic/source-level, lifecycle/resource, performance and eyes-on visual acceptance bars separately;
-7. keep an explicit landed/remaining status so partial completion is not mistaken for finished architecture.
-
-Do not spend a first implementation pass building speculative infrastructure merely because later features might need it.
-Build the requested vertical feature, extract only reuse justified by the real implementation, and record attractive but
-unproven abstractions in the decomposition for a later second-consumer decision.
-
-### Canonical integration + self-contained implementation gate
-
-A new transition should enter the **existing** transition catalog/registry and Qt Quick render host from its first implementation, initially deactivated by default for development. This is production-shaped integration, **not** a new experimental runtime, private Settings system, parallel preview or separate compositor. Its implementation module/shaders/mesh/per-run resources remain local so it can be disabled immediately and removed by deleting its descriptor, code and owned canonical state. Dormancy, not perpetual quarantine, is the relevant safety boundary. The already accepted Voxel Sphere is an **independent Visualizer mode** with its own protected isolation contract; this transition decision does not promote, merge or retune Sphere.
-
-- [ ] For a **new transition identity**, add one cheap canonical descriptor and lazy implementation to the existing registry/host and use current transition source/state/presentation/Settings authority. Keep per-transition rendering logic/resources local and do not sprinkle special cases through shared owners. Disabled transition: no heavy imports, shaders, buffers, cadence or frame work; enabled->switch away->retire releases all owned GPU/context resources.
-- [ ] For a **modifier of an existing effect** (e.g., Slide Perspective Push), extend that effect's single descriptor/implementation and canonical options. Do not make a fake transition identity for removability; if independent resources/owner/cadence emerge, revisit the identity boundary.
-- [ ] For a new **Visualizer mode**, use the current canonical mode descriptor, lazy builder/renderer, per-mode settings/preset authority and shared technical-family routing; do not treat a transition's lighter registry model as permission to alter Voxel Sphere/Bubble goldens or the accepted preset system.
-- [ ] All persisted values/defaults stay under the existing canonical `default_settings.py` / SettingsManager + appropriate accepted schema namespace. No dynamic plugin schema, private JSON, second SettingsManager or feature-local persistence to make removal easy. Descriptor metadata chooses generic Settings participation, never becomes another default/value authority. If omitting or aliasing a generic family, audit defaults/model/schema, normalization/migration, UI hydrate/save, technical/runtime application and preset/tool enumerators together; preserve user-authored preset catalogues (including sparse indices).
-- [ ] Keep Settings body lazy and **transactional**: attach on complete success, remove partial body on failure, retry without duplicate controls or leaked state. New persisted collapsible-bucket keys need canonical UI-state defaults/migration and exact identity tests. Do not add per-experiment `if mode == ...` branches beyond necessary catalog/registration boundaries.
-- [ ] Removal proof: deleting implementation + one registry entry + its owned canonical settings/default/preset block and focused tests/docs leaves shared hosts and unrelated options functioning. If user profiles can hold old values, perform one explicit retired-key/mode migration instead of indefinite compatibility sludge. A source search for the effect ID should show only justified registry, settings/migration, owned code and tests/docs references.
-- [ ] Run disabled import/resource dormancy, deterministic state and pixel/GL smoke, cleanup/context-loss, both display activation and representative heavy-load perf/freshness tests. A visual experiment can be reverted without preserving it for sunk cost. **Keep genuine module boundaries**, but do not require a second approval ceremony to use the effect through the normal host once tests and operator acceptance are complete.
-
-Runtime Widget Themes, their semantic resolver/linking/Custom model and the shared Style Overrides surface
-are **landed current architecture**, not future work. Their durable contract belongs in `Spec.md` and the
-Settings/Widget Theme architecture documents. Do not use this backlog to reopen that foundation.
-
-Capability terminology must follow the final landed contract even in future designs:
-
-```text
-activated / deactivated
-    = application-level capability gate
-
-enabled / disabled
-    = ordinary feature/instance state inside an activated capability
-```
-
-Do not revive old presenter, disabled-family, or dual-authority terminology just because an older idea used it.
-Current contracts always outrank the wording that originally described a dormant idea.
-
-All future performance-sensitive features also inherit `Docs/Guardrails/Performance_Optimization_Contract.md`. Feature cost must be measured without weakening current freshness/reactivity or replacing bounded useful caches/resources with latency-heavy churn.
-
----
-
-# 1. Visual-effects extension architecture
-
-Current extension model:
-
-```text
-cheap canonical catalog metadata
-        ↓
-lazy internal implementation resolution
-        ↓
-QQuickItem / QSGRenderNode
-        ↓
-direct OpenGL inside the Qt Quick scene
-```
-
-Quick 3D Block Spins has already proved that this path can own real mesh geometry, depth-tested faces,
-context-local VAO/VBO state and custom shaders inside the Quick scene. Future work is therefore not
-limited to fullscreen 2D fragment effects.
-
-A genuinely new transition should normally be:
-
-```text
-cheap descriptor/catalog entry
-        +
-one lazy implementation module
-        +
-authored shader/mesh/per-run state
-        +
-focused tests + visual oracle
-```
-
-Do not return to a central compositor switch where every new effect modifies the whole orchestra.
-A failed visual experiment should be removable by deleting/modifying its isolated descriptor,
-implementation and tests.
-
-This remains internal plugin-shaped architecture, not a third-party plugin SDK.
-
-### Shared 3D dormancy rule
-
-Future 3D support follows the same admission/dormancy contract as the feature that consumes it. If every admitted
-3D-dependent Visualizer mode / transition implementation is dormant, **meaningful 3D-only overhead must also be dormant**.
-Do not compile 3D-only shaders, allocate meshes/VAOs/VBOs, retain effect-specific GPU resources, perform depth-specific
-per-frame work, start workers, or create another cadence merely because reusable 3D code exists in the repository.
-Heavy implementation modules should continue to resolve lazily at the consuming renderer boundary.
-
-Cheap/import-safe pure math, immutable types, tiny shader/resource contracts and canonical catalog metadata may remain
-shared/eager when their runtime/resource cost is effectively nil and centralizing them prevents duplication. Do not contort
-the architecture to make zero-cost helpers artificially lazy. The boundary is **meaningful owned work/resources**, not a
-ritual requirement that every helper live behind an import gate.
-
-Shared 3D infrastructure should therefore be dependency-light at import, while context-local programs, meshes and other
-costly assets belong to the admitted renderer and are released on retirement/context loss. There must never be a hidden
-"3D subsystem" ticking or holding heavy resources in the background when all of its real consumers are disabled/dormant.
-
-### Proven 3D seams, not a Sphere foundation — Block Spins + accepted-experimental Voxel Sphere
-
-**Quick Block Spins** and the accepted-experimental **Voxel Sphere** are independent 3D consumers with different product owners:
-a finite transition run versus a persistent Visualizer logical/runtime path. They prove that context-local programs/buffers,
-real Z/depth, projection, GL-state hygiene and explicit retirement are recurring needs. They do **not** make Sphere itself a
-canonical 3D foundation or template. A future 3D experiment should compare both consumers, reuse already-neutral helpers,
-and extract only the smallest identical low-level seam that the new consumer actually needs. Do not subclass/copy Sphere
-wholesale and then inherit its feature-specific Settings/state/material/deformation assumptions.
-
-The instanced **voxel/block** representation is the accepted experimental Sphere representation. Hard block stepping is authored appearance rather than a failed smooth silhouette, while still exercising projection, depth, one static cube mesh + one instance buffer, context ownership and retirement. The reusable architectural lesson is the experimental **host/isolation seam** (lazy descriptor wiring, dormancy/retirement, private namespace and shared-family opt-outs), not Sphere internals. Keep Sphere implementation local until the operator explicitly authorizes promotion; a future independent consumer may separately prove small low-level 3D helpers worth extracting.
-
-Prefer shared, dependency-light primitives for the parts the two consumers have actually proven common:
-
-- context-local program / VAO / VBO / static-mesh allocation and release helpers;
-- bounded depth clear/scissor ownership inside the consuming Quick surface;
-- small aspect-correct perspective / projection helpers where equations truly match;
-- GL-state restoration helpers that compose with the existing Quick render fence;
-- tiny presentation-neutral normal/lighting math only after identical semantics are demonstrated.
-
-**Instancing now has concrete transition consumers.** Exploding Tiles and Directional Pixel Accretion derive their bounded cells from `gl_InstanceID`; they do not need Sphere's instance-buffer upload machinery. They share only small context-local program/static-mesh/underlay/depth primitives with Glass Shatter. Sphere's distinct shell-instance state remains local. A later consumer must still justify any further extraction from matching source, not hypothetical reuse.
-
-Keep the transition run, source/destination texture ownership, fracture/tile per-run state, Visualizer audio/logical state,
-Sphere deformation/materials and every feature's authored shader semantics local. Do **not** grow a generic camera tree,
-material hierarchy, physics engine or always-resident "SRPSS 3D engine". Heavy shared resources remain lazy and dormant.
-
-The current transition expansion reuses this substrate. Later page-curl/fold/cloth-like ideas should inspect both existing mesh consumers and the small shared transition helpers before adding resource/depth machinery. Extract only what a concrete implementation proves reusable.
-
-For a **deactivated** transition: keep cheap metadata available, exclude it from Random/Cycle, do not
-import heavy implementation solely for catalog construction, do not compile effect shaders, do not
-create effect-specific GL resources, and do not run effect-specific timers/workers.
-
-Future transitions/options consume the final monotonic transition run. They may author internal
-deformation/easing/physics deterministically from that sample but do not become another clock.
-
-Permanent safety rules apply to every future visual/transition experiment:
-
-- **R-69 Visualizer reactivity is golden.** Geometry/aspect adaptation may reframe, reflow, project or presentation-smooth, but must not globally compress authored musical response, head/radius amplitude, motion, Ghost/history displacement, transient strength, or source freshness as a viewport becomes wide/tall. State already normalized/projected into renderer-content coordinates is consumed exactly once. If an extreme visual tail is too large, target only that proven tail.
-- **R-63 black=0 outranks exact shared-edge cover.** A bounded one-device-pixel overshoot is preferable to resurrecting black/stale flashes. Any future seam/coverage change must derive native device geometry from actual monitor rectangles/DPR and remain valid across different resolutions, coordinates, monitor ordering and mixed 1.0/1.25/1.5/1.75/2.0 DPR rather than hard-coding the operator's current pair.
-- Future performance work follows `Docs/Guardrails/Performance_Optimization_Contract.md`: remove measured useless allocation/work and target latency tails/resource growth, not authored cadence, source/snapshot freshness, reaction amplitude, bounded useful caches or black-flash safety.
-
-Performance rules:
-
-- no Python/QObject object per shard/tile/pixel/particle;
-- no GL draw call per shard/tile/pixel/particle;
-- use instancing for repeated geometry;
-- generate fracture/mesh data once per run when practical;
-- reuse source/destination textures;
-- derive per-piece state from compact deterministic seeds;
-- bound blur/refraction/trail samples;
-- adapt quality to measured cost/resolution;
-- preserve the common Quick GL-state fence.
-
----
-
-# 2. Activated transition expansion
-
-Glass Shatter, Exploding Tiles, Directional Pixel Accretion, Slide Perspective Push, Ink Bloom and Melt Drip are implemented through the canonical Quick path. They are no longer dormant implementation ideas. Tendril Reveal was rejected and retired completely; it is not dormant future work. The remaining expansion capabilities start deactivated; operator visual quality and representative heavy-load/mixed-display acceptance remain open.
-
-- Current appearance, controls and resource contracts: `Docs/Reference/Transitions.md`.
-- Remaining physical acceptance: the end of `Docs/Reference/Transitions.md`.
-- Do not reimplement these effects from old backlog proposals or broaden this activation to the Visualizer ideas below.
-
----
-
-# 3. Future 3D visualizer experiments
-
-- [ ] Each requested 3D Visualizer has a distinct canonical mode identity and protected settings/preset ownership; the accepted Voxel Sphere remains unchanged unless specifically requested.
-
-These preserve `VisualizerLogicalRuntime` as the authored logical clock. Presentation may not discard
-logical steps or turn render refresh into simulation cadence.
-
-**Unique Mode means a real mode boundary.** Each experiment labelled `Unique Mode` gets one canonical descriptor plus its own lazy mode-local logical/runtime/renderer/Settings implementation. It may reuse shared analysis bands, direction vocabulary, shader utilities and proven math, but it must not parasitically run another mode's active runtime, install a second visualizer clock, or create an ad-hoc six-way switch outside the descriptor seam. A Bubble-derived or Spectrum-derived experiment may borrow contracts/equations while remaining independently dormant when disabled.
-
-**Voxel Sphere golden preservation:** the accepted Voxel Sphere is not future work. Its current
-reactivity/motion/presets are golden and its architecture remains isolated; do not retune or promote it unless the
-operator explicitly requests that work. The current preservation/isolation contract lives in
-`Docs/Reference/Sphere_Visualizer.md`.
-
-## 3.1 Extruded Spectrum - Unique Mode
-
-Instanced shallow 3D columns: one cuboid mesh, 32–128 instances, per-instance height/color/energy,
-restrained lighting/specular and mild perspective/orthographic depth.
-
-## 3.2 Waveform Ribbon - Unique Mode
-
-Oscilloscope/Sine-like state as a 3D ribbon with a few hundred vertices, amplitude on Y,
-authored phase/history through X/Z twist, neighboring-sample normals and bounded ghost ribbons.
-
-## 3.3 Bubble Depth Field - Unique Mode
-
-Shallow Z/depth presentation option without changing Bubble logical motion **or R-69 response amplitude**. Depth/parallax must not become a viewport-dependent damping term. Prefer instanced billboard
-sphere impostors with analytic normals/specular, per-bubble Z from authored state, depth ordering and
-subtle parallax.
-
-## 3.4 Reactive Particle Field - Unique Mode
-
-Bounded 3D instanced point/quad field driven by existing analysis. Prefer hundreds/low-thousands in
-one/few draws. Persistent state, if truly required, belongs to proper logical/runtime ownership.
-
-## 3.5 Spectrum Terrain - Unique Mode
-
-Spectrum/history mapped onto a modest grid mesh: current spectrum across one axis, short retained
-history into depth, a few thousand vertices, displacement from compact data/texture, normals/lighting.
-
----
-
-# 4. Future transition / Visualizer workflow | reusable checklist
-
-- [ ] Record the concrete visual contract and rollback reference; classify the idea as a new transition, an option of an existing transition, or a distinct Visualizer mode before coding.
-- [ ] Wire to **canonical** catalog/descriptor/defaults, lazy implementation and the one Qt Quick scene from day one. Use module-local expensive resources, not a parallel experimental engine or a Settings shadow tree.
-- [ ] Use deterministic seed/input and add source/owner state, disabled dormancy, GPU resource retirement/context-loss, Settings and removability tests; preserve existing accepted owners and visualizer goldens.
-- [ ] Validate production-shaped native Quick rendering, measured GPU/event-loop/frame/freshness cost, visual quality and multi-display behavior where material. Do not accept a shader merely because source or isolated offline preview compiles.
-- [ ] On acceptance, enable/offer via the existing canonical Settings/cycle/transition flow as applicable. On rejection, delete the self-contained implementation and its descriptor/owned canonical state with a bounded migration for persisted profiles if required; do not leave dead branches.
-- [ ] For Slide Perspective Push and similar existing-effect modifiers, use the single existing Slide owner instead of inventing a new transition identity.
-
----
-
-# 5. Dormant idea priority — not active sequencing
-
-This ranking contains dormant ideas only. Active/promoted work is deliberately absent; `Current_Plan.md` is the sole active sequencing authority.
-
-1. **Deformable 3D Sphere / Blob Sphere experiment**;
-2. other 3D visualizer experiments;
-3. **Settings FlowContainer polish [LOW]** where it genuinely improves alignment/space use without changing ownership.
-
-Activated transitions are tracked in the live plan, not this dormant ranking.
-
-Games You Follow and the system volume/mute OSD are implemented. Their durable product contracts live in `Docs/Reference/`; reopen either only for a concrete defect or an explicitly requested extension.
-
-The Deformable 3D Sphere idea is worth preserving even if its first prototype is abandoned. Its identity should not collapse into a generic audio sphere. Current Glass Shatter and Accretion identities are owned by the transition reference.
-
-Runtime frosted/glass ordinary-widget cards remain **rejected/shelved**, not a queued feature. Reconsider only if a future renderer architecture independently justifies the capability; begin from the rejected-experiment record rather than reviving 2026-09-02 debris.
-
----
-
-# 6. Operator-requested UI polish contracts
-
-## 6.1 Settings FlowContainer polish [LOW]
-
-- [ ] Only promote this UI polish for a demonstrated Settings layout issue; preserve lazy Settings bodies and current owner.
-
-Use FlowContainers in additional Settings sections only where they materially improve alignment and space usage. This is presentation polish, not permission to restructure settings ownership or eagerly construct otherwise lazy bodies.
+The single live router for deferred features and dormant ideas. `Current_Plan.md` owns active work; this file keeps
+good ideas, their admission rules and a suggested order so they survive without widening current scope. Technical notes
+are provisional: inspect the **current** Qt Quick architecture before coding any of them.
+
+## 1. Authority and activation
+
+This file is **not active sequencing**. An agent may implement an item only when:
+
+1. the operator explicitly asks for a named item (this overrides the normal sequencing: unfinished `Current_Plan.md`
+   work is not a reason to refuse or defer it; only a genuine technical prerequisite may block it, and where practical
+   that prerequisite becomes the opening slice of the requested work); or
+2. `Current_Plan.md` has no remaining important active work. A horizon-gated persisted-input bridge
+   (`Docs/Architecture/Persisted_Input_Compatibility.md`) is dormant user-data protection and does not block this.
+
+Reading, indexing or cross-linking this file is not permission to begin a feature. When an item is promoted, move it to
+`Current_Plan.md`; when it is implemented and accepted, delete it here and leave its durable contract in `Spec.md` or the
+relevant `Docs/Reference/` document.
+
+**Decomposition rule.** Before substantial coding on long, sizeable or architecturally unique work, commit a focused
+decomposition (a `Docs/Future_Work/<Name>.md` live checklist, created only when needed) that:
+
+1. inventories the current foundation and names the real source/tests that already own it;
+2. pins a rollback/comparison HEAD;
+3. defines state, cadence, Settings, presentation, GPU/resource and retirement ownership;
+4. classifies new primitives as **feature-local**, **justified reusable infrastructure** or **speculative reuse
+   deferred** until a second concrete consumer proves it;
+5. splits the work into resumable slices that leave the repository coherent;
+6. separates deterministic/source, lifecycle/resource, performance and eyes-on visual acceptance bars;
+7. keeps explicit landed/remaining status, and is deleted when the work closes.
+
+Build the requested vertical feature first; extract only reuse the real implementation justifies.
+
+## 2. Admission rules for new effects
+
+### 2.1 Workflow (every transition or Visualizer idea)
+
+- [ ] Record the visual contract and a rollback reference; classify the idea as a **new transition**, an **option of an
+      existing transition**, or a **distinct Visualizer mode** before coding.
+- [ ] Wire it to the canonical catalog/descriptor/defaults, a lazy implementation and the one Qt Quick scene from day
+      one. Expensive resources stay module-local; no parallel experimental engine or Settings shadow tree.
+- [ ] Use deterministic seeds/inputs and test owner state, disabled dormancy, GPU retirement/context loss, Settings and
+      removability; preserve accepted owners and Visualizer goldens.
+- [ ] Validate native Quick rendering, measured GPU/event-loop/frame/freshness cost, visual quality on real photos and
+      multi-display behaviour where material. A shader that compiles, or an offline preview, is not acceptance.
+- [ ] On acceptance, offer it through the existing Settings/cycle/transition flow. On rejection, delete the
+      implementation, descriptor and owned canonical state (with one bounded migration if profiles can hold old
+      values); leave no dead branches.
+
+### 2.2 Transitions
+
+- A **new identity** adds one cheap descriptor plus a lazy implementation to the existing registry/host and uses the
+  current transition source/state/presentation/Settings authority. It starts deactivated until the operator accepts
+  it. Deactivated: no heavy imports, shaders, buffers, cadence or frame work; enable → switch away → retire releases
+  every owned GPU/context resource.
+- A **modifier of an existing effect** (Slide → Perspective Push, Blinds → 3D Slats) extends that effect's single
+  descriptor/implementation and options. No fake identity for removability; revisit the boundary only if independent
+  resources, owners or cadence emerge.
+- Effects consume the monotonic transition run; they may author deformation/easing/physics deterministically from it
+  but never become another clock. Per-run options are solved once (at request resolution or on COMPUTE) and evaluated
+  analytically on the GPU.
+- Persisted values stay in `default_settings.py` / SettingsManager under the accepted schema namespace. Descriptor
+  metadata chooses generic Settings participation and is never a second default/value authority.
+- Settings bodies stay lazy and transactional: attach on complete success, remove a partial body on failure, retry
+  without duplicate controls. New persisted bucket keys need canonical UI-state defaults and identity tests.
+- Removal proof: deleting the implementation, one registry entry and its owned settings/tests/docs leaves shared hosts
+  and unrelated options working; a source search for the ID shows only justified references.
+
+### 2.3 Visualizer modes
+
+- Each mode (**Unique Mode**) has one canonical descriptor and its own lazy logical/runtime/renderer/Settings
+  implementation, per-mode settings and preset authority, and an explicit shell/clip policy (CARD + CARD_INTERIOR or
+  FRAMELESS + VIEWPORT_RECT). It may reuse shared analysis bands, the typed transient bus, shader utilities and proven
+  math, but it never runs another mode's runtime, installs a second clock or adds a switch outside the descriptor seam.
+- `VisualizerLogicalRuntime` stays the authored clock: presentation may not discard logical steps or turn render
+  refresh into simulation cadence. History (spectrum rows, recent events) is bounded plain data owned by the mode's
+  logical state and carried whole in the immutable snapshot.
+- Follow `Docs/Guides/Visualizer_Reactivity_Authoring.md` §12 (reaction vocabulary, separate presence/admission/
+  magnitude/sustain, hot-chorus tests) and `Docs/Guides/Visualizer_Change_Checklist.md`. Canonical, wide and tall
+  viewports keep authored amplitude (R-69).
+- The accepted **Voxel Sphere** and the **Bubble** reaction contract are golden and are not modified by a new mode
+  (`Docs/Reference/Sphere_Visualizer.md`, `Docs/Guardrails/Bubble_Temporal_Fidelity.md`).
+
+### 2.4 Shared 3D substrate and dormancy
+
+Current 3D consumers: 3D Block Spins, Glass Shatter, Crumble, Exploding Tiles and Directional Pixel Accretion
+(transitions, via `rendering/quick/transitions/mesh_support.py`), and the isolated experimental Voxel Sphere
+(Visualizer). Proven seams: context-local programs/VAOs/VBOs, a static mesh drawn with `gl_InstanceID`-derived
+instancing, per-run CPU geometry prepared on COMPUTE (`run_geometry.py`), per-run tables read by vertex texture fetch
+(Crumble's motion table), viewport-scoped depth clears, manual perspective in the vertex shader, and GL-state
+restoration by the host fence.
+
+- When every consumer of a 3D path is dormant, its meaningful overhead is dormant too: no shader compiles, meshes,
+  buffers, depth work, workers or cadence. Cheap import-safe math, immutable types and catalog metadata may stay eager.
+- Extract only the smallest seam two consumers prove identical. Sphere is an independent consumer to compare against,
+  not a foundation or base class; its Settings, state, materials and shaders stay private.
+- No generic camera tree, material hierarchy, physics engine or always-resident "3D engine".
+- Performance: no Python/QObject object and no draw call per shard/tile/particle; instance repeated geometry; build
+  per-run geometry once; reuse source/destination textures; derive per-piece state from compact seeds; bound
+  blur/refraction/trail samples; adapt quality to measured cost. `Docs/Guardrails/Performance_Optimization_Contract.md`
+  applies.
+- **R-69:** geometry/aspect adaptation may reframe or project but never globally compresses authored musical response.
+- **R-63:** black=0 outranks exact shared-edge cover. An effect that exposes a backdrop shows an image (for example a
+  dimmed destination), never black or stale pixels; seam geometry derives from actual monitor rectangles/DPR.
+
+## 3. 3D transitions (dormant ideas)
+
+Each is analytic on the GPU over one static mesh, needs no new host machinery, and is judged on real photos. All share
+the departure negative controls in `Docs/Reference/Transitions.md` (no premature in-viewport shrink or fade as a
+departure substitute; exact endpoints plus near-endpoint continuity).
+
+- [ ] **Page Curl** — *new identity; high confidence.* The source peels from an edge or corner around a moving cylinder
+      (an analytic curl of a subdivided grid, roughly 64×36 quads), showing a dimmed mirrored or paper-tinted back, and
+      casts a soft shadow onto the destination through an effect-local underlay. Options: Direction (4 edges, 4 corners,
+      Random), curl radius, back style; a **Roll Up** style keeps the curled part wrapped like a scroll. Risk: grid
+      density must follow the curl radius so tight creases stay smooth; the roll must fully leave the frame.
+- [ ] **Cube Turn** — *new identity or 3D Block Spins option (classify first); high confidence.* Source and destination
+      sit on adjacent faces of a box that turns 90° about the vertical or horizontal axis with a slight pull-back and
+      shading on the leading edge. The exposed backdrop during the pull-back is a dimmed destination, never black. Two
+      quads, one draw.
+- [ ] **Accordion Fold** — *new identity; high confidence.* The source splits into vertical or horizontal strips that
+      fold zig-zag like a paper fan (alternating hinge angles), facets shading by orientation, compressing toward one
+      edge before the folded stack leaves the frame. One strip mesh, per-strip index from the vertex or instance ID.
+- [ ] **Relief Rise** — *new identity; medium-high confidence.* A grid mesh displaced by source luminance (vertex texture
+      fetch) rises into lit relief under a sweeping light, morphs its height and colour toward the destination along a
+      wave, then settles flat. Endpoints are exact at zero height. Risk: without a small camera tilt it can read as
+      embossing; any tilt must not expose the frame edges.
+- [ ] **Blinds → 3D Slats** — *option of the existing Blinds identity; high confidence.* Each slat is a thin box turning
+      180° about its long axis (source front, destination back) with lighting and a staggered wave: 3D Block Spins per
+      slat, instanced by `gl_InstanceID`.
+
+## 4. 3D Visualizer modes (dormant ideas)
+
+Every entry is a Unique Mode under §2.3.
+
+- [ ] **Deformable Blob Sphere** — its own mode and renderer lifecycle; never mutates the accepted Voxel Sphere or
+      Bubble. Its identity should not collapse into a generic audio sphere; worth preserving even if a first prototype
+      is abandoned.
+- [ ] **Extruded Spectrum** — one cuboid mesh, 32–128 instances with per-instance height/colour/energy, restrained
+      lighting/specular and mild perspective or orthographic depth.
+- [ ] **Waveform Ribbon** — Oscilloscope/Sine-like state as a ribbon of a few hundred vertices: amplitude on Y,
+      authored phase/history through an X/Z twist, neighbour-sample normals, bounded ghost ribbons.
+- [ ] **Bubble Depth Field** — shallow Z/parallax over unchanged Bubble logical motion and R-69 amplitude; instanced
+      billboard sphere impostors with analytic normals/specular and per-bubble Z from authored state. Depth must not
+      become a viewport-dependent damping term.
+- [ ] **Reactive Particle Field** — a bounded instanced point/quad field (hundreds to low thousands in one or a few
+      draws) driven by existing analysis; persistent state, if needed, belongs to the mode's logical runtime.
+- [ ] **Spectrum Terrain** — spectrum across one axis and a short retained history into depth on a grid of a few
+      thousand vertices, displaced from compact data with normals and lighting. A **Skyline** style draws the same
+      history as instanced columns.
+- [ ] **Spectrum Tunnel** — *high confidence.* Each logical step's spectrum wraps into a ring; bounded ring history
+      (about 48 rows) recedes along a tunnel the camera looks down, kicks brighten the newest ring. Instanced ring
+      segments; the history travels whole in the snapshot and uploads as one small texture per frame.
+- [ ] **Shockwave Grid** — *high confidence.* A perspective lattice plane toward a horizon: bass drives a rolling
+      swell, each admitted kick launches a circular shockwave from a seeded point (the last ≤8 events and their logical
+      ages as uniforms), vocals warm the horizon glow. Static grid mesh with analytic displacement; consume-once events
+      are aged by the logical runtime, never replayed.
+
+## 5. Other dormant work
+
+- [ ] **Settings FlowContainer polish [LOW]** — only for a demonstrated Settings layout problem; improve alignment and
+      space use without restructuring ownership or eagerly building lazy bodies.
+- [ ] **Wallpaper feed consolidation** — reuse FEEDS normalization/image-candidate primitives only where that makes the
+      wallpaper engine simpler, without merging its image-primary cache/scheduling authority into FEEDS last-good
+      state; prove wallpaper parity first.
+
+## 6. Suggested order (dormant; the operator picks)
+
+1. Blinds → 3D Slats, Page Curl, Cube Turn (smallest, most certain wins);
+2. Extruded Spectrum, then Shockwave Grid (first two 3D Visualizers; Extruded Spectrum proves instanced 3D inside a
+   carded Visualizer renderer);
+3. Deformable Blob Sphere; Spectrum Terrain / Tunnel; Waveform Ribbon;
+4. Accordion Fold, Relief Rise;
+5. Reactive Particle Field, Bubble Depth Field;
+6. Settings FlowContainer polish.
+
+## 7. Not backlog
+
+- **Implemented:** Glass Shatter, Crumble, Exploding Tiles, Directional Pixel Accretion, Ink Bloom, Melt Drip and Slide
+  → Perspective Push (`Docs/Reference/Transitions.md`, open physical acceptance at its end); Runtime Widget Themes;
+  Games You Follow and the system volume/mute OSD (`Docs/Reference/`). Reopen only for a concrete defect or an
+  explicitly requested extension.
+- **Rejected:** Tendril Reveal (fully retired). Runtime frosted/glass ordinary-widget cards are shelved; reconsider only
+  if a future renderer independently justifies the capability, starting from the rejected-experiment record.
+
+Capability terminology follows the landed contract: *activated/deactivated* is the application-level capability gate;
+*enabled/disabled* is feature/instance state inside an activated capability.
