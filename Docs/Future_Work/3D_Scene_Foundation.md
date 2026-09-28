@@ -109,8 +109,8 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   operator decision. Tests: `tests/test_scene3d_uniforms.py` (driver-reported offsets equal the layout, values
   arrive, binding restored).
 
-### S4 — Camera
-- [ ] `sceneProject` takes a camera (distance per effect, plus offset, tilt and shake) from the frame block; at rest it
+### S4 — Camera — LANDED
+- [x] `sceneProject` takes a camera (distance per effect, plus offset, tilt and shake) from the frame block; at rest it
   maps z = 0 exactly onto the item (photo fills the view).
 - **Reward:** existing effects keep their authored distance (Glass/Accretion 3.0, Tiles 3.4); enables camera shake,
   Cube Turn's pull-back, Page Curl/Relief Rise tilt, Visualizer parallax.
@@ -119,6 +119,14 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   shake/tilt amplitude) or move only the pieces; shake at real-time rates; camera at rest at both endpoints.
 - **Bars:** at rest, projection mirrors match S1 and endpoints stay exact; a shaken camera never shows uncovered
   pixels at any aspect (edge-pixel test).
+- **Landed:** `sceneProjectAt` (resting camera at any distance; `sceneProject` = 3.4), `sceneCameraSpace` /
+  `sceneProjectCamera` (a = distance, zoom, offset; b = tilt), CPU mirrors, `scene3d_camera_overscan` (least zoom that
+  keeps the photograph plane covering the view) and `scene3d_camera_shake` (deterministic, 3-7 Hz real time,
+  bounded); `MeshResources.draw_camera_plane` draws the photograph through the camera. At rest the camera is bit-exact
+  with `sceneProjectAt` and the plane equals `draw_image`. No effect moves its camera yet (a look decision per
+  effect). Tests: `tests/test_scene3d_camera.py` (overscan is least and sufficient over 300 random cameras and four
+  aspects; no uncovered pixel with it, uncovered pixels without it), GPU mirrors in
+  `tests/test_scene3d_glsl_mirrors.py`.
 
 ### S5 — Existing 3D transitions onto the library and 3D Detail
 - [ ] Glass Shatter: shared camera at 3.0 and near-plane depth, `SceneTarget` on High, park lifecycle.
@@ -208,5 +216,5 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 
 ## Landed / remaining
 
-- Landed: S1, S2, S3.
-- Remaining: S4–S11 in order.
+- Landed: S1, S2, S3, S4.
+- Remaining: S5–S11 in order.

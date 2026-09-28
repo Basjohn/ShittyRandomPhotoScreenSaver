@@ -9,7 +9,9 @@ GPU instead of folding back through infinity.
 What an effect gets from ``SCENE3D_GLSL``:
 
 * ``sceneRandom`` -- integer lattice hash, identical on every GPU (R-94);
-* ``sceneRotate`` / ``sceneProject`` / ``scenePlaneUv`` -- rigid motion and the camera;
+* ``sceneRotate`` / ``sceneProject`` / ``sceneProjectAt`` / ``scenePlaneUv`` -- rigid motion and
+  a resting camera at any distance; ``sceneProjectCamera`` -- a moving camera (offset, tilt,
+  zoom), with ``scene3d_camera_overscan`` and ``scene3d_camera_shake`` on the CPU;
 * ``sceneImpulse`` -- drag-limited flight: a hard start that settles into a drift;
 * ``sceneDepartureTravel`` -- the least travel that clears the frame for good,
   so departing pieces leave by construction rather than by tuning;
@@ -86,13 +88,40 @@ float sceneClipDepth(float w) {{
     return ((SCENE_FAR + SCENE_NEAR) * w - 2.0 * SCENE_FAR * SCENE_NEAR) / (SCENE_FAR - SCENE_NEAR);
 }}
 
-// World point -> clip space through the Quick item matrix. w stays the distance
-// in front of the camera, so attributes interpolate perspective-correctly and
-// the GPU clips against the near plane.
-vec4 sceneProject(mat4 matrix, vec2 itemSize, vec3 world) {{
+// World point -> clip space through the Quick item matrix for a camera resting at
+// ``distance`` (each effect keeps its authored distance). w stays the distance in
+// front of the camera, so attributes interpolate perspective-correctly and the GPU
+// clips against the near plane.
+vec4 sceneProjectAt(mat4 matrix, vec2 itemSize, vec3 world, float distance) {{
     float aspect = itemSize.x / itemSize.y;
-    float w = SCENE_CAMERA - world.z;
-    vec2 scaled = vec2(world.x / aspect, -world.y) * SCENE_CAMERA + 0.5 * w;
+    float w = distance - world.z;
+    vec2 scaled = vec2(world.x / aspect, -world.y) * distance + 0.5 * w;
+    vec4 clip = matrix * vec4(scaled * itemSize, 0.0, w);
+    clip.z = sceneClipDepth(w);
+    return clip;
+}}
+
+vec4 sceneProject(mat4 matrix, vec2 itemSize, vec3 world) {{
+    return sceneProjectAt(matrix, itemSize, world, SCENE_CAMERA);
+}}
+
+// A moving camera: a = (distance, zoom, offset.x, offset.y), b = (tilt about x,
+// tilt about y, 0, 0) in radians about the photograph's centre. At rest (zoom 1,
+// no offset or tilt) it is exactly sceneProjectAt. A camera that moves must draw the
+// photograph through it too (MeshResources.draw_camera_plane) with the zoom from
+// scene3d_camera_overscan, so the frame edges are never exposed (R-63).
+vec3 sceneCameraSpace(vec3 world, vec4 a, vec4 b) {{
+    float cx = cos(b.x), sx = sin(b.x), cy = cos(b.y), sy = sin(b.y);
+    vec3 p = vec3(world.x, world.y * cx - world.z * sx, world.y * sx + world.z * cx);
+    p = vec3(p.x * cy + p.z * sy, p.y, -p.x * sy + p.z * cy);
+    return vec3(p.xy - a.zw, p.z);
+}}
+
+vec4 sceneProjectCamera(mat4 matrix, vec2 itemSize, vec3 world, vec4 a, vec4 b) {{
+    vec3 p = sceneCameraSpace(world, a, b);
+    float aspect = itemSize.x / itemSize.y;
+    float w = a.x - p.z;
+    vec2 scaled = vec2(p.x / aspect, -p.y) * a.x * a.y + 0.5 * w;
     vec4 clip = matrix * vec4(scaled * itemSize, 0.0, w);
     clip.z = sceneClipDepth(w);
     return clip;
@@ -385,3 +414,85 @@ class Scene3DBlockLayout:
             items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
             struct.pack_into("<" + fmt, data, offset, *items)
         return bytes(data)
+
+
+# ---- Camera (CPU side: mirrors, overscan and shake) ----
+
+def scene3d_screen_uv_at(world: Vec3, aspect: float, distance: float) -> tuple[float, float]:
+    """CPU mirror of ``sceneProjectAt`` after the divide, as item UV."""
+    scale = distance / (distance - world[2])
+    return world[0] / aspect * scale + 0.5, -world[1] * scale + 0.5
+
+
+def scene3d_camera_space(world: Vec3, a: tuple[float, float, float, float],
+                         b: tuple[float, float, float, float]) -> Vec3:
+    """CPU mirror of ``sceneCameraSpace``."""
+    cx, sx, cy, sy = math.cos(b[0]), math.sin(b[0]), math.cos(b[1]), math.sin(b[1])
+    x, y, z = world[0], world[1] * cx - world[2] * sx, world[1] * sx + world[2] * cx
+    x, z = x * cy + z * sy, -x * sy + z * cy
+    return x - a[2], y - a[3], z
+
+
+def scene3d_camera_uv(world: Vec3, aspect: float, a: tuple[float, float, float, float],
+                      b: tuple[float, float, float, float]) -> tuple[float, float]:
+    """CPU mirror of ``sceneProjectCamera`` after the divide, as item UV."""
+    x, y, z = scene3d_camera_space(world, a, b)
+    scale = a[0] * a[1] / (a[0] - z)
+    return x / aspect * scale + 0.5, -y * scale + 0.5
+
+
+def _inside_convex(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
+    sign = 0.0
+    for index, (x0, y0) in enumerate(polygon):
+        x1, y1 = polygon[(index + 1) % len(polygon)]
+        cross = (x1 - x0) * (point[1] - y0) - (y1 - y0) * (point[0] - x0)
+        if abs(cross) < 1e-12:
+            continue
+        if sign == 0.0:
+            sign = cross
+        elif cross * sign < 0.0:
+            return False
+    return True
+
+
+def scene3d_camera_overscan(distance: float, offset: tuple[float, float], tilt: tuple[float, float],
+                            aspect: float) -> float:
+    """Least zoom (>= 1) at which the photograph plane still covers the whole view.
+
+    The plane z = 0 fills the item exactly at rest; an offset or tilt would expose
+    its edges (R-63), so the camera zooms in by at least this much.
+    """
+    a = (distance, 1.0, offset[0], offset[1])
+    b = (tilt[0], tilt[1], 0.0, 0.0)
+    half = aspect * 0.5
+    quad = [scene3d_camera_uv((x, y, 0.0), aspect, a, b) for x, y in ((-half, 0.5), (half, 0.5), (half, -0.5), (-half, -0.5))]
+    zoom_low, zoom_high = 1.0, 1.0
+
+    def covered(zoom: float) -> bool:
+        # Zooming scales the projected plane about the view centre.
+        scaled = [((u - 0.5) * zoom + 0.5, (v - 0.5) * zoom + 0.5) for u, v in quad]
+        return all(_inside_convex(corner, scaled) for corner in ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)))
+
+    if covered(1.0):
+        return 1.0
+    while not covered(zoom_high):
+        zoom_high *= 1.25
+        if zoom_high > 64.0:
+            raise ValueError("camera motion too large to cover the view")
+    for _ in range(40):
+        middle = (zoom_low + zoom_high) * 0.5
+        zoom_low, zoom_high = (zoom_low, middle) if covered(middle) else (middle, zoom_high)
+    return zoom_high
+
+
+def scene3d_camera_shake(seconds: float, amplitude: float, seed: int) -> tuple[float, float]:
+    """A deterministic handheld shake at real-time rates (about 3-7 Hz), in world units.
+
+    Stays within ``amplitude`` on each axis; the caller scales it by its own envelope
+    (zero at rest and at both endpoints) and zooms by ``scene3d_camera_overscan``.
+    """
+    phase = [scene3d_random(index, 91, seed) * 2.0 * math.pi for index in range(4)]
+    x = 0.6 * math.sin(seconds * 23.0 + phase[0]) + 0.4 * math.sin(seconds * 41.0 + phase[1])
+    y = 0.6 * math.sin(seconds * 19.0 + phase[2]) + 0.4 * math.sin(seconds * 37.0 + phase[3])
+    return x * amplitude, y * amplitude
+
