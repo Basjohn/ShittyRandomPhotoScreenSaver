@@ -377,8 +377,12 @@ def test_3d_quality_choices_and_bloom_strength_round_trip_on_the_pages(qapp, set
         assert set(canonical[section]) <= set(persisted)  # the page's other values survive
     bloom = tab.exploding_tiles_bloom_combo
     bloom.setCurrentText(next(value for value in SCENE3D_EFFECT_CHOICES if value != bloom.currentText()))
+    motion_blur = tab.exploding_tiles_motion_blur_combo
+    assert motion_blur.currentText() == canonical["exploding_tiles"]["motion_blur"]
+    motion_blur.setCurrentText(next(value for value in SCENE3D_EFFECT_CHOICES if value != motion_blur.currentText()))
     tab.exploding_tiles_bloom_strength_spin.setValue(0.35)
     persisted = settings_manager.get("transitions", {})["exploding_tiles"]
+    assert persisted["motion_blur"] == motion_blur.currentText()
     assert persisted["bloom"] == bloom.currentText()
     assert persisted["bloom_strength"] == pytest.approx(0.35)
 

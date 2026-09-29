@@ -9,8 +9,12 @@ Visualizer card clip) and item bounds then apply as for a direct draw.
 The colour attachment is a texture the composite reads directly, averaging the
 samples itself: there is no resolve blit. (A ``glBlitFramebuffer`` resolve of
 drawn content measured ~0.5 ms at 2560x1440 on an RTX 4090, 1 or 4 samples
-alike; the shader average costs a few hundredths of that.) Bloom needs one
-resolved image, so with bloom a resolve pass writes it first.
+alike; the shader average costs a few hundredths of that.) Bloom and motion blur
+need one resolved image, so with either a resolve pass writes it first.
+
+With motion blur the target has a second attachment, the screen motion of each
+pixel's surface over the shutter (see ``motion.MotionBlur``). It is write-protected
+while the scene draws; a pass that moves opens it with ``velocity_writes()``.
 
 ``scope`` restores Quick's framebuffers, viewport and scissor even when the
 scene raises, so a consumer needs no fence change of its own (the Visualizer
@@ -31,6 +35,7 @@ from OpenGL import GL as gl
 from rendering.quick import gl_query
 
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame, item_pixel_rect
+from .motion import MotionBlur
 from .post import FULLSCREEN_VERTEX_SOURCE, BloomChain
 
 SCENE_TARGET_BUCKET = 64
@@ -78,43 +83,71 @@ void main() {
 }
 """
 
-# The whole allocation, resolved for the bloom (outside the rect it is cleared black).
+# The whole allocation, resolved for the post effects (outside the rect it is cleared black).
 _RESOLVE_FRAGMENT = "#version 410 core\nout vec4 FragColor;\n" + _RESOLVE_GLSL + """
 void main() {
     FragColor = sceneResolved(ivec2(gl_FragCoord.xy));
 }
 """
 
+# The same, with the screen motion averaged into the second output.
+_RESOLVE_MOTION_FRAGMENT = ("#version 410 core\nlayout(location = 0) out vec4 FragColor;\n"
+                            "layout(location = 1) out vec4 Motion;\n" + _RESOLVE_GLSL + """
+uniform sampler2DMS uMotionSamples;
+void main() {
+    ivec2 texel = ivec2(gl_FragCoord.xy);
+    FragColor = sceneResolved(texel);
+    vec2 sum = vec2(0.0);
+    for (int i = 0; i < uSamples; ++i) sum += texelFetch(uMotionSamples, texel, i).xy;
+    Motion = vec4(sum / float(uSamples), 0.0, 1.0);
+}
+""")
+
 
 def _bucket(size: int) -> int:
     return max(SCENE_TARGET_BUCKET, -(-int(size) // SCENE_TARGET_BUCKET) * SCENE_TARGET_BUCKET)
 
 
-def _plain_texture(width: int, height: int) -> int:
+def _plain_texture(width: int, height: int, internal: int = gl.GL_RGBA8, data_type: int = gl.GL_UNSIGNED_BYTE) -> int:
     texture = int(gl.glGenTextures(1))
     gl.glActiveTexture(gl.GL_TEXTURE0)
     gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
     for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
         gl.glTexParameteri(gl.GL_TEXTURE_2D, parameter, gl.GL_NEAREST)
-    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
+    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, internal, width, height, 0, gl.GL_RGBA, data_type, None)
     return texture
+
+
+def _attachment(samples: int, width: int, height: int, internal: int, data_type: int) -> tuple[int, int]:
+    """A colour attachment texture, multisampled when ``samples`` > 1. Returns (name, target)."""
+    if samples > 1:
+        texture = int(gl.glGenTextures(1))
+        gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, texture)
+        gl.glTexImage2DMultisample(gl.GL_TEXTURE_2D_MULTISAMPLE, samples, internal, width, height, True)
+        gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, 0)
+        return texture, gl.GL_TEXTURE_2D_MULTISAMPLE
+    return _plain_texture(width, height, internal, data_type), gl.GL_TEXTURE_2D
 
 
 class SceneTarget:
     def __init__(self, label: str) -> None:
         self.label = label
-        self._key: tuple[int, int, int] | None = None  # allocated width, height, requested samples
+        # allocated width, height, requested samples, with motion
+        self._key: tuple[int, int, int, bool] | None = None
         self._samples = 0                                # samples allocated (1 = a plain texture)
-        # colour: the scene texture (multisampled when _samples > 1); resolve_*: bloom's resolved copy.
-        self._names = {"fbo": 0, "colour": 0, "depth": 0, "resolve_fbo": 0, "resolve_texture": 0}
+        # colour / velocity: the scene's attachments (multisampled when _samples > 1);
+        # resolve_*: their resolved copies for the post effects.
+        self._names = {"fbo": 0, "colour": 0, "velocity": 0, "depth": 0, "resolve_fbo": 0, "resolve_texture": 0,
+                       "resolve_velocity": 0}
         self._inherited = (0, 0)
         self._scissor = False
         self._rect = (0, 0, 0, 0)
         self._bloom = BloomChain(label)
+        self._motion = MotionBlur(label)
 
     @property
     def has_resources(self) -> bool:
-        return any(self._names.values()) or self._bloom.has_resources
+        return any(self._names.values()) or self._bloom.has_resources or self._motion.has_resources
 
     @property
     def allocation(self) -> tuple[int, int, int] | None:
@@ -123,13 +156,16 @@ class SceneTarget:
 
     @contextmanager
     def scope(self, frame: SceneFrame, samples: int, resources,
-              rect: tuple[int, int, int, int] | None = None, bloom: float = 0.0) -> Iterator[None]:
+              rect: tuple[int, int, int, int] | None = None, bloom: float = 0.0,
+              motion_blur: bool = False) -> Iterator[None]:
         """Draw the enclosed passes through the target; Quick's bindings come back either way.
 
         With ``bloom`` > 0 the emissive light the passes wrote into alpha glows
         (see ``post.BloomChain``); the passes must then write alpha deliberately.
+        With ``motion_blur`` the passes that move write their screen motion inside
+        ``velocity_writes()`` (see ``motion.MotionBlur``).
         """
-        self.begin(frame, samples, rect)
+        self.begin(frame, samples, rect, motion_blur)
         try:
             yield
         except BaseException:
@@ -137,7 +173,20 @@ class SceneTarget:
             raise
         self.end(frame, resources, bloom)
 
-    def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None) -> None:
+    @contextmanager
+    def velocity_writes(self) -> Iterator[None]:
+        """Let the enclosed passes write their screen motion (location 1); a no-op without motion blur."""
+        if not self._names["velocity"]:
+            yield
+            return
+        gl.glColorMaski(1, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
+        try:
+            yield
+        finally:
+            gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
+
+    def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None,
+              motion_blur: bool = False) -> None:
         x, y, width, height = tuple(int(v) for v in (rect if rect is not None else item_pixel_rect(frame)))
         if width <= 0 or height <= 0:
             raise ValueError(f"{self.label} scene target needs a positive rect, got {(x, y, width, height)}")
@@ -145,21 +194,24 @@ class SceneTarget:
         self._inherited = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING),
                            gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING))
         self._scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
+        motion_blur = bool(motion_blur)
         key = self._key
-        if key is None or key[2] != samples or width > key[0] or height > key[1]:
+        if key is None or key[2] != samples or key[3] != motion_blur or width > key[0] or height > key[1]:
             self.release()
-            self._allocate(_bucket(width), _bucket(height), samples)
+            self._allocate(_bucket(width), _bucket(height), samples, motion_blur)
         self._rect = (x, y, width, height)
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["fbo"])
         gl.glDisable(gl.GL_SCISSOR_TEST)
         clear = gl_query.get_floats(gl.GL_COLOR_CLEAR_VALUE, 4)
         try:
-            gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+            gl.glClearColor(0.0, 0.0, 0.0, 1.0)   # the motion attachment clears to no motion
             gl.glClearDepth(1.0)
             gl.glDepthMask(gl.GL_TRUE)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         finally:
             gl.glClearColor(*clear)
+        if self._names["velocity"]:
+            gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
         vx, vy, vw, vh = frame.viewport
         gl.glViewport(vx - x, vy - y, vw, vh)
 
@@ -167,15 +219,23 @@ class SceneTarget:
         x, y, width, height = self._rect
         allocated_width, allocated_height = self._key[0], self._key[1]
         multisampled = self._samples > 1
+        motion = bool(self._names["velocity"])
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
+        if motion:
+            gl.glColorMaski(1, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
         scene, glow = self._names["colour"], 0
-        if bloom > 0.0:
+        if bloom > 0.0 or motion:
+            velocity = self._names["velocity"]
             if multisampled:
-                scene = self._resolve(frame, resources)
-            glow = self._bloom.apply(scene, (allocated_width, allocated_height), resources, frame.quad_vao)
+                scene, velocity = self._resolve(frame, resources)
+            if motion:
+                scene = self._motion.apply(scene, velocity, (allocated_width, allocated_height), resources,
+                                           frame.quad_vao)
+            if bloom > 0.0:
+                glow = self._bloom.apply(scene, (allocated_width, allocated_height), resources, frame.quad_vao)
         self._restore_inherited(frame)
-        if multisampled and not glow:
+        if scene == self._names["colour"] and multisampled:
             program = resources.program("scene_composite_samples", ITEM_QUAD_VERTEX_SOURCE,
                                         _COMPOSITE_SAMPLES_FRAGMENT)
             uniforms = resources.uniforms("scene_composite_samples", ("uMatrix", "uItemSize", "uOrigin", "uExtent",
@@ -204,22 +264,35 @@ class SceneTarget:
         gl.glUniform2i(uniforms["uExtent"], width, height)
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-        if multisampled and not glow:
+        if scene == self._names["colour"] and multisampled:
             gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, 0)
 
-    def _resolve(self, frame: SceneFrame, resources) -> int:
-        """Average the samples of the whole allocation into a plain texture (for the bloom)."""
+    def _resolve(self, frame: SceneFrame, resources) -> tuple[int, int]:
+        """Average the samples of the whole allocation into plain textures (for the post effects).
+
+        Returns the resolved colour and motion (0 without motion blur).
+        """
         width, height = self._key[0], self._key[1]
+        motion = bool(self._names["velocity"])
         if not self._names["resolve_texture"]:
             self._names["resolve_texture"] = _plain_texture(width, height)
             self._names["resolve_fbo"] = int(gl.glGenFramebuffers(1))
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["resolve_fbo"])
             gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D,
                                       self._names["resolve_texture"], 0)
+            if motion:
+                self._names["resolve_velocity"] = _plain_texture(width, height, gl.GL_RG16F, gl.GL_HALF_FLOAT)
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["resolve_fbo"])
+                gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT1, gl.GL_TEXTURE_2D,
+                                          self._names["resolve_velocity"], 0)
+                gl.glDrawBuffers(2, [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
             if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
                 raise RuntimeError(f"{self.label} scene resolve incomplete at {width}x{height}")
-        program = resources.program("scene_resolve", FULLSCREEN_VERTEX_SOURCE, _RESOLVE_FRAGMENT)
-        uniforms = resources.uniforms("scene_resolve", ("uSceneSamples", "uSamples"))
+        key = "scene_resolve_motion" if motion else "scene_resolve"
+        program = resources.program(key, FULLSCREEN_VERTEX_SOURCE,
+                                    _RESOLVE_MOTION_FRAGMENT if motion else _RESOLVE_FRAGMENT)
+        uniforms = resources.uniforms(key, ("uSceneSamples", "uSamples", "uMotionSamples") if motion
+                                      else ("uSceneSamples", "uSamples"))
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["resolve_fbo"])
         gl.glViewport(0, 0, width, height)
         gl.glUseProgram(program)
@@ -227,12 +300,19 @@ class SceneTarget:
         gl.glUniform1i(uniforms["uSceneSamples"], 0)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, self._names["colour"])
+        if motion:
+            gl.glUniform1i(uniforms["uMotionSamples"], 1)
+            gl.glActiveTexture(gl.GL_TEXTURE1)
+            gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, self._names["velocity"])
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-        gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, 0)
-        return self._names["resolve_texture"]
+        if motion:
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+        return self._names["resolve_texture"], self._names["resolve_velocity"]
 
     def _restore_inherited(self, frame: SceneFrame) -> None:
+        if self._names["velocity"]:
+            gl.glColorMaski(1, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)   # GL's default
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._inherited[0])
         gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._inherited[1])
         gl.glViewport(*frame.viewport)
@@ -241,21 +321,17 @@ class SceneTarget:
         else:
             gl.glDisable(gl.GL_SCISSOR_TEST)
 
-    def _allocate(self, width: int, height: int, requested: int) -> None:
+    def _allocate(self, width: int, height: int, requested: int, motion_blur: bool = False) -> None:
         samples = min(requested, gl_query.get_int(gl.GL_MAX_SAMPLES),
                       gl_query.get_int(gl.GL_MAX_COLOR_TEXTURE_SAMPLES))
         renderbuffer = gl_query.get_int(gl.GL_RENDERBUFFER_BINDING)
         try:
             self._names["fbo"] = int(gl.glGenFramebuffers(1))
-            if samples > 1:
-                self._names["colour"] = int(gl.glGenTextures(1))
-                gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, self._names["colour"])
-                gl.glTexImage2DMultisample(gl.GL_TEXTURE_2D_MULTISAMPLE, samples, gl.GL_RGBA8, width, height, True)
-                gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, 0)
-                colour_target = gl.GL_TEXTURE_2D_MULTISAMPLE
-            else:
-                self._names["colour"] = _plain_texture(width, height)
-                colour_target = gl.GL_TEXTURE_2D
+            self._names["colour"], colour_target = _attachment(samples, width, height, gl.GL_RGBA8,
+                                                               gl.GL_UNSIGNED_BYTE)
+            if motion_blur:
+                self._names["velocity"], _target = _attachment(samples, width, height, gl.GL_RG16F,
+                                                               gl.GL_HALF_FLOAT)
             self._names["depth"] = int(gl.glGenRenderbuffers(1))
             gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, self._names["depth"])
             gl.glRenderbufferStorageMultisample(gl.GL_RENDERBUFFER, samples if samples > 1 else 0,
@@ -263,11 +339,15 @@ class SceneTarget:
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["fbo"])
             gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, colour_target,
                                       self._names["colour"], 0)
+            if motion_blur:
+                gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT1, colour_target,
+                                          self._names["velocity"], 0)
+                gl.glDrawBuffers(2, [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
             gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_DEPTH_ATTACHMENT, gl.GL_RENDERBUFFER,
                                          self._names["depth"])
             if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
                 raise RuntimeError(f"{self.label} scene target incomplete at {width}x{height}x{samples}")
-            self._key = (width, height, requested)
+            self._key = (width, height, requested, bool(motion_blur))
             self._samples = max(1, samples)
         finally:
             gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, renderbuffer)
@@ -276,16 +356,19 @@ class SceneTarget:
 
     def release(self) -> None:
         errors: list[str] = []
-        try:
-            self._bloom.release()
-        except Exception as exc:
-            errors.append(str(exc))
+        for chain in (self._bloom, self._motion):
+            try:
+                chain.release()
+            except Exception as exc:
+                errors.append(str(exc))
         for key, delete in (
             ("fbo", lambda name: gl.glDeleteFramebuffers(1, [name])),
             ("resolve_fbo", lambda name: gl.glDeleteFramebuffers(1, [name])),
             ("colour", lambda name: gl.glDeleteTextures([name])),
+            ("velocity", lambda name: gl.glDeleteTextures([name])),
             ("depth", lambda name: gl.glDeleteRenderbuffers(1, [name])),
             ("resolve_texture", lambda name: gl.glDeleteTextures([name])),
+            ("resolve_velocity", lambda name: gl.glDeleteTextures([name])),
         ):
             name = self._names[key]
             if not name:

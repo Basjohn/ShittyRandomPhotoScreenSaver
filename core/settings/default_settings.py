@@ -107,6 +107,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                      'depth': 1.1,
                                      'direction': 'Random',
                                      'force': 1.0,
+                                     'motion_blur': 'Auto',
                                      'thickness': 0.65},
                  'glass_shatter': {'antialiasing': 'Auto',
                                    'collisions': True,

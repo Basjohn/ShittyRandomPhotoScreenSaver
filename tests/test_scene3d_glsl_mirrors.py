@@ -241,6 +241,22 @@ def test_streaks_match(probe):
            tolerance=1e-3)
 
 
+def test_velocity_matches(probe):
+    rng = random.Random(7)
+    cases = []
+    for _ in range(96):
+        now = (rng.uniform(-2, 2), rng.uniform(-2, 2), rng.uniform(-1, 1), rng.uniform(-0.2, 3.0))
+        previous = (now[0] + rng.uniform(-0.3, 0.3), now[1] + rng.uniform(-0.3, 0.3), now[2],
+                    now[3] + rng.uniform(-0.3, 0.3))
+        cases.append((now, previous, (rng.uniform(640, 3840), rng.uniform(360, 2160))))
+    gpu = probe.run("vec4 a = arg(0), b = arg(1), c = arg(2); FragColor = vec4(sceneVelocity(a, b, c.xy), 0.0, 0.0);",
+                    [[now, previous, viewport] for now, previous, viewport in cases])
+    _check(gpu, [lib.scene3d_velocity(now, previous, viewport) for now, previous, viewport in cases])
+    # Still, and behind the camera, a point has no motion.
+    assert lib.scene3d_velocity((0.3, 0.2, 0.0, 1.5), (0.3, 0.2, 0.0, 1.5), (2560, 1440)) == (0.0, 0.0)
+    assert lib.scene3d_velocity((0.3, 0.2, 0.0, -0.1), (0.1, 0.2, 0.0, 1.5), (2560, 1440)) == (0.0, 0.0)
+
+
 def test_a_drifted_mirror_is_caught(probe):
     # Negative control: a mirror that drifts by a hair from its shader fails the bar.
     rng = random.Random(6)

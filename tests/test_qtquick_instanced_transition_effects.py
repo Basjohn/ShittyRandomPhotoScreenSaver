@@ -31,6 +31,8 @@ def test_exploding_tiles_owns_one_deterministic_solid_mesh() -> None:
     {"seed": 0, "columns": 12, "depth": .8},
     {"seed": 7, "columns": 5, "depth": .8},
     {"seed": 7, "columns": 12, "depth": 1.6},
+    {"seed": 7, "columns": 12, "depth": .8, "thickness": .5, "force": 1.0, "detail": "High", "samples": 4,
+     "bloom": 0.5, "motion_blur": "On"},
 ))
 def test_exploding_tiles_rejects_outside_resolved_contract(parameters) -> None:
     effect = _load("exploding_tiles_program")

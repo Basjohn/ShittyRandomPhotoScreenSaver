@@ -18,7 +18,9 @@ What an effect gets from ``SCENE3D_GLSL``:
 * ``sceneShade`` / ``scenePointLight`` / ``sceneEmber`` -- one key light with
   Blinn-Phong highlights and a Fresnel rim, local lights, hot-material colour;
 * ``sceneCastOnPlane`` / ``sceneSoftRect`` -- soft planar shadows on the photograph;
-* ``sceneStreak`` -- camera-facing motion streaks for sparks and debris.
+* ``sceneStreak`` -- camera-facing motion streaks for sparks and debris;
+* ``sceneVelocity`` -- a surface point's screen motion over the shutter, for motion blur
+  (``SCENE3D_SHUTTER_SECONDS``, ``scene3d_shutter_progress``).
 
 Import-safe: strings and pure math only. Programs, buffers and every per-effect
 decision stay with the consuming renderer; this owns no state or clock.
@@ -92,6 +94,16 @@ def scene3d_post_effect(detail: Scene3DDetail, choice: object) -> bool:
 def scene3d_request_samples(parameters) -> int:
     """The resolved multisampling a request carries; a request built without it draws directly."""
     return int(parameters.get("samples", 0))
+
+
+# Motion blur's shutter in real seconds (a 180-degree shutter at 60 Hz). Real time, not
+# progress, so a piece blurs by how fast it moves on screen whatever the run's duration.
+SCENE3D_SHUTTER_SECONDS = 1.0 / 120.0
+
+
+def scene3d_shutter_progress(duration_ms: float) -> float:
+    """The shutter as a fraction of a run lasting ``duration_ms``."""
+    return SCENE3D_SHUTTER_SECONDS * 1000.0 / max(float(duration_ms), 1.0)
 
 
 SCENE3D_CAMERA = 3.4
@@ -247,7 +259,23 @@ vec4 sceneStreak(mat4 matrix, vec2 itemSize, vec3 tail, vec3 head, float width, 
     clip.z = sceneClipDepth(w) / w * clip.w;
     return clip;
 }}
+
+// How far a surface point moved on screen over the shutter, in target pixels: its clip
+// position now minus its clip position at t - shutter (both evaluated analytically).
+// A point behind the camera at either time contributes no motion.
+vec2 sceneVelocity(vec4 clipNow, vec4 clipPrevious, vec2 viewportPixels) {{
+    if (clipNow.w <= 0.0 || clipPrevious.w <= 0.0) return vec2(0.0);
+    return (clipNow.xy / clipNow.w - clipPrevious.xy / clipPrevious.w) * 0.5 * viewportPixels;
+}}
 """
+
+
+def scene3d_velocity(clip_now: tuple[float, float, float, float], clip_previous: tuple[float, float, float, float],
+                     viewport_pixels: tuple[float, float]) -> tuple[float, float]:
+    if clip_now[3] <= 0.0 or clip_previous[3] <= 0.0:
+        return 0.0, 0.0
+    return tuple((clip_now[i] / clip_now[3] - clip_previous[i] / clip_previous[3]) * 0.5 * viewport_pixels[i]
+                 for i in range(2))
 
 
 def scene3d_screen_uv(world: tuple[float, float, float], aspect: float) -> tuple[float, float]:

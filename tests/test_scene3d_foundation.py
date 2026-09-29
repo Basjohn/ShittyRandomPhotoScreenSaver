@@ -269,3 +269,28 @@ def test_a_transitions_anti_aliasing_choice_decides_the_scene_target(qt_app, eff
     finally:
         capture.close()
 
+
+@pytest.mark.qt
+def test_motion_blur_blurs_only_moving_tiles_and_follows_the_transition_setting(qt_app):
+    capture = TransitionCapture(256, 144)
+    try:
+        def frame(detail, motion_blur, progress):
+            section = {"motion_blur": motion_blur}
+            run = capture.run("exploding_tiles", direction="center_out", duration_ms=3000,
+                              settings={"detail_3d": detail, "exploding_tiles": section})
+            return np.asarray(capture.render(run, progress)[0], dtype=np.int16)
+
+        # Before anything moves the frame is exact; at the detonation the flying tiles blur.
+        assert np.array_equal(frame("High", "On", 0.005), frame("High", "Off", 0.005))
+        assert np.abs(frame("High", "On", 0.13) - frame("High", "Off", 0.13)).mean() > 0.5
+        # Auto follows the tier's post effects; the transition's own choice wins over it.
+        assert np.abs(frame("High", "Auto", 0.13) - frame("High", "Off", 0.13)).mean() > 0.5
+        assert np.array_equal(frame("Performance", "Auto", 0.13), frame("Performance", "Off", 0.13))
+        assert np.abs(frame("Performance", "On", 0.13) - frame("Performance", "Off", 0.13)).mean() > 0.5
+        # Its textures are per run: the host's park drops them with the target.
+        renderer = capture.host._implementations["exploding_tiles"]
+        assert renderer._target.has_resources
+        capture.host.park()
+        assert not renderer._target.has_resources
+    finally:
+        capture.close()

@@ -174,10 +174,23 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   allocation per frame.
 - **Bars:** endpoints exact on High; a photo with a bright sky does not glow at 0.0001; bloom measured and parked.
 
-### S7 — Analytic motion blur
-- [ ] A per-transition Motion Blur choice (Auto, Off, On), Auto following the tier's post effects. Every piece's motion is analytic, so its screen velocity comes from evaluating it at `t` and
-  `t - shutter` (shutter in real seconds); a bounded-sample blur along velocity. Choose between a velocity attachment
-  and geometric stretching after S6's measurements.
+### S7 — Analytic motion blur — LANDED (foundation + Exploding Tiles); other transitions in S7b
+- [x] A per-transition Motion Blur choice (Auto, Off, On), Auto following the tier's post effects. Every piece's
+  motion is analytic, so its screen velocity comes from evaluating it at `t` and `t - shutter` (shutter in real
+  seconds); a bounded-sample blur along velocity. Chosen: a velocity attachment with a McGuire-style reconstruction.
+  Geometric stretching would need translucency, and so sorting, on opaque depth-tested pieces.
+- **Landed:** `rendering/quick/scene3d/motion.py` (`MotionBlur`: separable tile max, neighbour max, 16-tap gather),
+  `SceneTarget.scope(..., motion_blur=)` with a write-protected RG16F attachment opened by `velocity_writes()`, and an
+  MRT resolve of colour and motion. `sceneVelocity` plus `scene3d_velocity` mirror, `SCENE3D_SHUTTER_SECONDS` (1/120 s)
+  and `scene3d_shutter_progress`. Exploding Tiles: `tileAtTime` and the slabs write motion; Motion Blur on its page.
+  Motion Blur Off is pixel-identical to before (54 frames, all tiers). Cost at 1440p (RTX 4090): +0.08 ms GPU at 4x,
+  ~+0.25 ms CPU submit, ~105 MB VRAM per display at 4x during a run.
+- **Findings:** the one-pass 24x24 tile max cost 0.118 ms (separable: 0.019, identical). Full-tap white-noise jitter
+  speckled the blur's edges, so it is a quarter tap with 16 taps.
+- [ ] **S7b** The other 3D transitions write their motion (Glass Shatter shards, Crumble chunks and debris,
+  Directional Pixel Accretion tiles, 3D Block Spins' slab) and get the Motion Blur choice. Each vertex shader
+  evaluates its analytic motion at t - shutter. Glass and Crumble motion tables (per-run bakes) are sampled at both
+  times.
 - **Reward:** fast debris reads as fast; smoother motion at any refresh rate.
 - **Risks:** multisampled velocity resolve; blur crossing depth edges (bleeding).
 - **Hazards:** memory of another attachment; sample count (bounded, 8–12); must be zero at rest and at endpoints.
@@ -244,5 +257,5 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 
 ## Landed / remaining
 
-- Landed: S1, S2, S3, S4, S5, S6.
-- Remaining: S7–S11 in order.
+- Landed: S1, S2, S3, S4, S5, S6, S7 (foundation + Exploding Tiles).
+- Remaining: S7b, then S8–S11 in order.

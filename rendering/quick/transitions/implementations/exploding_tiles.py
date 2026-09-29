@@ -3,8 +3,9 @@
 Four passes per frame, all analytic from the run's progress: the new photograph
 lit by the blast, soft tile shadows on it (MIN-blended, 3D Detail permitting),
 the beveled slabs (depth-tested), then additive sparks. Their shared per-frame
-values travel in one uniform block. On High the passes render into a
-multisampled scene target that the host's park drops after the run.
+values travel in one uniform block. With anti-aliasing, bloom or motion blur the
+passes render into a scene target that the host's park drops after the run; with
+motion blur the slabs also write their screen motion over the shutter.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from rendering.gl_programs.exploding_tiles_program import (
     exploding_tiles_parameters,
     exploding_tiles_sparks_live,
 )
-from rendering.gl_programs.scene3d import scene3d_detail
+from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
@@ -60,13 +61,12 @@ class QuickExplodingTilesRenderer:
             if progress >= 1.0:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
-            seed, columns, depth, thickness, force, detail_name, samples, bloom = exploding_tiles_parameters(
-                frame.run.request.parameter_dict()
-            )
-            # Multisampling and bloom arrive resolved (this transition's settings over the
-            # 3D Detail tier); the tier itself still sets shadows and the spark budget.
+            (seed, columns, depth, thickness, force, detail_name, samples, bloom,
+             motion_blur) = exploding_tiles_parameters(frame.run.request.parameter_dict())
+            # Multisampling, bloom and motion blur arrive resolved (this transition's settings
+            # over the 3D Detail tier); the tier itself still sets shadows and the spark budget.
             detail = scene3d_detail(detail_name)
-            samples = samples or (1 if bloom > 0.0 else 0)
+            samples = samples or (1 if bloom > 0.0 or motion_blur else 0)
             grid = exploding_tiles_grid(columns, frame.viewport[2], frame.viewport[3])
             direction = frame.run.request.direction
             center_out = str(direction) == "center_out"
@@ -80,10 +80,12 @@ class QuickExplodingTilesRenderer:
                 "uEpicentre": epicentre, "uSeconds": frame.run.request.duration_ms / 1000.0,
                 "uBlast": exploding_tiles_blast(progress), "uBody": self._body_colour(frame),
                 "uEmissive": 1.0 if samples and bloom > 0.0 else 0.0,
+                "uShutter": scene3d_shutter_progress(frame.run.request.duration_ms) if motion_blur else 0.0,
+                "uViewport": (float(frame.viewport[2]), float(frame.viewport[3])),
             }
             with self._frame_block.bound(values):
                 if samples:
-                    with self._target.scope(frame, samples, self._resources, bloom=bloom):
+                    with self._target.scope(frame, samples, self._resources, bloom=bloom, motion_blur=motion_blur):
                         self._draw_scene(frame, grid, detail, progress, force, center_out)
                 else:
                     self._draw_scene(frame, grid, detail, progress, force, center_out)
@@ -127,7 +129,8 @@ class QuickExplodingTilesRenderer:
                   ("uMatrix", "uItemSize", "uOldTex"), frame)
         vao, count = self._resources.mesh("beveled_slab", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2))
         gl.glBindVertexArray(vao)
-        gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, tiles)
+        with self._target.velocity_writes():
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, tiles)
 
     def _draw_sparks(self, frame, count: int) -> None:
         self._use("sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,

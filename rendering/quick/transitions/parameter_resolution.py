@@ -627,12 +627,14 @@ def _scene_choice(cfg: Mapping[str, object], defaults: Mapping[str, object], fie
 
 
 def resolve_scene_quality(settings: Mapping[str, object], cfg: Mapping[str, object],
-                          defaults: Mapping[str, object], *, bloom: bool = False) -> dict[str, object]:
+                          defaults: Mapping[str, object], *, bloom: bool = False,
+                          motion_blur: bool = False) -> dict[str, object]:
     """A 3D transition's effective quality: the global 3D Detail tier, with the
     transition's own choices authoritative ("Auto" follows the tier).
 
     Returns ``detail`` (the tier, for tier-only features), ``samples`` and, for an
-    effect with emitted light, ``bloom`` (its strength, 0 when off).
+    effect with emitted light, ``bloom`` (its strength, 0 when off); for an effect
+    that writes its screen motion, ``motion_blur`` (on or off).
     """
     detail_name = resolve_scene_detail(settings)
     detail = scene3d_detail(detail_name)
@@ -644,6 +646,9 @@ def resolve_scene_quality(settings: Mapping[str, object], cfg: Mapping[str, obje
         on = scene3d_post_effect(detail, _scene_choice(cfg, defaults, "bloom", SCENE3D_EFFECT_CHOICES))
         strength = max(0.0, min(1.0, _number(_value(cfg, defaults, "bloom_strength"), float(defaults["bloom_strength"]))))
         quality["bloom"] = strength if on else 0.0
+    if motion_blur:
+        quality["motion_blur"] = scene3d_post_effect(
+            detail, _scene_choice(cfg, defaults, "motion_blur", SCENE3D_EFFECT_CHOICES))
     return quality
 
 
@@ -705,7 +710,7 @@ def _resolve_exploding_tiles(
         {"seed": _seed(rng), "columns": columns, "depth": depth,
          **_surface_values(cfg, defaults, ("thickness",)),
          "force": max(.5, min(2., _number(_value(cfg, defaults, "force"), float(defaults["force"])))),
-         **resolve_scene_quality(settings, cfg, defaults, bloom=True)},
+         **resolve_scene_quality(settings, cfg, defaults, bloom=True, motion_blur=True)},
     )
 
 

@@ -47,7 +47,7 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
     ("transition_id", "section", "expected_direction", "expected_keys"),
     [
         ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen", "collisions", "reshatter", "detail", "samples"}),
-        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force", "detail", "samples", "bloom"}),
+        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force", "detail", "samples", "bloom", "motion_blur"}),
         ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel", "detail", "samples"}),
         ("melt_drip", "melt_drip", "center_in", {"seed", "detail", "depth", "gloss"}),
     ],
@@ -305,17 +305,20 @@ def test_a_transitions_own_quality_choices_are_authoritative_over_the_tier():
 
     # Auto follows the tier.
     for tier, detail in SCENE3D_DETAIL_TIERS.items():
-        params = quality(tier, {"antialiasing": "Auto", "bloom": "Auto", "bloom_strength": 0.5})
+        params = quality(tier, {"antialiasing": "Auto", "bloom": "Auto", "bloom_strength": 0.5,
+                                "motion_blur": "Auto"})
         assert params["samples"] == detail.samples
         assert params["bloom"] == (0.5 if detail.post_effects else 0.0)
+        assert params["motion_blur"] is detail.post_effects
     # An explicit choice wins over any tier, both ways.
-    params = quality("Performance", {"antialiasing": "8x", "bloom": "On", "bloom_strength": 0.4})
-    assert params["samples"] == 8 and params["bloom"] == pytest.approx(0.4)
-    params = quality("High", {"antialiasing": "Off", "bloom": "Off"})
-    assert params["samples"] == 0 and params["bloom"] == 0.0
+    params = quality("Performance", {"antialiasing": "8x", "bloom": "On", "bloom_strength": 0.4, "motion_blur": "On"})
+    assert params["samples"] == 8 and params["bloom"] == pytest.approx(0.4) and params["motion_blur"] is True
+    params = quality("High", {"antialiasing": "Off", "bloom": "Off", "motion_blur": "Off"})
+    assert params["samples"] == 0 and params["bloom"] == 0.0 and params["motion_blur"] is False
     # Unknown stored choices repair to the canonical (Auto) behaviour.
-    params = quality("High", {"antialiasing": "16x", "bloom": "Maybe"})
+    params = quality("High", {"antialiasing": "16x", "bloom": "Maybe", "motion_blur": "Sometimes"})
     assert params["samples"] == SCENE3D_DETAIL_TIERS["High"].samples
+    assert params["motion_blur"] is SCENE3D_DETAIL_TIERS["High"].post_effects
     # Other 3D transitions take their own anti-aliasing the same way.
     for transition in ("glass_shatter", "crumble", "pixel_accretion"):
         assert quality("High", {"antialiasing": "2x"}, transition)["samples"] == 2
