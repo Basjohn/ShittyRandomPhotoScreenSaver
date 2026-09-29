@@ -24,6 +24,7 @@ layout(location=11) in vec2 aPivot;  // stage-1 spin pivot
 layout(location=12) in vec4 aKick2;  // second crack: kick xyz from time .w
 layout(location=13) in vec4 aSpin2;  // second crack: spin axis xyz, rate .w
 layout(location=14) in vec2 aPivot2; // second crack: this piece's own centre
+layout(location=15) in float aLayer;  // constant depth offset keeping shards from passing through each other
 uniform mat4 uMatrix;
 uniform vec2 uItemSize;
 uniform vec2 uDirection;
@@ -97,7 +98,7 @@ void main() {
     direction=normalize(direction+vec2(-direction.y,direction.x)*(.35*(aVariation-.5)));
     // Ray/expanded-rectangle exit accounts for the entire rotating prism and
     // the largest possible receding projection. No scale/fade retirement.
-    vec2 extent=(vec2(aspect*.5,.5)+vec2(aRadius*2.0+.10))*(1.0+.6*uDepth/3.0);
+    vec2 extent=(vec2(aspect*.5,.5)+vec2(aRadius*2.0+.10))*(1.0+(.6*uDepth+max(-aLayer,0.0))/3.0);
     vec2 distanceToEdge=(sign(direction)*extent-center)/
                          (sign(direction)*max(abs(direction),vec2(.00001)));
     if(abs(direction.x)<.00001) distanceToEdge.x=1e5;
@@ -106,7 +107,7 @@ void main() {
     float travel=.12*local+.88*local*local;
     position.xy+=center+direction*exitDistance*travel;
     position.y-=.16*sin(3.14159265*local)*local;
-    position.z+=uDepth*(.56*sin(3.14159265*local)-.6*local*local);
+    position.z+=uDepth*(.56*sin(3.14159265*local)-.6*local*local)+aLayer*impact;
     position+=aKick.xyz*tau+aKick2.xyz*tau2;
     float w=3.0-position.z;
     vec2 uv=vec2(position.x/aspect,-position.y)*3.0/w+.5;

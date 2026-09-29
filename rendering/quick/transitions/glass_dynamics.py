@@ -19,6 +19,12 @@ start at the event time. There is no per-frame simulation, clock or state.
   collisions off each split piece has a 30% chance to crack again later in
   its flight. A second crack is a second event stage on the same piece.
 
+* Depth layers (always on): shards whose flights would pass through each other
+  on screen are given small, constant depth offsets (within +-``LAYER_RANGE``,
+  ramping in as each shard launches), placed so each conflicting pair is
+  separated by at least the depth their tumbling can sweep. Crash pairs share a
+  layer so they still meet; split pieces keep their parent's layer.
+
 Every kicked piece must still leave the frame by the end of the run: a kick
 that would carry a piece back into view is scaled down (or turned outward).
 """
@@ -47,6 +53,12 @@ _CRASH_SPEED = 0.20        # closing speed, as a fraction of the shards' speed
 _MAX_COLLISIONS = 0.12     # at most this share of shards pairs up in a run
 _LATEST_CRASH = 0.80       # later crashes would happen as the shards leave
 
+# Depth layers; LAYER_RANGE is mirrored by GLASS_VERTEX's exit margin for receding shards.
+LAYER_RANGE = 0.25
+_LAYER_STEP = 0.004
+_LAYER_REACH = 0.85        # of the summed circumradii: centres this close may intersect
+_LAYER_SAMPLES = 49
+
 
 @dataclass(frozen=True, slots=True)
 class GlassPiece:
@@ -61,6 +73,7 @@ class GlassPiece:
     spin_pivot: tuple[float, float] | None = None       # stage-1 spin pivot (default: own centre)
     kick2: tuple[float, float, float, float] = (0.0, 0.0, 0.0, NO_EVENT)
     spin2: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+    layer: float = 0.0                                  # depth offset (see separation_layers)
 
 
 def shard_radius(shard: GlassShard, aspect: float) -> float:
@@ -71,9 +84,10 @@ def shard_radius(shard: GlassShard, aspect: float) -> float:
 class _Paths:
     """Vectorised replica of GLASS_VERTEX's shard-centre path (position space)."""
 
-    def __init__(self, shards, aspect: float, direction: object, depth: float):
+    def __init__(self, shards, aspect: float, direction: object, depth: float, layers=None):
         self.aspect = aspect
         self.depth = depth
+        self.layers = np.zeros(len(shards)) if layers is None else np.asarray(layers, dtype=np.float64)
         u = np.array([s.center[0] for s in shards], dtype=np.float64)
         v = np.array([s.center[1] for s in shards], dtype=np.float64)
         var = np.array([s.variation for s in shards], dtype=np.float64)
@@ -93,7 +107,7 @@ class _Paths:
         dx, dy = dx - dy * bend, dy + dx * bend
         length = np.hypot(dx, dy)
         self.dx, self.dy = dx / length, dy / length
-        scale = 1.0 + 0.6 * depth / 3.0
+        scale = 1.0 + (0.6 * depth + np.maximum(-self.layers, 0.0)) / 3.0
         extent_x = (aspect * 0.5 + radius * 2.0 + 0.10) * scale
         extent_y = (0.5 + radius * 2.0 + 0.10) * scale
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -115,7 +129,10 @@ class _Paths:
         x = self.cx[idx][:, None] + self.dx[idx][:, None] * reach * travel
         y = (self.cy[idx][:, None] + self.dy[idx][:, None] * reach * travel
              - 0.16 * np.sin(math.pi * local) * local)
-        z = self.depth * (0.56 * np.sin(math.pi * local) - 0.6 * local * local)
+        impact = np.clip(local / 0.10, 0.0, 1.0)
+        impact = impact * impact * (3.0 - 2.0 * impact)
+        z = (self.depth * (0.56 * np.sin(math.pi * local) - 0.6 * local * local)
+             + self.layers[idx][:, None] * impact)
         return np.stack((x, y, z), axis=-1)
 
     def point(self, index: int, t: float) -> np.ndarray:
@@ -124,10 +141,12 @@ class _Paths:
         local = min(1.0, max(0.0, (t - delay) / (PATH_END - delay)))
         travel = (0.12 * local + 0.88 * local * local) * float(self.exit[index])
         arc = math.sin(math.pi * local)
+        impact = min(1.0, local / 0.10)
+        impact = impact * impact * (3.0 - 2.0 * impact)
         return np.array((
             float(self.cx[index]) + float(self.dx[index]) * travel,
             float(self.cy[index]) + float(self.dy[index]) * travel - 0.16 * arc * local,
-            self.depth * (0.56 * arc - 0.6 * local * local),
+            self.depth * (0.56 * arc - 0.6 * local * local) + float(self.layers[index]) * impact,
         ))
 
     def velocity(self, index: int, t: float) -> np.ndarray:
@@ -138,6 +157,65 @@ class _Paths:
     def launched(self, t) -> np.ndarray:
         t = np.atleast_1d(np.asarray(t, dtype=np.float64))
         return (t[None, :] - self.delay[:, None]) / (PATH_END - self.delay[:, None]) > 0.02
+
+
+def separation_layers(paths: _Paths, groups: tuple[tuple[int, ...], ...] = ()) -> np.ndarray:
+    """Constant depth offsets that keep shards from passing through each other.
+
+    Pairs whose centres come within ``_LAYER_REACH`` of their summed circumradii
+    while flying and on screen must be separated in depth by the height their
+    tumbling sweeps at those moments. Shards are placed greedily (most
+    constrained first) at the offset nearest 0 in [-LAYER_RANGE, LAYER_RANGE]
+    that satisfies the neighbours already placed, or the least violating one.
+    Shards in one ``group`` (a crash pair) share an offset. Solved once per run.
+    """
+    count = len(paths.radius)
+    times = np.linspace(0.02, PATH_END, _LAYER_SAMPLES)
+    positions = paths.at(times)
+    local = np.clip((times[None, :] - paths.delay[:, None]) / (PATH_END - paths.delay[:, None]), 0.0, 1.0)
+    flying = local > 0.0
+    rate = (3.8 + 4.5 * paths.variation) * (0.5 + 0.65 * paths.depth)
+    lift = paths.radius[:, None] * np.abs(np.sin(local * rate[:, None]))
+    scale = 3.0 / (3.0 - positions[:, :, 2])
+    screen_x = positions[:, :, 0] / paths.aspect * scale + 0.5
+    screen_y = -positions[:, :, 1] * scale + 0.5
+    seen = (screen_x > -0.05) & (screen_x < 1.05) & (screen_y > -0.05) & (screen_y < 1.05)
+    owner = list(range(count))
+    for group in groups:
+        for member in group:
+            owner[member] = group[0]
+    needs: dict[int, dict[int, float]] = {node: {} for node in set(owner)}
+    for i in range(count - 1):
+        delta = positions[i + 1:] - positions[i]
+        gap = np.sqrt(np.einsum("mtc,mtc->mt", delta, delta))
+        limit = (paths.radius[i + 1:] + paths.radius[i])[:, None] * _LAYER_REACH
+        close = (gap < limit) & flying[i + 1:] & flying[i] & (seen[i + 1:] | seen[i])
+        rows = np.flatnonzero(close.any(axis=1))
+        if rows.size == 0:
+            continue
+        need = np.where(close[rows], lift[i + 1:][rows] + lift[i][None, :], 0.0).max(axis=1)
+        a = owner[i]
+        for row, spacing in zip(rows, need):
+            b = owner[i + 1 + int(row)]
+            if a == b:
+                continue
+            spacing = float(spacing)
+            needs[a][b] = max(needs[a].get(b, 0.0), spacing)
+            needs[b][a] = max(needs[b].get(a, 0.0), spacing)
+    grid = np.arange(-LAYER_RANGE, LAYER_RANGE + 1e-9, _LAYER_STEP)
+    candidates = grid[np.argsort(np.abs(grid), kind="stable")]
+    offset: dict[int, float] = {}
+    for node in sorted(needs, key=lambda k: (-sum(needs[k].values()), k)):
+        placed = [(offset[other], spacing) for other, spacing in needs[node].items() if other in offset]
+        if not placed:
+            offset[node] = 0.0
+            continue
+        others = np.array([value for value, _ in placed])
+        spacing = np.array([value for _, value in placed])
+        worst = np.maximum(spacing[None, :] - np.abs(candidates[:, None] - others[None, :]), 0.0).max(axis=1)
+        fits = np.flatnonzero(worst <= 1e-9)
+        offset[node] = float(candidates[fits[0]] if fits.size else candidates[int(np.argmin(worst))])
+    return np.array([offset[owner[index]] for index in range(count)])
 
 
 def _collision_candidates(paths: _Paths) -> list[tuple[float, int, int]]:
@@ -313,33 +391,44 @@ def solve_glass_pieces(
 ) -> tuple[GlassPiece, ...]:
     """Rendered pieces for one run: the shards, their collisions and splits."""
     radii = [shard_radius(shard, aspect) for shard in shards]
-    if not collisions and not reshatter:
-        return tuple(_whole(shard, radius) for shard, radius in zip(shards, radii))
-
+    base = _Paths(shards, aspect, direction, depth)
     rng = random.Random(f"glass-dynamics:{seed}")
-    paths = _Paths(shards, aspect, direction, depth)
     spin_scale = 0.5 + 0.5 * depth
     kicks: dict[int, tuple[float, np.ndarray, tuple[float, float, float, float]]] = {}
     split_at: dict[int, float] = {}
+    crashes: list[tuple[float, int, int, np.ndarray, float]] = []
 
     if collisions:
+        # Crashes are chosen on the unlayered paths: a crash pair shares one depth
+        # layer, which leaves their relative motion (and so the crash) unchanged.
         used: set[int] = set()
         budget = max(2, round(len(shards) * _MAX_COLLISIONS))
-        for lo, hi, i, j in _collision_candidates(paths):
+        for lo, hi, i, j in _collision_candidates(base):
             if budget <= 0:
                 break
             if i in used or j in used:
                 continue
-            time = _contact_time(paths, i, j, lo, hi)
-            a, b = paths.point(i, time), paths.point(j, time)
+            time = _contact_time(base, i, j, lo, hi)
+            a, b = base.point(i, time), base.point(j, time)
             normal = b - a
             length = float(np.linalg.norm(normal))
             if length < 1e-9:
                 continue
             normal /= length
-            closing = float(np.dot(paths.velocity(i, time) - paths.velocity(j, time), normal))
+            closing = float(np.dot(base.velocity(i, time) - base.velocity(j, time), normal))
             if closing <= 0.0:
                 continue
+            crashes.append((time, i, j, normal, closing))
+            used.update((i, j))
+            budget -= 1
+    layers = separation_layers(base, tuple((i, j) for _time, i, j, _normal, _closing in crashes))
+    paths = _Paths(shards, aspect, direction, depth, layers)
+    if not collisions and not reshatter:
+        return tuple(_whole(shard, radius, layer=float(layers[index]))
+                     for index, (shard, radius) in enumerate(zip(shards, radii)))
+
+    if collisions:
+        for time, i, j, normal, closing in crashes:
             impulse = 0.5 * (1.0 + _RESTITUTION) * closing
             tangent = np.cross(normal, np.array(_random_axis(rng)))
             tangent /= max(float(np.linalg.norm(tangent)), 1e-9)
@@ -349,8 +438,6 @@ def solve_glass_pieces(
                 kicks[index] = (time, sign * impulse * normal + scatter, (*_random_axis(rng), rate))
                 if reshatter:
                     split_at[index] = time
-            used.update((i, j))
-            budget -= 1
     else:
         for index in range(len(shards)):
             if rng.random() < RANDOM_SPLIT_CHANCE:
@@ -360,19 +447,20 @@ def solve_glass_pieces(
     pieces: list[GlassPiece] = []
     for index, shard in enumerate(shards):
         radius = radii[index]
+        layer = float(layers[index])
         event = kicks.get(index)
         base_kick = event[1] if event else np.zeros(3)
         split = split_at.get(index)
         children = split_polygon(shard, aspect, rng) if split is not None else ()
         if not children:
             if event is None:
-                pieces.append(_whole(shard, radius))
+                pieces.append(_whole(shard, radius, layer=layer))
                 continue
             time, kick, spin = event
             kick = _leave_the_frame(paths, index, kick, time, 0.0, radius)
-            pieces.append(_whole(shard, radius, kick=(*map(float, kick), time), spin=spin))
+            pieces.append(_whole(shard, radius, kick=(*map(float, kick), time), spin=spin, layer=layer))
             continue
-        pieces.append(_whole(shard, radius, life=(0.0, split)))
+        pieces.append(_whole(shard, radius, life=(0.0, split), layer=layer))
         for polygon in children:
             ux, uy = _centroid(polygon)
             drift = _drift(rng, aspect, shard.center, (ux, uy), (0.25, 0.6))
@@ -393,10 +481,10 @@ def solve_glass_pieces(
                              if cracks_again and second < PATH_END - 0.05 else ())
             if not grandchildren:
                 pieces.append(GlassPiece(child, shard.center, radius, life=(split, NO_EVENT),
-                                         kick=(*map(float, kick), split), spin=spin))
+                                         kick=(*map(float, kick), split), spin=spin, layer=layer))
                 continue
             pieces.append(GlassPiece(child, shard.center, radius, life=(split, second),
-                                     kick=(*map(float, kick), split), spin=spin))
+                                     kick=(*map(float, kick), split), spin=spin, layer=layer))
             carried = kick * (PATH_END - split)
             for piece_polygon in grandchildren:
                 gx, gy = _centroid(piece_polygon)
@@ -409,21 +497,22 @@ def solve_glass_pieces(
                     GlassShard((gx, gy), piece_polygon, shard.variation), shard.center, radius,
                     life=(second, NO_EVENT), kick=(*map(float, kick), split), spin=spin,
                     spin_pivot=(ux, uy), kick2=(*map(float, kick2), second), spin2=(*_random_axis(rng), rate2),
+                    layer=layer,
                 ))
     return tuple(pieces)
 
 
-EXTRA_FLOATS = 22
+EXTRA_FLOATS = 23
 
 
 def piece_extras(piece: GlassPiece) -> tuple[float, ...]:
     """The per-vertex event floats GLASS_VERTEX reads after the prism data.
 
-    life2, kick4, spin4, pivot2 (stage 1), kick4, spin4, pivot2 (stage 2).
+    life2, kick4, spin4, pivot2 (stage 1), kick4, spin4, pivot2 (stage 2), layer.
     """
     pivot = piece.spin_pivot if piece.spin_pivot is not None else piece.shard.center
     return (*piece.life, *piece.kick, *piece.spin, *pivot,
-            *piece.kick2, *piece.spin2, *piece.shard.center)
+            *piece.kick2, *piece.spin2, *piece.shard.center, piece.layer)
 
 
 __all__ = [
@@ -432,9 +521,11 @@ __all__ = [
     "PATH_END",
     "EXTRA_FLOATS",
     "IMPACT_SECOND_SPLIT_CHANCE",
+    "LAYER_RANGE",
     "RANDOM_SPLIT_CHANCE",
     "SECOND_SPLIT_CHANCE",
     "piece_extras",
+    "separation_layers",
     "shard_radius",
     "solve_glass_pieces",
     "split_polygon",
