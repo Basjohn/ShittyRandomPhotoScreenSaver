@@ -60,7 +60,7 @@ Target, in order:
 
 - [ ] attribute repeatable >100 ms active stalls to GC, GUI/event loop, provider work, synchronization, transition/image work, or render/presentation ownership;
 - [ ] reduce p95/p99/max and severe-gap counts without worsening median freshness/reactivity;
-- [ ] distinguish recreation/teardown intervals from ordinary steady-state stalls;
+- [x] distinguish recreation/teardown intervals from ordinary steady-state stalls (lifecycle windows, section 5);
 - [ ] fix instrumentation that carries stale timestamps across runtime recreation before tuning from those numbers;
 - [ ] prefer removing a named allocation/lifetime/work source over changing GC thresholds or hiding pauses.
 
@@ -169,6 +169,7 @@ If GC mechanism hunting is reopened, instrumentation should correlate GC callbac
 
 Do not optimize a number until its semantics are understood.
 
+- [ ] **Startup and teardown are not stall points (binding, operator 2026-09-29).** A runtime starting up or tearing down (cold start, Settings, exit, monitor or layout replacement) spikes by design: windows, scene graphs, programs and images are built or dropped at once. Never count, rank or chase those frames as stalls or spikes. The one lifecycle question is poisoning: are frames *after* the generation's coordinated reveal late? `core/diagnostics/lifecycle_window.py` marks each window (opened at cold start, Settings pause and every `teardown_display_runtime`; closed by the coordinated reveal). Inside it the Visualizer's dt-spike, slow-tick and latency warnings and the event-loop stall recorder stay silent, and `--frame-trace` records `lifecycle_begin`/`lifecycle_end`, from which `tools/frame_trace_report.py` prints steady-state swap spacing without the windows and a `post_lifecycle_2s` poisoning line.
 - [ ] **Demand-light `dt_max`:** a display with nothing to redraw may intentionally go a long time between swaps. A multi-second `dt_max` on that surface is not automatically a multi-second active rendering stall. Pair it with demand/activity, active-display timing and visible behavior.
 - [ ] **High-refresh pacer skip:** overdue target deadlines can be collapsed into freshest-state presentation. `skip_pct` is not automatically “that percentage of visible frames dropped.” Pair it with physical cadence, Visualizer logical revision rate and snapshot age.
 - [ ] **Quick presentation authority:** do not treat raw ``frameSwapped`` rate or generic VSync doctrine as a sufficient performance oracle. The installed mixed-refresh A/B rejected forcing Quick ``swapInterval=1`` and restored the known-good release-era interval-0 policy. Any future surface/pacer change must be compared against 5.0.0/5.0.1 on real single- and multi-display hardware and judged by operator-visible pacing, freshness, interaction latency and transition smoothness together—not one counter in isolation.

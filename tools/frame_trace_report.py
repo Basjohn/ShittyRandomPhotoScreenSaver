@@ -73,7 +73,63 @@ EVENT_NAMES = {
     59: "bubble_style_uniforms_ready",
     60: "bubble_vao_ready",
     61: "bubble_draw_ready",
+    62: "lifecycle_begin",
+    63: "lifecycle_end",
 }
+
+# Startup/teardown windows are not stall points (core/diagnostics/lifecycle_window.py):
+# frames inside them are reported apart; only frames just after one count as poisoning.
+POST_LIFECYCLE_NS = 2_000_000_000
+LATE_FRAME_MS = 25.0
+NOT_RENDERING_MS = 1000.0
+
+
+def _lifecycle_windows(edges, first_ns, last_ns):
+    """[(begin, end)] from begin/end edges; a trace may start or end inside a window."""
+    windows, opened = [], None
+    for index, (ts_ns, event) in enumerate(sorted(edges)):
+        if event == 62 and opened is None:
+            opened = ts_ns
+        elif event == 63:
+            if opened is None and index == 0:
+                opened = first_ns          # the trace began inside a window
+            if opened is not None:
+                windows.append((opened, ts_ns))
+                opened = None
+    if opened is not None:
+        windows.append((opened, last_ns))
+    return windows
+
+
+def _lifecycle_report(windows, swap_timestamps_by_screen):
+    total_s = sum(end - begin for begin, end in windows) / 1e9
+    print(f"lifecycle_windows={len(windows)} lifecycle_total_s={total_s:.1f} "
+          "(startup/teardown: reported apart, not stall points)")
+
+    def inside(ts_ns):
+        return any(begin <= ts_ns <= end for begin, end in windows)
+
+    for screen, stamps in sorted(swap_timestamps_by_screen.items()):
+        steady, poisoned = [], []
+        for left, right in zip(stamps, stamps[1:]):
+            gap_ms = (right - left) / 1_000_000.0
+            if right < left or gap_ms >= NOT_RENDERING_MS or inside(left) or inside(right):
+                continue
+            steady.append(gap_ms)
+            if any(end <= left < end + POST_LIFECYCLE_NS for _begin, end in windows):
+                poisoned.append(gap_ms)
+        if steady:
+            print(
+                f"screen={screen} steady_swap_spacing_ms n={len(steady)} "
+                f"median={statistics.median(steady):.3f} p99={_pct(steady, .99):.3f} "
+                f"max={max(steady):.3f} over_25={sum(g > 25.0 for g in steady)} "
+                f"over_50={sum(g > 50.0 for g in steady)} over_100={sum(g > 100.0 for g in steady)}"
+            )
+        late = [g for g in poisoned if g > LATE_FRAME_MS]
+        print(
+            f"screen={screen} post_lifecycle_2s frames={len(poisoned)} late_over_25={len(late)} "
+            f"max_ms={max(poisoned, default=0.0):.3f}"
+        )
 
 RENDER_CYCLE_EVENT_IDS = frozenset(range(48, 55))
 RENDER_CYCLE_STAGES = (
@@ -714,6 +770,8 @@ def main() -> int:
     unique_swap_revisions: dict[int, set[tuple[int, int]]] = defaultdict(set)
     draw_timestamps_by_screen: dict[int, list[int]] = defaultdict(list)
     swap_timestamps_by_screen: dict[int, list[int]] = defaultdict(list)
+    lifecycle_edges: list[tuple[int, int]] = []
+    first_ns, last_ns = None, None
     payload_bytes = len(raw) - HEADER.size
     records, trailing_bytes = divmod(payload_bytes, RECORD.size)
     if trailing_bytes:
@@ -725,6 +783,10 @@ def main() -> int:
         offset = HEADER.size + index * RECORD.size
         ts_ns, event, screen, revision, logical_ns, aux = RECORD.unpack_from(raw, offset)
         counts[event] += 1
+        first_ns = ts_ns if first_ns is None or ts_ns < first_ns else first_ns
+        last_ns = ts_ns if last_ns is None or ts_ns > last_ns else last_ns
+        if event in (62, 63):
+            lifecycle_edges.append((ts_ns, event))
         if event in (15, 16, 17, 18) and revision >= 0:
             worker_events[(int(aux), int(revision))][event].append(ts_ns)
         if event in RENDER_CYCLE_EVENT_IDS and screen >= 0 and revision >= 0:
@@ -809,6 +871,14 @@ def main() -> int:
                     f"p95={_pct(intervals, .95):.3f} "
                     f"p99={_pct(intervals, .99):.3f} max={max(intervals):.3f}"
                 )
+
+    if lifecycle_edges:
+        _lifecycle_report(
+            _lifecycle_windows(lifecycle_edges, first_ns, last_ns),
+            {screen: sorted(stamps) for screen, stamps in swap_timestamps_by_screen.items()},
+        )
+    else:
+        print("lifecycle_windows=unrecorded (trace predates lifecycle markers)")
 
     audio_analysis_intervals = _paired_worker_intervals(worker_events, 15, 16)
     audio_smooth_intervals = _paired_worker_intervals(worker_events, 17, 18)

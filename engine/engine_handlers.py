@@ -310,6 +310,9 @@ def on_settings_requested(
         )
         return
     logger.info("Settings requested - pausing screensaver and opening config")
+    from core.diagnostics import lifecycle_window
+
+    lifecycle_window.open_window("settings")   # closed by the replacement's reveal
     request_start = time.perf_counter()
     engine._settings_dialog_active = True
     engine._sources_changed_during_settings = False

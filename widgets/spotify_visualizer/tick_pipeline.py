@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from typing import Any, Callable, Optional
 
 
+from core.diagnostics import lifecycle_window
 from core.logging.logger import (
     get_logger,
     is_perf_metrics_enabled,
@@ -1308,6 +1309,8 @@ def log_audio_latency_metrics(
         # A recovered healthy sample re-arms one future bounded warning.
         widget._latency_last_signature = None
         return
+    if lifecycle_window.is_open():
+        return   # startup/teardown latency is expected, not a finding
 
     if stale_source_carry:
         severity = "stale_source"
@@ -1472,7 +1475,11 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     widget._last_update_ts = now_ts
     _dt_spike_max_reasonable_ms: float = 1000.0
     dt_for_spike_check = min(dt_since_last * 1000.0, _dt_spike_max_reasonable_ms)
-    if dt_since_last * 1000.0 >= widget._dt_spike_threshold_ms and dt_for_spike_check < _dt_spike_max_reasonable_ms:
+    if (
+        dt_since_last * 1000.0 >= widget._dt_spike_threshold_ms
+        and dt_for_spike_check < _dt_spike_max_reasonable_ms
+        and not lifecycle_window.is_open()   # startup/teardown is not a stall point
+    ):
         widget._log_tick_spike(dt_since_last, transition_ctx)
 
     # Perf metrics accounting
@@ -1540,7 +1547,7 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     used_gpu = False
     first_frame = not widget._has_pushed_first_frame
     _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
-    if _tick_elapsed > 50.0:
+    if _tick_elapsed > 50.0 and not lifecycle_window.is_open():
         logger.warning("[PERF] [SPOTIFY_VIS] Slow _on_tick: %.2fms", _tick_elapsed)
         phase_payload = " ".join(
             f"{name}_ms={elapsed_ms:.2f}"
