@@ -11,7 +11,7 @@ from rendering.gl_programs.pixel_accretion_program import (
     pixel_accretion_grid,
     pixel_accretion_parameters,
 )
-from rendering.gl_programs.scene3d import scene3d_request_detail
+from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
 from ..directions import direction_vector
@@ -41,9 +41,9 @@ class QuickPixelAccretionRenderer:
             self._initialize()
             parameters = frame.run.request.parameter_dict()
             seed, tile_size, travel = pixel_accretion_parameters(parameters)
-            detail = scene3d_request_detail(parameters)
-            if detail.samples:
-                with self._target.scope(frame, detail.samples, self._resources):
+            samples = scene3d_request_samples(parameters)
+            if samples:
+                with self._target.scope(frame, samples, self._resources):
                     self._draw_scene(frame, progress, seed, tile_size, travel)
             else:
                 self._draw_scene(frame, progress, seed, tile_size, travel)

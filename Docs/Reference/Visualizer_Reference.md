@@ -428,7 +428,8 @@ A mode may build on the shared 3D foundation the transitions use; none does toda
   drag does not reallocate per frame), released in the renderer's `release_resources` when the mode retires or is
   disabled. Nothing is allocated per frame.
 - **Cost:** a Visualizer detail tier arrives with the first consumer, separate from `transitions.detail_3d` because a
-  mode draws continuously. Per-frame Python GL calls are the main CPU hazard (plan slice S3, uniform blocks).
+  mode draws continuously; each mode's own quality choices then override it the same way transitions do ("Auto"
+  follows the tier, one resolver combines them). Per-frame Python GL calls are the main CPU hazard (plan slice S3, uniform blocks).
 - **Fence:** the Visualizer fence is unchanged (CHK26-protected hot path; modes that do not use a target pay nothing);
   `SceneTarget.scope` itself restores framebuffers, viewport and scissor, including when the scene raises.
 

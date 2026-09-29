@@ -103,8 +103,11 @@ class TransitionCapture:
         if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
             raise RuntimeError("transition diagnostic framebuffer incomplete")
 
-    def run(self, effect: str, *, seed: int = 713, direction=None, parameters=None, duration_ms: int = 1000):
-        """Resolve one run. Effects with real-time motion (Exploding Tiles' rumble) need the authored duration."""
+    def run(self, effect: str, *, seed: int = 713, direction=None, parameters=None, duration_ms: int = 1000,
+            settings=None):
+        """Resolve one run as production does from ``settings`` (the transitions section;
+        empty means canonical defaults), then apply any ``parameters`` overrides.
+        Effects with real-time motion (Exploding Tiles' rumble) need the authored duration."""
         from rendering.quick.image_state import PresentationImage
         from rendering.quick.transitions.parameter_resolution import resolve_parameterized_phase_c_inputs
         from rendering.quick.transitions.state import TransitionRequest, TransitionRun
@@ -112,9 +115,14 @@ class TransitionCapture:
         if effect == "slide":
             resolved_direction, resolved_params = "left", {"motion_style": "Perspective Push"}
         elif effect == "block_spins":
-            resolved_direction, resolved_params = "left", {}
+            from core.settings.default_contract import require_canonical_default
+            from rendering.quick.transitions.parameter_resolution import resolve_scene_quality
+
+            section = {**require_canonical_default("transitions.blockspin"), **(settings or {}).get("blockspin", {})}
+            resolved_direction = "left"
+            resolved_params = resolve_scene_quality(settings or {}, section, require_canonical_default("transitions.blockspin"))
         else:
-            resolved = resolve_parameterized_phase_c_inputs(effect, {}, random_source=random.Random(seed))
+            resolved = resolve_parameterized_phase_c_inputs(effect, settings or {}, random_source=random.Random(seed))
             resolved_direction, resolved_params = resolved.direction, resolved.parameter_dict()
         resolved_params.update(parameters or {})
         images = [PresentationImage(str(index), "diagnostic", (self.width, self.height), 1.,

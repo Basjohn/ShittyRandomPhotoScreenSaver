@@ -11,7 +11,7 @@ from rendering.gl_programs.crumble_program import (
     DEBRIS_VERTEX,
 )
 from ..crumble_dynamics import MOTION_FRAMES
-from rendering.gl_programs.scene3d import scene3d_request_detail
+from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
 from ..render_contract import QuickTransitionRenderFrame
@@ -62,9 +62,9 @@ class QuickCrumbleRenderer:
                     PREPARED_GEOMETRY.get_or_build(geometry_key, build_crumble_geometry)
                 )
                 self._geometry_key = key
-            detail = scene3d_request_detail(parameters)
-            if detail.samples:
-                with self._target.scope(frame, detail.samples, self._resources):
+            samples = scene3d_request_samples(parameters)
+            if samples:
+                with self._target.scope(frame, samples, self._resources):
                     self._draw_scene(frame, progress, seed, depth, thickness, debris)
             else:
                 self._draw_scene(frame, progress, seed, depth, thickness, debris)

@@ -355,3 +355,37 @@ def test_3d_detail_round_trips_and_repairs_unknown_values(qapp, settings_manager
     settings_manager.set("transitions", external)
     qapp.processEvents()
     assert tab._detail_3d_combo.currentText() == canonical
+
+
+def test_3d_quality_choices_and_bloom_strength_round_trip_on_the_pages(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.scene3d import SCENE3D_ANTIALIASING_CHOICES, SCENE3D_EFFECT_CHOICES
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    canonical = get_default_settings()["transitions"]
+    pages = (("Exploding Tiles", "exploding_tiles"), ("Glass Shatter", "glass_shatter"), ("Crumble", "crumble"),
+             ("Directional Pixel Accretion", "pixel_accretion"), ("3D Block Spins", "blockspin"))
+    for name, section in pages:
+        tab._activation_checkboxes[name].setChecked(True)
+        tab._on_nav_selected(name)
+        combo = getattr(tab, f"{section}_antialiasing_combo")
+        assert combo.currentText() == canonical[section]["antialiasing"]
+        choice = next(value for value in SCENE3D_ANTIALIASING_CHOICES if value != combo.currentText())
+        combo.setCurrentText(choice)
+        persisted = settings_manager.get("transitions", {})[section]
+        assert persisted["antialiasing"] == choice
+        assert set(canonical[section]) <= set(persisted)  # the page's other values survive
+    bloom = tab.exploding_tiles_bloom_combo
+    bloom.setCurrentText(next(value for value in SCENE3D_EFFECT_CHOICES if value != bloom.currentText()))
+    tab.exploding_tiles_bloom_strength_spin.setValue(0.35)
+    persisted = settings_manager.get("transitions", {})["exploding_tiles"]
+    assert persisted["bloom"] == bloom.currentText()
+    assert persisted["bloom_strength"] == pytest.approx(0.35)
+
+    # An external write with an unknown choice is shown as the canonical value.
+    external = deepcopy(settings_manager.get("transitions", {}))
+    external["glass_shatter"]["antialiasing"] = "16x"
+    settings_manager.set("transitions", external)
+    qapp.processEvents()
+    assert tab.glass_shatter_antialiasing_combo.currentText() == canonical["glass_shatter"]["antialiasing"]
+

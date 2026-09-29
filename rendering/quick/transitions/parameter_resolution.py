@@ -15,7 +15,14 @@ import random
 from typing import Protocol
 
 from core.settings.default_contract import require_canonical_default
-from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES
+from rendering.gl_programs.scene3d import (
+    SCENE3D_ANTIALIASING_CHOICES,
+    SCENE3D_DETAIL_NAMES,
+    SCENE3D_EFFECT_CHOICES,
+    scene3d_detail,
+    scene3d_post_effect,
+    scene3d_samples,
+)
 from .state import TransitionParameters, TransitionValue, freeze_transition_parameters
 
 
@@ -252,7 +259,7 @@ def _resolve_crumble(
             **_surface_values(cfg, defaults, ("thickness", "debris")),
             "weight_mode": weight_mode,
             "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
-            "detail": resolve_scene_detail(settings),
+            **resolve_scene_quality(settings, cfg, defaults),
         },
     )
 
@@ -612,6 +619,33 @@ def resolve_scene_detail(settings: Mapping[str, object]) -> str:
     return str(require_canonical_default("transitions.detail_3d"))
 
 
+def _scene_choice(cfg: Mapping[str, object], defaults: Mapping[str, object], field: str,
+                  choices: tuple[str, ...]) -> str:
+    value = _value(cfg, defaults, field)
+    return value if isinstance(value, str) and value in choices else str(defaults[field])
+
+
+def resolve_scene_quality(settings: Mapping[str, object], cfg: Mapping[str, object],
+                          defaults: Mapping[str, object], *, bloom: bool = False) -> dict[str, object]:
+    """A 3D transition's effective quality: the global 3D Detail tier, with the
+    transition's own choices authoritative ("Auto" follows the tier).
+
+    Returns ``detail`` (the tier, for tier-only features), ``samples`` and, for an
+    effect with emitted light, ``bloom`` (its strength, 0 when off).
+    """
+    detail_name = resolve_scene_detail(settings)
+    detail = scene3d_detail(detail_name)
+    quality: dict[str, object] = {
+        "detail": detail_name,
+        "samples": scene3d_samples(detail, _scene_choice(cfg, defaults, "antialiasing", SCENE3D_ANTIALIASING_CHOICES)),
+    }
+    if bloom:
+        on = scene3d_post_effect(detail, _scene_choice(cfg, defaults, "bloom", SCENE3D_EFFECT_CHOICES))
+        strength = max(0.0, min(1.0, _number(_value(cfg, defaults, "bloom_strength"), float(defaults["bloom_strength"]))))
+        quality["bloom"] = strength if on else 0.0
+    return quality
+
+
 def _surface_values(cfg: Mapping[str, object], defaults: Mapping[str, object],
                     names: tuple[str, ...]) -> dict[str, float]:
     return {name: max(0.0, min(1.0, _number(_value(cfg, defaults, name), float(defaults[name]))))
@@ -638,7 +672,7 @@ def _resolve_glass_shatter(
                                "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
                                "reshatter": _bool(_value(cfg, defaults, "reshatter"), bool(defaults["reshatter"])),
                                **_surface_values(cfg, defaults, ("thickness", "transparency", "refraction", "dispersion", "sheen")),
-                               "detail": resolve_scene_detail(settings)})
+                               **resolve_scene_quality(settings, cfg, defaults)})
 
 
 def _resolve_exploding_tiles(
@@ -662,7 +696,7 @@ def _resolve_exploding_tiles(
         {"seed": _seed(rng), "columns": columns, "depth": depth,
          **_surface_values(cfg, defaults, ("thickness",)),
          "force": max(.5, min(2., _number(_value(cfg, defaults, "force"), float(defaults["force"])))),
-         "detail": resolve_scene_detail(settings)},
+         **resolve_scene_quality(settings, cfg, defaults, bloom=True)},
     )
 
 
@@ -684,7 +718,7 @@ def _resolve_pixel_accretion(
     travel = max(0.1, min(1.0, _number(_value(cfg, defaults, "travel"), default_travel)))
     return _finish(
         direction,
-        {"seed": _seed(rng), "tile_size": tile_size, "travel": travel, "detail": resolve_scene_detail(settings)},
+        {"seed": _seed(rng), "tile_size": tile_size, "travel": travel, **resolve_scene_quality(settings, cfg, defaults)},
     )
 
 

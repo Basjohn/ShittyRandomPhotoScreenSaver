@@ -180,7 +180,7 @@ _BLAST_FADE = (0.60, 0.85)
 
 def exploding_tiles_parameters(
     parameters: Mapping[str, object],
-) -> tuple[int, int, float, float, float, str]:
+) -> tuple[int, int, float, float, float, str, int, float]:
     """Validate resolved-only tile controls before GL state changes."""
     seed, columns, depth = (
         parameters.get("seed"),
@@ -188,7 +188,7 @@ def exploding_tiles_parameters(
         parameters.get("depth"),
     )
     thickness, force = parameters.get("thickness"), parameters.get("force")
-    detail = parameters.get("detail")
+    detail, samples, bloom = parameters.get("detail"), parameters.get("samples"), parameters.get("bloom")
     if isinstance(seed, bool) or not isinstance(seed, int) or not 1 <= seed <= 65535:
         raise ValueError("Exploding Tiles seed must be an integer between 1 and 65535")
     if (
@@ -220,7 +220,16 @@ def exploding_tiles_parameters(
         raise ValueError("Exploding Tiles force must be finite and between 0.5 and 2")
     if detail not in SCENE3D_DETAIL_NAMES:
         raise ValueError(f"Exploding Tiles detail must be one of {', '.join(SCENE3D_DETAIL_NAMES)}")
-    return seed, columns, float(depth), float(thickness), float(force), str(detail)
+    if (
+        isinstance(bloom, bool)
+        or not isinstance(bloom, (int, float))
+        or not math.isfinite(float(bloom))
+        or not 0.0 <= float(bloom) <= 1.0
+    ):
+        raise ValueError("Exploding Tiles bloom must be finite and between 0 and 1")
+    if isinstance(samples, bool) or samples not in (0, 2, 4, 8):
+        raise ValueError("Exploding Tiles samples must be 0, 2, 4 or 8")
+    return seed, columns, float(depth), float(thickness), float(force), str(detail), int(samples), float(bloom)
 
 
 def exploding_tiles_grid(columns: int, width: int, height: int) -> tuple[int, int]:
@@ -316,7 +325,7 @@ def exploding_tiles_sparks_live(progress: float, force: float, center_out: bool)
 EXPLODING_TILES_FRAME_BLOCK = Scene3DBlockLayout.of("ExplodingTilesFrame", (
     ("uGrid", "vec2"), ("uProgress", "float"), ("uSeed", "float"), ("uDepth", "float"),
     ("uThickness", "float"), ("uForce", "float"), ("uCenterOut", "int"), ("uEpicentre", "vec3"),
-    ("uSeconds", "float"), ("uBlast", "vec2"), ("uBody", "vec3"),
+    ("uSeconds", "float"), ("uBlast", "vec2"), ("uBody", "vec3"), ("uEmissive", "float"),
 ))
 _FRAME_GLSL = EXPLODING_TILES_FRAME_BLOCK.glsl()
 _MOTION_UNIFORMS_GLSL = "uniform mat4 uMatrix; uniform vec2 uItemSize;\n" + _FRAME_GLSL
@@ -440,13 +449,29 @@ vec3 tileNormal(Tile t, vec3 normal) {{
 
 _BACKDROP_GLSL = """
 const vec3 BLAST_FIRE = vec3(1.0, 0.5, 0.18);
-// The new photograph lit by the blast: a warm fireball glow and the flash.
-vec3 blastBackdrop(vec2 uv) {
-    vec3 colour = texture(uNewTex, uv).rgb;
+// The blast's light on the new photograph: a warm fireball glow and the flash.
+vec3 blastLight(vec2 uv, vec3 photo) {
     vec2 world = vec2((uv.x - 0.5) * uItemSize.x / uItemSize.y, 0.5 - uv.y) - uEpicentre.xy;
     float d2 = dot(world, world);
-    colour += BLAST_FIRE * uBlast.y * (0.45 * exp(-d2 * 9.0) + 0.10 * exp(-d2 * 1.5)) * (0.4 + colour);
-    return colour + uBlast.x * 0.25 * (colour + 0.15);
+    vec3 fire = BLAST_FIRE * uBlast.y * (0.45 * exp(-d2 * 9.0) + 0.10 * exp(-d2 * 1.5)) * (0.4 + photo);
+    return fire + uBlast.x * 0.25 * (photo + fire + 0.15);
+}
+vec3 blastBackdrop(vec2 uv) {
+    vec3 photo = texture(uNewTex, uv).rgb;
+    return photo + blastLight(uv, photo);
+}
+// What glows (bloom) on the photograph: only the flash. The fireball is light cast on the
+// picture over a wide area; blooming it would bloom the picture's own colours.
+vec3 blastGlow(vec3 photo) {
+    return uBlast.x * 0.25 * (photo + 0.15);
+}
+"""
+
+_OUTPUT_GLSL = """
+// While the scene renders into a bloom target, alpha is the brightness of the light the
+// pixel emits (additive passes add theirs), so the bloom takes the light, never the photograph.
+vec4 sceneOutput(vec3 colour, vec3 emitted) {
+    return vec4(colour, uEmissive > 0.5 ? clamp(dot(emitted, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0) : 1.0);
 }
 """
 
@@ -493,6 +518,7 @@ uniform sampler2D uOldTex; uniform vec2 uItemSize;
 """
     + _FRAME_GLSL
     + SCENE3D_GLSL
+    + _OUTPUT_GLSL
     + """
 void main() {
     // Bevels read as flat face until their tile leaves the wall, so the fireball
@@ -501,6 +527,7 @@ void main() {
     vec3 fire = scenePointLight(normal, vWorld, vec3(uEpicentre.xy, 0.35), vec3(1.0, 0.55, 0.22) * uBlast.y * 1.2, 9.0);
     vec3 source = texture(uOldTex, vUv).rgb;
     vec3 colour;
+    vec3 glow = vec3(0.0);   // emitted light (hot cracks, embers, flash), for the bloom
     if (vSurface > 0.3) {
         // Photograph face and its bevel: exactly the source until the tile is lit.
         float bevel = vSurface < 0.9 ? 1.0 : 0.0;
@@ -515,17 +542,19 @@ void main() {
         // Dark hairlines, glowing only where the crack has heated.
         float heat = smoothstep(0.55, 1.0, vCrack);
         colour = mix(colour, mix(vec3(0.02), hot * 1.3, heat), line);
-        colour += hot * heat * heat * 0.25 * (1.0 - smoothstep(0.0, 2.0 + 4.0 * vCrack, gap));
-        colour += sceneEmber(vHeat) * vHeat * vHeat * bevel * 0.6;
+        glow = hot * 1.3 * heat * line + hot * heat * heat * 0.25 * (1.0 - smoothstep(0.0, 2.0 + 4.0 * vCrack, gap))
+             + sceneEmber(vHeat) * vHeat * vHeat * bevel * 0.6;
+        colour += glow - hot * 1.3 * heat * line;
     } else {
         // Thickness and back: dark grey stone tinted slightly toward the photograph's
         // most used colour, glowing where the blast heated it.
         vec3 body = mix(vec3(0.25), uBody, 0.44) * 0.75 * (vSurface > -0.3 ? 1.0 : 0.8);
-        colour = sceneShade(body, normal, vWorld, 0.5, 0.12, 28.0, 0.05) + fire * 0.12
-               + sceneEmber(vHeat) * vHeat * vHeat * (vSurface > -0.3 ? 0.9 : 0.3);
+        glow = sceneEmber(vHeat) * vHeat * vHeat * (vSurface > -0.3 ? 0.9 : 0.3);
+        colour = sceneShade(body, normal, vWorld, 0.5, 0.12, 28.0, 0.05) + fire * 0.12 + glow;
     }
-    colour += uBlast.x * 0.3 * (colour + 0.1);
-    FragColor = vec4(colour, 1.0);
+    vec3 flash = uBlast.x * 0.3 * (colour + 0.1);
+    colour += flash;
+    FragColor = sceneOutput(colour, glow + flash);
 }
 """
 )
@@ -536,7 +565,9 @@ EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE = (
     "uniform sampler2D uNewTex; uniform vec2 uItemSize;\n"
     + _FRAME_GLSL
     + _BACKDROP_GLSL
-    + "void main() { FragColor = vec4(blastBackdrop(vec2(vUv.x, 1.0 - vUv.y)), 1.0); }\n"
+    + _OUTPUT_GLSL
+    + "void main() { vec2 uv = vec2(vUv.x, 1.0 - vUv.y); vec3 photo = texture(uNewTex, uv).rgb;"
+    " FragColor = sceneOutput(photo + blastLight(uv, photo), blastGlow(photo)); }\n"
 )
 
 EXPLODING_TILES_SHADOW_VERTEX_SOURCE = (
@@ -635,12 +666,16 @@ void main() {{
 EXPLODING_TILES_SPARK_FRAGMENT_SOURCE = (
     "#version 410 core\n"
     "in vec2 vQuad; in float vHeat; in float vGlow;\nout vec4 FragColor;\n"
+    + _FRAME_GLSL
     + SCENE3D_GLSL
     + """
 void main() {
     float across = 1.0 - smoothstep(0.15, 0.5, abs(vQuad.y - 0.5));
     float along = smoothstep(0.0, 0.45, vQuad.x);
-    FragColor = vec4(sceneEmber(0.2 + 0.8 * vHeat) * vGlow * across * along * 1.8, 1.0);
+    float light = vGlow * across * along;
+    // Additive: colour adds light; alpha (blended additively too) adds emitted light for the bloom.
+    vec3 spark = sceneEmber(0.2 + 0.8 * vHeat) * light * 1.8;
+    FragColor = vec4(spark, uEmissive * dot(spark, vec3(0.2126, 0.7152, 0.0722)));
 }
 """
 )

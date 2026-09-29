@@ -60,10 +60,13 @@ class QuickExplodingTilesRenderer:
             if progress >= 1.0:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
-            seed, columns, depth, thickness, force, detail_name = exploding_tiles_parameters(
+            seed, columns, depth, thickness, force, detail_name, samples, bloom = exploding_tiles_parameters(
                 frame.run.request.parameter_dict()
             )
+            # Multisampling and bloom arrive resolved (this transition's settings over the
+            # 3D Detail tier); the tier itself still sets shadows and the spark budget.
             detail = scene3d_detail(detail_name)
+            samples = samples or (1 if bloom > 0.0 else 0)
             grid = exploding_tiles_grid(columns, frame.viewport[2], frame.viewport[3])
             direction = frame.run.request.direction
             center_out = str(direction) == "center_out"
@@ -76,10 +79,11 @@ class QuickExplodingTilesRenderer:
                 "uThickness": thickness, "uForce": force, "uCenterOut": 1 if center_out else 0,
                 "uEpicentre": epicentre, "uSeconds": frame.run.request.duration_ms / 1000.0,
                 "uBlast": exploding_tiles_blast(progress), "uBody": self._body_colour(frame),
+                "uEmissive": 1.0 if samples and bloom > 0.0 else 0.0,
             }
             with self._frame_block.bound(values):
-                if detail.samples:
-                    with self._target.scope(frame, detail.samples, self._resources):
+                if samples:
+                    with self._target.scope(frame, samples, self._resources, bloom=bloom):
                         self._draw_scene(frame, grid, detail, progress, force, center_out)
                 else:
                     self._draw_scene(frame, grid, detail, progress, force, center_out)
@@ -130,7 +134,7 @@ class QuickExplodingTilesRenderer:
                   ("uMatrix", "uItemSize"), frame)
         gl.glDepthMask(gl.GL_FALSE)
         gl.glBindVertexArray(frame.quad_vao)
-        with blend_scope(gl.GL_FUNC_ADD):
+        with blend_scope(gl.GL_FUNC_ADD, accumulate_alpha=True):
             gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, count)
 
     def _body_colour(self, frame) -> tuple[float, float, float]:
