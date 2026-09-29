@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
-from rendering.gl_programs.scene3d import SCENE3D_GLSL
+from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_motion_fragment, scene3d_motion_vertex
 
 
 PIXEL_ACCRETION_MAX_INSTANCES = 60_000
@@ -106,3 +106,7 @@ uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 void main() { FragColor = texture(uNewTex, vUv); }
 """
+
+# With motion blur: the same shaders, also writing each point's screen motion.
+PIXEL_ACCRETION_MOTION_VERTEX_SOURCE = scene3d_motion_vertex(PIXEL_ACCRETION_VERTEX_SOURCE)
+PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE = scene3d_motion_fragment(PIXEL_ACCRETION_FRAGMENT_SOURCE)

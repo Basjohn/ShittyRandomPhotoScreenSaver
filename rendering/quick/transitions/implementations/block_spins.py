@@ -11,12 +11,15 @@ from rendering.gl_programs.blockspin_program import (
     BLOCK_SPIN_BOX_VERTEX_COUNT,
     BLOCK_SPIN_BOX_VERTICES,
     BLOCK_SPIN_FRAGMENT_SOURCE,
+    BLOCK_SPIN_MOTION_FRAGMENT_SOURCE,
+    BLOCK_SPIN_MOTION_VERTEX_SOURCE,
     BLOCK_SPIN_QUICK_VERTEX_SOURCE,
     BLOCK_SPIN_VERTEX_STRIDE_FLOATS,
     block_spin_edge_glass_mode,
     block_spin_progress,
 )
-from rendering.gl_programs.scene3d import scene3d_request_samples
+from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress
+from rendering.quick.scene3d.motion import motion_uniform_names, set_motion_uniforms
 from rendering.quick.render.gl_resources import compile_program
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SceneTarget
@@ -63,7 +66,8 @@ class QuickBlockSpinsRenderer:
         self._box_vbo = 0
         self._void_uniforms: dict[str, int] = {}
         self._slab_uniforms: dict[str, int] = {}
-        # Only for the High tier: the multisampled target and its composite program.
+        # The scene target (anti-aliasing, motion blur), its composite and the slab's
+        # motion-writing variant.
         self._target = SceneTarget("Quick 3D Block Spins")
         self._target_resources = MeshResources("Quick 3D Block Spins")
 
@@ -82,19 +86,20 @@ class QuickBlockSpinsRenderer:
         if not self._slab_program:
             self._initialize()
         parameters = frame.run.request.parameter_dict()
-        samples = scene3d_request_samples(parameters)
+        motion = bool(parameters.get("motion_blur", False))
+        samples = scene3d_request_samples(parameters) or (1 if motion else 0)
         edge_glass = block_spin_edge_glass_mode(parameters.get("edge_glass", "Off"))
         if samples:
-            with self._target.scope(frame, samples, self._target_resources):
-                self._draw_scene(frame, edge_glass)
+            with self._target.scope(frame, samples, self._target_resources, motion_blur=motion):
+                self._draw_scene(frame, edge_glass, motion)
         else:
-            self._draw_scene(frame, edge_glass)
+            self._draw_scene(frame, edge_glass, False)
 
     def park(self) -> None:
         """Drop the per-run scene target; programs and the slab stay warm."""
         self._target.release()
 
-    def _draw_scene(self, frame: QuickTransitionRenderFrame, edge_glass: int) -> None:
+    def _draw_scene(self, frame: QuickTransitionRenderFrame, edge_glass: int, motion: bool) -> None:
         axis_mode, spin_direction = _block_spin_direction_state(
             frame.run.request.direction
         )
@@ -123,7 +128,13 @@ class QuickBlockSpinsRenderer:
         gl.glDepthFunc(gl.GL_LESS)
 
         uniforms = self._slab_uniforms
-        gl.glUseProgram(self._slab_program)
+        program = self._slab_program
+        if motion:
+            program = self._target_resources.program("slab_motion", BLOCK_SPIN_MOTION_VERTEX_SOURCE,
+                                                     BLOCK_SPIN_MOTION_FRAGMENT_SOURCE)
+            uniforms = self._target_resources.uniforms("slab_motion", tuple(self._slab_uniforms)
+                                                       + motion_uniform_names("uAngle"))
+        gl.glUseProgram(program)
         gl.glUniformMatrix4fv(
             uniforms["uMatrix"],
             1,
@@ -138,6 +149,11 @@ class QuickBlockSpinsRenderer:
         gl.glUniform1f(uniforms["uSpecDirection"], spin_direction)
         gl.glUniform1i(uniforms["uAxisMode"], axis_mode)
         gl.glUniform1i(uniforms["uEdgeGlass"], edge_glass)
+        if motion:
+            # The slab's angle one shutter ago.
+            before = max(frame.sample.eased_progress
+                         - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0)
+            set_motion_uniforms(uniforms, frame, math.pi * block_spin_progress(before) * spin_direction, "uAngle")
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
         gl.glUniform1i(uniforms["uOldTexture"], 0)
@@ -145,7 +161,8 @@ class QuickBlockSpinsRenderer:
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
         gl.glUniform1i(uniforms["uNewTexture"], 1)
         gl.glBindVertexArray(self._box_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, BLOCK_SPIN_BOX_VERTEX_COUNT)
+        with self._target.velocity_writes():
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, BLOCK_SPIN_BOX_VERTEX_COUNT)
 
     def release_resources(self) -> None:
         errors: list[str] = []

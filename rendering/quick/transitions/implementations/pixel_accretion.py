@@ -6,12 +6,15 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.pixel_accretion_program import (
     PIXEL_ACCRETION_FRAGMENT_SOURCE,
+    PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE,
+    PIXEL_ACCRETION_MOTION_VERTEX_SOURCE,
     PIXEL_ACCRETION_QUAD_VERTICES,
     PIXEL_ACCRETION_VERTEX_SOURCE,
     pixel_accretion_grid,
     pixel_accretion_parameters,
 )
-from rendering.gl_programs.scene3d import scene3d_request_samples
+from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress
+from rendering.quick.scene3d.motion import motion_program, set_motion_uniforms
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
 from ..directions import direction_vector
@@ -41,27 +44,27 @@ class QuickPixelAccretionRenderer:
             self._initialize()
             parameters = frame.run.request.parameter_dict()
             seed, tile_size, travel = pixel_accretion_parameters(parameters)
-            samples = scene3d_request_samples(parameters)
+            motion = bool(parameters.get("motion_blur", False))
+            samples = scene3d_request_samples(parameters) or (1 if motion else 0)
             if samples:
-                with self._target.scope(frame, samples, self._resources):
-                    self._draw_scene(frame, progress, seed, tile_size, travel)
+                with self._target.scope(frame, samples, self._resources, motion_blur=motion):
+                    self._draw_scene(frame, progress, seed, tile_size, travel, motion)
             else:
-                self._draw_scene(frame, progress, seed, tile_size, travel)
+                self._draw_scene(frame, progress, seed, tile_size, travel, False)
         except Exception:
             self.release_resources()
             raise
 
-    def _draw_scene(self, frame, progress: float, seed: int, tile_size: int, travel: float) -> None:
+    def _draw_scene(self, frame, progress: float, seed: int, tile_size: int, travel: float, motion: bool) -> None:
         columns, rows, _actual_size = pixel_accretion_grid(
             frame.viewport[2], frame.viewport[3], tile_size
         )
         self._resources.draw_image(frame, frame.source_texture_id)
         self._resources.begin_depth(frame)
-        program = self._resources.program(
-            "microquads", PIXEL_ACCRETION_VERTEX_SOURCE, PIXEL_ACCRETION_FRAGMENT_SOURCE
-        )
-        uniforms = self._resources.uniforms(
-            "microquads", ("uMatrix", "uItemSize", "uNewTex", "uGrid", "uDirection", "uProgress", "uTravel", "uSeed")
+        program, uniforms = motion_program(
+            self._resources, "microquads", (PIXEL_ACCRETION_VERTEX_SOURCE, PIXEL_ACCRETION_FRAGMENT_SOURCE),
+            (PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE),
+            ("uMatrix", "uItemSize", "uNewTex", "uGrid", "uDirection", "uProgress", "uTravel", "uSeed"), motion,
         )
         bind_frame(program, uniforms, frame)
         gl.glUniform2f(uniforms["uGrid"], float(columns), float(rows))
@@ -69,9 +72,13 @@ class QuickPixelAccretionRenderer:
         gl.glUniform1f(uniforms["uProgress"], progress)
         gl.glUniform1f(uniforms["uTravel"], travel)
         gl.glUniform1f(uniforms["uSeed"], float(seed))
+        if motion:
+            set_motion_uniforms(uniforms, frame,
+                                max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0))
         vao, count = self._resources.mesh("microquad", PIXEL_ACCRETION_QUAD_VERTICES, (2, 2))
         gl.glBindVertexArray(vao)
-        gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, columns * rows)
+        with self._target.velocity_writes():
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, columns * rows)
 
     def park(self) -> None:
         """Drop the per-run scene target; the program and mesh stay warm."""

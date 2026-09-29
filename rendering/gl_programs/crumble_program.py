@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rendering.gl_programs.scene3d import SCENE3D_GLSL
+from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_motion_fragment, scene3d_motion_vertex
 
 
 def _chip_vertices() -> tuple[float, ...]:
@@ -104,3 +104,9 @@ DEBRIS_FRAGMENT = """#version 410 core
 // Fine rock grain: an exact integer hash on a 1/300 lattice of the chip surface.
 float sceneRandomRock(vec3 p){uvec3 u=uvec3(ivec3(floor(p*300.))+1048576);return sceneRandom(u.x^(u.y*0x27d4eb2du)^(u.z*0x165667b1u),2u,11u);}
 in vec3 vNormal;in vec3 vRock;in float vMotion;out vec4 FragColor;void main(){float d=.16+.84*max(dot(normalize(vNormal),normalize(vec3(-.4,.62,.7))),0.),grain=sceneRandomRock(vRock);vec3 rock=mix(vec3(.09,.065,.042),vec3(.31,.22,.14),d);rock*=.82+.22*grain;FragColor=vec4(rock*(.72+.28*vMotion),1.);}"""
+
+# With motion blur: the same shaders, also writing each point's screen motion.
+CRUMBLE_MOTION_VERTEX = scene3d_motion_vertex(CRUMBLE_VERTEX)
+CRUMBLE_MOTION_FRAGMENT = scene3d_motion_fragment(CRUMBLE_FRAGMENT)
+DEBRIS_MOTION_VERTEX = scene3d_motion_vertex(DEBRIS_VERTEX)
+DEBRIS_MOTION_FRAGMENT = scene3d_motion_fragment(DEBRIS_FRAGMENT)

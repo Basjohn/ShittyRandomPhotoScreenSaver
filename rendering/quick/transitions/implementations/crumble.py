@@ -6,12 +6,17 @@ from OpenGL import GL as gl
 from rendering.gl_programs.crumble_program import (
     CRUMBLE_CHIP_VERTICES,
     CRUMBLE_FRAGMENT,
+    CRUMBLE_MOTION_FRAGMENT,
+    CRUMBLE_MOTION_VERTEX,
     CRUMBLE_VERTEX,
     DEBRIS_FRAGMENT,
+    DEBRIS_MOTION_FRAGMENT,
+    DEBRIS_MOTION_VERTEX,
     DEBRIS_VERTEX,
 )
 from ..crumble_dynamics import MOTION_FRAMES
-from rendering.gl_programs.scene3d import scene3d_request_samples
+from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress
+from rendering.quick.scene3d.motion import motion_program, set_motion_uniforms
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
 from ..render_contract import QuickTransitionRenderFrame
@@ -62,22 +67,25 @@ class QuickCrumbleRenderer:
                     PREPARED_GEOMETRY.get_or_build(geometry_key, build_crumble_geometry)
                 )
                 self._geometry_key = key
-            samples = scene3d_request_samples(parameters)
+            motion = bool(parameters.get("motion_blur", False))
+            samples = scene3d_request_samples(parameters) or (1 if motion else 0)
+            # With motion blur, where the chunks and chips were one shutter ago.
+            before = max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0) if motion else None
             if samples:
-                with self._target.scope(frame, samples, self._resources):
-                    self._draw_scene(frame, progress, seed, depth, thickness, debris)
+                with self._target.scope(frame, samples, self._resources, motion_blur=motion):
+                    self._draw_scene(frame, progress, seed, depth, thickness, debris, before)
             else:
-                self._draw_scene(frame, progress, seed, depth, thickness, debris)
+                self._draw_scene(frame, progress, seed, depth, thickness, debris, None)
         except Exception:
             self.release_resources()
             raise
 
-    def _draw_scene(self, frame, progress, seed, depth, thickness, debris) -> None:
+    def _draw_scene(self, frame, progress, seed, depth, thickness, debris, before) -> None:
         self._resources.draw_image(frame, frame.destination_texture_id)
         self._resources.begin_depth(frame)
-        self._draw_chunks(frame, progress, seed, depth, thickness)
+        self._draw_chunks(frame, progress, seed, depth, thickness, before)
         if debris > 0.0:
-            self._draw_debris(frame, progress, depth, debris)
+            self._draw_debris(frame, progress, depth, debris, before)
 
     def park(self) -> None:
         """Drop the per-run scene target; programs and geometry stay warm."""
@@ -136,12 +144,12 @@ class QuickCrumbleRenderer:
         )
         gl.glActiveTexture(gl.GL_TEXTURE0)
 
-    def _draw_chunks(self, frame, progress, seed, depth, thickness) -> None:
-        program = self._resources.program("chunks", CRUMBLE_VERTEX, CRUMBLE_FRAGMENT)
+    def _draw_chunks(self, frame, progress, seed, depth, thickness, before) -> None:
         # Release order and motion are per-chunk attributes; uSeed only varies
         # the crack stroke timing in the fragment stage.
-        u = self._resources.uniforms(
-            "chunks",
+        program, u = motion_program(
+            self._resources, "chunks", (CRUMBLE_VERTEX, CRUMBLE_FRAGMENT),
+            (CRUMBLE_MOTION_VERTEX, CRUMBLE_MOTION_FRAGMENT),
             (
                 "uMatrix",
                 "uItemSize",
@@ -153,6 +161,7 @@ class QuickCrumbleRenderer:
                 "uMotion",
                 "uMotionFrames",
             ),
+            before is not None,
         )
         bind_frame(program, u, frame)
         for name, value in (
@@ -167,13 +176,16 @@ class QuickCrumbleRenderer:
         gl.glBindTexture(gl.GL_TEXTURE_2D, self._motion_texture)
         gl.glUniform1i(u["uMotion"], 1)
         gl.glActiveTexture(gl.GL_TEXTURE0)
+        if before is not None:
+            set_motion_uniforms(u, frame, before)
         gl.glBindVertexArray(self._chunk_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._chunk_count)
+        with self._target.velocity_writes():
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._chunk_count)
 
-    def _draw_debris(self, frame, progress, depth, debris) -> None:
-        program = self._resources.program("debris", DEBRIS_VERTEX, DEBRIS_FRAGMENT)
-        u = self._resources.uniforms(
-            "debris",
+    def _draw_debris(self, frame, progress, depth, debris, before) -> None:
+        program, u = motion_program(
+            self._resources, "debris", (DEBRIS_VERTEX, DEBRIS_FRAGMENT),
+            (DEBRIS_MOTION_VERTEX, DEBRIS_MOTION_FRAGMENT),
             (
                 "uMatrix",
                 "uItemSize",
@@ -181,6 +193,7 @@ class QuickCrumbleRenderer:
                 "uDepth",
                 "uDebris",
             ),
+            before is not None,
         )
         bind_frame(program, u, frame)
         for name, value in (
@@ -189,9 +202,12 @@ class QuickCrumbleRenderer:
             ("uDebris", debris),
         ):
             gl.glUniform1f(u[name], value)
+        if before is not None:
+            set_motion_uniforms(u, frame, before)
         vao, count = self._resources.mesh("debris_chip", CRUMBLE_CHIP_VERTICES, (3, 3))
         gl.glBindVertexArray(vao)
-        gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, self._debris_count)
+        with self._target.velocity_writes():
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, self._debris_count)
 
     def release_resources(self) -> None:
         errors = []

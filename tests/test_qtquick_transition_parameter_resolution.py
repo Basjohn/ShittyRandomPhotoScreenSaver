@@ -46,9 +46,9 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
 @pytest.mark.parametrize(
     ("transition_id", "section", "expected_direction", "expected_keys"),
     [
-        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen", "collisions", "reshatter", "detail", "samples"}),
+        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen", "collisions", "reshatter", "detail", "samples", "motion_blur"}),
         ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force", "detail", "samples", "bloom", "motion_blur"}),
-        ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel", "detail", "samples"}),
+        ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel", "detail", "samples", "motion_blur"}),
         ("melt_drip", "melt_drip", "center_in", {"seed", "detail", "depth", "gloss"}),
     ],
 )
@@ -319,8 +319,11 @@ def test_a_transitions_own_quality_choices_are_authoritative_over_the_tier():
     params = quality("High", {"antialiasing": "16x", "bloom": "Maybe", "motion_blur": "Sometimes"})
     assert params["samples"] == SCENE3D_DETAIL_TIERS["High"].samples
     assert params["motion_blur"] is SCENE3D_DETAIL_TIERS["High"].post_effects
-    # Other 3D transitions take their own anti-aliasing the same way.
+    # Other 3D transitions take their own anti-aliasing and motion blur the same way.
     for transition in ("glass_shatter", "crumble", "pixel_accretion"):
         assert quality("High", {"antialiasing": "2x"}, transition)["samples"] == 2
         assert quality("Performance", {}, transition)["samples"] == 0
+        assert quality("Performance", {"motion_blur": "On"}, transition)["motion_blur"] is True
+        assert quality("High", {"motion_blur": "Off"}, transition)["motion_blur"] is False
+        assert quality("High", {}, transition)["motion_blur"] is SCENE3D_DETAIL_TIERS["High"].post_effects
 

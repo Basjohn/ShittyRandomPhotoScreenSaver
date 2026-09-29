@@ -259,12 +259,14 @@ def test_a_transitions_anti_aliasing_choice_decides_the_scene_target(qt_app, eff
     try:
         section = "blockspin" if effect == "block_spins" else effect
         renderer = None
-        for tier, choice, expected in (("Performance", "4x", True), ("High", "Off", False), ("High", "Auto", True)):
+        # Anti-aliasing alone decides the target while motion blur is off; motion blur needs one too.
+        for tier, choice, motion_blur, expected in (("Performance", "4x", "Off", True), ("High", "Off", "Off", False),
+                                                    ("High", "Auto", "Off", True), ("Performance", "Off", "On", True)):
             run = capture.run(effect, direction=direction, duration_ms=8000,
-                              settings={"detail_3d": tier, section: {"antialiasing": choice}})
+                              settings={"detail_3d": tier, section: {"antialiasing": choice, "motion_blur": motion_blur}})
             capture.render(run, 0.45)
             renderer = capture.host._implementations[effect]
-            assert renderer._target.has_resources is expected, (tier, choice)
+            assert renderer._target.has_resources is expected, (tier, choice, motion_blur)
             capture.host.park()
     finally:
         capture.close()
@@ -290,6 +292,32 @@ def test_motion_blur_blurs_only_moving_tiles_and_follows_the_transition_setting(
         # Its textures are per run: the host's park drops them with the target.
         renderer = capture.host._implementations["exploding_tiles"]
         assert renderer._target.has_resources
+        capture.host.park()
+        assert not renderer._target.has_resources
+    finally:
+        capture.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("effect,direction", _MIGRATED)
+def test_every_3d_transition_blurs_its_motion_and_stays_exact_when_nothing_moves(qt_app, effect, direction):
+    """Motion blur for Glass Shatter, Crumble, Directional Pixel Accretion and 3D Block Spins."""
+    capture = TransitionCapture(256, 144)
+    try:
+        section = "blockspin" if effect == "block_spins" else effect
+
+        def frame(motion_blur, progress, duration_ms):
+            run = capture.run(effect, direction=direction, duration_ms=duration_ms,
+                              settings={"detail_3d": "High", section: {"motion_blur": motion_blur}})
+            return np.asarray(capture.render(run, progress)[0], dtype=np.int16)
+
+        # When its pieces move fastest, at a short duration, they blur...
+        progress = {"glass_shatter": 0.3, "crumble": 0.6}.get(effect, 0.45)
+        moving = np.abs(frame("On", progress, 1500) - frame("Off", progress, 1500))
+        assert moving.mean() > 0.05 and moving.max() > 16, effect
+        # ...and over a very long run a shutter moves nothing by half a pixel: exact.
+        assert np.array_equal(frame("On", progress, 600_000), frame("Off", progress, 600_000)), effect
+        renderer = capture.host._implementations[effect]
         capture.host.park()
         assert not renderer._target.has_resources
     finally:

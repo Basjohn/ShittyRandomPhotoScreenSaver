@@ -4,9 +4,10 @@ from __future__ import annotations
 from OpenGL import GL as gl
 
 from rendering.gl_programs.glass_shatter_program import (
-    GLASS_FRAGMENT, GLASS_VERTEX,
+    GLASS_FRAGMENT, GLASS_MOTION_FRAGMENT, GLASS_MOTION_VERTEX, GLASS_VERTEX,
 )
-from rendering.gl_programs.scene3d import scene3d_request_samples
+from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress
+from rendering.quick.scene3d.motion import motion_program, set_motion_uniforms
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
 from ..directions import direction_vector
@@ -48,24 +49,25 @@ class QuickGlassShatterRenderer:
                 geometry = PREPARED_GEOMETRY.get_or_build(geometry_key, build_glass_geometry)
                 self._vao, self._count = resources.mesh("shards", geometry.vertices, GLASS_ATTRIBUTES)
                 self._geometry_key = key
-            samples = scene3d_request_samples(params)
+            motion = bool(params.get("motion_blur", False))
+            samples = scene3d_request_samples(params) or (1 if motion else 0)
             if samples:
-                with self._target.scope(frame, samples, resources):
-                    self._draw_scene(frame, progress, params)
+                with self._target.scope(frame, samples, resources, motion_blur=motion):
+                    self._draw_scene(frame, progress, params, motion)
             else:
-                self._draw_scene(frame, progress, params)
+                self._draw_scene(frame, progress, params, False)
         except Exception:
             self.release_resources()
             raise
 
-    def _draw_scene(self, frame, progress: float, params) -> None:
+    def _draw_scene(self, frame, progress: float, params, motion: bool) -> None:
         resources = self._resources
         resources.draw_image(frame, frame.destination_texture_id)
-        program = resources.program("glass", GLASS_VERTEX, GLASS_FRAGMENT)
-        uniforms = resources.uniforms("glass", (
+        program, uniforms = motion_program(resources, "glass", (GLASS_VERTEX, GLASS_FRAGMENT),
+                                           (GLASS_MOTION_VERTEX, GLASS_MOTION_FRAGMENT), (
             "uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uDepth", "uDirection", "uRadial",
             "uThickness", "uTransparency", "uRefraction", "uDispersion", "uSheen",
-        ))
+        ), motion)
         resources.begin_depth(frame)
         bind_frame(program, uniforms, frame)
         radial = frame.run.request.direction == "center_out"
@@ -76,8 +78,12 @@ class QuickGlassShatterRenderer:
         gl.glUniform1f(uniforms["uDepth"], float(params["depth"]))
         for name in ("thickness", "transparency", "refraction", "dispersion", "sheen"):
             gl.glUniform1f(uniforms["u" + name.capitalize()], float(params[name]))
+        if motion:
+            set_motion_uniforms(uniforms, frame,
+                                max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0))
         gl.glBindVertexArray(self._vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
+        with self._target.velocity_writes():
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
 
     def park(self) -> None:
         """Drop the per-run scene target; programs and shard geometry stay warm."""

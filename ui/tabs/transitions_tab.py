@@ -1079,19 +1079,22 @@ class TransitionsTab(QWidget):
     _AUTO_TIP = " Auto follows 3D Detail on the SETUP page."
     _ANTIALIASING_CONTROL = ("antialiasing", "Anti-aliasing:", SCENE3D_ANTIALIASING_CHOICES,
                              "Multisampling that smooths the 3D edges; 4x and 8x cost the most GPU time." + _AUTO_TIP)
+    _MOTION_BLUR_CONTROL = ("motion_blur", "Motion Blur:", SCENE3D_EFFECT_CHOICES,
+                            "Blurs fast pieces along their motion, as a camera would; still parts stay sharp."
+                            + _AUTO_TIP)
     _SCENE3D_CHOICES = {
         "exploding_tiles": (
             _ANTIALIASING_CONTROL,
             ("bloom", "Bloom:", SCENE3D_EFFECT_CHOICES,
              "Glow around sparks, hot edges and glowing cracks; the photographs never glow." + _AUTO_TIP),
-            ("motion_blur", "Motion Blur:", SCENE3D_EFFECT_CHOICES,
-             "Blurs fast pieces along their motion, as a camera would; still parts stay sharp." + _AUTO_TIP),
+            _MOTION_BLUR_CONTROL,
         ),
-        "glass_shatter": (_ANTIALIASING_CONTROL,),
-        "crumble": (_ANTIALIASING_CONTROL,),
-        "pixel_accretion": (_ANTIALIASING_CONTROL,),
+        "glass_shatter": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL),
+        "crumble": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL),
+        "pixel_accretion": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL),
         "blockspin": (
             _ANTIALIASING_CONTROL,
+            _MOTION_BLUR_CONTROL,
             ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
              "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
              "The sheen and gloss stay."),

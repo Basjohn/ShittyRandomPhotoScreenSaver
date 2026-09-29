@@ -20,7 +20,8 @@ What an effect gets from ``SCENE3D_GLSL``:
 * ``sceneCastOnPlane`` / ``sceneSoftRect`` -- soft planar shadows on the photograph;
 * ``sceneStreak`` -- camera-facing motion streaks for sparks and debris;
 * ``sceneVelocity`` -- a surface point's screen motion over the shutter, for motion blur
-  (``SCENE3D_SHUTTER_SECONDS``, ``scene3d_shutter_progress``).
+  (``SCENE3D_SHUTTER_SECONDS``, ``scene3d_shutter_progress``); ``scene3d_motion_vertex`` /
+  ``scene3d_motion_fragment`` make any effect's shaders write it.
 
 Import-safe: strings and pure math only. Programs, buffers and every per-effect
 decision stay with the consuming renderer; this owns no state or clock.
@@ -29,6 +30,7 @@ decision stay with the consuming renderer; this owns no state or clock.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 
 
@@ -112,6 +114,16 @@ SCENE3D_FAR = 9.0
 _KEY = (-0.38, 0.57, 0.73)
 _KEY_LENGTH = math.sqrt(sum(value * value for value in _KEY))
 SCENE3D_KEY_LIGHT = tuple(value / _KEY_LENGTH for value in _KEY)
+
+SCENE3D_VELOCITY_GLSL = """
+// How far a surface point moved on screen over the shutter, in target pixels: its clip
+// position now minus its clip position at t - shutter (both evaluated analytically).
+// A point behind the camera at either time contributes no motion.
+vec2 sceneVelocity(vec4 clipNow, vec4 clipPrevious, vec2 viewportPixels) {
+    if (clipNow.w <= 0.0 || clipPrevious.w <= 0.0) return vec2(0.0);
+    return (clipNow.xy / clipNow.w - clipPrevious.xy / clipPrevious.w) * 0.5 * viewportPixels;
+}
+"""
 
 SCENE3D_GLSL = f"""
 const float SCENE_CAMERA = {SCENE3D_CAMERA:.6f};
@@ -259,14 +271,74 @@ vec4 sceneStreak(mat4 matrix, vec2 itemSize, vec3 tail, vec3 head, float width, 
     clip.z = sceneClipDepth(w) / w * clip.w;
     return clip;
 }}
+""" + SCENE3D_VELOCITY_GLSL
 
-// How far a surface point moved on screen over the shutter, in target pixels: its clip
-// position now minus its clip position at t - shutter (both evaluated analytically).
-// A point behind the camera at either time contributes no motion.
-vec2 sceneVelocity(vec4 clipNow, vec4 clipPrevious, vec2 viewportPixels) {{
-    if (clipNow.w <= 0.0 || clipPrevious.w <= 0.0) return vec2(0.0);
-    return (clipNow.xy / clipNow.w - clipPrevious.xy / clipPrevious.w) * 0.5 * viewportPixels;
+
+_CULLED = "vec4(2.0, 2.0, 2.0, 1.0)"   # the effects' off-screen sentinel for a piece not yet in play
+_UNIFORM_STATEMENT = re.compile(r"^\s*(?://[^\n]*\n\s*)*uniform\b")
+
+
+def _after_version(source: str, insert: str) -> str:
+    head, newline, rest = source.partition("\n")
+    if not head.startswith("#version") or not newline:
+        raise ValueError("a shader for motion blur must start with its #version line")
+    return head + "\n" + insert + rest
+
+
+def _rename_main(source: str, name: str) -> str:
+    if len(re.findall(r"\bvoid\s+main\s*\(\s*\)", source)) != 1:
+        raise ValueError("a shader for motion blur must define main() exactly once")
+    return re.sub(r"\bvoid\s+main\s*\(\s*\)", f"void {name}()", source)
+
+
+def scene3d_motion_vertex(source: str, time_uniform: str = "uProgress") -> str:
+    """The same vertex shader, also giving where each point was one shutter ago.
+
+    ``time_uniform`` must be the shader's only input that changes over the run.
+    Every use of it (but its declaration) reads the global ``sceneTime``, and
+    ``main`` runs twice: at ``<time_uniform>Before`` (the value one shutter ago,
+    set by the renderer) and at ``time_uniform``, so every output is the current
+    one. ``vClipNow`` / ``vClipBefore`` carry both clip positions to
+    ``scene3d_motion_fragment``. A point that was not in play a shutter ago (the
+    off-screen sentinel) has no motion.
+    """
+    uses = re.compile(rf"\b{re.escape(time_uniform)}\b")
+    statements = source.split(";")
+    if not any(_UNIFORM_STATEMENT.match(statement) and uses.search(statement) for statement in statements):
+        raise ValueError(f"the shader does not declare {time_uniform}")
+    source = ";".join(statement if _UNIFORM_STATEMENT.match(statement) else uses.sub("sceneTime", statement)
+                      for statement in statements)
+    source = _rename_main(source, "sceneVertexMain")
+    source = _after_version(source, f"float sceneTime;\nuniform float {time_uniform}Before;\n"
+                                    "out vec4 vClipNow;\nout vec4 vClipBefore;\n")
+    return source + f"""
+void main() {{
+    sceneTime = {time_uniform}Before;
+    sceneVertexMain();
+    vec4 before = gl_Position;
+    sceneTime = {time_uniform};
+    sceneVertexMain();
+    vClipNow = gl_Position;
+    vClipBefore = before == {_CULLED} ? gl_Position : before;
 }}
+"""
+
+
+def scene3d_motion_fragment(source: str) -> str:
+    """The same fragment shader, also writing its screen motion to location 1."""
+    if len(re.findall(r"\bout\s+vec4\s+FragColor\s*;", source)) != 1:
+        raise ValueError("a shader for motion blur must write one vec4 FragColor")
+    source = re.sub(r"(?:layout\s*\(\s*location\s*=\s*0\s*\)\s*)?\bout\s+vec4\s+FragColor\s*;",
+                    "layout(location = 0) out vec4 FragColor;", source)
+    source = _rename_main(source, "sceneFragmentMain")
+    velocity = "" if "sceneVelocity" in source else SCENE3D_VELOCITY_GLSL
+    source = _after_version(source, "in vec4 vClipNow;\nin vec4 vClipBefore;\nuniform vec2 uViewport;\n"
+                                    "layout(location = 1) out vec4 SceneMotion;\n" + velocity)
+    return source + """
+void main() {
+    sceneFragmentMain();
+    SceneMotion = vec4(sceneVelocity(vClipNow, vClipBefore, uViewport), 0.0, 1.0);
+}
 """
 
 
