@@ -294,7 +294,14 @@ def test_the_3d_detail_tier_reaches_the_run_and_unknown_values_use_the_default(s
 
 
 def test_a_transitions_own_quality_choices_are_authoritative_over_the_tier():
-    from rendering.gl_programs.scene3d import SCENE3D_DETAIL_TIERS
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.scene3d import SCENE3D_DETAIL_TIERS, scene3d_post_effect, scene3d_samples
+
+    def canonical(transition, field, tier="High"):
+        """What an unknown or missing stored choice resolves to: the canonical default's effect."""
+        choice = require_canonical_default(f"transitions.{transition}.{field}")
+        detail = SCENE3D_DETAIL_TIERS[tier]
+        return scene3d_samples(detail, choice) if field == "antialiasing" else scene3d_post_effect(detail, choice)
 
     def quality(detail_3d, section_values, transition="exploding_tiles"):
         settings = {"detail_3d": detail_3d, transition: section_values}
@@ -315,15 +322,15 @@ def test_a_transitions_own_quality_choices_are_authoritative_over_the_tier():
     assert params["samples"] == 8 and params["bloom"] == pytest.approx(0.4) and params["motion_blur"] is True
     params = quality("High", {"antialiasing": "Off", "bloom": "Off", "motion_blur": "Off"})
     assert params["samples"] == 0 and params["bloom"] == 0.0 and params["motion_blur"] is False
-    # Unknown stored choices repair to the canonical (Auto) behaviour.
+    # Unknown stored choices repair to the canonical default's behaviour.
     params = quality("High", {"antialiasing": "16x", "bloom": "Maybe", "motion_blur": "Sometimes"})
-    assert params["samples"] == SCENE3D_DETAIL_TIERS["High"].samples
-    assert params["motion_blur"] is SCENE3D_DETAIL_TIERS["High"].post_effects
+    assert params["samples"] == canonical("exploding_tiles", "antialiasing")
+    assert params["motion_blur"] is canonical("exploding_tiles", "motion_blur")
     # Other 3D transitions take their own anti-aliasing and motion blur the same way.
     for transition in ("glass_shatter", "crumble", "pixel_accretion"):
         assert quality("High", {"antialiasing": "2x"}, transition)["samples"] == 2
-        assert quality("Performance", {}, transition)["samples"] == 0
+        assert quality("Performance", {}, transition)["samples"] == canonical(transition, "antialiasing", "Performance")
         assert quality("Performance", {"motion_blur": "On"}, transition)["motion_blur"] is True
         assert quality("High", {"motion_blur": "Off"}, transition)["motion_blur"] is False
-        assert quality("High", {}, transition)["motion_blur"] is SCENE3D_DETAIL_TIERS["High"].post_effects
+        assert quality("High", {}, transition)["motion_blur"] is canonical(transition, "motion_blur")
 

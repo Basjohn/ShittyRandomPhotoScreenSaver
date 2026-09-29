@@ -181,7 +181,7 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   Geometric stretching would need translucency, and so sorting, on opaque depth-tested pieces.
 - **Landed:** `rendering/quick/scene3d/motion.py` (`MotionBlur`: separable tile max, neighbour max, 16-tap gather),
   `SceneTarget.scope(..., motion_blur=)` with a write-protected RG16F attachment opened by `velocity_writes()`, and an
-  MRT resolve of colour and motion. `sceneVelocity` plus `scene3d_velocity` mirror, `SCENE3D_SHUTTER_SECONDS` (1/120 s)
+  MRT resolve of colour and motion. `sceneVelocity` plus `scene3d_velocity` mirror, `SCENE3D_SHUTTER_SECONDS` (1/120 s at first; 1/60 s since the operator found it weak)
   and `scene3d_shutter_progress`. Exploding Tiles: `tileAtTime` and the slabs write motion; Motion Blur on its page.
   Motion Blur Off is pixel-identical to before (54 frames, all tiers). Cost at 1440p (RTX 4090): +0.08 ms GPU at 4x,
   ~+0.25 ms CPU submit, ~105 MB VRAM per display at 4x during a run.

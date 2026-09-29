@@ -108,9 +108,10 @@ def scene3d_request_samples(parameters) -> int:
     return int(parameters.get("samples", 0))
 
 
-# Motion blur's shutter in real seconds (a 180-degree shutter at 60 Hz). Real time, not
-# progress, so a piece blurs by how fast it moves on screen whatever the run's duration.
-SCENE3D_SHUTTER_SECONDS = 1.0 / 120.0
+# Motion blur's shutter in real seconds: the whole frame interval at 60 Hz (a 360-degree
+# shutter; 180 degrees read too weak on real photos). Real time, not progress, so a piece
+# blurs by how fast it moves on screen whatever the run's duration.
+SCENE3D_SHUTTER_SECONDS = 1.0 / 60.0
 
 
 def scene3d_shutter_progress(duration_ms: float) -> float:
