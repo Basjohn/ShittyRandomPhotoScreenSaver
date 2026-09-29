@@ -1478,6 +1478,12 @@ class QuickSceneController(QObject):
             "update_requests": int(root.property("transitionFrameUpdateRequests") or 0),
         }
 
+    def request_transition_warm_up(self, transition_id: str, parameters) -> None:
+        """Warm the next run gradually on this display's render thread (S11)."""
+        if not self._readiness.admission_open:
+            return
+        self.background_item.request_warm_up(transition_id, parameters)
+
     def set_transition_run(self, run: TransitionRun | None) -> bool:
         """Publish the current generation-fenced run into the Quick sync path."""
 

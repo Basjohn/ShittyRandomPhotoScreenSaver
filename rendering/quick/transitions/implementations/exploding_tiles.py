@@ -31,12 +31,12 @@ from rendering.gl_programs.exploding_tiles_program import (
     exploding_tiles_sparks_live,
 )
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress, scene3d_trail_ghosts
-from rendering.quick.scene3d.environment import PhotoEnvironment
+from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.particles import draw_particles, particle_budget
-from rendering.quick.scene3d.resources import MeshResources, bind_frame
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
 from rendering.quick.scene3d.shadows import draw_planar_shadows
-from rendering.quick.scene3d.trails import MotionTrails, trail_program
-from rendering.quick.scene3d.target import SceneTarget
+from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
 from ..render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
@@ -103,6 +103,28 @@ class QuickExplodingTilesRenderer:
         except Exception:
             self.release_resources()
             raise
+
+    def warm(self, parameters) -> bool:
+        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
+        between runs): True once that run's first frame will compile nothing."""
+        (_seed, _columns, _depth, _thickness, _force, detail_name, samples, bloom,
+         motion_blur, trails) = exploding_tiles_parameters(parameters)
+        detail = scene3d_detail(detail_name)
+        samples = samples or (1 if bloom > 0.0 or motion_blur or trails else 0)
+        r = self._resources
+        entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
+                   (r, "backdrop", QUICK_TRANSITION_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE)]
+        if detail.shadows:
+            entries.append((r, "shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE))
+        entries.append((r, "tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE))
+        if particle_budget(EXPLODING_TILES_SPARKS, detail):
+            entries.append((r, "sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE))
+        if trails:
+            entries += [(r, "tiles_ghost", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_GHOST_FRAGMENT_SOURCE),
+                        (r, *TRAIL_EDGES_PROGRAM)]
+        if samples:
+            entries += [(r, *program) for program in scene_target_programs(samples, bloom > 0.0, motion_blur)]
+        return warm_programs(entries)
 
     def _draw_scene(self, frame, grid, detail, progress: float, force: float, center_out: bool,
                     environment: int, trail_values=None) -> None:

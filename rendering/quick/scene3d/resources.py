@@ -61,6 +61,24 @@ def pack_floats(values) -> bytes:
     return array("f", values).tobytes()
 
 
+# (key, vertex, fragment) of the image underlay ``draw_image`` uses (for a gradual warm-up).
+UNDERLAY_PROGRAM = ("underlay", ITEM_QUAD_VERTEX_SOURCE, _IMAGE_FRAGMENT)
+
+
+def warm_programs(entries) -> bool:
+    """One step of a gradual warm-up over (resources, key, vertex, fragment) entries: compile
+    the first program not yet compiled, and only that one. True once all are compiled.
+
+    An ordinary synchronous compile on the calling (render) thread: no driver compile threads,
+    no status polling, nothing left running between steps."""
+    for resources, key, vertex, fragment in entries:
+        if resources.has_program(key):
+            continue
+        resources.program(key, vertex, fragment)
+        return False
+    return True
+
+
 def bind_frame(program: int, uniforms: dict[str, int], frame: SceneFrame) -> None:
     """Use the program with the frame's matrix and item size; a transition frame's
     source/destination textures bind to units 0/1 when the program declares them."""
@@ -94,6 +112,9 @@ class MeshResources:
         if key not in self._programs:
             self._programs[key] = compile_program(vertex_source, fragment_source, label=f"{self.label} {key}")
         return self._programs[key]
+
+    def has_program(self, key: str) -> bool:
+        return key in self._programs
 
     def uniforms(self, key: str, names: tuple[str, ...], *, required: bool = True) -> dict[str, int]:
         """Uniform locations, looked up once. A missing uniform is an error unless the program is

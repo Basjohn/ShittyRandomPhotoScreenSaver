@@ -110,6 +110,17 @@ def canonical_enabled_transition_ids(values: Iterable[object]) -> frozenset[str]
     return frozenset(enabled)
 
 
+def preload_quick_transition_implementation(transition_id: object) -> None:
+    """Import one transition's renderer module ahead of its first run (GUI thread), so the
+    render thread's resolve is instant. Constructs nothing and touches no GL."""
+    canonical = get_transition_descriptor_for_runtime_identity(transition_id)
+    if canonical is None:
+        raise ValueError(f"unknown canonical transition: {transition_id!r}")
+    descriptor = _BY_ID.get(canonical.stable_id)
+    if descriptor is not None and is_transition_available(canonical.setting_name):
+        import_module(descriptor.module_name)
+
+
 def resolve_quick_transition_renderer(
     transition_id: object,
     *,

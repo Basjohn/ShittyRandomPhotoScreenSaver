@@ -149,3 +149,6 @@ class MotionTrails:
         self._size = None
         if errors:
             raise RuntimeError(f"{self.label} motion trails cleanup incomplete: {' | '.join(errors)}")
+
+# (key, vertex, fragment) of the edge pass (for a gradual warm-up).
+TRAIL_EDGES_PROGRAM = ("trail_edges", FULLSCREEN_VERTEX_SOURCE, _EDGE_FRAGMENT)

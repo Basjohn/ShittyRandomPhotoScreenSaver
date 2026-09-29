@@ -11,7 +11,6 @@ order; commit and push each slice; tests and measurements before looks change.
 
 - [ ] **Motion Trails CPU:** each ghost re-sets its program's uniforms through PyOpenGL (+0.5-1.0 ms CPU per frame at 1440p when On). Set the shared uniforms once per trail pass and vary only time and fade per ghost; measure CPU submit before and after.
 - [ ] **S10** Cheaper High beyond the shader resolve (landed), only if physical testing shows the cost matters.
-- [ ] **S11** First-frame program compile, only if the installed build's frame trace shows the hitch.
 
 ## Memory and handles | open development items
 

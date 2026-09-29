@@ -35,8 +35,8 @@ from OpenGL import GL as gl
 from rendering.quick import gl_query
 
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame, item_pixel_rect
-from .motion import MotionBlur
-from .post import FULLSCREEN_VERTEX_SOURCE, BloomChain
+from .motion import MOTION_BLUR_PROGRAMS, MotionBlur
+from .post import BLOOM_PROGRAMS, FULLSCREEN_VERTEX_SOURCE, BloomChain
 
 SCENE_TARGET_BUCKET = 64
 
@@ -102,6 +102,27 @@ void main() {
     Motion = vec4(sum / float(uSamples), 0.0, 1.0);
 }
 """)
+
+
+def scene_target_programs(samples: int, bloom: bool, motion: bool) -> tuple[tuple[str, str, str], ...]:
+    """(key, vertex, fragment) of every program ``end`` draws with for this setup, for a gradual
+    warm-up. Keep in step with ``end`` (the warm-up bar renders a first frame that must compile
+    nothing)."""
+    multisampled = int(samples) > 1
+    if not (bloom or motion):
+        if multisampled:
+            return (("scene_composite_samples", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_SAMPLES_FRAGMENT),)
+        return (("scene_composite", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_FRAGMENT),)
+    programs: list[tuple[str, str, str]] = []
+    if multisampled:
+        programs.append(("scene_resolve_motion", FULLSCREEN_VERTEX_SOURCE, _RESOLVE_MOTION_FRAGMENT) if motion
+                        else ("scene_resolve", FULLSCREEN_VERTEX_SOURCE, _RESOLVE_FRAGMENT))
+    if motion:
+        programs.extend(MOTION_BLUR_PROGRAMS)
+    if bloom:
+        programs.extend(BLOOM_PROGRAMS)
+    programs.append(("scene_composite", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_FRAGMENT))
+    return tuple(programs)
 
 
 def _bucket(size: int) -> int:

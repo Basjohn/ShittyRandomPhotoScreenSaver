@@ -16,9 +16,9 @@ from rendering.gl_programs.pixel_accretion_program import (
 )
 from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress, scene3d_trail_ghosts
 from rendering.quick.scene3d.motion import motion_program, motion_uniform_names, set_motion_uniforms
-from rendering.quick.scene3d.trails import MotionTrails, trail_program
-from rendering.quick.scene3d.resources import MeshResources, bind_frame
-from rendering.quick.scene3d.target import SceneTarget
+from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from ..directions import direction_vector
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -58,6 +58,26 @@ class QuickPixelAccretionRenderer:
         except Exception:
             self.release_resources()
             raise
+
+    def warm(self, parameters) -> bool:
+        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
+        between runs): True once that run's first frame will compile nothing."""
+        motion = bool(parameters.get("motion_blur", False))
+        trails = bool(parameters.get("motion_trails", False))
+        samples = scene3d_request_samples(parameters) or (1 if motion or trails else 0)
+        r = self._resources
+        # render() always prepares the plain program (``_initialize``), motion blur or not.
+        entries = [(r, *UNDERLAY_PROGRAM),
+                   (r, "microquads", PIXEL_ACCRETION_VERTEX_SOURCE, PIXEL_ACCRETION_FRAGMENT_SOURCE)]
+        if motion:
+            entries.append((r, "microquads_motion", PIXEL_ACCRETION_MOTION_VERTEX_SOURCE,
+                            PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE))
+        if trails:
+            entries += [(r, "microquads_ghost", PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE),
+                        (r, *TRAIL_EDGES_PROGRAM)]
+        if samples:
+            entries += [(r, *program) for program in scene_target_programs(samples, False, motion)]
+        return warm_programs(entries)
 
     def _draw_scene(self, frame, progress: float, seed: int, tile_size: int, travel: float, motion: bool,
                     trails: bool = False) -> None:

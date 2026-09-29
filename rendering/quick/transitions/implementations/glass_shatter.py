@@ -7,11 +7,11 @@ from rendering.gl_programs.glass_shatter_program import (
     GLASS_FRAGMENT, GLASS_GHOST_FRAGMENT, GLASS_MOTION_FRAGMENT, GLASS_MOTION_VERTEX, GLASS_VERTEX,
 )
 from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress, scene3d_trail_ghosts
-from rendering.quick.scene3d.environment import PhotoEnvironment
+from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.motion import motion_program, motion_uniform_names, set_motion_uniforms
-from rendering.quick.scene3d.trails import MotionTrails, trail_program
-from rendering.quick.scene3d.resources import MeshResources, bind_frame
-from rendering.quick.scene3d.target import SceneTarget
+from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from ..directions import direction_vector
 from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import (
@@ -67,6 +67,24 @@ class QuickGlassShatterRenderer:
         except Exception:
             self.release_resources()
             raise
+
+    def warm(self, parameters) -> bool:
+        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
+        between runs): True once that run's first frame will compile nothing."""
+        motion = bool(parameters.get("motion_blur", False))
+        trails = bool(parameters.get("motion_trails", False))
+        samples = scene3d_request_samples(parameters) or (1 if motion or trails else 0)
+        r = self._resources
+        entries = [(r, *UNDERLAY_PROGRAM)]
+        if float(parameters.get("sheen", 0.0)) > 0.0:
+            entries.append((r, *PHOTO_ENVIRONMENT_PROGRAM))
+        entries.append((r, "glass_motion", GLASS_MOTION_VERTEX, GLASS_MOTION_FRAGMENT) if motion
+                       else (r, "glass", GLASS_VERTEX, GLASS_FRAGMENT))
+        if trails:
+            entries += [(r, "glass_ghost", GLASS_MOTION_VERTEX, GLASS_GHOST_FRAGMENT), (r, *TRAIL_EDGES_PROGRAM)]
+        if samples:
+            entries += [(r, *program) for program in scene_target_programs(samples, False, motion)]
+        return warm_programs(entries)
 
     def _draw_scene(self, frame, progress: float, params, motion: bool, environment: int,
                     trails: bool = False) -> None:
