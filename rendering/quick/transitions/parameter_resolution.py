@@ -260,7 +260,7 @@ def _resolve_crumble(
             **_surface_values(cfg, defaults, ("thickness", "debris")),
             "weight_mode": weight_mode,
             "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
-            **resolve_scene_quality(settings, cfg, defaults),
+            **resolve_scene_quality(settings, cfg, defaults, motion_blur=True),
         },
     )
 
@@ -655,7 +655,7 @@ def resolve_scene_quality(settings: Mapping[str, object], cfg: Mapping[str, obje
 def resolve_block_spins_parameters(settings: Mapping[str, object], cfg: Mapping[str, object],
                                    defaults: Mapping[str, object]) -> dict[str, object]:
     """3D Block Spins' request parameters: its quality plus its Edge Glass look."""
-    parameters = resolve_scene_quality(settings, cfg, defaults)
+    parameters = resolve_scene_quality(settings, cfg, defaults, motion_blur=True)
     parameters["edge_glass"] = _scene_choice(cfg, defaults, "edge_glass", BLOCK_SPIN_EDGE_GLASS_CHOICES)
     return parameters
 
@@ -686,7 +686,7 @@ def _resolve_glass_shatter(
                                "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
                                "reshatter": _bool(_value(cfg, defaults, "reshatter"), bool(defaults["reshatter"])),
                                **_surface_values(cfg, defaults, ("thickness", "transparency", "refraction", "dispersion", "sheen")),
-                               **resolve_scene_quality(settings, cfg, defaults)})
+                               **resolve_scene_quality(settings, cfg, defaults, motion_blur=True)})
 
 
 def _resolve_exploding_tiles(
@@ -732,7 +732,8 @@ def _resolve_pixel_accretion(
     travel = max(0.1, min(1.0, _number(_value(cfg, defaults, "travel"), default_travel)))
     return _finish(
         direction,
-        {"seed": _seed(rng), "tile_size": tile_size, "travel": travel, **resolve_scene_quality(settings, cfg, defaults)},
+        {"seed": _seed(rng), "tile_size": tile_size, "travel": travel,
+         **resolve_scene_quality(settings, cfg, defaults, motion_blur=True)},
     )
 
 

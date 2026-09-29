@@ -8,6 +8,7 @@ resources itself.
 from __future__ import annotations
 
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
+from rendering.gl_programs.scene3d import scene3d_motion_fragment, scene3d_motion_vertex
 
 
 BLOCK_SPIN_VERTEX_STRIDE_FLOATS = 8
@@ -339,3 +340,8 @@ void main() {
     FragColor = vec4(color, 1.0);
 }
 """
+
+# With motion blur: the same shaders, also writing each point's screen motion (the
+# slab's only moving input is its angle).
+BLOCK_SPIN_MOTION_VERTEX_SOURCE = scene3d_motion_vertex(BLOCK_SPIN_QUICK_VERTEX_SOURCE, "uAngle")
+BLOCK_SPIN_MOTION_FRAGMENT_SOURCE = scene3d_motion_fragment(BLOCK_SPIN_FRAGMENT_SOURCE)

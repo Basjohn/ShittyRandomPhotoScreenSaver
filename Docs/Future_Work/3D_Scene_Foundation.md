@@ -174,7 +174,7 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   allocation per frame.
 - **Bars:** endpoints exact on High; a photo with a bright sky does not glow at 0.0001; bloom measured and parked.
 
-### S7 — Analytic motion blur — LANDED (foundation + Exploding Tiles); other transitions in S7b
+### S7 — Analytic motion blur — LANDED (every 3D transition)
 - [x] A per-transition Motion Blur choice (Auto, Off, On), Auto following the tier's post effects. Every piece's
   motion is analytic, so its screen velocity comes from evaluating it at `t` and `t - shutter` (shutter in real
   seconds); a bounded-sample blur along velocity. Chosen: a velocity attachment with a McGuire-style reconstruction.
@@ -187,10 +187,14 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   ~+0.25 ms CPU submit, ~105 MB VRAM per display at 4x during a run.
 - **Findings:** the one-pass 24x24 tile max cost 0.118 ms (separable: 0.019, identical). Full-tap white-noise jitter
   speckled the blur's edges, so it is a quarter tap with 16 taps.
-- [ ] **S7b** The other 3D transitions write their motion (Glass Shatter shards, Crumble chunks and debris,
-  Directional Pixel Accretion tiles, 3D Block Spins' slab) and get the Motion Blur choice. Each vertex shader
-  evaluates its analytic motion at t - shutter. Glass and Crumble motion tables (per-run bakes) are sampled at both
-  times.
+- [x] **S7b** The other 3D transitions write their motion (Glass Shatter shards, Crumble chunks and debris,
+  Directional Pixel Accretion tiles, 3D Block Spins' slab) and get the Motion Blur choice. Rather than hand-editing
+  four shaders, `scene3d_motion_vertex` / `scene3d_motion_fragment` derive a motion variant from each effect's own
+  sources: the vertex `main` becomes a function of the run's time input and runs at t - shutter and at t (so the
+  Crumble motion table is sampled at both times for free), and the fragment adds the motion output.
+  `motion.motion_program` picks the variant, so Off draws the original program: 105 frames pixel-identical to HEAD.
+  Cost at 1440p (4x): +0.12-0.28 ms GPU per frame, most for Block Spins, whose moving slab fills the screen (gather
+  0.087 ms). Tap counts adapted to the blur length saved 0.04 ms but stippled fast blurs, so the gather keeps 16.
 - **Reward:** fast debris reads as fast; smoother motion at any refresh rate.
 - **Risks:** multisampled velocity resolve; blur crossing depth edges (bleeding).
 - **Hazards:** memory of another attachment; sample count (bounded, 8–12); must be zero at rest and at endpoints.
@@ -257,5 +261,5 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 
 ## Landed / remaining
 
-- Landed: S1, S2, S3, S4, S5, S6, S7 (foundation + Exploding Tiles).
-- Remaining: S7b, then S8–S11 in order.
+- Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b).
+- Remaining: S8–S11 in order.

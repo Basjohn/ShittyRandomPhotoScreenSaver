@@ -6,7 +6,7 @@ visibility window and a velocity/spin kick that start at its event time. With
 no event the kick is zero and the path is exactly the plain shatter.
 """
 
-from rendering.gl_programs.scene3d import SCENE3D_GLSL
+from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_motion_fragment, scene3d_motion_vertex
 
 GLASS_VERTEX = """#version 410 core
 layout(location=0) in vec2 aUv;
@@ -178,3 +178,7 @@ void main() {
     FragColor=vec4(body,1.0);
 }
 """
+
+# With motion blur: the same shaders, also writing each point's screen motion.
+GLASS_MOTION_VERTEX = scene3d_motion_vertex(GLASS_VERTEX)
+GLASS_MOTION_FRAGMENT = scene3d_motion_fragment(GLASS_FRAGMENT)

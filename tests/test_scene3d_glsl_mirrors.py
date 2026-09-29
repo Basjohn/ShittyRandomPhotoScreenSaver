@@ -271,3 +271,35 @@ def test_the_hash_is_uniform():
     counts, _edges = np.histogram(values, bins=20, range=(0.0, 1.0))
     assert counts.min() > 850 and counts.max() < 1150
     assert abs(float(np.mean(values)) - 0.5) < 0.01
+
+
+def test_motion_transforms_keep_the_shader_and_add_its_motion():
+    vertex = """#version 410 core
+uniform mat4 uMatrix;
+// the run's progress
+uniform float uProgress, uDepth;
+out vec2 vUv;
+void main() {
+    float t = uProgress * 2.0;
+    if (t <= 0.0) { gl_Position = vec4(2., 2., 2., 1.); return; }
+    gl_Position = uMatrix * vec4(t, uDepth, 0.0, 1.0);
+    vUv = vec2(uProgress);
+}
+"""
+    moving = lib.scene3d_motion_vertex(vertex)
+    assert moving.startswith("#version 410 core\n")
+    assert "uniform float uProgress, uDepth;" in moving           # the declaration stays
+    assert "float t = sceneTime * 2.0;" in moving and "vUv = vec2(sceneTime);" in moving
+    assert "void sceneVertexMain()" in moving and moving.count("void main()") == 1
+    assert "sceneTime = uProgressBefore;" in moving and "vClipBefore" in moving
+    fragment = "#version 410 core\nin vec2 vUv;\nout vec4 FragColor;\nvoid main() { FragColor = vec4(vUv, 0.0, 1.0); }\n"
+    writing = lib.scene3d_motion_fragment(fragment)
+    assert "layout(location = 0) out vec4 FragColor;" in writing
+    assert "layout(location = 1) out vec4 SceneMotion;" in writing and "vec2 sceneVelocity(" in writing
+    assert "void sceneFragmentMain()" in writing and writing.count("void main()") == 1
+    # Shaders the transform cannot handle safely are refused, never guessed at.
+    for broken in ("void main() {}", "#version 410 core\nvoid main() {}\n"):
+        with pytest.raises(ValueError):
+            lib.scene3d_motion_vertex(broken)
+    with pytest.raises(ValueError):
+        lib.scene3d_motion_fragment("#version 410 core\nout vec4 Colour;\nvoid main() {}\n")
