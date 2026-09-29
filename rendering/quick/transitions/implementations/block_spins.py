@@ -15,7 +15,10 @@ from rendering.gl_programs.blockspin_program import (
     BLOCK_SPIN_VERTEX_STRIDE_FLOATS,
     block_spin_progress,
 )
+from rendering.gl_programs.scene3d import scene3d_request_detail
 from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.scene3d.resources import MeshResources
+from rendering.quick.scene3d.target import SceneTarget
 from ..render_contract import (
     QUICK_TRANSITION_VERTEX_SOURCE,
     QuickTransitionRenderFrame,
@@ -59,6 +62,9 @@ class QuickBlockSpinsRenderer:
         self._box_vbo = 0
         self._void_uniforms: dict[str, int] = {}
         self._slab_uniforms: dict[str, int] = {}
+        # Only for the High tier: the multisampled target and its composite program.
+        self._target = SceneTarget("Quick 3D Block Spins")
+        self._target_resources = MeshResources("Quick 3D Block Spins")
 
     @property
     def has_resources(self) -> bool:
@@ -67,11 +73,25 @@ class QuickBlockSpinsRenderer:
             or self._slab_program
             or self._box_vao
             or self._box_vbo
+            or self._target.has_resources
+            or self._target_resources.has_resources
         )
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         if not self._slab_program:
             self._initialize()
+        detail = scene3d_request_detail(frame.run.request.parameter_dict())
+        if detail.samples:
+            with self._target.scope(frame, detail.samples, self._target_resources):
+                self._draw_scene(frame)
+        else:
+            self._draw_scene(frame)
+
+    def park(self) -> None:
+        """Drop the per-run scene target; programs and the slab stay warm."""
+        self._target.release()
+
+    def _draw_scene(self, frame: QuickTransitionRenderFrame) -> None:
         axis_mode, spin_direction = _block_spin_direction_state(
             frame.run.request.direction
         )
@@ -125,6 +145,11 @@ class QuickBlockSpinsRenderer:
 
     def release_resources(self) -> None:
         errors: list[str] = []
+        for release in (self._target.release, self._target_resources.release_resources):
+            try:
+                release()
+            except Exception as exc:
+                errors.append(f"scene target:{type(exc).__name__}:{exc}")
         for attribute, delete in (
             ("_box_vbo", lambda value: gl.glDeleteBuffers(1, [value])),
             ("_box_vao", lambda value: gl.glDeleteVertexArrays(1, [value])),

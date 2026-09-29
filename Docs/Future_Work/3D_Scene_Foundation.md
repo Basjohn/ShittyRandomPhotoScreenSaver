@@ -128,12 +128,14 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   aspects; no uncovered pixel with it, uncovered pixels without it), GPU mirrors in
   `tests/test_scene3d_glsl_mirrors.py`.
 
-### S5 — Existing 3D transitions onto the library and 3D Detail
-- [ ] Glass Shatter: shared camera at 3.0 and near-plane depth, `SceneTarget` on High, park lifecycle.
-- [ ] Directional Pixel Accretion: shared camera at 3.0, integer hash, `SceneTarget` on High.
-- [ ] Crumble: integer hash for its noise, `SceneTarget` on High.
-- [ ] 3D Block Spins: stays orthographic by design; `SceneTarget` on High only.
-- [ ] Exit guarantees: each effect already has its authored departure (Glass ray-exit, Crumble fall, Accretion is an
+### S5 — Existing 3D transitions onto the library and 3D Detail — LANDED
+- [x] Glass Shatter: shared camera at 3.0, `SceneTarget` on High, park lifecycle. It keeps its authored linear depth:
+  the library's near-plane depth has coarser precision at Glass's depth and flipped a few coplanar bevel pixels.
+- [x] Directional Pixel Accretion: shared camera at 3.0 (authored linear depth kept), integer hash, `SceneTarget` on High.
+- [x] Crumble: integer hash for its stone lattice, crack variation and debris grain, `SceneTarget` on High. Its own
+  camera (3.15 with an authored magnification clamp) is kept.
+- [x] 3D Block Spins: stays orthographic by design; `SceneTarget` on High only.
+- [x] Exit guarantees: each effect already has its authored departure (Glass ray-exit, Crumble fall, Accretion is an
   arrival); the solver is not substituted where it would change accepted trajectories.
 - **Reward:** smooth edges on High for every 3D transition; one camera and one hash family; hashes identical on every
   GPU (R-94 class).
@@ -144,6 +146,12 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   visible pieces.
 - **Bars:** Balanced frames equal the pre-migration captures (Glass exact; Crumble/Accretion statistics and endpoints);
   every existing GL/endpoint/departure suite green; High vs Balanced differs only at edges.
+- **Landed:** every 3D transition request carries `detail` (`resolve_scene_detail`; a request built without it draws
+  directly, `scene3d_request_detail`). Against pre-migration captures at Balanced: 3D Block Spins exact, Glass Shatter
+  max 1-2 levels (float rounding), Crumble and Accretion differ only in which random pattern a seed gives (stills
+  reviewed: same style). Tests: `test_every_3d_transition_honours_the_tiers_and_parks` (every tier: exact near
+  endpoints, framebuffer restored, High differs only at edges, park drops the target) and
+  `test_every_3d_transition_request_carries_the_3d_detail_tier`.
 
 ### S6 — Bloom (then HDR, decided on measurement)
 - [ ] High only: a bright-pass and downsample/upsample chain (1/2 to 1/16) over the resolved target, added back in the
@@ -216,5 +224,5 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 
 ## Landed / remaining
 
-- Landed: S1, S2, S3, S4.
-- Remaining: S5–S11 in order.
+- Landed: S1, S2, S3, S4, S5.
+- Remaining: S6–S11 in order.

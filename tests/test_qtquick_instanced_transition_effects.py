@@ -93,7 +93,7 @@ def test_pixel_accretion_shader_translates_microquads_toward_one_event_vector() 
     assert "landing = 1. + (1. - local)" in source
     assert "abs(direction.x) + abs(direction.y)" in source
     assert "(uProgress - start) / .28" in source
-    assert "projected *= cameraW" in source
+    assert "sceneProjectAt(uMatrix, uItemSize, world, 3.0)" in source  # the shared camera at its authored distance
     assert "vUv = (cell + aUv) / uGrid" in source
     renderer = (ROOT / "rendering/quick/transitions/implementations/pixel_accretion.py").read_text(encoding="utf-8")
     assert "glDrawArraysInstanced" in renderer

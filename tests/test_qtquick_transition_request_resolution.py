@@ -255,3 +255,19 @@ def test_new_transition_ids_resolve_through_manual_and_random_admission(
     assert random.selected_from_random is True
     assert random.duration_ms == 2100
     assert dict(random.parameters)["seed"] == 1
+
+
+@pytest.mark.parametrize("stored", ["Performance", None])
+def test_every_3d_transition_request_carries_the_3d_detail_tier(stored) -> None:
+    from core.settings.default_contract import require_canonical_default
+
+    expected = stored or require_canonical_default("transitions.detail_3d")
+    for name, stable_id in (("3D Block Spins", "block_spins"), ("Glass Shatter", "glass_shatter"),
+                            ("Exploding Tiles", "exploding_tiles"), ("Directional Pixel Accretion", "pixel_accretion"),
+                            ("Crumble", "crumble")):
+        transitions = {"type": name, "random_always": False, "activation": {name: True}}
+        if stored:
+            transitions["detail_3d"] = stored
+        spec = resolve_quick_transition_spec(_Settings(transitions), random_source=_Rng("left"))
+        assert spec is not None and spec.transition_id == stable_id
+        assert dict(spec.parameters)["detail"] == expected, stable_id

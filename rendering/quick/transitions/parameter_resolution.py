@@ -252,6 +252,7 @@ def _resolve_crumble(
             **_surface_values(cfg, defaults, ("thickness", "debris")),
             "weight_mode": weight_mode,
             "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
+            "detail": resolve_scene_detail(settings),
         },
     )
 
@@ -602,7 +603,7 @@ def _resolve_detail(
     return max(0.5, min(2.0, _number(_value(cfg, defaults, "detail"), default_detail)))
 
 
-def _scene_detail(settings: Mapping[str, object]) -> str:
+def resolve_scene_detail(settings: Mapping[str, object]) -> str:
     """The run's 3D Detail tier; an unknown persisted value uses the canonical default."""
 
     value = settings.get("detail_3d")
@@ -636,7 +637,8 @@ def _resolve_glass_shatter(
     return _finish(direction, {"seed": _seed(rng), "shards": shards, "depth": depth,
                                "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
                                "reshatter": _bool(_value(cfg, defaults, "reshatter"), bool(defaults["reshatter"])),
-                               **_surface_values(cfg, defaults, ("thickness", "transparency", "refraction", "dispersion", "sheen"))})
+                               **_surface_values(cfg, defaults, ("thickness", "transparency", "refraction", "dispersion", "sheen")),
+                               "detail": resolve_scene_detail(settings)})
 
 
 def _resolve_exploding_tiles(
@@ -660,7 +662,7 @@ def _resolve_exploding_tiles(
         {"seed": _seed(rng), "columns": columns, "depth": depth,
          **_surface_values(cfg, defaults, ("thickness",)),
          "force": max(.5, min(2., _number(_value(cfg, defaults, "force"), float(defaults["force"])))),
-         "detail": _scene_detail(settings)},
+         "detail": resolve_scene_detail(settings)},
     )
 
 
@@ -682,7 +684,7 @@ def _resolve_pixel_accretion(
     travel = max(0.1, min(1.0, _number(_value(cfg, defaults, "travel"), default_travel)))
     return _finish(
         direction,
-        {"seed": _seed(rng), "tile_size": tile_size, "travel": travel},
+        {"seed": _seed(rng), "tile_size": tile_size, "travel": travel, "detail": resolve_scene_detail(settings)},
     )
 
 

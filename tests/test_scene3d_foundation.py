@@ -144,3 +144,33 @@ def test_parking_the_background_node_parks_the_transition_host(qt_app, monkeypat
     monkeypatch.setattr(background_node.QOpenGLContext, "currentContext", staticmethod(lambda: object()))
     node.release_presentation_textures()
     assert host.parks == 1
+
+
+_MIGRATED = (("glass_shatter", "center_out"), ("crumble", None), ("pixel_accretion", "left"), ("block_spins", "left"))
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("effect,direction", _MIGRATED)
+def test_every_3d_transition_honours_the_tiers_and_parks(qt_app, effect, direction):
+    capture = TransitionCapture(256, 144)
+    try:
+        source, destination = (np.asarray(image, dtype=np.int16) for image in capture.images)
+        frames = {}
+        for detail in SCENE3D_DETAIL_NAMES:
+            run = capture.run(effect, direction=direction, parameters={"detail": detail}, duration_ms=8000)
+            assert np.abs(np.asarray(capture.render(run, 0.0001)[0], dtype=np.int16) - source).mean() < 0.5
+            assert np.abs(np.asarray(capture.render(run, 0.9999)[0], dtype=np.int16) - destination).mean() < 0.5
+            frames[detail] = np.asarray(capture.render(run, 0.45)[0], dtype=np.int16)
+            assert int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING)) == capture.fbo
+        # High multisamples the same scene: only edge pixels differ from a direct draw.
+        difference = np.abs(frames["High"] - frames["Balanced"])
+        assert difference.mean() < 3.0
+        assert (difference.max(axis=2) > 24).mean() < 0.08
+        renderer = capture.host._implementations[effect]
+        run = capture.run(effect, direction=direction, parameters={"detail": "High"}, duration_ms=8000)
+        capture.render(run, 0.45)
+        assert renderer._target.has_resources
+        capture.host.park()
+        assert not renderer._target.has_resources and renderer.has_resources
+    finally:
+        capture.close()

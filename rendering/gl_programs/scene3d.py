@@ -57,6 +57,16 @@ def scene3d_detail(name: object) -> Scene3DDetail:
     return detail
 
 
+# A request resolved without a tier (built outside the resolver) draws directly,
+# exactly as the effects did before 3D Detail existed.
+SCENE3D_DIRECT_DETAIL = "Balanced"
+
+
+def scene3d_request_detail(parameters) -> Scene3DDetail:
+    """The tier a resolved request carries in ``parameters["detail"]``."""
+    return scene3d_detail(parameters.get("detail", SCENE3D_DIRECT_DETAIL))
+
+
 SCENE3D_CAMERA = 3.4
 SCENE3D_NEAR = 0.22
 SCENE3D_FAR = 9.0

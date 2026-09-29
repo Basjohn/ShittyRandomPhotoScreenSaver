@@ -11,7 +11,9 @@ from rendering.gl_programs.crumble_program import (
     DEBRIS_VERTEX,
 )
 from ..crumble_dynamics import MOTION_FRAMES
+from rendering.gl_programs.scene3d import scene3d_request_detail
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
+from rendering.quick.scene3d.target import SceneTarget
 from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import (
     CRUMBLE_CHUNK_ATTRIBUTES,
@@ -29,13 +31,15 @@ class QuickCrumbleRenderer:
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Crumble")
+        self._target = SceneTarget("Quick Crumble")
         self._geometry_key = None
         self._chunk_vao = self._chunk_count = self._debris_vbo = self._debris_count = 0
         self._motion_texture = 0
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources or bool(self._debris_vbo) or bool(self._motion_texture)
+        return (self._resources.has_resources or self._target.has_resources
+                or bool(self._debris_vbo) or bool(self._motion_texture))
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
@@ -58,14 +62,26 @@ class QuickCrumbleRenderer:
                     PREPARED_GEOMETRY.get_or_build(geometry_key, build_crumble_geometry)
                 )
                 self._geometry_key = key
-            self._resources.draw_image(frame, frame.destination_texture_id)
-            self._resources.begin_depth(frame)
-            self._draw_chunks(frame, progress, seed, depth, thickness)
-            if debris > 0.0:
-                self._draw_debris(frame, progress, depth, debris)
+            detail = scene3d_request_detail(parameters)
+            if detail.samples:
+                with self._target.scope(frame, detail.samples, self._resources):
+                    self._draw_scene(frame, progress, seed, depth, thickness, debris)
+            else:
+                self._draw_scene(frame, progress, seed, depth, thickness, debris)
         except Exception:
             self.release_resources()
             raise
+
+    def _draw_scene(self, frame, progress, seed, depth, thickness, debris) -> None:
+        self._resources.draw_image(frame, frame.destination_texture_id)
+        self._resources.begin_depth(frame)
+        self._draw_chunks(frame, progress, seed, depth, thickness)
+        if debris > 0.0:
+            self._draw_debris(frame, progress, depth, debris)
+
+    def park(self) -> None:
+        """Drop the per-run scene target; programs and geometry stay warm."""
+        self._target.release()
 
     def _rebuild_geometry(self, geometry: CrumbleGeometry) -> None:
         self._resources.drop_mesh("chunks")
@@ -179,6 +195,10 @@ class QuickCrumbleRenderer:
 
     def release_resources(self) -> None:
         errors = []
+        try:
+            self._target.release()
+        except Exception as exc:
+            errors.append(str(exc))
         if self._debris_vbo:
             try:
                 gl.glDeleteBuffers(1, [self._debris_vbo])
