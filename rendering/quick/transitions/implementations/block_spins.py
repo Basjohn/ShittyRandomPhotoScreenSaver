@@ -19,6 +19,7 @@ from rendering.gl_programs.blockspin_program import (
     block_spin_progress,
 )
 from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress
+from rendering.quick.scene3d.environment import PhotoEnvironment
 from rendering.quick.scene3d.motion import motion_uniform_names, set_motion_uniforms
 from rendering.quick.render.gl_resources import compile_program
 from rendering.quick.scene3d.resources import MeshResources
@@ -70,6 +71,8 @@ class QuickBlockSpinsRenderer:
         # motion-writing variant.
         self._target = SceneTarget("Quick 3D Block Spins")
         self._target_resources = MeshResources("Quick 3D Block Spins")
+        # Edge Glass reflections: the next image as a per-run blurred environment.
+        self._environment = PhotoEnvironment("Quick 3D Block Spins")
 
     @property
     def has_resources(self) -> bool:
@@ -80,6 +83,7 @@ class QuickBlockSpinsRenderer:
             or self._box_vbo
             or self._target.has_resources
             or self._target_resources.has_resources
+            or self._environment.has_resources
         )
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
@@ -89,17 +93,21 @@ class QuickBlockSpinsRenderer:
         motion = bool(parameters.get("motion_blur", False))
         samples = scene3d_request_samples(parameters) or (1 if motion else 0)
         edge_glass = block_spin_edge_glass_mode(parameters.get("edge_glass", "Off"))
+        # Reflection and Both read the next image's environment (copied once per run).
+        environment = self._environment.texture(frame, self._target_resources) if edge_glass in (1, 3) else 0
         if samples:
             with self._target.scope(frame, samples, self._target_resources, motion_blur=motion):
-                self._draw_scene(frame, edge_glass, motion)
+                self._draw_scene(frame, edge_glass, motion, environment)
         else:
-            self._draw_scene(frame, edge_glass, False)
+            self._draw_scene(frame, edge_glass, False, environment)
 
     def park(self) -> None:
-        """Drop the per-run scene target; programs and the slab stay warm."""
+        """Drop the per-run scene target and environment; programs and the slab stay warm."""
         self._target.release()
+        self._environment.release()
 
-    def _draw_scene(self, frame: QuickTransitionRenderFrame, edge_glass: int, motion: bool) -> None:
+    def _draw_scene(self, frame: QuickTransitionRenderFrame, edge_glass: int, motion: bool,
+                    environment: int) -> None:
         axis_mode, spin_direction = _block_spin_direction_state(
             frame.run.request.direction
         )
@@ -160,13 +168,17 @@ class QuickBlockSpinsRenderer:
         gl.glActiveTexture(gl.GL_TEXTURE1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
         gl.glUniform1i(uniforms["uNewTexture"], 1)
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
+        gl.glUniform1i(uniforms["uEnvironment"], 2)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindVertexArray(self._box_vao)
         with self._target.velocity_writes():
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, BLOCK_SPIN_BOX_VERTEX_COUNT)
 
     def release_resources(self) -> None:
         errors: list[str] = []
-        for release in (self._target.release, self._target_resources.release_resources):
+        for release in (self._target.release, self._environment.release, self._target_resources.release_resources):
             try:
                 release()
             except Exception as exc:
@@ -222,6 +234,7 @@ class QuickBlockSpinsRenderer:
                     "uEdgeGlass",
                     "uOldTexture",
                     "uNewTexture",
+                    "uEnvironment",
                 ),
             )
 

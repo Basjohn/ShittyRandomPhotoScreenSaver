@@ -9,7 +9,6 @@ audits are historicalised (`Docs/Historical_Bugs/R-100_...`, `R-101_...`).
 Detail, rewards, risks and performance hazards per slice: `Docs/Future_Work/3D_Scene_Foundation.md`. Work in this
 order; commit and push each slice; tests and measurements before looks change.
 
-- [ ] **S9** Photo reflections from renderer-owned per-run copies (opt-in per effect).
 - [ ] **S10** Cheaper High beyond the shader resolve (landed), only if physical testing shows the cost matters.
 - [ ] **S11** First-frame program compile, only if the installed build's frame trace shows the hitch.
 

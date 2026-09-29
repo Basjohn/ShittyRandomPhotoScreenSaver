@@ -30,6 +30,7 @@ from rendering.gl_programs.exploding_tiles_program import (
     exploding_tiles_sparks_live,
 )
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress
+from rendering.quick.scene3d.environment import PhotoEnvironment
 from rendering.quick.scene3d.particles import draw_particles, particle_budget
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.shadows import draw_planar_shadows
@@ -45,13 +46,15 @@ class QuickExplodingTilesRenderer:
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Exploding Tiles")
         self._target = SceneTarget("Quick Exploding Tiles")
+        self._environment = PhotoEnvironment("Quick Exploding Tiles")   # photo reflections
         self._frame_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles")
         self._body_key: tuple[int, str] | None = None
         self._body = (0.15, 0.15, 0.15)
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources or self._target.has_resources or self._frame_block.has_resources
+        return (self._resources.has_resources or self._target.has_resources or self._frame_block.has_resources
+                or self._environment.has_resources)
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
@@ -84,23 +87,25 @@ class QuickExplodingTilesRenderer:
                 "uShutter": scene3d_shutter_progress(frame.run.request.duration_ms) if motion_blur else 0.0,
                 "uViewport": (float(frame.viewport[2]), float(frame.viewport[3])),
             }
+            environment = self._environment.texture(frame, self._resources)
             with self._frame_block.bound(values):
                 if samples:
                     with self._target.scope(frame, samples, self._resources, bloom=bloom, motion_blur=motion_blur):
-                        self._draw_scene(frame, grid, detail, progress, force, center_out)
+                        self._draw_scene(frame, grid, detail, progress, force, center_out, environment)
                 else:
-                    self._draw_scene(frame, grid, detail, progress, force, center_out)
+                    self._draw_scene(frame, grid, detail, progress, force, center_out, environment)
         except Exception:
             self.release_resources()
             raise
 
-    def _draw_scene(self, frame, grid, detail, progress: float, force: float, center_out: bool) -> None:
+    def _draw_scene(self, frame, grid, detail, progress: float, force: float, center_out: bool,
+                    environment: int) -> None:
         tiles = grid[0] * grid[1]
         self._draw_backdrop(frame)
         if detail.shadows:
             self._draw_shadows(frame, tiles)
         self._resources.begin_depth(frame)
-        self._draw_tiles(frame, tiles)
+        self._draw_tiles(frame, tiles, environment)
         sparks = particle_budget(EXPLODING_TILES_SPARKS, detail)
         if sparks and exploding_tiles_sparks_live(progress, force, center_out):
             self._draw_sparks(frame, sparks)
@@ -123,9 +128,14 @@ class QuickExplodingTilesRenderer:
                   ("uMatrix", "uItemSize", "uNewTex"), frame)
         draw_planar_shadows(frame, tiles)
 
-    def _draw_tiles(self, frame, tiles: int) -> None:
+    def _draw_tiles(self, frame, tiles: int, environment: int) -> None:
         self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
-                  ("uMatrix", "uItemSize", "uOldTex"), frame)
+                  ("uMatrix", "uItemSize", "uOldTex", "uEnvironment"), frame)
+        uniforms = self._resources.uniforms("tiles", ("uMatrix", "uItemSize", "uOldTex", "uEnvironment"))
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
+        gl.glUniform1i(uniforms["uEnvironment"], 2)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
         vao, count = self._resources.mesh("beveled_slab", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2))
         gl.glBindVertexArray(vao)
         with self._target.velocity_writes():
@@ -146,12 +156,14 @@ class QuickExplodingTilesRenderer:
         return self._body
 
     def park(self) -> None:
-        """Drop the per-run scene target; programs, the slab mesh and the block stay warm."""
+        """Drop the per-run scene target and environment; programs, the slab mesh and the block stay warm."""
         self._target.release()
+        self._environment.release()
 
     def release_resources(self) -> None:
         errors: list[str] = []
-        for release in (self._target.release, self._frame_block.release, self._resources.release_resources):
+        for release in (self._target.release, self._environment.release, self._frame_block.release,
+                        self._resources.release_resources):
             try:
                 release()
             except Exception as exc:
