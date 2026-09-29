@@ -30,6 +30,7 @@ from rendering.gl_programs.exploding_tiles_program import (
     exploding_tiles_sparks_live,
 )
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress
+from rendering.quick.scene3d.particles import draw_particles, particle_budget
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
@@ -100,7 +101,7 @@ class QuickExplodingTilesRenderer:
             self._draw_shadows(frame, tiles)
         self._resources.begin_depth(frame)
         self._draw_tiles(frame, tiles)
-        sparks = round(EXPLODING_TILES_SPARKS * detail.particles)
+        sparks = particle_budget(EXPLODING_TILES_SPARKS, detail)
         if sparks and exploding_tiles_sparks_live(progress, force, center_out):
             self._draw_sparks(frame, sparks)
 
@@ -135,10 +136,7 @@ class QuickExplodingTilesRenderer:
     def _draw_sparks(self, frame, count: int) -> None:
         self._use("sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
                   ("uMatrix", "uItemSize"), frame)
-        gl.glDepthMask(gl.GL_FALSE)
-        gl.glBindVertexArray(frame.quad_vao)
-        with blend_scope(gl.GL_FUNC_ADD, accumulate_alpha=True):
-            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, count)
+        draw_particles(frame, count)
 
     def _body_colour(self, frame) -> tuple[float, float, float]:
         """The source's most used colour, found once per run."""

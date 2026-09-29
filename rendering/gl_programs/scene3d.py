@@ -19,6 +19,8 @@ What an effect gets from ``SCENE3D_GLSL``:
   Blinn-Phong highlights and a Fresnel rim, local lights, hot-material colour;
 * ``sceneCastOnPlane`` / ``sceneSoftRect`` -- soft planar shadows on the photograph;
 * ``sceneStreak`` -- camera-facing motion streaks for sparks and debris;
+* ``sceneParticleAt`` / ``sceneParticleStreak`` -- a particle's drag-and-fall flight and its
+  streak (a streak with no trail is a soft sprite), drawn by ``rendering.quick.scene3d.particles``;
 * ``sceneVelocity`` -- a surface point's screen motion over the shutter, for motion blur
   (``SCENE3D_SHUTTER_SECONDS``, ``scene3d_shutter_progress``); ``scene3d_motion_vertex`` /
   ``scene3d_motion_fragment`` make any effect's shaders write it.
@@ -271,6 +273,21 @@ vec4 sceneStreak(mat4 matrix, vec2 itemSize, vec3 tail, vec3 head, float width, 
     clip.z = sceneClipDepth(w) / w * clip.w;
     return clip;
 }}
+
+// A particle launched from origin at velocity: exponential drag slows it, fall pulls it
+// down (both per unit of the effect's time t).
+vec3 sceneParticleAt(vec3 origin, vec3 velocity, float drag, float fall, float t) {{
+    return origin + velocity * (1.0 - exp(-drag * t)) / drag + vec3(0.0, -fall * t * t, 0.0);
+}}
+
+// The particle as a camera-facing streak from where it was trail ago to where it is now
+// (trail 0: a soft sprite of the given width).
+vec4 sceneParticleStreak(mat4 matrix, vec2 itemSize, vec3 origin, vec3 velocity, float drag, float fall,
+                         float t, float trail, float width, vec2 corner) {{
+    vec3 head = sceneParticleAt(origin, velocity, drag, fall, t);
+    vec3 tail = sceneParticleAt(origin, velocity, drag, fall, max(t - trail, 0.0));
+    return sceneStreak(matrix, itemSize, tail, head, width, corner);
+}}
 """ + SCENE3D_VELOCITY_GLSL
 
 
@@ -504,6 +521,22 @@ def scene3d_streak(matrix: tuple[float, ...], item_size: tuple[float, float], ta
     w = wt + (wh - wt) * corner[0]
     clip[2] = scene3d_clip_depth(w) / w * clip[3]
     return tuple(clip)
+
+
+def scene3d_particle_at(origin: Vec3, velocity: Vec3, drag: float, fall: float, t: float) -> Vec3:
+    """CPU mirror of ``sceneParticleAt``."""
+    reach = (1.0 - math.exp(-drag * t)) / drag
+    return (origin[0] + velocity[0] * reach, origin[1] + velocity[1] * reach - fall * t * t,
+            origin[2] + velocity[2] * reach)
+
+
+def scene3d_particle_streak(matrix: tuple[float, ...], item_size: tuple[float, float], origin: Vec3, velocity: Vec3,
+                            drag: float, fall: float, t: float, trail: float, width: float,
+                            corner: tuple[float, float]) -> tuple[float, float, float, float]:
+    """CPU mirror of ``sceneParticleStreak``."""
+    head = scene3d_particle_at(origin, velocity, drag, fall, t)
+    tail = scene3d_particle_at(origin, velocity, drag, fall, max(t - trail, 0.0))
+    return scene3d_streak(matrix, item_size, tail, head, width, corner)
 
 
 # ---- std140 uniform blocks (pure layout; the GL buffer is rendering.quick.scene3d.uniforms) ----

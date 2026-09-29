@@ -646,9 +646,6 @@ EXPLODING_TILES_SPARK_VERTEX_SOURCE = (
     + f"""
 const float DETONATE = {EXPLODING_TILES_DETONATION:.6f};
 out vec2 vQuad; out float vHeat; out float vGlow;
-vec3 sparkAt(vec3 origin, vec3 velocity, float fall, float t) {{
-    return origin + velocity * (1.0 - exp(-11.0 * t)) / 11.0 + vec3(0.0, -fall * t * t, 0.0);
-}}
 void main() {{
     uint id = uint(gl_InstanceID);
     uint seed = uint(uSeed + 0.5) ^ 0x5bd1e995u;
@@ -673,9 +670,8 @@ void main() {{
     }}
     float speed = uForce * (1.5 + 5.5 * r4 * r4) * (1.2 - 0.6 * reach);
     vec3 velocity = vec3(normalize(direction + (vec2(r5, r6) - 0.5) * 0.6) * speed, (0.2 + 1.4 * r7) * uForce);
-    vec3 head = sparkAt(origin, velocity, 1.4, t);
-    vec3 tail = sparkAt(origin, velocity, 1.4, max(t - 0.006, 0.0));
-    gl_Position = sceneStreak(uMatrix, uItemSize, tail, head, (0.0016 + 0.0028 * r5) * uItemSize.y, aPosition);
+    gl_Position = sceneParticleStreak(uMatrix, uItemSize, origin, velocity, 11.0, 1.4, t, 0.006,
+                                      (0.0016 + 0.0028 * r5) * uItemSize.y, aPosition);
     float age = t / life;
     vHeat = 1.0 - age;
     vGlow = (1.0 - age) * (1.0 - age) * (0.55 + 0.45 * r6);
