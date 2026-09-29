@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_motion_fragment, scene3d_motion_vertex
+from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_ghost_fragment, scene3d_motion_fragment, scene3d_motion_vertex
 
 
 def _chip_vertices() -> tuple[float, ...]:
@@ -110,3 +110,6 @@ CRUMBLE_MOTION_VERTEX = scene3d_motion_vertex(CRUMBLE_VERTEX)
 CRUMBLE_MOTION_FRAGMENT = scene3d_motion_fragment(CRUMBLE_FRAGMENT)
 DEBRIS_MOTION_VERTEX = scene3d_motion_vertex(DEBRIS_VERTEX)
 DEBRIS_MOTION_FRAGMENT = scene3d_motion_fragment(DEBRIS_FRAGMENT)
+# With motion trails: the same chunks and chips as flat ghost silhouettes.
+CRUMBLE_GHOST_FRAGMENT = scene3d_ghost_fragment(CRUMBLE_MOTION_FRAGMENT)
+DEBRIS_GHOST_FRAGMENT = scene3d_ghost_fragment(DEBRIS_MOTION_FRAGMENT)

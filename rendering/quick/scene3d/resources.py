@@ -95,11 +95,14 @@ class MeshResources:
             self._programs[key] = compile_program(vertex_source, fragment_source, label=f"{self.label} {key}")
         return self._programs[key]
 
-    def uniforms(self, key: str, names: tuple[str, ...]) -> dict[str, int]:
+    def uniforms(self, key: str, names: tuple[str, ...], *, required: bool = True) -> dict[str, int]:
+        """Uniform locations, looked up once. A missing uniform is an error unless the program is
+        a variant whose driver may drop what its output no longer reads (``required=False``:
+        location -1, which ``glUniform*`` ignores)."""
         if key not in self._uniforms:
             locations = {name: int(gl.glGetUniformLocation(self._programs[key], name)) for name in names}
             missing = [name for name, location in locations.items() if location < 0]
-            if missing:
+            if missing and required:
                 raise RuntimeError(f"{self.label} {key} missing uniforms: {', '.join(missing)}")
             self._uniforms[key] = locations
         return self._uniforms[key]

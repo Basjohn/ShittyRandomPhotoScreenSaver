@@ -18,6 +18,7 @@ from core.settings.default_contract import require_canonical_default
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
+    SCENE3D_TRAIL_CHOICES,
     SCENE3D_DETAIL_NAMES,
     SCENE3D_EFFECT_CHOICES,
     scene3d_detail,
@@ -260,7 +261,7 @@ def _resolve_crumble(
             **_surface_values(cfg, defaults, ("thickness", "debris")),
             "weight_mode": weight_mode,
             "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
-            **resolve_scene_quality(settings, cfg, defaults, motion_blur=True),
+            **resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True),
         },
     )
 
@@ -628,13 +629,14 @@ def _scene_choice(cfg: Mapping[str, object], defaults: Mapping[str, object], fie
 
 def resolve_scene_quality(settings: Mapping[str, object], cfg: Mapping[str, object],
                           defaults: Mapping[str, object], *, bloom: bool = False,
-                          motion_blur: bool = False) -> dict[str, object]:
+                          motion_blur: bool = False, motion_trails: bool = False) -> dict[str, object]:
     """A 3D transition's effective quality: the global 3D Detail tier, with the
     transition's own choices authoritative ("Auto" follows the tier).
 
     Returns ``detail`` (the tier, for tier-only features), ``samples`` and, for an
     effect with emitted light, ``bloom`` (its strength, 0 when off); for an effect
-    that writes its screen motion, ``motion_blur`` (on or off).
+    that writes its screen motion, ``motion_blur`` (on or off); for one that can draw
+    its ghosts, ``motion_trails`` (on or off: a look, not a tier choice, so no Auto).
     """
     detail_name = resolve_scene_detail(settings)
     detail = scene3d_detail(detail_name)
@@ -649,13 +651,15 @@ def resolve_scene_quality(settings: Mapping[str, object], cfg: Mapping[str, obje
     if motion_blur:
         quality["motion_blur"] = scene3d_post_effect(
             detail, _scene_choice(cfg, defaults, "motion_blur", SCENE3D_EFFECT_CHOICES))
+    if motion_trails:
+        quality["motion_trails"] = _scene_choice(cfg, defaults, "motion_trails", SCENE3D_TRAIL_CHOICES) == "On"
     return quality
 
 
 def resolve_block_spins_parameters(settings: Mapping[str, object], cfg: Mapping[str, object],
                                    defaults: Mapping[str, object]) -> dict[str, object]:
     """3D Block Spins' request parameters: its quality plus its Edge Glass look."""
-    parameters = resolve_scene_quality(settings, cfg, defaults, motion_blur=True)
+    parameters = resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True)
     parameters["edge_glass"] = _scene_choice(cfg, defaults, "edge_glass", BLOCK_SPIN_EDGE_GLASS_CHOICES)
     return parameters
 
@@ -686,7 +690,7 @@ def _resolve_glass_shatter(
                                "collisions": _bool(_value(cfg, defaults, "collisions"), bool(defaults["collisions"])),
                                "reshatter": _bool(_value(cfg, defaults, "reshatter"), bool(defaults["reshatter"])),
                                **_surface_values(cfg, defaults, ("thickness", "transparency", "refraction", "dispersion", "sheen")),
-                               **resolve_scene_quality(settings, cfg, defaults, motion_blur=True)})
+                               **resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True)})
 
 
 def _resolve_exploding_tiles(
@@ -710,7 +714,7 @@ def _resolve_exploding_tiles(
         {"seed": _seed(rng), "columns": columns, "depth": depth,
          **_surface_values(cfg, defaults, ("thickness",)),
          "force": max(.5, min(2., _number(_value(cfg, defaults, "force"), float(defaults["force"])))),
-         **resolve_scene_quality(settings, cfg, defaults, bloom=True, motion_blur=True)},
+         **resolve_scene_quality(settings, cfg, defaults, bloom=True, motion_blur=True, motion_trails=True)},
     )
 
 
@@ -733,7 +737,7 @@ def _resolve_pixel_accretion(
     return _finish(
         direction,
         {"seed": _seed(rng), "tile_size": tile_size, "travel": travel,
-         **resolve_scene_quality(settings, cfg, defaults, motion_blur=True)},
+         **resolve_scene_quality(settings, cfg, defaults, motion_blur=True, motion_trails=True)},
     )
 
 

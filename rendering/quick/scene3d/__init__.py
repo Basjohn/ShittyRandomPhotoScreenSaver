@@ -13,6 +13,7 @@ library and its CPU mirrors live in ``rendering.gl_programs.scene3d``.
 * ``shadows`` -- the shared MIN-blended planar shadow pass;
 * ``grid`` -- the bendable grid surface (drawn around an effect's displacement);
 * ``environment`` -- photo reflections: per-run, renderer-owned mipmapped photo copies;
+* ``trails`` -- motion trails: fading outlines of where pieces just were;
 * ``uniforms`` -- per-frame uniform blocks;
 * ``passes`` -- blend scopes.
 

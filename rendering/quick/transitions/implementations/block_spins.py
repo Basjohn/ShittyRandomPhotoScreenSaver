@@ -11,6 +11,7 @@ from rendering.gl_programs.blockspin_program import (
     BLOCK_SPIN_BOX_VERTEX_COUNT,
     BLOCK_SPIN_BOX_VERTICES,
     BLOCK_SPIN_FRAGMENT_SOURCE,
+    BLOCK_SPIN_GHOST_FRAGMENT_SOURCE,
     BLOCK_SPIN_MOTION_FRAGMENT_SOURCE,
     BLOCK_SPIN_MOTION_VERTEX_SOURCE,
     BLOCK_SPIN_QUICK_VERTEX_SOURCE,
@@ -18,9 +19,10 @@ from rendering.gl_programs.blockspin_program import (
     block_spin_edge_glass_mode,
     block_spin_progress,
 )
-from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress
+from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress, scene3d_trail_ghosts
 from rendering.quick.scene3d.environment import PhotoEnvironment
 from rendering.quick.scene3d.motion import motion_uniform_names, set_motion_uniforms
+from rendering.quick.scene3d.trails import MotionTrails, trail_program
 from rendering.quick.render.gl_resources import compile_program
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SceneTarget
@@ -73,6 +75,7 @@ class QuickBlockSpinsRenderer:
         self._target_resources = MeshResources("Quick 3D Block Spins")
         # Edge Glass reflections: the next image as a per-run blurred environment.
         self._environment = PhotoEnvironment("Quick 3D Block Spins")
+        self._trails = MotionTrails("Quick 3D Block Spins")
 
     @property
     def has_resources(self) -> bool:
@@ -84,6 +87,7 @@ class QuickBlockSpinsRenderer:
             or self._target.has_resources
             or self._target_resources.has_resources
             or self._environment.has_resources
+            or self._trails.has_resources
         )
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
@@ -91,28 +95,25 @@ class QuickBlockSpinsRenderer:
             self._initialize()
         parameters = frame.run.request.parameter_dict()
         motion = bool(parameters.get("motion_blur", False))
-        samples = scene3d_request_samples(parameters) or (1 if motion else 0)
+        trails = bool(parameters.get("motion_trails", False))
+        samples = scene3d_request_samples(parameters) or (1 if motion or trails else 0)
         edge_glass = block_spin_edge_glass_mode(parameters.get("edge_glass", "Off"))
         # Reflection and Both read the next image's environment (copied once per run).
         environment = self._environment.texture(frame, self._target_resources) if edge_glass in (1, 3) else 0
         if samples:
             with self._target.scope(frame, samples, self._target_resources, motion_blur=motion):
-                self._draw_scene(frame, edge_glass, motion, environment)
+                self._draw_scene(frame, edge_glass, motion, environment, trails)
         else:
             self._draw_scene(frame, edge_glass, False, environment)
 
     def park(self) -> None:
-        """Drop the per-run scene target and environment; programs and the slab stay warm."""
+        """Drop the per-run target, environment and trails; programs and the slab stay warm."""
         self._target.release()
         self._environment.release()
+        self._trails.release()
 
     def _draw_scene(self, frame: QuickTransitionRenderFrame, edge_glass: int, motion: bool,
-                    environment: int) -> None:
-        axis_mode, spin_direction = _block_spin_direction_state(
-            frame.run.request.direction
-        )
-        spin = block_spin_progress(frame.sample.eased_progress)
-
+                    environment: int, trails: bool = False) -> None:
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         gl.glUseProgram(self._void_program)
@@ -129,15 +130,34 @@ class QuickBlockSpinsRenderer:
         gl.glBindVertexArray(frame.quad_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
+        if trails:
+            now = frame.sample.eased_progress
+            self._trails.draw(self._target, frame, self._target_resources,
+                              scene3d_trail_ghosts(now, frame.run.request.duration_ms),
+                              lambda time, fade: self._draw_slab(frame, time, edge_glass, False, environment,
+                                                                 (fade, now)))
+
         gl.glDepthMask(gl.GL_TRUE)
         gl.glClearDepth(1.0)
         gl.glClear(gl.GL_DEPTH_BUFFER_BIT)
         gl.glEnable(gl.GL_DEPTH_TEST)
         gl.glDepthFunc(gl.GL_LESS)
+        self._draw_slab(frame, frame.sample.eased_progress, edge_glass, motion, environment)
 
+    def _draw_slab(self, frame: QuickTransitionRenderFrame, progress: float, edge_glass: int, motion: bool,
+                   environment: int, ghost: tuple[float, float] | None = None) -> None:
+        """``ghost``: (fade, the moment now) to draw the slab as a motion-trail ghost."""
+        axis_mode, spin_direction = _block_spin_direction_state(
+            frame.run.request.direction
+        )
+        spin = block_spin_progress(progress)
         uniforms = self._slab_uniforms
         program = self._slab_program
-        if motion:
+        if ghost is not None:
+            program, uniforms = trail_program(self._target_resources, "slab", BLOCK_SPIN_MOTION_VERTEX_SOURCE,
+                                              BLOCK_SPIN_GHOST_FRAGMENT_SOURCE,
+                                              tuple(self._slab_uniforms) + motion_uniform_names("uAngle"))
+        elif motion:
             program = self._target_resources.program("slab_motion", BLOCK_SPIN_MOTION_VERTEX_SOURCE,
                                                      BLOCK_SPIN_MOTION_FRAGMENT_SOURCE)
             uniforms = self._target_resources.uniforms("slab_motion", tuple(self._slab_uniforms)
@@ -157,10 +177,12 @@ class QuickBlockSpinsRenderer:
         gl.glUniform1f(uniforms["uSpecDirection"], spin_direction)
         gl.glUniform1i(uniforms["uAxisMode"], axis_mode)
         gl.glUniform1i(uniforms["uEdgeGlass"], edge_glass)
+        if ghost is not None:
+            gl.glUniform1f(uniforms["uGhostFade"], ghost[0])
+            set_motion_uniforms(uniforms, frame, math.pi * block_spin_progress(ghost[1]) * spin_direction, "uAngle")
         if motion:
             # The slab's angle one shutter ago.
-            before = max(frame.sample.eased_progress
-                         - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0)
+            before = max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0)
             set_motion_uniforms(uniforms, frame, math.pi * block_spin_progress(before) * spin_direction, "uAngle")
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
@@ -178,7 +200,8 @@ class QuickBlockSpinsRenderer:
 
     def release_resources(self) -> None:
         errors: list[str] = []
-        for release in (self._target.release, self._environment.release, self._target_resources.release_resources):
+        for release in (self._target.release, self._environment.release, self._trails.release,
+                        self._target_resources.release_resources):
             try:
                 release()
             except Exception as exc:

@@ -4,11 +4,12 @@ from __future__ import annotations
 from OpenGL import GL as gl
 
 from rendering.gl_programs.glass_shatter_program import (
-    GLASS_FRAGMENT, GLASS_MOTION_FRAGMENT, GLASS_MOTION_VERTEX, GLASS_VERTEX,
+    GLASS_FRAGMENT, GLASS_GHOST_FRAGMENT, GLASS_MOTION_FRAGMENT, GLASS_MOTION_VERTEX, GLASS_VERTEX,
 )
-from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress
+from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress, scene3d_trail_ghosts
 from rendering.quick.scene3d.environment import PhotoEnvironment
-from rendering.quick.scene3d.motion import motion_program, set_motion_uniforms
+from rendering.quick.scene3d.motion import motion_program, motion_uniform_names, set_motion_uniforms
+from rendering.quick.scene3d.trails import MotionTrails, trail_program
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
 from ..directions import direction_vector
@@ -28,12 +29,14 @@ class QuickGlassShatterRenderer:
         self._resources = MeshResources("Quick Glass Shatter")
         self._target = SceneTarget("Quick Glass Shatter")
         self._environment = PhotoEnvironment("Quick Glass Shatter")   # photo reflections
+        self._trails = MotionTrails("Quick Glass Shatter")
         self._geometry_key = None
         self._vao = self._count = 0
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources or self._target.has_resources or self._environment.has_resources
+        return (self._resources.has_resources or self._target.has_resources or self._environment.has_resources
+                or self._trails.has_resources)
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         resources = self._resources
@@ -52,27 +55,47 @@ class QuickGlassShatterRenderer:
                 self._vao, self._count = resources.mesh("shards", geometry.vertices, GLASS_ATTRIBUTES)
                 self._geometry_key = key
             motion = bool(params.get("motion_blur", False))
-            samples = scene3d_request_samples(params) or (1 if motion else 0)
+            trails = bool(params.get("motion_trails", False))
+            samples = scene3d_request_samples(params) or (1 if motion or trails else 0)
             # Sheen zero removes all reflection, so no environment is needed then.
             environment = self._environment.texture(frame, resources) if float(params["sheen"]) > 0.0 else 0
             if samples:
                 with self._target.scope(frame, samples, resources, motion_blur=motion):
-                    self._draw_scene(frame, progress, params, motion, environment)
+                    self._draw_scene(frame, progress, params, motion, environment, trails)
             else:
                 self._draw_scene(frame, progress, params, False, environment)
         except Exception:
             self.release_resources()
             raise
 
-    def _draw_scene(self, frame, progress: float, params, motion: bool, environment: int) -> None:
+    def _draw_scene(self, frame, progress: float, params, motion: bool, environment: int,
+                    trails: bool = False) -> None:
         resources = self._resources
         resources.draw_image(frame, frame.destination_texture_id)
-        program, uniforms = motion_program(resources, "glass", (GLASS_VERTEX, GLASS_FRAGMENT),
-                                           (GLASS_MOTION_VERTEX, GLASS_MOTION_FRAGMENT), (
-            "uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uDepth", "uDirection", "uRadial",
-            "uThickness", "uTransparency", "uRefraction", "uDispersion", "uSheen", "uEnvironment",
-        ), motion)
+        if trails:
+            self._trails.draw(self._target, frame, resources,
+                              scene3d_trail_ghosts(progress, frame.run.request.duration_ms),
+                              lambda time, fade: self._draw_shards(frame, time, params, False, environment,
+                                                                   (fade, progress)))
         resources.begin_depth(frame)
+        self._draw_shards(frame, progress, params, motion, environment)
+
+    _SHARD_UNIFORMS = (
+        "uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uDepth", "uDirection", "uRadial",
+        "uThickness", "uTransparency", "uRefraction", "uDispersion", "uSheen", "uEnvironment",
+    )
+
+    def _draw_shards(self, frame, progress: float, params, motion: bool, environment: int,
+                     ghost: tuple[float, float] | None = None) -> None:
+        """``ghost``: (fade, the moment now) to draw the shards as a motion-trail ghost."""
+        resources = self._resources
+        if ghost is not None:
+            program, uniforms = trail_program(resources, "glass", GLASS_MOTION_VERTEX, GLASS_GHOST_FRAGMENT,
+                                              self._SHARD_UNIFORMS + motion_uniform_names())
+        else:
+            program, uniforms = motion_program(resources, "glass", (GLASS_VERTEX, GLASS_FRAGMENT),
+                                               (GLASS_MOTION_VERTEX, GLASS_MOTION_FRAGMENT), self._SHARD_UNIFORMS,
+                                               motion)
         bind_frame(program, uniforms, frame)
         radial = frame.run.request.direction == "center_out"
         direction = (0.0, 0.0) if radial else direction_vector(frame.run.request.direction)
@@ -86,6 +109,9 @@ class QuickGlassShatterRenderer:
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
         gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
+        if ghost is not None:
+            gl.glUniform1f(uniforms["uGhostFade"], ghost[0])
+            set_motion_uniforms(uniforms, frame, ghost[1])
         if motion:
             set_motion_uniforms(uniforms, frame,
                                 max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0))
@@ -94,13 +120,15 @@ class QuickGlassShatterRenderer:
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
 
     def park(self) -> None:
-        """Drop the per-run scene target and environment; programs and shard geometry stay warm."""
+        """Drop the per-run target, environment and trails; programs and shard geometry stay warm."""
         self._target.release()
         self._environment.release()
+        self._trails.release()
 
     def release_resources(self) -> None:
         self._target.release()
         self._environment.release()
+        self._trails.release()
         self._resources.release_resources()
         self._geometry_key = None
         self._vao = self._count = 0

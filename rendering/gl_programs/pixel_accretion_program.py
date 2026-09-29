@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
-from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_motion_fragment, scene3d_motion_vertex
+from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_ghost_fragment, scene3d_motion_fragment, scene3d_motion_vertex
 
 
 PIXEL_ACCRETION_MAX_INSTANCES = 60_000
@@ -110,3 +110,5 @@ void main() { FragColor = texture(uNewTex, vUv); }
 # With motion blur: the same shaders, also writing each point's screen motion.
 PIXEL_ACCRETION_MOTION_VERTEX_SOURCE = scene3d_motion_vertex(PIXEL_ACCRETION_VERTEX_SOURCE)
 PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE = scene3d_motion_fragment(PIXEL_ACCRETION_FRAGMENT_SOURCE)
+# With motion trails: the same tiles as flat ghost silhouettes.
+PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE = scene3d_ghost_fragment(PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE)
