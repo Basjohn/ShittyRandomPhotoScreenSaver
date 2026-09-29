@@ -9,7 +9,6 @@ audits are historicalised (`Docs/Historical_Bugs/R-100_...`, `R-101_...`).
 Detail, rewards, risks and performance hazards per slice: `Docs/Future_Work/3D_Scene_Foundation.md`. Work in this
 order; commit and push each slice; tests and measurements before looks change.
 
-- [ ] **S5** Glass Shatter, Pixel Accretion, Crumble and 3D Block Spins onto the library and 3D Detail (looks kept).
 - [ ] **S6** Bloom on High from emissive content only (HDR only if measurements justify it).
 - [ ] **S7** Analytic motion blur on High.
 - [ ] **S8** Shared particles, planar soft shadows and the bendable grid surface.

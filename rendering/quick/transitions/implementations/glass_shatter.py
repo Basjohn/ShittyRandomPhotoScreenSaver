@@ -6,7 +6,9 @@ from OpenGL import GL as gl
 from rendering.gl_programs.glass_shatter_program import (
     GLASS_FRAGMENT, GLASS_VERTEX,
 )
+from rendering.gl_programs.scene3d import scene3d_request_detail
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
+from rendering.quick.scene3d.target import SceneTarget
 from ..directions import direction_vector
 from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import (
@@ -22,19 +24,20 @@ class QuickGlassShatterRenderer:
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Glass Shatter")
+        self._target = SceneTarget("Quick Glass Shatter")
         self._geometry_key = None
         self._vao = self._count = 0
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources
+        return self._resources.has_resources or self._target.has_resources
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         resources = self._resources
         progress = float(frame.sample.eased_progress)
         try:
-            resources.draw_image(frame, frame.source_texture_id if progress <= 0.0 else frame.destination_texture_id)
             if progress <= 0.0 or progress >= 1.0:
+                resources.draw_image(frame, frame.source_texture_id if progress <= 0.0 else frame.destination_texture_id)
                 return
             params = frame.run.request.parameter_dict()
             aspect = frame.logical_size[0] / frame.logical_size[1]
@@ -45,28 +48,43 @@ class QuickGlassShatterRenderer:
                 geometry = PREPARED_GEOMETRY.get_or_build(geometry_key, build_glass_geometry)
                 self._vao, self._count = resources.mesh("shards", geometry.vertices, GLASS_ATTRIBUTES)
                 self._geometry_key = key
-            program = resources.program("glass", GLASS_VERTEX, GLASS_FRAGMENT)
-            uniforms = resources.uniforms("glass", (
-                "uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uDepth", "uDirection", "uRadial",
-                "uThickness", "uTransparency", "uRefraction", "uDispersion", "uSheen",
-            ))
-            resources.begin_depth(frame)
-            bind_frame(program, uniforms, frame)
-            radial = frame.run.request.direction == "center_out"
-            direction = (0.0, 0.0) if radial else direction_vector(frame.run.request.direction)
-            gl.glUniform2f(uniforms["uDirection"], *direction)
-            gl.glUniform1i(uniforms["uRadial"], int(radial))
-            gl.glUniform1f(uniforms["uProgress"], progress)
-            gl.glUniform1f(uniforms["uDepth"], float(params["depth"]))
-            for name in ("thickness", "transparency", "refraction", "dispersion", "sheen"):
-                gl.glUniform1f(uniforms["u" + name.capitalize()], float(params[name]))
-            gl.glBindVertexArray(self._vao)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
+            detail = scene3d_request_detail(params)
+            if detail.samples:
+                with self._target.scope(frame, detail.samples, resources):
+                    self._draw_scene(frame, progress, params)
+            else:
+                self._draw_scene(frame, progress, params)
         except Exception:
             self.release_resources()
             raise
 
+    def _draw_scene(self, frame, progress: float, params) -> None:
+        resources = self._resources
+        resources.draw_image(frame, frame.destination_texture_id)
+        program = resources.program("glass", GLASS_VERTEX, GLASS_FRAGMENT)
+        uniforms = resources.uniforms("glass", (
+            "uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uDepth", "uDirection", "uRadial",
+            "uThickness", "uTransparency", "uRefraction", "uDispersion", "uSheen",
+        ))
+        resources.begin_depth(frame)
+        bind_frame(program, uniforms, frame)
+        radial = frame.run.request.direction == "center_out"
+        direction = (0.0, 0.0) if radial else direction_vector(frame.run.request.direction)
+        gl.glUniform2f(uniforms["uDirection"], *direction)
+        gl.glUniform1i(uniforms["uRadial"], int(radial))
+        gl.glUniform1f(uniforms["uProgress"], progress)
+        gl.glUniform1f(uniforms["uDepth"], float(params["depth"]))
+        for name in ("thickness", "transparency", "refraction", "dispersion", "sheen"):
+            gl.glUniform1f(uniforms["u" + name.capitalize()], float(params[name]))
+        gl.glBindVertexArray(self._vao)
+        gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
+
+    def park(self) -> None:
+        """Drop the per-run scene target; programs and shard geometry stay warm."""
+        self._target.release()
+
     def release_resources(self) -> None:
+        self._target.release()
         self._resources.release_resources()
         self._geometry_key = None
         self._vao = self._count = 0

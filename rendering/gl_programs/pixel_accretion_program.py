@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+from rendering.gl_programs.scene3d import SCENE3D_GLSL
+
 
 PIXEL_ACCRETION_MAX_INSTANCES = 60_000
 PIXEL_ACCRETION_FLIGHT_PROGRESS = .28
@@ -59,14 +61,18 @@ uniform float uProgress;
 uniform float uTravel;
 uniform float uSeed;
 out vec2 vUv;
-float hash1(vec2 p) { return fract(sin(dot(p, vec2(41.37, 289.19)) + uSeed) * 43758.5453); }
+""" + SCENE3D_GLSL + """
+// Per-tile randoms from the exact integer hash (identical on every GPU).
+float tileRandom(vec2 cell, uint salt) {
+    return sceneRandom(uint(cell.x) + uint(cell.y) * 65536u, salt, uint(uSeed + 0.5));
+}
 void main() {
     float id = float(gl_InstanceID);
     vec2 cell = vec2(mod(id, uGrid.x), floor(id / uGrid.x));
     vec2 centre = (cell + vec2(.5)) / uGrid;
     vec2 direction = normalize(uDirection);
     float rank = .5 + dot(centre - vec2(.5), direction) / (abs(direction.x) + abs(direction.y));
-    float start = clamp(.025 + rank * .64 + (hash1(cell) - .5) * .075, 0., .70);
+    float start = clamp(.025 + rank * .64 + (tileRandom(cell, 1u) - .5) * .075, 0., .70);
     // Each tile has a bounded flight. This leaves landed destination tiles
     // behind while the coherent front advances, instead of one shared finale.
     float raw = clamp((uProgress - start) / .28, 0., 1.);
@@ -77,20 +83,18 @@ void main() {
     }
     float local = raw * raw * (3. - 2. * raw);
     float appearance = smoothstep(0., .08, raw);
-    float landing = 1. + (1. - local) * (.08 + hash1(cell + 5.) * .08);
+    float landing = 1. + (1. - local) * (.08 + tileRandom(cell, 5u) * .08);
     vec2 size = landing * appearance / uGrid;
     // A tile comes from the opposite side and travels *toward* uDirection.
     vec2 translation = -direction * uTravel * (1. - local);
     vec2 point = centre + aPosition * size + translation;
-    float height = (1. - local) * (.008 + hash1(cell + 9.) * .014);
+    float height = (1. - local) * (.008 + tileRandom(cell, 9u) * .014);
     float aspect = uItemSize.x / uItemSize.y;
     vec3 world = vec3((point.x - .5) * aspect, .5 - point.y, height);
-    float cameraW = 3.0 - world.z;
-    vec2 uv = vec2(world.x / aspect, -world.y) * 3.0 / cameraW + .5;
-    vec4 projected = uMatrix * vec4(uv * uItemSize, 0., 1.);
-    projected *= cameraW;
-    projected.z = clamp(-world.z / 5.0, -.9, .9) * projected.w;
-    gl_Position = projected;
+    // The shared camera at Accretion's authored resting distance, keeping its
+    // authored linear depth.
+    gl_Position = sceneProjectAt(uMatrix, uItemSize, world, 3.0);
+    gl_Position.z = clamp(-world.z / 5.0, -.9, .9) * gl_Position.w;
     vUv = (cell + aUv) / uGrid;
 }
 """

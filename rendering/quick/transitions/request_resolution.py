@@ -21,7 +21,7 @@ from rendering.transition_registry import (
 )
 
 from ..image_state import PresentationImage
-from .parameter_resolution import resolve_parameterized_phase_c_inputs
+from .parameter_resolution import resolve_parameterized_phase_c_inputs, resolve_scene_detail
 from .state import (
     TransitionParameters,
     TransitionRequest,
@@ -301,6 +301,8 @@ def resolve_quick_transition_spec(
                 "cols": int(cfg["cols"]),
                 "rows": int(cfg["rows"]),
             }
+        else:
+            parameters = {"detail": resolve_scene_detail(transitions)}
 
     return ResolvedQuickTransitionSpec(
         transition_id=transition_id,

@@ -6,6 +6,8 @@ visibility window and a velocity/spin kick that start at its event time. With
 no event the kick is zero and the path is exactly the plain shatter.
 """
 
+from rendering.gl_programs.scene3d import SCENE3D_GLSL
+
 GLASS_VERTEX = """#version 410 core
 layout(location=0) in vec2 aUv;
 layout(location=1) in vec2 aCenter;
@@ -36,7 +38,7 @@ out float vMotion;
 out vec3 vView;
 out float vThickness;
 flat out float vFace;
-
+""" + SCENE3D_GLSL + """
 vec3 rotateAxis(vec3 p, vec3 axis, float angle) {
     float c=cos(angle), s=sin(angle);
     return p*c + cross(axis,p)*s + axis*dot(axis,p)*(1.0-c);
@@ -108,10 +110,10 @@ void main() {
     position+=aKick.xyz*tau+aKick2.xyz*tau2;
     float w=3.0-position.z;
     vec2 uv=vec2(position.x/aspect,-position.y)*3.0/w+.5;
-    vec4 projected=uMatrix*vec4(uv*uItemSize,0,1);
-    projected*=w;
-    projected.z=clamp(-position.z/5.0,-.9,.9)*projected.w;
-    gl_Position=projected;
+    // The shared camera at Glass's authored resting distance; Glass keeps its
+    // authored linear depth, whose precision its thin coplanar bevels rely on.
+    gl_Position=sceneProjectAt(uMatrix,uItemSize,position,3.0);
+    gl_Position.z=clamp(-position.z/5.0,-.9,.9)*gl_Position.w;
     vScreenUv=uv;
     vUv=localUv;
     vNormal=normal;

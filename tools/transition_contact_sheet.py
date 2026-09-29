@@ -111,6 +111,8 @@ class TransitionCapture:
 
         if effect == "slide":
             resolved_direction, resolved_params = "left", {"motion_style": "Perspective Push"}
+        elif effect == "block_spins":
+            resolved_direction, resolved_params = "left", {}
         else:
             resolved = resolve_parameterized_phase_c_inputs(effect, {}, random_source=random.Random(seed))
             resolved_direction, resolved_params = resolved.direction, resolved.parameter_dict()

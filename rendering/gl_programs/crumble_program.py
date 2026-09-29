@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from rendering.gl_programs.scene3d import SCENE3D_GLSL
+
 
 def _chip_vertices() -> tuple[float, ...]:
     # Deliberately asymmetric base chip.  Per-instance anisotropic scaling in
@@ -56,7 +58,9 @@ in float vFace,vMotion;
 out vec4 FragColor;
 uniform sampler2D uOldTex;
 uniform float uProgress,uSeed;
-float hash3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+""" + SCENE3D_GLSL + """
+// Stone lattice values from the exact integer hash (R-94: identical on every GPU).
+float hash3(vec3 p){uvec3 u=uvec3(ivec3(floor(p))+1048576);return sceneRandom(u.x^(u.y*0x27d4eb2du)^(u.z*0x165667b1u),0u,7u);}
 float stone(vec3 p){
     vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
     return mix(mix(mix(hash3(i),hash3(i+vec3(1,0,0)),f.x),
@@ -74,7 +78,7 @@ void main(){
     vec3 body=mix(source,mix(source*(.74+.26*diffuse),broken,side),vMotion);
     // A visible crack stage precedes all gravity/tumble. The stroke crawls
     // along the actual cell border, then widens into a dark recessed fissure.
-    float variation=fract(sin(vCrackPhase+uSeed)*43758.5453);
+    float variation=sceneRandom(floatBitsToUint(vCrackPhase),1u,uint(uSeed+.5));
     float start=.025+.105*variation;
     float progress=clamp((uProgress-start)/.12,0.,1.);
     float stroke=smoothstep(-.025,.025,progress-vCrack.y)*smoothstep(0.,.018,uProgress-start);
@@ -96,4 +100,7 @@ vec3 rotateAxis(vec3 p,vec3 a,float t){float c=cos(t),s=sin(t);return p*c+cross(
 void main(){float begin=aRelease.x,raw=clamp((uProgress-begin)/max(.001,.98-begin),0.,1.);if(raw<=0.){gl_Position=vec4(2.,2.,2.,1.);vMotion=0.;return;}float local=raw*raw*(3.-2.*raw),aspect=uItemSize.x/uItemSize.y;float sizeSeed=fract(aMeta.y*23.17+aMeta.x*11.83),shapeSeed=fract(aMeta.y*41.71+aMeta.x*7.29);vec3 shape=vec3(.52+.70*sizeSeed,.46+.76*shapeSeed,.42+.62*fract(sizeSeed*5.31+shapeSeed*3.17));float scale=(.006+.014*aMeta.y)*uDebris*smoothstep(0.,.09,local);vec3 axis=normalize(vec3(fract(aMeta.x*17.)*2.-1.,fract(aMeta.y*29.)*2.-1.,.55));vec3 p=rotateAxis(aPosition*shape*scale,axis,local*(6.+7.*aMeta.x));vec2 c=vec2((aEdge.x-.5)*aspect,.5-aEdge.y),spray=normalize(vec2(aEdge.x-.5,.5-aEdge.y)+vec2(.0001));p.xy+=c+vec2(spray.x*aspect,-spray.y)*local*(.35+.55*aMeta.x);p.y-=local*local*(2.7+1.8*aMeta.y);p.z+=uDepth*(.26+local*.24)*(1.-local*.35)*local;float w=max(1.55,3.15-p.z);vec2 uv=vec2(p.x/aspect,-p.y)*3.15/w+.5;vec4 q=uMatrix*vec4(uv*uItemSize,0.,1.);q*=w;q.z=clamp(-p.z/5.,-.9,.9)*q.w;gl_Position=q;vNormal=rotateAxis(normalize(aNormal/shape),axis,local*(6.+7.*aMeta.x));vRock=aPosition*shape;vMotion=local;}"""
 
 DEBRIS_FRAGMENT = """#version 410 core
-in vec3 vNormal;in vec3 vRock;in float vMotion;out vec4 FragColor;void main(){float d=.16+.84*max(dot(normalize(vNormal),normalize(vec3(-.4,.62,.7))),0.),grain=fract(sin(dot(vRock,vec3(41.3,67.7,17.1)))*43758.5);vec3 rock=mix(vec3(.09,.065,.042),vec3(.31,.22,.14),d);rock*=.82+.22*grain;FragColor=vec4(rock*(.72+.28*vMotion),1.);}"""
+""" + SCENE3D_GLSL + """
+// Fine rock grain: an exact integer hash on a 1/300 lattice of the chip surface.
+float sceneRandomRock(vec3 p){uvec3 u=uvec3(ivec3(floor(p*300.))+1048576);return sceneRandom(u.x^(u.y*0x27d4eb2du)^(u.z*0x165667b1u),2u,11u);}
+in vec3 vNormal;in vec3 vRock;in float vMotion;out vec4 FragColor;void main(){float d=.16+.84*max(dot(normalize(vNormal),normalize(vec3(-.4,.62,.7))),0.),grain=sceneRandomRock(vRock);vec3 rock=mix(vec3(.09,.065,.042),vec3(.31,.22,.14),d);rock*=.82+.22*grain;FragColor=vec4(rock*(.72+.28*vMotion),1.);}"""
