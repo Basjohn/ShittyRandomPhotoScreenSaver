@@ -420,7 +420,8 @@ A mode may build on the shared 3D foundation the transitions use; none does toda
   planar shadows, streaks, integer hash, impulse and departure helpers). Every function has a CPU mirror in the same
   module, checked on the GPU by `tests/test_scene3d_glsl_mirrors.py`.
 - **GL helpers:** `rendering/quick/scene3d/`: `MeshResources` (programs, meshes, depth clear), `SceneTarget`
-  (multisampled target sized to the card's pixel rect) and `blend_scope`. Draw inside
+  (multisampled target sized to the card's pixel rect), `blend_scope`, the shared particle and planar-shadow passes,
+  and the bendable grid (`grid.py`: a Spectrum Terrain or Waveform Ribbon writes only its `sceneDisplace`). Draw inside
   `with target.scope(frame, samples, resources): ...` in the mode's `render`; the clip host already wraps that call,
   so the composite stays inside the card clip.
 - **Time:** only the snapshot's logical time. Never real seconds and never a new clock (one authored clock, R-69,

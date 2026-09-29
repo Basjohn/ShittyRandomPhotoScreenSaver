@@ -23,6 +23,9 @@ What an effect gets from ``SCENE3D_GLSL``:
 * ``sceneStreak`` -- camera-facing motion streaks for sparks and debris;
 * ``sceneParticleAt`` / ``sceneParticleStreak`` -- a particle's drag-and-fall flight and its
   streak (a streak with no trail is a soft sprite), drawn by ``rendering.quick.scene3d.particles``;
+* ``scenePlanePoint`` / ``scene3d_grid_vertex_source`` -- the bendable grid surface: an effect
+  writes ``vec3 sceneDisplace(vec2 uv)`` and gets a subdivided photograph (density by tier,
+  ``scene3d_grid_size``) with normals, drawn by ``rendering.quick.scene3d.grid``;
 * ``sceneVelocity`` -- a surface point's screen motion over the shutter, for motion blur
   (``SCENE3D_SHUTTER_SECONDS``, ``scene3d_shutter_progress``); ``scene3d_motion_vertex`` /
   ``scene3d_motion_fragment`` make any effect's shaders write it.
@@ -36,15 +39,17 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 
 
 @dataclass(frozen=True, slots=True)
 class Scene3DDetail:
-    """One 3D Detail tier: multisampling, shadow pass, particle share and post effects.
+    """One 3D Detail tier: multisampling, shadow pass, particle share, post effects, grid density.
 
-    ``post_effects`` admits a transition's own post-effect settings (Bloom, and
-    later Motion Blur, on its Settings page); a tier without multisampling then
-    renders through a single-sample scene target only while one is in use.
+    ``post_effects`` admits a transition's own post-effect settings (Bloom and
+    Motion Blur on its Settings page); a tier without multisampling then renders
+    through a single-sample scene target only while one is in use. ``grid_cells``
+    is the bendable grid's cells along the photograph's longer side.
     """
 
     name: str
@@ -52,15 +57,16 @@ class Scene3DDetail:
     shadows: bool
     particles: float
     post_effects: bool = False
+    grid_cells: int = 64
 
 
 # The canonical ``transitions.detail_3d`` values, cheapest last. High renders the
 # scene into a 4x multisampled target; the others draw straight into Quick's.
 # High and Balanced honour each transition's post-effect settings; Performance none.
 SCENE3D_DETAIL_TIERS: dict[str, Scene3DDetail] = {
-    "High": Scene3DDetail("High", 4, True, 1.0, post_effects=True),
-    "Balanced": Scene3DDetail("Balanced", 0, True, 0.6, post_effects=True),
-    "Performance": Scene3DDetail("Performance", 0, False, 0.3),
+    "High": Scene3DDetail("High", 4, True, 1.0, post_effects=True, grid_cells=192),
+    "Balanced": Scene3DDetail("Balanced", 0, True, 0.6, post_effects=True, grid_cells=128),
+    "Performance": Scene3DDetail("Performance", 0, False, 0.3, grid_cells=64),
 }
 SCENE3D_DETAIL_NAMES = tuple(SCENE3D_DETAIL_TIERS)
 
@@ -195,6 +201,11 @@ vec4 sceneProjectCamera(mat4 matrix, vec2 itemSize, vec3 world, vec4 a, vec4 b) 
 // Item UV (0..1, y down) of a point on the photograph plane z = 0.
 vec2 scenePlaneUv(vec2 world, float aspect) {{
     return vec2(world.x / aspect, -world.y) + 0.5;
+}}
+
+// Where the photograph's point at uv (v down) lies at rest: the inverse of scenePlaneUv.
+vec3 scenePlanePoint(vec2 uv, float aspect) {{
+    return vec3((uv.x - 0.5) * aspect, 0.5 - uv.y, 0.0);
 }}
 
 // Flight under drag: a hard start (slope drag*(1+drift)) that settles into a
@@ -399,6 +410,63 @@ void main() {
     SceneMotion = vec4(sceneVelocity(vClipNow, vClipBefore, uViewport), 0.0, 1.0);
 }
 """
+
+
+# ---- The bendable grid surface (Page Curl, Accordion, Relief Rise, terrains, ribbons) ----
+
+def scene3d_grid_size(detail: Scene3DDetail, aspect: float) -> tuple[int, int]:
+    """Grid cells (columns, rows): the tier's density along the longer side, square cells."""
+    long_side = max(2, int(detail.grid_cells))
+    if aspect >= 1.0:
+        return long_side, max(2, round(long_side / aspect))
+    return max(2, round(long_side * aspect)), long_side
+
+
+@lru_cache(maxsize=8)
+def scene3d_grid_vertices(columns: int, rows: int) -> tuple[float, ...]:
+    """A static triangle list over the photograph: (u, v) per vertex, v down, uv in [0, 1].
+
+    Two triangles per cell, wound consistently, so the displaced surface's normals and
+    any face culling agree. Built once per size (cached), never per frame.
+    """
+    if columns < 1 or rows < 1:
+        raise ValueError("a grid needs at least one cell each way")
+    values: list[float] = []
+    for row in range(rows):
+        v0, v1 = row / rows, (row + 1) / rows
+        for column in range(columns):
+            u0, u1 = column / columns, (column + 1) / columns
+            values.extend((u0, v0, u0, v1, u1, v1, u0, v0, u1, v1, u1, v0))
+    return tuple(values)
+
+
+def scene3d_grid_vertex_source(displacement_glsl: str, declarations_glsl: str = "") -> str:
+    """The grid's vertex shader around an effect's ``vec3 sceneDisplace(vec2 uv)``.
+
+    ``declarations_glsl`` holds the effect's uniforms (and helpers) that its
+    displacement reads. The surface's normal comes from the displacement itself
+    (central differences one cell apart), so any bend is lit correctly. With
+    ``sceneDisplace`` returning ``scenePlanePoint`` the photograph is drawn exactly.
+    Outputs: ``vUv`` (the photograph's uv at the point), ``vWorld``, ``vNormal``
+    (toward the viewer at rest).
+    """
+    if not re.search(r"\bvec3\s+sceneDisplace\s*\(\s*vec2\s+\w+\s*\)", displacement_glsl):
+        raise ValueError("the grid's displacement must define vec3 sceneDisplace(vec2 uv)")
+    return ("#version 410 core\nlayout(location = 0) in vec2 aGrid;\n"
+            "uniform mat4 uMatrix;\nuniform vec2 uItemSize;\nuniform vec2 uGridCells;\n"
+            "out vec2 vUv;\nout vec3 vWorld;\nout vec3 vNormal;\n"
+            + SCENE3D_GLSL + declarations_glsl + displacement_glsl + """
+void main() {
+    vec3 world = sceneDisplace(aGrid);
+    vec2 cell = 1.0 / uGridCells;
+    vec3 acrossU = sceneDisplace(aGrid + vec2(cell.x, 0.0)) - sceneDisplace(aGrid - vec2(cell.x, 0.0));
+    vec3 acrossV = sceneDisplace(aGrid + vec2(0.0, cell.y)) - sceneDisplace(aGrid - vec2(0.0, cell.y));
+    vNormal = normalize(cross(acrossV, acrossU));
+    vUv = aGrid;
+    vWorld = world;
+    gl_Position = sceneProject(uMatrix, uItemSize, world);
+}
+""")
 
 
 def scene3d_velocity(clip_now: tuple[float, float, float, float], clip_previous: tuple[float, float, float, float],
