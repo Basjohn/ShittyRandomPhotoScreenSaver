@@ -155,6 +155,32 @@ def test_projection_depth_and_shadow_casting_match(probe):
     _check(gpu, [lib.scene3d_cast_on_plane(w, plane) for w, plane in casts])
 
 
+def test_pieces_and_their_shadows_match(probe):
+    rng = random.Random(9)
+    pieces = []
+    for _ in range(96):
+        piece = lib.Scene3DPiece(
+            (rng.uniform(-1.2, 1.2), rng.uniform(-0.7, 0.7), rng.uniform(-0.05, 0.8)),
+            (rng.uniform(0.02, 0.1), -rng.uniform(0.02, 0.1), rng.uniform(0.0, 0.05)),
+            _unit(rng), rng.uniform(-1, 1), _unit(rng), rng.uniform(-6, 6))
+        pieces.append((piece, rng.uniform(-0.05, 0.0), (rng.random(), rng.random()), (rng.uniform(-.5, .5), rng.uniform(-.5, .5))))
+    head = ("vec4 c = arg(0), e = arg(1), a = arg(2), b = arg(3), k = arg(4);"
+            "ScenePiece piece = ScenePiece(c.xyz, e.xyz, a.xyz, a.w, b.xyz, b.w);")
+    rows = [[(*piece.centre, plane), piece.extent, (*piece.tilt_axis, piece.tilt), (*piece.spin_axis, piece.spin),
+             (*corner, *unit)] for piece, plane, corner, unit in pieces]
+    gpu = probe.run(head + "FragColor = vec4(scenePiecePoint(piece, vec3(k.z, k.w, 0.3)), 0.0);", rows)
+    _check(gpu, [lib.scene3d_piece_point(piece, (unit[0], unit[1], 0.3)) for piece, _p, _c, unit in pieces])
+    shadows = [lib.scene3d_piece_shadow(_MATRIX, _ITEM, piece, plane, corner) for piece, plane, corner, _u in pieces]
+    gpu = probe.run(head + "FragColor = scenePieceShadow(MATRIX, ITEM, piece, c.w, k.xy).clip;", rows)
+    _check(gpu, [s["clip"] for s in shadows])
+    gpu = probe.run(head + "SceneShadow s = scenePieceShadow(MATRIX, ITEM, piece, c.w, k.xy);"
+                           "FragColor = vec4(s.screen, s.local);", rows)
+    _check(gpu, [(*s["screen"], *s["local"]) for s in shadows])
+    gpu = probe.run(head + "SceneShadow s = scenePieceShadow(MATRIX, ITEM, piece, c.w, k.xy);"
+                           "FragColor = vec4(s.feather, s.onScreen, s.low, 0.0);", rows)
+    _check(gpu, [(s["feather"], s["on_screen"], s["low"]) for s in shadows])
+
+
 def test_cameras_match_and_rest_exactly(probe):
     rng = random.Random(7)
     aspect = _ITEM[0] / _ITEM[1]

@@ -10,6 +10,7 @@ library and its CPU mirrors live in ``rendering.gl_programs.scene3d``.
 * ``post`` -- bloom on emitted light (``BloomChain``);
 * ``motion`` -- motion blur along each surface's screen motion (``MotionBlur``);
 * ``particles`` -- the shared additive particle pass and its tier budget;
+* ``shadows`` -- the shared MIN-blended planar shadow pass;
 * ``uniforms`` -- per-frame uniform blocks;
 * ``passes`` -- blend scopes.
 

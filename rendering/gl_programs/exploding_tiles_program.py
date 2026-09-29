@@ -445,9 +445,13 @@ Tile tileAt(uint id) {{
     return tileAtTime(id, uProgress);
 }}
 
+// The tile as a rigid piece (its mesh is authored y-down, hence the mirrored y).
+ScenePiece tilePiece(Tile t) {{
+    return ScenePiece(t.centre, vec3(t.size.x, -t.size.y, t.slab), t.tiltAxis, t.tilt, t.spinAxis, t.spin);
+}}
+
 vec3 tilePoint(Tile t, vec3 unit) {{
-    vec3 local = vec3(unit.x * t.size.x, -unit.y * t.size.y, unit.z * t.slab);
-    return t.centre + sceneRotate(sceneRotate(local, t.tiltAxis, t.tilt), t.spinAxis, t.spin);
+    return scenePiecePoint(tilePiece(t), unit);
 }}
 
 vec3 tileNormal(Tile t, vec3 normal) {{
@@ -599,26 +603,15 @@ EXPLODING_TILES_SHADOW_VERTEX_SOURCE = (
     + """
 out vec2 vScreen; out vec2 vLocal; flat out float vFeather; flat out float vStrength;
 void main() {
-    // Each tile's face, grown by its thickness and a height-dependent penumbra,
-    // cast along the key light onto the plane behind the wall.
+    // Each tile's shadow on the plane behind the wall (the shared piece shadow); it
+    // leaves with its tile and softens as the tile rises.
     Tile t = tileAt(uint(gl_InstanceID));
-    float plane = -t.slabFull;
-    float extent = min(t.size.x, t.size.y);
-    float height = max(t.centre.z - plane, 0.0);
-    float thick = 1.0 + t.slab / extent;
-    float feather = 0.04 + 0.15 * height / extent;
-    vec2 corner = (aPosition - 0.5) * (thick + 2.0 * feather);
-    vScreen = scenePlaneUv(sceneCastOnPlane(tilePoint(t, vec3(corner, 0.5)), plane), uItemSize.x / uItemSize.y);
-    gl_Position = uMatrix * vec4(vScreen * uItemSize, 0.0, 1.0);
-    vLocal = corner / thick;
-    vFeather = feather / thick;
-    // A shadow leaves with its tile: it fades as the caster's projection clears the view.
-    float aspect = uItemSize.x / uItemSize.y;
-    vec2 seen = scenePlaneUv(t.centre.xy * SCENE_CAMERA / max(SCENE_CAMERA - t.centre.z, SCENE_NEAR), aspect);
-    vec2 outside = max(max(-seen, seen - 1.0), 0.0) * vec2(aspect, 1.0);
-    float onScreen = 1.0 - smoothstep(0.0, 0.12, max(outside.x, outside.y));
-    vStrength = 0.5 * t.crack * onScreen * (1.0 - smoothstep(0.04, 0.5, height))
-              * (1.0 - smoothstep(0.85, 0.97, uProgress));
+    SceneShadow shadow = scenePieceShadow(uMatrix, uItemSize, tilePiece(t), -t.slabFull, aPosition);
+    gl_Position = shadow.clip;
+    vScreen = shadow.screen;
+    vLocal = shadow.local;
+    vFeather = shadow.feather;
+    vStrength = 0.5 * t.crack * shadow.onScreen * shadow.low * (1.0 - smoothstep(0.85, 0.97, uProgress));
 }
 """
 )

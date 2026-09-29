@@ -18,6 +18,8 @@ What an effect gets from ``SCENE3D_GLSL``:
 * ``sceneShade`` / ``scenePointLight`` / ``sceneEmber`` -- one key light with
   Blinn-Phong highlights and a Fresnel rim, local lights, hot-material colour;
 * ``sceneCastOnPlane`` / ``sceneSoftRect`` -- soft planar shadows on the photograph;
+  ``ScenePiece`` / ``scenePiecePoint`` / ``scenePieceShadow`` -- any rigid piece and its shadow,
+  drawn by ``rendering.quick.scene3d.shadows``;
 * ``sceneStreak`` -- camera-facing motion streaks for sparks and debris;
 * ``sceneParticleAt`` / ``sceneParticleStreak`` -- a particle's drag-and-fall flight and its
   streak (a streak with no trail is a soft sprite), drawn by ``rendering.quick.scene3d.particles``;
@@ -247,6 +249,46 @@ vec2 sceneCastOnPlane(vec3 world, float planeZ) {{
 }}
 
 // Soft coverage of a rectangle in its local coordinates (edges at +-0.5).
+// A rigid piece: a unit box scaled per axis by extent (a negative component mirrors that
+// axis), turned by tilt about tiltAxis and then by spin about spinAxis, at centre.
+struct ScenePiece {{
+    vec3 centre; vec3 extent; vec3 tiltAxis; float tilt; vec3 spinAxis; float spin;
+}};
+
+vec3 scenePiecePoint(ScenePiece piece, vec3 unit) {{
+    return piece.centre + sceneRotate(sceneRotate(unit * piece.extent, piece.tiltAxis, piece.tilt),
+                                      piece.spinAxis, piece.spin);
+}}
+
+// A piece's soft shadow on the plane z = plane, cast along the key light: its face grown by
+// its thickness and by a penumbra that widens with height. corner is the item-quad corner in
+// [0, 1]^2. screen is the shadow's point on the photograph (uv); local and feather feed
+// sceneSoftRect; onScreen fades the shadow as its piece leaves the view and low as the
+// piece rises (both 1 at rest). The effect multiplies in its own strength.
+struct SceneShadow {{
+    vec4 clip; vec2 screen; vec2 local; float feather; float onScreen; float low;
+}};
+
+SceneShadow scenePieceShadow(mat4 matrix, vec2 itemSize, ScenePiece piece, float plane, vec2 corner) {{
+    SceneShadow shadow;
+    float extent = min(abs(piece.extent.x), abs(piece.extent.y));
+    float height = max(piece.centre.z - plane, 0.0);
+    float thick = 1.0 + abs(piece.extent.z) / extent;
+    float feather = 0.04 + 0.15 * height / extent;
+    vec2 grown = (corner - 0.5) * (thick + 2.0 * feather);
+    shadow.screen = scenePlaneUv(sceneCastOnPlane(scenePiecePoint(piece, vec3(grown, 0.5)), plane),
+                                 itemSize.x / itemSize.y);
+    shadow.clip = matrix * vec4(shadow.screen * itemSize, 0.0, 1.0);
+    shadow.local = grown / thick;
+    shadow.feather = feather / thick;
+    float aspect = itemSize.x / itemSize.y;
+    vec2 seen = scenePlaneUv(piece.centre.xy * SCENE_CAMERA / max(SCENE_CAMERA - piece.centre.z, SCENE_NEAR), aspect);
+    vec2 outside = max(max(-seen, seen - 1.0), 0.0) * vec2(aspect, 1.0);
+    shadow.onScreen = 1.0 - smoothstep(0.0, 0.12, max(outside.x, outside.y));
+    shadow.low = 1.0 - smoothstep(0.04, 0.5, height);
+    return shadow;
+}}
+
 float sceneSoftRect(vec2 local, float feather) {{
     vec2 edge = abs(local);
     return (1.0 - smoothstep(0.5 - feather, 0.5 + feather, edge.x))
@@ -498,6 +540,46 @@ def scene3d_soft_rect(local: tuple[float, float], feather: float) -> float:
 def _apply(matrix: tuple[float, ...], vector: tuple[float, float, float, float]) -> list[float]:
     # Column-major 4x4, as Qt/OpenGL uniforms.
     return [sum(matrix[column * 4 + row] * vector[column] for column in range(4)) for row in range(4)]
+
+
+@dataclass(frozen=True)
+class Scene3DPiece:
+    """CPU mirror of ``ScenePiece``."""
+
+    centre: Vec3
+    extent: Vec3
+    tilt_axis: Vec3
+    tilt: float
+    spin_axis: Vec3
+    spin: float
+
+
+def scene3d_piece_point(piece: Scene3DPiece, unit: Vec3) -> Vec3:
+    """CPU mirror of ``scenePiecePoint``."""
+    local = tuple(u * e for u, e in zip(unit, piece.extent))
+    turned = scene3d_rotate(scene3d_rotate(local, piece.tilt_axis, piece.tilt), piece.spin_axis, piece.spin)
+    return tuple(c + t for c, t in zip(piece.centre, turned))
+
+
+def scene3d_piece_shadow(matrix: tuple[float, ...], item_size: tuple[float, float], piece: Scene3DPiece,
+                         plane: float, corner: tuple[float, float]) -> dict[str, object]:
+    """CPU mirror of ``scenePieceShadow``: clip, screen, local, feather, on_screen, low."""
+    aspect = item_size[0] / item_size[1]
+    extent = min(abs(piece.extent[0]), abs(piece.extent[1]))
+    height = max(piece.centre[2] - plane, 0.0)
+    thick = 1.0 + abs(piece.extent[2]) / extent
+    feather = 0.04 + 0.15 * height / extent
+    grown = tuple((c - 0.5) * (thick + 2.0 * feather) for c in corner)
+    cast = scene3d_cast_on_plane(scene3d_piece_point(piece, (grown[0], grown[1], 0.5)), plane)
+    screen = (cast[0] / aspect + 0.5, -cast[1] + 0.5)
+    depth = max(SCENE3D_CAMERA - piece.centre[2], SCENE3D_NEAR)
+    seen = (piece.centre[0] * SCENE3D_CAMERA / depth / aspect + 0.5, -piece.centre[1] * SCENE3D_CAMERA / depth + 0.5)
+    outside = (max(-seen[0], seen[0] - 1.0, 0.0) * aspect, max(-seen[1], seen[1] - 1.0, 0.0))
+    return {
+        "clip": tuple(_apply(matrix, (screen[0] * item_size[0], screen[1] * item_size[1], 0.0, 1.0))),
+        "screen": screen, "local": (grown[0] / thick, grown[1] / thick), "feather": feather / thick,
+        "on_screen": 1.0 - _smoothstep(0.0, 0.12, max(outside)), "low": 1.0 - _smoothstep(0.04, 0.5, height),
+    }
 
 
 def scene3d_streak(matrix: tuple[float, ...], item_size: tuple[float, float], tail: Vec3, head: Vec3,

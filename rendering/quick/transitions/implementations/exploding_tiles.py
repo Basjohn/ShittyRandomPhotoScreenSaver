@@ -31,8 +31,8 @@ from rendering.gl_programs.exploding_tiles_program import (
 )
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress
 from rendering.quick.scene3d.particles import draw_particles, particle_budget
-from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
+from rendering.quick.scene3d.shadows import draw_planar_shadows
 from rendering.quick.scene3d.target import SceneTarget
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
@@ -121,9 +121,7 @@ class QuickExplodingTilesRenderer:
     def _draw_shadows(self, frame, tiles: int) -> None:
         self._use("shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
                   ("uMatrix", "uItemSize", "uNewTex"), frame)
-        gl.glBindVertexArray(frame.quad_vao)
-        with blend_scope(gl.GL_MIN):
-            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, tiles)
+        draw_planar_shadows(frame, tiles)
 
     def _draw_tiles(self, frame, tiles: int) -> None:
         self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,

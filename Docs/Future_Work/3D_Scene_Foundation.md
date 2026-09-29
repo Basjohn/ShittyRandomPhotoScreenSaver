@@ -207,8 +207,13 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   `rendering/quick/scene3d/particles.py` (`draw_particles`: additive, depth untouched, alpha accumulated for the
   bloom; `particle_budget` by tier). Each effect keeps its own emitter (birth, heading, speed, life, colour). Tiles
   is pixel-identical: 189 frames, every tier, three directions, with and without bloom, motion blur and 4x.
-- [ ] Planar soft shadows: the Tiles shadow pass becomes a shared pass for any instanced rigid piece; Tiles identical.
-  Glass/Crumble shadows are a look change and wait for the operator.
+- [x] Planar soft shadows: the Tiles shadow pass becomes a shared pass for any instanced rigid piece; Tiles identical.
+  Glass/Crumble shadows are a look change and wait for the operator. **Landed:** `ScenePiece` / `scenePiecePoint`
+  (a unit box scaled per axis, turned by a tilt and then a spin) and `scenePieceShadow` (face grown by thickness
+  and a height-dependent penumbra, cast along the key light; returns clip, uv, soft-rect inputs and the on-screen
+  and height fades) with CPU mirrors, plus `rendering/quick/scene3d/shadows.py` (`draw_planar_shadows`, MIN
+  blended). Tiles builds its piece with `tilePiece` and keeps its own strength and end fade: 189 frames
+  pixel-identical to HEAD.
 - [ ] Bendable grid surface: a static subdivided grid (density by tier) and a displacement-hook convention for Page
   Curl, Accordion, Relief Rise, Spectrum Terrain, Shockwave Grid and Waveform Ribbon; unit-tested now, first real
   consumer with the first of those.
