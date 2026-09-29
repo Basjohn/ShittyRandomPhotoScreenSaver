@@ -402,6 +402,29 @@ def test_3d_quality_choices_and_bloom_strength_round_trip_on_the_pages(qapp, set
     assert tab.glass_shatter_antialiasing_combo.currentText() == canonical["glass_shatter"]["antialiasing"]
 
 
+def test_optional_3d_choices_live_in_a_closed_advanced_bucket(qapp, settings_manager, qtbot):
+    """Operator direction (2026-09-29): the optional choices, which will grow, are bucketed."""
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    pages = (("Exploding Tiles", "exploding_tiles"), ("Glass Shatter", "glass_shatter"), ("Crumble", "crumble"),
+             ("Directional Pixel Accretion", "pixel_accretion"), ("3D Block Spins", "blockspin"))
+    for name, section in pages:
+        tab._activation_checkboxes[name].setChecked(True)
+        tab._on_nav_selected(name)
+        toggle, body = getattr(tab, f"{section}_advanced_toggle"), getattr(tab, f"{section}_advanced_body")
+        assert toggle.text() == "Advanced" and not toggle.isChecked() and body.isHidden()
+        for field, *_rest in tab._SCENE3D_CHOICES[section]:
+            assert body.isAncestorOf(getattr(tab, f"{section}_{field}_combo")), (section, field)
+        # Controls that shape the effect itself stay on the page.
+        for control in tab._SURFACE_CONTROLS.get(section, ()):
+            spin = getattr(tab, f"{section}_{control[0]}_spin")
+            attached = {f for fields in tab._ADVANCED_SURFACE_FIELDS.get(section, {}).values() for f in fields}
+            assert body.isAncestorOf(spin) is (control[0] in attached), (section, control[0])
+        toggle.setChecked(True)
+        assert not body.isHidden()
+    assert tab.exploding_tiles_advanced_body.isAncestorOf(tab.exploding_tiles_bloom_strength_spin)
+
+
 def test_block_spins_edge_glass_round_trips_on_its_page(qapp, settings_manager, qtbot):
     from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 

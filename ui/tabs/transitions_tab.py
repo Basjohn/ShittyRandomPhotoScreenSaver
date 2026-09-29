@@ -1097,18 +1097,29 @@ class TransitionsTab(QWidget):
         "crumble": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
         "pixel_accretion": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
         "blockspin": (
-            _ANTIALIASING_CONTROL,
-            _MOTION_BLUR_CONTROL,
-            _MOTION_TRAILS_CONTROL,
             ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
              "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
              "The sheen and gloss stay."),
+            _ANTIALIASING_CONTROL,
+            _MOTION_BLUR_CONTROL,
+            _MOTION_TRAILS_CONTROL,
         ),
     }
 
+    # Operator direction (2026-09-29): a page's optional quality and look choices, which will
+    # grow, live in one closed "Advanced" bucket; the controls that shape the effect itself
+    # stay on the page. A surface value that belongs to a choice sits right under it.
+    _ADVANCED_SURFACE_FIELDS = {"exploding_tiles": {"bloom": ("bloom_strength",)}}
+
     def _build_scene3d_choices(self, layout, section: str) -> None:
+        toggle, body, advanced = shared_styles.build_bucket_toggle(layout, "Advanced", expanded=False)
+        toggle.setToolTip("Quality and optional effects for this transition.")
+        setattr(self, f"{section}_advanced_toggle", toggle)
+        setattr(self, f"{section}_advanced_body", body)
+        attached = self._ADVANCED_SURFACE_FIELDS.get(section, {})
+        surface = {control[0]: control for control in self._SURFACE_CONTROLS.get(section, ())}
         for field, label, choices, tooltip in self._SCENE3D_CHOICES[section]:
-            row = self._aligned_row(layout, label)
+            row = self._aligned_row(advanced, label)
             combo = StyledComboBox(size_variant="compact")
             combo.addItems(list(choices))
             combo.setCurrentText(str(_transition_default(f"{section}.{field}")))
@@ -1117,20 +1128,28 @@ class TransitionsTab(QWidget):
             row.addWidget(combo)
             row.addStretch()
             setattr(self, f"{section}_{field}_combo", combo)
+            for extra in attached.get(field, ()):
+                self._build_surface_control(advanced, section, *surface[extra])
 
     def _build_surface_controls(self, layout, section: str) -> None:
-        for field, label, low, high, tooltip in self._SURFACE_CONTROLS[section]:
-            row = self._aligned_row(layout, label)
-            spin = QDoubleSpinBox()
-            spin.setDecimals(2)
-            spin.setRange(low, high)
-            spin.setSingleStep(.05)
-            spin.setValue(float(_transition_default(f"{section}.{field}")))
-            spin.setToolTip(tooltip)
-            spin.valueChanged.connect(self._save_settings)
-            row.addWidget(spin)
-            row.addStretch()
-            setattr(self, f"{section}_{field}_spin", spin)
+        advanced = {field for fields in self._ADVANCED_SURFACE_FIELDS.get(section, {}).values() for field in fields}
+        for control in self._SURFACE_CONTROLS[section]:
+            if control[0] not in advanced:
+                self._build_surface_control(layout, section, *control)
+
+    def _build_surface_control(self, layout, section: str, field: str, label: str, low: float, high: float,
+                               tooltip: str) -> None:
+        row = self._aligned_row(layout, label)
+        spin = QDoubleSpinBox()
+        spin.setDecimals(2)
+        spin.setRange(low, high)
+        spin.setSingleStep(.05)
+        spin.setValue(float(_transition_default(f"{section}.{field}")))
+        spin.setToolTip(tooltip)
+        spin.valueChanged.connect(self._save_settings)
+        row.addWidget(spin)
+        row.addStretch()
+        setattr(self, f"{section}_{field}_spin", spin)
 
     def _build_glass_shatter_group(self) -> None:
         self.glass_shatter_group = QGroupBox("Glass Shatter Settings")
