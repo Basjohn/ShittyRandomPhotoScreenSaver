@@ -16,6 +16,7 @@ from rendering.gl_programs.exploding_tiles_program import (
     EXPLODING_TILES_BOX_VERTICES,
     EXPLODING_TILES_FRAGMENT_SOURCE,
     EXPLODING_TILES_FRAME_BLOCK,
+    EXPLODING_TILES_GHOST_FRAGMENT_SOURCE,
     EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
     EXPLODING_TILES_SHADOW_VERTEX_SOURCE,
     EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
@@ -29,11 +30,12 @@ from rendering.gl_programs.exploding_tiles_program import (
     exploding_tiles_parameters,
     exploding_tiles_sparks_live,
 )
-from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress
+from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress, scene3d_trail_ghosts
 from rendering.quick.scene3d.environment import PhotoEnvironment
 from rendering.quick.scene3d.particles import draw_particles, particle_budget
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.shadows import draw_planar_shadows
+from rendering.quick.scene3d.trails import MotionTrails, trail_program
 from rendering.quick.scene3d.target import SceneTarget
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
@@ -47,6 +49,9 @@ class QuickExplodingTilesRenderer:
         self._resources = MeshResources("Quick Exploding Tiles")
         self._target = SceneTarget("Quick Exploding Tiles")
         self._environment = PhotoEnvironment("Quick Exploding Tiles")   # photo reflections
+        self._trails = MotionTrails("Quick Exploding Tiles")
+        # The ghosts' frame values (their own buffer, so the real tiles keep theirs).
+        self._ghost_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles ghosts")
         self._frame_block = UniformBlock(EXPLODING_TILES_FRAME_BLOCK, "Quick Exploding Tiles")
         self._body_key: tuple[int, str] | None = None
         self._body = (0.15, 0.15, 0.15)
@@ -54,7 +59,7 @@ class QuickExplodingTilesRenderer:
     @property
     def has_resources(self) -> bool:
         return (self._resources.has_resources or self._target.has_resources or self._frame_block.has_resources
-                or self._environment.has_resources)
+                or self._environment.has_resources or self._trails.has_resources or self._ghost_block.has_resources)
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
@@ -66,11 +71,11 @@ class QuickExplodingTilesRenderer:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
             (seed, columns, depth, thickness, force, detail_name, samples, bloom,
-             motion_blur) = exploding_tiles_parameters(frame.run.request.parameter_dict())
+             motion_blur, trails) = exploding_tiles_parameters(frame.run.request.parameter_dict())
             # Multisampling, bloom and motion blur arrive resolved (this transition's settings
             # over the 3D Detail tier); the tier itself still sets shadows and the spark budget.
             detail = scene3d_detail(detail_name)
-            samples = samples or (1 if bloom > 0.0 or motion_blur else 0)
+            samples = samples or (1 if bloom > 0.0 or motion_blur or trails else 0)
             grid = exploding_tiles_grid(columns, frame.viewport[2], frame.viewport[3])
             direction = frame.run.request.direction
             center_out = str(direction) == "center_out"
@@ -91,7 +96,8 @@ class QuickExplodingTilesRenderer:
             with self._frame_block.bound(values):
                 if samples:
                     with self._target.scope(frame, samples, self._resources, bloom=bloom, motion_blur=motion_blur):
-                        self._draw_scene(frame, grid, detail, progress, force, center_out, environment)
+                        self._draw_scene(frame, grid, detail, progress, force, center_out, environment,
+                                         values if trails else None)
                 else:
                     self._draw_scene(frame, grid, detail, progress, force, center_out, environment)
         except Exception:
@@ -99,11 +105,20 @@ class QuickExplodingTilesRenderer:
             raise
 
     def _draw_scene(self, frame, grid, detail, progress: float, force: float, center_out: bool,
-                    environment: int) -> None:
+                    environment: int, trail_values=None) -> None:
         tiles = grid[0] * grid[1]
         self._draw_backdrop(frame)
         if detail.shadows:
             self._draw_shadows(frame, tiles)
+        if trail_values is not None:
+            def ghost(time, fade):
+                # A negative shutter: the ghost's vertex stage also finds where each tile is now.
+                values = {**trail_values, "uProgress": time, "uBlast": exploding_tiles_blast(time),
+                          "uShutter": time - progress}
+                with self._ghost_block.bound(values):
+                    self._draw_tiles(frame, tiles, environment, fade)
+            self._trails.draw(self._target, frame, self._resources,
+                              scene3d_trail_ghosts(progress, frame.run.request.duration_ms), ghost)
         self._resources.begin_depth(frame)
         self._draw_tiles(frame, tiles, environment)
         sparks = particle_budget(EXPLODING_TILES_SPARKS, detail)
@@ -128,10 +143,19 @@ class QuickExplodingTilesRenderer:
                   ("uMatrix", "uItemSize", "uNewTex"), frame)
         draw_planar_shadows(frame, tiles)
 
-    def _draw_tiles(self, frame, tiles: int, environment: int) -> None:
-        self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
-                  ("uMatrix", "uItemSize", "uOldTex", "uEnvironment"), frame)
-        uniforms = self._resources.uniforms("tiles", ("uMatrix", "uItemSize", "uOldTex", "uEnvironment"))
+    _TILE_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uEnvironment")
+
+    def _draw_tiles(self, frame, tiles: int, environment: int, ghost: float | None = None) -> None:
+        if ghost is not None:
+            program, uniforms = trail_program(self._resources, "tiles", EXPLODING_TILES_VERTEX_SOURCE,
+                                              EXPLODING_TILES_GHOST_FRAGMENT_SOURCE, self._TILE_UNIFORMS)
+            self._frame_block.attach(program)
+            bind_frame(program, uniforms, frame)
+            gl.glUniform1f(uniforms["uGhostFade"], ghost)
+        else:
+            self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
+                      self._TILE_UNIFORMS, frame)
+            uniforms = self._resources.uniforms("tiles", self._TILE_UNIFORMS)
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
         gl.glUniform1i(uniforms["uEnvironment"], 2)
@@ -156,14 +180,15 @@ class QuickExplodingTilesRenderer:
         return self._body
 
     def park(self) -> None:
-        """Drop the per-run scene target and environment; programs, the slab mesh and the block stay warm."""
+        """Drop the per-run target, environment and trails; programs, the slab mesh and the block stay warm."""
         self._target.release()
         self._environment.release()
+        self._trails.release()
 
     def release_resources(self) -> None:
         errors: list[str] = []
-        for release in (self._target.release, self._environment.release, self._frame_block.release,
-                        self._resources.release_resources):
+        for release in (self._target.release, self._environment.release, self._trails.release,
+                        self._frame_block.release, self._ghost_block.release, self._resources.release_resources):
             try:
                 release()
             except Exception as exc:

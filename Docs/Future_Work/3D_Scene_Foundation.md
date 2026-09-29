@@ -285,5 +285,6 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 
 ## Landed / remaining
 
-- Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b), S8, S9.
+- Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b), S8, S9; also Motion Trails (operator request 2026-09-29:
+  `rendering/quick/scene3d/trails.py`, ghosts from each effect's motion variants; see Transitions.md).
 - Remaining: S10 and S11 (both conditional on physical evidence).

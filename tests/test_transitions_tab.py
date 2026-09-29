@@ -358,7 +358,7 @@ def test_3d_detail_round_trips_and_repairs_unknown_values(qapp, settings_manager
 
 
 def test_3d_quality_choices_and_bloom_strength_round_trip_on_the_pages(qapp, settings_manager, qtbot):
-    from rendering.gl_programs.scene3d import SCENE3D_ANTIALIASING_CHOICES, SCENE3D_EFFECT_CHOICES
+    from rendering.gl_programs.scene3d import SCENE3D_ANTIALIASING_CHOICES, SCENE3D_EFFECT_CHOICES, SCENE3D_TRAIL_CHOICES
 
     tab = TransitionsTab(settings_manager)
     qtbot.addWidget(tab)
@@ -379,6 +379,13 @@ def test_3d_quality_choices_and_bloom_strength_round_trip_on_the_pages(qapp, set
         assert motion_blur.currentText() == canonical[section]["motion_blur"]
         motion_blur.setCurrentText(next(value for value in SCENE3D_EFFECT_CHOICES if value != motion_blur.currentText()))
         assert settings_manager.get("transitions", {})[section]["motion_blur"] == motion_blur.currentText()
+        trails = getattr(tab, f"{section}_motion_trails_combo")
+        assert trails.currentText() == canonical[section]["motion_trails"]
+        trails.setCurrentText(next(value for value in SCENE3D_TRAIL_CHOICES if value != trails.currentText()))
+        assert settings_manager.get("transitions", {})[section]["motion_trails"] == trails.currentText()
+    # Motion Trails is offered only where it can help (operator direction, 2026-09-29).
+    assert {section for section, controls in tab._SCENE3D_CHOICES.items()
+            if any(control[0] == "motion_trails" for control in controls)} == {section for _name, section in pages}
     bloom = tab.exploding_tiles_bloom_combo
     bloom.setCurrentText(next(value for value in SCENE3D_EFFECT_CHOICES if value != bloom.currentText()))
     tab.exploding_tiles_bloom_strength_spin.setValue(0.35)

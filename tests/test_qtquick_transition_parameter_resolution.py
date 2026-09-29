@@ -46,9 +46,9 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
 @pytest.mark.parametrize(
     ("transition_id", "section", "expected_direction", "expected_keys"),
     [
-        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen", "collisions", "reshatter", "detail", "samples", "motion_blur"}),
-        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force", "detail", "samples", "bloom", "motion_blur"}),
-        ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel", "detail", "samples", "motion_blur"}),
+        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen", "collisions", "reshatter", "detail", "samples", "motion_blur", "motion_trails"}),
+        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force", "detail", "samples", "bloom", "motion_blur", "motion_trails"}),
+        ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel", "detail", "samples", "motion_blur", "motion_trails"}),
         ("melt_drip", "melt_drip", "center_in", {"seed", "detail", "depth", "gloss"}),
     ],
 )

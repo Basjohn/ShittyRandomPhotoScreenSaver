@@ -506,6 +506,45 @@ def scene3d_reflection_uv(ray: Vec3) -> tuple[float, float]:
     return 0.5 + ray[0] * 0.5, 0.5 - ray[1] * 0.5
 
 
+def scene3d_ghost_fragment(source: str) -> str:
+    """A piece's ghost for the motion trails: its motion-writing fragment shader writing only
+    ``uGhostFade``, a flat silhouette of the piece's exact shape (its discards still apply).
+
+    The ghost's vertex stage evaluates the piece at the ghost's moment (the time input) and
+    *now* (the ``Before`` input), so the fragment knows how far the piece has moved since;
+    a piece that moved less than the trail's line reaches (``trail_line``) draws no ghost,
+    so a still or slow piece never trails or wears a halo of its own outline.
+    """
+    if len(re.findall(r"\bout\s+vec4\s+FragColor\s*;", source)) != 1:
+        raise ValueError("a shader for motion trails must write one vec4 FragColor")
+    if not all(name in source for name in ("vClipNow", "vClipBefore", "uViewport", "sceneVelocity")):
+        raise ValueError("motion trails need a motion-writing fragment (a ghost must know how far its piece moved)")
+    source = _rename_main(source, "sceneTrailMain")
+    source = _after_version(source, "uniform float uGhostFade;\n")
+    return source + """
+void main() {
+    sceneTrailMain();
+    if (length(sceneVelocity(vClipNow, vClipBefore, uViewport)) < max(1.5, uViewport.y / 540.0) + 1.5) discard;
+    FragColor = vec4(uGhostFade);
+}
+"""
+
+
+# Motion trails: ghosts a fixed real time apart (like the shutter, whatever the run's length),
+# oldest first and faintest; a fade per ghost, the newest brightest.
+SCENE3D_TRAIL_GHOSTS = 3
+SCENE3D_TRAIL_GAP_SECONDS = 0.045
+SCENE3D_TRAIL_CHOICES = ("Off", "On")
+
+
+def scene3d_trail_ghosts(progress: float, duration_ms: float) -> tuple[tuple[float, float], ...]:
+    """(progress, fade) of each ghost, oldest first; a ghost before the run's start rests there."""
+    step = SCENE3D_TRAIL_GAP_SECONDS * 1000.0 / max(float(duration_ms), 1.0)
+    count = SCENE3D_TRAIL_GHOSTS
+    return tuple((max(float(progress) - step * age, 0.0), 1.0 - age / (count + 1))
+                 for age in range(count, 0, -1))
+
+
 def scene3d_velocity(clip_now: tuple[float, float, float, float], clip_previous: tuple[float, float, float, float],
                      viewport_pixels: tuple[float, float]) -> tuple[float, float]:
     if clip_now[3] <= 0.0 or clip_previous[3] <= 0.0:

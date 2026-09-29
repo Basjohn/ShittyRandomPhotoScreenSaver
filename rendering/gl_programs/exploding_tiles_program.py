@@ -19,6 +19,7 @@ from rendering.gl_programs.scene3d import (
     SCENE3D_GLSL,
     Scene3DBlockLayout,
     scene3d_impulse,
+    scene3d_ghost_fragment,
 )
 
 
@@ -180,7 +181,7 @@ _BLAST_FADE = (0.60, 0.85)
 
 def exploding_tiles_parameters(
     parameters: Mapping[str, object],
-) -> tuple[int, int, float, float, float, str, int, float, bool]:
+) -> tuple[int, int, float, float, float, str, int, float, bool, bool]:
     """Validate resolved-only tile controls before GL state changes."""
     seed, columns, depth = (
         parameters.get("seed"),
@@ -190,6 +191,7 @@ def exploding_tiles_parameters(
     thickness, force = parameters.get("thickness"), parameters.get("force")
     detail, samples, bloom = parameters.get("detail"), parameters.get("samples"), parameters.get("bloom")
     motion_blur = parameters.get("motion_blur", False)
+    motion_trails = parameters.get("motion_trails", False)
     if isinstance(seed, bool) or not isinstance(seed, int) or not 1 <= seed <= 65535:
         raise ValueError("Exploding Tiles seed must be an integer between 1 and 65535")
     if (
@@ -230,10 +232,10 @@ def exploding_tiles_parameters(
         raise ValueError("Exploding Tiles bloom must be finite and between 0 and 1")
     if isinstance(samples, bool) or samples not in (0, 2, 4, 8):
         raise ValueError("Exploding Tiles samples must be 0, 2, 4 or 8")
-    if not isinstance(motion_blur, bool):
-        raise ValueError("Exploding Tiles motion blur must be on or off")
+    if not isinstance(motion_blur, bool) or not isinstance(motion_trails, bool):
+        raise ValueError("Exploding Tiles motion blur and motion trails must be on or off")
     return (seed, columns, float(depth), float(thickness), float(force), str(detail), int(samples), float(bloom),
-            motion_blur)
+            motion_blur, motion_trails)
 
 
 def exploding_tiles_grid(columns: int, width: int, height: int) -> tuple[int, int]:
@@ -505,10 +507,11 @@ void main() {
     Tile t = tileAt(uint(gl_InstanceID));
     vec3 world = tilePoint(t, aPosition);
     gl_Position = sceneProject(uMatrix, uItemSize, world);
-    // Where this point was one shutter ago (only with motion blur on).
+    // Where this point was one shutter ago (only with motion blur on); a ghost for the
+    // motion trails passes a negative shutter to learn where its tile is now.
     vClipNow = gl_Position;
     vClipBefore = gl_Position;
-    if (uShutter > 0.0) {
+    if (uShutter != 0.0) {
         Tile before = tileAtTime(uint(gl_InstanceID), max(uProgress - uShutter, 0.0));
         vClipBefore = sceneProject(uMatrix, uItemSize, tilePoint(before, aPosition));
     }
@@ -694,3 +697,5 @@ void main() {
 }
 """
 )
+# With motion trails: the same slabs as flat ghost silhouettes.
+EXPLODING_TILES_GHOST_FRAGMENT_SOURCE = scene3d_ghost_fragment(EXPLODING_TILES_FRAGMENT_SOURCE)

@@ -6,6 +6,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.pixel_accretion_program import (
     PIXEL_ACCRETION_FRAGMENT_SOURCE,
+    PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE,
     PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE,
     PIXEL_ACCRETION_MOTION_VERTEX_SOURCE,
     PIXEL_ACCRETION_QUAD_VERTICES,
@@ -13,8 +14,9 @@ from rendering.gl_programs.pixel_accretion_program import (
     pixel_accretion_grid,
     pixel_accretion_parameters,
 )
-from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress
-from rendering.quick.scene3d.motion import motion_program, set_motion_uniforms
+from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress, scene3d_trail_ghosts
+from rendering.quick.scene3d.motion import motion_program, motion_uniform_names, set_motion_uniforms
+from rendering.quick.scene3d.trails import MotionTrails, trail_program
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
 from ..directions import direction_vector
@@ -27,10 +29,11 @@ class QuickPixelAccretionRenderer:
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Directional Pixel Accretion")
         self._target = SceneTarget("Quick Directional Pixel Accretion")
+        self._trails = MotionTrails("Quick Directional Pixel Accretion")
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources or self._target.has_resources
+        return self._resources.has_resources or self._target.has_resources or self._trails.has_resources
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
@@ -45,33 +48,55 @@ class QuickPixelAccretionRenderer:
             parameters = frame.run.request.parameter_dict()
             seed, tile_size, travel = pixel_accretion_parameters(parameters)
             motion = bool(parameters.get("motion_blur", False))
-            samples = scene3d_request_samples(parameters) or (1 if motion else 0)
+            trails = bool(parameters.get("motion_trails", False))
+            samples = scene3d_request_samples(parameters) or (1 if motion or trails else 0)
             if samples:
                 with self._target.scope(frame, samples, self._resources, motion_blur=motion):
-                    self._draw_scene(frame, progress, seed, tile_size, travel, motion)
+                    self._draw_scene(frame, progress, seed, tile_size, travel, motion, trails)
             else:
                 self._draw_scene(frame, progress, seed, tile_size, travel, False)
         except Exception:
             self.release_resources()
             raise
 
-    def _draw_scene(self, frame, progress: float, seed: int, tile_size: int, travel: float, motion: bool) -> None:
+    def _draw_scene(self, frame, progress: float, seed: int, tile_size: int, travel: float, motion: bool,
+                    trails: bool = False) -> None:
+        self._resources.draw_image(frame, frame.source_texture_id)
+        if trails:
+            self._trails.draw(self._target, frame, self._resources,
+                              scene3d_trail_ghosts(progress, frame.run.request.duration_ms),
+                              lambda time, fade: self._draw_tiles(frame, time, seed, tile_size, travel, False,
+                                                                  (fade, progress)))
+        self._resources.begin_depth(frame)
+        self._draw_tiles(frame, progress, seed, tile_size, travel, motion)
+
+    _TILE_UNIFORMS = ("uMatrix", "uItemSize", "uNewTex", "uGrid", "uDirection", "uProgress", "uTravel", "uSeed")
+
+    def _draw_tiles(self, frame, progress: float, seed: int, tile_size: int, travel: float, motion: bool,
+                    ghost: tuple[float, float] | None = None) -> None:
+        """``ghost``: (fade, the moment now) to draw the tiles as a motion-trail ghost."""
         columns, rows, _actual_size = pixel_accretion_grid(
             frame.viewport[2], frame.viewport[3], tile_size
         )
-        self._resources.draw_image(frame, frame.source_texture_id)
-        self._resources.begin_depth(frame)
-        program, uniforms = motion_program(
-            self._resources, "microquads", (PIXEL_ACCRETION_VERTEX_SOURCE, PIXEL_ACCRETION_FRAGMENT_SOURCE),
-            (PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE),
-            ("uMatrix", "uItemSize", "uNewTex", "uGrid", "uDirection", "uProgress", "uTravel", "uSeed"), motion,
-        )
+        if ghost is not None:
+            program, uniforms = trail_program(self._resources, "microquads", PIXEL_ACCRETION_MOTION_VERTEX_SOURCE,
+                                              PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE,
+                                              self._TILE_UNIFORMS + motion_uniform_names())
+        else:
+            program, uniforms = motion_program(
+                self._resources, "microquads", (PIXEL_ACCRETION_VERTEX_SOURCE, PIXEL_ACCRETION_FRAGMENT_SOURCE),
+                (PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE),
+                self._TILE_UNIFORMS, motion,
+            )
         bind_frame(program, uniforms, frame)
         gl.glUniform2f(uniforms["uGrid"], float(columns), float(rows))
         gl.glUniform2f(uniforms["uDirection"], *direction_vector(frame.run.request.direction))
         gl.glUniform1f(uniforms["uProgress"], progress)
         gl.glUniform1f(uniforms["uTravel"], travel)
         gl.glUniform1f(uniforms["uSeed"], float(seed))
+        if ghost is not None:
+            gl.glUniform1f(uniforms["uGhostFade"], ghost[0])
+            set_motion_uniforms(uniforms, frame, ghost[1])
         if motion:
             set_motion_uniforms(uniforms, frame,
                                 max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0))
@@ -81,8 +106,9 @@ class QuickPixelAccretionRenderer:
             gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, columns * rows)
 
     def park(self) -> None:
-        """Drop the per-run scene target; the program and mesh stay warm."""
+        """Drop the per-run scene target and trails; the program and mesh stay warm."""
         self._target.release()
+        self._trails.release()
 
     def _initialize(self) -> None:
         self._resources.program(
@@ -91,6 +117,7 @@ class QuickPixelAccretionRenderer:
 
     def release_resources(self) -> None:
         self._target.release()
+        self._trails.release()
         self._resources.release_resources()
 
 

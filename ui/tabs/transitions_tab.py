@@ -30,6 +30,7 @@ from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
     SCENE3D_DETAIL_NAMES,
     SCENE3D_EFFECT_CHOICES,
+    SCENE3D_TRAIL_CHOICES,
 )
 from rendering.transition_registry import (
     canonicalize_transition_name,
@@ -1082,19 +1083,23 @@ class TransitionsTab(QWidget):
     _MOTION_BLUR_CONTROL = ("motion_blur", "Motion Blur:", SCENE3D_EFFECT_CHOICES,
                             "Blurs fast pieces along their motion, as a camera would; still parts stay sharp."
                             + _AUTO_TIP)
+    _MOTION_TRAILS_CONTROL = ("motion_trails", "Motion Trails:", SCENE3D_TRAIL_CHOICES,
+                              "Faint, fading outlines of where fast pieces just were.")
     _SCENE3D_CHOICES = {
         "exploding_tiles": (
             _ANTIALIASING_CONTROL,
             ("bloom", "Bloom:", SCENE3D_EFFECT_CHOICES,
              "Glow around sparks, hot edges and glowing cracks; the photographs never glow." + _AUTO_TIP),
             _MOTION_BLUR_CONTROL,
+            _MOTION_TRAILS_CONTROL,
         ),
-        "glass_shatter": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL),
-        "crumble": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL),
-        "pixel_accretion": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL),
+        "glass_shatter": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
+        "crumble": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
+        "pixel_accretion": (_ANTIALIASING_CONTROL, _MOTION_BLUR_CONTROL, _MOTION_TRAILS_CONTROL),
         "blockspin": (
             _ANTIALIASING_CONTROL,
             _MOTION_BLUR_CONTROL,
+            _MOTION_TRAILS_CONTROL,
             ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
              "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
              "The sheen and gloss stay."),
