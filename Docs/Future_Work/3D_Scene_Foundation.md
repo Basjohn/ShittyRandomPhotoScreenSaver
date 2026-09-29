@@ -201,8 +201,12 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 - **Bars:** endpoints exact; a still scene is unchanged; cost measured.
 
 ### S8 — Shared building blocks
-- [ ] Particles: the Exploding Tiles spark emitter becomes library functions plus a shared instanced pass (emit, drag,
-  gravity, life, streak or soft sprite, additive); Tiles consumes it with identical pixels.
+- [x] Particles: the Exploding Tiles spark emitter becomes library functions plus a shared instanced pass (emit, drag,
+  gravity, life, streak or soft sprite, additive); Tiles consumes it with identical pixels. **Landed:**
+  `sceneParticleAt` / `sceneParticleStreak` (a streak with no trail is a soft sprite) with CPU mirrors, and
+  `rendering/quick/scene3d/particles.py` (`draw_particles`: additive, depth untouched, alpha accumulated for the
+  bloom; `particle_budget` by tier). Each effect keeps its own emitter (birth, heading, speed, life, colour). Tiles
+  is pixel-identical: 189 frames, every tier, three directions, with and without bloom, motion blur and 4x.
 - [ ] Planar soft shadows: the Tiles shadow pass becomes a shared pass for any instanced rigid piece; Tiles identical.
   Glass/Crumble shadows are a look change and wait for the operator.
 - [ ] Bendable grid surface: a static subdivided grid (density by tier) and a displacement-hook convention for Page

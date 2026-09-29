@@ -241,6 +241,27 @@ def test_streaks_match(probe):
            tolerance=1e-3)
 
 
+def test_particles_match(probe):
+    rng = random.Random(8)
+    cases = []
+    for _ in range(96):
+        origin = (rng.uniform(-0.8, 0.8), rng.uniform(-0.4, 0.4), rng.uniform(0.0, 0.3))
+        velocity = (rng.uniform(-4, 4), rng.uniform(-4, 4), rng.uniform(0, 2))
+        cases.append((origin, velocity, rng.uniform(2, 20), rng.uniform(0, 3), rng.uniform(0.001, 0.3),
+                      rng.uniform(0, 0.01), rng.uniform(1, 6), (rng.random(), rng.random())))
+    gpu = probe.run("vec4 o = arg(0), v = arg(1), p = arg(2);"
+                    "FragColor = vec4(sceneParticleAt(o.xyz, v.xyz, p.x, p.y, p.z), 0.0);",
+                    [[origin, velocity, (drag, fall, t)] for origin, velocity, drag, fall, t, *_ in cases])
+    _check(gpu, [lib.scene3d_particle_at(origin, velocity, drag, fall, t)
+                 for origin, velocity, drag, fall, t, *_ in cases])
+    gpu = probe.run("vec4 o = arg(0), v = arg(1), p = arg(2), c = arg(3);"
+                    "FragColor = sceneParticleStreak(MATRIX, ITEM, o.xyz, v.xyz, p.x, p.y, p.z, p.w, c.z, c.xy);",
+                    [[origin, velocity, (drag, fall, t, trail), (*corner, width)]
+                     for origin, velocity, drag, fall, t, trail, width, corner in cases])
+    _check(gpu, [lib.scene3d_particle_streak(_MATRIX, _ITEM, origin, velocity, drag, fall, t, trail, width, corner)
+                 for origin, velocity, drag, fall, t, trail, width, corner in cases], tolerance=1e-3)
+
+
 def test_velocity_matches(probe):
     rng = random.Random(7)
     cases = []

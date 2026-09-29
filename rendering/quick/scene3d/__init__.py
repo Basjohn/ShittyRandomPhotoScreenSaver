@@ -9,6 +9,7 @@ library and its CPU mirrors live in ``rendering.gl_programs.scene3d``.
 * ``target`` -- the multisampled ``SceneTarget`` for any pixel rect;
 * ``post`` -- bloom on emitted light (``BloomChain``);
 * ``motion`` -- motion blur along each surface's screen motion (``MotionBlur``);
+* ``particles`` -- the shared additive particle pass and its tier budget;
 * ``uniforms`` -- per-frame uniform blocks;
 * ``passes`` -- blend scopes.
 
