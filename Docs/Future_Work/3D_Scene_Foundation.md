@@ -200,7 +200,7 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 - **Hazards:** memory of another attachment; sample count (bounded, 8–12); must be zero at rest and at endpoints.
 - **Bars:** endpoints exact; a still scene is unchanged; cost measured.
 
-### S8 — Shared building blocks
+### S8 — Shared building blocks — LANDED
 - [x] Particles: the Exploding Tiles spark emitter becomes library functions plus a shared instanced pass (emit, drag,
   gravity, life, streak or soft sprite, additive); Tiles consumes it with identical pixels. **Landed:**
   `sceneParticleAt` / `sceneParticleStreak` (a streak with no trail is a soft sprite) with CPU mirrors, and
@@ -214,9 +214,16 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   and height fades) with CPU mirrors, plus `rendering/quick/scene3d/shadows.py` (`draw_planar_shadows`, MIN
   blended). Tiles builds its piece with `tilePiece` and keeps its own strength and end fade: 189 frames
   pixel-identical to HEAD.
-- [ ] Bendable grid surface: a static subdivided grid (density by tier) and a displacement-hook convention for Page
+- [x] Bendable grid surface: a static subdivided grid (density by tier) and a displacement-hook convention for Page
   Curl, Accordion, Relief Rise, Spectrum Terrain, Shockwave Grid and Waveform Ribbon; unit-tested now, first real
-  consumer with the first of those.
+  consumer with the first of those. **Landed:** the tier's `grid_cells` along the photograph's longer side (High
+  192, Balanced 128, Performance 64) and `scene3d_grid_size` (square cells, either orientation), plus
+  `scene3d_grid_vertices`, a closed, consistently wound triangle list built once per size (~5 ms at 192x108, then
+  cached). `scene3d_grid_vertex_source` wraps an effect's `vec3 sceneDisplace(vec2 uv)` into the vertex shader,
+  with normals from central differences of the displacement and `scenePlanePoint` for the rest pose.
+  `rendering/quick/scene3d/grid.py` has `draw_grid`. Tests: topology (one winding, exact coverage, closed with only
+  the outline open), density by tier and aspect, a flat grid draws the photograph within one level, and normals
+  face the viewer at rest and follow a bend (a flipped normal fails).
 - **Reward:** the next transitions and 3D modes start from working parts.
 - **Risks:** refactors must not change Tiles' pixels.
 - **Hazards:** grid density is the main cost lever (tier-controlled); particle counts scale with the tier.
@@ -270,5 +277,5 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 
 ## Landed / remaining
 
-- Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b).
-- Remaining: S8–S11 in order.
+- Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b), S8.
+- Remaining: S9 (opt-in photo reflections), then S10 and S11 (both conditional on physical evidence).
