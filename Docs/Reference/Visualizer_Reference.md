@@ -413,7 +413,8 @@ A test name does not prove it exercises the real output path.
 ## 16. 3D scene foundation (optional for modes)
 
 A mode may build on the shared 3D foundation the transitions use; none does today, and Voxel Sphere stays isolated
-(its promotion gate stands). Plan and hazards: `Docs/Future_Work/3D_Scene_Foundation.md`.
+(its promotion gate stands). Plan and hazards: `Docs/Future_Work/3D_Scene_Foundation.md`. The binding lessons in
+`Docs/Reference/Transitions.md` ("3D foundation lessons") apply to modes as well.
 
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,
   planar shadows, streaks, integer hash, impulse and departure helpers). Every function has a CPU mirror in the same

@@ -12,7 +12,7 @@ order; commit and push each slice; tests and measurements before looks change.
 - [ ] **S7** Analytic motion blur, a per-transition Motion Blur choice (Auto follows the tier).
 - [ ] **S8** Shared particles, planar soft shadows and the bendable grid surface.
 - [ ] **S9** Photo reflections from renderer-owned per-run copies (opt-in per effect).
-- [ ] **S10** Cheaper High, only if physical testing shows the cost matters.
+- [ ] **S10** Cheaper High beyond the shader resolve (landed), only if physical testing shows the cost matters.
 - [ ] **S11** First-frame program compile, only if the installed build's frame trace shows the hitch.
 
 ## Memory and handles | open development items

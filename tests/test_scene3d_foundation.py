@@ -200,6 +200,10 @@ def test_bloom_glows_emitted_light_only_and_follows_the_transition_setting(qt_ap
         assert np.array_equal(frame("Performance", "Auto", 0.12), frame("Performance", "Off", 0.12))
         # ...unless the transition itself says On: its setting is authoritative.
         assert np.abs(frame("Performance", "On", 0.12) - frame("Performance", "Off", 0.12)).mean() > 0.3
+        # Balanced's bloom target is single-sample and draws like a direct draw: once nothing emits the
+        # frames match (a 1-sample multisampled renderbuffer rasterised the tiles up to 144 levels apart).
+        assert np.abs(frame("Balanced", "Auto", 0.35) - frame("Balanced", "Off", 0.35)).max() <= 1
+        assert np.array_equal(frame("Balanced", "Auto", 0.6), frame("Balanced", "Off", 0.6))
     finally:
         capture.close()
 

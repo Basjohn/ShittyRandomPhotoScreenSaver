@@ -142,3 +142,34 @@ def test_a_failing_scene_hands_quick_back_its_state(capture):
         gl.glDisable(gl.GL_SCISSOR_TEST)
         target.release()
         resources.release_resources()
+
+
+@pytest.mark.parametrize("samples,bloom", ((1, 0.0), (4, 0.0), (1, 1.0), (4, 1.0)))
+def test_the_target_resolves_in_shaders_never_through_a_blit(capture, monkeypatch, samples, bloom):
+    """A blit resolve of drawn content cost ~0.5 ms at 1440p (see the 3D foundation lessons)."""
+    import rendering.quick.scene3d.target as target_module
+
+    def blit(*_args):
+        raise AssertionError("scene target resolved through glBlitFramebuffer")
+
+    monkeypatch.setattr(target_module.gl, "glBlitFramebuffer", blit)
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    try:
+        card = _card_frame(capture, 40, 20, 120, 80)
+        _clear(capture)
+        resources.draw_image(card, capture.textures[0])
+        direct = _read(capture)
+        _clear(capture)
+        with target.scope(card, samples, resources, bloom=bloom):
+            resources.draw_image(card, capture.textures[0])
+            # A photograph emits nothing: in a bloom target its alpha (emitted brightness) is 0.
+            gl.glColorMask(gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_TRUE)
+            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+            gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
+        # So even with bloom the card is the direct draw.
+        assert np.abs(_read(capture) - direct).max() <= 1
+    finally:
+        target.release()
+        resources.release_resources()
+

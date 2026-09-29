@@ -167,6 +167,9 @@ class TransitionCapture:
             self.host.render(self.frame(run, .15+.7*index/11))
             cpu.append((perf_counter()-start)*1000)
             gl.glEndQuery(gl.GL_TIME_ELAPSED)
+            # Flush per frame as presentation does; otherwise the driver's command-buffer
+            # boundary lands inside a query and it counts the GPU waiting on the CPU.
+            gl.glFlush()
         gpu = []
         try:
             for query in queries:
