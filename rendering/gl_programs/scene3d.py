@@ -32,19 +32,26 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Scene3DDetail:
-    """One 3D Detail tier: multisampling, shadow pass and particle share."""
+    """One 3D Detail tier: multisampling, shadow pass, particle share and post effects.
+
+    ``post_effects`` admits a transition's own post-effect settings (Bloom, and
+    later Motion Blur, on its Settings page); a tier without multisampling then
+    renders through a single-sample scene target only while one is in use.
+    """
 
     name: str
     samples: int
     shadows: bool
     particles: float
+    post_effects: bool = False
 
 
 # The canonical ``transitions.detail_3d`` values, cheapest last. High renders the
 # scene into a 4x multisampled target; the others draw straight into Quick's.
+# High and Balanced honour each transition's post-effect settings; Performance none.
 SCENE3D_DETAIL_TIERS: dict[str, Scene3DDetail] = {
-    "High": Scene3DDetail("High", 4, True, 1.0),
-    "Balanced": Scene3DDetail("Balanced", 0, True, 0.6),
+    "High": Scene3DDetail("High", 4, True, 1.0, post_effects=True),
+    "Balanced": Scene3DDetail("Balanced", 0, True, 0.6, post_effects=True),
     "Performance": Scene3DDetail("Performance", 0, False, 0.3),
 }
 SCENE3D_DETAIL_NAMES = tuple(SCENE3D_DETAIL_TIERS)
@@ -57,14 +64,34 @@ def scene3d_detail(name: object) -> Scene3DDetail:
     return detail
 
 
-# A request resolved without a tier (built outside the resolver) draws directly,
-# exactly as the effects did before 3D Detail existed.
-SCENE3D_DIRECT_DETAIL = "Balanced"
+# Each 3D transition's own quality choices (on its Settings page). "Auto" follows the
+# global tier; any other value is authoritative for that transition. Resolution
+# (``resolve_scene_quality``) is the one place the two combine into effective values.
+SCENE3D_ANTIALIASING_CHOICES = ("Auto", "Off", "2x", "4x", "8x")
+SCENE3D_EFFECT_CHOICES = ("Auto", "Off", "On")
 
 
-def scene3d_request_detail(parameters) -> Scene3DDetail:
-    """The tier a resolved request carries in ``parameters["detail"]``."""
-    return scene3d_detail(parameters.get("detail", SCENE3D_DIRECT_DETAIL))
+def scene3d_samples(detail: Scene3DDetail, choice: object) -> int:
+    """Multisampling for one transition: its own choice, or the tier's for Auto."""
+    if choice == "Off":
+        return 0
+    if choice in ("2x", "4x", "8x"):
+        return int(str(choice)[0])
+    return detail.samples
+
+
+def scene3d_post_effect(detail: Scene3DDetail, choice: object) -> bool:
+    """Whether one post effect (Bloom, Motion Blur) runs: the transition's choice, or the tier's."""
+    if choice == "On":
+        return True
+    if choice == "Off":
+        return False
+    return detail.post_effects
+
+
+def scene3d_request_samples(parameters) -> int:
+    """The resolved multisampling a request carries; a request built without it draws directly."""
+    return int(parameters.get("samples", 0))
 
 
 SCENE3D_CAMERA = 3.4

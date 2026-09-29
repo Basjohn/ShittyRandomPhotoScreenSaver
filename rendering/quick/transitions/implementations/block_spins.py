@@ -15,7 +15,7 @@ from rendering.gl_programs.blockspin_program import (
     BLOCK_SPIN_VERTEX_STRIDE_FLOATS,
     block_spin_progress,
 )
-from rendering.gl_programs.scene3d import scene3d_request_detail
+from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.quick.render.gl_resources import compile_program
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SceneTarget
@@ -80,9 +80,9 @@ class QuickBlockSpinsRenderer:
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         if not self._slab_program:
             self._initialize()
-        detail = scene3d_request_detail(frame.run.request.parameter_dict())
-        if detail.samples:
-            with self._target.scope(frame, detail.samples, self._target_resources):
+        samples = scene3d_request_samples(frame.run.request.parameter_dict())
+        if samples:
+            with self._target.scope(frame, samples, self._target_resources):
                 self._draw_scene(frame)
         else:
             self._draw_scene(frame)

@@ -6,7 +6,7 @@ from OpenGL import GL as gl
 from rendering.gl_programs.glass_shatter_program import (
     GLASS_FRAGMENT, GLASS_VERTEX,
 )
-from rendering.gl_programs.scene3d import scene3d_request_detail
+from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
 from ..directions import direction_vector
@@ -48,9 +48,9 @@ class QuickGlassShatterRenderer:
                 geometry = PREPARED_GEOMETRY.get_or_build(geometry_key, build_glass_geometry)
                 self._vao, self._count = resources.mesh("shards", geometry.vertices, GLASS_ATTRIBUTES)
                 self._geometry_key = key
-            detail = scene3d_request_detail(params)
-            if detail.samples:
-                with self._target.scope(frame, detail.samples, resources):
+            samples = scene3d_request_samples(params)
+            if samples:
+                with self._target.scope(frame, samples, resources):
                     self._draw_scene(frame, progress, params)
             else:
                 self._draw_scene(frame, progress, params)

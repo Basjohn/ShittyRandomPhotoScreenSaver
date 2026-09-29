@@ -46,9 +46,9 @@ def test_blinds_resolves_random_direction_and_ui_feather_before_request():
 @pytest.mark.parametrize(
     ("transition_id", "section", "expected_direction", "expected_keys"),
     [
-        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen", "collisions", "reshatter", "detail"}),
-        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force", "detail"}),
-        ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel", "detail"}),
+        ("glass_shatter", "glass_shatter", "center_out", {"seed", "shards", "depth", "thickness", "transparency", "refraction", "dispersion", "sheen", "collisions", "reshatter", "detail", "samples"}),
+        ("exploding_tiles", "exploding_tiles", "diag_tr_bl", {"seed", "columns", "depth", "thickness", "force", "detail", "samples", "bloom"}),
+        ("pixel_accretion", "pixel_accretion", "diag_bl_tr", {"seed", "tile_size", "travel", "detail", "samples"}),
         ("melt_drip", "melt_drip", "center_in", {"seed", "detail", "depth", "gloss"}),
     ],
 )
@@ -291,3 +291,33 @@ def test_the_3d_detail_tier_reaches_the_run_and_unknown_values_use_the_default(s
     settings = {} if stored is None else {"detail_3d": stored}
     params = resolve_parameterized_phase_c_inputs("exploding_tiles", settings, random_source=rng).parameter_dict()
     assert params["detail"] == (stored if stored in SCENE3D_DETAIL_NAMES else default)
+
+
+def test_a_transitions_own_quality_choices_are_authoritative_over_the_tier():
+    from rendering.gl_programs.scene3d import SCENE3D_DETAIL_TIERS
+
+    def quality(detail_3d, section_values, transition="exploding_tiles"):
+        settings = {"detail_3d": detail_3d, transition: section_values}
+        rng = _Rng()
+        rng.choice_values = ["left"]
+        rng.randint_values = [9]
+        return resolve_parameterized_phase_c_inputs(transition, settings, random_source=rng).parameter_dict()
+
+    # Auto follows the tier.
+    for tier, detail in SCENE3D_DETAIL_TIERS.items():
+        params = quality(tier, {"antialiasing": "Auto", "bloom": "Auto", "bloom_strength": 0.5})
+        assert params["samples"] == detail.samples
+        assert params["bloom"] == (0.5 if detail.post_effects else 0.0)
+    # An explicit choice wins over any tier, both ways.
+    params = quality("Performance", {"antialiasing": "8x", "bloom": "On", "bloom_strength": 0.4})
+    assert params["samples"] == 8 and params["bloom"] == pytest.approx(0.4)
+    params = quality("High", {"antialiasing": "Off", "bloom": "Off"})
+    assert params["samples"] == 0 and params["bloom"] == 0.0
+    # Unknown stored choices repair to the canonical (Auto) behaviour.
+    params = quality("High", {"antialiasing": "16x", "bloom": "Maybe"})
+    assert params["samples"] == SCENE3D_DETAIL_TIERS["High"].samples
+    # Other 3D transitions take their own anti-aliasing the same way.
+    for transition in ("glass_shatter", "crumble", "pixel_accretion"):
+        assert quality("High", {"antialiasing": "2x"}, transition)["samples"] == 2
+        assert quality("Performance", {}, transition)["samples"] == 0
+

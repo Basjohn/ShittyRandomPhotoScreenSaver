@@ -8,11 +8,13 @@ from OpenGL import GL as gl
 
 
 @contextmanager
-def blend_scope(equation: int, source: int = gl.GL_ONE, destination: int = gl.GL_ONE) -> Iterator[None]:
-    """Blend one pass; alpha is left untouched. The consumer's fence restores the rest."""
+def blend_scope(equation: int, source: int = gl.GL_ONE, destination: int = gl.GL_ONE,
+                *, accumulate_alpha: bool = False) -> Iterator[None]:
+    """Blend one pass. Alpha is left untouched unless ``accumulate_alpha`` adds the
+    pass's alpha (emissive light for the bloom). The consumer's fence restores the rest."""
     gl.glEnable(gl.GL_BLEND)
     gl.glBlendEquationSeparate(equation, gl.GL_FUNC_ADD)
-    gl.glBlendFuncSeparate(source, destination, gl.GL_ZERO, gl.GL_ONE)
+    gl.glBlendFuncSeparate(source, destination, gl.GL_ONE if accumulate_alpha else gl.GL_ZERO, gl.GL_ONE)
     try:
         yield
     finally:

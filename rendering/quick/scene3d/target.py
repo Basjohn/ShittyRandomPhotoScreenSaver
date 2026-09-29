@@ -25,6 +25,7 @@ from OpenGL import GL as gl
 from rendering.quick import gl_query
 
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame, item_pixel_rect
+from .post import BloomChain
 
 SCENE_TARGET_BUCKET = 64
 
@@ -32,12 +33,18 @@ _COMPOSITE_FRAGMENT = """#version 410 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uScene;
+uniform sampler2D uBloom;
 uniform ivec2 uOrigin;
 uniform ivec2 uExtent;
+uniform vec2 uBloomScale;      // 1 / allocation size: the glow covers the allocation at half size
+uniform float uBloomStrength;  // 0 without bloom
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy) - uOrigin;
     if (any(lessThan(texel, ivec2(0))) || any(greaterThanEqual(texel, uExtent))) discard;
-    FragColor = texelFetch(uScene, texel, 0);
+    vec3 colour = texelFetch(uScene, texel, 0).rgb;
+    if (uBloomStrength > 0.0) colour += texture(uBloom, (vec2(texel) + 0.5) * uBloomScale).rgb * uBloomStrength;
+    // The target's alpha may carry emissive light for the bloom; Quick gets opaque pixels.
+    FragColor = vec4(colour, 1.0);
 }
 """
 
@@ -54,10 +61,11 @@ class SceneTarget:
         self._inherited = (0, 0)
         self._scissor = False
         self._rect = (0, 0, 0, 0)
+        self._bloom = BloomChain(label)
 
     @property
     def has_resources(self) -> bool:
-        return any(self._names.values())
+        return any(self._names.values()) or self._bloom.has_resources
 
     @property
     def allocation(self) -> tuple[int, int, int] | None:
@@ -66,15 +74,19 @@ class SceneTarget:
 
     @contextmanager
     def scope(self, frame: SceneFrame, samples: int, resources,
-              rect: tuple[int, int, int, int] | None = None) -> Iterator[None]:
-        """Draw the enclosed passes through the target; Quick's bindings come back either way."""
+              rect: tuple[int, int, int, int] | None = None, bloom: float = 0.0) -> Iterator[None]:
+        """Draw the enclosed passes through the target; Quick's bindings come back either way.
+
+        With ``bloom`` > 0 the emissive light the passes wrote into alpha glows
+        (see ``post.BloomChain``); the passes must then write alpha deliberately.
+        """
         self.begin(frame, samples, rect)
         try:
             yield
         except BaseException:
             self._restore_inherited(frame)
             raise
-        self.end(frame, resources)
+        self.end(frame, resources, bloom)
 
     def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None) -> None:
         x, y, width, height = tuple(int(v) for v in (rect if rect is not None else item_pixel_rect(frame)))
@@ -102,14 +114,23 @@ class SceneTarget:
         vx, vy, vw, vh = frame.viewport
         gl.glViewport(vx - x, vy - y, vw, vh)
 
-    def end(self, frame: SceneFrame, resources) -> None:
+    def end(self, frame: SceneFrame, resources, bloom: float = 0.0) -> None:
         x, y, width, height = self._rect
+        allocated_width, allocated_height = self._key[0], self._key[1]
+        # With bloom, resolve the whole allocation: outside the rect it is cleared black.
+        blit_width, blit_height = (allocated_width, allocated_height) if bloom > 0.0 else (width, height)
         gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._names["fbo"])
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._names["resolve_fbo"])
-        gl.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, gl.GL_COLOR_BUFFER_BIT, gl.GL_NEAREST)
+        gl.glBlitFramebuffer(0, 0, blit_width, blit_height, 0, 0, blit_width, blit_height,
+                             gl.GL_COLOR_BUFFER_BIT, gl.GL_NEAREST)
+        glow = 0
+        if bloom > 0.0:
+            glow = self._bloom.apply(self._names["resolve_texture"], (allocated_width, allocated_height),
+                                     resources, frame.quad_vao)
         self._restore_inherited(frame)
         program = resources.program("scene_composite", ITEM_QUAD_VERTEX_SOURCE, _COMPOSITE_FRAGMENT)
-        uniforms = resources.uniforms("scene_composite", ("uMatrix", "uItemSize", "uScene", "uOrigin", "uExtent"))
+        uniforms = resources.uniforms("scene_composite", ("uMatrix", "uItemSize", "uScene", "uBloom", "uOrigin",
+                                                           "uExtent", "uBloomScale", "uBloomStrength"))
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         gl.glUseProgram(program)
@@ -117,6 +138,11 @@ class SceneTarget:
         gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
         gl.glUniform2i(uniforms["uOrigin"], x, y)
         gl.glUniform2i(uniforms["uExtent"], width, height)
+        gl.glUniform2f(uniforms["uBloomScale"], 1.0 / allocated_width, 1.0 / allocated_height)
+        gl.glUniform1f(uniforms["uBloomStrength"], float(bloom) if glow else 0.0)
+        gl.glActiveTexture(gl.GL_TEXTURE1)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, glow or self._names["resolve_texture"])
+        gl.glUniform1i(uniforms["uBloom"], 1)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self._names["resolve_texture"])
         gl.glUniform1i(uniforms["uScene"], 0)
@@ -169,6 +195,10 @@ class SceneTarget:
 
     def release(self) -> None:
         errors: list[str] = []
+        try:
+            self._bloom.release()
+        except Exception as exc:
+            errors.append(str(exc))
         for key, delete in (
             ("fbo", lambda name: gl.glDeleteFramebuffers(1, [name])),
             ("resolve_fbo", lambda name: gl.glDeleteFramebuffers(1, [name])),

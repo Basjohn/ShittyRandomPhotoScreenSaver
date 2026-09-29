@@ -25,7 +25,11 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state,
 )
 from core.logging.logger import get_logger
-from rendering.gl_programs.scene3d import SCENE3D_DETAIL_NAMES
+from rendering.gl_programs.scene3d import (
+    SCENE3D_ANTIALIASING_CHOICES,
+    SCENE3D_DETAIL_NAMES,
+    SCENE3D_EFFECT_CHOICES,
+)
 from rendering.transition_registry import (
     canonicalize_transition_name,
     is_transition_available,
@@ -547,7 +551,9 @@ class TransitionsTab(QWidget):
             "High: smooth edges (multisampling), soft shadows and every spark; the most GPU time "
             "while a 3D transition runs.\n"
             "Balanced: soft shadows and fewer sparks, without multisampling.\n"
-            "Performance: no shadows and the fewest sparks."
+            "Performance: no shadows and the fewest sparks.\n"
+            "Each 3D transition's page can override its own Anti-aliasing and effects; "
+            "Auto there follows this setting."
         )
         self._detail_3d_combo.currentTextChanged.connect(self._save_settings)
         detail_row.addWidget(self._detail_3d_combo)
@@ -824,6 +830,16 @@ class TransitionsTab(QWidget):
                         cfg, field, section, canonical[field], spin, float,
                     ))
 
+        for section, controls in self._SCENE3D_CHOICES.items():
+            if hasattr(self, f"{section}_group"):
+                canonical = canonical_transitions[section]
+                cfg = transitions_config.get(section, canonical)
+                cfg = cfg if isinstance(cfg, dict) else canonical
+                for field, _label, choices, _tip in controls:
+                    value = cfg.get(field, canonical[field])
+                    getattr(self, f"{section}_{field}_combo").setCurrentText(
+                        str(value if value in choices else canonical[field]))
+
         if hasattr(self, 'flip_group'):
             canonical_block_flip = canonical_transitions['block_flip']
             block_flip = transitions_config.get('block_flip', canonical_block_flip)
@@ -1044,6 +1060,8 @@ class TransitionsTab(QWidget):
         "exploding_tiles": (
             ("thickness", "Tile Thickness:", 0., 1., "Solid tile thickness relative to tile size, with beveled edges."),
             ("force", "Explosion Force:", .5, 2., "Strength of the outward launch and tumble. Tiles travel beyond the screen edge."),
+            ("bloom_strength", "Bloom Strength:", 0., 1., "How strongly sparks, hot edges and glowing cracks glow "
+             "when Bloom is on."),
         ),
         "ink_bloom": (
             ("depth", "Liquid Depth:", 0., 1., "Height and surface relief of the spreading pigment."),
@@ -1054,6 +1072,35 @@ class TransitionsTab(QWidget):
             ("gloss", "Wet Gloss:", 0., 1., "Reflections on the rounded liquid surfaces."),
         ),
     }
+
+    # Each 3D transition's own quality choices. "Auto" follows 3D Detail on the SETUP
+    # page; anything else is authoritative for that transition (one resolver combines them).
+    _AUTO_TIP = " Auto follows 3D Detail on the SETUP page."
+    _ANTIALIASING_CONTROL = ("antialiasing", "Anti-aliasing:", SCENE3D_ANTIALIASING_CHOICES,
+                             "Multisampling that smooths the 3D edges; 4x and 8x cost the most GPU time." + _AUTO_TIP)
+    _SCENE3D_CHOICES = {
+        "exploding_tiles": (
+            _ANTIALIASING_CONTROL,
+            ("bloom", "Bloom:", SCENE3D_EFFECT_CHOICES,
+             "Glow around sparks, hot edges and glowing cracks; the photographs never glow." + _AUTO_TIP),
+        ),
+        "glass_shatter": (_ANTIALIASING_CONTROL,),
+        "crumble": (_ANTIALIASING_CONTROL,),
+        "pixel_accretion": (_ANTIALIASING_CONTROL,),
+        "blockspin": (_ANTIALIASING_CONTROL,),
+    }
+
+    def _build_scene3d_choices(self, layout, section: str) -> None:
+        for field, label, choices, tooltip in self._SCENE3D_CHOICES[section]:
+            row = self._aligned_row(layout, label)
+            combo = StyledComboBox(size_variant="compact")
+            combo.addItems(list(choices))
+            combo.setCurrentText(str(_transition_default(f"{section}.{field}")))
+            combo.setToolTip(tooltip)
+            combo.currentTextChanged.connect(self._save_settings)
+            row.addWidget(combo)
+            row.addStretch()
+            setattr(self, f"{section}_{field}_combo", combo)
 
     def _build_surface_controls(self, layout, section: str) -> None:
         for field, label, low, high, tooltip in self._SURFACE_CONTROLS[section]:
@@ -1112,6 +1159,7 @@ class TransitionsTab(QWidget):
         reshatter_row.addWidget(self.glass_reshatter_check)
         reshatter_row.addStretch()
         self._build_surface_controls(layout, "glass_shatter")
+        self._build_scene3d_choices(layout, "glass_shatter")
         self._specific_group_host_layout.addWidget(self.glass_shatter_group)
 
     def _build_exploding_tiles_group(self) -> None:
@@ -1136,6 +1184,7 @@ class TransitionsTab(QWidget):
         depth_row.addWidget(self.exploding_tiles_depth_spin)
         depth_row.addStretch()
         self._build_surface_controls(layout, "exploding_tiles")
+        self._build_scene3d_choices(layout, "exploding_tiles")
         self._specific_group_host_layout.addWidget(self.exploding_tiles_group)
 
     def _build_pixel_accretion_group(self) -> None:
@@ -1159,6 +1208,7 @@ class TransitionsTab(QWidget):
         self.pixel_travel_spin.valueChanged.connect(self._save_settings)
         travel_row.addWidget(self.pixel_travel_spin)
         travel_row.addStretch()
+        self._build_scene3d_choices(layout, "pixel_accretion")
         self._specific_group_host_layout.addWidget(self.pixel_accretion_group)
 
     def _build_organic_detail_group(self, *, attr: str, title: str, section: str) -> None:
@@ -1223,6 +1273,7 @@ class TransitionsTab(QWidget):
         self.blockspin_direction_combo.currentTextChanged.connect(self._save_settings)
         bs_row.addWidget(self.blockspin_direction_combo)
         bs_row.addStretch()
+        self._build_scene3d_choices(blockspin_layout, "blockspin")
 
         self._specific_group_host_layout.addWidget(self.blockspin_group)
 
@@ -1350,6 +1401,7 @@ class TransitionsTab(QWidget):
         collide_row.addStretch()
 
         self._build_surface_controls(crumble_layout, "crumble")
+        self._build_scene3d_choices(crumble_layout, "crumble")
         self._specific_group_host_layout.addWidget(self.crumble_group)
 
     def _build_particle_group(self) -> None:
@@ -1932,6 +1984,12 @@ class TransitionsTab(QWidget):
                 if spin is not None:
                     spin.blockSignals(True)
                     blockers.append(spin)
+        for section, controls in self._SCENE3D_CHOICES.items():
+            for field, *_ in controls:
+                combo = getattr(self, f"{section}_{field}_combo", None)
+                if combo is not None:
+                    combo.blockSignals(True)
+                    blockers.append(combo)
 
         # Also block the SETUP page controls while applying their state.
         for w in (
@@ -2424,7 +2482,7 @@ class TransitionsTab(QWidget):
                 }
             ),
             'wipe': {'direction': self._dir_wipe},
-            'blockspin': {'direction': self._dir_blockspin},
+            'blockspin': {**_existing_subdict('blockspin'), 'direction': self._dir_blockspin},
             'block_flip': block_flip,
             'blinds': blinds,
             'diffuse': diffuse,
@@ -2438,6 +2496,11 @@ class TransitionsTab(QWidget):
             'ink_bloom': ink_bloom,
             'melt_drip': melt_drip,
         }
+        for section, controls in self._SCENE3D_CHOICES.items():
+            if hasattr(self, f"{section}_group"):
+                for field, *_ in controls:
+                    config[section][field] = getattr(self, f"{section}_{field}_combo").currentText()
+
         # Preserve engine-managed transient random-choice bookkeeping.
         for transient_key in ('random_choice', 'last_random_choice'):
             if transient_key in existing:

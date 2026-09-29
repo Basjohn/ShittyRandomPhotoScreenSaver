@@ -153,12 +153,21 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   endpoints, framebuffer restored, High differs only at edges, park drops the target) and
   `test_every_3d_transition_request_carries_the_3d_detail_tier`.
 
-### S6 — Bloom (then HDR, decided on measurement)
-- [ ] High only: a bright-pass and downsample/upsample chain (1/2 to 1/16) over the resolved target, added back in the
+### S6 — Bloom (then HDR, decided on measurement) — LANDED (bloom; HDR not needed yet)
+- [x] A bright-pass and downsample/upsample chain (1/2 to 1/16) over the resolved target, added back in the
   composite. Glow comes only from **emissive** content, which effects write into the target's alpha (the photograph
   writes 0), so the pictures themselves never bloom and endpoints stay exact.
-- [ ] HDR (RGBA16F target + tone map) only if measurements justify doubling the colour memory (~118 MB more per display
-  at 1440p with 4x samples).
+- [x] HDR deferred: the emitted-brightness alpha and RGBA16F bloom levels give smooth glows without an HDR scene
+  target; revisit only if additive light visibly clips.
+- **Operator direction (2026-09-29):** post effects and anti-aliasing are per-transition settings on each transition's
+  page, authoritative over the global tier; "Auto" follows the tier. `resolve_scene_quality` is the single place they
+  combine (no second source of truth). Motion Blur (S7) follows the same pattern.
+- **Landed:** `rendering/quick/scene3d/post.py` (`BloomChain`), `SceneTarget.scope(..., bloom=)`, emitted-brightness
+  alpha (Exploding Tiles: sparks, hot cracks, embers, flash), Anti-aliasing choices on every 3D page and Bloom/Bloom
+  Strength on Exploding Tiles, tier flag `post_effects` (High, Balanced). Tests: bloom glows emitted light only (bright
+  non-emissive field unchanged), photographs never bloom late in the run, Auto/On/Off precedence over each tier,
+  anti-aliasing choice decides the scene target for every 3D transition, Settings round trip. Cost: +0.28 ms GPU
+  over 4x at 1440p (RTX 4090); the single-sample target itself ~0.7 ms (S10).
 - **Reward:** real glow on sparks, embers, hot cracks, glints and highlights.
 - **Risks:** bloom leaking from bright photo areas (prevented by the emissive mask); a changed composite on High.
 - **Hazards:** extra full-screen passes (downsampled chain, ~0.2–0.4 ms target); per-run allocation only; no
@@ -166,7 +175,7 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 - **Bars:** endpoints exact on High; a photo with a bright sky does not glow at 0.0001; bloom measured and parked.
 
 ### S7 — Analytic motion blur
-- [ ] High only. Every piece's motion is analytic, so its screen velocity comes from evaluating it at `t` and
+- [ ] A per-transition Motion Blur choice (Auto, Off, On), Auto following the tier's post effects. Every piece's motion is analytic, so its screen velocity comes from evaluating it at `t` and
   `t - shutter` (shutter in real seconds); a bounded-sample blur along velocity. Choose between a velocity attachment
   and geometric stretching after S6's measurements.
 - **Reward:** fast debris reads as fast; smoother motion at any refresh rate.
@@ -224,5 +233,5 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 
 ## Landed / remaining
 
-- Landed: S1, S2, S3, S4, S5.
-- Remaining: S6–S11 in order.
+- Landed: S1, S2, S3, S4, S5, S6.
+- Remaining: S7–S11 in order.

@@ -72,6 +72,8 @@ def test_detail_tiers_trade_cost_monotonically():
     assert [tier.name for tier in tiers] == list(SCENE3D_DETAIL_NAMES)
     assert tiers[0].samples > 1 and tiers[0].shadows
     assert tiers[-1].samples == 0 and not tiers[-1].shadows
+    # Post effects (each transition's Bloom, Motion Blur) run on every tier but the cheapest.
+    assert all(tier.post_effects for tier in tiers[:-1]) and not tiers[-1].post_effects
     particles = [tier.particles for tier in tiers]
     assert particles == sorted(particles, reverse=True) and particles[-1] > 0.0
     with pytest.raises(ValueError):
@@ -83,7 +85,7 @@ def test_detail_tiers_trade_cost_monotonically():
 def test_every_tier_keeps_exact_endpoints_and_restores_the_framebuffer(qt_app, detail):
     capture = TransitionCapture(256, 144)
     try:
-        run = capture.run("exploding_tiles", direction="center_out", parameters={"detail": detail})
+        run = capture.run("exploding_tiles", direction="center_out", settings={"detail_3d": detail})
         source, destination = (np.asarray(image, dtype=np.int16) for image in capture.images)
         near_start = np.asarray(capture.render(run, 0.0001)[0], dtype=np.int16)
         middle = np.asarray(capture.render(run, 0.2)[0], dtype=np.int16)
@@ -103,7 +105,9 @@ def test_high_multisamples_the_same_scene_and_park_drops_only_the_target(qt_app)
     try:
         frames = {}
         for detail in ("High", "Balanced"):
-            run = capture.run("exploding_tiles", direction="center_out", parameters={"detail": detail})
+            # Bloom off: this compares multisampling alone.
+            run = capture.run("exploding_tiles", direction="center_out",
+                              settings={"detail_3d": detail, "exploding_tiles": {"bloom": "Off"}})
             frames[detail] = np.asarray(capture.render(run, 0.2)[0], dtype=np.int16)
         difference = np.abs(frames["High"] - frames["Balanced"])
         # Same scene, smoother silhouettes: only edge pixels change.
@@ -111,7 +115,8 @@ def test_high_multisamples_the_same_scene_and_park_drops_only_the_target(qt_app)
         assert (difference.max(axis=2) > 24).mean() < 0.08
 
         renderer = capture.host._implementations["exploding_tiles"]
-        run = capture.run("exploding_tiles", direction="center_out", parameters={"detail": "High"})
+        run = capture.run("exploding_tiles", direction="center_out",
+                          settings={"detail_3d": "High", "exploding_tiles": {"bloom": "Off"}})
         capture.render(run, 0.2)
         assert renderer._target.has_resources
         capture.host.park()
@@ -157,7 +162,7 @@ def test_every_3d_transition_honours_the_tiers_and_parks(qt_app, effect, directi
         source, destination = (np.asarray(image, dtype=np.int16) for image in capture.images)
         frames = {}
         for detail in SCENE3D_DETAIL_NAMES:
-            run = capture.run(effect, direction=direction, parameters={"detail": detail}, duration_ms=8000)
+            run = capture.run(effect, direction=direction, settings={"detail_3d": detail}, duration_ms=8000)
             assert np.abs(np.asarray(capture.render(run, 0.0001)[0], dtype=np.int16) - source).mean() < 0.5
             assert np.abs(np.asarray(capture.render(run, 0.9999)[0], dtype=np.int16) - destination).mean() < 0.5
             frames[detail] = np.asarray(capture.render(run, 0.45)[0], dtype=np.int16)
@@ -167,10 +172,96 @@ def test_every_3d_transition_honours_the_tiers_and_parks(qt_app, effect, directi
         assert difference.mean() < 3.0
         assert (difference.max(axis=2) > 24).mean() < 0.08
         renderer = capture.host._implementations[effect]
-        run = capture.run(effect, direction=direction, parameters={"detail": "High"}, duration_ms=8000)
+        run = capture.run(effect, direction=direction, settings={"detail_3d": "High"}, duration_ms=8000)
         capture.render(run, 0.45)
         assert renderer._target.has_resources
         capture.host.park()
         assert not renderer._target.has_resources and renderer.has_resources
     finally:
         capture.close()
+
+
+@pytest.mark.qt
+def test_bloom_glows_emitted_light_only_and_follows_the_transition_setting(qt_app):
+    capture = TransitionCapture(256, 144)
+    try:
+        def frame(detail, bloom, progress):
+            section = {"bloom": bloom, "bloom_strength": 1.0}
+            run = capture.run("exploding_tiles", direction="center_out", duration_ms=8000,
+                              settings={"detail_3d": detail, "exploding_tiles": section})
+            return np.asarray(capture.render(run, progress)[0], dtype=np.int16)
+
+        # Late in the run nothing emits (no sparks, cracks, embers or flash): the photographs never bloom.
+        assert np.abs(frame("High", "On", 0.6) - frame("High", "Off", 0.6)).max() <= 1
+        # Around the detonation sparks and glowing cracks do.
+        assert np.abs(frame("High", "On", 0.12) - frame("High", "Off", 0.12)).mean() > 0.3
+        # Auto: Balanced blooms (through a single-sample target), Performance does not...
+        assert np.abs(frame("Balanced", "Auto", 0.12) - frame("Balanced", "Off", 0.12)).mean() > 0.3
+        assert np.array_equal(frame("Performance", "Auto", 0.12), frame("Performance", "Off", 0.12))
+        # ...unless the transition itself says On: its setting is authoritative.
+        assert np.abs(frame("Performance", "On", 0.12) - frame("Performance", "Off", 0.12)).mean() > 0.3
+    finally:
+        capture.close()
+
+
+@pytest.mark.qt
+def test_the_bloom_pass_takes_only_the_alpha_marked_light(qt_app):
+    """A white field marked non-emissive stays put; a small emissive spot spreads a glow."""
+    from types import SimpleNamespace
+
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.scene3d.target import SceneTarget
+
+    capture = TransitionCapture(256, 144)
+    resources, target = MeshResources("bloom test"), SceneTarget("bloom test")
+    texture = int(gl.glGenTextures(1))
+    try:
+        image = np.zeros((144, 256, 4), dtype=np.uint8)
+        image[..., :3] = 40
+        image[:, :96, :3] = 255                       # a white field, alpha 0: not emitted
+        image[60:84, 180:204] = (255, 140, 40, 255)    # an orange spot, alpha 1: emitted
+        gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+        for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+            gl.glTexParameteri(gl.GL_TEXTURE_2D, parameter, gl.GL_NEAREST)
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, 256, 144, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, image)
+        frame = SimpleNamespace(viewport=(0, 0, 256, 144), logical_size=(256.0, 144.0),
+                                matrix_values=(2 / 256, 0, 0, 0, 0, -2 / 144, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
+                                quad_vao=capture.vao)
+
+        def draw(bloom):
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+            gl.glViewport(0, 0, 256, 144)
+            with target.scope(frame, 1, resources, bloom=bloom):
+                resources.draw_image(frame, texture)
+            pixels = gl.glReadPixels(0, 0, 256, 144, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+            return np.flipud(np.frombuffer(bytes(pixels), dtype=np.uint8).reshape(144, 256, 4)).astype(np.int16)
+
+        plain, glowing = draw(0.0), draw(1.0)
+        added = (glowing - plain)[..., :3].max(axis=2)
+        assert added[72, 170] > 10          # beside the emissive spot: glow
+        assert added[72, 110] <= 1          # beside the white field: nothing
+        assert (glowing[..., 3] == 255).all()   # Quick always gets opaque pixels
+    finally:
+        gl.glDeleteTextures([texture])
+        target.release()
+        resources.release_resources()
+        capture.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("effect,direction", _MIGRATED)
+def test_a_transitions_anti_aliasing_choice_decides_the_scene_target(qt_app, effect, direction):
+    capture = TransitionCapture(256, 144)
+    try:
+        section = "blockspin" if effect == "block_spins" else effect
+        renderer = None
+        for tier, choice, expected in (("Performance", "4x", True), ("High", "Off", False), ("High", "Auto", True)):
+            run = capture.run(effect, direction=direction, duration_ms=8000,
+                              settings={"detail_3d": tier, section: {"antialiasing": choice}})
+            capture.render(run, 0.45)
+            renderer = capture.host._implementations[effect]
+            assert renderer._target.has_resources is expected, (tier, choice)
+            capture.host.park()
+    finally:
+        capture.close()
+
