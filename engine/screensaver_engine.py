@@ -481,6 +481,9 @@ class ScreensaverEngine(QObject):
         ):
             logger.error("Cannot initialize: invalid state")
             return False
+        from core.diagnostics import lifecycle_window
+
+        lifecycle_window.open_window("cold_start")   # closed by the first coordinated reveal
         
         try:
             logger.info("=" * 60)
@@ -1167,6 +1170,9 @@ class ScreensaverEngine(QObject):
             )
             return
         self._end_replacement_watchdog("startup_reveal_completed")
+        from core.diagnostics import lifecycle_window
+
+        lifecycle_window.close_window()
         self._prepare_next_transition()
         from core.logging.logger import (
             is_lifecycle_logging_enabled,

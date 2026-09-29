@@ -98,6 +98,10 @@ class FrameTraceEvent(IntEnum):
     BUBBLE_STYLE_UNIFORMS_READY = 59
     BUBBLE_VAO_READY = 60
     BUBBLE_DRAW_READY = 61
+    # Lifecycle windows (startup/teardown, core/diagnostics/lifecycle_window.py):
+    # frames between these are not stall points; the report splits them out.
+    LIFECYCLE_BEGIN = 62
+    LIFECYCLE_END = 63
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"

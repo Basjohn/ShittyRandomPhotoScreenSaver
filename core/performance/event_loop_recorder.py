@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QTimer, Qt
 
+from core.diagnostics import lifecycle_window
 from core.logging.logger import get_logger
 
 
@@ -97,6 +98,10 @@ class EventLoopStallRecorder(QObject):
             return None
         observed_at = time.perf_counter() if now is None else float(now)
         lateness_ms = max(0.0, (observed_at - self._expected_at) * 1000.0)
+        if lifecycle_window.is_open():
+            # Startup/teardown blocks the loop by design: not a stall sample.
+            self._expected_at = observed_at + self._interval_ms / 1000.0
+            return None
         self._lateness_ms.append(lateness_ms)
         self._period_lateness_ms.append(lateness_ms)
         self._sample_count += 1

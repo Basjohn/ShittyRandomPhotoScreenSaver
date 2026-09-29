@@ -79,6 +79,9 @@ def teardown_display_runtime(
     if manager is None:
         engine._display_initialized = False
         return None
+    from core.diagnostics import lifecycle_window
+
+    lifecycle_window.open_window(f"teardown:{reason}")   # closed by the next reveal, if any
 
     retiring_generation = getattr(manager, "_runtime_generation", None)
     barrier = None
