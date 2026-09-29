@@ -25,6 +25,7 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state,
 )
 from core.logging.logger import get_logger
+from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
     SCENE3D_DETAIL_NAMES,
@@ -1073,7 +1074,7 @@ class TransitionsTab(QWidget):
         ),
     }
 
-    # Each 3D transition's own quality choices. "Auto" follows 3D Detail on the SETUP
+    # Each 3D transition's own choices. For quality, "Auto" follows 3D Detail on the SETUP
     # page; anything else is authoritative for that transition (one resolver combines them).
     _AUTO_TIP = " Auto follows 3D Detail on the SETUP page."
     _ANTIALIASING_CONTROL = ("antialiasing", "Anti-aliasing:", SCENE3D_ANTIALIASING_CHOICES,
@@ -1087,7 +1088,12 @@ class TransitionsTab(QWidget):
         "glass_shatter": (_ANTIALIASING_CONTROL,),
         "crumble": (_ANTIALIASING_CONTROL,),
         "pixel_accretion": (_ANTIALIASING_CONTROL,),
-        "blockspin": (_ANTIALIASING_CONTROL,),
+        "blockspin": (
+            _ANTIALIASING_CONTROL,
+            ("edge_glass", "Edge Glass:", BLOCK_SPIN_EDGE_GLASS_CHOICES,
+             "Polished glass edges on the spinning slab, showing the next image: Reflection, Refraction or Both. "
+             "The sheen and gloss stay."),
+        ),
     }
 
     def _build_scene3d_choices(self, layout, section: str) -> None:

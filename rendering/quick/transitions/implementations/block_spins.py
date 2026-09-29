@@ -13,6 +13,7 @@ from rendering.gl_programs.blockspin_program import (
     BLOCK_SPIN_FRAGMENT_SOURCE,
     BLOCK_SPIN_QUICK_VERTEX_SOURCE,
     BLOCK_SPIN_VERTEX_STRIDE_FLOATS,
+    block_spin_edge_glass_mode,
     block_spin_progress,
 )
 from rendering.gl_programs.scene3d import scene3d_request_samples
@@ -80,18 +81,20 @@ class QuickBlockSpinsRenderer:
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         if not self._slab_program:
             self._initialize()
-        samples = scene3d_request_samples(frame.run.request.parameter_dict())
+        parameters = frame.run.request.parameter_dict()
+        samples = scene3d_request_samples(parameters)
+        edge_glass = block_spin_edge_glass_mode(parameters.get("edge_glass", "Off"))
         if samples:
             with self._target.scope(frame, samples, self._target_resources):
-                self._draw_scene(frame)
+                self._draw_scene(frame, edge_glass)
         else:
-            self._draw_scene(frame)
+            self._draw_scene(frame, edge_glass)
 
     def park(self) -> None:
         """Drop the per-run scene target; programs and the slab stay warm."""
         self._target.release()
 
-    def _draw_scene(self, frame: QuickTransitionRenderFrame) -> None:
+    def _draw_scene(self, frame: QuickTransitionRenderFrame, edge_glass: int) -> None:
         axis_mode, spin_direction = _block_spin_direction_state(
             frame.run.request.direction
         )
@@ -134,6 +137,7 @@ class QuickBlockSpinsRenderer:
         )
         gl.glUniform1f(uniforms["uSpecDirection"], spin_direction)
         gl.glUniform1i(uniforms["uAxisMode"], axis_mode)
+        gl.glUniform1i(uniforms["uEdgeGlass"], edge_glass)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
         gl.glUniform1i(uniforms["uOldTexture"], 0)
@@ -198,6 +202,7 @@ class QuickBlockSpinsRenderer:
                     "uAngle",
                     "uSpecDirection",
                     "uAxisMode",
+                    "uEdgeGlass",
                     "uOldTexture",
                     "uNewTexture",
                 ),

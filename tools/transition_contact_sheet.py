@@ -116,11 +116,12 @@ class TransitionCapture:
             resolved_direction, resolved_params = "left", {"motion_style": "Perspective Push"}
         elif effect == "block_spins":
             from core.settings.default_contract import require_canonical_default
-            from rendering.quick.transitions.parameter_resolution import resolve_scene_quality
+            from rendering.quick.transitions.parameter_resolution import resolve_block_spins_parameters
 
             section = {**require_canonical_default("transitions.blockspin"), **(settings or {}).get("blockspin", {})}
             resolved_direction = "left"
-            resolved_params = resolve_scene_quality(settings or {}, section, require_canonical_default("transitions.blockspin"))
+            resolved_params = resolve_block_spins_parameters(settings or {}, section,
+                                                             require_canonical_default("transitions.blockspin"))
         else:
             resolved = resolve_parameterized_phase_c_inputs(effect, settings or {}, random_source=random.Random(seed))
             resolved_direction, resolved_params = resolved.direction, resolved.parameter_dict()

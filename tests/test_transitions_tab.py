@@ -389,3 +389,26 @@ def test_3d_quality_choices_and_bloom_strength_round_trip_on_the_pages(qapp, set
     qapp.processEvents()
     assert tab.glass_shatter_antialiasing_combo.currentText() == canonical["glass_shatter"]["antialiasing"]
 
+
+def test_block_spins_edge_glass_round_trips_on_its_page(qapp, settings_manager, qtbot):
+    from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
+
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+    canonical = get_default_settings()["transitions"]["blockspin"]
+    tab._activation_checkboxes["3D Block Spins"].setChecked(True)
+    tab._on_nav_selected("3D Block Spins")
+    combo = tab.blockspin_edge_glass_combo
+    assert combo.currentText() == canonical["edge_glass"]
+    for choice in BLOCK_SPIN_EDGE_GLASS_CHOICES:
+        combo.setCurrentText(choice)
+        persisted = settings_manager.get("transitions", {})["blockspin"]
+        assert persisted["edge_glass"] == choice
+        assert {"direction", "antialiasing"} <= set(persisted)  # the page's other values survive
+
+    external = deepcopy(settings_manager.get("transitions", {}))
+    external["blockspin"]["edge_glass"] = "Mirror"
+    settings_manager.set("transitions", external)
+    qapp.processEvents()
+    assert combo.currentText() == canonical["edge_glass"]
+
