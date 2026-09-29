@@ -431,6 +431,8 @@ A mode may build on the shared 3D foundation the transitions use; none does toda
 - **Cost:** a Visualizer detail tier arrives with the first consumer, separate from `transitions.detail_3d` because a
   mode draws continuously; each mode's own quality choices then override it the same way transitions do ("Auto"
   follows the tier, one resolver combines them). Per-frame Python GL calls are the main CPU hazard (plan slice S3, uniform blocks).
+- **Motion blur:** a mode may pass `motion_blur=True` to `scope` and write its screen motion inside
+  `velocity_writes()`, evaluating its points at the snapshot's logical t and t - shutter (never real time).
 - **Fence:** the Visualizer fence is unchanged (CHK26-protected hot path; modes that do not use a target pay nothing);
   `SceneTarget.scope` itself restores framebuffers, viewport and scissor, including when the scene raises.
 

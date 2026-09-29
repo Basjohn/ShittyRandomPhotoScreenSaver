@@ -9,7 +9,7 @@ audits are historicalised (`Docs/Historical_Bugs/R-100_...`, `R-101_...`).
 Detail, rewards, risks and performance hazards per slice: `Docs/Future_Work/3D_Scene_Foundation.md`. Work in this
 order; commit and push each slice; tests and measurements before looks change.
 
-- [ ] **S7** Analytic motion blur, a per-transition Motion Blur choice (Auto follows the tier).
+- [ ] **S7b** Motion Blur for Glass Shatter, Crumble, Directional Pixel Accretion and 3D Block Spins (the foundation and Exploding Tiles landed).
 - [ ] **S8** Shared particles, planar soft shadows and the bendable grid surface.
 - [ ] **S9** Photo reflections from renderer-owned per-run copies (opt-in per effect).
 - [ ] **S10** Cheaper High beyond the shader resolve (landed), only if physical testing shows the cost matters.

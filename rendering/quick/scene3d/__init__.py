@@ -7,6 +7,9 @@ library and its CPU mirrors live in ``rendering.gl_programs.scene3d``.
 * ``frame`` -- the item-quad vertex source, the frame protocol and pixel rects (pure);
 * ``resources`` -- context-local programs, meshes, image underlay, depth clear;
 * ``target`` -- the multisampled ``SceneTarget`` for any pixel rect;
+* ``post`` -- bloom on emitted light (``BloomChain``);
+* ``motion`` -- motion blur along each surface's screen motion (``MotionBlur``);
+* ``uniforms`` -- per-frame uniform blocks;
 * ``passes`` -- blend scopes.
 
 Nothing here owns a clock, state or Settings; every GL handle belongs to the

@@ -180,7 +180,7 @@ _BLAST_FADE = (0.60, 0.85)
 
 def exploding_tiles_parameters(
     parameters: Mapping[str, object],
-) -> tuple[int, int, float, float, float, str, int, float]:
+) -> tuple[int, int, float, float, float, str, int, float, bool]:
     """Validate resolved-only tile controls before GL state changes."""
     seed, columns, depth = (
         parameters.get("seed"),
@@ -189,6 +189,7 @@ def exploding_tiles_parameters(
     )
     thickness, force = parameters.get("thickness"), parameters.get("force")
     detail, samples, bloom = parameters.get("detail"), parameters.get("samples"), parameters.get("bloom")
+    motion_blur = parameters.get("motion_blur", False)
     if isinstance(seed, bool) or not isinstance(seed, int) or not 1 <= seed <= 65535:
         raise ValueError("Exploding Tiles seed must be an integer between 1 and 65535")
     if (
@@ -229,7 +230,10 @@ def exploding_tiles_parameters(
         raise ValueError("Exploding Tiles bloom must be finite and between 0 and 1")
     if isinstance(samples, bool) or samples not in (0, 2, 4, 8):
         raise ValueError("Exploding Tiles samples must be 0, 2, 4 or 8")
-    return seed, columns, float(depth), float(thickness), float(force), str(detail), int(samples), float(bloom)
+    if not isinstance(motion_blur, bool):
+        raise ValueError("Exploding Tiles motion blur must be on or off")
+    return (seed, columns, float(depth), float(thickness), float(force), str(detail), int(samples), float(bloom),
+            motion_blur)
 
 
 def exploding_tiles_grid(columns: int, width: int, height: int) -> tuple[int, int]:
@@ -326,6 +330,7 @@ EXPLODING_TILES_FRAME_BLOCK = Scene3DBlockLayout.of("ExplodingTilesFrame", (
     ("uGrid", "vec2"), ("uProgress", "float"), ("uSeed", "float"), ("uDepth", "float"),
     ("uThickness", "float"), ("uForce", "float"), ("uCenterOut", "int"), ("uEpicentre", "vec3"),
     ("uSeconds", "float"), ("uBlast", "vec2"), ("uBody", "vec3"), ("uEmissive", "float"),
+    ("uShutter", "float"), ("uViewport", "vec2"),
 ))
 _FRAME_GLSL = EXPLODING_TILES_FRAME_BLOCK.glsl()
 _MOTION_UNIFORMS_GLSL = "uniform mat4 uMatrix; uniform vec2 uItemSize;\n" + _FRAME_GLSL
@@ -347,7 +352,7 @@ float tileRelease(float reach, float jitter) {{
         * pow(reach, 0.85) + jitter * 0.012;
 }}
 
-Tile tileAt(uint id) {{
+Tile tileAtTime(uint id, float progress) {{
     Tile t;
     uint seed = uint(uSeed + 0.5);
     uint columns = uint(uGrid.x + 0.5);
@@ -367,15 +372,15 @@ Tile tileAt(uint id) {{
     // Cracks race out from the blast, then its shock front releases each tile.
     float release = tileRelease(reach, r0);
     float cracked = 0.015 + (DETONATE - 0.025) * pow(reach, 0.7);
-    float p = min(uProgress, SETTLE);
+    float p = min(progress, SETTLE);
     float tau = max(p - release, 0.0);
     float flight = SETTLE - release;
-    float build = smoothstep(cracked, release, uProgress);
-    t.crack = smoothstep(cracked, cracked + 0.02, uProgress);
+    float build = smoothstep(cracked, release, progress);
+    t.crack = smoothstep(cracked, cracked + 0.02, progress);
     // Cracks glow at the heart of the blast as it builds, then in a ring racing
     // just ahead of the shock front: each tile heats in the moment before it breaks free.
-    t.glow = max(smoothstep(cracked + 0.01, DETONATE + 0.01, uProgress) * smoothstep(0.6, 0.95, t.near),
-                 smoothstep(release - 0.025, release, uProgress));
+    t.glow = max(smoothstep(cracked + 0.01, DETONATE + 0.01, progress) * smoothstep(0.6, 0.95, t.near),
+                 smoothstep(release - 0.025, release, progress));
     t.released = smoothstep(0.0, 0.015, tau);
     // Only the heart of the blast domes and tilts before release; the rest of the
     // wall stays exactly on the photograph so its seams line up to the pixel.
@@ -391,9 +396,9 @@ Tile tileAt(uint id) {{
     // smoothly. The rate is real time (about 2.7-5 Hz) whatever the run's duration, and
     // neighbouring tiles move nearly together, so the wall shakes rather than jitters.
     float rumbleStart = mix(cracked, release, 0.4);
-    float shake = smoothstep(rumbleStart, rumbleStart + 0.03, uProgress) * (1.0 - t.released)
-                * (0.2 + 0.8 * t.near) * (0.5 + 0.5 * smoothstep(rumbleStart, release, uProgress)) * sqrt(uForce);
-    float seconds = uProgress * uSeconds;
+    float shake = smoothstep(rumbleStart, rumbleStart + 0.03, progress) * (1.0 - t.released)
+                * (0.2 + 0.8 * t.near) * (0.5 + 0.5 * smoothstep(rumbleStart, release, progress)) * sqrt(uForce);
+    float seconds = progress * uSeconds;
     float phase = dot(home, vec2(2.1, 1.7)) + r6 * 1.2;
     vec2 rumble = 0.0022 * shake * vec2(
         sin(seconds * 17.0 + phase) + 0.5 * sin(seconds * 27.0 + phase * 1.3 + r7 * 2.0),
@@ -434,6 +439,10 @@ Tile tileAt(uint id) {{
     // A brief white-hot flash on pieces near the blast, cooled to nothing within ~0.04 of the run.
     t.heat = t.released * t.near * t.near * exp(-tau * 30.0);
     return t;
+}}
+
+Tile tileAt(uint id) {{
+    return tileAtTime(id, uProgress);
 }}
 
 vec3 tilePoint(Tile t, vec3 unit) {{
@@ -487,10 +496,18 @@ EXPLODING_TILES_VERTEX_SOURCE = (
 out vec2 vUv; out vec2 vFace; out vec3 vNormal; out vec3 vWorld;
 out float vSurface; out float vLit; out float vCrack; out float vHeat;
 out float vReleased; out vec3 vFront;
+out vec4 vClipNow; out vec4 vClipBefore;
 void main() {
     Tile t = tileAt(uint(gl_InstanceID));
     vec3 world = tilePoint(t, aPosition);
     gl_Position = sceneProject(uMatrix, uItemSize, world);
+    // Where this point was one shutter ago (only with motion blur on).
+    vClipNow = gl_Position;
+    vClipBefore = gl_Position;
+    if (uShutter > 0.0) {
+        Tile before = tileAtTime(uint(gl_InstanceID), max(uProgress - uShutter, 0.0));
+        vClipBefore = sceneProject(uMatrix, uItemSize, tilePoint(before, aPosition));
+    }
     // Every surface shows the photograph at its own position in the tile, so the
     // thickness carries the edge colours through: a solid chunk of the picture.
     vFace = aPosition.xy + 0.5;
@@ -513,7 +530,9 @@ EXPLODING_TILES_FRAGMENT_SOURCE = (
 in vec2 vUv; in vec2 vFace; in vec3 vNormal; in vec3 vWorld;
 in float vSurface; in float vLit; in float vCrack; in float vHeat;
 in float vReleased; in vec3 vFront;
-out vec4 FragColor;
+in vec4 vClipNow; in vec4 vClipBefore;
+layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 SceneMotion;   // only kept while the target takes motion
 uniform sampler2D uOldTex; uniform vec2 uItemSize;
 """
     + _FRAME_GLSL
@@ -555,6 +574,7 @@ void main() {
     vec3 flash = uBlast.x * 0.3 * (colour + 0.1);
     colour += flash;
     FragColor = sceneOutput(colour, glow + flash);
+    SceneMotion = vec4(sceneVelocity(vClipNow, vClipBefore, uViewport), 0.0, 1.0);
 }
 """
 )

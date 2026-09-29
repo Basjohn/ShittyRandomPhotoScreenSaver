@@ -173,3 +173,83 @@ def test_the_target_resolves_in_shaders_never_through_a_blit(capture, monkeypatc
         target.release()
         resources.release_resources()
 
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_motion_blur_leaves_a_still_scene_exact(capture, samples):
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    try:
+        card = _card_frame(capture, 40, 20, 120, 80)
+        _clear(capture)
+        resources.draw_image(card, capture.textures[0])
+        direct = _read(capture)
+        _clear(capture)
+        with target.scope(card, samples, resources, motion_blur=True):
+            resources.draw_image(card, capture.textures[0])   # nothing writes motion
+        assert np.array_equal(_read(capture), direct)
+        target.release()
+        assert not target.has_resources
+    finally:
+        target.release()
+        resources.release_resources()
+
+
+_MOVING_FRAGMENT = """#version 410 core
+layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 Motion;
+uniform vec2 uMotion;
+void main() {
+    FragColor = vec4(1.0);
+    Motion = vec4(uMotion, 0.0, 1.0);
+}
+"""
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_motion_blur_smears_a_moving_surface_along_its_motion_only(capture, samples):
+    from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+    from rendering.quick.scene3d.motion import motion_blur_tile
+    from rendering.quick.scene3d.resources import bind_frame
+
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    try:
+        full = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
+        square = _card_frame(capture, 120, 64, 16, 16)   # rows 64..79, columns 120..135 (top-down)
+        motion = 1.5 * motion_blur_tile(HEIGHT)          # within the longest blur (two tiles)
+
+        def draw(velocity, writes=True):
+            _clear(capture)
+            with target.scope(full, samples, resources, rect=(0, 0, WIDTH, HEIGHT), motion_blur=True):
+                gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+                program = resources.program("moving", ITEM_QUAD_VERTEX_SOURCE, _MOVING_FRAGMENT)
+                bind_frame(program, resources.uniforms("moving", ("uMatrix", "uItemSize", "uMotion")), square)
+                gl.glUniform2f(resources.uniforms("moving", ("uMatrix", "uItemSize", "uMotion"))["uMotion"],
+                               *velocity)
+                gl.glBindVertexArray(capture.vao)
+                if writes:
+                    with target.velocity_writes():
+                        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                else:
+                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            return _read(capture)[::-1]   # top-down rows
+
+        still = draw((0.0, 0.0))
+        lit = np.nonzero(still[..., 0] > 0)
+        assert (lit[0].min(), lit[0].max(), lit[1].min(), lit[1].max()) == (64, 79, 120, 135)
+        # Motion the pass may not write (outside velocity_writes) changes nothing.
+        assert np.array_equal(draw((motion, 0.0), writes=False), still)
+
+        moving = draw((motion, 0.0))
+        middle = moving[72, :, 0]
+        spread = np.nonzero(middle > 0)[0]
+        # It smears sideways, about half the motion each way (the shutter centres on now)...
+        assert spread.min() <= 120 - motion / 2 + 3 and spread.max() >= 135 + motion / 2 - 3
+        assert 0 < middle[118] < 255 and 0 < middle[137] < 255   # translucent streak ends
+        # ...but never up or down.
+        assert not moving[:62, :, :3].any() and not moving[82:, :, :3].any()
+        # Vertical motion smears vertically only.
+        rising = draw((0.0, motion))
+        assert not rising[:, :118, :3].any() and not rising[:, 138:, :3].any()
+        assert rising[62, 128, 0] > 0 and rising[81, 128, 0] > 0
+    finally:
+        target.release()
+        resources.release_resources()

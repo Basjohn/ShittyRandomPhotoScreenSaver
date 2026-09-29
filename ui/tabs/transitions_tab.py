@@ -1084,6 +1084,8 @@ class TransitionsTab(QWidget):
             _ANTIALIASING_CONTROL,
             ("bloom", "Bloom:", SCENE3D_EFFECT_CHOICES,
              "Glow around sparks, hot edges and glowing cracks; the photographs never glow." + _AUTO_TIP),
+            ("motion_blur", "Motion Blur:", SCENE3D_EFFECT_CHOICES,
+             "Blurs fast pieces along their motion, as a camera would; still parts stay sharp." + _AUTO_TIP),
         ),
         "glass_shatter": (_ANTIALIASING_CONTROL,),
         "crumble": (_ANTIALIASING_CONTROL,),
