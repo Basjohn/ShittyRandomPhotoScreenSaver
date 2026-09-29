@@ -39,7 +39,7 @@ logger = get_logger(__name__)
 
 # Prism data (as Crumble), then per-piece events: life2, then two stages of
 # kick4, spin4, pivot2 (a split piece can crack once more).
-GLASS_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 2, 4, 4, 2, 4, 4, 2)
+GLASS_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 2, 4, 4, 2, 4, 4, 2, 1)
 # Prism data, crack coordinates, then per-chunk motion (see crumble_dynamics).
 CRUMBLE_CHUNK_ATTRIBUTES = (2, 2, 1, 3, 1, 1, 1, 1, 3) + MOTION_ATTRIBUTES
 # Seam point, parent centre, parent variation and size, parent release (+pad).
@@ -65,13 +65,10 @@ def glass_geometry_key(
 ) -> tuple:
     collisions = bool(parameters.get("collisions", False))
     reshatter = bool(parameters.get("reshatter", False))
-    dynamic = collisions or reshatter
-    # Collisions and splits follow the shards' paths, which depend on the
-    # resolved direction and depth; without them the geometry does not.
+    # Depth layers, collisions and splits all follow the shards' paths, which
+    # depend on the resolved direction and depth.
     return ("glass_shatter", int(parameters["seed"]), int(parameters["shards"]), float(aspect),
-            str(direction) if dynamic else None,
-            float(parameters["depth"]) if dynamic else None,
-            collisions, reshatter)
+            str(direction), float(parameters["depth"]), collisions, reshatter)
 
 
 def build_glass_geometry(key: tuple) -> GlassGeometry:

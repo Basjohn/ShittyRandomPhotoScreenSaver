@@ -23,7 +23,8 @@ from rendering.quick.transitions.run_geometry import (
 )
 
 _ASPECT = 2560 / 1440
-_GLASS = {"seed": 417, "shards": 95}
+_GLASS = {"seed": 417, "shards": 95, "depth": 1.0}
+_DIRECTION = "left"
 _CRUMBLE = {
     "seed": 123.25,
     "piece_count": 35,
@@ -54,21 +55,34 @@ def test_pack_floats_is_byte_identical_to_ctypes_constructor() -> None:
 
 def test_glass_geometry_matches_the_previous_render_thread_build() -> None:
     # With collisions and re-shattering off, every vertex carries exactly the
-    # previous prism data followed by neutral (never-firing) event floats.
-    key = glass_geometry_key(_GLASS, _ASPECT)
+    # previous prism data followed by neutral (never-firing) event floats and
+    # its shard's depth layer.
+    from rendering.quick.transitions.glass_dynamics import LAYER_RANGE
+
+    key = glass_geometry_key(_GLASS, _ASPECT, _DIRECTION)
     reference = fracture_vertices(fracture_cells(417, 95, _ASPECT), _ASPECT)
-    rows = np.frombuffer(build_glass_geometry(key).vertices, dtype=np.float32).reshape(-1, 34)
+    rows = np.frombuffer(build_glass_geometry(key).vertices, dtype=np.float32).reshape(-1, 35)
     assert rows[:, :12].tobytes() == _ctypes_reference(reference)
     stage = np.array((0.0, 0.0, 0.0, 9.0, 1.0, 0.0, 0.0, 0.0), dtype=np.float32)
     assert np.array_equal(rows[:, 12:14], np.broadcast_to((0.0, 9.0), (len(rows), 2)))
     for start in (14, 24):  # both event stages are neutral
         assert np.array_equal(rows[:, start:start + 8], np.broadcast_to(stage, (len(rows), 8)))
         assert np.array_equal(rows[:, start + 8:start + 10], rows[:, 2:4])
+    layers = rows[:, 34]
+    assert np.all(np.abs(layers) <= LAYER_RANGE + 1e-6) and np.any(layers != 0.0)
+    # One layer per shard: every vertex of a shard shares its centre and its layer.
+    by_centre = {}
+    for centre, layer in zip(map(tuple, rows[:, 2:4]), layers):
+        by_centre.setdefault(centre, set()).add(float(layer))
+    assert all(len(values) == 1 for values in by_centre.values())
 
 
-def test_glass_dynamic_geometry_keys_on_direction_and_depth() -> None:
+def test_glass_geometry_keys_on_direction_and_depth() -> None:
+    # Depth layers (always on), collisions and splits all follow the paths.
     dynamic = {**_GLASS, "depth": 1.0, "collisions": True}
-    assert glass_geometry_key(_GLASS, _ASPECT, "left") == glass_geometry_key(_GLASS, _ASPECT, "right")
+    assert glass_geometry_key(_GLASS, _ASPECT, "left") != glass_geometry_key(_GLASS, _ASPECT, "right")
+    assert (glass_geometry_key(_GLASS, _ASPECT, "left")
+            != glass_geometry_key({**_GLASS, "depth": 0.4}, _ASPECT, "left"))
     assert glass_geometry_key(dynamic, _ASPECT, "left") != glass_geometry_key(dynamic, _ASPECT, "right")
     assert (glass_geometry_key(dynamic, _ASPECT, "left")
             != glass_geometry_key({**dynamic, "depth": 0.4}, _ASPECT, "left"))
@@ -105,11 +119,11 @@ def test_crumble_geometry_matches_the_ctypes_packing_of_its_pure_builders() -> N
 
 
 def test_prepared_geometry_is_used_without_rebuilding() -> None:
-    prepare_run_geometry("glass_shatter", _GLASS, (_ASPECT, _ASPECT, 16 / 10))
-    key = glass_geometry_key(_GLASS, _ASPECT)
+    prepare_run_geometry("glass_shatter", _GLASS, (_ASPECT, _ASPECT, 16 / 10), _DIRECTION)
+    key = glass_geometry_key(_GLASS, _ASPECT, _DIRECTION)
     prepared = PREPARED_GEOMETRY.get(key)
     assert prepared is not None
-    assert PREPARED_GEOMETRY.get(glass_geometry_key(_GLASS, 16 / 10)) is not None
+    assert PREPARED_GEOMETRY.get(glass_geometry_key(_GLASS, 16 / 10, _DIRECTION)) is not None
 
     def _must_not_build(_key):
         raise AssertionError("render thread rebuilt prepared geometry")
@@ -127,8 +141,8 @@ def test_missing_preparation_builds_the_same_bytes_synchronously() -> None:
 def test_preparation_failure_is_silent_and_stores_nothing() -> None:
     prepare_run_geometry("crumble", {**_CRUMBLE, "piece_count": 999}, (_ASPECT,))
     prepare_run_geometry("crossfade", {}, (_ASPECT,))
-    prepare_run_geometry("glass_shatter", {"seed": 1}, (_ASPECT,))
-    assert PREPARED_GEOMETRY.get(glass_geometry_key(_GLASS, _ASPECT)) is None
+    prepare_run_geometry("glass_shatter", {"seed": 1}, (_ASPECT,), _DIRECTION)
+    assert PREPARED_GEOMETRY.get(glass_geometry_key(_GLASS, _ASPECT, _DIRECTION)) is None
 
 
 def test_prepared_store_is_bounded() -> None:
@@ -260,8 +274,8 @@ def test_a_stuck_preparation_only_delays_the_render_thread_by_the_bound() -> Non
 
 
 def test_preparation_always_settles_its_claim() -> None:
-    prepare_run_geometry("glass_shatter", _GLASS, (_ASPECT,))
-    assert PREPARED_GEOMETRY.get(glass_geometry_key(_GLASS, _ASPECT)) is not None
+    prepare_run_geometry("glass_shatter", _GLASS, (_ASPECT,), _DIRECTION)
+    assert PREPARED_GEOMETRY.get(glass_geometry_key(_GLASS, _ASPECT, _DIRECTION)) is not None
     assert not PREPARED_GEOMETRY._in_flight
     # A builder failure settles too, so nothing waits on a dead claim.
     prepare_run_geometry("glass_shatter", {"seed": 1, "shards": 95, "depth": 1.0,
