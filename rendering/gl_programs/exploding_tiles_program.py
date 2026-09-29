@@ -538,6 +538,7 @@ in vec4 vClipNow; in vec4 vClipBefore;
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 SceneMotion;   // only kept while the target takes motion
 uniform sampler2D uOldTex; uniform vec2 uItemSize;
+uniform sampler2D uEnvironment;   // the new picture as a blurred environment (photo reflections)
 """
     + _FRAME_GLSL
     + SCENE3D_GLSL
@@ -548,6 +549,9 @@ void main() {
     // does not paint a grid across the unbroken picture.
     vec3 normal = normalize(vSurface > 0.3 ? mix(vFront, vNormal, vReleased) : vNormal);
     vec3 fire = scenePointLight(normal, vWorld, vec3(uEpicentre.xy, 0.35), vec3(1.0, 0.55, 0.22) * uBlast.y * 1.2, 9.0);
+    // Photo reflections: a released tile reflects the new picture it flies over, glossier
+    // on its photograph face than on its stone. Nothing before release (the wall is exact).
+    vec3 view = normalize(vec3(0.0, 0.0, SCENE_CAMERA) - vWorld);
     vec3 source = texture(uOldTex, vUv).rgb;
     vec3 colour;
     vec3 glow = vec3(0.0);   // emitted light (hot cracks, embers, flash), for the bloom
@@ -555,7 +559,8 @@ void main() {
         // Photograph face and its bevel: exactly the source until the tile is lit.
         float bevel = vSurface < 0.9 ? 1.0 : 0.0;
         vec3 lit = sceneShade(source, normal, vWorld, 0.55, (0.10 + 0.35 * bevel) * vReleased, 36.0, 0.10 * vReleased)
-                 + fire * (0.25 + 0.6 * source);
+                 + fire * (0.25 + 0.6 * source)
+                 + sceneEnvironmentLight(uEnvironment, normal, view, 0.35 - 0.2 * bevel, 0.04) * 0.5 * vReleased;
         colour = mix(source, lit, vLit);
         // Cracks along the tile border, glowing hotter toward the detonation.
         vec2 edge = min(vFace, 1.0 - vFace) * uItemSize / uGrid;
@@ -573,7 +578,8 @@ void main() {
         // most used colour, glowing where the blast heated it.
         vec3 body = mix(vec3(0.25), uBody, 0.44) * 0.75 * (vSurface > -0.3 ? 1.0 : 0.8);
         glow = sceneEmber(vHeat) * vHeat * vHeat * (vSurface > -0.3 ? 0.9 : 0.3);
-        colour = sceneShade(body, normal, vWorld, 0.5, 0.12, 28.0, 0.05) + fire * 0.12 + glow;
+        colour = sceneShade(body, normal, vWorld, 0.5, 0.12, 28.0, 0.05) + fire * 0.12 + glow
+               + sceneEnvironmentLight(uEnvironment, normal, view, 0.8, 0.03) * 0.35 * vReleased;
     }
     vec3 flash = uBlast.x * 0.3 * (colour + 0.1);
     colour += flash;

@@ -26,6 +26,9 @@ What an effect gets from ``SCENE3D_GLSL``:
 * ``scenePlanePoint`` / ``scene3d_grid_vertex_source`` -- the bendable grid surface: an effect
   writes ``vec3 sceneDisplace(vec2 uv)`` and gets a subdivided photograph (density by tier,
   ``scene3d_grid_size``) with normals, drawn by ``rendering.quick.scene3d.grid``;
+* ``sceneEnvironment`` / ``sceneReflectionUv`` / ``sceneEnvironmentLight`` -- photo reflections:
+  a glossy surface reflects a blurred, renderer-owned copy of a photograph
+  (``rendering.quick.scene3d.environment``) where its reflected ray points;
 * ``sceneVelocity`` -- a surface point's screen motion over the shutter, for motion blur
   (``SCENE3D_SHUTTER_SECONDS``, ``scene3d_shutter_progress``); ``scene3d_motion_vertex`` /
   ``scene3d_motion_fragment`` make any effect's shaders write it.
@@ -118,6 +121,11 @@ def scene3d_shutter_progress(duration_ms: float) -> float:
     """The shutter as a fraction of a run lasting ``duration_ms``."""
     return SCENE3D_SHUTTER_SECONDS * 1000.0 / max(float(duration_ms), 1.0)
 
+
+# Photo reflections: the per-run copy's longer side, and the mip level a roughness of 1 reads
+# (7 levels down from 512 px: about 4 px across, the photograph's broad colours).
+SCENE3D_ENVIRONMENT_SIZE = 512
+SCENE3D_ENVIRONMENT_ROUGH_LEVEL = 7.0
 
 SCENE3D_CAMERA = 3.4
 SCENE3D_NEAR = 0.22
@@ -239,6 +247,29 @@ vec3 sceneShade(vec3 albedo, vec3 normal, vec3 world, float ambient, float specu
     float highlight = pow(max(dot(normal, normalize(SCENE_KEY + view)), 0.0), shininess);
     float fresnel = pow(1.0 - max(dot(normal, view), 0.0), 5.0);
     return albedo * (ambient + (1.0 - ambient) * diffuse) + vec3(specular * highlight + rim * fresnel);
+}}
+
+// Photo reflections. The environment is a photograph (a mipmapped, renderer-owned copy)
+// taken as a mirror ball around the scene: a reflected ray looking straight back at the
+// viewer sees its centre, one grazing sideways its edge, so a reflection travels across
+// the picture as a piece turns, wherever it is on screen.
+vec2 sceneReflectionUv(vec3 ray) {{
+    return 0.5 + vec2(ray.x, -ray.y) * 0.5;
+}}
+
+// The photograph at uv (mirrored past its edges), blurred by roughness (0 sharp, 1 its
+// broad colours).
+vec3 sceneEnvironment(sampler2D environment, vec2 uv, float roughness) {{
+    vec2 mirrored = 1.0 - abs(1.0 - mod(uv, 2.0));
+    return textureLod(environment, mirrored, clamp(roughness, 0.0, 1.0) * {SCENE3D_ENVIRONMENT_ROUGH_LEVEL:.1f}).rgb;
+}}
+
+// Light a glossy surface reflects from the environment: the reflection where its ray
+// points, weighted by Fresnel from reflectance (facing) to 1 (grazing).
+vec3 sceneEnvironmentLight(sampler2D environment, vec3 normal, vec3 view, float roughness, float reflectance) {{
+    vec3 ray = reflect(-view, normal);
+    float fresnel = reflectance + (1.0 - reflectance) * pow(1.0 - max(dot(normal, view), 0.0), 5.0);
+    return sceneEnvironment(environment, sceneReflectionUv(ray), roughness) * fresnel;
 }}
 
 // A local light with smooth distance falloff; returns the added radiance.
@@ -468,6 +499,11 @@ void main() {
     gl_Position = sceneProject(uMatrix, uItemSize, world);
 }
 """)
+
+
+def scene3d_reflection_uv(ray: Vec3) -> tuple[float, float]:
+    """CPU mirror of ``sceneReflectionUv``."""
+    return 0.5 + ray[0] * 0.5, 0.5 - ray[1] * 0.5
 
 
 def scene3d_velocity(clip_now: tuple[float, float, float, float], clip_previous: tuple[float, float, float, float],

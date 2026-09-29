@@ -288,6 +288,14 @@ def test_particles_match(probe):
                  for origin, velocity, drag, fall, t, trail, width, corner in cases], tolerance=1e-3)
 
 
+def test_reflection_uv_matches(probe):
+    rng = random.Random(10)
+    rays = [_unit(rng) for _ in range(64)]
+    gpu = probe.run("FragColor = vec4(sceneReflectionUv(arg(0).xyz), 0.0, 0.0);", [[ray] for ray in rays])
+    _check(gpu, [lib.scene3d_reflection_uv(ray) for ray in rays])
+    assert lib.scene3d_reflection_uv((0.0, 0.0, 1.0)) == (0.5, 0.5)   # looking straight back: the centre
+
+
 def test_velocity_matches(probe):
     rng = random.Random(7)
     cases = []

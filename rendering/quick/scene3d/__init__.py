@@ -12,6 +12,7 @@ library and its CPU mirrors live in ``rendering.gl_programs.scene3d``.
 * ``particles`` -- the shared additive particle pass and its tier budget;
 * ``shadows`` -- the shared MIN-blended planar shadow pass;
 * ``grid`` -- the bendable grid surface (drawn around an effect's displacement);
+* ``environment`` -- photo reflections: per-run, renderer-owned mipmapped photo copies;
 * ``uniforms`` -- per-frame uniform blocks;
 * ``passes`` -- blend scopes.
 

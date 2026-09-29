@@ -141,6 +141,8 @@ uniform float uTransparency;
 uniform float uRefraction;
 uniform float uDispersion;
 uniform float uSheen;
+uniform sampler2D uEnvironment;   // the new picture as a blurred environment (photo reflections)
+""" + SCENE3D_GLSL + """
 void main() {
     vec3 n=normalize(vNormal);
     vec3 view=normalize(vView);
@@ -166,13 +168,16 @@ void main() {
     vec3 light=normalize(vec3(-.45,.75,1.2));
     float diffuse=.38+.62*abs(dot(n,light));
     body*=mix(1.,diffuse,vMotion*wall*.70);
-    // Broad reflected softbox and a fine second glint travel across bevels as
-    // they rotate. Independent sheen zero removes all authored reflection.
+    // The Fresnel reflection is the new picture where the reflected ray points (photo
+    // reflections), so shards carry the colours they fly over; a broad softbox and a
+    // fine second glint travel across bevels as they rotate. Independent sheen zero
+    // removes all authored reflection.
     vec3 reflected=reflect(-view,n);
     float softbox=pow(max(0.,dot(reflected,normalize(vec3(-.5,.8,1.)))),28.);
     float strip=pow(max(0.,1.0-abs(reflected.y-.38)),90.)*
                 smoothstep(-.9,-.2,reflected.x);
-    vec3 reflection=vec3(.64,.83,1.)*(fresnel*.42+softbox*.55+strip*.45);
+    vec3 surroundings=mix(vec3(.64,.83,1.),sceneEnvironment(uEnvironment,sceneReflectionUv(reflected),.2)*1.25,.7);
+    vec3 reflection=surroundings*fresnel*.42+vec3(.64,.83,1.)*(softbox*.55+strip*.45);
     reflection+=vec3(.86,.96,1.)*bevel*(.12+.65*pow(facing,.5));
     body+=reflection*uSheen*vMotion;
     FragColor=vec4(body,1.0);

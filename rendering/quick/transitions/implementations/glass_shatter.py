@@ -7,6 +7,7 @@ from rendering.gl_programs.glass_shatter_program import (
     GLASS_FRAGMENT, GLASS_MOTION_FRAGMENT, GLASS_MOTION_VERTEX, GLASS_VERTEX,
 )
 from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress
+from rendering.quick.scene3d.environment import PhotoEnvironment
 from rendering.quick.scene3d.motion import motion_program, set_motion_uniforms
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from rendering.quick.scene3d.target import SceneTarget
@@ -26,12 +27,13 @@ class QuickGlassShatterRenderer:
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Glass Shatter")
         self._target = SceneTarget("Quick Glass Shatter")
+        self._environment = PhotoEnvironment("Quick Glass Shatter")   # photo reflections
         self._geometry_key = None
         self._vao = self._count = 0
 
     @property
     def has_resources(self) -> bool:
-        return self._resources.has_resources or self._target.has_resources
+        return self._resources.has_resources or self._target.has_resources or self._environment.has_resources
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         resources = self._resources
@@ -51,22 +53,24 @@ class QuickGlassShatterRenderer:
                 self._geometry_key = key
             motion = bool(params.get("motion_blur", False))
             samples = scene3d_request_samples(params) or (1 if motion else 0)
+            # Sheen zero removes all reflection, so no environment is needed then.
+            environment = self._environment.texture(frame, resources) if float(params["sheen"]) > 0.0 else 0
             if samples:
                 with self._target.scope(frame, samples, resources, motion_blur=motion):
-                    self._draw_scene(frame, progress, params, motion)
+                    self._draw_scene(frame, progress, params, motion, environment)
             else:
-                self._draw_scene(frame, progress, params, False)
+                self._draw_scene(frame, progress, params, False, environment)
         except Exception:
             self.release_resources()
             raise
 
-    def _draw_scene(self, frame, progress: float, params, motion: bool) -> None:
+    def _draw_scene(self, frame, progress: float, params, motion: bool, environment: int) -> None:
         resources = self._resources
         resources.draw_image(frame, frame.destination_texture_id)
         program, uniforms = motion_program(resources, "glass", (GLASS_VERTEX, GLASS_FRAGMENT),
                                            (GLASS_MOTION_VERTEX, GLASS_MOTION_FRAGMENT), (
             "uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uDepth", "uDirection", "uRadial",
-            "uThickness", "uTransparency", "uRefraction", "uDispersion", "uSheen",
+            "uThickness", "uTransparency", "uRefraction", "uDispersion", "uSheen", "uEnvironment",
         ), motion)
         resources.begin_depth(frame)
         bind_frame(program, uniforms, frame)
@@ -78,6 +82,10 @@ class QuickGlassShatterRenderer:
         gl.glUniform1f(uniforms["uDepth"], float(params["depth"]))
         for name in ("thickness", "transparency", "refraction", "dispersion", "sheen"):
             gl.glUniform1f(uniforms["u" + name.capitalize()], float(params[name]))
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
+        gl.glUniform1i(uniforms["uEnvironment"], 2)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
         if motion:
             set_motion_uniforms(uniforms, frame,
                                 max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0))
@@ -86,11 +94,13 @@ class QuickGlassShatterRenderer:
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
 
     def park(self) -> None:
-        """Drop the per-run scene target; programs and shard geometry stay warm."""
+        """Drop the per-run scene target and environment; programs and shard geometry stay warm."""
         self._target.release()
+        self._environment.release()
 
     def release_resources(self) -> None:
         self._target.release()
+        self._environment.release()
         self._resources.release_resources()
         self._geometry_key = None
         self._vao = self._count = 0

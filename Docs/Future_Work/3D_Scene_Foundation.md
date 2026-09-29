@@ -229,10 +229,18 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 - **Hazards:** grid density is the main cost lever (tier-controlled); particle counts scale with the tier.
 - **Bars:** Tiles pixel-identical per tier; grid topology and displacement tests.
 
-### S9 — Photo reflections
-- [ ] Per run, copy the source and destination into small renderer-owned mipmapped textures (never the shared
+### S9 — Photo reflections — LANDED
+- [x] Per run, copy the source and destination into small renderer-owned mipmapped textures (never the shared
   presentation textures: PR-04 lends the destination to the native branch); a library function samples them as a
   blurred planar environment by roughness. Opt-in per effect; adopting it in Tiles or Glass is a look decision.
+  **Landed:** `PhotoEnvironment` (a 512 px box-filtered copy with its own mipmaps, once per run and role; 4K photo
+  ~0.07 ms GPU / ~0.2 ms CPU; dropped at park), plus `sceneEnvironment` (roughness 0 sharp, 1 at mip 7),
+  `sceneReflectionUv` (the photo as a mirror ball, by the reflected ray) and `sceneEnvironmentLight`
+  (Fresnel-weighted). The operator chose adoption (2026-09-29) where it improves on the existing look: Block Spins
+  Edge Glass (which also fixes dark, flat early diagonal spins), Glass Shatter's Fresnel reflection and released
+  Exploding Tiles. Bars: lent textures untouched (pixels, no mip level), one copy per run, roughness blurs, edge
+  reflections alike in both halves of every spin (a screen-position lookup fails all four directions), the Tiles
+  wall exact until release, and Glass reflection-free at sheen zero.
 - **Reward:** glossy pieces reflect the picture's colours.
 - **Hazards:** touching lent textures (forbidden); the copy is once per run (~0.1 ms), never per frame.
 - **Bars:** shared textures unchanged (no mip levels added); endpoints exact.
@@ -277,5 +285,5 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 
 ## Landed / remaining
 
-- Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b), S8.
-- Remaining: S9 (opt-in photo reflections), then S10 and S11 (both conditional on physical evidence).
+- Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b), S8, S9.
+- Remaining: S10 and S11 (both conditional on physical evidence).

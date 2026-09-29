@@ -8,7 +8,7 @@ resources itself.
 from __future__ import annotations
 
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
-from rendering.gl_programs.scene3d import scene3d_motion_fragment, scene3d_motion_vertex
+from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_motion_fragment, scene3d_motion_vertex
 
 
 BLOCK_SPIN_VERTEX_STRIDE_FLOATS = 8
@@ -231,18 +231,21 @@ uniform float uAngle;
 uniform float uSpecDirection;
 uniform int uAxisMode;
 uniform int uEdgeGlass;  // 0 Off, 1 Reflection, 2 Refraction, 3 Both
-
+uniform sampler2D uEnvironment;  // the next image as a blurred environment (photo reflections)
+""" + SCENE3D_GLSL + """
 vec2 mirroredUv(vec2 uv) {
     return 1.0 - abs(1.0 - mod(uv, 2.0));
 }
 
-// The next image in the slab's polished glass edge (it is already bound, so either
-// image costs the same). The edge is rounded (bullnose): across the thickness its
-// normal rolls from the front face's to the back face's, so the edge holds a
-// compressed miniature of the picture rather than a smear of one column. Reflection
-// sweeps it across the edge as the slab turns; refraction bends it through the
-// glass with a little dispersion; Fresnel weighs the two, so the rounded borders
-// read as mirror and the middle as glass. The sheen keeps the flat normal.
+// The next image in the slab's polished glass edge. The edge is rounded (bullnose):
+// across the thickness its normal rolls from the front face's to the back face's, so
+// the edge holds a compressed miniature of the picture rather than a smear of one
+// column. Reflection reads the photo environment where the reflected ray points (its
+// direction, not the edge's place on screen: an edge near the top of the screen no
+// longer reflects only the picture's top border, which left early diagonal spins dark
+// and flat); refraction bends the picture through the glass with a little dispersion;
+// Fresnel weighs the two, so the rounded borders read as mirror and the middle as
+// glass. The sheen keeps the flat normal.
 vec3 edgeGlass(vec3 flatNormal, vec3 viewDirection) {
     float roll = (0.5 - vDepthCoordinate) * 2.2;
     vec3 normal = normalize(flatNormal * cos(roll) + normalize(vFrontNormal) * sin(roll));
@@ -253,7 +256,7 @@ vec3 edgeGlass(vec3 flatNormal, vec3 viewDirection) {
     vec3 refraction = vec3(0.0);
     if (uEdgeGlass != 2) {
         vec3 ray = reflect(incident, normal);
-        reflection = texture(uNewTexture, mirroredUv(vScreenUv + vec2(ray.x, -ray.y) * 0.35)).rgb;
+        reflection = sceneEnvironment(uEnvironment, sceneReflectionUv(ray), 0.12);
     }
     if (uEdgeGlass != 1) {
         vec3 red = refract(incident, normal, 1.0 / 1.50);
