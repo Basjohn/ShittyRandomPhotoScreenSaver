@@ -15,7 +15,7 @@ over what is behind it and turns translucent within its own blur. Where nothing
 in the neighbourhood moves the gather returns the pixel unchanged, so a still
 frame, the run's endpoints and every static region are exact and cost one fetch.
 
-The blur never exceeds two tiles (K is ~1/60 of the target's height), which the
+The blur never exceeds two tiles (K is 1/40 of the target's height), which the
 neighbourhood covers. Textures are sized from the target's allocation bucket and
 dropped with it; no allocation per frame.
 """
@@ -141,8 +141,8 @@ void main() {{
 
 
 def motion_blur_tile(height: int) -> int:
-    """Tile edge K in pixels: ~1/60 of the height (24 at 1440p), never under 8."""
-    return max(8, round(int(height) / 60))
+    """Tile edge K in pixels: 1/40 of the height (36 at 1440p), never under 8; the longest blur is 2K."""
+    return max(8, round(int(height) / 40))
 
 
 def _texture(width: int, height: int, internal: int, data_type: int) -> int:
