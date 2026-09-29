@@ -10,7 +10,6 @@ Detail, rewards, risks and performance hazards per slice: `Docs/Future_Work/3D_S
 order; commit and push each slice; tests and measurements before looks change.
 
 - [ ] **Motion Trails CPU:** each ghost re-sets its program's uniforms through PyOpenGL (+0.5-1.0 ms CPU per frame at 1440p when On). Set the shared uniforms once per trail pass and vary only time and fade per ghost; measure CPU submit before and after.
-- [ ] **S10: per-run allocation costs a frame at every 3D start (operator decision needed).** The 2026-09-29 two-display `--perf` run shows one 10-29 ms render-thread frame at the start of every 3D run on each display (Block Spins 10-23 ms, Exploding Tiles 15-29, Glass Shatter ~14, Pixel Accretion 12-19), costing the Visualizer 1-2 late frames per run. Offscreen at 3840x2160 with the operator's settings and programs already warm: Block Spins 9.9 ms, Exploding Tiles 18 ms (bloom chain ~7 ms), Glass Shatter 9 ms, almost all driver allocation of the multisampled target, velocity, motion-blur and bloom textures; steady frames are 1-2 ms. Removing it means holding those textures outside a run (~230 MB at 4K and ~100 MB at 1440p with these settings), which the foundation's memory rule forbids today. Options: keep them between runs, or allocate them ahead in spaced single-texture S11 warm-up steps and release at park as now.
 
 ## Memory and handles | open development items
 

@@ -175,10 +175,7 @@ class MotionBlur:
         the host fence restores texture bindings, so none of that is repeated here
         (every GL call costs the render thread ~2 us).
         """
-        if self._key != allocation:
-            self.release()
-            self._allocate(*allocation)
-            self._key = allocation
+        self.warm(allocation)
         width, height = allocation
         tile = motion_blur_tile(height)
         ((columns, columns_fbo, tile_w, _h), (tiles, tiles_fbo, _w, tile_h), (neighbours, neighbours_fbo, _nw, _nh),
@@ -232,6 +229,15 @@ class MotionBlur:
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         return blurred
+
+    def warm(self, allocation: tuple[int, int]) -> bool:
+        """Allocate for ``allocation`` if not yet (ahead of a run, or at first use); True if it was."""
+        if self._key == allocation:
+            return True
+        self.release()
+        self._allocate(*allocation)
+        self._key = allocation
+        return False
 
     def _allocate(self, width: int, height: int) -> None:
         previous = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)

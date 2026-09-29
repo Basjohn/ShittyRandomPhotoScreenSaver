@@ -87,10 +87,7 @@ class BloomChain:
         The source covers the whole allocation (outside the drawn rect it is
         cleared black); so does the glow texture, at half resolution.
         """
-        if self._key != allocation:
-            self.release()
-            self._allocate(*allocation)
-            self._key = allocation
+        self.warm(allocation)
         down = resources.program("bloom_down", FULLSCREEN_VERTEX_SOURCE, _DOWNSAMPLE_FRAGMENT)
         down_uniforms = resources.uniforms("bloom_down", ("uSource", "uTexel", "uFirst"))
         up = resources.program("bloom_up", FULLSCREEN_VERTEX_SOURCE, _UPSAMPLE_FRAGMENT)
@@ -122,6 +119,15 @@ class BloomChain:
                 gl.glUniform2f(up_uniforms["uTexel"], 1.0 / small[2], 1.0 / small[3])
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         return self._levels[0][0]
+
+    def warm(self, allocation: tuple[int, int]) -> bool:
+        """Allocate for ``allocation`` if not yet (ahead of a run, or at first use); True if it was."""
+        if self._key == allocation:
+            return True
+        self.release()
+        self._allocate(*allocation)
+        self._key = allocation
+        return False
 
     def _allocate(self, width: int, height: int) -> None:
         previous = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)

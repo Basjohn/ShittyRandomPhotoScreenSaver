@@ -24,6 +24,12 @@ Allocation rounds up to 64 px and is reused while the rect fits, so a CUSTOM
 resize drag does not reallocate per frame. The owner releases the target: a
 transition at the host's ``park()`` after each run, a Visualizer mode when it
 retires. Failed deletions keep their handles for retry.
+
+``warm`` allocates the same textures ahead of a run, one unit per call (S10): the
+target, its resolve copies, the motion-blur chain, the bloom chain. At 3840x2160 each
+unit costs 1-3.5 ms of CPU; allocated at the run's first frame together they cost the
+render thread 10-29 ms. Nothing is held between runs that ``park()`` does not already
+release: the next transition's warm-up allocates again.
 """
 from __future__ import annotations
 
@@ -125,6 +131,18 @@ def scene_target_programs(samples: int, bloom: bool, motion: bool) -> tuple[tupl
     return tuple(programs)
 
 
+def warm_run_resources(target: "SceneTarget", trails, size: tuple[int, int] | None, samples: int, *,
+                       motion_blur: bool = False, bloom: bool = False, with_trails: bool = False) -> bool:
+    """One step of allocating ahead what a run will allocate at its first frames, for a
+    renderer whose scene draws through ``target`` at ``size`` device pixels (and ``trails``
+    when on). True once nothing is left, or when the run draws without a target."""
+    if size is None or not samples:
+        return True
+    if not target.warm(size, samples, motion_blur=motion_blur, bloom=bloom):
+        return False
+    return not with_trails or trails.warm(target)
+
+
 def _bucket(size: int) -> int:
     return max(SCENE_TARGET_BUCKET, -(-int(size) // SCENE_TARGET_BUCKET) * SCENE_TARGET_BUCKET)
 
@@ -205,6 +223,49 @@ class SceneTarget:
             yield
         finally:
             gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
+
+    def warm(self, size: tuple[int, int], samples: int, *, motion_blur: bool = False,
+             bloom: bool = False) -> bool:
+        """Allocate ahead, one unit per call, what ``scope`` will use at ``size`` (device
+        pixels) with these settings; True once all of it is allocated. ``begin`` reuses it."""
+        width, height = (int(value) for value in size)
+        samples, motion_blur = max(1, int(samples)), bool(motion_blur)
+        key = self._key
+        if key is None or key[2] != samples or key[3] != motion_blur or width > key[0] or height > key[1]:
+            self.release()
+            self._inherited = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING),
+                               gl_query.get_int(gl.GL_READ_FRAMEBUFFER_BINDING))
+            self._allocate(_bucket(width), _bucket(height), samples, motion_blur)
+            self._commit()
+            return False
+        allocation = (self._key[0], self._key[1])
+        if self._samples > 1 and (motion_blur or bloom) and not self._names["resolve_texture"]:
+            self._allocate_resolve()
+            return False
+        if motion_blur and not self._motion.warm(allocation):
+            return False
+        if bloom and not self._bloom.warm(allocation):
+            return False
+        return True
+
+    def _commit(self) -> None:
+        """Clear the new allocation once, so the driver commits its memory now and not at the
+        run's first frame."""
+        scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
+        clear = gl_query.get_floats(gl.GL_COLOR_CLEAR_VALUE, 4)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["fbo"])
+        gl.glDisable(gl.GL_SCISSOR_TEST)
+        try:
+            gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+            gl.glClearDepth(1.0)
+            gl.glDepthMask(gl.GL_TRUE)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        finally:
+            gl.glClearColor(*clear)
+            if scissor:
+                gl.glEnable(gl.GL_SCISSOR_TEST)
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._inherited[0])
+            gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self._inherited[1])
 
     def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None,
               motion_blur: bool = False) -> None:
@@ -296,19 +357,7 @@ class SceneTarget:
         width, height = self._key[0], self._key[1]
         motion = bool(self._names["velocity"])
         if not self._names["resolve_texture"]:
-            self._names["resolve_texture"] = _plain_texture(width, height)
-            self._names["resolve_fbo"] = int(gl.glGenFramebuffers(1))
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["resolve_fbo"])
-            gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D,
-                                      self._names["resolve_texture"], 0)
-            if motion:
-                self._names["resolve_velocity"] = _plain_texture(width, height, gl.GL_RG16F, gl.GL_HALF_FLOAT)
-                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["resolve_fbo"])
-                gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT1, gl.GL_TEXTURE_2D,
-                                          self._names["resolve_velocity"], 0)
-                gl.glDrawBuffers(2, [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
-            if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
-                raise RuntimeError(f"{self.label} scene resolve incomplete at {width}x{height}")
+            self._allocate_resolve()
         key = "scene_resolve_motion" if motion else "scene_resolve"
         program = resources.program(key, FULLSCREEN_VERTEX_SOURCE,
                                     _RESOLVE_MOTION_FRAGMENT if motion else _RESOLVE_FRAGMENT)
@@ -330,6 +379,24 @@ class SceneTarget:
         if motion:
             gl.glActiveTexture(gl.GL_TEXTURE0)
         return self._names["resolve_texture"], self._names["resolve_velocity"]
+
+    def _allocate_resolve(self) -> None:
+        """The resolved copies the post effects read (colour, and motion with motion blur)."""
+        width, height = self._key[0], self._key[1]
+        motion = bool(self._names["velocity"])
+        self._names["resolve_texture"] = _plain_texture(width, height)
+        self._names["resolve_fbo"] = int(gl.glGenFramebuffers(1))
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["resolve_fbo"])
+        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D,
+                                  self._names["resolve_texture"], 0)
+        if motion:
+            self._names["resolve_velocity"] = _plain_texture(width, height, gl.GL_RG16F, gl.GL_HALF_FLOAT)
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self._names["resolve_fbo"])
+            gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT1, gl.GL_TEXTURE_2D,
+                                      self._names["resolve_velocity"], 0)
+            gl.glDrawBuffers(2, [gl.GL_COLOR_ATTACHMENT0, gl.GL_COLOR_ATTACHMENT1])
+        if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+            raise RuntimeError(f"{self.label} scene resolve incomplete at {width}x{height}")
 
     def _restore_inherited(self, frame: SceneFrame) -> None:
         if self._names["velocity"]:

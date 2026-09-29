@@ -36,7 +36,7 @@ from rendering.quick.scene3d.particles import draw_particles, particle_budget
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
 from rendering.quick.scene3d.shadows import draw_planar_shadows
 from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
-from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
 from ..render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
@@ -104,9 +104,10 @@ class QuickExplodingTilesRenderer:
             self.release_resources()
             raise
 
-    def warm(self, parameters) -> bool:
+    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
         """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs): True once that run's first frame will compile nothing."""
+        between runs): True once that run's first frame will compile nothing and, given the
+        render ``size`` in device pixels, allocate nothing."""
         (_seed, _columns, _depth, _thickness, _force, detail_name, samples, bloom,
          motion_blur, trails) = exploding_tiles_parameters(parameters)
         detail = scene3d_detail(detail_name)
@@ -124,7 +125,10 @@ class QuickExplodingTilesRenderer:
                         (r, *TRAIL_EDGES_PROGRAM)]
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, bloom > 0.0, motion_blur)]
-        return warm_programs(entries)
+        if not warm_programs(entries):
+            return False
+        return warm_run_resources(self._target, self._trails, size, samples, motion_blur=motion_blur,
+                                  bloom=bloom > 0.0, with_trails=trails)
 
     def _draw_scene(self, frame, grid, detail, progress: float, force: float, center_out: bool,
                     environment: int, trail_values=None) -> None:

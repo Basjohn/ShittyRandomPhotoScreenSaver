@@ -135,9 +135,13 @@ Each foundation slice adds what it learned here.
   the CPU/COMPUTE and evaluated analytically on the GPU.
 
 **Preparing runs (S11)**
-- A run's first frame compiles nothing it could have prepared. Every renderer lists the programs a run with given
-  parameters uses in `warm(parameters)`; a new program or variant goes there too, or
-  `test_transition_warmup.py` fails.
+- A run's first frames compile and allocate nothing they could have prepared. Every renderer lists the programs
+  a run with given parameters uses in `warm(parameters, size)` and then allocates its scene textures through
+  `warm_run_resources`; a new program, variant or per-run texture goes there too, or `test_transition_warmup.py`
+  fails. Allocate with the same method the run's first use calls (`SceneTarget.warm`, the chains' `warm`), so the
+  two cannot drift.
+- Only the next transition's textures are held, from its warm-up until `park()` after its run: never keep
+  textures for transitions that are not next (they add up as transitions are added).
 - Prepare while the displays are idle, never at the image change: that resolves its transition ~14 ms before the
   first frame. The next transition is settled when the previous one completes (a reserved Random pick and a batch
   seed), so the batch meets the spec that was warmed and the geometry COMPUTE built.

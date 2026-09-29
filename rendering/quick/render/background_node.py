@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import math
 from dataclasses import dataclass
 import threading
 import time
@@ -179,6 +180,7 @@ class BackgroundRenderNode(QSGRenderNode):
         self._trace_render_sequence = 0
         self._logical_size = (0.0, 0.0)
         self._device_pixel_ratio = 1.0
+        self._render_target_size: tuple[int, int] | None = None   # the last one a render saw
         self._state = SlideProofState()
         self._presentation_image: PresentationImage | None = None
         self._transition_run: TransitionRun | None = None
@@ -314,10 +316,22 @@ class BackgroundRenderNode(QSGRenderNode):
             if not self._program:
                 self._initialize_gl()   # this node's own quad program, as a step of its own
                 return False
-            return self._transition_renderer.warm_step(transition_id, parameters)
+            return self._transition_renderer.warm_step(transition_id, parameters, self._warm_size())
         except Exception as exc:
             self._telemetry.note_error(f"transition warm-up: {type(exc).__name__}: {exc}")
             return True
+
+    def _warm_size(self) -> tuple[int, int] | None:
+        """The render size the next run's scene will use (the item covers the window): the one
+        the last render saw, else the largest the logical size can round from, so a run reuses
+        what the warm-up allocated (a scene target reuses any allocation at least as large)."""
+        if self._render_target_size is not None:
+            return self._render_target_size
+        width, height = self._logical_size
+        if width <= 0.0 or height <= 0.0:
+            return None
+        ratio = self._device_pixel_ratio
+        return (math.ceil((width + 0.5) * ratio), math.ceil((height + 0.5) * ratio))
 
     def release_presentation_textures(self) -> None:
         """Park after a transition: drop its images, keep warm GL programs.
@@ -485,6 +499,7 @@ class BackgroundRenderNode(QSGRenderNode):
             raise RuntimeError(
                 f"Quick render node has invalid render target: {render_target_size}"
             )
+        self._render_target_size = render_target_size
         viewport = (0, 0, *render_target_size)
         matrix = self.projectionMatrix() * self.matrix()
         matrix_values = tuple(float(value) for value in matrix.data())

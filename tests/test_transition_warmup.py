@@ -43,28 +43,88 @@ class _Compiles:
             monkeypatch.setattr(module, "compile_program", compile_program)
 
 
+class _Work(_Compiles):
+    """Counts program compiles and per-run texture allocations (S10), the units a warm-up
+    step may do one of."""
+
+    def __init__(self, monkeypatch) -> None:
+        super().__init__(monkeypatch)
+        from rendering.quick.scene3d.motion import MotionBlur
+        from rendering.quick.scene3d.post import BloomChain
+        from rendering.quick.scene3d.target import SceneTarget
+        from rendering.quick.scene3d.trails import MotionTrails
+
+        self.allocations = []
+        for owner, name in ((SceneTarget, "_allocate"), (SceneTarget, "_allocate_resolve"),
+                            (MotionBlur, "_allocate"), (BloomChain, "_allocate"), (MotionTrails, "_allocate")):
+            original = getattr(owner, name)
+
+            def counted(*args, _original=original, _label=f"{owner.__name__}.{name}", **kwargs):
+                self.allocations.append(_label)
+                self.total += 1
+                return _original(*args, **kwargs)
+
+            monkeypatch.setattr(owner, name, counted)
+
+
 @pytest.mark.parametrize("effect,direction,section", _CASES)
 @pytest.mark.parametrize("setup", range(len(_SETUPS)))
-def test_after_warming_a_runs_first_frame_compiles_nothing(qt_app, monkeypatch, effect, direction, section, setup):
+def test_after_warming_a_runs_first_frames_compile_and_allocate_nothing(qt_app, monkeypatch, effect, direction,
+                                                                         section, setup):
     capture = TransitionCapture(256, 144)
     try:
-        compiles = _Compiles(monkeypatch)
+        work = _Work(monkeypatch)
         run = capture.run(effect, direction=direction, duration_ms=3000,
                           settings={"detail_3d": "High", section: dict(_SETUPS[setup])})
         parameters = run.request.parameter_dict()
+        size = (capture.width, capture.height)
         steps = 0
-        while not capture.host.warm_step(run.request.transition_id, parameters):
+        while not capture.host.warm_step(run.request.transition_id, parameters, size):
             steps += 1
-            assert compiles.total <= steps, "a warm-up step compiled more than one program"
+            assert work.total <= steps, "a warm-up step did more than one compile or allocation"
             assert steps < 100, "warm-up never finished"
-        assert compiles.total > 1
-        warmed = compiles.total
+        assert work.total > 1
+        warmed, allocated = work.total, list(work.allocations)
         for progress in (0.0, 0.3):              # an endpoint frame and a mid-run frame
             capture.render(run, progress)
-        assert compiles.total == warmed, "the warmed run's first frames compiled a program"
-        assert capture.host.warm_step(run.request.transition_id, parameters)   # nothing left to do
+        assert work.allocations == allocated, "the warmed run's first frames allocated textures"
+        assert work.total == warmed, "the warmed run's first frames compiled a program"
+        assert capture.host.warm_step(run.request.transition_id, parameters, size)   # nothing left
+        capture.host.park()
+        renderer = capture.host._implementations[run.request.transition_id]
+        assert not renderer._target.has_resources and not renderer._trails.has_resources   # none held
     finally:
         capture.close()
+
+
+def test_without_a_render_size_the_warm_up_compiles_only(qt_app, monkeypatch):
+    capture = TransitionCapture(256, 144)
+    try:
+        work = _Work(monkeypatch)
+        run = capture.run("block_spins", direction="left", settings={"detail_3d": "High"})
+        while not capture.host.warm_step(run.request.transition_id, run.request.parameter_dict()):
+            pass
+        assert work.allocations == []
+    finally:
+        capture.close()
+
+
+def test_the_warm_up_render_size_is_never_smaller_than_the_window():
+    """Before any render, the node estimates the size from its logical size; the native
+    size may round either way, so the estimate must cover all of them."""
+    from rendering.quick.render.background_node import BackgroundRenderNode
+    from rendering.quick.render.telemetry import RenderNodeTelemetry
+    from rendering.quick.scene3d.target import _bucket
+
+    node = BackgroundRenderNode(RenderNodeTelemetry(gui_thread_id=1), screen_index=0)
+    for ratio in (1.0, 1.25, 1.5, 1.75, 2.0, 2.5):
+        for native in range(1000, 4400, 7):
+            logical = round(native / ratio)
+            node._logical_size, node._device_pixel_ratio = (float(logical), float(logical)), ratio
+            estimate = node._warm_size()[0]
+            assert estimate >= native and _bucket(estimate) - _bucket(native) <= 64
+    node._render_target_size = (2560, 1442)                      # once a render has seen it
+    assert node._warm_size() == (2560, 1442)
 
 
 def test_a_warm_step_is_one_plain_compile_and_leaves_nothing_running(qt_app, monkeypatch):

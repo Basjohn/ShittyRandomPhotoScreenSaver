@@ -245,7 +245,7 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 - **Hazards:** touching lent textures (forbidden); the copy is once per run (~0.1 ms), never per frame.
 - **Bars:** shared textures unchanged (no mip levels added); endpoints exact.
 
-### S10 — Cheaper High (conditional)
+### S10 — Cheaper High
 - [x] **Landed early (2026-09-29, from the 3D Block Spins before/after check):** the target's `glBlitFramebuffer`
   resolve cost ~0.5 ms at 1440p on drawn content, 1 or 4 samples alike. The colour attachment is now a texture
   (multisampled when anti-aliased) that the composite averages itself; bloom resolves the allocation in one shader
@@ -253,8 +253,20 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   Exploding Tiles 4x 0.227 -> 0.071 ms, 4x with bloom 0.538 -> 0.129 ms, bloom without anti-aliasing 0.579 ->
   0.102 ms, Glass Shatter 4x 0.232 -> 0.078 ms. Output matches the blit within one level for multisampled targets;
   a single-sample target now reproduces a direct draw exactly (the old 1-sample renderbuffer did not).
-- [ ] Anything further only if physical testing shows High's cost matters: 2x samples, multisampling only the mesh
-  pass, or a measured alternative. Decide from `--perf` evidence on the installed build.
+- [x] **Per-run textures allocated ahead (2026-09-29, operator-chosen over holding them between runs).** The
+  two-display `--perf` run showed one 10-29 ms render-thread frame at the start of every 3D run on each display:
+  the driver allocating the run's multisampled target, motion, resolve, bloom and trails textures at its first
+  frame. The S11 warm-up now allocates them ahead, one unit per spaced step, at the render size the node's last
+  render saw (else the largest its logical size can round from): `SceneTarget.warm`, `MotionBlur.warm`,
+  `BloomChain.warm`, `MotionTrails.warm`, which the run's first use shares. `park()` still releases everything
+  after each run, so only the *next* transition's textures are ever held, and only from its warm-up to its end.
+  - **Measured** (offscreen, 3840x2160, operator settings, programs warm; start frame = worst of the first three):
+    Block Spins 9.1-9.5 -> 2.5-3.8 ms, Exploding Tiles 11.1-11.9 -> 3.0-4.0, Glass Shatter 8.6-10.5 -> 3.0-3.5,
+    Crumble 12.2-12.7 -> 2.2-2.8, Pixel Accretion 10.8-11.0 -> 1.1-1.5. A warm step costs 0.2-2.7 ms of render-
+    thread CPU (the GPU side of zeroing a 4K multisampled target, up to ~6 ms, overlaps other frames).
+  - **Memory** (driver-reported, 4K + 1440p displays, operator settings): Block Spins 289 + 136 MB, Exploding
+    Tiles 312 + 146, Glass Shatter 264 + 119, Crumble 488 + 222, Pixel Accretion 480 + 219. Peak use is unchanged
+    (each run allocated the same); it is now also held while that transition is next.
 
 ### S11 — Gradual warm-up of the next transition
 - [x] **Landed (2026-09-29, operator: "a no-brainer" if it prevents a hitch).** Before, the first run of a 3D
@@ -277,8 +289,8 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   - **Measured** (hidden `QQuickRenderControl` scene, real `BackgroundRenderItem`, 1280x720, RTX 4090, warm
     driver shader cache, first two run frames together, with `glFinish`): cold -> warmed Glass Shatter 63-88 ->
     12-17 ms, Exploding Tiles 36-44 -> 8-30 ms, Crumble 40-51 -> 12-20 ms, Pixel Accretion 28 -> 10 ms. Warmed
-    runs compile nothing. What remains is per-run work: the destination upload, the scene target and the
-    environment copy (S10).
+    runs compile nothing. What remained was per-run work: the destination upload, the environment copy and the
+    scene textures (now allocated ahead, S10).
 
 ## Cross-cutting performance hazards
 
@@ -289,8 +301,9 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 - Render-thread Python GL calls hold the GIL (R-87 freshness, Visualizer hitch evidence): count calls per frame and
   measure CPU submit for every slice that adds a pass.
 - No allocation, compile or texture copy per frame; per run or per size bucket only.
-- Memory: the High target is per display and held only during a run (transitions) or while a mode is active
-  (Visualizers); every new attachment is measured and justified.
+- Memory: a transition's scene textures are per display and held from its warm-up (it is the next transition)
+  until `park()` after its run; a Visualizer mode's while it is active. Never hold textures for transitions that
+  are not next. Every new attachment is measured and justified.
 - State: every GL state the foundation touches is fence-restored (framebuffers, blend, uniform-buffer binding).
 - Endpoints: every post effect is exactly zero at progress 0 and 1 and at the near-endpoint checks.
 - Time: real seconds only for real-time rates; Visualizers only logical time.
@@ -306,5 +319,5 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 
 - Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b), S8, S9; also Motion Trails (operator request 2026-09-29:
   `rendering/quick/scene3d/trails.py`, ghosts from each effect's motion variants; see Transitions.md).
-- Landed: S11 (gradual warm-up of the next transition).
-- Remaining: S10 (conditional on physical evidence).
+- Landed: S10 (shader resolve; per-run textures allocated ahead), S11 (gradual warm-up of the next transition).
+- Remaining: none.
