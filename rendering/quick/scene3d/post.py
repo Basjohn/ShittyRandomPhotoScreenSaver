@@ -165,3 +165,9 @@ class BloomChain:
         self._key = None
         if errors:
             raise RuntimeError(f"{self.label} bloom cleanup incomplete: {' | '.join(errors)}")
+
+# (key, vertex, fragment) of the programs ``BloomChain.apply`` draws with (for a gradual warm-up).
+BLOOM_PROGRAMS = (
+    ("bloom_down", FULLSCREEN_VERTEX_SOURCE, _DOWNSAMPLE_FRAGMENT),
+    ("bloom_up", FULLSCREEN_VERTEX_SOURCE, _UPSAMPLE_FRAGMENT),
+)

@@ -89,19 +89,94 @@ class RandomTransitionHistory:
     change fan-out or file rewrite.
     """
 
-    __slots__ = ("current", "last_choice", "last_directions")
+    __slots__ = ("current", "upcoming", "last_choice", "last_directions")
 
     def __init__(self) -> None:
         self.current: RandomTransitionSelection | None = None
+        # The next rotation's pick, made as soon as the displays go idle so they can
+        # warm it gradually (S11); taken by the next rotation while still in the pool.
+        self.upcoming: RandomTransitionSelection | None = None
         self.last_choice: str | None = None
         self.last_directions: dict[str, str] = {}
 
-    def pick_direction(self, transition_name: str, choices: tuple[str, ...]) -> str:
+    def reserve(self, available: list[str]) -> RandomTransitionSelection:
+        """The next rotation's pick, made ahead and kept while it stays in the pool."""
+        if self.upcoming is None or self.upcoming.transition_name not in available:
+            self.upcoming = self._pick(available)
+        return self.upcoming
+
+    def take(self, available: list[str]) -> RandomTransitionSelection:
+        """This rotation's pick: the reserved one while still in the pool, else a fresh one."""
+        selection = self.reserve(available)
+        self.upcoming = None
+        self.current = selection
+        self.last_choice = selection.transition_name
+        if selection.direction is not None:
+            self.last_directions[selection.transition_name] = selection.direction
+        return selection
+
+    def _pick(self, available: list[str]) -> RandomTransitionSelection:
+        # Avoid immediate repeats of this session's previous pick.
+        last_type = self.last_choice
+        candidates = [t for t in available if t != last_type] if last_type in available else available
+        choice = random.choice(candidates or available)
+        # Slide/Wipe directions are picked with the transition so every display of the
+        # batch shares them. They ride in the selection; the authored direction settings
+        # are never overwritten.
+        direction = None
+        if choice == "Slide":
+            direction = self._pick_direction(choice, _RANDOM_SLIDE_DIRECTIONS)
+        elif choice == "Wipe":
+            direction = self._pick_direction(choice, _RANDOM_WIPE_DIRECTIONS)
+        return RandomTransitionSelection(transition_name=choice, direction=direction)
+
+    def _pick_direction(self, transition_name: str, choices: tuple[str, ...]) -> str:
         last = self.last_directions.get(transition_name)
         candidates = [d for d in choices if d != last] if last in choices else list(choices)
-        direction = random.choice(candidates)
-        self.last_directions[transition_name] = direction
-        return direction
+        return random.choice(candidates)
+
+
+def _transition_rotation_pool(settings_manager) -> tuple[str | None, list[str] | None]:
+    """(fixed transition, None) when Random is off, else (None, effective Random pool)."""
+
+    canonical_transitions = require_canonical_default("transitions")
+    if not isinstance(canonical_transitions, dict):
+        raise TypeError("canonical transitions default must be a mapping")
+    transitions = settings_manager.get('transitions')
+    if not isinstance(transitions, dict):
+        transitions = dict(canonical_transitions)
+    # Canonical activation normalization (the one authority): ensure >=1
+    # activated transition and reconcile Random with an empty effective
+    # pool before selecting. Persist only on an actual repair (rare).
+    if normalize_transition_capability_state(transitions):
+        settings_manager.set('transitions', transitions)
+        settings_manager.save()
+    # random_always is the single live random-mode authority (E2.6). A
+    # legacy type="Random" is migrated once by the normalization above,
+    # never treated as a second live random trigger here.
+    canonical_random = bool(canonical_transitions["random_always"])
+    raw_rnd = transitions.get('random_always', canonical_random)
+    rnd = SettingsManager.to_bool(raw_rnd, canonical_random)
+    if not rnd:
+        canonical_type = str(canonical_transitions["type"])
+        return canonicalize_transition_name(
+            transitions.get("type", canonical_type),
+            fallback=canonicalize_transition_name(canonical_type, fallback=""),
+        ), None
+    # Effective Random membership is centralized in capability_activation:
+    # activated ∩ saved pool, with missing members repaired from canonical
+    # defaults.  This engine seam adds only hardware availability.
+    canonical_hw = bool(require_canonical_default("display.hw_accel"))
+    try:
+        hw = settings_manager.get_bool('display.hw_accel')
+    except Exception as e:
+        logger.debug("[ENGINE] Exception suppressed: %s", e)
+        hw = canonical_hw
+    return None, [
+        name
+        for name in get_effective_random_pool(transitions)
+        if is_transition_available_for_hw(name, hw)
+    ]
 
 
 class EngineState(Enum):
@@ -831,6 +906,7 @@ class ScreensaverEngine(QObject):
         from engine.image_pipeline import notify_transition_complete
 
         notify_transition_complete(self, screen_index)
+        self._prepare_next_transition()
 
     def _initialize_display(self) -> bool:
         """Initialize display manager."""
@@ -1091,6 +1167,7 @@ class ScreensaverEngine(QObject):
             )
             return
         self._end_replacement_watchdog("startup_reveal_completed")
+        self._prepare_next_transition()
         from core.logging.logger import (
             is_lifecycle_logging_enabled,
             is_perf_metrics_enabled,
@@ -1659,46 +1736,9 @@ class ScreensaverEngine(QObject):
 
     def _prepare_random_transition_if_needed(self) -> str | None:
         try:
-            canonical_transitions = require_canonical_default("transitions")
-            if not isinstance(canonical_transitions, dict):
-                raise TypeError("canonical transitions default must be a mapping")
-            transitions = self.settings_manager.get('transitions')
-            if not isinstance(transitions, dict):
-                transitions = dict(canonical_transitions)
-            # Canonical activation normalization (the one authority): ensure >=1
-            # activated transition and reconcile Random with an empty effective
-            # pool before selecting. Persist only on an actual repair (rare).
-            if normalize_transition_capability_state(transitions):
-                self.settings_manager.set('transitions', transitions)
-                self.settings_manager.save()
-            # random_always is the single live random-mode authority (E2.6). A
-            # legacy type="Random" is migrated once by the normalization above,
-            # never treated as a second live random trigger here.
-            canonical_random = bool(canonical_transitions["random_always"])
-            raw_rnd = transitions.get('random_always', canonical_random)
-            rnd = SettingsManager.to_bool(raw_rnd, canonical_random)
-            if not rnd:
-                canonical_type = str(canonical_transitions["type"])
-                return canonicalize_transition_name(
-                    transitions.get("type", canonical_type),
-                    fallback=canonicalize_transition_name(canonical_type, fallback=""),
-                )
-            # Effective Random membership is centralized in capability_activation:
-            # activated ∩ saved pool, with missing members repaired from canonical
-            # defaults.  This engine seam adds only hardware availability.
-            canonical_hw = bool(require_canonical_default("display.hw_accel"))
-            try:
-                hw = self.settings_manager.get_bool('display.hw_accel')
-            except Exception as e:
-                logger.debug("[ENGINE] Exception suppressed: %s", e)
-                hw = canonical_hw
-
-            available = [
-                name
-                for name in get_effective_random_pool(transitions)
-                if is_transition_available_for_hw(name, hw)
-            ]
-
+            fixed, available = _transition_rotation_pool(self.settings_manager)
+            if available is None:
+                return fixed
             history = self._random_transition_history
             if not available:
                 # Effective pool (activated ∩ saved pool ∩ hardware) is empty.
@@ -1707,37 +1747,40 @@ class ScreensaverEngine(QObject):
                 # filtering removed every pooled candidate. Clear the current
                 # pick and select nothing this rotation.
                 history.current = None
+                history.upcoming = None
                 self._publish_random_transition_selection(None)
                 logger.info(
                     "Random transition selection failed closed: empty effective "
                     "pool (activated ∩ saved pool ∩ hardware)."
                 )
                 return None
-            # Avoid immediate repeats of this session's previous pick.
-            last_type = history.last_choice
-            candidates = [t for t in available if t != last_type] if last_type in available else available
-            if not candidates:
-                candidates = available
-            choice = random.choice(candidates)
-
-            # Slide/Wipe directions are picked with the transition so every
-            # display of the batch shares them. They ride in the selection;
-            # the authored direction settings are never overwritten.
-            direction = None
-            if choice == "Slide":
-                direction = history.pick_direction(choice, _RANDOM_SLIDE_DIRECTIONS)
-            elif choice == "Wipe":
-                direction = history.pick_direction(choice, _RANDOM_WIPE_DIRECTIONS)
-
-            history.last_choice = choice
-            selection = RandomTransitionSelection(transition_name=choice, direction=direction)
-            history.current = selection
+            selection = history.take(available)
             self._publish_random_transition_selection(selection)
-            logger.info(f"Random transition choice for this rotation: {choice}")
-            return choice
+            logger.info(f"Random transition choice for this rotation: {selection.transition_name}")
+            return selection.transition_name
         except Exception as e:
             logger.debug(f"Random transition selection failed: {e}")
             return None
+
+    def _prepare_next_transition(self) -> None:
+        """Once the displays are idle, settle the next rotation's transition and let
+        every display warm it gradually, one program per frame it renders anyway (S11).
+
+        A Random pick is reserved now and taken by the next rotation while it is still
+        in the pool, so the warm-up has the whole display interval instead of the few
+        milliseconds between an image change and its transition's first frame.
+        """
+
+        manager = self.display_manager
+        prepare = getattr(manager, "prepare_next_transition", None)
+        if not callable(prepare) or manager.has_transition_work_pending():
+            return
+        try:
+            _fixed, available = _transition_rotation_pool(self.settings_manager)
+            selection = self._random_transition_history.reserve(available) if available else None
+            prepare(selection)
+        except Exception as e:
+            logger.debug(f"Next transition warm-up not prepared: {e}")
 
     def _publish_random_transition_selection(
         self,

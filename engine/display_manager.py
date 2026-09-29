@@ -5,6 +5,7 @@ Owns one authoritative Quick display unit for each selected screen.
 """
 import math
 import os
+import random
 import time
 import weakref
 from copy import deepcopy
@@ -61,6 +62,7 @@ from rendering.quick.state import (
     QuickWindowPolicy,
     QuickWindowRole,
 )
+from rendering.quick.transitions.implementation_registry import preload_quick_transition_implementation
 from rendering.quick.transitions.request_resolution import (
     RandomTransitionSelection,
     ResolvedQuickTransitionSpec,
@@ -252,6 +254,10 @@ class DisplayManager(QObject):
         # Engine-made Random pick for the next resolved batch; kept until the
         # engine replaces it so Previous (no new pick) reuses the current one.
         self._random_transition_selection: RandomTransitionSelection | None = None
+        # Drawn when the next batch's transition is prepared while idle; the batch resolves
+        # its randomised parameters from it, so it meets the same spec the displays warmed
+        # and the geometry COMPUTE already built (unless Settings changed meanwhile).
+        self._next_batch_seed: int | None = None
         self._quick_transition_paths: dict[int, str] = {}
         self._quick_batch_expected_screens: set[int] = set()
         self._quick_batch_published_screens: set[int] = set()
@@ -3758,13 +3764,58 @@ class DisplayManager(QObject):
         """Resolve Settings intent once, then share it across this batch."""
 
         if not self._quick_transition_spec_resolved:
+            seed, self._next_batch_seed = self._next_batch_seed, None
             self._quick_transition_batch_spec = resolve_quick_transition_spec(
                 self.settings_manager,
                 random_selection=self._random_transition_selection,
+                random_source=None if seed is None else random.Random(seed),
             )
             self._quick_transition_spec_resolved = True
             self._prepare_transition_run_geometry(self._quick_transition_batch_spec)
         return self._quick_transition_batch_spec
+
+    def prepare_next_transition(self, random_selection: RandomTransitionSelection | None) -> None:
+        """Warm the next batch's transition while the displays hold the current image (S11).
+
+        An image change resolves its transition only milliseconds before the first frame,
+        too late for anything to be prepared. Here the whole display interval is available:
+        the spec is resolved from the next batch's seed, so the batch meets this same spec;
+        its run geometry is built on COMPUTE, its renderer module is imported here on the
+        GUI thread, and each display compiles its programs gradually on frames it renders
+        anyway. Nothing runs in bursts, and a transition already used this session has no
+        programs left to compile.
+        """
+
+        if self.has_transition_work_pending():
+            return
+        if self._next_batch_seed is None:
+            self._next_batch_seed = random.getrandbits(64)
+        try:
+            spec = resolve_quick_transition_spec(
+                self.settings_manager,
+                random_selection=random_selection,
+                random_source=random.Random(self._next_batch_seed),
+            )
+        except Exception:
+            logger.debug("[TRANSITION] Next transition not resolved for warm-up", exc_info=True)
+            return
+        if spec is None:
+            return
+        self._prepare_transition_run_geometry(spec)
+        try:
+            preload_quick_transition_implementation(spec.transition_id)
+        except Exception:
+            logger.debug("[TRANSITION] Warm-up import failed for %s", spec.transition_id, exc_info=True)
+            return
+        parameters = dict(spec.parameters)
+        for display in self.displays:
+            request = getattr(display, "request_transition_warm_up", None)
+            if not callable(request):
+                continue
+            try:
+                request(spec.transition_id, parameters)
+            except Exception:
+                logger.debug("[TRANSITION] Warm-up request failed", exc_info=True)
 
     def _prepare_transition_run_geometry(
         self,

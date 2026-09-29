@@ -183,8 +183,7 @@ class QuickTransitionRenderHost:
                 "Quick transition disable cleanup incomplete: " + " | ".join(errors)
             )
 
-    def render(self, frame: QuickTransitionRenderFrame) -> str:
-        transition_id = frame.run.request.transition_id
+    def _implementation(self, transition_id: str) -> QuickTransitionRenderer:
         if transition_id not in self._enabled_transition_ids:
             raise RuntimeError(f"Quick transition is disabled: {transition_id}")
         implementation = self._implementations.get(transition_id)
@@ -198,6 +197,25 @@ class QuickTransitionRenderHost:
                     f"Quick transition renderer is not registered: {transition_id}"
                 )
             self._implementations[transition_id] = implementation
+        return implementation
+
+    def warm_step(self, transition_id: str, parameters) -> bool:
+        """One bounded step of the gradual warm-up for the next run (render thread, between
+        runs, context current): True once that run's first frame will compile nothing, or
+        when the transition has nothing to warm (small 2D programs compile on first use)."""
+        implementation = self._implementation(transition_id)
+        warm = getattr(implementation, "warm", None)
+        if warm is None:
+            return True
+        inherited = _InheritedGlState.capture()
+        try:
+            return bool(warm(parameters))
+        finally:
+            inherited.restore()
+
+    def render(self, frame: QuickTransitionRenderFrame) -> str:
+        transition_id = frame.run.request.transition_id
+        implementation = self._implementation(transition_id)
 
         inherited = _InheritedGlState.capture()
         try:

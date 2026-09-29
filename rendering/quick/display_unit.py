@@ -130,6 +130,10 @@ class QuickDisplayUnit:
         _x, _y, width, height = self._runtime.display_identity.geometry
         return OverlayWidgetGeometry(0.0, 0.0, float(width), float(height))
 
+    def request_transition_warm_up(self, transition_id: str, parameters) -> None:
+        """Let this display prepare the next run's programs gradually (S11)."""
+        self._runtime.scene_controller.request_transition_warm_up(transition_id, parameters)
+
     def transition_logical_size(self) -> tuple[float, float]:
         """Logical size transition renderers draw at: the background item's size.
 

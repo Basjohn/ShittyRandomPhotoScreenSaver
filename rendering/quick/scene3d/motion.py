@@ -296,3 +296,10 @@ def set_motion_uniforms(uniforms: dict[str, int], frame, before: float, time_uni
     """The time input one shutter ago, and the viewport the motion is measured in."""
     gl.glUniform1f(uniforms[f"{time_uniform}Before"], float(before))
     gl.glUniform2f(uniforms["uViewport"], float(frame.viewport[2]), float(frame.viewport[3]))
+
+# (key, vertex, fragment) of the programs ``MotionBlur.apply`` draws with (for a gradual warm-up).
+MOTION_BLUR_PROGRAMS = (
+    ("motion_tile_max", FULLSCREEN_VERTEX_SOURCE, _TILE_MAX_FRAGMENT),
+    ("motion_neighbour_max", FULLSCREEN_VERTEX_SOURCE, _NEIGHBOUR_MAX_FRAGMENT),
+    ("motion_gather", FULLSCREEN_VERTEX_SOURCE, _GATHER_FRAGMENT),
+)

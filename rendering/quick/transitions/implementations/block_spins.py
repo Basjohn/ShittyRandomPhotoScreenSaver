@@ -20,12 +20,11 @@ from rendering.gl_programs.blockspin_program import (
     block_spin_progress,
 )
 from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress, scene3d_trail_ghosts
-from rendering.quick.scene3d.environment import PhotoEnvironment
+from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.motion import motion_uniform_names, set_motion_uniforms
-from rendering.quick.scene3d.trails import MotionTrails, trail_program
-from rendering.quick.render.gl_resources import compile_program
-from rendering.quick.scene3d.resources import MeshResources
-from rendering.quick.scene3d.target import SceneTarget
+from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
+from rendering.quick.scene3d.resources import MeshResources, warm_programs
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from ..render_contract import (
     QUICK_TRANSITION_VERTEX_SOURCE,
     QuickTransitionRenderFrame,
@@ -105,6 +104,35 @@ class QuickBlockSpinsRenderer:
                 self._draw_scene(frame, edge_glass, motion, environment, trails)
         else:
             self._draw_scene(frame, edge_glass, False, environment)
+
+    def warm(self, parameters) -> bool:
+        """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
+        between runs): True once that run's first frame will compile nothing."""
+        r = self._target_resources
+        if not warm_programs(self._base_programs()):
+            return False
+        if not self._box_vao:
+            self._initialize()   # the slab mesh and uniform lookups (its programs are compiled)
+            return False
+        motion = bool(parameters.get("motion_blur", False))
+        trails = bool(parameters.get("motion_trails", False))
+        samples = scene3d_request_samples(parameters) or (1 if motion or trails else 0)
+        entries = []
+        if motion:
+            entries.append((r, "slab_motion", BLOCK_SPIN_MOTION_VERTEX_SOURCE, BLOCK_SPIN_MOTION_FRAGMENT_SOURCE))
+        if trails:
+            entries += [(r, "slab_ghost", BLOCK_SPIN_MOTION_VERTEX_SOURCE, BLOCK_SPIN_GHOST_FRAGMENT_SOURCE),
+                        (r, *TRAIL_EDGES_PROGRAM)]
+        if block_spin_edge_glass_mode(parameters.get("edge_glass", "Off")) in (1, 3):
+            entries.append((r, *PHOTO_ENVIRONMENT_PROGRAM))
+        if samples:
+            entries += [(r, *program) for program in scene_target_programs(samples, False, motion)]
+        return warm_programs(entries)
+
+    def _base_programs(self):
+        r = self._target_resources
+        return ((r, "void", QUICK_TRANSITION_VERTEX_SOURCE, _VOID_FRAGMENT_SOURCE),
+                (r, "slab", BLOCK_SPIN_QUICK_VERTEX_SOURCE, BLOCK_SPIN_FRAGMENT_SOURCE))
 
     def park(self) -> None:
         """Drop the per-run target, environment and trails; programs and the slab stay warm."""
@@ -206,11 +234,14 @@ class QuickBlockSpinsRenderer:
                 release()
             except Exception as exc:
                 errors.append(f"scene target:{type(exc).__name__}:{exc}")
+        # The void and slab programs belong to the resources released above.
+        if not self._target_resources.has_program("slab"):
+            self._slab_program = 0
+        if not self._target_resources.has_program("void"):
+            self._void_program = 0
         for attribute, delete in (
             ("_box_vbo", lambda value: gl.glDeleteBuffers(1, [value])),
             ("_box_vao", lambda value: gl.glDeleteVertexArrays(1, [value])),
-            ("_slab_program", gl.glDeleteProgram),
-            ("_void_program", gl.glDeleteProgram),
         ):
             value = int(getattr(self, attribute))
             if not value:
@@ -232,16 +263,9 @@ class QuickBlockSpinsRenderer:
 
     def _initialize(self) -> None:
         try:
-            self._void_program = compile_program(
-                QUICK_TRANSITION_VERTEX_SOURCE,
-                _VOID_FRAGMENT_SOURCE,
-                label="Quick 3D Block Spins void",
-            )
-            self._slab_program = compile_program(
-                BLOCK_SPIN_QUICK_VERTEX_SOURCE,
-                BLOCK_SPIN_FRAGMENT_SOURCE,
-                label="Quick 3D Block Spins slab",
-            )
+            (void_resources, *void), (slab_resources, *slab) = self._base_programs()
+            self._void_program = void_resources.program(*void)
+            self._slab_program = slab_resources.program(*slab)
             self._void_uniforms = self._uniform_locations(
                 self._void_program,
                 ("uMatrix", "uItemSize"),

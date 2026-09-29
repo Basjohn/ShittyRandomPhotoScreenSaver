@@ -142,3 +142,6 @@ class PhotoEnvironment:
                 self._fbo = 0
         if errors:
             raise RuntimeError(f"{self.label} photo environment cleanup incomplete: {' | '.join(errors)}")
+
+# (key, vertex, fragment) of the copy program (for a gradual warm-up).
+PHOTO_ENVIRONMENT_PROGRAM = ("photo_environment", FULLSCREEN_VERTEX_SOURCE, _COPY_FRAGMENT)

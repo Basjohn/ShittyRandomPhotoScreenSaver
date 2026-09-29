@@ -163,6 +163,12 @@ class RetainedBackgroundSceneNode(QSGNode):
             device_pixel_ratio=float(device_pixel_ratio),
         )
 
+    def warm_step(self, transition_id: str, parameters) -> bool:
+        """One bounded warm-up step for the next run (render thread); True when nothing is left."""
+        if self._released:
+            return True
+        return self._custom_node.warm_step(transition_id, parameters)
+
     def release_resources(self) -> None:
         """Retire custom GL resources and mirror native texture lifetime once."""
 

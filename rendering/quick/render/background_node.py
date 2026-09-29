@@ -307,6 +307,18 @@ class BackgroundRenderNode(QSGRenderNode):
             return
         self._image_textures.reclaim(identity)
 
+    def warm_step(self, transition_id: str, parameters) -> bool:
+        """One bounded warm-up step for the next run (render thread); True when nothing is left.
+        A failure stops the warm-up quietly: the run then prepares itself as before."""
+        try:
+            if not self._program:
+                self._initialize_gl()   # this node's own quad program, as a step of its own
+                return False
+            return self._transition_renderer.warm_step(transition_id, parameters)
+        except Exception as exc:
+            self._telemetry.note_error(f"transition warm-up: {type(exc).__name__}: {exc}")
+            return True
+
     def release_presentation_textures(self) -> None:
         """Park after a transition: drop its images, keep warm GL programs.
 

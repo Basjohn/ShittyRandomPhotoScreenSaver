@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 from PySide6.QtCore import Property, Signal, Qt
 from PySide6.QtQuick import QQuickItem, QSGNode
@@ -30,6 +31,14 @@ class _RenderNodeRetirement:
         with self._lock:
             self._node = node
 
+    def warm_step(self, transition_id: str, parameters) -> bool:
+        """Render thread: one warm-up step on the current node; True when there is none."""
+        with self._lock:
+            node = self._node
+        if node is None:
+            return True
+        return node.warm_step(transition_id, parameters)
+
     def invalidate(self) -> None:
         """Run from sceneGraphInvalidated on Qt Quick's render owner."""
 
@@ -43,6 +52,56 @@ class _RenderNodeRetirement:
             # Compatibility retirement for a pre-CHK21 node surviving a live
             # source reload or test scaffold.
             node.releaseResources()
+
+
+class _TransitionWarmUp:
+    """The next run's gradual warm-up (S11): one bounded step on a frame the window renders
+    anyway (``beforeRendering``, render thread, context current), until done or cancelled.
+
+    A step compiles at most one program, and steps are at least ``SPACING_S`` apart, so no
+    two nearby frames both carry a compile whatever the refresh rate. No timer, no thread
+    and no polling: a window that renders nothing does no warm-up, and the run then
+    prepares whatever is left itself exactly as before.
+    """
+
+    SPACING_S = 0.2
+
+    def __init__(self, window, retirement: "_RenderNodeRetirement", transition_id: str, parameters) -> None:
+        self._lock = threading.Lock()
+        self._window = window
+        self._retirement = retirement
+        self._request = (transition_id, parameters)
+        self._next_step_at = time.monotonic() + self.SPACING_S
+        window.beforeRendering.connect(self._step, Qt.ConnectionType.DirectConnection)
+
+    @property
+    def active(self) -> bool:
+        with self._lock:
+            return self._window is not None
+
+    def cancel(self) -> None:
+        with self._lock:
+            window, self._window = self._window, None
+        if window is not None:
+            try:
+                window.beforeRendering.disconnect(self._step)
+            except (RuntimeError, TypeError):
+                pass  # the native window may already be disconnecting
+
+    def _step(self) -> None:
+        with self._lock:
+            window = self._window
+        now = time.monotonic()
+        if window is None or now < self._next_step_at:
+            return
+        self._next_step_at = now + self.SPACING_S
+        window.beginExternalCommands()
+        try:
+            done = self._retirement.warm_step(*self._request)
+        finally:
+            window.endExternalCommands()
+        if done:
+            self.cancel()
 
 
 class BackgroundRenderItem(QQuickItem):
@@ -74,6 +133,7 @@ class BackgroundRenderItem(QQuickItem):
         # item construction rather than resolving global state from render().
         self._frame_trace = current_frame_trace()
         self._retirement = _RenderNodeRetirement(self._telemetry)
+        self._warm_up: _TransitionWarmUp | None = None
         self._bound_window = None
         self.windowChanged.connect(self._bind_window_invalidation)
         self._bind_window_invalidation(self.window())
@@ -141,12 +201,30 @@ class BackgroundRenderItem(QQuickItem):
             raise TypeError("Quick transition presentation requires a TransitionRun")
         if run == self._transition_run:
             return
+        if run is not None:
+            self._cancel_warm_up()   # the run prepares whatever is left itself
         self._transition_run = run
         self.update()
+
+    def request_warm_up(self, transition_id: str, parameters) -> None:
+        """GUI thread: prepare the next run gradually, in spaced single-program steps on frames
+        the window renders anyway, so its first frame compiles nothing (S11). Replaces any
+        earlier request."""
+        self._cancel_warm_up()
+        window = self.window()
+        if window is None or self._transition_run is not None:
+            return
+        self._warm_up = _TransitionWarmUp(window, self._retirement, str(transition_id), dict(parameters))
+
+    def _cancel_warm_up(self) -> None:
+        warm_up, self._warm_up = self._warm_up, None
+        if warm_up is not None:
+            warm_up.cancel()
 
     def _bind_window_invalidation(self, window) -> None:
         if window is self._bound_window:
             return
+        self._cancel_warm_up()
         if self._bound_window is not None:
             try:
                 self._bound_window.sceneGraphInvalidated.disconnect(

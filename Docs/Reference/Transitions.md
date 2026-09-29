@@ -134,6 +134,19 @@ Each foundation slice adds what it learned here.
 - Interactions between pieces (Glass depth layers and collisions, Crumble Slabs Collide) are solved once per run on
   the CPU/COMPUTE and evaluated analytically on the GPU.
 
+**Preparing runs (S11)**
+- A run's first frame compiles nothing it could have prepared. Every renderer lists the programs a run with given
+  parameters uses in `warm(parameters)`; a new program or variant goes there too, or
+  `test_transition_warmup.py` fails.
+- Prepare while the displays are idle, never at the image change: that resolves its transition ~14 ms before the
+  first frame. The next transition is settled when the previous one completes (a reserved Random pick and a batch
+  seed), so the batch meets the spec that was warmed and the geometry COMPUTE built.
+- Compile gradually on frames the window renders anyway: one program per step, steps at least 0.2 s apart. No
+  startup work, no bursts, no timers, no threads, no polling, no forced frames, and no driver parallel-compile
+  threads.
+- GL work on `beforeRendering` is bracketed by `beginExternalCommands`/`endExternalCommands` and restores the
+  inherited state like a render does.
+
 **Motion and look**
 - Real-time rates (rumble, shake, flicker) run on real seconds (`uSeconds`), not progress, and are judged at long
   authored durations (8000 ms), not the harness's 1000 ms default: the jarring rumble only showed at length.

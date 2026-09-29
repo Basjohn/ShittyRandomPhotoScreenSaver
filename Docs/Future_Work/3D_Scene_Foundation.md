@@ -256,10 +256,29 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 - [ ] Anything further only if physical testing shows High's cost matters: 2x samples, multisampling only the mesh
   pass, or a measured alternative. Decide from `--perf` evidence on the installed build.
 
-### S11 — First-frame program compile (conditional)
-- [ ] The first run of a 3D transition compiles its programs on the render thread (80–150 ms for Exploding Tiles).
-  If the frame trace shows that hitch on the installed build, warm programs off the first frame (for example on
-  enable) without adding a timer or a worker; otherwise record the measurement and close.
+### S11 — Gradual warm-up of the next transition
+- [x] **Landed (2026-09-29, operator: "a no-brainer" if it prevents a hitch).** Before, the first run of a 3D
+  transition in a session compiled its programs, imported its renderer module and built its fracture geometry on
+  the render thread at its first frame; an image change resolves its transition only ~14 ms before that frame
+  (`[PERF][IMAGE_CHANGE]`, prefetched image), too late to prepare anything.
+  - **When:** as soon as the displays go idle (the last display's transition completed, or the startup reveal
+    completed), the engine reserves the next Random pick (`RandomTransitionHistory.reserve`, taken by the next
+    rotation while it stays in the pool, so the distribution and no-repeat rule are unchanged) and
+    `DisplayManager.prepare_next_transition` resolves its spec from a batch seed kept for the next batch. The
+    batch resolves the identical spec unless Settings changed meanwhile.
+  - **What:** its run geometry is built on COMPUTE (existing `prepare_run_geometry`), its renderer module is
+    imported on the GUI thread, and every display compiles its programs gradually: one program per step, steps at
+    least 0.2 s apart, run on `beforeRendering` of frames the window renders anyway (bracketed by
+    `begin/endExternalCommands`). Each renderer lists its programs in `warm(parameters)`; the background node's
+    own quad program is the first step.
+  - **Never:** at startup, in bursts, on a timer, on a thread, by polling, or by forcing frames. A window that
+    renders nothing warms nothing, and a run always prepares whatever is left itself. The driver's parallel
+    compile (`KHR_parallel_shader_compile`) was tried and removed: it adds driver threads and needs polling.
+  - **Measured** (hidden `QQuickRenderControl` scene, real `BackgroundRenderItem`, 1280x720, RTX 4090, warm
+    driver shader cache, first two run frames together, with `glFinish`): cold -> warmed Glass Shatter 63-88 ->
+    12-17 ms, Exploding Tiles 36-44 -> 8-30 ms, Crumble 40-51 -> 12-20 ms, Pixel Accretion 28 -> 10 ms. Warmed
+    runs compile nothing. What remains is per-run work: the destination upload, the scene target and the
+    environment copy (S10).
 
 ## Cross-cutting performance hazards
 
@@ -287,4 +306,5 @@ Binding lessons from the landed slices (measuring, rendering, motion, settings) 
 
 - Landed: S1, S2, S3, S4, S5, S6, S7 (with S7b), S8, S9; also Motion Trails (operator request 2026-09-29:
   `rendering/quick/scene3d/trails.py`, ghosts from each effect's motion variants; see Transitions.md).
-- Remaining: S10 and S11 (both conditional on physical evidence).
+- Landed: S11 (gradual warm-up of the next transition).
+- Remaining: S10 (conditional on physical evidence).
