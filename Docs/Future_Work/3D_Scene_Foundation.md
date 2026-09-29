@@ -167,7 +167,7 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   Strength on Exploding Tiles, tier flag `post_effects` (High, Balanced). Tests: bloom glows emitted light only (bright
   non-emissive field unchanged), photographs never bloom late in the run, Auto/On/Off precedence over each tier,
   anti-aliasing choice decides the scene target for every 3D transition, Settings round trip. Cost: +0.28 ms GPU
-  over 4x at 1440p (RTX 4090); the single-sample target itself ~0.7 ms (S10).
+  over 4x at 1440p (RTX 4090) as first measured; the blit resolve behind the rest was removed under S10.
 - **Reward:** real glow on sparks, embers, hot cracks, glints and highlights.
 - **Risks:** bloom leaking from bright photo areas (prevented by the emissive mask); a changed composite on High.
 - **Hazards:** extra full-screen passes (downsampled chain, ~0.2–0.4 ms target); per-run allocation only; no
@@ -205,8 +205,15 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
 - **Bars:** shared textures unchanged (no mip levels added); endpoints exact.
 
 ### S10 — Cheaper High (conditional)
-- [ ] Only if physical testing shows High's cost matters: 2x samples, multisampling only the mesh pass, or a
-  measured alternative. Decide from `--perf` evidence on the installed build.
+- [x] **Landed early (2026-09-29, from the 3D Block Spins before/after check):** the target's `glBlitFramebuffer`
+  resolve cost ~0.5 ms at 1440p on drawn content, 1 or 4 samples alike. The colour attachment is now a texture
+  (multisampled when anti-aliased) that the composite averages itself; bloom resolves the allocation in one shader
+  pass first. GPU median per frame at 2560x1440, RTX 4090, blit -> shader: 3D Block Spins 4x 0.310 -> 0.120 ms,
+  Exploding Tiles 4x 0.227 -> 0.071 ms, 4x with bloom 0.538 -> 0.129 ms, bloom without anti-aliasing 0.579 ->
+  0.102 ms, Glass Shatter 4x 0.232 -> 0.078 ms. Output matches the blit within one level for multisampled targets;
+  a single-sample target now reproduces a direct draw exactly (the old 1-sample renderbuffer did not).
+- [ ] Anything further only if physical testing shows High's cost matters: 2x samples, multisampling only the mesh
+  pass, or a measured alternative. Decide from `--perf` evidence on the installed build.
 
 ### S11 — First-frame program compile (conditional)
 - [ ] The first run of a 3D transition compiles its programs on the render thread (80–150 ms for Exploding Tiles).
@@ -214,6 +221,10 @@ Each slice: reward, risks, performance hazards to avoid, acceptance bars. Commit
   enable) without adding a timer or a worker; otherwise record the measurement and close.
 
 ## Cross-cutting performance hazards
+
+Binding lessons from the landed slices (measuring, rendering, motion, settings) live in
+`Docs/Reference/Transitions.md` ("3D foundation lessons"); every slice adds what it learned there.
+
 
 - Render-thread Python GL calls hold the GIL (R-87 freshness, Visualizer hitch evidence): count calls per frame and
   measure CPU submit for every slice that adds a pass.

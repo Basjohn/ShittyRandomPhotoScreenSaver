@@ -23,7 +23,7 @@ from .passes import blend_scope
 
 BLOOM_LEVELS = 4
 
-_FULLSCREEN_VERTEX = """#version 410 core
+FULLSCREEN_VERTEX_SOURCE = """#version 410 core
 out vec2 vUv;
 void main() {
     vec2 corner = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
@@ -91,9 +91,9 @@ class BloomChain:
             self.release()
             self._allocate(*allocation)
             self._key = allocation
-        down = resources.program("bloom_down", _FULLSCREEN_VERTEX, _DOWNSAMPLE_FRAGMENT)
+        down = resources.program("bloom_down", FULLSCREEN_VERTEX_SOURCE, _DOWNSAMPLE_FRAGMENT)
         down_uniforms = resources.uniforms("bloom_down", ("uSource", "uTexel", "uFirst"))
-        up = resources.program("bloom_up", _FULLSCREEN_VERTEX, _UPSAMPLE_FRAGMENT)
+        up = resources.program("bloom_up", FULLSCREEN_VERTEX_SOURCE, _UPSAMPLE_FRAGMENT)
         up_uniforms = resources.uniforms("bloom_up", ("uSource", "uTexel"))
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)

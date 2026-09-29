@@ -28,8 +28,9 @@ The expansion capabilities remain **deactivated by default** unless explicitly a
 - `rendering/quick/scene3d/resources.py` owns only the small shared context-local program/VAO/VBO primitives, image underlay and viewport-scoped depth clear (shared with Visualizer modes that opt in; see `Docs/Reference/Visualizer_Reference.md` §16). It is imported by admitted implementations. No always-resident 3D engine or dependency on Sphere exists.
 - **Shared 3D scene library.** `rendering/gl_programs/scene3d.py` is the import-safe GLSL library plus CPU mirrors: integer hash, rigid rotation, the pinhole camera with a real near plane (`sceneProject`), impulse flight, the departure solver, key-light shading with highlights and Fresnel rim, point lights, ember colour, planar soft shadows and camera-facing streaks. `rendering/quick/scene3d/` adds MIN/additive blend scopes (`passes.py`) and `SceneTarget` (`target.py`), a multisampled colour+depth target for the item's pixel rect, reused while the rect fits a 64 px bucket, resolved and composited through the item quad (Quick's scissor and item bounds apply as for a direct draw); its `scope` restores Quick's framebuffers, viewport and scissor even when the scene raises. Exploding Tiles is the first consumer.
 - **Per-transition quality over one tier.** Each 3D transition's page has its own quality choices: Anti-aliasing (Auto, Off, 2x, 4x, 8x) on Exploding Tiles, Glass Shatter, Crumble, Directional Pixel Accretion and 3D Block Spins, and Bloom (Auto, Off, On) plus Bloom Strength on Exploding Tiles (Motion Blur will follow the same pattern). Auto follows the global 3D Detail tier; any other value is authoritative for that transition. `resolve_scene_quality` in `parameter_resolution.py` is the one place the two combine, so the request carries effective values (`samples`, `bloom`) plus the tier (`detail`) for tier-only features (shadows, spark budget); renderers never consult the tier for anything a transition can set.
-- **Bloom** (`rendering/quick/scene3d/post.py`): only emitted light glows. While a scene renders into a bloom target, its alpha is the brightness of the light each pixel emits (opaque passes write theirs; additive sparks add theirs); a bright pass scales each pixel to that brightness, then four half-float levels blur and add back. Photographs write 0, so a bright sky never glows and endpoints stay exact; Exploding Tiles marks sparks, hot cracks, embers and the flash (not the fireball's wash, which is light on the picture). Measured at 2560x1440 on an RTX 4090: +0.28 ms GPU over 4x; a single-sample target with bloom ~1.05 ms, mostly the full-size target itself (a cheaper High, plan S10).
-- **3D Detail** (`transitions.detail_3d`, Transitions -> SETUP -> 3D Rendering) is the default every Auto choice follows: **High** renders into a 4x multisampled `SceneTarget` with soft shadows and every spark; **Balanced** draws straight into Quick's target with shadows and 60% of the sparks; **Performance** skips the shadow pass and keeps 30%. An unknown stored value uses the canonical default. Measured at 2560x1440 on an RTX 4090 (Exploding Tiles, warm): GPU mean 0.98 / 0.038 / 0.016 ms for High / Balanced / Performance (Glass Shatter 0.022 ms); the High target is ~133 MB of VRAM per display at that size. High and Balanced admit post effects (Auto Bloom on); Performance does not.
+- **Bloom** (`rendering/quick/scene3d/post.py`): only emitted light glows. While a scene renders into a bloom target, its alpha is the brightness of the light each pixel emits (opaque passes write theirs; additive sparks add theirs); a bright pass scales each pixel to that brightness, then four half-float levels blur and add back. Photographs write 0, so a bright sky never glows and endpoints stay exact; Exploding Tiles marks sparks, hot cracks, embers and the flash (not the fireball's wash, which is light on the picture). Measured at 2560x1440 on an RTX 4090 (GPU median per frame, Exploding Tiles): direct 0.036 ms, 4x 0.071 ms, 4x with bloom 0.129 ms, bloom without anti-aliasing 0.102 ms.
+- **Scene target resolve:** the target's colour is a texture that the composite reads directly, averaging the samples itself. With bloom, one shader pass resolves the allocation first. A single-sample target (bloom without anti-aliasing) draws exactly like a direct draw. See the lessons below.
+- **3D Detail** (`transitions.detail_3d`, Transitions -> SETUP -> 3D Rendering) is the default every Auto choice follows: **High** renders into a 4x multisampled `SceneTarget` with soft shadows and every spark; **Balanced** draws straight into Quick's target with shadows and 60% of the sparks; **Performance** skips the shadow pass and keeps 30%. An unknown stored value uses the canonical default. Measured at 2560x1440 on an RTX 4090 (Exploding Tiles, warm, GPU median per frame with a per-frame flush): 0.129 / 0.099 / 0.014 ms for High / Balanced / Performance. The High target is ~120 MB of VRAM per display at that size, plus ~25 MB with bloom. High and Balanced admit post effects (Auto Bloom on); Performance does not.
 - **Camera.** Effects project through `sceneProjectAt` (their authored resting distance) or `sceneProjectCamera` (offset, tilt, zoom). A camera that moves must draw the photograph through it (`MeshResources.draw_camera_plane`) with the zoom from `scene3d_camera_overscan`, so no frame edge is ever exposed (R-63); shake comes from `scene3d_camera_shake` at real-time rates.
 - **Per-frame CPU.** Shared per-frame values travel in one std140 uniform block (`rendering/quick/scene3d/uniforms.py`, layout from `Scene3DBlockLayout`); the fence and 3D helpers read GL state through `rendering/quick/gl_query.py` (raw getters, ~5x cheaper than PyOpenGL's checked ones). Exploding Tiles: warm CPU submit ~0.9 ms per frame.
 - **Per-run memory.** `QuickTransitionRenderHost.park()` runs when the background node parks after every run (`release_presentation_textures`); renderers drop per-run targets there (the `SceneTarget`) and keep programs and meshes warm. The host fence now also restores draw/read framebuffer bindings and the blend equation and function, so a renderer that fails mid-scene cannot leave Quick drawing into its target.
@@ -69,6 +70,50 @@ Depth clears must stay within the transition viewport and restore scissor state;
 - Organic effects: no generic feathered mask under a new identity; Tendril Reveal stays retired.
 - No clocks, evolving CPU fluid simulations, parallel surfaces or fallback effects; per-run options are solved once
   (Glass collisions/re-shatter, Crumble Slabs Collide) and evaluated analytically on the GPU.
+
+## 3D foundation lessons (binding)
+
+Learned the hard way while building the shared 3D foundation. They bind every change to the foundation
+(`rendering/gl_programs/scene3d.py`, `rendering/quick/scene3d/`) and every new 3D transition or Visualizer mode.
+Each foundation slice adds what it learned here.
+
+**Measuring**
+- GPU cost: `GL_TIME_ELAPSED` around a whole frame or one stage, over at least 90 frames, reporting median and p90.
+  Flush after every frame as presentation does (`TransitionCapture.benchmark` does). Without a flush, the driver's
+  command-buffer boundary lands inside a query and counts the GPU waiting on the CPU: periodic multi-ms spikes
+  (every ~9 frames) that are not rendering cost.
+- Find where a cost is spent by removing the operation (a skip variant) and timing with `GL_TIME_ELAPSED`.
+  `glQueryCounter` timestamp deltas pinned the resolve's cost on the wrong call.
+- Before/after on the same machine and build: load the old module next to the new one in the harness, never compare
+  against numbers from an earlier session.
+- CPU: every PyOpenGL call also runs `glGetError` (~4 µs). Count GL calls per frame and measure CPU submit. Read state
+  through `rendering/quick/gl_query.py` (raw getters) and send shared per-frame values in one uniform block.
+
+**Rendering**
+- No `glBlitFramebuffer` resolves (~0.5 ms at 1440p on drawn content, whatever the sample count). Render into texture
+  attachments and resolve in the shader that reads them.
+- A single-sample target is a plain texture: a 1-sample multisampled renderbuffer does not rasterise like a direct
+  draw.
+- Post effects work only from emitted light (alpha in a bloom target); photographs write 0, so endpoints stay exact
+  and bright photos never glow.
+- Photo textures are lent: sample them, never modify them (no mipmaps, no writes). Anything derived is a
+  renderer-owned per-run copy.
+- Randomness in GLSL is the integer hash with a CPU mirror checked on the GPU (R-94); float `fract(sin())` hashes
+  seam.
+- Allocate per run or per 64 px bucket and release at `park()` (transitions) or retirement (modes); nothing per frame.
+- Interactions between pieces (Glass depth layers and collisions, Crumble Slabs Collide) are solved once per run on
+  the CPU/COMPUTE and evaluated analytically on the GPU.
+
+**Motion and look**
+- Real-time rates (rumble, shake, flicker) run on real seconds (`uSeconds`), not progress, and are judged at long
+  authored durations (8000 ms), not the harness's 1000 ms default: the jarring rumble only showed at length.
+- Pieces launch with their full speed (no ease-in: that read as falling), and every piece leaves the frame.
+- Judge looks on real photos. Render new animations only for new transitions, not for tweaks to an existing one.
+
+**Settings**
+- A transition's quality choices (Anti-aliasing, Bloom, and future ones such as Motion Blur) live on its own page.
+  "Auto" follows the global 3D Detail tier, and any other value wins over it. `resolve_scene_quality` is the only
+  place the two combine, and renderers never read the tier for a value the transition can set.
 
 ## Physical acceptance (open)
 
