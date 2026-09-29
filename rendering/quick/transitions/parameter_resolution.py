@@ -15,6 +15,7 @@ import random
 from typing import Protocol
 
 from core.settings.default_contract import require_canonical_default
+from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
 from rendering.gl_programs.scene3d import (
     SCENE3D_ANTIALIASING_CHOICES,
     SCENE3D_DETAIL_NAMES,
@@ -644,6 +645,14 @@ def resolve_scene_quality(settings: Mapping[str, object], cfg: Mapping[str, obje
         strength = max(0.0, min(1.0, _number(_value(cfg, defaults, "bloom_strength"), float(defaults["bloom_strength"]))))
         quality["bloom"] = strength if on else 0.0
     return quality
+
+
+def resolve_block_spins_parameters(settings: Mapping[str, object], cfg: Mapping[str, object],
+                                   defaults: Mapping[str, object]) -> dict[str, object]:
+    """3D Block Spins' request parameters: its quality plus its Edge Glass look."""
+    parameters = resolve_scene_quality(settings, cfg, defaults)
+    parameters["edge_glass"] = _scene_choice(cfg, defaults, "edge_glass", BLOCK_SPIN_EDGE_GLASS_CHOICES)
+    return parameters
 
 
 def _surface_values(cfg: Mapping[str, object], defaults: Mapping[str, object],

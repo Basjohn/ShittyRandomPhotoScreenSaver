@@ -7,9 +7,23 @@ resources itself.
 
 from __future__ import annotations
 
+from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
+
 
 BLOCK_SPIN_VERTEX_STRIDE_FLOATS = 8
 BLOCK_SPIN_THICKNESS = 0.05
+
+def block_spin_edge_glass_mode(choice: object) -> int:
+    """The shader's ``uEdgeGlass`` for a resolved Edge Glass choice (0 = Off).
+
+    The sheen band and gloss outline are drawn over the glass unchanged; Off
+    keeps them on black.
+    """
+
+    try:
+        return BLOCK_SPIN_EDGE_GLASS_CHOICES.index(str(choice))
+    except ValueError:
+        raise ValueError(f"unknown resolved 3D Block Spins edge glass: {choice!r}") from None
 
 
 def block_spin_progress(progress: float) -> float:
@@ -120,6 +134,9 @@ out vec2 vUv;
 out vec3 vNormal;
 out vec3 vViewDirection;
 out float vEdgeCoordinate;
+out vec2 vScreenUv;
+out float vDepthCoordinate;  // 0 at the front face, 1 at the back face
+out vec3 vFrontNormal;
 flat out int vFaceKind;
 
 uniform mat4 uMatrix;
@@ -147,6 +164,7 @@ void main() {
     float sine = sin(uAngle);
     vec3 position;
     vec3 normal;
+    vec3 front = vec3(0.0, 0.0, 1.0);
     if (uAxisMode == 1) {
         mat3 rotation = mat3(
             1.0, 0.0, 0.0,
@@ -155,14 +173,17 @@ void main() {
         );
         position = rotation * aPosition;
         normal = normalize(rotation * aNormal);
+        front = rotation * front;
     } else if (uAxisMode == 2) {
         vec3 axis = vec3(0.70710678, -0.70710678, 0.0);
         position = rotateAroundAxis(aPosition, axis, cosine, sine);
         normal = normalize(rotateAroundAxis(aNormal, axis, cosine, sine));
+        front = rotateAroundAxis(front, axis, cosine, sine);
     } else if (uAxisMode == 3) {
         vec3 axis = vec3(0.70710678, 0.70710678, 0.0);
         position = rotateAroundAxis(aPosition, axis, cosine, sine);
         normal = normalize(rotateAroundAxis(aNormal, axis, cosine, sine));
+        front = rotateAroundAxis(front, axis, cosine, sine);
     } else {
         mat3 rotation = mat3(
             cosine, 0.0, sine,
@@ -171,21 +192,25 @@ void main() {
         );
         position = rotation * aPosition;
         normal = normalize(rotation * aNormal);
+        front = rotation * front;
     }
 
     vNormal = normal;
+    vFrontNormal = front;
+    vDepthCoordinate = clamp(-aPosition.z / __THICKNESS__, 0.0, 1.0);
     vViewDirection = vec3(0.0, 0.0, 1.0);
     // The authored slab lives in OpenGL's bottom-up object coordinates while
     // Qt Quick item coordinates are top-down.
-    vec2 localPosition = vec2(
+    vScreenUv = vec2(
         position.x * 0.5 + 0.5,
         0.5 - position.y * 0.5
-    ) * uItemSize;
+    );
+    vec2 localPosition = vScreenUv * uItemSize;
     vec4 projected = uMatrix * vec4(localPosition, 0.0, 1.0);
     projected.z = -position.z * 0.5 * projected.w;
     gl_Position = projected;
 }
-"""
+""".replace("__THICKNESS__", f"{BLOCK_SPIN_THICKNESS:.6f}")
 
 
 BLOCK_SPIN_FRAGMENT_SOURCE = """#version 410 core
@@ -193,6 +218,9 @@ in vec2 vUv;
 in vec3 vNormal;
 in vec3 vViewDirection;
 in float vEdgeCoordinate;
+in vec2 vScreenUv;
+in float vDepthCoordinate;
+in vec3 vFrontNormal;
 flat in int vFaceKind;
 out vec4 FragColor;
 
@@ -201,6 +229,49 @@ uniform sampler2D uNewTexture;
 uniform float uAngle;
 uniform float uSpecDirection;
 uniform int uAxisMode;
+uniform int uEdgeGlass;  // 0 Off, 1 Reflection, 2 Refraction, 3 Both
+
+vec2 mirroredUv(vec2 uv) {
+    return 1.0 - abs(1.0 - mod(uv, 2.0));
+}
+
+// The next image in the slab's polished glass edge (it is already bound, so either
+// image costs the same). The edge is rounded (bullnose): across the thickness its
+// normal rolls from the front face's to the back face's, so the edge holds a
+// compressed miniature of the picture rather than a smear of one column. Reflection
+// sweeps it across the edge as the slab turns; refraction bends it through the
+// glass with a little dispersion; Fresnel weighs the two, so the rounded borders
+// read as mirror and the middle as glass. The sheen keeps the flat normal.
+vec3 edgeGlass(vec3 flatNormal, vec3 viewDirection) {
+    float roll = (0.5 - vDepthCoordinate) * 2.2;
+    vec3 normal = normalize(flatNormal * cos(roll) + normalize(vFrontNormal) * sin(roll));
+    vec3 incident = -viewDirection;
+    float facing = max(dot(normal, viewDirection), 0.0);
+    float fresnel = 0.04 + 0.96 * pow(1.0 - facing, 5.0);
+    vec3 reflection = vec3(0.0);
+    vec3 refraction = vec3(0.0);
+    if (uEdgeGlass != 2) {
+        vec3 ray = reflect(incident, normal);
+        reflection = texture(uNewTexture, mirroredUv(vScreenUv + vec2(ray.x, -ray.y) * 0.35)).rgb;
+    }
+    if (uEdgeGlass != 1) {
+        vec3 red = refract(incident, normal, 1.0 / 1.50);
+        vec3 green = refract(incident, normal, 1.0 / 1.52);
+        vec3 blue = refract(incident, normal, 1.0 / 1.54);
+        refraction = vec3(
+            texture(uNewTexture, mirroredUv(vScreenUv + vec2(red.x, -red.y) * 0.12)).r,
+            texture(uNewTexture, mirroredUv(vScreenUv + vec2(green.x, -green.y) * 0.12)).g,
+            texture(uNewTexture, mirroredUv(vScreenUv + vec2(blue.x, -blue.y) * 0.12)).b
+        );
+    }
+    if (uEdgeGlass == 1) {
+        return reflection * mix(0.45, 1.0, fresnel);
+    }
+    if (uEdgeGlass == 2) {
+        return refraction * 0.88 * (1.0 - fresnel);
+    }
+    return mix(refraction * 0.88, reflection, mix(0.2, 1.0, fresnel));
+}
 
 void main() {
     vec2 frontUv = vec2(vUv.x, 1.0 - vUv.y);
@@ -246,7 +317,8 @@ void main() {
         float specular = pow(normalHighlight, 6.0)
             * bandMask
             * highlightPhase;
-        color = mix(vec3(0.0), vec3(1.0), clamp(4.0 * specular, 0.0, 1.0));
+        vec3 surface = uEdgeGlass == 0 ? vec3(0.0) : edgeGlass(normal, viewDirection);
+        color = mix(surface, vec3(1.0), clamp(4.0 * specular, 0.0, 1.0));
 
         float xEdge = min(vEdgeCoordinate, 1.0 - vEdgeCoordinate);
         float yEdge = min(vUv.y, 1.0 - vUv.y);

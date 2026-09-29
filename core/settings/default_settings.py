@@ -60,7 +60,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                 'Wipe': True},
                  'blinds': {'direction': 'Random', 'feather': 2},
                  'block_flip': {'cols': 24, 'direction': 'Random', 'rows': 24},
-                 'blockspin': {'antialiasing': 'Auto', 'direction': 'Random'},
+                 'blockspin': {'antialiasing': 'Auto', 'direction': 'Random', 'edge_glass': 'Off'},
                  'burn': {'ash_density': 0.8,
                           'ash_enabled': True,
                           'char_width': 0.1,
