@@ -199,17 +199,18 @@ class QuickTransitionRenderHost:
             self._implementations[transition_id] = implementation
         return implementation
 
-    def warm_step(self, transition_id: str, parameters) -> bool:
+    def warm_step(self, transition_id: str, parameters, size: tuple[int, int] | None = None) -> bool:
         """One bounded step of the gradual warm-up for the next run (render thread, between
-        runs, context current): True once that run's first frame will compile nothing, or
-        when the transition has nothing to warm (small 2D programs compile on first use)."""
+        runs, context current): True once that run's first frame will compile nothing and,
+        given the render ``size``, allocate nothing; or when the transition has nothing to
+        warm (small 2D programs compile on first use)."""
         implementation = self._implementation(transition_id)
         warm = getattr(implementation, "warm", None)
         if warm is None:
             return True
         inherited = _InheritedGlState.capture()
         try:
-            return bool(warm(parameters))
+            return bool(warm(parameters, size))
         finally:
             inherited.restore()
 

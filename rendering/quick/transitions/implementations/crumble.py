@@ -21,7 +21,7 @@ from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutt
 from rendering.quick.scene3d.motion import motion_program, motion_uniform_names, set_motion_uniforms
 from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
-from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import (
     CRUMBLE_CHUNK_ATTRIBUTES,
@@ -85,9 +85,10 @@ class QuickCrumbleRenderer:
             self.release_resources()
             raise
 
-    def warm(self, parameters) -> bool:
+    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
         """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs): True once that run's first frame will compile nothing."""
+        between runs): True once that run's first frame will compile nothing and, given the
+        render ``size`` in device pixels, allocate nothing."""
         debris = crumble_parameters(parameters)[6]
         motion = bool(parameters.get("motion_blur", False))
         trails = bool(parameters.get("motion_trails", False))
@@ -105,7 +106,10 @@ class QuickCrumbleRenderer:
                 entries.append((r, "debris_ghost", DEBRIS_MOTION_VERTEX, DEBRIS_GHOST_FRAGMENT))
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, False, motion)]
-        return warm_programs(entries)
+        if not warm_programs(entries):
+            return False
+        return warm_run_resources(self._target, self._trails, size, samples, motion_blur=motion,
+                                  bloom=False, with_trails=trails)
 
     def _draw_scene(self, frame, progress, seed, depth, thickness, debris, before, trails=False) -> None:
         self._resources.draw_image(frame, frame.destination_texture_id)

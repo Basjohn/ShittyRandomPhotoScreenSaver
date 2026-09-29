@@ -82,10 +82,8 @@ class MotionTrails:
              draw_ghost: Callable[[float, float], None]) -> None:
         """Inside ``target.scope``: draw each (progress, fade) ghost with ``draw_ghost``, then lay
         their outlines over what the scene has drawn so far."""
-        width, height, _samples = target.allocation
-        if self._size != (width, height):
-            self.release()
-            self._allocate(width, height)
+        self.warm(target)
+        width, height = self._size
         scene = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
         viewport = gl_query.get_ints(gl.GL_VIEWPORT, 4)
         clear = gl_query.get_floats(gl.GL_COLOR_CLEAR_VALUE, 4)
@@ -113,6 +111,16 @@ class MotionTrails:
         with blend_scope(gl.GL_FUNC_ADD, gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA):
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         gl.glViewport(*viewport)
+
+    def warm(self, target) -> bool:
+        """Allocate for ``target``'s allocation if not yet (ahead of a run, or at first use);
+        True if it was."""
+        width, height, _samples = target.allocation
+        if self._size == (width, height):
+            return True
+        self.release()
+        self._allocate(width, height)
+        return False
 
     def _allocate(self, width: int, height: int) -> None:
         previous = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)

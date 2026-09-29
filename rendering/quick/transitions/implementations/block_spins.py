@@ -24,7 +24,7 @@ from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, Photo
 from rendering.quick.scene3d.motion import motion_uniform_names, set_motion_uniforms
 from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
-from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
+from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from ..render_contract import (
     QUICK_TRANSITION_VERTEX_SOURCE,
     QuickTransitionRenderFrame,
@@ -105,9 +105,10 @@ class QuickBlockSpinsRenderer:
         else:
             self._draw_scene(frame, edge_glass, False, environment)
 
-    def warm(self, parameters) -> bool:
+    def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
         """One bounded step of the gradual warm-up for a run with ``parameters`` (render thread,
-        between runs): True once that run's first frame will compile nothing."""
+        between runs): True once that run's first frame will compile nothing and, given the
+        render ``size`` in device pixels, allocate nothing."""
         r = self._target_resources
         if not warm_programs(self._base_programs()):
             return False
@@ -127,7 +128,10 @@ class QuickBlockSpinsRenderer:
             entries.append((r, *PHOTO_ENVIRONMENT_PROGRAM))
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, False, motion)]
-        return warm_programs(entries)
+        if not warm_programs(entries):
+            return False
+        return warm_run_resources(self._target, self._trails, size, samples, motion_blur=motion,
+                                  bloom=False, with_trails=trails)
 
     def _base_programs(self):
         r = self._target_resources
