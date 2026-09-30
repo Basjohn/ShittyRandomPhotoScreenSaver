@@ -48,6 +48,9 @@ class MessageType(Enum):
     # Image worker messages
     IMAGE_DECODE = "image_decode"
     IMAGE_PRESCALE = "image_prescale"
+    # One source decode feeding a bounded set of speculative Qt derivatives.
+    # This is handled by the foreground IMAGE worker; it is not a worker role.
+    IMAGE_PREFETCH_BATCH = "image_prefetch_batch"
     IMAGE_RESULT = "image_result"
     
     # Error messages

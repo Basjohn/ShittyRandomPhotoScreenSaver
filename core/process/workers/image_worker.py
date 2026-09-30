@@ -18,7 +18,7 @@ import time
 import uuid
 from multiprocessing import Queue
 from multiprocessing.shared_memory import SharedMemory
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from core.process.types import (
     MessageType,
@@ -61,6 +61,8 @@ class ImageWorker(BaseWorker):
     # Shared memory threshold: 2MB (lowered from 5MB to catch 2560x1438 images)
     # 2560x1438 RGBA = 14.7MB, so this threshold ensures shared memory is used
     SHARED_MEMORY_THRESHOLD = 2 * 1024 * 1024
+    PREFETCH_BATCH_MAX_DERIVATIVES = 16
+    PREFETCH_BATCH_MAX_LOGICAL_BYTES = 128 * 1024 * 1024
     
     def __init__(self, request_queue: Queue, response_queue: Queue):
         super().__init__(request_queue, response_queue)
@@ -84,6 +86,8 @@ class ImageWorker(BaseWorker):
             return self._handle_decode(msg)
         elif msg.msg_type == MessageType.IMAGE_PRESCALE:
             return self._handle_prescale(msg)
+        elif msg.msg_type == MessageType.IMAGE_PREFETCH_BATCH:
+            return self._handle_prefetch_batch(msg)
         elif msg.msg_type == MessageType.CONFIG_UPDATE:
             return self._handle_config(msg)
         else:
@@ -231,63 +235,18 @@ class ImageWorker(BaseWorker):
         
         start = time.time()
         try:
-            # Decode
-            img = Image.open(path)
-            img.load()
-            original_size = img.size
-            
-            # Wallpaper pixels are opaque (Guardrails): composite any source
-            # transparency over black before scaling, so every display mode
-            # (FILL crops and FIT/SHRINK padding alike) returns opaque RGBA.
-            if img.has_transparency_data:
-                img = Image.alpha_composite(
-                    Image.new("RGBA", img.size, (0, 0, 0, 255)),
-                    img.convert("RGBA"),
-                )
-            
-            # Convert to RGBA
-            if img.mode != "RGBA":
-                img = img.convert("RGBA")
-            
-            # Calculate scale based on mode
-            scaled_size = self._calculate_scale_size(
-                original_size, (target_width, target_height), mode
+            rgba_data, width, height, original_size = self._pil_prescale_rgba(
+                path, target_width, target_height, mode, use_lanczos, sharpen
             )
-            
-            # Prescale if needed
-            if scaled_size != original_size:
-                resample = self.LANCZOS_RESAMPLE if use_lanczos else Image.Resampling.BILINEAR
-                img = img.resize(scaled_size, resample)
-                
-                # Apply sharpening for aggressive downscaling
-                if sharpen and PIL_AVAILABLE:
-                    scale_factor = min(
-                        scaled_size[0] / original_size[0],
-                        scaled_size[1] / original_size[1]
-                    )
-                    if scale_factor < self.SHARPEN_THRESHOLD:
-                        img = img.filter(ImageFilter.UnsharpMask(
-                            radius=2, percent=150, threshold=3
-                        ))
-                    elif scale_factor < 1.0:
-                        img = img.filter(ImageFilter.SHARPEN)
-            
-            # Handle mode-specific cropping/padding
-            final_img = self._apply_display_mode(
-                img, (target_width, target_height), mode
-            )
-            
-            width, height = final_img.size
-            rgba_data = final_img.tobytes("raw", "RGBA")
             data_size = len(rgba_data)
-            
+
             # Generate cache key
             cache_key = f"{path}|scaled:{target_width}x{target_height}"
-            
+
             prescale_ms = (time.time() - start) * 1000
             self._prescale_count += 1
             self._total_prescale_ms += prescale_ms
-            
+
             # Use shared memory for large images to avoid queue serialization
             if data_size > self.SHARED_MEMORY_THRESHOLD:
                 try:
@@ -362,7 +321,289 @@ class ImageWorker(BaseWorker):
                 success=False,
                 error=f"Prescale failed: {e}",
             )
-    
+
+    @staticmethod
+    def _packed_rgba8888(qimage: Any) -> tuple[bytes, int, int]:
+        """Copy a QImage into tightly packed RGBA8888 bytes for transport."""
+        from PySide6.QtGui import QImage
+
+        rgba = qimage.convertToFormat(QImage.Format.Format_RGBA8888)
+        width, height = int(rgba.width()), int(rgba.height())
+        if width <= 0 or height <= 0:
+            raise ValueError("Qt derivative has invalid dimensions")
+        packed_stride = width * 4
+        stride = int(rgba.bytesPerLine())
+        data = rgba.constBits().tobytes()
+        if stride == packed_stride:
+            return data[: packed_stride * height], width, height
+        return (
+            b"".join(
+                data[row * stride: row * stride + packed_stride]
+                for row in range(height)
+            ),
+            width,
+            height,
+        )
+
+    def _prefetch_batch_error(
+        self,
+        msg: WorkerMessage,
+        error: str,
+    ) -> WorkerResponse:
+        return WorkerResponse(
+            msg_type=MessageType.ERROR,
+            seq_no=msg.seq_no,
+            correlation_id=msg.correlation_id,
+            success=False,
+            error=error,
+        )
+
+    def _validated_prefetch_batch(
+        self,
+        msg: WorkerMessage,
+    ) -> tuple[str, int, list[dict[str, Any]]] | WorkerResponse:
+        """Validate the whole request before it can acquire a source decode."""
+        payload = msg.payload
+        path = payload.get("path")
+        generation = payload.get("generation")
+        derivatives = payload.get("derivatives")
+        if not isinstance(path, str) or not path:
+            return self._prefetch_batch_error(msg, "IMAGE_PREFETCH_BATCH requires a path")
+        if not isinstance(generation, int) or isinstance(generation, bool):
+            return self._prefetch_batch_error(msg, "IMAGE_PREFETCH_BATCH generation must be an integer")
+        if not isinstance(derivatives, list) or not derivatives:
+            return self._prefetch_batch_error(
+                msg,
+                "IMAGE_PREFETCH_BATCH requires one or more derivatives",
+            )
+        if len(derivatives) > self.PREFETCH_BATCH_MAX_DERIVATIVES:
+            return self._prefetch_batch_error(
+                msg,
+                f"IMAGE_PREFETCH_BATCH permits at most {self.PREFETCH_BATCH_MAX_DERIVATIVES} derivatives",
+            )
+
+        normalized: list[dict[str, Any]] = []
+        logical_bytes = 0
+        for index, derivative in enumerate(derivatives):
+            if not isinstance(derivative, dict):
+                return self._prefetch_batch_error(
+                    msg,
+                    f"IMAGE_PREFETCH_BATCH derivative {index} must be a mapping",
+                )
+            cache_key = derivative.get("cache_key")
+            width = derivative.get("width")
+            height = derivative.get("height")
+            mode = derivative.get("mode")
+            if not isinstance(cache_key, str) or not cache_key:
+                return self._prefetch_batch_error(
+                    msg,
+                    f"IMAGE_PREFETCH_BATCH derivative {index} requires a cache_key",
+                )
+            if (
+                not isinstance(width, int)
+                or isinstance(width, bool)
+                or not isinstance(height, int)
+                or isinstance(height, bool)
+                or width <= 0
+                or height <= 0
+            ):
+                return self._prefetch_batch_error(
+                    msg,
+                    f"IMAGE_PREFETCH_BATCH derivative {index} has invalid dimensions",
+                )
+            if mode not in {"fill", "fit", "shrink"}:
+                return self._prefetch_batch_error(
+                    msg,
+                    f"IMAGE_PREFETCH_BATCH derivative {index} has unknown mode: {mode!r}",
+                )
+            logical_bytes += width * height * 4
+            if logical_bytes > self.PREFETCH_BATCH_MAX_LOGICAL_BYTES:
+                return self._prefetch_batch_error(
+                    msg,
+                    "IMAGE_PREFETCH_BATCH logical RGBA bytes exceed 128 MiB",
+                )
+            normalized.append(
+                {
+                    "cache_key": cache_key,
+                    "width": width,
+                    "height": height,
+                    "mode": mode,
+                }
+            )
+        return path, generation, normalized
+
+    def _handle_prefetch_batch(self, msg: WorkerMessage) -> WorkerResponse:
+        """Decode one speculative source once and return its Qt derivatives together."""
+        validated = self._validated_prefetch_batch(msg)
+        if isinstance(validated, WorkerResponse):
+            return validated
+        path, generation, requested_derivatives = validated
+        if not os.path.exists(path):
+            return WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=msg.seq_no,
+                correlation_id=msg.correlation_id,
+                success=False,
+                error=f"File not found: {path}",
+            )
+
+        self._send_busy_notification(msg.correlation_id)
+        start = time.time()
+        try:
+            from PySide6.QtCore import QSize
+            from PySide6.QtGui import QImage
+
+            from rendering.display_modes import DisplayMode
+            from rendering.image_processor_async import AsyncImageProcessor
+
+            source = QImage(path)
+            if source.isNull():
+                return WorkerResponse(
+                    msg_type=MessageType.IMAGE_RESULT,
+                    seq_no=msg.seq_no,
+                    correlation_id=msg.correlation_id,
+                    success=False,
+                    error=f"Qt could not decode {path}",
+                )
+            self._decode_count += 1
+
+            packed = bytearray()
+            response_derivatives: list[dict[str, Any]] = []
+            for derivative in requested_derivatives:
+                result = AsyncImageProcessor.process_qimage(
+                    source,
+                    QSize(derivative["width"], derivative["height"]),
+                    DisplayMode.from_string(derivative["mode"]),
+                    use_lanczos=False,
+                    sharpen=False,
+                )
+                rgba_data, width, height = self._packed_rgba8888(result)
+                offset = len(packed)
+                packed.extend(rgba_data)
+                response_derivatives.append(
+                    {
+                        "cache_key": derivative["cache_key"],
+                        "width": width,
+                        "height": height,
+                        "mode": derivative["mode"],
+                        "offset": offset,
+                        "size": len(rgba_data),
+                    }
+                )
+                self._prescale_count += 1
+
+            data = bytes(packed)
+            try:
+                shm_name = f"srpss_img_{uuid.uuid4().hex[:12]}"
+                shm, descriptor = create_image_shared_memory(data, name=shm_name)
+            except Exception as shm_error:
+                if self._logger:
+                    self._logger.error(
+                        "IMAGE_PREFETCH_BATCH shared-memory publication failed: %s",
+                        shm_error,
+                    )
+                return self._prefetch_batch_error(
+                    msg,
+                    f"IMAGE_PREFETCH_BATCH shared-memory publication failed: {shm_error}",
+                )
+
+            self._pending_shared_transfers[msg.correlation_id] = (shm, descriptor)
+            elapsed_ms = (time.time() - start) * 1000
+            self._total_decode_ms += elapsed_ms
+            self._total_prescale_ms += elapsed_ms
+            return WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=msg.seq_no,
+                correlation_id=msg.correlation_id,
+                success=True,
+                payload={
+                    "path": path,
+                    "generation": generation,
+                    "decode_count": 1,
+                    "worker_pid": os.getpid(),
+                    "format": "RGBA",
+                    "derivatives": response_derivatives,
+                    **descriptor.payload_fields(),
+                },
+                processing_time_ms=elapsed_ms,
+            )
+        except Exception as exc:
+            if self._logger:
+                self._logger.exception("IMAGE_PREFETCH_BATCH failed: %s", exc)
+            return WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=msg.seq_no,
+                correlation_id=msg.correlation_id,
+                success=False,
+                error=f"IMAGE_PREFETCH_BATCH failed: {exc}",
+            )
+        finally:
+            # This source is deliberately batch-local; the worker owns no image cache.
+            try:
+                del source
+            except UnboundLocalError:
+                pass
+            if msg.correlation_id not in self._pending_shared_transfers:
+                self._send_idle_notification(msg.correlation_id)
+
+    def _pil_prescale_rgba(
+        self,
+        path: str,
+        target_width: int,
+        target_height: int,
+        mode: str,
+        use_lanczos: bool,
+        sharpen: bool,
+    ) -> Tuple[bytes, int, int, Tuple[int, int]]:
+        """The foreground derivative: PIL decode and scale to opaque RGBA bytes."""
+        img = Image.open(path)
+        img.load()
+        original_size = img.size
+
+        # Wallpaper pixels are opaque (Guardrails): composite any source
+        # transparency over black before scaling, so every display mode
+        # (FILL crops and FIT/SHRINK padding alike) returns opaque RGBA.
+        if img.has_transparency_data:
+            img = Image.alpha_composite(
+                Image.new("RGBA", img.size, (0, 0, 0, 255)),
+                img.convert("RGBA"),
+            )
+
+        # Convert to RGBA
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
+
+        # Calculate scale based on mode
+        scaled_size = self._calculate_scale_size(
+            original_size, (target_width, target_height), mode
+        )
+
+        # Prescale if needed
+        if scaled_size != original_size:
+            resample = self.LANCZOS_RESAMPLE if use_lanczos else Image.Resampling.BILINEAR
+            img = img.resize(scaled_size, resample)
+
+            # Apply sharpening for aggressive downscaling
+            if sharpen and PIL_AVAILABLE:
+                scale_factor = min(
+                    scaled_size[0] / original_size[0],
+                    scaled_size[1] / original_size[1]
+                )
+                if scale_factor < self.SHARPEN_THRESHOLD:
+                    img = img.filter(ImageFilter.UnsharpMask(
+                        radius=2, percent=150, threshold=3
+                    ))
+                elif scale_factor < 1.0:
+                    img = img.filter(ImageFilter.SHARPEN)
+
+        # Handle mode-specific cropping/padding
+        final_img = self._apply_display_mode(
+            img, (target_width, target_height), mode
+        )
+
+        width, height = final_img.size
+        return final_img.tobytes("raw", "RGBA"), width, height, original_size
+
     def _calculate_scale_size(
         self,
         source: Tuple[int, int],
