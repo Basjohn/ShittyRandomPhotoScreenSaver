@@ -47,6 +47,8 @@ in a kill-on-close Job Object before resuming it; Emergency Stop and runner shut
 queued jobs from starting. Operator abort is distinct from compiler failure. A new run creates a fresh owner.
 Diagnostic publishes `SRPSS_Diagnostic.scr` through the canonical SCR builder; only Standard and Media Center have
 installers. Build concurrency remains script-owned. Operator builds and installed acceptance do not block source work.
+The canonical runtime dependency probe reads the four exact Qt pins from `requirements.txt` and checks both
+distribution metadata and loaded PySide/Qt/shiboken versions before compilation, in Normal and Venv modes.
 
 ## Retired presentation architecture
 
