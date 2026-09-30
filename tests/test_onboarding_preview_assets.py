@@ -12,7 +12,7 @@ from rendering.quick.transitions.implementation_registry import iter_quick_trans
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSETS = ROOT / "images" / "onboarding"
+ASSETS = ROOT / "ui" / "assets" / "onboarding" / "source"
 
 
 def test_onboarding_preview_manifest_covers_visible_catalogues() -> None:

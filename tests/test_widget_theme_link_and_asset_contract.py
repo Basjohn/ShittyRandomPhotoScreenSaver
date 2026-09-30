@@ -1,10 +1,4 @@
-"""Qt-free source contracts for Widget-theme link identity and static assets.
-
-Runtime/visual behavior still requires the normal PySide6 user-environment gate.
-These checks preserve two packaging/ownership facts that are easy to conflate:
-Qt resources own Settings-UI embedded assets, while runtime widget imagery remains
-raw ``images/`` data that Nuitka must package separately.
-"""
+"""Qt-free source contracts for Widget-theme identity and static asset ownership."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,34 +22,29 @@ def test_link_toggle_persists_current_paired_widget_identity() -> None:
     assert "Switch to Independent before selecting it." in source
 
 
-def test_settings_qrc_and_raw_widget_images_remain_distinct_asset_paths() -> None:
+def test_immutable_widget_assets_use_the_canonical_qrc_lane() -> None:
     qrc = _text(ROOT / "ui" / "resources" / "assets.qrc")
     font_registration = _text(ROOT / "ui" / "font_registration.py")
     ui_init = _text(ROOT / "ui" / "__init__.py")
     styles = _text(ROOT / "ui" / "tabs" / "shared_styles.py")
 
-    # QRC is the embedded Settings-UI lane: fonts + small QSS icons.
-    assert '<qresource prefix="/ui/assets">' in qrc
+    # Immutable assets use one canonical runtime QRC namespace.
+    assert '<qresource prefix="/srpss">' in qrc
     assert "fonts/Jost-Regular.ttf" in qrc
     assert "combobox_closed.svg" in qrc
-    assert ":/ui/assets/fonts/Jost-Regular.ttf" in font_registration
+    assert "branding/logos/Steam_Logo_Cropped.png" in qrc
+    assert "weather/presented/clear-day.png" in qrc
+    assert ":/srpss/fonts/Jost-Regular.ttf" in font_registration
     # Circle indicators come from the QRC lane (recoloured copies only for dark-text themes).
-    assert 'f":/ui/assets/circle_checkbox_{name}.svg"' in styles
+    assert 'f":/srpss/ui/icons/circle_checkbox_{name}.svg"' in styles
     assert "assets_rc" in ui_init
 
-    # Runtime branded/widget imagery deliberately stays on the raw images lane.
+    # Runtime presenters use QRC URLs and never reintroduce image-root probing.
     achievement = _text(ROOT / "rendering" / "quick" / "widgets" / "achievement_pulse.py")
     abandonment = _text(ROOT / "rendering" / "quick" / "widgets" / "abandonment_issues.py")
-    assert '"images" / "Steam_Logo_Cropped.png"' in achievement
-    assert '"images" / "Steam_Logo_Cropped.png"' in abandonment
-    assert ".resolve().as_uri()" in achievement
-    assert "Steam_Logo_Cropped.png" not in qrc
-
-    # Frozen builds must therefore keep shipping the raw images directory.
-    for script_name in ("build_nuitka.ps1", "build_nuitka_mc_onedir.ps1"):
-        script = _text(ROOT / "scripts" / script_name)
-        assert '"--include-data-dir=images=images"' in script, script_name
-        assert '"--include-data-dir=themes=themes"' in script, script_name
+    assert 'resource_url("branding/logos/Steam_Logo_Cropped.png")' in achievement
+    assert 'resource_url("branding/logos/Steam_Logo_Cropped.png")' in abandonment
+    assert ".resolve().as_uri()" not in achievement
 
 
 def test_generated_widget_themes_only_serialize_admitted_semantic_roles() -> None:

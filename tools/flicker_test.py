@@ -1085,9 +1085,9 @@ def _register_fonts():
     except Exception:
         pass
     paths = (
-        ":/ui/assets/fonts/Jost-Regular.ttf",
-        ":/ui/assets/fonts/Jost-SemiBold.ttf",
-        ":/ui/assets/fonts/Jost-Bold.ttf",
+        ":/srpss/fonts/Jost-Regular.ttf",
+        ":/srpss/fonts/Jost-SemiBold.ttf",
+        ":/srpss/fonts/Jost-Bold.ttf",
     )
     for p in paths:
         QFontDatabase.addApplicationFont(p)

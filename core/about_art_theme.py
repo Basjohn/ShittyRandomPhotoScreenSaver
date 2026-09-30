@@ -8,11 +8,28 @@ all unmasked artwork exactly.
 from __future__ import annotations
 
 from functools import lru_cache
+from io import BytesIO
 from pathlib import Path
 from typing import Iterable
 
 import numpy as np
 from PIL import Image
+
+
+def _load_image(path: str) -> Image.Image:
+    """Open a normal path or an already-registered immutable Qt resource."""
+
+    if path.startswith(":/"):
+        from PySide6.QtCore import QFile, QIODevice
+
+        source = QFile(path)
+        if not source.open(QIODevice.OpenModeFlag.ReadOnly):
+            raise FileNotFoundError(f"About resource is unavailable: {path}")
+        try:
+            return Image.open(BytesIO(bytes(source.readAll()))).copy()
+        finally:
+            source.close()
+    return Image.open(path)
 
 # Authored source-liquid colour. A theme may still choose this exact value to
 # bypass recolouring and preserve the source pixels byte-for-byte.
@@ -22,8 +39,8 @@ _REFERENCE_LIGHTNESS = 0.55
 
 @lru_cache(maxsize=8)
 def _load_source_and_mask(source_path: str, mask_path: str) -> tuple[np.ndarray, np.ndarray]:
-    source = np.asarray(Image.open(source_path).convert("RGBA"), dtype=np.uint8)
-    mask = np.asarray(Image.open(mask_path).convert("L"), dtype=np.uint8)
+    source = np.asarray(_load_image(source_path).convert("RGBA"), dtype=np.uint8)
+    mask = np.asarray(_load_image(mask_path).convert("L"), dtype=np.uint8)
     if source.shape[:2] != mask.shape:
         raise ValueError(
             f"About liquid mask size mismatch: source={source.shape[:2]} mask={mask.shape}"
@@ -99,7 +116,7 @@ def themed_about_rgba(
 ) -> np.ndarray:
     """Load one cached source/mask pair and return themed RGBA pixels."""
 
-    source, mask = _load_source_and_mask(str(Path(source_path)), str(Path(mask_path)))
+    source, mask = _load_source_and_mask(str(source_path), str(mask_path))
     return recolor_liquid_rgba(source, mask, target_rgb)
 
 

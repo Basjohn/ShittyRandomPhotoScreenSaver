@@ -54,6 +54,12 @@ Diagnostic publishes `SRPSS_Diagnostic.scr` through the canonical SCR builder; o
 installers. Build concurrency remains script-owned. Operator builds and installed acceptance do not block source work.
 The canonical runtime dependency probe reads the four exact Qt pins from `requirements.txt` and checks both
 distribution metadata and loaded PySide/Qt/shiboken versions before compilation, in Normal and Venv modes.
+Build Runner owns the QRC prerequisite before any selected runtime-product jobs. It delegates deterministic
+generation to `tools/regen_qrc.py` using the selected mode's interpreter; resource child processes share its existing
+cancellation owner. Direct build scripts invoke the same prerequisite. A generation failure prevents compilation;
+unchanged resources do not recompile for each job. Themes and presets retain their loose editable packaging.
+For venv products, the Foundry first invokes the existing worker's preparation-only mode, which returns before
+build-directory mutation or compilation. Diagnostic follows its venv worker even when the Foundry is in Normal mode.
 
 ## Retired presentation architecture
 
@@ -115,7 +121,22 @@ Runtime cards remain the ordinary retained Qt Quick RGBA surface/border/shadow p
 
 The curated source pack currently contains 58 Settings themes and 58 deterministic colour-only Widget counterparts, including four deliberately light/white-adjacent themes and four silver/metal themes. Settings-theme filenames may legitimately retain `[Glass]`/`[Acrylic]` because those tags describe the Settings HWND. Widget counterpart display names and filenames omit those tags while preserving stable links back to the actual Settings-theme identity. Installed theme storage is the same machine-wide curated asset family as visualizer presets: source/dev reads `<repo-root>/themes`, while frozen/installed runtime reads `%ProgramData%\SRPSS\themes` and Widget Themes live under its `widgets/` child. Normal and Media Center installers seed/clean-replace that tree; Nuitka may bundle the source pack for build completeness, but frozen runtime does not merge the bundled extraction/app-local copy into the active catalogue.
 
-Static assets use two intentional lanes. `ui/resources/assets.qrc` compiled to `ui/resources/assets_rc.py` embeds Settings-UI fonts/small QSS icons addressable as `:/ui/assets/...`. Runtime branded/widget imagery remains raw `images/` data and frozen builds must package that directory separately. Changing the QRC manifest requires regenerating `assets_rc.py`; adding a runtime logo such as `Steam_Logo_Cropped.png` does not belong in the QRC unless the asset architecture is deliberately changed.
+Immutable application assets are Qt resources. Their canonical sources live under `ui/assets/`, grouped by ownership;
+`ui/resources/assets.qrc` embeds ordinary fonts, UI icons, branding and widget imagery under `:/srpss/...`.
+Qt image APIs use that path; QML uses `qrc:/srpss/...`. Consumers must not resolve install directories or extract
+resources back to disk. Frozen products do not ship duplicate loose imagery.
+
+Guided Setup previews have one separate `onboarding_assets.qrc`, registered on the first explicit asset request.
+The split follows measured import cost of the consolidated module; importing Settings/onboarding helpers must not
+load the preview module. Both generated Python modules use the selected build toolchain and are maintained by
+Build Runner's automatic resource prerequisite. No external RCC artifact, recurring lookup work or eager image
+decoding is introduced. Themes, presets, user content, caches, credentials and replaceable notification/Jedi sounds
+retain their filesystem ownership. Installer artwork is a compile-time Inno Setup input, not loose runtime imagery.
+
+Clock's named timezone authority remains `pytz`, including persisted IANA aliases and DST rules. Its bundled world
+database is required payload: Windows Qt timezone data does not preserve the supported identifiers and offsets,
+and this Windows Python runtime has no standalone `zoneinfo` database. A replacement must prove behavior parity
+before removing that payload; local time and explicit UTC offsets remain supported through the existing Clock resolver.
 
 ## Capability / ordinary instance state
 

@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
 DEFAULT_SHEET: Final = ROOT / "tools" / "onboarding_sources" / "MEGASHEET.png"
 # Operator screenshot of every Visualizer mode (unshipped, like MEGASHEET).
 VISUALIZER_SHEET: Final = ROOT / "tools" / "onboarding_sources" / "Visualizers.png"
-DEFAULT_OUTPUT: Final = ROOT / "images" / "onboarding"
+DEFAULT_OUTPUT: Final = ROOT / "ui" / "assets" / "onboarding" / "source"
 
 # Card frame lines located in the sheet (x0, y0, x1, y1, sheet pixels).  The
 # tool walks outward from each line to the frame's true outer edge.

@@ -1,15 +1,185 @@
 <RCC>
-    <qresource prefix="/ui/assets">
-        <file alias="circle_checkbox_unchecked.svg">../assets/circle_checkbox_unchecked.svg</file>
-        <file alias="circle_checkbox_checked.svg">../assets/circle_checkbox_checked.svg</file>
-        <file alias="circle_checkbox_unchecked_hover.svg">../assets/circle_checkbox_unchecked_hover.svg</file>
-        <file alias="circle_checkbox_checked_hover.svg">../assets/circle_checkbox_checked_hover.svg</file>
-        <file alias="fonts/Jost-Regular.ttf">../assets/fonts/Jost-Regular.ttf</file>
-        <file alias="fonts/Jost-SemiBold.ttf">../assets/fonts/Jost-SemiBold.ttf</file>
-        <file alias="fonts/Jost-Bold.ttf">../assets/fonts/Jost-Bold.ttf</file>
-        <file alias="fonts/Inter-VariableFont_opsz,wght.ttf">../assets/fonts/Inter-VariableFont_opsz,wght.ttf</file>
-        <file alias="fonts/Inter-Italic-VariableFont_opsz,wght.ttf">../assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf</file>
-        <file alias="combobox_closed.svg">../assets/combobox_closed.svg</file>
-        <file alias="combobox_closed_hover.svg">../assets/combobox_closed_hover.svg</file>
-    </qresource>
+  <qresource prefix="/srpss">
+    <file alias="ui/icons/circle_checkbox_checked_hover.svg">../assets/ui/icons/circle_checkbox_checked_hover.svg</file>
+    <file alias="ui/icons/circle_checkbox_checked.svg">../assets/ui/icons/circle_checkbox_checked.svg</file>
+    <file alias="ui/icons/circle_checkbox_unchecked_hover.svg">../assets/ui/icons/circle_checkbox_unchecked_hover.svg</file>
+    <file alias="ui/icons/circle_checkbox_unchecked.svg">../assets/ui/icons/circle_checkbox_unchecked.svg</file>
+    <file alias="ui/icons/combobox_closed_hover.svg">../assets/ui/icons/combobox_closed_hover.svg</file>
+    <file alias="ui/icons/combobox_closed.svg">../assets/ui/icons/combobox_closed.svg</file>
+    <file alias="fonts/Inter-Italic-VariableFont_opsz,wght.ttf" compression-algorithm="none">../assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf</file>
+    <file alias="fonts/Inter-VariableFont_opsz,wght.ttf" compression-algorithm="none">../assets/fonts/Inter-VariableFont_opsz,wght.ttf</file>
+    <file alias="fonts/Jost-Bold.ttf" compression-algorithm="none">../assets/fonts/Jost-Bold.ttf</file>
+    <file alias="fonts/Jost-Regular.ttf" compression-algorithm="none">../assets/fonts/Jost-Regular.ttf</file>
+    <file alias="fonts/Jost-SemiBold.ttf" compression-algorithm="none">../assets/fonts/Jost-SemiBold.ttf</file>
+    <file alias="branding/about/Logo_LiquidMask.png" compression-algorithm="none">../assets/branding/about/Logo_LiquidMask.png</file>
+    <file alias="branding/about/Logo.png" compression-algorithm="none">../assets/branding/about/Logo.png</file>
+    <file alias="branding/about/Shoogle300W_LiquidMask.png" compression-algorithm="none">../assets/branding/about/Shoogle300W_LiquidMask.png</file>
+    <file alias="branding/about/Shoogle300W.png" compression-algorithm="none">../assets/branding/about/Shoogle300W.png</file>
+    <file alias="branding/logos/Apple_Music_Icon_RGB.png" compression-algorithm="none">../assets/branding/logos/Apple_Music_Icon_RGB.png</file>
+    <file alias="branding/logos/gmail-archive.svg">../assets/branding/logos/gmail-archive.svg</file>
+    <file alias="branding/logos/gmail-envelope.png" compression-algorithm="none">../assets/branding/logos/gmail-envelope.png</file>
+    <file alias="branding/logos/gmail-envelope.svg">../assets/branding/logos/gmail-envelope.svg</file>
+    <file alias="branding/logos/gmail-read.png" compression-algorithm="none">../assets/branding/logos/gmail-read.png</file>
+    <file alias="branding/logos/gmail-read.svg">../assets/branding/logos/gmail-read.svg</file>
+    <file alias="branding/logos/gmail-spam.png" compression-algorithm="none">../assets/branding/logos/gmail-spam.png</file>
+    <file alias="branding/logos/gmail-spam.svg">../assets/branding/logos/gmail-spam.svg</file>
+    <file alias="branding/logos/gmail-trash.png" compression-algorithm="none">../assets/branding/logos/gmail-trash.png</file>
+    <file alias="branding/logos/gmail-trash.svg">../assets/branding/logos/gmail-trash.svg</file>
+    <file alias="branding/logos/google-gmail.png" compression-algorithm="none">../assets/branding/logos/google-gmail.png</file>
+    <file alias="branding/logos/icons8-musicbee-96.png" compression-algorithm="none">../assets/branding/logos/icons8-musicbee-96.png</file>
+    <file alias="branding/logos/Reddit_Logo_C.png" compression-algorithm="none">../assets/branding/logos/Reddit_Logo_C.png</file>
+    <file alias="branding/logos/Reddit_LogoBW.png" compression-algorithm="none">../assets/branding/logos/Reddit_LogoBW.png</file>
+    <file alias="branding/logos/Spotify_Primary_Logo_RGB_Black.png" compression-algorithm="none">../assets/branding/logos/Spotify_Primary_Logo_RGB_Black.png</file>
+    <file alias="branding/logos/Steam_Logo_Cropped.png" compression-algorithm="none">../assets/branding/logos/Steam_Logo_Cropped.png</file>
+    <file alias="branding/logos/Steam_Logo.png" compression-algorithm="none">../assets/branding/logos/Steam_Logo.png</file>
+    <file alias="branding/logos/YouTube_Icon_RGB.png" compression-algorithm="none">../assets/branding/logos/YouTube_Icon_RGB.png</file>
+    <file alias="branding/logos/YouTube_Music_Icon_RGB.png" compression-algorithm="none">../assets/branding/logos/YouTube_Music_Icon_RGB.png</file>
+    <file alias="weather/barometer.png" compression-algorithm="none">../assets/weather/source/barometer.png</file>
+    <file alias="weather/celsius.png" compression-algorithm="none">../assets/weather/source/celsius.png</file>
+    <file alias="weather/clear-day.png" compression-algorithm="none">../assets/weather/source/clear-day.png</file>
+    <file alias="weather/clear-night.png" compression-algorithm="none">../assets/weather/source/clear-night.png</file>
+    <file alias="weather/cloudy.png" compression-algorithm="none">../assets/weather/source/cloudy.png</file>
+    <file alias="weather/compass.png" compression-algorithm="none">../assets/weather/source/compass.png</file>
+    <file alias="weather/drizzle.png" compression-algorithm="none">../assets/weather/source/drizzle.png</file>
+    <file alias="weather/dust-day.png" compression-algorithm="none">../assets/weather/source/dust-day.png</file>
+    <file alias="weather/dust-night.png" compression-algorithm="none">../assets/weather/source/dust-night.png</file>
+    <file alias="weather/dust-wind.png" compression-algorithm="none">../assets/weather/source/dust-wind.png</file>
+    <file alias="weather/dust.png" compression-algorithm="none">../assets/weather/source/dust.png</file>
+    <file alias="weather/fahrenheit.png" compression-algorithm="none">../assets/weather/source/fahrenheit.png</file>
+    <file alias="weather/falling-stars.png" compression-algorithm="none">../assets/weather/source/falling-stars.png</file>
+    <file alias="weather/fog-day.png" compression-algorithm="none">../assets/weather/source/fog-day.png</file>
+    <file alias="weather/fog-night.png" compression-algorithm="none">../assets/weather/source/fog-night.png</file>
+    <file alias="weather/fog.png" compression-algorithm="none">../assets/weather/source/fog.png</file>
+    <file alias="weather/hail.png" compression-algorithm="none">../assets/weather/source/hail.png</file>
+    <file alias="weather/haze-day.png" compression-algorithm="none">../assets/weather/source/haze-day.png</file>
+    <file alias="weather/haze-night.png" compression-algorithm="none">../assets/weather/source/haze-night.png</file>
+    <file alias="weather/haze.png" compression-algorithm="none">../assets/weather/source/haze.png</file>
+    <file alias="weather/horizon.png" compression-algorithm="none">../assets/weather/source/horizon.png</file>
+    <file alias="weather/humidity.png" compression-algorithm="none">../assets/weather/source/humidity.png</file>
+    <file alias="weather/hurricane.png" compression-algorithm="none">../assets/weather/source/hurricane.png</file>
+    <file alias="weather/lightning-bolt.png" compression-algorithm="none">../assets/weather/source/lightning-bolt.png</file>
+    <file alias="weather/mist.png" compression-algorithm="none">../assets/weather/source/mist.png</file>
+    <file alias="weather/moon-first-quarter.png" compression-algorithm="none">../assets/weather/source/moon-first-quarter.png</file>
+    <file alias="weather/moon-full.png" compression-algorithm="none">../assets/weather/source/moon-full.png</file>
+    <file alias="weather/moon-last-quarter.png" compression-algorithm="none">../assets/weather/source/moon-last-quarter.png</file>
+    <file alias="weather/moon-new.png" compression-algorithm="none">../assets/weather/source/moon-new.png</file>
+    <file alias="weather/moon-waning-crescent.png" compression-algorithm="none">../assets/weather/source/moon-waning-crescent.png</file>
+    <file alias="weather/moon-waning-gibbous.png" compression-algorithm="none">../assets/weather/source/moon-waning-gibbous.png</file>
+    <file alias="weather/moon-waxing-crescent.png" compression-algorithm="none">../assets/weather/source/moon-waxing-crescent.png</file>
+    <file alias="weather/moon-waxing-gibbous.png" compression-algorithm="none">../assets/weather/source/moon-waxing-gibbous.png</file>
+    <file alias="weather/moonrise.png" compression-algorithm="none">../assets/weather/source/moonrise.png</file>
+    <file alias="weather/moonset.png" compression-algorithm="none">../assets/weather/source/moonset.png</file>
+    <file alias="weather/not-available.png" compression-algorithm="none">../assets/weather/source/not-available.png</file>
+    <file alias="weather/overcast-day.png" compression-algorithm="none">../assets/weather/source/overcast-day.png</file>
+    <file alias="weather/overcast-night.png" compression-algorithm="none">../assets/weather/source/overcast-night.png</file>
+    <file alias="weather/overcast.png" compression-algorithm="none">../assets/weather/source/overcast.png</file>
+    <file alias="weather/partly-cloudy-day-drizzle.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-day-drizzle.png</file>
+    <file alias="weather/partly-cloudy-day-fog.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-day-fog.png</file>
+    <file alias="weather/partly-cloudy-day-hail.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-day-hail.png</file>
+    <file alias="weather/partly-cloudy-day-haze.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-day-haze.png</file>
+    <file alias="weather/partly-cloudy-day-rain.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-day-rain.png</file>
+    <file alias="weather/partly-cloudy-day-sleet.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-day-sleet.png</file>
+    <file alias="weather/partly-cloudy-day-smoke.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-day-smoke.png</file>
+    <file alias="weather/partly-cloudy-day-snow.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-day-snow.png</file>
+    <file alias="weather/partly-cloudy-day.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-day.png</file>
+    <file alias="weather/partly-cloudy-night-drizzle.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-night-drizzle.png</file>
+    <file alias="weather/partly-cloudy-night-fog.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-night-fog.png</file>
+    <file alias="weather/partly-cloudy-night-hail.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-night-hail.png</file>
+    <file alias="weather/partly-cloudy-night-haze.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-night-haze.png</file>
+    <file alias="weather/partly-cloudy-night-rain.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-night-rain.png</file>
+    <file alias="weather/partly-cloudy-night-sleet.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-night-sleet.png</file>
+    <file alias="weather/partly-cloudy-night-smoke.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-night-smoke.png</file>
+    <file alias="weather/partly-cloudy-night-snow.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-night-snow.png</file>
+    <file alias="weather/partly-cloudy-night.png" compression-algorithm="none">../assets/weather/source/partly-cloudy-night.png</file>
+    <file alias="weather/presented/clear-day.png" compression-algorithm="none">../assets/weather/source/presented/clear-day.png</file>
+    <file alias="weather/presented/clear-night.png" compression-algorithm="none">../assets/weather/source/presented/clear-night.png</file>
+    <file alias="weather/presented/detail/humidity.png" compression-algorithm="none">../assets/weather/source/presented/detail/humidity.png</file>
+    <file alias="weather/presented/detail/umbrella.png" compression-algorithm="none">../assets/weather/source/presented/detail/umbrella.png</file>
+    <file alias="weather/presented/detail/wind.png" compression-algorithm="none">../assets/weather/source/presented/detail/wind.png</file>
+    <file alias="weather/presented/drizzle.png" compression-algorithm="none">../assets/weather/source/presented/drizzle.png</file>
+    <file alias="weather/presented/fog-day.png" compression-algorithm="none">../assets/weather/source/presented/fog-day.png</file>
+    <file alias="weather/presented/fog-night.png" compression-algorithm="none">../assets/weather/source/presented/fog-night.png</file>
+    <file alias="weather/presented/hail.png" compression-algorithm="none">../assets/weather/source/presented/hail.png</file>
+    <file alias="weather/presented/haze-day.png" compression-algorithm="none">../assets/weather/source/presented/haze-day.png</file>
+    <file alias="weather/presented/haze-night.png" compression-algorithm="none">../assets/weather/source/presented/haze-night.png</file>
+    <file alias="weather/presented/overcast-day.png" compression-algorithm="none">../assets/weather/source/presented/overcast-day.png</file>
+    <file alias="weather/presented/overcast-night.png" compression-algorithm="none">../assets/weather/source/presented/overcast-night.png</file>
+    <file alias="weather/presented/partly-cloudy-day-sleet.png" compression-algorithm="none">../assets/weather/source/presented/partly-cloudy-day-sleet.png</file>
+    <file alias="weather/presented/partly-cloudy-day.png" compression-algorithm="none">../assets/weather/source/presented/partly-cloudy-day.png</file>
+    <file alias="weather/presented/partly-cloudy-night-sleet.png" compression-algorithm="none">../assets/weather/source/presented/partly-cloudy-night-sleet.png</file>
+    <file alias="weather/presented/partly-cloudy-night.png" compression-algorithm="none">../assets/weather/source/presented/partly-cloudy-night.png</file>
+    <file alias="weather/presented/rain.png" compression-algorithm="none">../assets/weather/source/presented/rain.png</file>
+    <file alias="weather/presented/smoke.png" compression-algorithm="none">../assets/weather/source/presented/smoke.png</file>
+    <file alias="weather/presented/snow.png" compression-algorithm="none">../assets/weather/source/presented/snow.png</file>
+    <file alias="weather/presented/thunderstorms-day-rain.png" compression-algorithm="none">../assets/weather/source/presented/thunderstorms-day-rain.png</file>
+    <file alias="weather/presented/thunderstorms-day.png" compression-algorithm="none">../assets/weather/source/presented/thunderstorms-day.png</file>
+    <file alias="weather/presented/thunderstorms-night-rain.png" compression-algorithm="none">../assets/weather/source/presented/thunderstorms-night-rain.png</file>
+    <file alias="weather/presented/thunderstorms-night.png" compression-algorithm="none">../assets/weather/source/presented/thunderstorms-night.png</file>
+    <file alias="weather/pressure-high-alt.png" compression-algorithm="none">../assets/weather/source/pressure-high-alt.png</file>
+    <file alias="weather/pressure-high.png" compression-algorithm="none">../assets/weather/source/pressure-high.png</file>
+    <file alias="weather/pressure-low-alt.png" compression-algorithm="none">../assets/weather/source/pressure-low-alt.png</file>
+    <file alias="weather/pressure-low.png" compression-algorithm="none">../assets/weather/source/pressure-low.png</file>
+    <file alias="weather/rain.png" compression-algorithm="none">../assets/weather/source/rain.png</file>
+    <file alias="weather/raindrop.png" compression-algorithm="none">../assets/weather/source/raindrop.png</file>
+    <file alias="weather/raindrops.png" compression-algorithm="none">../assets/weather/source/raindrops.png</file>
+    <file alias="weather/sleet.png" compression-algorithm="none">../assets/weather/source/sleet.png</file>
+    <file alias="weather/smoke-particles.png" compression-algorithm="none">../assets/weather/source/smoke-particles.png</file>
+    <file alias="weather/smoke.png" compression-algorithm="none">../assets/weather/source/smoke.png</file>
+    <file alias="weather/snow.png" compression-algorithm="none">../assets/weather/source/snow.png</file>
+    <file alias="weather/snowflake.png" compression-algorithm="none">../assets/weather/source/snowflake.png</file>
+    <file alias="weather/solar-eclipse.png" compression-algorithm="none">../assets/weather/source/solar-eclipse.png</file>
+    <file alias="weather/star.png" compression-algorithm="none">../assets/weather/source/star.png</file>
+    <file alias="weather/starry-night.png" compression-algorithm="none">../assets/weather/source/starry-night.png</file>
+    <file alias="weather/sunrise.png" compression-algorithm="none">../assets/weather/source/sunrise.png</file>
+    <file alias="weather/sunset.png" compression-algorithm="none">../assets/weather/source/sunset.png</file>
+    <file alias="weather/thermometer-celsius.png" compression-algorithm="none">../assets/weather/source/thermometer-celsius.png</file>
+    <file alias="weather/thermometer-colder.png" compression-algorithm="none">../assets/weather/source/thermometer-colder.png</file>
+    <file alias="weather/thermometer-fahrenheit.png" compression-algorithm="none">../assets/weather/source/thermometer-fahrenheit.png</file>
+    <file alias="weather/thermometer-glass-celsius.png" compression-algorithm="none">../assets/weather/source/thermometer-glass-celsius.png</file>
+    <file alias="weather/thermometer-glass-fahrenheit.png" compression-algorithm="none">../assets/weather/source/thermometer-glass-fahrenheit.png</file>
+    <file alias="weather/thermometer-glass.png" compression-algorithm="none">../assets/weather/source/thermometer-glass.png</file>
+    <file alias="weather/thermometer-mercury-cold.png" compression-algorithm="none">../assets/weather/source/thermometer-mercury-cold.png</file>
+    <file alias="weather/thermometer-mercury.png" compression-algorithm="none">../assets/weather/source/thermometer-mercury.png</file>
+    <file alias="weather/thermometer-warmer.png" compression-algorithm="none">../assets/weather/source/thermometer-warmer.png</file>
+    <file alias="weather/thermometer.png" compression-algorithm="none">../assets/weather/source/thermometer.png</file>
+    <file alias="weather/thunderstorms-day-rain.png" compression-algorithm="none">../assets/weather/source/thunderstorms-day-rain.png</file>
+    <file alias="weather/thunderstorms-day-snow.png" compression-algorithm="none">../assets/weather/source/thunderstorms-day-snow.png</file>
+    <file alias="weather/thunderstorms-day.png" compression-algorithm="none">../assets/weather/source/thunderstorms-day.png</file>
+    <file alias="weather/thunderstorms-night-rain.png" compression-algorithm="none">../assets/weather/source/thunderstorms-night-rain.png</file>
+    <file alias="weather/thunderstorms-night-snow.png" compression-algorithm="none">../assets/weather/source/thunderstorms-night-snow.png</file>
+    <file alias="weather/thunderstorms-night.png" compression-algorithm="none">../assets/weather/source/thunderstorms-night.png</file>
+    <file alias="weather/thunderstorms-rain.png" compression-algorithm="none">../assets/weather/source/thunderstorms-rain.png</file>
+    <file alias="weather/thunderstorms-snow.png" compression-algorithm="none">../assets/weather/source/thunderstorms-snow.png</file>
+    <file alias="weather/thunderstorms.png" compression-algorithm="none">../assets/weather/source/thunderstorms.png</file>
+    <file alias="weather/tornado.png" compression-algorithm="none">../assets/weather/source/tornado.png</file>
+    <file alias="weather/umbrella.png" compression-algorithm="none">../assets/weather/source/umbrella.png</file>
+    <file alias="weather/uv-index-1.png" compression-algorithm="none">../assets/weather/source/uv-index-1.png</file>
+    <file alias="weather/uv-index-10.png" compression-algorithm="none">../assets/weather/source/uv-index-10.png</file>
+    <file alias="weather/uv-index-11.png" compression-algorithm="none">../assets/weather/source/uv-index-11.png</file>
+    <file alias="weather/uv-index-2.png" compression-algorithm="none">../assets/weather/source/uv-index-2.png</file>
+    <file alias="weather/uv-index-3.png" compression-algorithm="none">../assets/weather/source/uv-index-3.png</file>
+    <file alias="weather/uv-index-4.png" compression-algorithm="none">../assets/weather/source/uv-index-4.png</file>
+    <file alias="weather/uv-index-5.png" compression-algorithm="none">../assets/weather/source/uv-index-5.png</file>
+    <file alias="weather/uv-index-6.png" compression-algorithm="none">../assets/weather/source/uv-index-6.png</file>
+    <file alias="weather/uv-index-7.png" compression-algorithm="none">../assets/weather/source/uv-index-7.png</file>
+    <file alias="weather/uv-index-8.png" compression-algorithm="none">../assets/weather/source/uv-index-8.png</file>
+    <file alias="weather/uv-index-9.png" compression-algorithm="none">../assets/weather/source/uv-index-9.png</file>
+    <file alias="weather/uv-index.png" compression-algorithm="none">../assets/weather/source/uv-index.png</file>
+    <file alias="weather/wind-beaufort-0.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-0.png</file>
+    <file alias="weather/wind-beaufort-1.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-1.png</file>
+    <file alias="weather/wind-beaufort-10.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-10.png</file>
+    <file alias="weather/wind-beaufort-11.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-11.png</file>
+    <file alias="weather/wind-beaufort-12.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-12.png</file>
+    <file alias="weather/wind-beaufort-2.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-2.png</file>
+    <file alias="weather/wind-beaufort-3.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-3.png</file>
+    <file alias="weather/wind-beaufort-4.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-4.png</file>
+    <file alias="weather/wind-beaufort-5.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-5.png</file>
+    <file alias="weather/wind-beaufort-6.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-6.png</file>
+    <file alias="weather/wind-beaufort-7.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-7.png</file>
+    <file alias="weather/wind-beaufort-8.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-8.png</file>
+    <file alias="weather/wind-beaufort-9.png" compression-algorithm="none">../assets/weather/source/wind-beaufort-9.png</file>
+    <file alias="weather/wind.png" compression-algorithm="none">../assets/weather/source/wind.png</file>
+    <file alias="weather/windsock.png" compression-algorithm="none">../assets/weather/source/windsock.png</file>
+    <file alias="widgets/system/system_stats_tools.svg">../assets/widgets/system/system_stats_tools.svg</file>
+  </qresource>
 </RCC>

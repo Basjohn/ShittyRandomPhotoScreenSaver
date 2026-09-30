@@ -34,7 +34,7 @@ from typing import Any, Callable, Final
 
 
 ROOT: Final = Path(__file__).resolve().parents[1]
-DEFAULT_OUTPUT: Final = ROOT / "images" / "onboarding"
+DEFAULT_OUTPUT: Final = ROOT / "ui" / "assets" / "onboarding" / "source"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

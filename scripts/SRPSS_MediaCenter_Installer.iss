@@ -30,7 +30,7 @@ SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
-WizardSmallImageFile=..\images\LogoBMP.bmp
+WizardSmallImageFile=..\ui\assets\installer\LogoBMP.bmp
 VersionInfoVersion=5.0.5
 AllowUNCPath=False
 

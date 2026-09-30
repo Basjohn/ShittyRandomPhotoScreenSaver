@@ -24,6 +24,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
+from ui.resources.assets import resource_url
 from core.steam.friend_pulse import (
     FriendPulseProjection,
     FriendPulseRow,
@@ -60,7 +61,7 @@ from .theme_projection import (
 )
 
 
-_STEAM_LOGO = Path(__file__).resolve().parents[3] / "images" / "Steam_Logo_Cropped.png"
+_STEAM_LOGO = resource_url("branding/logos/Steam_Logo_Cropped.png")
 _STEAM_DEFAULTS = require_canonical_default("widgets.steam")
 _FRIEND_DEFAULTS = require_canonical_default("widgets.friend_pulse")
 if not isinstance(_STEAM_DEFAULTS, Mapping) or not isinstance(
@@ -1145,7 +1146,7 @@ class FriendPulsePresentationModel(QObject):
 
     @Property(str, constant=True)
     def logoSource(self) -> str:
-        return _STEAM_LOGO.resolve().as_uri() if _STEAM_LOGO.is_file() else ""
+        return _STEAM_LOGO
 
     @Property(str, notify=stateChanged)
     def fontFamily(self) -> str:

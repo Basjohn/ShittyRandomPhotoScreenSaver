@@ -67,6 +67,7 @@ foreach ($RequiredBuildCommand in @(
     'Publish-SRPSSDirectory',
     'Assert-SRPSSDefaultsAuthority',
     'Assert-SRPSSQmlSourceContract',
+    'Invoke-SRPSSQrcRegeneration',
     'Assert-SRPSSSourceProductAssets',
     'Assert-SRPSSPythonRuntimeDependencies',
     'Assert-SRPSSOnefileQuickPayloadContract',
@@ -87,6 +88,12 @@ try {
     Assert-SRPSSQmlSourceContract -RepoRoot $Root -PythonExe 'python'
 } catch {
     throw "QML source contract preflight failed: $($_.Exception.Message)"
+}
+
+try {
+    Invoke-SRPSSQrcRegeneration -RepoRoot $Root -PythonExe 'python'
+} catch {
+    throw "QRC resource preflight failed: $($_.Exception.Message)"
 }
 
 try {
@@ -191,7 +198,6 @@ $argsList = @(
     "--enable-plugin=pyside6",
     "--include-data-dir=presets=presets",
     "--include-data-dir=themes=themes",
-    "--include-data-dir=images=images",
     "--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg",
     "--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3",
     "--include-data-files=SRPSS.ico=SRPSS.ico",
@@ -209,6 +215,8 @@ $argsList = @(
     "--include-module=PySide6.QtMultimedia",
     "--include-module=PySide6.QtQuick",
     "--include-module=PySide6.QtQml",
+    "--include-module=ui.resources.assets_rc",
+    "--include-module=ui.resources.onboarding_assets_rc",
     "--include-module=winrt.windows.media.control",
     "--include-module=winrt.windows.storage.streams",
     "--include-module=winrt.windows.foundation",

@@ -35,8 +35,11 @@ def test_friend_pulse_and_system_stats_assets_are_in_the_product_contract() -> N
 
     assert "rendering\\quick\\qml\\FriendPulsePresentation.qml" in contract
     assert "rendering\\quick\\qml\\SystemStatsPresentation.qml" in contract
-    assert "images\\system_stats_tools.svg" in contract
-    assert "--include-data-dir=images=images" in contract
+    assert "ui\\resources\\assets.qrc" in contract
+    assert "ui\\resources\\onboarding_assets.qrc" in contract
+    assert "--include-module=ui.resources.assets_rc" in contract
+    assert "--include-module=ui.resources.onboarding_assets_rc" in contract
+    assert "--include-data-dir=images=images" not in contract
 
 
 def test_build_runner_preflight_checks_friend_pulse_and_system_stats_assets() -> None:
@@ -44,7 +47,23 @@ def test_build_runner_preflight_checks_friend_pulse_and_system_stats_assets() ->
 
     assert '"rendering" / "quick" / "qml" / "FriendPulsePresentation.qml"' in contract
     assert '"rendering" / "quick" / "qml" / "SystemStatsPresentation.qml"' in contract
-    assert '"images" / "system_stats_tools.svg"' in contract
+    assert '"ui" / "resources" / "assets.qrc"' in contract
+    assert '"ui" / "resources" / "onboarding_assets.qrc"' in contract
+
+
+def test_every_product_worker_generates_and_retains_the_two_qrc_modules() -> None:
+    scripts = (
+        REPO_ROOT / "scripts" / "build_nuitka.ps1",
+        REPO_ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka.ps1",
+        REPO_ROOT / "scripts" / "venv" / "build_nuitka_mc_onedir.ps1",
+    )
+    for script in scripts:
+        worker = script.read_text(encoding="utf-8")
+        assert "Invoke-SRPSSQrcRegeneration" in worker
+        assert "--include-data-dir=images=images" not in worker
+        assert "--include-module=ui.resources.assets_rc" in worker
+        assert "--include-module=ui.resources.onboarding_assets_rc" in worker
 
 
 def test_publish_replaces_only_the_canonical_product_directory(tmp_path):

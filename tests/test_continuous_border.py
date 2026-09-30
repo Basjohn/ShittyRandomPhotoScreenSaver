@@ -125,13 +125,13 @@ def test_circle_indicators_contrast_with_the_themes_checkbox_text(qapp, tmp_path
     try:
         activate_catalog_theme(next(e for e in catalog.entries if e.name.startswith("Polished Chrome")))
         style = shared_styles.CIRCLE_CHECKBOX_STYLE
-        assert ":/ui/assets/circle_checkbox_" not in style
+        assert ":/srpss/ui/icons/circle_checkbox_" not in style
         text = get_active_settings_theme().color("control.checkbox.text")
         colour = f"#{text.r:02x}{text.g:02x}{text.b:02x}"
         written = sorted(tmp_path.glob("settings_indicators/*.svg"))
         assert len(written) == 4 and all(colour in path.read_text(encoding="utf-8") for path in written)
         activate_catalog_theme(next(e for e in catalog.entries if e.name == "Default Dark"))
-        assert shared_styles.CIRCLE_CHECKBOX_STYLE.count(":/ui/assets/circle_checkbox_") == 6
+        assert shared_styles.CIRCLE_CHECKBOX_STYLE.count(":/srpss/ui/icons/circle_checkbox_") == 6
     finally:
         from ui.settings_theme_runtime import set_active_settings_theme
         set_active_settings_theme(before)

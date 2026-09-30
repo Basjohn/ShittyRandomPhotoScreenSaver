@@ -771,7 +771,7 @@ def _circle_indicator_urls() -> dict[str, str]:
     """
 
     text = _SETTINGS_THEME.color("control.checkbox.text")
-    resources = {name: f":/ui/assets/circle_checkbox_{name}.svg" for name in _CIRCLE_INDICATORS}
+    resources = {name: f":/srpss/ui/icons/circle_checkbox_{name}.svg" for name in _CIRCLE_INDICATORS}
     if QColor(text.r, text.g, text.b).lightnessF() >= 0.5:
         return resources
     colour = f"#{text.r:02x}{text.g:02x}{text.b:02x}"

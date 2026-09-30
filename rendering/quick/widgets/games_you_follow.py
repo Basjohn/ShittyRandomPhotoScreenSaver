@@ -16,6 +16,7 @@ from PySide6.QtCore import QAbstractListModel, QModelIndex, QObject, Property, Q
 from PySide6.QtGui import QColor
 
 from core.settings.default_contract import require_canonical_default
+from ui.resources.assets import resource_url
 from core.steam.games_followed_projection import FollowedNewsDisplay, project_followed_news
 from core.steam.games_followed_source import FollowedNewsSnapshot
 from core.steam.links import news_article_target, news_hub_target
@@ -33,7 +34,7 @@ from .steam_common import (
     project_steam_card_style, as_bool, bounded_float, rgba as steam_rgba,
 )
 
-_STEAM_LOGO = Path(__file__).resolve().parents[3] / "images" / "Steam_Logo_Cropped.png"
+_STEAM_LOGO = resource_url("branding/logos/Steam_Logo_Cropped.png")
 
 _CHILD_ROLE_MAP = child_role_map(FOLLOWED_CHILD_ROLES)
 _MAX_ROWS = 8
@@ -431,7 +432,7 @@ class GamesYouFollowPresentationModel(QObject):
 
     @Property(QUrl, constant=True)
     def steamLogo(self) -> QUrl:
-        return QUrl.fromLocalFile(str(_STEAM_LOGO))
+        return QUrl(_STEAM_LOGO)
 
     @Property("QVariantMap", notify=customGeometryChanged)
     def customChildGeometry(self) -> dict[str, dict[str, object]]:

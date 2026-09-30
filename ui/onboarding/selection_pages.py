@@ -18,7 +18,7 @@ from core.settings.capability_activation import (
 from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors, resolve_admissible_enabled_modes
 from core.settings.widget_family_catalog import get_widget_family_descriptors, get_widget_member_label
 from rendering.transition_registry import iter_transition_descriptors
-from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, CheckList, text_label
+from ui.onboarding.common import Page, ImagePanel, action, asset_bytes, asset_path, checkbox, CheckList, text_label
 from ui.onboarding.state import current_setup_summary, saved_account_states
 from ui.settings_theme_catalog import get_current_settings_theme_catalog, read_persisted_theme_id
 from ui.widgets.dpr_pixmap import scale_pixmap_for_dpr
@@ -258,7 +258,7 @@ TRANSITION_COPY = {
 
 @lru_cache(maxsize=1)
 def _transition_manifest() -> dict[str, dict]:
-    rows = json.loads(asset_path("onboarding/manifest.json").read_text(encoding="utf-8"))["transitions"]
+    rows = json.loads(asset_bytes("onboarding/manifest.json").decode("utf-8"))["transitions"]
     return {row["transition_id"]: row for row in rows}
 
 
@@ -488,7 +488,7 @@ def _controls_summary() -> QWidget:
     return box
 
 
-# A capture of the saver's own right-click menu (images/onboarding), shown at its
+# A capture of the saver's own right-click menu from the immutable onboarding QRC, shown at its
 # true logical size: 2x source pixels, so it stays sharp at any display scale.
 _EDIT_MENU_CAPTURE = "onboarding/context_menu_edit.png"
 _EDIT_MENU_SIZE = QSize(344, 108)

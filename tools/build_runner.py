@@ -46,11 +46,18 @@ from core.build_qml_contract import audit_qml_source_contract  # noqa: E402
 from core.visualizer_preset_manifest import (  # noqa: E402
     write_curated_visualizer_preset_manifest,
 )
+from tools.regen_qrc import (  # noqa: E402
+    QrcRegenerationError,
+    QrcStatus,
+    ensure_qrc_targets_current,
+    resource_targets,
+)
 
 LOG_DIR = REPO_ROOT / "logs"
 RELEASE_DIR = REPO_ROOT / "release"
 CANONICAL_SCRIPTS_DIR = REPO_ROOT / "scripts"
 VENV_SCRIPTS_DIR = CANONICAL_SCRIPTS_DIR / "venv"
+QRC_RUNTIME_JOB_KEYS = frozenset({"standard", "media_center", "diagnostic"})
 
 
 def _build_runner_data_dir() -> Path:
@@ -594,6 +601,100 @@ def normalize_mode(value: str) -> ModeName:
     return "venv" if str(value).strip().lower() == "venv" else "normal"
 
 
+def qrc_python_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> Path:
+    """Return the exact interpreter used by the selected product worker.
+
+    The normal workers invoke ``python`` and the venv workers invoke the
+    repository venv directly.  Resource compilation must follow that same
+    selected PySide toolchain rather than whichever ``pyside6-rcc`` happens to
+    be globally visible.
+    """
+    if mode == "venv":
+        return repo_root / ".venv" / "Scripts" / "python.exe"
+    selected = shutil.which("python")
+    if selected is None:
+        raise QrcRegenerationError(
+            "Normal worker Python is unavailable; cannot regenerate QRC resources"
+        )
+    return Path(selected)
+
+
+def _run_qrc_with_process_owner(
+    command: Sequence[str],
+    *,
+    cwd: str,
+    check: bool,
+    capture_output: bool,
+    text: bool,
+    process_owner: BuildProcessOwner,
+) -> subprocess.CompletedProcess[str]:
+    """Run the QRC sidecar inside the Foundry's one cancellable process tree."""
+    del check, capture_output  # ``ensure_qrc_current`` always requests both.
+    process = process_owner.start(
+        command,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=text,
+        **_windows_subprocess_kwargs(),
+    )
+    try:
+        stdout, stderr = process.communicate()
+        returncode = process.returncode
+    finally:
+        aborted = process_owner.retire(process)
+    if aborted or process_owner.cancellation_requested:
+        raise BuildPipelineCancelled("Build pipeline was cancelled during QRC regeneration")
+    return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+
+
+def ensure_selected_qrc_current(
+    mode: ModeName,
+    process_owner: BuildProcessOwner,
+    repo_root: Path = REPO_ROOT,
+) -> tuple[QrcStatus, ...]:
+    """Regenerate the ownership-scoped resource set once per Foundry run."""
+    prepare_qrc_environment(mode, process_owner, repo_root)
+    python_executable = qrc_python_for_mode(mode, repo_root)
+    return ensure_qrc_targets_current(
+        python_executable=python_executable,
+        targets=resource_targets(repo_root),
+        run=lambda command, **kwargs: _run_qrc_with_process_owner(
+            command,
+            process_owner=process_owner,
+            **kwargs,
+        ),
+    )
+
+
+def prepare_qrc_environment(
+    mode: ModeName, process_owner: BuildProcessOwner, repo_root: Path = REPO_ROOT,
+) -> None:
+    """Use the existing venv bootstrap before the Foundry's resource prerequisite.
+
+    Fresh checkouts and changed requirements must still get the worker's ordinary
+    environment preparation. The explicit preparation-only switch returns before
+    build-directory mutation or compilation; the same cancellation owner covers it.
+    """
+    if mode != "venv":
+        return
+    pwsh = _find_pwsh()
+    if pwsh is None:
+        raise QrcRegenerationError("PowerShell 7 is required to prepare the selected venv")
+    result = _run_qrc_with_process_owner(
+        [str(pwsh), "-NoProfile", "-File",
+         str(repo_root / "scripts" / "venv" / "build_nuitka.ps1"),
+         "-PrepareEnvironmentOnly", "-Console"],
+        cwd=str(repo_root), check=False, capture_output=True, text=True,
+        process_owner=process_owner,
+    )
+    if result.returncode:
+        raise QrcRegenerationError(
+            f"Selected venv preparation failed ({result.returncode}): "
+            f"{result.stdout}\n{result.stderr}"
+        )
+
+
 def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...]:
     scripts_dir = repo_root / "scripts"
     worker_dir = scripts_dir / "venv" if mode == "venv" else scripts_dir
@@ -705,7 +806,9 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
 
     required_assets = (
         repo_root / "SRPSS.ico",
-        repo_root / "images" / "LogoBMP.bmp",
+        repo_root / "ui" / "assets" / "installer" / "LogoBMP.bmp",
+        repo_root / "ui" / "resources" / "assets.qrc",
+        repo_root / "ui" / "resources" / "onboarding_assets.qrc",
         repo_root / "resources" / "tutuogg.ogg",
         repo_root / "resources" / "jedimodeyall.mp3",
         repo_root / "rendering" / "quick" / "qml" / "DisplayScene.qml",
@@ -714,10 +817,6 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
         repo_root / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml",
         repo_root / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
         repo_root / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
-        repo_root / "images" / "system_stats_tools.svg",
-        # Guided Setup reads these generated release assets; the operator-owned
-        # Witch artwork remains a separate loud required build dependency.
-        repo_root / "images" / "SRPSSWitch.png",
         # PyInstaller toolchain pins for the (default-selected) Reddit Helper job.
         repo_root / "build_deps" / "requirements_helper.txt",
     )
@@ -726,7 +825,6 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
             result.errors.append(f"Required build asset is missing: {asset}")
 
     required_asset_dirs = (
-        repo_root / "images" / "onboarding",
         repo_root / "themes",
         repo_root / "themes" / "widgets",
         repo_root / "presets" / "visualizer_modes",
@@ -735,10 +833,6 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
     for directory in required_asset_dirs:
         if not directory.is_dir():
             result.errors.append(f"Required product asset directory is missing: {directory}")
-
-    onboarding_assets = repo_root / "images" / "onboarding"
-    if onboarding_assets.is_dir() and not any(onboarding_assets.glob("*.png")):
-        result.errors.append("No generated Guided Setup PNG preview assets were found under images/onboarding")
 
     if (repo_root / "themes").is_dir() and not any((repo_root / "themes").glob("*.srtheme")):
         result.errors.append("No shipped Settings .srtheme files were found under themes")
@@ -2300,6 +2394,26 @@ class BuildRunnerApp:
                     COLORS["green"],
                 )
             )
+            selected_runtime_jobs = selected & QRC_RUNTIME_JOB_KEYS
+            if selected_runtime_jobs:
+                self._events.put(
+                    (
+                        "footer",
+                        "Checking the selected PySide6 QRC resource prerequisite…",
+                        COLORS["amber"],
+                    )
+                )
+                # Diagnostic always uses the venv worker, including in Normal mode.
+                qrc_mode = "venv" if selected_runtime_jobs == {"diagnostic"} else mode
+                qrc_statuses = ensure_selected_qrc_current(qrc_mode, process_owner)
+                qrc_assets = sum(len(status.input_paths) - 1 for status in qrc_statuses)
+                self._events.put(
+                    (
+                        "footer",
+                        f"QRC resource modules are current: {qrc_assets} QRC assets.",
+                        COLORS["green"],
+                    )
+                )
             helper_status = helper_build_status(mode)
             all_ok = True
             aborted = False
@@ -2346,6 +2460,18 @@ class BuildRunnerApp:
                     else "Pipeline completed with one or more failures."
                 )
             self._events.put(("pipeline_done", all_ok and not aborted, message, aborted))
+        except BuildPipelineCancelled:
+            for job in jobs:
+                if job.key in selected:
+                    self._events.put(("job_cancelled", job.key))
+            self._events.put(
+                (
+                    "pipeline_done",
+                    False,
+                    "Pipeline aborted by operator. Selected jobs did not start.",
+                    True,
+                )
+            )
         except Exception as exc:
             self._events.put(("pipeline_done", False, f"Pipeline failed: {exc}", False))
         finally:

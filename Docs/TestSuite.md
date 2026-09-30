@@ -27,6 +27,14 @@ The current agent/container may lack PySide6/OpenGL. In that environment, a coll
 
 ## 1.1 Qt delivery and painted-geometry evidence
 
+Immutable resource ownership is covered by `tests/test_qt_resource_assets.py` (Qt lookup and lazy Guided Setup
+registration), `tests/test_widget_theme_link_and_asset_contract.py` (immutable resources versus editable themes),
+and the retained widget/About tests. `tests/test_qrc_regeneration.py` protects selected-toolchain regeneration,
+staleness, failure and Foundry sequencing; `tests/test_build_runner_cancellation.py` protects the shared process-tree
+owner. These are source/resource proofs; fresh frozen size and installed rendering remain operator-build evidence.
+`tests/test_clock_timezone_resolution.py` exercises the actual Clock resolver for local/UTC/explicit offsets,
+named DST and non-DST zones, persisted aliases, and the Troll/Casablanca cases that require the retained database.
+
 A green geometry owner/source suite does not verify which MouseArea receives a click or whether a short post headline makes a timestamp rail float. `tests/test_qtquick_edit_pointer_delivery.py` sends real press/release events into a QQuickWindow and verifies top-strip selection, header-gap selection, and that the flip target calls the existing flip authority instead of selecting/moving the parent. `tests/test_qtquick_reddit_presentation.py` asserts retained Reddit/Reddit2 title/age/AGO paint-item rectangles and common timestamp alignment across short and long titles, parent resize and semantic flips. Both are Windows/PySide6 a required native regression gate when their actual input or geometry paths change. Only screen-pixel appearance/hardware-specific DPI, OS mouse routing, and real GPU dual-display behavior require a bounded physical check when affected; never carry an old checkpoint-specific red/green assertion into another tree.
 
 ## Shared paint/Edit parity acceptance

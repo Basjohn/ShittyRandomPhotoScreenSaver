@@ -34,10 +34,13 @@ from core.settings.visualizer_preset_transfer import (
     import_visualizer_presets_folder,
 )
 from core.animation import AnimationManager
-from ui.tabs import (
-    SourcesTab, TransitionsTab, WidgetsTab, VisualizersTab,
-    DisplayTab, AccessibilityTab, ThemesTab,
-)
+from ui.tabs.sources_tab import SourcesTab
+from ui.tabs.transitions_tab import TransitionsTab
+from ui.tabs.widgets_tab import WidgetsTab
+from ui.tabs.visualizers_tab import VisualizersTab
+from ui.tabs.display_tab import DisplayTab
+from ui.tabs.accessibility_tab import AccessibilityTab
+from ui.tabs.themes_tab import ThemesTab
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
 from ui.widgets.control_shadow import (
@@ -2404,4 +2407,3 @@ def _refresh_live_settings_dialogs(theme: SettingsThemeSpec) -> None:
 
 # settings_theme.py owns root QSS; control_shadow.py owns shadow refreshes.
 _THEME_UNSUBSCRIBE = subscribe_settings_theme(_refresh_live_settings_dialogs)
-

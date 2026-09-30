@@ -16,73 +16,47 @@ push coherent slices; preserve accepted visual/temporal contracts unless a slice
 - [ ] Installed Windows acceptance only: open DIFF, run LOCAL vs GIT HEAD on a deliberately dirty repo, then compare
   the result to the CLI form. The core unit bars cover complete HEAD→disk semantics; GUI acceptance is visual only.
 
-## 1. P0 | implementation complete; ordinary-use observations remain non-blocking
+## 1. P0 | Awaiting ordinary-use observation, non-blocking
 
-The latest supplied two-display logs (2026-10-01 00:08–00:11) are the accepted evidence input:
-17 matched prefetch handoffs, no orphan markers, three late Visualizer render intervals overlapping handoff,
-and 19/19 shared-memory segments consumed with none left live. No 30-transition trace is requested.
+Worker batches and the owned native RGBA copy are implemented and transport/lifetime validated. The latest supplied
+two-display logs are the accepted input; no fixed transition count or 30-transition trace is required.
+Durable ownership is in `Docs/Contracts.md`; probes are routed from `Docs/Reference/Harness_Index.md`.
 
-The bounded correction retains one owned RGBA copy but performs it through native `ctypes.memmove`, releasing the
-GIL while the supervisor lease pins the source. Byte ownership/transport tests pass. The 50-cycle probe consumed
-50 transfers and reclaimed one shutdown transfer with zero live mappings. Copy wall time was 29.81 ms median /
-35.54 ms p95, versus the earlier 26.70 / 30.16 ms: this is GIL contention relief, not demonstrated wall-time speedup.
-Durable ownership is in `Docs/Contracts.md`; commands are in `Docs/Reference/Harness_Index.md`.
+- [~] Inspect subsequently supplied ordinary-use logs for repeatable post-transition Visualizer handoff overlap.
+  Native copying releases the GIL; a lower copy wall time has not been demonstrated. Continue other work meanwhile.
 
-- [~] **Awaiting ordinary-use observation, non-blocking:** inspect any subsequently supplied logs for repeatable
-  post-transition Visualizer handoff overlap. Do not demand a fixed transition count or another dedicated trace
-  before continuing. Existing logs establish the correction's motivation, not post-correction visual acceptance.
+## 2. Build Runner | Awaiting operator build acceptance, non-blocking
 
-## 2. Build Runner safety + diagnostic cleanup | implementation complete
+Emergency Stop, process-tree ownership, Diagnostic SCR and automatic resource regeneration are implemented and
+regression-tested. `Spec.md` → Build control and products owns the durable contract.
 
-Windows builds now launch suspended, enter one kill-on-close Job Object, and then resume. Emergency Stop and
-shutdown fence queued work and report operator abort separately. Lifecycle, queued cancellation, rerun and real
-parent/child termination tests pass. Diagnostic publishes SCR directly; its installer and EXE opt-out are retired.
-Durable ownership and product shape are in `Spec.md` → Build control and products.
+- [~] On the next operator build, exercise Standard/MC/Diagnostic SCR, active-child Emergency Stop, then a clean
+  rerun in the same Foundry session. The agent must not run build scripts. Preserve intentional Jobs=3/4/5.
+- [~] **Normal-mode interpreter, operator admin action:** `C:\Python311` still has Qt 6.9.1 because its launchers
+  require administrator access. Upgrade its four Qt pins to `requirements.txt` before Normal Standard/MC builds.
+  The project `.venv` is verified 6.11.2; Diagnostic always uses it. This does not block source work.
+- [~] **Separate dependency audit:** when the next operator 6.11.2 MC build supplies a Nuitka report, investigate
+  the old artifact's unused WebEngine payload before proposing exclusions. Asset cleanup did not change Qt module
+  exclusions or Jobs; broad dependency trimming remains outside this slice.
 
-- [~] **Operator-owned build acceptance, non-blocking:** when the operator next builds, exercise Diagnostic SCR,
-  Standard/MC, a forced stop with an active child, and a subsequent clean build in the same runner session.
-  The agent must not run build scripts or wait for builds before renderer work. Preserve intentional Jobs=3/4/5.
-- [~] **Packaging audit follow-up, operator artifacts only:** existing MC output is 610 MB, including 191 MB of
-  WebEngine despite no source imports. It still contains Qt 6.9.1, and no Nuitka report is retained. When a normal
-  operator 6.11.2 build supplies a report, trace why those modules were included before proposing exclusions.
-  Standard/Diagnostic are about 169 MB each; helper is 25 MB and already excludes the product stack.
-  No includes/excludes or Jobs were changed; package-policy changes still require operator approval.
-- [~] **Normal-mode interpreter, operator admin action:** `C:\Python311` remains at Qt/PySide 6.9.1 because its launcher
-  files require administrator access. The attempted upgrade was restored. Upgrade that interpreter's four Qt pins
-  to `requirements.txt` before using Normal mode; the actual project `.venv` is 6.11.2. This does not block source work.
+## 3. Qt 6.11.2 / OpenGL 4.6 | Awaiting physical validation, non-blocking
 
-## 3. Renderer-era hard jump | implementation landed; combined regression pending
+The actual `.venv` stack, strict 4.6 Core / GLSL 460 startup floor, native image ownership, queued shutdown and
+retained clip/state behavior are validated. Four broad test chunks pass after the resource-path assertion correction;
+focused resource/build/Clock checks and pip check pass. OpenGL remains the only backend; swap interval stays zero.
 
-The actual project `.venv` loads PySide/Qt/shiboken 6.11.2 and passes pip check. Production requests OpenGL 4.6 Core
-with GLSL 460; startup validates actual context capabilities before the first image and rejects incompatibility.
-The RTX 4090 probe reports GL 4.6 / GLSL 4.60. Swap interval remains zero and OpenGL remains the sole graphics API.
-Focused driver, texture, clipping, startup and lifecycle checks pass. The initial broad run exposed test-isolation
-and graphics-bootstrap gaps; those were corrected at the test owners, preserving strict production validation.
+- [~] Preserve gentle start, transition endpoints, Bubble reaction, Visualizer freshness and no black flash during
+  ordinary two-display use. Compare later supplied logs; no dedicated trace count or agent-run build is a gate.
 
-- [ ] Run final combined regression after the active asset/timezone slice stabilizes. Include the real native-image,
-  texture-retention and queued-quit probes (parallel source edits interrupted their last rerun), then the full chunks.
-- [~] **Awaiting ordinary-use physical validation, non-blocking:** preserve gentle start, transition endpoints,
-  Bubble reaction, Visualizer freshness and no black flash on two displays. Compare subsequently supplied warm
-  performance logs with the existing evidence; no fixed trace count or agent-run builds are required.
+## 3A. Immutable resources | Awaiting installed measurements, non-blocking
 
-## 3A. Immutable resources and timezone cleanup | active operator side quest
+Immutable imagery uses the canonical QRC namespace, with a measured lazy Guided Setup bundle. Build Foundry owns
+toolchain validation, environment preparation, cancellation and content-based regeneration. Source/consumer/packaging
+checks pass. `pytz` remains because Windows Qt/stdlib facilities failed the existing named-zone parity contract.
 
-- [ ] Inventory and reorganize immutable application assets by ownership before changing runtime paths; record
-  current QRC/source sizes and loose installed file/byte counts. Themes, presets and user/generated material remain loose.
-- [ ] Promote the existing `ui/resources/assets.qrc` to one canonical immutable resource namespace, migrate Qt/QML
-  consumers, regenerate bindings with the selected Qt 6.11 toolchain, and remove duplicate loose runtime copies.
-  Retain a filesystem exception only for a proven consumer; no blanket extraction, polling or eager image decoding.
-- [ ] Add one automatic QRC prerequisite to canonical builds: selected interpreter/toolchain, cheap stale detection,
-  no repeated regeneration in an unchanged multi-job run, loud failure, and cancellation owned by Build Runner.
-- [ ] Remove obsolete immutable asset packaging/preflight rules across Standard, MC, Diagnostic and installers;
-  preserve editable themes/presets and intentional Jobs=3/4/5. Do not run product build scripts.
-- [ ] Prove whether Qt 6.11 timezone facilities can replace pytz while preserving local/UTC/explicit offsets,
-  named world zones, existing persisted names and DST. Migrate one canonical authority only if parity is proven.
-- [ ] Validate focused asset/render/build/timezone contracts, then the broad practical regression boundary. Report
-  QRC counts/generated size/import cost, prospective loose-payload counts/bytes, and timezone before/after evidence.
-  Actual frozen-binary/install deltas require the next operator build and remain explicitly unmeasured meanwhile.
-- [ ] Refresh stale two-lane asset contracts in Spec/widget guidelines and all moved source references. Record any
-  retained immutable filesystem asset with its concrete consumer requirement.
+- [~] On the next operator build, verify QRC images/fonts/About/Guided Setup in the installed products and record
+  frozen binary/install deltas. The old MC image payload was 222 files / 21,924,720 bytes; new packaging removes that
+  loose directory. Actual new frozen sizes remain unmeasured. Themes, presets and replaceable sounds remain loose.
 
 ## 4. Modern OpenGL 4.6 scene3d expansion | active
 
@@ -210,6 +184,9 @@ quality tier or be confined to a mode/effect that is itself dormant when not sel
 - [ ] **Global Python cleanup:** the denied Normal-mode Qt upgrade left pip `~yside6-essentials` rollback metadata;
   the original 6.9.1 modules were restored and verified. Global pip also reports the unchanged opencv/numpy version
   conflict. Resolve these in operator environment maintenance; the project `.venv` passes pip check.
+- [ ] **Existing local timezone heuristic:** `widgets/timezone_utils.get_local_timezone()` selects the first named
+  zone sharing an offset and uses `time.daylight` rather than the current DST state. Audit its callers and preserve
+  local-zone identity before changing it. The asset cleanup retains the existing pytz authority and behavior.
 
 - [ ] **Temporary validation debris:** `.artifacts/qt611-validation` and `.artifacts/qt-restore` are unused after the
   actual `.venv` upgrade. Automatic approval review blocked their requested deletion; remove during operator cleanup.
