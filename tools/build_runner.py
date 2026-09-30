@@ -28,7 +28,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Literal, Sequence
+from typing import Any, Callable, Iterable, Literal, Sequence
 
 import tkinter as tk
 from tkinter import ttk
@@ -284,6 +284,303 @@ class JobResult:
     detail: str
     log_path: Path
     output_path: Path
+    aborted: bool = False
+
+
+class _WindowsBuildJob:
+    """One Windows Job Object whose close kills every contained build child."""
+
+    _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
+    _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+
+    def __init__(self) -> None:
+        if os.name != "nt":
+            raise OSError("Windows Job Objects are unavailable on this platform")
+        from ctypes import wintypes
+
+        class _BasicLimitInformation(ctypes.Structure):
+            _fields_ = [
+                ("per_process_user_time_limit", ctypes.c_int64),
+                ("per_job_user_time_limit", ctypes.c_int64),
+                ("limit_flags", wintypes.DWORD),
+                ("minimum_working_set_size", ctypes.c_size_t),
+                ("maximum_working_set_size", ctypes.c_size_t),
+                ("active_process_limit", wintypes.DWORD),
+                ("affinity", ctypes.c_size_t),
+                ("priority_class", wintypes.DWORD),
+                ("scheduling_class", wintypes.DWORD),
+            ]
+
+        class _IoCounters(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_uint64) for name in (
+                "read_operation_count",
+                "write_operation_count",
+                "other_operation_count",
+                "read_transfer_count",
+                "write_transfer_count",
+                "other_transfer_count",
+            )]
+
+        class _ExtendedLimitInformation(ctypes.Structure):
+            _fields_ = [
+                ("basic_limit_information", _BasicLimitInformation),
+                ("io_info", _IoCounters),
+                ("process_memory_limit", ctypes.c_size_t),
+                ("job_memory_limit", ctypes.c_size_t),
+                ("peak_process_memory_used", ctypes.c_size_t),
+                ("peak_job_memory_used", ctypes.c_size_t),
+            ]
+
+        self._kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self._kernel32.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
+        self._kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        self._kernel32.SetInformationJobObject.argtypes = (
+            wintypes.HANDLE,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+        )
+        self._kernel32.SetInformationJobObject.restype = wintypes.BOOL
+        self._kernel32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+        self._kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+        self._kernel32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
+        self._kernel32.TerminateJobObject.restype = wintypes.BOOL
+        self._kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        self._kernel32.CloseHandle.restype = wintypes.BOOL
+
+        handle = self._kernel32.CreateJobObjectW(None, None)
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        self._handle: int | None = int(handle)
+        limits = _ExtendedLimitInformation()
+        limits.basic_limit_information.limit_flags = self._JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not self._kernel32.SetInformationJobObject(
+            self._handle,
+            self._JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+            ctypes.byref(limits),
+            ctypes.sizeof(limits),
+        ):
+            error = ctypes.get_last_error()
+            self.close()
+            raise ctypes.WinError(error)
+
+    def assign(self, process: Any) -> None:
+        if self._handle is None:
+            raise RuntimeError("Build Job Object is already closed")
+        process_handle = getattr(process, "_handle", None)
+        if process_handle is None or not self._kernel32.AssignProcessToJobObject(
+            self._handle,
+            int(process_handle),
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def terminate(self) -> None:
+        if self._handle is not None and not self._kernel32.TerminateJobObject(self._handle, 1):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def close(self) -> None:
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        self._kernel32.CloseHandle(handle)
+
+
+def _resume_windows_process(process_id: int) -> None:
+    """Resume the suspended primary thread only after Job Object assignment."""
+    if os.name != "nt":
+        raise OSError("Windows thread resume is unavailable on this platform")
+    from ctypes import wintypes
+
+    class _ThreadEntry32(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ThreadID", wintypes.DWORD),
+            ("th32OwnerProcessID", wintypes.DWORD),
+            ("tpBasePri", ctypes.c_long),
+            ("tpDeltaPri", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Thread32First.argtypes = (wintypes.HANDLE, ctypes.POINTER(_ThreadEntry32))
+    kernel32.Thread32First.restype = wintypes.BOOL
+    kernel32.Thread32Next.argtypes = (wintypes.HANDLE, ctypes.POINTER(_ThreadEntry32))
+    kernel32.Thread32Next.restype = wintypes.BOOL
+    kernel32.OpenThread.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenThread.restype = wintypes.HANDLE
+    kernel32.ResumeThread.argtypes = (wintypes.HANDLE,)
+    kernel32.ResumeThread.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000004, 0)  # TH32CS_SNAPTHREAD
+    if snapshot in (0, ctypes.c_void_p(-1).value):
+        raise ctypes.WinError(ctypes.get_last_error())
+    resumed = False
+    entry = _ThreadEntry32()
+    entry.dwSize = ctypes.sizeof(entry)
+    try:
+        has_entry = kernel32.Thread32First(snapshot, ctypes.byref(entry))
+        while has_entry:
+            if int(entry.th32OwnerProcessID) == int(process_id):
+                thread = kernel32.OpenThread(0x0002, False, entry.th32ThreadID)  # THREAD_SUSPEND_RESUME
+                if not thread:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                try:
+                    if kernel32.ResumeThread(thread) == 0xFFFFFFFF:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    resumed = True
+                finally:
+                    kernel32.CloseHandle(thread)
+            entry.dwSize = ctypes.sizeof(entry)
+            has_entry = kernel32.Thread32Next(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+    if not resumed:
+        raise OSError(f"Could not find suspended primary thread for build pid={process_id}")
+
+
+@dataclass
+class _ActiveBuildProcess:
+    process: Any
+    job: _WindowsBuildJob | None
+    aborted: bool = False
+
+
+class BuildPipelineCancelled(RuntimeError):
+    """Expected terminal state after an operator abort or runner shutdown."""
+
+
+class BuildProcessOwner:
+    """The runner's sole active build-tree owner.
+
+    Windows builds enter a kill-on-close Job Object immediately after launch, so
+    compiler/linker/installer descendants share the root lifecycle.  POSIX is
+    retained only for the bounded test seam, through an isolated process group.
+    """
+
+    def __init__(
+        self,
+        *,
+        popen_factory: Callable[..., Any] | None = None,
+        windows: bool | None = None,
+        job_factory: Callable[[], _WindowsBuildJob] | None = None,
+        resume_windows_process: Callable[[int], None] | None = None,
+    ) -> None:
+        self._popen_factory = popen_factory or subprocess.Popen
+        self._windows = os.name == "nt" if windows is None else windows
+        self._job_factory = job_factory or _WindowsBuildJob
+        self._resume_windows_process = resume_windows_process or _resume_windows_process
+        self._lock = threading.Lock()
+        self._active: _ActiveBuildProcess | None = None
+        self._cancel_requested = False
+        self._closed = False
+
+    @property
+    def cancellation_requested(self) -> bool:
+        with self._lock:
+            return self._cancel_requested
+
+    def start(self, command: Sequence[str], **kwargs: Any) -> Any:
+        with self._lock:
+            if self._closed:
+                raise BuildPipelineCancelled("Build process owner is shut down")
+            if self._cancel_requested:
+                raise BuildPipelineCancelled("Build pipeline was cancelled")
+            if self._active is not None:
+                raise RuntimeError("Build process owner already has an active process")
+
+        job = self._job_factory() if self._windows else None
+        launch_kwargs = dict(kwargs)
+        if self._windows:
+            launch_kwargs["creationflags"] = (
+                int(launch_kwargs.get("creationflags", 0))
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                | getattr(subprocess, "CREATE_SUSPENDED", 0x00000004)
+            )
+        else:
+            launch_kwargs.setdefault("start_new_session", True)
+        try:
+            process = self._popen_factory(command, **launch_kwargs)
+        except Exception:
+            if job is not None:
+                job.close()
+            raise
+        assigned = False
+        try:
+            if job is not None:
+                job.assign(process)
+                assigned = True
+                self._resume_windows_process(int(process.pid))
+        except Exception:
+            try:
+                if job is not None and assigned:
+                    job.terminate()
+                else:
+                    process.kill()
+                process.wait(timeout=10)
+            finally:
+                if job is not None:
+                    job.close()
+            raise
+        with self._lock:
+            if self._closed or self._cancel_requested:
+                active = _ActiveBuildProcess(process, job, aborted=True)
+            else:
+                self._active = _ActiveBuildProcess(process, job)
+                return process
+        try:
+            self._terminate(active)
+            process.wait(timeout=10)
+        finally:
+            if job is not None:
+                job.close()
+        raise BuildPipelineCancelled("Build pipeline was cancelled during launch")
+
+    def cancel(self) -> bool:
+        with self._lock:
+            self._cancel_requested = True
+            active = self._active
+            if active is None:
+                return False
+            if active.aborted:
+                return False
+            active.aborted = True
+            # Job termination and Job close must share this lifecycle boundary:
+            # a concurrent completion may otherwise close the native handle
+            # while this cancellation is still using it.
+            self._terminate(active)
+        return True
+
+    def shutdown(self) -> bool:
+        with self._lock:
+            self._closed = True
+        return self.cancel()
+
+    def retire(self, process: Any) -> bool:
+        with self._lock:
+            active = self._active
+            if active is None or active.process is not process:
+                return False
+            self._active = None
+            if active.job is not None:
+                active.job.close()
+            return active.aborted
+
+    def _terminate(self, active: _ActiveBuildProcess) -> None:
+        if active.job is not None:
+            active.job.terminate()
+            return
+        if self._windows:
+            active.process.kill()
+            return
+        try:
+            os.killpg(os.getpgid(active.process.pid), 9)
+        except ProcessLookupError:
+            pass
 
 
 @dataclass(frozen=True)
@@ -325,7 +622,7 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
             "powershell",
             scripts_dir / "venv" / "build_nuitka_diagnostic.ps1",
             release_dir / "diagnostic",
-            release_dir / "diagnostic" / "SRPSS_Diagnostic.exe",
+            release_dir / "diagnostic" / "SRPSS_Diagnostic.scr",
             default_selected=False,
         ),
         Job(
@@ -351,15 +648,6 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
             scripts_dir / "SRPSS_MediaCenter_Installer.iss",
             installers_dir,
             installers_dir / "Setup_SRPSS_Media_Center.exe",
-        ),
-        Job(
-            "diagnostic_installer",
-            "Diagnostic Installer",
-            "inno",
-            scripts_dir / "SRPSS_Diagnostic_Installer.iss",
-            installers_dir,
-            installers_dir / "Setup_SRPSS_Diagnostic.exe",
-            default_selected=False,
         ),
     )
 
@@ -791,7 +1079,13 @@ def prune_build_runner_logs(
                 pass
 
 
-def run_job(job: Job, preflight: PreflightResult, log_dir: Path = LOG_DIR) -> JobResult:
+def run_job(
+    job: Job,
+    preflight: PreflightResult,
+    log_dir: Path = LOG_DIR,
+    *,
+    process_owner: BuildProcessOwner | None = None,
+) -> JobResult:
     log_dir.mkdir(parents=True, exist_ok=True)
     # Leave room for the log about to be created, yielding ten retained logs
     # for each runner job rather than ten old logs plus the current one.
@@ -823,6 +1117,8 @@ def run_job(job: Job, preflight: PreflightResult, log_dir: Path = LOG_DIR) -> Jo
             return JobResult(1, f"Version stamp failed: {exc}", log_path, job.output_dir)
         command = [str(preflight.iscc), "/Qp", str(job.script)]
 
+    owner = process_owner or BuildProcessOwner()
+    process: Any | None = None
     try:
         with log_path.open("wb") as log_handle:
             header = (
@@ -834,34 +1130,46 @@ def run_job(job: Job, preflight: PreflightResult, log_dir: Path = LOG_DIR) -> Jo
             )
             log_handle.write(header.encode("utf-8", errors="replace"))
             log_handle.flush()
-            completed = subprocess.run(
+            process = owner.start(
                 command,
                 cwd=str(REPO_ROOT),
                 stdout=log_handle,
                 stderr=subprocess.STDOUT,
-                check=False,
                 **_windows_subprocess_kwargs(),
             )
-            returncode = completed.returncode
-            artifact_missing = returncode == 0 and not job.expected_artifact.is_file()
+            completed_returncode = process.wait()
+            aborted = owner.retire(process)
+            process = None
+            returncode = 130 if aborted else completed_returncode
+            artifact_missing = not aborted and returncode == 0 and not job.expected_artifact.is_file()
             if artifact_missing:
                 returncode = 1
             footer = (
                 f"\n{'=' * 72}\n"
-                f"Process exit code: {completed.returncode}\n"
+                f"Process exit code: {completed_returncode}\n"
                 f"Runner exit code: {returncode}\n"
+                f"Operator abort: {aborted}\n"
                 f"Expected artifact: {job.expected_artifact}\n"
                 f"Artifact present: {job.expected_artifact.is_file()}\n"
                 f"Finished: {datetime.now().isoformat(timespec='seconds')}\n"
             )
             log_handle.write(footer.encode("utf-8", errors="replace"))
-        if artifact_missing:
+        if aborted:
+            detail = "Aborted by operator"
+        elif artifact_missing:
             detail = "Compiler exited 0, but the expected artifact is missing"
         else:
             detail = "Completed" if returncode == 0 else f"Failed (exit {returncode})"
-        return JobResult(returncode, detail, log_path, job.output_dir)
+        return JobResult(returncode, detail, log_path, job.output_dir, aborted=aborted)
+    except BuildPipelineCancelled:
+        return JobResult(130, "Aborted by operator", log_path, job.output_dir, aborted=True)
     except OSError as exc:
         return JobResult(1, f"Launch failed: {exc}", log_path, job.output_dir)
+    finally:
+        if process is not None:
+            owner.retire(process)
+        if process_owner is None:
+            owner.shutdown()
 
 
 def open_local_path(path: Path) -> bool:
@@ -1076,6 +1384,9 @@ class BuildRunnerApp:
         self._root = root
         self._events: queue.Queue[tuple] = queue.Queue()
         self._running = False
+        self._process_owner: BuildProcessOwner | None = None
+        self._shutdown_requested = False
+        self._destroyed = False
         self._auto_close_after_id: str | None = None
         self._drag_state: tuple[int, int, int, int] | None = None
         self._preflight = PreflightResult()
@@ -1465,6 +1776,14 @@ class BuildRunnerApp:
             style="Primary.TButton",
         )
         self._start_button.pack(side="right", padx=(10, 0))
+        self._emergency_stop_button = ttk.Button(
+            footer,
+            text="EMERGENCY STOP",
+            command=self._on_emergency_stop,
+            style="Foundry.TButton",
+        )
+        self._emergency_stop_button.state(["disabled"])
+        self._emergency_stop_button.pack(side="right", padx=(6, 0))
         self._select_none_button = ttk.Button(
             footer,
             text="None",
@@ -1755,13 +2074,26 @@ class BuildRunnerApp:
 
     def _request_close(self) -> None:
         if self._running:
+            self._shutdown_requested = True
+            if self._process_owner is not None:
+                self._process_owner.shutdown()
             self._footer_status.configure(
-                text="A build is running. Let it finish before closing the runner.",
-                fg=COLORS["amber"],
+                text="Emergency stop requested before Build Foundry closes.",
+                fg=COLORS["red"],
             )
             return
         self._cancel_auto_close()
-        self._root.destroy()
+        self._destroy_root()
+
+    def _destroy_root(self) -> None:
+        if self._destroyed:
+            return
+        self._destroyed = True
+        self._cancel_auto_close()
+        try:
+            self._root.destroy()
+        except tk.TclError:
+            pass
 
     def _cancel_auto_close(self) -> None:
         if self._auto_close_after_id is None:
@@ -1775,7 +2107,7 @@ class BuildRunnerApp:
     def _auto_close_if_idle(self) -> None:
         self._auto_close_after_id = None
         if not self._running and self._auto_close_var.get():
-            self._root.destroy()
+            self._destroy_root()
 
     def _persist_preferences(self) -> None:
         if not self._auto_close_var.get():
@@ -1903,6 +2235,8 @@ class BuildRunnerApp:
             return
 
         self._running = True
+        self._shutdown_requested = False
+        self._process_owner = BuildProcessOwner()
         self._progress_total = len(selected)
         self._progress_completed = 0
         self._progress_bar.stop()
@@ -1921,9 +2255,20 @@ class BuildRunnerApp:
         preflight = self._preflight
         threading.Thread(
             target=self._pipeline_worker,
-            args=(mode, jobs, selected, preflight),
+            args=(mode, jobs, selected, preflight, self._process_owner),
             daemon=True,
         ).start()
+
+    def _on_emergency_stop(self) -> None:
+        owner = self._process_owner
+        if not self._running or owner is None:
+            return
+        owner.cancel()
+        self._emergency_stop_button.state(["disabled"])
+        self._footer_status.configure(
+            text="Emergency stop requested. Terminating the active build tree…",
+            fg=COLORS["red"],
+        )
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         state = ["!disabled"] if enabled else ["disabled"]
@@ -1933,6 +2278,7 @@ class BuildRunnerApp:
         self._select_all_button.state(state)
         self._select_none_button.state(state)
         self._auto_close_checkbox.state(state)
+        self._emergency_stop_button.state(["disabled"] if enabled else ["!disabled"])
         for button in self._mode_buttons:
             button.configure(state="normal" if enabled else "disabled")
 
@@ -1942,8 +2288,8 @@ class BuildRunnerApp:
         jobs: Sequence[Job],
         selected: set[str],
         preflight: PreflightResult,
+        process_owner: BuildProcessOwner,
     ) -> None:
-        all_ok = True
         try:
             preset_root = REPO_ROOT / "presets" / "visualizer_modes"
             entries = write_curated_visualizer_preset_manifest(preset_root)
@@ -1954,47 +2300,73 @@ class BuildRunnerApp:
                     COLORS["green"],
                 )
             )
+            helper_status = helper_build_status(mode)
+            all_ok = True
+            aborted = False
+            for index, job in enumerate(jobs):
+                if job.key not in selected:
+                    self._events.put(("job_skipped", job.key))
+                    continue
+                if process_owner.cancellation_requested:
+                    aborted = True
+                    for remaining in jobs[index:]:
+                        if remaining.key in selected:
+                            self._events.put(("job_cancelled", remaining.key))
+                    break
+                self._events.put(("job_running", job.key))
+                result = run_job(job, preflight, process_owner=process_owner)
+                if result.returncode == 0 and job.key == "reddit_helper":
+                    if not record_helper_build(
+                        mode,
+                        helper_status.fingerprint,
+                        artifact=job.expected_artifact,
+                        state_path=HELPER_STATE_PATH,
+                    ):
+                        result = JobResult(
+                            1,
+                            "Build succeeded, but helper fingerprint could not be recorded",
+                            result.log_path,
+                            result.output_path,
+                        )
+                all_ok = all_ok and result.returncode == 0
+                self._events.put(("job_done", job.key, result))
+                if result.aborted or process_owner.cancellation_requested:
+                    aborted = True
+                    for remaining in jobs[index + 1:]:
+                        if remaining.key in selected:
+                            self._events.put(("job_cancelled", remaining.key))
+                    break
+
+            if aborted:
+                message = "Pipeline aborted by operator. Remaining selected jobs did not start."
+            else:
+                message = (
+                    "All selected jobs completed successfully."
+                    if all_ok
+                    else "Pipeline completed with one or more failures."
+                )
+            self._events.put(("pipeline_done", all_ok and not aborted, message, aborted))
         except Exception as exc:
-            self._events.put(("pipeline_done", False, f"Preset regeneration failed: {exc}"))
-            return
-
-        helper_status = helper_build_status(mode)
-        for job in jobs:
-            if job.key not in selected:
-                self._events.put(("job_skipped", job.key))
-                continue
-            self._events.put(("job_running", job.key))
-            result = run_job(job, preflight)
-            if result.returncode == 0 and job.key == "reddit_helper":
-                if not record_helper_build(
-                    mode,
-                    helper_status.fingerprint,
-                    artifact=job.expected_artifact,
-                    state_path=HELPER_STATE_PATH,
-                ):
-                    result = JobResult(
-                        1,
-                        "Build succeeded, but helper fingerprint could not be recorded",
-                        result.log_path,
-                        result.output_path,
-                    )
-            all_ok = all_ok and result.returncode == 0
-            self._events.put(("job_done", job.key, result))
-
-        message = (
-            "All selected jobs completed successfully."
-            if all_ok
-            else "Pipeline completed with one or more failures."
-        )
-        self._events.put(("pipeline_done", all_ok, message))
+            self._events.put(("pipeline_done", False, f"Pipeline failed: {exc}", False))
+        finally:
+            process_owner.shutdown()
 
     def _poll_events(self) -> None:
+        if self._destroyed:
+            return
         try:
             while True:
                 self._dispatch_event(self._events.get_nowait())
+                if self._destroyed:
+                    return
         except queue.Empty:
             pass
-        self._root.after(100, self._poll_events)
+        if self._destroyed:
+            return
+        try:
+            self._root.after(100, self._poll_events)
+        except tk.TclError:
+            self._destroyed = True
 
     def _dispatch_event(self, event: tuple) -> None:
         kind = event[0]
@@ -2044,6 +2416,11 @@ class BuildRunnerApp:
             widgets.status.configure(text="Skipped", fg=COLORS["faint"])
             return
 
+        if kind == "job_cancelled":
+            widgets = self._job_widgets[event[1]]
+            widgets.status.configure(text="Cancelled", fg=COLORS["red"])
+            return
+
         if kind == "job_done":
             _, key, result = event
             widgets = self._job_widgets[key]
@@ -2059,7 +2436,7 @@ class BuildRunnerApp:
                 text=f"{self._progress_completed} / {self._progress_total} jobs complete"
             )
             widgets.status.configure(
-                text="Complete" if success else f"Failed {result.returncode}",
+                text="Complete" if success else ("Aborted" if result.aborted else f"Failed {result.returncode}"),
                 fg=COLORS["green"] if success else COLORS["red"],
             )
             widgets.log_link._command = lambda path=result.log_path: open_local_path(path)
@@ -2069,8 +2446,9 @@ class BuildRunnerApp:
             return
 
         if kind == "pipeline_done":
-            _, success, message = event
+            _, success, message, aborted = event
             self._running = False
+            self._process_owner = None
             self._progress_bar.stop()
             self._progress_bar.configure(
                 mode="determinate",
@@ -2088,6 +2466,9 @@ class BuildRunnerApp:
                 text=message,
                 fg=COLORS["green"] if success else COLORS["red"],
             )
+            if self._shutdown_requested:
+                self._destroy_root()
+                return
             if success and self._auto_close_var.get():
                 self._footer_status.configure(
                     text=f"{message} Closing in {self.AUTO_CLOSE_MS // 1000} seconds…"

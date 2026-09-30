@@ -116,8 +116,8 @@ def test_schedule_runtime_reddit_helper_session_skips_diagnostic_build(monkeypat
         "core.windows.reddit_helper_runtime.ensure_helper_runtime",
         lambda **_kwargs: helper_calls.append("ensure"),
     )
-    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Diagnostic.exe", "/s"])
-    monkeypatch.setattr(main.sys, "executable", r"C:\Apps\SRPSS_Diagnostic.exe")
+    monkeypatch.setattr(main.sys, "argv", ["SRPSS_Diagnostic.scr", "/s"])
+    monkeypatch.setattr(main.sys, "executable", r"C:\Apps\SRPSS_Diagnostic.scr")
 
     class _FakeEngine:
         _reddit_helper_session_timer = None

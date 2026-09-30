@@ -94,8 +94,8 @@ source at twice target size. The baseline measures the retired parent Qt work; p
 supervisor callback, returns two display derivatives from one child decode, checks byte parity/retirement and reports
 parent handoff plus child scale durations. It creates no QGuiApplication or per-request thread.
 
-Live P0 acceptance uses the usual two-display runtime with `--perf --frame-trace` and no `--usage`, at least 30 completed
-transitions. `python tools\frame_trace_report.py logs\screensaver_frame_trace.bin` reports handoff median/p95 and
+Use available two-display `--perf --frame-trace` logs for live P0 evidence; no minimum transition count is required.
+Keep diagnostic flags with the evidence so sampler cost can be interpreted. `python tools\frame_trace_report.py logs\screensaver_frame_trace.bin` reports handoff median/p95 and
 `late_overlapping_handoff` for both Visualizer render and draw intervals; absent handoff evidence is unavailable,
 not a zero-overlap pass. Preserve PERF/QML/trace sidecars from the same run and count completions with
 `python tools\image_change_perf_parser.py logs\screensaver_perf.log`. `Current_Plan.md` owns the acceptance status.

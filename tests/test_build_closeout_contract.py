@@ -73,17 +73,16 @@ def test_diagnostic_frozen_profile_uses_bundled_theme_and_preset_payloads() -> N
 
 def test_installers_offer_profile_scoped_settings_reset() -> None:
     standard = _text("scripts/SRPSS_Installer.iss")
-    diagnostic = _text("scripts/SRPSS_Diagnostic_Installer.iss")
     media_center = _text("scripts/SRPSS_MediaCenter_Installer.iss")
 
-    for source in (standard, diagnostic, media_center):
+    for source in (standard, media_center):
         assert 'Name: "resetsettings"' in source
         assert 'Description: "Revert Settings To Defaults"' in source
 
     # EXACT-VALUE INVARIANT: after the one-release 5.0.0 migration window, the
     # destructive reset remains available but opt-in in every installer. Change
     # this only with an explicit installer migration/reset policy decision.
-    for source in (standard, diagnostic, media_center):
+    for source in (standard, media_center):
         reset_task = next(
             line.strip()
             for line in source.splitlines()
@@ -92,14 +91,13 @@ def test_installers_offer_profile_scoped_settings_reset() -> None:
         assert "Flags: unchecked" in reset_task
 
     assert '{userappdata}\\SRPSS\\settings_v2.json"; Tasks: resetsettings' in standard
-    assert '{userappdata}\\SRPSS\\settings_v2.json"; Tasks: resetsettings' in diagnostic
     assert '{userappdata}\\SRPSS_MC\\settings_v2.json"; Tasks: resetsettings' in media_center
 
     # Reset stays surgical even after the migration hardened it: exactly one file
     # deletion (settings_v2.json) plus exactly one legacy QSettings registry key
     # clear (so pre-JSON values cannot be re-imported) -- never a broad
     # APPDATA/cache/credential wipe.
-    for source in (standard, diagnostic, media_center):
+    for source in (standard, media_center):
         reset_lines = [
             line.strip() for line in source.splitlines() if "Tasks: resetsettings" in line
         ]

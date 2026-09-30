@@ -19,8 +19,7 @@ param(
     [string]$EntryPoint = "main.py",
     [string]$AppName = "SRPSS",
     [switch]$Console,
-    [switch]$KeepExe,
-    [switch]$SkipScrRename
+    [switch]$KeepExe
 )
 
 Set-StrictMode -Version Latest
@@ -301,31 +300,25 @@ try {
     exit 1
 }
 
-$primaryArtifact = $Exe
+$scrPath = [System.IO.Path]::ChangeExtension($Exe.FullName, ".scr")
+try {
+    if (Test-Path $scrPath) { Remove-Item -Force -Path $scrPath }
+} catch {
+    Write-Host "[BUILD-N] Warning: failed to delete existing SCR $scrPath"
+}
 
-if (-not $SkipScrRename) {
-    $scrPath = [System.IO.Path]::ChangeExtension($Exe.FullName, ".scr")
-    try {
-        if (Test-Path $scrPath) { Remove-Item -Force -Path $scrPath }
-    } catch {
-        Write-Host "[BUILD-N] Warning: failed to delete existing SCR $scrPath"
+try {
+    if ($KeepExe) {
+        Copy-Item -Force -Path $Exe.FullName -Destination $scrPath
+        $primaryArtifact = Get-Item $scrPath
+        Write-Host "[BUILD-N] SCR copy created; original EXE retained due to -KeepExe."
+    } else {
+        Move-Item -Force -Path $Exe.FullName -Destination $scrPath
+        $primaryArtifact = Get-Item $scrPath
     }
-
-    try {
-        if ($KeepExe) {
-            Copy-Item -Force -Path $Exe.FullName -Destination $scrPath
-            $primaryArtifact = Get-Item $scrPath
-            Write-Host "[BUILD-N] SCR copy created; original EXE retained due to -KeepExe."
-        } else {
-            Move-Item -Force -Path $Exe.FullName -Destination $scrPath
-            $primaryArtifact = Get-Item $scrPath
-        }
-    } catch {
-        Write-Host "[BUILD-N] Error: failed to create SCR at $scrPath"
-        exit 1
-    }
-} else {
-    Write-Host "[BUILD-N] SkipScrRename enabled; SCR copy not produced."
+} catch {
+    Write-Host "[BUILD-N] Error: failed to create SCR at $scrPath"
+    exit 1
 }
 
 if (Test-Path -LiteralPath $PackageDir) {
