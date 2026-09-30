@@ -619,6 +619,36 @@ def _describe_prefetcher_state(engine: ScreensaverEngine) -> str:
 # ImageWorker-based loading
 # ------------------------------------------------------------------
 
+def _copy_shared_rgba_to_owned_qimage(view: memoryview, width: int, height: int) -> QImage:
+    """Copy into Qt-owned storage without holding Python's GIL for the copy.
+
+    The supervisor lease keeps the source mapping alive. The fresh QImage owns
+    its destination before publication; neither buffer can be resized/shared
+    while ctypes' CFUNCTYPE memmove releases the GIL. No mapping escapes here.
+    """
+    import ctypes
+
+    size = width * height * 4
+    if width <= 0 or height <= 0 or view.nbytes != size or not view.c_contiguous or view.readonly:
+        raise ValueError("Invalid shared RGBA buffer or dimensions")
+    image = QImage(width, height, QImage.Format.Format_RGBA8888)
+    if image.isNull() or image.bytesPerLine() != width * 4 or image.sizeInBytes() != size:
+        raise ValueError("QImage failed to allocate packed RGBA storage")
+    destination = image.bits()
+    try:
+        source_anchor = ctypes.c_char.from_buffer(view)
+        destination_anchor = ctypes.c_char.from_buffer(destination)
+        try:
+            # ctypes.memmove is a CFUNCTYPE foreign call, which releases the
+            # GIL. QImage.copy() holds it for this full wallpaper-sized copy.
+            ctypes.memmove(ctypes.addressof(destination_anchor), ctypes.addressof(source_anchor), size)
+        finally:
+            del destination_anchor, source_anchor
+    finally:
+        destination.release()
+    return image
+
+
 def load_image_via_worker(
     engine: ScreensaverEngine,
     image_path: str,
@@ -753,24 +783,7 @@ def load_image_via_worker(
                     raise ValueError(
                         "Mapped image payload does not match RGBA dimensions"
                     )
-                source_qimage = QImage(
-                    rgba_view,
-                    width,
-                    height,
-                    width * 4,
-                    QImage.Format.Format_RGBA8888,
-                )
-                try:
-                    if source_qimage.isNull():
-                        raise ValueError("QImage rejected shared RGBA payload")
-                    owned_qimage = source_qimage.copy()
-                    if owned_qimage.isNull():
-                        raise ValueError("QImage failed to detach shared RGBA payload")
-                    return owned_qimage
-                finally:
-                    # The non-owning QImage must die before the memoryview is
-                    # released by the supervisor's transfer lease.
-                    del source_qimage
+                return _copy_shared_rgba_to_owned_qimage(rgba_view, width, height)
 
             qimage = supervisor.consume_shared_memory_response(
                 response,
@@ -982,20 +995,11 @@ def derive_prefetch_via_worker(
                     for derivative in manifest:
                         start = derivative["offset"]
                         region = view[start:start + derivative["size"]]
-                        source = QImage(
-                            region,
-                            derivative["width"],
-                            derivative["height"],
-                            derivative["width"] * 4,
-                            QImage.Format.Format_RGBA8888,
-                        )
                         try:
-                            image = source.copy()
-                            if image.isNull():
-                                raise ValueError("QImage failed to detach prefetch RGBA")
-                            images[derivative["cache_key"]] = image
+                            images[derivative["cache_key"]] = _copy_shared_rgba_to_owned_qimage(
+                                region, derivative["width"], derivative["height"],
+                            )
                         finally:
-                            del source
                             region.release()
                     return images
 
