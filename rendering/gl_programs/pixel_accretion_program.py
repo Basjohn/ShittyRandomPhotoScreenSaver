@@ -50,7 +50,7 @@ def pixel_accretion_tile_state(progress: float, start: float) -> tuple[float, fl
     return local, appearance * appearance * (3.0 - 2.0 * appearance)
 
 
-PIXEL_ACCRETION_VERTEX_SOURCE = """#version 410 core
+PIXEL_ACCRETION_VERTEX_SOURCE = """#version 460 core
 layout(location = 0) in vec2 aPosition;
 layout(location = 1) in vec2 aUv;
 uniform mat4 uMatrix;
@@ -99,7 +99,7 @@ void main() {
 }
 """
 
-PIXEL_ACCRETION_FRAGMENT_SOURCE = """#version 410 core
+PIXEL_ACCRETION_FRAGMENT_SOURCE = """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uOldTex;

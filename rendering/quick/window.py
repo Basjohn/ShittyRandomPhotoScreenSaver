@@ -10,6 +10,7 @@ from PySide6.QtCore import QMetaObject, QPointF, QRect, QRectF, Signal, Qt
 from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QScreen
 from PySide6.QtQuick import QQuickWindow
 
+from .bootstrap import validate_or_quit_current_opengl_context
 from .state import (
     QuickDisplayBindingLoss,
     QuickDisplayIdentity,
@@ -95,6 +96,13 @@ class QuickDisplayWindow(QQuickWindow):
         self._bind_screen(screen, apply_geometry=False)
         self.screenChanged.connect(self._on_window_screen_changed)
         self.visibleChanged.connect(self._on_window_visibility_changed)
+        # This is the first actual context boundary even when the retained
+        # background has no image/node yet. Direct delivery keeps the scene
+        # graph context current for the one startup validation query.
+        self.sceneGraphInitialized.connect(
+            self._validate_scene_graph_opengl,
+            Qt.ConnectionType.DirectConnection,
+        )
         # Geometry edges are rare (show, screen changes, resume); each re-derives
         # whether the scene sits on the monitor or fills the window.
         for changed in (self.xChanged, self.yChanged, self.widthChanged, self.heightChanged):
@@ -144,6 +152,21 @@ class QuickDisplayWindow(QQuickWindow):
         ):
             raise ValueError("Quick input identity does not match its display window")
         self._input_controller = controller
+
+    def _validate_scene_graph_opengl(self) -> None:
+        """Enforce the one graphics contract at actual scene-graph startup."""
+
+        generation_label = (
+            "none"
+            if self._runtime_generation is None
+            else str(self._runtime_generation)
+        )
+        validate_or_quit_current_opengl_context(
+            reason=(
+                f"quick-display-scene-graph-screen-{self._screen_index}-"
+                f"generation-{generation_label}"
+            )
+        )
 
     def bind_cursor_controller(self, controller: QuickCursorController) -> None:
         """Bind the native cursor owner; it never participates in scene geometry."""

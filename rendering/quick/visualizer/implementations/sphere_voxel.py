@@ -150,7 +150,7 @@ def sphere_overflow_scissor(
     )
 
 
-_VERTEX_SOURCE = f"""#version 410 core
+_VERTEX_SOURCE = f"""#version 460 core
 layout(location = 0) in vec3 aPosition;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec3 aInstanceCenter;
@@ -506,7 +506,7 @@ void main() {{
 }}
 """
 
-_FRAGMENT_SOURCE = """#version 410 core
+_FRAGMENT_SOURCE = """#version 460 core
 in vec3 vScreenCenter;
 in vec3 vLocalPosition;
 in vec3 vWorldLocalPosition;
@@ -665,7 +665,7 @@ void main() {
 
 _SHADOW_VERTEX_SOURCE = _VERTEX_SOURCE
 
-_SHADOW_FRAGMENT_SOURCE = """#version 410 core
+_SHADOW_FRAGMENT_SOURCE = """#version 460 core
 in float vArrivalFade;
 out vec4 fragColor;
 uniform vec4 uShadowColor;

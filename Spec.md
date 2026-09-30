@@ -36,6 +36,11 @@ Hard: one accelerated runtime surface per selected display; standalone `QQuickWi
 Quick scene graph; Settings may remain QWidget; business/runtime ownership remains Python; transition+visualizer GL
 remains inline in the one Quick scene; no permanent old/software presenter fallback.
 
+The dependency floor is PySide6/Qt 6.11.2. Production requests OpenGL 4.6 Core and uses GLSL 460 core;
+OpenGL is the sole production graphics API. The existing render-context initialization boundary records actual
+GL/GLSL, vendor, renderer and required capabilities, and rejects unsupported contexts. Validation is scoped to
+context lifetime, with no steady-frame driver queries. The accepted swap interval remains zero.
+
 Wallpaper lookahead uses bounded source batches in the supervised speculative image worker. The parent caches only
 display-ready derivatives; requested images retain their separate foreground worker and authored quality settings.
 The construction, generation and shared-memory ownership contract lives in `Docs/Contracts.md` → Wallpaper image cache and prefetch.

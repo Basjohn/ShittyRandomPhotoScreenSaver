@@ -29,7 +29,7 @@ class SlideProgram(BaseGLProgram):
 
     @property
     def vertex_source(self) -> str:
-        return """#version 410 core
+        return """#version 460 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUv;
 
@@ -45,7 +45,7 @@ void main() {
     def fragment_source(self) -> str:
         # Optimized: Uses branchless bounds checking with step() for better GPU performance.
         # This eliminates thread divergence from if-statements.
-        return """#version 410 core
+        return """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 

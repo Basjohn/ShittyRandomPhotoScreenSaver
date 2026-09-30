@@ -26,7 +26,7 @@ from .post import FULLSCREEN_VERTEX_SOURCE
 # Edges between a ghost and what lies around it, as a soft line (``scene3d_trail_line``
 # either side): bright white, as strong as the step in ghost value (the newest ghost's
 # outline the strongest).
-_EDGE_FRAGMENT = """#version 410 core
+_EDGE_FRAGMENT = """#version 460 core
 out vec4 FragColor;
 uniform sampler2D uGhosts;
 uniform ivec2 uSize;

@@ -1,4 +1,4 @@
-#version 330 core
+#version 460 core
 // Dev Curve: smooth full-width spline-like filled curves.
 
 in vec2 v_uv;

@@ -247,11 +247,11 @@ def test_real_gl_line_glow_uses_visible_logical_footprint(
     fmt = QSurfaceFormat()
     fmt.setRenderableType(QSurfaceFormat.OpenGL)
     fmt.setProfile(QSurfaceFormat.CoreProfile)
-    fmt.setVersion(4, 1)
+    fmt.setVersion(4, 6)
     context = QOpenGLContext()
     context.setFormat(fmt)
     if not context.create():
-        pytest.skip("OpenGL 4.1 context unavailable")
+        pytest.skip("OpenGL 4.6 context unavailable")
     surface = QOffscreenSurface()
     surface.setFormat(fmt)
     surface.create()

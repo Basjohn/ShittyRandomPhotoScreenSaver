@@ -491,7 +491,7 @@ vec4 sceneOutput(vec3 colour, vec3 emitted) {
 """
 
 EXPLODING_TILES_VERTEX_SOURCE = (
-    "#version 410 core\n"
+    "#version 460 core\n"
     "layout(location=0) in vec3 aPosition;\n"
     "layout(location=1) in vec3 aNormal;\n"
     "layout(location=2) in vec2 aUv;\n"
@@ -532,7 +532,7 @@ void main() {
 )
 
 EXPLODING_TILES_FRAGMENT_SOURCE = (
-    "#version 410 core\n"
+    "#version 460 core\n"
     + """
 in vec2 vUv; in vec2 vFace; in vec3 vNormal; in vec3 vWorld;
 in float vSurface; in float vLit; in float vCrack; in float vHeat;
@@ -593,7 +593,7 @@ void main() {
 )
 
 EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE = (
-    "#version 410 core\n"
+    "#version 460 core\n"
     "in vec2 vUv;\nout vec4 FragColor;\n"
     "uniform sampler2D uNewTex; uniform vec2 uItemSize;\n"
     + _FRAME_GLSL
@@ -604,7 +604,7 @@ EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE = (
 )
 
 EXPLODING_TILES_SHADOW_VERTEX_SOURCE = (
-    "#version 410 core\n"
+    "#version 460 core\n"
     "layout(location=0) in vec2 aPosition;\n"
     + _MOTION_UNIFORMS_GLSL
     + SCENE3D_GLSL
@@ -626,7 +626,7 @@ void main() {
 )
 
 EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE = (
-    "#version 410 core\n"
+    "#version 460 core\n"
     "in vec2 vScreen; in vec2 vLocal; flat in float vFeather; flat in float vStrength;\nout vec4 FragColor;\n"
     "uniform sampler2D uNewTex; uniform vec2 uItemSize;\n"
     + _FRAME_GLSL
@@ -641,7 +641,7 @@ void main() {
 )
 
 EXPLODING_TILES_SPARK_VERTEX_SOURCE = (
-    "#version 410 core\n"
+    "#version 460 core\n"
     "layout(location=0) in vec2 aPosition;\n"
     + _MOTION_UNIFORMS_GLSL
     + SCENE3D_GLSL
@@ -682,7 +682,7 @@ void main() {{
 )
 
 EXPLODING_TILES_SPARK_FRAGMENT_SOURCE = (
-    "#version 410 core\n"
+    "#version 460 core\n"
     "in vec2 vQuad; in float vHeat; in float vGlow;\nout vec4 FragColor;\n"
     + _FRAME_GLSL
     + SCENE3D_GLSL

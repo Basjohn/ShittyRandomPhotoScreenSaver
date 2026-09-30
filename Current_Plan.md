@@ -42,35 +42,47 @@ Durable ownership and product shape are in `Spec.md` → Build control and produ
 - [~] **Operator-owned build acceptance, non-blocking:** when the operator next builds, exercise Diagnostic SCR,
   Standard/MC, a forced stop with an active child, and a subsequent clean build in the same runner session.
   The agent must not run build scripts or wait for builds before renderer work. Preserve intentional Jobs=3/4/5.
-- [ ] **POST-PySide informational audit only: build import/package bloat.** After the PySide 6.11.2 + OpenGL 4.6 slice
-  passes, inspect Standard, MC, Diagnostic and helper build scripts plus Nuitka reports/artifacts to identify explicit
-  includes, broad package includes, Qt/QML/plugin trees, native DLLs and transitive imports that may be unnecessary.
-  Report what each inclusion appears to provide, likely size/cost, confidence and removal risk. Prefer a little proven
-  over-inclusion to brittle minimalism. **Do not change include/exclude/package policy without operator approval.**
+- [~] **Packaging audit follow-up, operator artifacts only:** existing MC output is 610 MB, including 191 MB of
+  WebEngine despite no source imports. It still contains Qt 6.9.1, and no Nuitka report is retained. When a normal
+  operator 6.11.2 build supplies a report, trace why those modules were included before proposing exclusions.
+  Standard/Diagnostic are about 169 MB each; helper is 25 MB and already excludes the product stack.
+  No includes/excludes or Jobs were changed; package-policy changes still require operator approval.
+- [~] **Normal-mode interpreter, operator admin action:** `C:\Python311` remains at Qt/PySide 6.9.1 because its launcher
+  files require administrator access. The attempted upgrade was restored. Upgrade that interpreter's four Qt pins
+  to `requirements.txt` before using Normal mode; the actual project `.venv` is 6.11.2. This does not block source work.
 
-## 3. Renderer-era hard jump | PySide 6.11.2 + OpenGL 4.6
+## 3. Renderer-era hard jump | implementation landed; combined regression pending
 
-Do this as one compatibility window after the bounded P0 correction and Build Runner source validation. No 4.2/4.3 stepping-stone migration and no silent renderer
-fallback. `requirements.txt` in this handoff is already pinned to **PySide6 / Addons / Essentials / shiboken6 6.11.2**;
-the runtime acceptance still belongs to this slice.
+The actual project `.venv` loads PySide/Qt/shiboken 6.11.2 and passes pip check. Production requests OpenGL 4.6 Core
+with GLSL 460; startup validates actual context capabilities before the first image and rejects incompatibility.
+The RTX 4090 probe reports GL 4.6 / GLSL 4.60. Swap interval remains zero and OpenGL remains the sole graphics API.
+Focused driver, texture, clipping, startup and lifecycle checks pass. The initial broad run exposed test-isolation
+and graphics-bootstrap gaps; those were corrected at the test owners, preserving strict production validation.
 
-- [ ] **PySide 6.11.2 acceptance first inside the same slice.** Upgrade the actual project `.venv` to 6.11.2 (done; PySide/Qt/shiboken verified, pip check clean), run the focused
-  Quick/render/image/lifecycle suites and the full chunked suite. Standard + MC builds remain operator-owned and non-blocking. Re-run version-sensitive
-  proofs rather than assuming 6.9.1 behaviour: QSGRenderNode lifecycle, Visualizer stencil/clip metadata, QImage buffer
-  lifetime, threaded-Quick quit/close GIL deadlock probe, PR-04 native texture adoption, render-thread callbacks,
-  offscreen harnesses and Nuitka packaging.
-- [ ] **Request OpenGL 4.6 Core directly** in `rendering/quick/bootstrap.py`; move production shaders to a 460-core
-  contract. At process start record requested and actual GL/GLSL versions, vendor, renderer and the small capability
-  set the new foundation depends on. If production cannot obtain the required 4.6 capabilities, fail clearly rather
-  than quietly running a different renderer contract.
-- [ ] **No architecture split.** OpenGL remains the sole production graphics API through this program. Do not add
-  D3D11/Vulkan branches or an RHI abstraction while modern GL still supplies the required capabilities.
-- [ ] **Parity bars:** all existing transition/Visualizer endpoint, pixel/statistical golden, resource-retirement,
-  clip/state-fence, native-texture and multi-display tests pass under the new floor. Physical two-display acceptance
-  preserves gentle start, image transitions, Bubble golden reaction, Visualizer freshness and no black flash.
-- [ ] **Performance comparator:** capture the same warm two-display `--perf --frame-trace` workload before/after the
-  floor change. A version bump alone is not permitted to worsen steady frame spacing, Visualizer render cost, 3D
-  transition GPU/CPU submit, startup reveal, transition-start frames or parked memory materially.
+- [ ] Run final combined regression after the active asset/timezone slice stabilizes. Include the real native-image,
+  texture-retention and queued-quit probes (parallel source edits interrupted their last rerun), then the full chunks.
+- [~] **Awaiting ordinary-use physical validation, non-blocking:** preserve gentle start, transition endpoints,
+  Bubble reaction, Visualizer freshness and no black flash on two displays. Compare subsequently supplied warm
+  performance logs with the existing evidence; no fixed trace count or agent-run builds are required.
+
+## 3A. Immutable resources and timezone cleanup | active operator side quest
+
+- [ ] Inventory and reorganize immutable application assets by ownership before changing runtime paths; record
+  current QRC/source sizes and loose installed file/byte counts. Themes, presets and user/generated material remain loose.
+- [ ] Promote the existing `ui/resources/assets.qrc` to one canonical immutable resource namespace, migrate Qt/QML
+  consumers, regenerate bindings with the selected Qt 6.11 toolchain, and remove duplicate loose runtime copies.
+  Retain a filesystem exception only for a proven consumer; no blanket extraction, polling or eager image decoding.
+- [ ] Add one automatic QRC prerequisite to canonical builds: selected interpreter/toolchain, cheap stale detection,
+  no repeated regeneration in an unchanged multi-job run, loud failure, and cancellation owned by Build Runner.
+- [ ] Remove obsolete immutable asset packaging/preflight rules across Standard, MC, Diagnostic and installers;
+  preserve editable themes/presets and intentional Jobs=3/4/5. Do not run product build scripts.
+- [ ] Prove whether Qt 6.11 timezone facilities can replace pytz while preserving local/UTC/explicit offsets,
+  named world zones, existing persisted names and DST. Migrate one canonical authority only if parity is proven.
+- [ ] Validate focused asset/render/build/timezone contracts, then the broad practical regression boundary. Report
+  QRC counts/generated size/import cost, prospective loose-payload counts/bytes, and timezone before/after evidence.
+  Actual frozen-binary/install deltas require the next operator build and remain explicitly unmeasured meanwhile.
+- [ ] Refresh stale two-lane asset contracts in Spec/widget guidelines and all moved source references. Record any
+  retained immutable filesystem asset with its concrete consumer requirement.
 
 ## 4. Modern OpenGL 4.6 scene3d expansion | active
 
@@ -191,6 +203,13 @@ quality tier or be confined to a mode/effect that is itself dormant when not sel
   height; validate on a never-cached/offline Weather card.
 
 ## Known failing tests and anomalies
+
+- [ ] **Pre-existing Qt test suppression:** `tests/conftest.py` broadly filters slot-miss AttributeErrors. Reproduce
+  cross-generation background/Visualizer `sceneGraphInvalidated` retirement in a bounded unfiltered test, then
+  narrow the suppression at the owning lifetime boundary. Real subprocess GL/lifetime probes remain unfiltered.
+- [ ] **Global Python cleanup:** the denied Normal-mode Qt upgrade left pip `~yside6-essentials` rollback metadata;
+  the original 6.9.1 modules were restored and verified. Global pip also reports the unchanged opencv/numpy version
+  conflict. Resolve these in operator environment maintenance; the project `.venv` passes pip check.
 
 - [ ] **Temporary validation debris:** `.artifacts/qt611-validation` and `.artifacts/qt-restore` are unused after the
   actual `.venv` upgrade. Automatic approval review blocked their requested deletion; remove during operator cleanup.

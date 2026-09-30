@@ -1,7 +1,8 @@
 """Single render-node-local clip path for inline visualizer GL.
 
-PySide 6.9.1 does not provide a reliable scene-graph clip-node to Python
-render-node state handoff on the pinned Windows/OpenGL runtime. This host
+The PySide 6.9.1 proof found no reliable scene-graph clip-node to Python
+render-node state handoff on the Windows/OpenGL runtime. The PySide 6.11.2
+upgrade must re-run that proof before this owner changes. This host
 therefore owns the one admitted fallback: a rounded-rectangle SDF writes a
 temporary nested stencil value, mode GL draws against it, and the host redraws
 the same mask to restore the inherited stencil contents before returning to Qt.
@@ -23,7 +24,7 @@ from .gl_state import InheritedGlState
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 
 
-_VERTEX_SOURCE = """#version 410 core
+_VERTEX_SOURCE = """#version 460 core
 layout(location = 0) in vec2 aPosition;
 uniform mat4 uMatrix;
 uniform vec2 uItemSize;
@@ -34,7 +35,7 @@ void main() {
 }
 """
 
-_FRAGMENT_SOURCE = """#version 410 core
+_FRAGMENT_SOURCE = """#version 460 core
 in vec2 vLocalPosition;
 uniform vec4 uClipRect;
 uniform float uRadius;

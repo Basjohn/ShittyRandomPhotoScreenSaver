@@ -19,6 +19,16 @@ import pytest
 import sys
 import uuid
 from pathlib import Path
+
+# Production-shaped Qt tests must establish the sole Quick graphics contract
+# before the first QApplication exists.  In particular, native render owners
+# require an actual current OpenGL 4.6 Core scene-graph context; accepting
+# Qt's Windows D3D11 default in the shared test fixture would exercise a
+# renderer contract production never permits.
+from rendering.quick.bootstrap import configure_quick_graphics
+
+configure_quick_graphics(reason="pytest-conftest")
+
 from PySide6.QtWidgets import QApplication
 
 

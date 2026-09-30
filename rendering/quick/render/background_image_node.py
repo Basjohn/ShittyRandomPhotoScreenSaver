@@ -15,6 +15,7 @@ from PySide6.QtQuick import (
 
 from core.logging.logger import get_logger
 
+from ..bootstrap import validate_or_quit_current_opengl_context
 from ..image_state import PresentationImage
 from ..transitions.state import TransitionRun
 from .background_node import BackgroundRenderNode, SlideProofState
@@ -64,6 +65,13 @@ class RetainedBackgroundSceneNode(QSGNode):
         frame_trace,
     ) -> None:
         super().__init__()
+        # ``updatePaintNode`` is Qt Quick's existing render-thread scene-node
+        # construction boundary, with the production context current. Enforce
+        # the one OpenGL 4.6 Core contract here before either native or custom
+        # presentation can proceed; no alternate renderer is selected on error.
+        validate_or_quit_current_opengl_context(
+            reason=f"retained-background-scene-screen-{int(screen_index)}"
+        )
         self._window = window
         self._telemetry = telemetry
         self._screen_index = int(screen_index)

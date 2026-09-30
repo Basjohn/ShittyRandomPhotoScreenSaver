@@ -23,7 +23,7 @@ from .passes import blend_scope
 
 BLOOM_LEVELS = 4
 
-FULLSCREEN_VERTEX_SOURCE = """#version 410 core
+FULLSCREEN_VERTEX_SOURCE = """#version 460 core
 out vec2 vUv;
 void main() {
     vec2 corner = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
@@ -32,7 +32,7 @@ void main() {
 }
 """
 
-_DOWNSAMPLE_FRAGMENT = """#version 410 core
+_DOWNSAMPLE_FRAGMENT = """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uSource;
@@ -54,7 +54,7 @@ void main() {
 }
 """
 
-_UPSAMPLE_FRAGMENT = """#version 410 core
+_UPSAMPLE_FRAGMENT = """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uSource;

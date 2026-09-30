@@ -31,7 +31,7 @@ MOTION_BLUR_TAPS = 16
 
 # The longest motion along K texels of one axis: uStep (1, 0) across a tile's columns,
 # (0, 1) down its rows. Separable, so the tile max is 2K fetches per texel, not K^2 in one.
-_TILE_MAX_FRAGMENT = """#version 410 core
+_TILE_MAX_FRAGMENT = """#version 460 core
 out vec4 FragColor;
 uniform sampler2D uVelocity;
 uniform int uTile;
@@ -55,7 +55,7 @@ void main() {
 }
 """
 
-_NEIGHBOUR_MAX_FRAGMENT = """#version 410 core
+_NEIGHBOUR_MAX_FRAGMENT = """#version 460 core
 out vec4 FragColor;
 uniform sampler2D uTiles;
 uniform ivec2 uTileCount;
@@ -78,7 +78,7 @@ void main() {
 }
 """
 
-_GATHER_FRAGMENT = f"""#version 410 core
+_GATHER_FRAGMENT = f"""#version 460 core
 out vec4 FragColor;
 uniform sampler2D uScene;
 uniform sampler2D uVelocity;

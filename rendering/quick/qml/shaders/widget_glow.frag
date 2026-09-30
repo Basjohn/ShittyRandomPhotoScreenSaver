@@ -1,5 +1,5 @@
-#version 440
-// Bake with PySide6 qsb: --glsl "410" -o widget_glow.frag.qsb widget_glow.frag
+#version 460 core
+// Bake with PySide6 qsb: --glsl "460" -o widget_glow.frag.qsb widget_glow.frag
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
 layout(std140, binding = 0) uniform buf {

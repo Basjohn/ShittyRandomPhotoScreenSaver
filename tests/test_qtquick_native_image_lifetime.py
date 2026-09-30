@@ -9,8 +9,9 @@ threaded render loop) and pin, on a real QQuickWindow:
    during that frame's texture upload): bytes overwritten in
    ``afterSynchronizing`` are the ones that reach the texture.
 2. Once uploaded, later frames never read the buffer again.
-3. PySide 6.9.1 keeps the Python buffer alive while any C++ QImage copy of it
-   exists (the texture's / upload batch's), not only while the wrapper lives.
+3. The original PySide 6.9.1 proof showed the Python buffer stays alive while any
+   C++ QImage copy of it exists (texture/upload batch), not only while the wrapper
+   lives; the pinned 6.11.2 runtime must keep this contract.
 4. End to end, the production native node renders correct pixels when the
    GUI-side reference is dropped right after sync and freed memory is churned.
 
@@ -304,8 +305,11 @@ def test_steady_frames_do_not_read_the_native_image_again(probe) -> None:
 
 
 def test_pyside_ties_the_bytes_to_the_cxx_image_data_not_the_wrapper(qt_app) -> None:
-    """PySide 6.9.1 keeps the Python buffer alive while any C++ QImage copy of it
-    exists (texture, upload batch), not just while the Python wrapper lives."""
+    """Keep bytes alive for C++ QImage copies, not merely the Python wrapper.
+
+    The original PySide 6.9.1 proof established this; the pinned 6.11.2 runtime
+    must preserve it.
+    """
 
     import gc
 
@@ -324,12 +328,16 @@ def test_pyside_ties_the_bytes_to_the_cxx_image_data_not_the_wrapper(qt_app) -> 
     assert sys.getrefcount(data) - base == 0
 
 
-def test_native_node_wraps_the_presentation_bytes_and_owns_them_with_the_texture(qt_app) -> None:
+def test_native_node_wraps_the_presentation_bytes_and_owns_them_with_the_texture(
+    qt_app,
+    monkeypatch,
+) -> None:
     import numpy as np
     from PySide6.QtGui import QImage
     from PySide6.QtQuick import QSGNode
 
     from rendering.quick.image_state import PresentationImage
+    from rendering.quick.render import background_image_node
     from rendering.quick.render.background_image_node import RetainedBackgroundSceneNode
     from rendering.quick.render.telemetry import RenderNodeTelemetry
 
@@ -374,6 +382,13 @@ def test_native_node_wraps_the_presentation_bytes_and_owns_them_with_the_texture
     def _address(buffer) -> int:
         return np.frombuffer(buffer, dtype=np.uint8, count=8 * 4 * 4).__array_interface__["data"][0]
 
+    # This unit test substitutes the complete native/GL surface. Keep the
+    # production subprocess probe above responsible for actual-context checks.
+    monkeypatch.setattr(
+        background_image_node,
+        "validate_or_quit_current_opengl_context",
+        lambda **_kwargs: None,
+    )
     window = _Window()
     node = RetainedBackgroundSceneNode(
         window=window, telemetry=RenderNodeTelemetry(gui_thread_id=1),

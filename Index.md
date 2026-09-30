@@ -42,6 +42,7 @@ Keep the small routing authorities at `Docs/` root: project overview, current ow
 | fast current owner map | `Docs/Contracts.md` |
 | project overview | `Docs/00_PROJECT_OVERVIEW.md` |
 | runtime presentation architecture | `Docs/Architecture/Compositor_Architecture.md` |
+| Qt/OpenGL production floor | `Spec.md` → Accepted runtime presentation; `rendering/quick/bootstrap.py` |
 | Settings theme / Acrylic / Glass / Theme Foundry | `Docs/Architecture/Settings_Theme_Architecture.md` |
 | safety / guardrail router | `Docs/Guardrails.md` |
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |

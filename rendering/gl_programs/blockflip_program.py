@@ -31,7 +31,7 @@ class BlockFlipProgram(BaseGLProgram):
 
     @property
     def vertex_source(self) -> str:
-        return """#version 410 core
+        return """#version 460 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUv;
 
@@ -45,7 +45,7 @@ void main() {
 
     @property
     def fragment_source(self) -> str:
-        return """#version 410 core
+        return """#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 

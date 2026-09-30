@@ -25,8 +25,9 @@ pytestmark = pytest.mark.usefixtures("qt_app")
 
 
 def _wait_releasing_gil(ms: int) -> None:
-    # QTest.qWait keeps the GIL while it processes events (PySide 6.9.1). The
-    # first expose then waits for the render thread, which needs the GIL for
+    # The original PySide 6.9.1 proof showed QTest.qWait keeping the GIL while
+    # it processes events; keep the nonblocking wait contract on 6.11.2 unless
+    # re-proven. The first expose then waits for the render thread, which needs the GIL for
     # the Python window's connectNotify override lookup during
     # ShaderEffectSource sync: a deadlock. QEventLoop.exec releases the GIL.
     loop = QEventLoop()

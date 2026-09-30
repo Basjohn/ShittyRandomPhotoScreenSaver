@@ -222,6 +222,9 @@ def test_quick_display_window_is_a_narrow_standalone_qwindow_owner():
     } <= methods
     assert "setPersistentGraphics(False)" in source
     assert "setPersistentSceneGraph(False)" in source
+    assert "self.sceneGraphInitialized.connect(" in source
+    assert "self._validate_scene_graph_opengl" in source
+    assert "Qt.ConnectionType.DirectConnection" in source
     assert source.index("self.setScreen(screen)") < source.index(
         'self._queue_meta_call("show")'
     )

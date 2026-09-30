@@ -17,7 +17,7 @@ thickness, lip darkening and refraction; Gloss = wet highlight intensity and
 tightness only (never the silhouette).
 """
 
-MELT_FRAGMENT_SOURCE = r"""#version 410 core
+MELT_FRAGMENT_SOURCE = r"""#version 460 core
 in vec2 vUv;
 out vec4 FragColor;
 uniform sampler2D uOldTex,uNewTex;

@@ -3,10 +3,10 @@
 # Used by experimental scripts\venv builds against the repo-root .venv.
 
 # Core UI framework
-PySide6==6.9.1
-PySide6_Addons==6.9.1
-PySide6_Essentials==6.9.1
-shiboken6==6.9.1
+PySide6==6.11.2
+PySide6_Addons==6.11.2
+PySide6_Essentials==6.11.2
+shiboken6==6.11.2
 
 # Image processing / numeric
 Pillow==12.0.0

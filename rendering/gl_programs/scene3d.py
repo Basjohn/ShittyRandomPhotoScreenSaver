@@ -484,7 +484,7 @@ def scene3d_grid_vertex_source(displacement_glsl: str, declarations_glsl: str = 
     """
     if not re.search(r"\bvec3\s+sceneDisplace\s*\(\s*vec2\s+\w+\s*\)", displacement_glsl):
         raise ValueError("the grid's displacement must define vec3 sceneDisplace(vec2 uv)")
-    return ("#version 410 core\nlayout(location = 0) in vec2 aGrid;\n"
+    return ("#version 460 core\nlayout(location = 0) in vec2 aGrid;\n"
             "uniform mat4 uMatrix;\nuniform vec2 uItemSize;\nuniform vec2 uGridCells;\n"
             "out vec2 vUv;\nout vec3 vWorld;\nout vec3 vNormal;\n"
             + SCENE3D_GLSL + declarations_glsl + displacement_glsl + """
@@ -891,4 +891,3 @@ def scene3d_camera_shake(seconds: float, amplitude: float, seed: int) -> tuple[f
     x = 0.6 * math.sin(seconds * 23.0 + phase[0]) + 0.4 * math.sin(seconds * 41.0 + phase[1])
     y = 0.6 * math.sin(seconds * 19.0 + phase[2]) + 0.4 * math.sin(seconds * 37.0 + phase[3])
     return x * amplitude, y * amplitude
-

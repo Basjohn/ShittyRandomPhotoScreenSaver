@@ -41,7 +41,7 @@ _DIRECTION_STATES = {
 }
 
 
-_VOID_FRAGMENT_SOURCE = """#version 410 core
+_VOID_FRAGMENT_SOURCE = """#version 460 core
 out vec4 FragColor;
 
 void main() {
